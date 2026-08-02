@@ -1,0 +1,9 @@
+---
+source: tests\fixtures\causal-laws\duplicate_next.rad
+exit_code: 1
+---
+
+---stderr---
+Error: [line 9] in __resolver__ResolveDamage: Settlement aborted while resolver `ResolveDamage` handled Damage(0): resolver `ResolveDamage` attempted to stage `Health` more than once for entity 0
+No world state was changed.
+  called from [line 12] in main

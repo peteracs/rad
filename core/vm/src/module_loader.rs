@@ -1001,6 +1001,9 @@ fn decl_is_pub(decl: &Decl) -> bool {
     match decl {
         Decl::Component(c) => c.is_pub,
         Decl::Struct(s) => s.is_pub,
+        Decl::Intent(i) => i.is_pub,
+        Decl::Law(l) => l.is_pub,
+        Decl::Resolver(r) => r.is_pub,
         Decl::Entity(e) => e.is_pub,
         Decl::State(s) => s.is_pub,
         Decl::System(s) => s.is_pub,
@@ -1017,6 +1020,9 @@ fn decl_is_pub(decl: &Decl) -> bool {
 fn decl_symbol(decl: &Decl) -> Option<(String, u32, u32)> {
     match decl {
         Decl::Component(c) => Some((c.name.clone(), c.span.line, c.span.col)),
+        Decl::Intent(i) => Some((i.name.clone(), i.span.line, i.span.col)),
+        Decl::Law(l) => Some((l.name.clone(), l.span.line, l.span.col)),
+        Decl::Resolver(r) => Some((r.name.clone(), r.span.line, r.span.col)),
         Decl::Entity(e) => Some((e.name.clone(), e.span.line, e.span.col)),
         Decl::State(s) => Some((s.name.clone(), s.span.line, s.span.col)),
         Decl::System(s) => Some((s.name.clone(), s.span.line, s.span.col)),

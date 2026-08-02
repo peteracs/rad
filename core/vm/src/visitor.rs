@@ -83,6 +83,18 @@ pub fn walk_decl<V: AstVisitor + ?Sized>(v: &mut V, decl: &Decl) {
                 v.visit_expr(&field.default_value);
             }
         }
+        Decl::Intent(i) => {
+            for field in &i.fields {
+                v.visit_type_expr(&field.type_annotation);
+            }
+        }
+        Decl::Law(l) => {
+            for ty in &l.param_types {
+                v.visit_type_expr(ty);
+            }
+            v.visit_block(&l.body);
+        }
+        Decl::Resolver(r) => v.visit_block(&r.body),
         Decl::Entity(e) => {
             for entry in &e.components {
                 match entry {
@@ -200,6 +212,18 @@ pub fn walk_stmt<V: AstVisitor + ?Sized>(v: &mut V, stmt: &Stmt) {
                     v.visit_expr(idx);
                 }
                 v.visit_expr(&fu.value);
+            }
+        }
+        Stmt::Settle(s) => v.visit_block(&s.body),
+        Stmt::Propose(s) => {
+            for (_, expr) in &s.fields {
+                v.visit_expr(expr);
+            }
+        }
+        Stmt::Next(s) => {
+            v.visit_expr(&s.entity);
+            for (_, expr) in &s.fields {
+                v.visit_expr(expr);
             }
         }
         Stmt::Emit(s) => {

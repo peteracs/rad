@@ -1,0 +1,8 @@
+// flags: --experimental-laws
+// expect-runtime-error: law `Hit` may only be called inside `settle`
+
+intent Damage { key target: entity, amount: int }
+law Hit(target: entity) { propose Damage { target: target, amount: 1 } }
+resolver ResolveDamage for Damage(target, proposals) {}
+entity hero {}
+Hit(hero)

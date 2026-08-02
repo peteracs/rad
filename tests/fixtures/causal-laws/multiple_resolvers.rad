@@ -1,0 +1,6 @@
+// flags: --experimental-laws
+// expect-runtime-error: intent `Damage` has multiple resolvers
+
+intent Damage { key target: entity, amount: int }
+resolver ResolveDamage for Damage(target, proposals) {}
+resolver AlternateDamage for Damage(target, proposals) {}

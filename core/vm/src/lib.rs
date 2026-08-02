@@ -8,6 +8,8 @@ pub mod wire;
 
 #[cfg(test)]
 mod bench_tests;
+#[cfg(test)]
+mod causal_laws_tests;
 pub mod checker;
 pub mod compiler;
 pub mod compiler_abi;

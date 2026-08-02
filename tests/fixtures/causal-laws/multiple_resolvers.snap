@@ -1,0 +1,7 @@
+---
+source: tests\fixtures\causal-laws\multiple_resolvers.rad
+exit_code: 1
+---
+
+---stderr---
+Error: intent `Damage` has multiple resolvers

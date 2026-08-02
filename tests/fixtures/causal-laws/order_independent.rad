@@ -1,0 +1,21 @@
+// flags: --experimental-laws
+// expect: true
+
+component Health { hp: int = 100 }
+intent Damage { key target: entity, source: entity, amount: int }
+law Hit(source: entity, target: entity, amount: int) {
+    propose Damage { target: target, source: source, amount: amount }
+}
+resolver ResolveDamage for Damage(target, proposals) {
+    let health = require(target, Health)
+    let total = proposals |> map(fn(p) { return p.amount }) |> sum()
+    next(target, Health { hp: health.hp - total })
+}
+entity a {}
+entity b {}
+entity c {}
+entity first { Health {} }
+entity second { Health {} }
+settle { Hit(a, first, 20) Hit(b, first, 30) Hit(c, first, 5) }
+settle { Hit(c, second, 5) Hit(b, second, 30) Hit(a, second, 20) }
+print(require(first, Health) == require(second, Health))

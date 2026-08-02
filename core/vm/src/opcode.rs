@@ -244,6 +244,12 @@ pub enum Op {
     /// system runs one at a time in topological order: no worker snapshots,
     /// no merge (dogfood feature seq 83, the per-call `--serial-schedule`).
     RunScheduleSerial,
+
+    /// RFC-0001 settlement transaction boundary and causal operations.
+    BeginSettlement,
+    EndSettlement,
+    ProposeIntent,
+    StageCandidate,
 }
 
 impl Op {

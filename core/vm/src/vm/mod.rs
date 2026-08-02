@@ -2,6 +2,8 @@ mod builtins_impl;
 pub(crate) use builtins_impl::value_to_json;
 mod exec;
 mod helpers;
+mod settlement;
+pub(crate) use settlement::{IntentRuntimeInfo, ResolverRuntimeInfo, SettlementContext};
 #[cfg(not(target_arch = "wasm32"))]
 mod io_pool;
 mod parallel;
@@ -49,6 +51,8 @@ pub struct VmSharedState {
     pub state_machines: Arc<HashMap<String, HashMap<String, Vec<StateTransitionInfo>>>>,
     pub event_handlers: Arc<HashMap<String, Vec<HandlerEntry>>>,
     pub systems: Arc<HashMap<String, SystemRuntimeInfo>>,
+    pub intent_registry: Arc<HashMap<String, IntentRuntimeInfo>>,
+    pub resolver_registry: Arc<HashMap<String, ResolverRuntimeInfo>>,
     pub component_layouts: Arc<HashMap<String, Arc<Vec<String>>>>,
     pub component_field_types: ComponentFieldTypes,
     /// Declared schema versions (`component X v2`), nonzero entries only
@@ -154,6 +158,9 @@ pub struct VM {
     pub state_machines: Arc<HashMap<String, HashMap<String, Vec<StateTransitionInfo>>>>,
     pub event_handlers: Arc<HashMap<String, Vec<HandlerEntry>>>,
     pub systems: Arc<HashMap<String, SystemRuntimeInfo>>,
+    pub(crate) intent_registry: Arc<HashMap<String, IntentRuntimeInfo>>,
+    pub(crate) resolver_registry: Arc<HashMap<String, ResolverRuntimeInfo>>,
+    pub(crate) settlement: Option<SettlementContext>,
     /// Schema migrations (#5): component/resource name → compiled
     /// `migrate X(old)` chunk, invoked by `load_world` on shape drift.
     pub(crate) migrations: HashMap<String, MigrationEntry>,
@@ -382,6 +389,25 @@ impl VM {
         for entry in &self.event_log {
             entry.payload.trace(&mut marked);
         }
+        if let Some(settlement) = &self.settlement {
+            for proposal in &settlement.proposals {
+                proposal.payload.trace(&mut marked);
+            }
+            for patch in &settlement.patches {
+                for write in &patch.writes {
+                    for value in &write.component.values {
+                        value.trace(&mut marked);
+                    }
+                }
+            }
+            if let Some(active) = &settlement.active {
+                for write in &active.writes {
+                    for value in &write.component.values {
+                        value.trace(&mut marked);
+                    }
+                }
+            }
+        }
         for chunk in self.chunks.iter() {
             for val in &chunk.constants {
                 val.trace(&mut marked);
@@ -403,6 +429,8 @@ impl VM {
             state_machines: self.state_machines.clone(),
             event_handlers: self.event_handlers.clone(),
             systems: self.systems.clone(),
+            intent_registry: self.intent_registry.clone(),
+            resolver_registry: self.resolver_registry.clone(),
             component_layouts: self.component_layouts.clone(),
             component_field_types: self.component_field_types.clone(),
             component_versions: self.component_versions.clone(),
@@ -425,6 +453,9 @@ impl VM {
             state_machines: shared.state_machines,
             event_handlers: shared.event_handlers,
             systems: shared.systems,
+            intent_registry: shared.intent_registry,
+            resolver_registry: shared.resolver_registry,
+            settlement: None,
             migrations: HashMap::new(),
             events_current: Vec::new(),
             events_next: Vec::new(),
@@ -497,6 +528,8 @@ impl VM {
             self.state_machines = Arc::clone(&shared.state_machines);
             self.event_handlers = Arc::clone(&shared.event_handlers);
             self.systems = Arc::clone(&shared.systems);
+            self.intent_registry = Arc::clone(&shared.intent_registry);
+            self.resolver_registry = Arc::clone(&shared.resolver_registry);
             self.component_layouts = Arc::clone(&shared.component_layouts);
             self.component_field_types = Arc::clone(&shared.component_field_types);
             self.component_versions = Arc::clone(&shared.component_versions);
@@ -543,6 +576,9 @@ impl VM {
             state_machines: Arc::new(HashMap::new()),
             event_handlers: Arc::new(HashMap::new()),
             systems: Arc::new(HashMap::new()),
+            intent_registry: Arc::new(HashMap::new()),
+            resolver_registry: Arc::new(HashMap::new()),
+            settlement: None,
             migrations: HashMap::new(),
             events_current: Vec::new(),
             events_next: Vec::new(),
@@ -972,6 +1008,30 @@ impl VM {
     pub fn load_compile_result(&mut self, result: CompileResult) {
         self.gc.merge(result.gc);
         {
+            let intents = Arc::make_mut(&mut self.intent_registry);
+            for intent in &result.intents {
+                intents.insert(
+                    intent.name.clone(),
+                    IntentRuntimeInfo {
+                        name: intent.name.clone(),
+                        key_field: intent.key_field.clone(),
+                        fields: Arc::new(intent.fields.clone()),
+                    },
+                );
+            }
+            let resolvers = Arc::make_mut(&mut self.resolver_registry);
+            for resolver in &result.resolvers {
+                resolvers.insert(
+                    resolver.intent.clone(),
+                    ResolverRuntimeInfo {
+                        name: resolver.name.clone(),
+                        intent: resolver.intent.clone(),
+                        global_slot: resolver.global_slot,
+                    },
+                );
+            }
+        }
+        {
             let sm = Arc::make_mut(&mut self.state_machines);
             for machine in result.state_machines {
                 sm.insert(machine.name, machine.states);
@@ -1086,6 +1146,7 @@ impl VM {
         self.events_current.clear();
         self.events_next.clear();
         self.events_processing.clear();
+        self.settlement = None;
         self.emit_ids_current.clear();
         self.emit_ids_next.clear();
         self.tasks.clear();

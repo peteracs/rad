@@ -25,6 +25,9 @@ impl Compiler {
             Stmt::Emit(e) => self.compile_emit(e),
             Stmt::Schedule(s) => self.compile_schedule(s),
             Stmt::Update(u) => self.compile_update(u),
+            Stmt::Settle(s) => self.compile_settle(s),
+            Stmt::Propose(s) => self.compile_propose(s),
+            Stmt::Next(s) => self.compile_next(s),
             Stmt::Match(m) => self.compile_match(m),
             Stmt::Expr(e) => {
                 self.allow_pipe_fusion = true;

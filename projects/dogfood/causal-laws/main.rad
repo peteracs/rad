@@ -1,0 +1,94 @@
+// RAD Causal Laws vertical slice (RFC-0001).
+//
+// Run with:
+//   rad projects/dogfood/causal-laws/main.rad --experimental-laws
+
+// Three independent causes enter one settlement. They do not mutate the
+// world directly; ResolveDamage owns the transition and stages one atomic
+// Shield + Health patch.
+
+// The acceptance suite executes all six producer permutations. Every one
+// yields the same world digest and equivalent fan-in provenance.
+
+component Health {
+    hp: int = 100
+    max: int = 100
+}
+
+component Shield {
+    hp: int = 10
+}
+
+intent Damage {
+    key target: entity
+    source: entity
+    amount: int
+    kind: str
+}
+
+law DirectHit(source: entity, target: entity, amount: int, kind: str) {
+    propose Damage {
+        target: target,
+        source: source,
+        amount: amount,
+        kind: kind
+    }
+}
+
+resolver ResolveDamage for Damage(target, proposals) {
+    let health = require(target, Health)
+    let shield = require(target, Shield)
+    let raw_damage = proposals
+        |> map(fn(proposal) { return proposal.amount })
+        |> sum()
+    let absorbed = min(shield.hp, raw_damage)
+    let remaining = raw_damage - absorbed
+
+    next(target, Shield {
+        hp: shield.hp - absorbed
+    })
+    next(target, Health {
+        hp: max(0, health.hp - remaining),
+        max: health.max
+    })
+}
+
+event CombatFrame {
+    attacker_a: entity
+    attacker_b: entity
+    environment: entity
+    target: entity
+}
+
+on CombatFrame(frame) {
+    settle {
+        DirectHit(frame.attacker_a, frame.target, 20, "physical")
+        DirectHit(frame.attacker_b, frame.target, 30, "fire")
+        DirectHit(frame.environment, frame.target, 5, "burn")
+    }
+}
+
+entity attacker_a {}
+
+entity attacker_b {}
+
+entity environment {}
+
+entity hero {
+    Health {}
+    Shield {}
+}
+
+emit CombatFrame {
+    attacker_a: attacker_a,
+    attacker_b: attacker_b,
+    environment: environment,
+    target: hero
+}
+flush_events()
+
+let health = require(hero, Health)
+let shield = require(hero, Shield)
+print(f"Health: {health.hp}/{health.max}")
+print(f"Shield: {shield.hp}")
+print(why(hero, Health))

@@ -1,0 +1,24 @@
+// flags: --experimental-laws
+// expect: 80
+// expect: ResolveDamage
+// expect: DirectHit
+// expect: CombatFrame
+
+component Health { hp: int = 100 }
+intent Damage { key target: entity, source: entity, amount: int }
+law DirectHit(source: entity, target: entity, amount: int) {
+    propose Damage { target: target, source: source, amount: amount }
+}
+resolver ResolveDamage for Damage(target, proposals) {
+    let health = require(target, Health)
+    let total = proposals |> map(fn(p) { return p.amount }) |> sum()
+    next(target, Health { hp: health.hp - total })
+}
+event CombatFrame { source: entity, target: entity }
+on CombatFrame(e) { settle { DirectHit(e.source, e.target, 20) } }
+entity attacker {}
+entity hero { Health {} }
+emit CombatFrame { source: attacker, target: hero }
+flush_events()
+print(require(hero, Health).hp)
+print(why(hero, Health))

@@ -21,6 +21,9 @@ impl Compiler {
             Decl::Component(c) => self.compile_component_decl(c),
             Decl::Resource(r) => self.compile_resource_decl(r),
             Decl::Struct(s) => self.compile_struct_decl(s),
+            Decl::Intent(i) => self.compile_intent_decl(i),
+            Decl::Law(l) => self.compile_law_decl(l),
+            Decl::Resolver(r) => self.compile_resolver_decl(r),
             Decl::Entity(e) => self.compile_entity_decl(e),
             Decl::State(s) => self.compile_state_decl(s),
             Decl::System(s) => self.compile_system_decl(s),
@@ -94,6 +97,29 @@ impl Compiler {
                 let resolved = self
                     .resolve_current_alias(&s.name)
                     .unwrap_or_else(|| s.name.clone());
+                self.global_mutability.entry(resolved).or_insert(false);
+            }
+            Decl::Intent(i) => {
+                let resolved = self
+                    .resolve_current_alias(&i.name)
+                    .unwrap_or_else(|| i.name.clone());
+                let key = i
+                    .fields
+                    .iter()
+                    .find(|field| field.is_key)
+                    .map(|field| field.name.clone())
+                    .unwrap_or_default();
+                self.intent_types.entry(resolved).or_insert_with(|| {
+                    (
+                        key,
+                        i.fields.iter().map(|field| field.name.clone()).collect(),
+                    )
+                });
+            }
+            Decl::Law(l) => {
+                let resolved = self
+                    .resolve_current_alias(&l.name)
+                    .unwrap_or_else(|| l.name.clone());
                 self.global_mutability.entry(resolved).or_insert(false);
             }
             Decl::Entity(e) => {
@@ -342,7 +368,7 @@ impl Compiler {
         Ok(chunk_id)
     }
 
-    fn compile_fn_decl(&mut self, f: &FnDecl) -> Result<(), CompileError> {
+    pub(crate) fn compile_fn_decl(&mut self, f: &FnDecl) -> Result<(), CompileError> {
         let line = f.span.line;
         let mut fn_scope = Self::new_fn_scope(&f.name);
         fn_scope.unique_locals = super::escape::find_unique_locals(&f.body);

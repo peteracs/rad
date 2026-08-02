@@ -2580,6 +2580,8 @@ if (x) { return ${n}; }
             handlers: result.handlers,
             migrations: result.migrations,
             state_machines: result.state_machines,
+            intents: result.intents,
+            resolvers: result.resolvers,
             layout_analysis: crate::compiler::layout_analysis::LayoutAnalysis::default(),
             materialization_plan: crate::compiler::materialization::MaterializationPlan::default(),
             component_layouts: result.component_layouts,

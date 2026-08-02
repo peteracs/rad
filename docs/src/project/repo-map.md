@@ -30,6 +30,8 @@ serve different jobs:
 | `core/vm/src/checker/` | Static analysis and type checking. |
 | `core/vm/src/compiler/` | AST-to-bytecode lowering inside the Rust VM. |
 | `core/vm/src/vm/` | Bytecode execution and builtin implementation. |
+| `core/vm/src/{parser,checker,compiler}/causal.rs`, `core/vm/src/vm/settlement.rs` | Experimental RFC-0001 Causal Laws front end and atomic settlement kernel. |
+| `core/vm/src/causality/settlement.rs` | Settlement/proposal/resolution fan-in provenance and `why()` rendering. |
 | `core/vm/src/value.rs`, `core/vm/src/world.rs` | Runtime values and ECS world storage. |
 | `core/c-backend/` | Frozen legacy C backend, with source, runtime, old harnesses, and reproductions kept out of normal health checks. |
 | `core/simcore/` | Native/wasm Rust sim core used by the MOBA dogfood path. |
@@ -65,6 +67,7 @@ dogfood projects, but they are not the language implementation.
 |---|---|
 | `examples/` | Canonical example `.rad` programs and host examples. |
 | `projects/dogfood/` | Larger dogfood applications and feature stress projects. |
+| `projects/dogfood/causal-laws/` | RFC-0001 damage settlement vertical slice. |
 | `projects/moba-rad/` | Networked MOBA dogfood stack: RAD authority server, Rust WebTransport edge proxy, and browser client. The authority owns all game rules; the proxy forwards opaque datagrams and must stay dumb. |
 | `projects/playground/` | Browser hosts, interactive demos, relay, JS session tests, and public playground shell. |
 | `projects/playground/demos/` | Standalone browser visual prototypes and their local assets. |

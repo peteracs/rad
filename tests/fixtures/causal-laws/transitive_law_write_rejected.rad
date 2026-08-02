@@ -1,0 +1,13 @@
+// flags: --experimental-laws
+// expect-runtime-error: law `IllegalLaw` cannot call `mutate`
+
+component Health { hp: int = 100 }
+intent Damage { key target: entity, amount: int }
+fn mutate(target: entity) { set(target, Health { hp: 0 }) }
+law IllegalLaw(target: entity) {
+    mutate(target)
+    propose Damage { target: target, amount: 10 }
+}
+resolver ResolveDamage for Damage(target, proposals) { next(target, Health { hp: 90 }) }
+entity hero { Health {} }
+settle { IllegalLaw(hero) }

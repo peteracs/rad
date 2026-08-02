@@ -1,6 +1,7 @@
 use crate::ast::*;
 use crate::lexer::{reserved_keyword_rename_hints, Token, TokenType};
 
+mod causal;
 mod decl;
 mod expr;
 mod recovery;

@@ -401,6 +401,22 @@ impl Checker {
                             queue.push(VisitItem::Expr(&fu.value));
                         }
                     }
+                    Stmt::Settle(settlement) => {
+                        queue.push(VisitItem::Block(&settlement.body));
+                    }
+                    Stmt::Propose(proposal) => {
+                        for (_, expr) in &proposal.fields {
+                            queue.push(VisitItem::Expr(expr));
+                        }
+                    }
+                    Stmt::Next(next) => {
+                        reachable_components
+                            .insert(self.resolve_canonical_name(&next.component_name));
+                        queue.push(VisitItem::Expr(&next.entity));
+                        for (_, expr) in &next.fields {
+                            queue.push(VisitItem::Expr(expr));
+                        }
+                    }
                     Stmt::Match(m) => {
                         queue.push(VisitItem::Expr(&m.subject));
                         for arm in &m.cases {

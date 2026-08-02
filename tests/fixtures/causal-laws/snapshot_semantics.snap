@@ -1,0 +1,5 @@
+---
+source: tests\fixtures\causal-laws\snapshot_semantics.rad
+exit_code: 0
+---
+80

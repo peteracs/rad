@@ -1,3 +1,4 @@
+mod causal;
 mod declarations;
 mod diagnostics;
 mod reachability;
@@ -20,6 +21,9 @@ fn decl_name(decl: &Decl) -> Option<&str> {
         Decl::Component(c) => Some(&c.name),
         Decl::Resource(r) => Some(&r.name),
         Decl::Struct(s) => Some(&s.name),
+        Decl::Intent(i) => Some(&i.name),
+        Decl::Law(l) => Some(&l.name),
+        Decl::Resolver(r) => Some(&r.name),
         Decl::Entity(e) => Some(&e.name),
         Decl::State(s) => Some(&s.name),
         Decl::System(s) => Some(&s.name),
@@ -40,6 +44,9 @@ fn decl_is_pub(decl: &Decl) -> bool {
         Decl::Component(c) => c.is_pub,
         Decl::Resource(r) => r.is_pub,
         Decl::Struct(s) => s.is_pub,
+        Decl::Intent(i) => i.is_pub,
+        Decl::Law(l) => l.is_pub,
+        Decl::Resolver(r) => r.is_pub,
         Decl::Entity(e) => e.is_pub,
         Decl::State(s) => s.is_pub,
         Decl::System(s) => s.is_pub,
@@ -139,6 +146,37 @@ pub(crate) struct Scope {
     pub(crate) in_async: bool,
     pub(crate) in_loop: bool,
     pub(crate) effect_context: EffectSet,
+    pub(crate) causal_context: CausalContext,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum CausalContext {
+    None,
+    Settlement,
+    Law(String),
+    Resolver {
+        name: String,
+        intent: String,
+        key_param: String,
+    },
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct IntentType {
+    pub(crate) name: String,
+    pub(crate) fields: Vec<(String, Ty)>,
+    pub(crate) file_id: Option<FileId>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct LawType {
+    pub(crate) params: Vec<Ty>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct ResolverOwner {
+    pub(crate) name: String,
+    pub(crate) span: Span,
 }
 #[derive(Debug, Clone)]
 pub(crate) struct FunctionSig {
@@ -157,6 +195,7 @@ impl Scope {
             in_async: false,
             in_loop: false,
             effect_context: EffectSet::unrestricted(),
+            causal_context: CausalContext::None,
         }
     }
 }
@@ -171,6 +210,10 @@ pub struct Checker {
     pub(crate) components: HashMap<String, ComponentType>,
     pub(crate) resources: HashMap<String, ResourceType>,
     pub(crate) structs: HashMap<String, StructType>,
+    pub(crate) intents: HashMap<String, IntentType>,
+    pub(crate) laws: HashMap<String, LawType>,
+    pub(crate) resolvers: HashMap<String, Vec<ResolverOwner>>,
+    pub(crate) proposed_intents: HashSet<String>,
     pub(crate) state_machines: HashMap<String, StateMachineType>,
     pub(crate) systems: HashMap<String, SystemType>,
     pub(crate) phases: HashMap<String, Vec<String>>,
@@ -387,6 +430,10 @@ impl Checker {
             components: HashMap::new(),
             resources: HashMap::new(),
             structs: HashMap::new(),
+            intents: HashMap::new(),
+            laws: HashMap::new(),
+            resolvers: HashMap::new(),
+            proposed_intents: HashSet::new(),
             state_machines: HashMap::new(),
             systems: HashMap::new(),
             phases: HashMap::new(),
@@ -554,6 +601,7 @@ impl Checker {
         for decl in &program.declarations {
             self.check_decl(decl);
         }
+        self.warn_unproduced_resolvers();
         self.warn_unused_systems_and_entity_ecs(program);
         self.flush_unused_top_level_lets();
         self.check_reachability(program);
@@ -636,6 +684,21 @@ impl Checker {
                             self.register_struct(&ms);
                             self.define(&mangled, Ty::Str, false, s.span.clone(), s.is_pub, false);
                         }
+                    }
+                    Decl::Intent(i) => {
+                        let mut intent = i.clone();
+                        intent.name = mangled.clone();
+                        self.register_intent(&intent);
+                    }
+                    Decl::Law(l) => {
+                        let mut law = l.clone();
+                        law.name = mangled.clone();
+                        self.register_law(&law);
+                    }
+                    Decl::Resolver(r) => {
+                        let mut resolver = r.clone();
+                        resolver.name = mangled.clone();
+                        self.register_resolver(&resolver);
                     }
                     Decl::State(s) => {
                         if let Some(canonical) = self.find_canonical_type_name(s.span.file, &orig) {
@@ -763,6 +826,22 @@ impl Checker {
                             .cloned()
                             .unwrap_or_else(|| s.name.clone());
                         self.check_decl(&Decl::System(ms));
+                    }
+                    Decl::Law(l) => {
+                        let mut law = l.clone();
+                        law.name = all_names
+                            .get(&l.name)
+                            .cloned()
+                            .unwrap_or_else(|| l.name.clone());
+                        self.check_decl(&Decl::Law(law));
+                    }
+                    Decl::Resolver(r) => {
+                        let mut resolver = r.clone();
+                        resolver.name = all_names
+                            .get(&r.name)
+                            .cloned()
+                            .unwrap_or_else(|| r.name.clone());
+                        self.check_decl(&Decl::Resolver(resolver));
                     }
                     _ => {}
                 }
@@ -896,7 +975,7 @@ impl Checker {
         }
 
         if let Some(span) = first_entity_span {
-            if !has_any_system_decl {
+            if !has_any_system_decl && self.laws.is_empty() {
                 self.warning(
                     &span,
                     "Entity declarations found without any systems".to_string(),

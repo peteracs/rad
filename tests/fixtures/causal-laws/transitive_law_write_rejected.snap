@@ -1,0 +1,8 @@
+---
+source: tests\fixtures\causal-laws\transitive_law_write_rejected.rad
+exit_code: 1
+---
+
+---stderr---
+Error: law `IllegalLaw` cannot perform this effect: calls 'mutate' which calls impure builtin 'set'
+Error: Effect violation: function 'mutate' requires unrestricted effects, but current context only allows readonly

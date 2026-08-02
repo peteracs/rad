@@ -161,6 +161,18 @@ impl EscapeAnalyzer {
                     self.visit_expr(&fu.value);
                 }
             }
+            Stmt::Settle(s) => self.visit_block(&s.body),
+            Stmt::Propose(s) => {
+                for (_, expr) in &s.fields {
+                    self.visit_expr(expr);
+                }
+            }
+            Stmt::Next(s) => {
+                self.visit_expr(&s.entity);
+                for (_, expr) in &s.fields {
+                    self.visit_expr(expr);
+                }
+            }
             Stmt::Break(_) | Stmt::Continue(_) | Stmt::OnceGuardPass(_) | Stmt::Error(_) => {}
         }
     }

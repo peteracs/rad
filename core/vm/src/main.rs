@@ -49,6 +49,7 @@ enum CliCommand {
         directory: Option<String>,
         update: bool,
         create: bool,
+        experimental_laws: bool,
     },
     Play {
         port: u16,
@@ -97,7 +98,7 @@ fn project_entry_from_rad_toml() -> Result<String, String> {
 
 fn usage(program: &str) -> String {
     let mut output = format!(
-        "Rad v{} — Bytecode Compiler & Virtual Machine\n\nUsage: {} <file.rad> [--no-check] [--compat-v0.5-dx|--no-compat-v0.5-dx] [--deny-warnings] [--warn-compat|--no-warn-compat] [--strict-types] [--write-lock] [--profile-copies] [--serial-schedule] [--record <trace.radr>] [-- <program args>]\n       {} run [run options] [-- <program args>]   (entry from ./rad.toml)\n       {} new <name> [--template <template>]\n       {} snapshot [--update] [--create] [dir]\n       {} play [--port <port>]\n       {} build [--target wasm] <input.rad> <output.wasm>\n       {} sandbox serve [host.rad] [--caps <caps.json>]\n       {} replay <trace.radr> [--to-frame <n>] [--serve] [--with <fixed.rad>] [--force]\n       {} fmt [--check] [file.rad...]\n       {} lint [--preset=strict] [file.rad...]\n       {} test [dir]\n       {} lsp\n       {} --version",
+        "Rad v{} — Bytecode Compiler & Virtual Machine\n\nUsage: {} <file.rad> [--no-check] [--compat-v0.5-dx|--no-compat-v0.5-dx] [--experimental-laws] [--deny-warnings] [--warn-compat|--no-warn-compat] [--strict-types] [--write-lock] [--profile-copies] [--serial-schedule] [--record <trace.radr>] [-- <program args>]\n       {} run [run options] [-- <program args>]   (entry from ./rad.toml)\n       {} new <name> [--template <template>]\n       {} snapshot [--update] [--create] [--experimental-laws] [dir]\n       {} play [--port <port>]\n       {} build [--target wasm] <input.rad> <output.wasm>\n       {} sandbox serve [host.rad] [--caps <caps.json>]\n       {} replay <trace.radr> [--to-frame <n>] [--serve] [--with <fixed.rad>] [--force]\n       {} fmt [--check] [file.rad...]\n       {} lint [--preset=strict] [file.rad...]\n       {} test [dir]\n       {} lsp\n       {} --version",
         env!("CARGO_PKG_VERSION"), program, program, program, program, program, program, program, program, program, program, program, program, program
     );
     output.push_str(&format!("\n       {} --help", program));
@@ -220,11 +221,14 @@ fn parse_cli_args(args: &[String]) -> Result<CliCommand, String> {
         let mut directory = None;
         let mut update = false;
         let mut create = false;
+        let mut experimental_laws = false;
         for arg in args.iter().skip(2) {
             if arg == "--update" {
                 update = true;
             } else if arg == "--create" {
                 create = true;
+            } else if arg == "--experimental-laws" {
+                experimental_laws = true;
             } else if arg.starts_with('-') {
                 return Err(format!(
                     "Unknown option for snapshot: {}\n\n{}",
@@ -239,6 +243,7 @@ fn parse_cli_args(args: &[String]) -> Result<CliCommand, String> {
             directory,
             update,
             create,
+            experimental_laws,
         });
     }
 
@@ -457,6 +462,7 @@ fn parse_cli_args(args: &[String]) -> Result<CliCommand, String> {
             "--write-lock" => write_lock = true,
             "--profile-copies" => profile_copies = true,
             "--serial-schedule" => serial_schedule = true,
+            "--experimental-laws" => features.push("causal_laws".to_string()),
             "--version" => want_version = true,
             "--feature" => {
                 if let Some(f) = it.next() {
@@ -813,9 +819,10 @@ fn main() {
         directory,
         update,
         create,
+        experimental_laws,
     } = command
     {
-        rad_vm::snapshot::execute_snapshot(directory, update, create);
+        rad_vm::snapshot::execute_snapshot(directory, update, create, experimental_laws);
         return;
     }
 

@@ -1,3 +1,4 @@
+mod causal;
 mod decl;
 mod egraph;
 mod emit;
@@ -141,12 +142,28 @@ pub struct StateMachineInfo {
     pub states: HashMap<String, Vec<StateTransitionInfo>>,
 }
 
+#[derive(Debug, Clone)]
+pub struct IntentChunkInfo {
+    pub name: String,
+    pub key_field: String,
+    pub fields: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ResolverChunkInfo {
+    pub name: String,
+    pub intent: String,
+    pub global_slot: u16,
+}
+
 pub struct CompileResult {
     pub chunks: Vec<Chunk>,
     pub systems: Vec<SystemChunkInfo>,
     pub handlers: Vec<HandlerChunkInfo>,
     pub migrations: Vec<MigrationChunkInfo>,
     pub state_machines: Vec<StateMachineInfo>,
+    pub intents: Vec<IntentChunkInfo>,
+    pub resolvers: Vec<ResolverChunkInfo>,
     pub(crate) layout_analysis: layout_analysis::LayoutAnalysis,
     pub(crate) materialization_plan: materialization::MaterializationPlan,
     pub component_layouts: HashMap<String, Vec<String>>,
@@ -198,6 +215,8 @@ pub struct Compiler {
     pub(crate) handlers: Vec<HandlerChunkInfo>,
     pub(crate) migrations: Vec<MigrationChunkInfo>,
     pub(crate) state_machines: Vec<StateMachineInfo>,
+    pub(crate) intent_types: HashMap<String, (String, Vec<String>)>,
+    pub(crate) resolvers: Vec<ResolverChunkInfo>,
     pub(crate) temp_counter: u32,
     pub(crate) global_mutability: HashMap<String, bool>,
     pub(crate) for_iter_kinds: HashMap<NodeId, ForIterKind>,
@@ -303,6 +322,8 @@ impl Compiler {
             handlers: Vec::new(),
             migrations: Vec::new(),
             state_machines: Vec::new(),
+            intent_types: HashMap::new(),
+            resolvers: Vec::new(),
             temp_counter: 0,
             global_mutability: HashMap::new(),
             for_iter_kinds: HashMap::new(),
@@ -364,6 +385,9 @@ impl Compiler {
             Decl::Component(c) => Some(&c.name),
             Decl::Resource(r) => Some(&r.name),
             Decl::Struct(s) => Some(&s.name),
+            Decl::Intent(i) => Some(&i.name),
+            Decl::Law(l) => Some(&l.name),
+            Decl::Resolver(r) => Some(&r.name),
             Decl::Entity(e) => Some(&e.name),
             Decl::State(s) => Some(&s.name),
             Decl::System(s) => Some(&s.name),
@@ -381,6 +405,9 @@ impl Compiler {
             Decl::Component(c) => c.is_pub,
             Decl::Resource(r) => r.is_pub,
             Decl::Struct(s) => s.is_pub,
+            Decl::Intent(i) => i.is_pub,
+            Decl::Law(l) => l.is_pub,
+            Decl::Resolver(r) => r.is_pub,
             Decl::Entity(e) => e.is_pub,
             Decl::State(s) => s.is_pub,
             Decl::System(s) => s.is_pub,
@@ -669,12 +696,12 @@ impl Compiler {
             self.predeclare_decl_metadata(decl);
         }
         for decl in &program.declarations {
-            if matches!(decl, Decl::Fn(_)) {
+            if matches!(decl, Decl::Fn(_) | Decl::Law(_) | Decl::Resolver(_)) {
                 self.compile_decl(decl)?;
             }
         }
         for decl in &program.declarations {
-            if !matches!(decl, Decl::Fn(_)) {
+            if !matches!(decl, Decl::Fn(_) | Decl::Law(_) | Decl::Resolver(_)) {
                 self.compile_decl(decl)?;
             }
         }
@@ -706,6 +733,9 @@ impl Compiler {
         let mut component_field_types = HashMap::new();
         let mut indexed_component_fields = HashMap::new();
         let mut transient_resources = std::collections::HashSet::new();
+        for (name, (_, fields)) in &self.intent_types {
+            component_layouts.insert(Self::intent_runtime_type(name), fields.clone());
+        }
         for (name, ct) in &self.checker_components {
             component_layouts.insert(
                 name.clone(),
@@ -853,6 +883,16 @@ impl Compiler {
             handlers: self.handlers,
             migrations: self.migrations,
             state_machines: self.state_machines,
+            intents: self
+                .intent_types
+                .iter()
+                .map(|(name, (key_field, fields))| IntentChunkInfo {
+                    name: name.clone(),
+                    key_field: key_field.clone(),
+                    fields: fields.clone(),
+                })
+                .collect(),
+            resolvers: self.resolvers,
             layout_analysis,
             materialization_plan,
             component_layouts,

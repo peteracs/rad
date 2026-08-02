@@ -1226,6 +1226,29 @@ impl VM {
                 Op::RunScheduleSerial => {
                     self.exec_run_schedule_serial_op()?;
                 }
+                Op::BeginSettlement => {
+                    self.begin_settlement()?;
+                }
+                Op::EndSettlement => {
+                    self.finish_settlement()?;
+                }
+                Op::ProposeIntent => {
+                    let intent_idx = self.read_u16()? as usize;
+                    let intent = helpers::constant_string(self.current_chunk(), intent_idx)?;
+                    let payload = self.pop()?;
+                    let frame = self.current_frame();
+                    let line = self
+                        .chunks
+                        .get(frame.chunk_id)
+                        .and_then(|chunk| chunk.lines.get(frame.ip.saturating_sub(3)).copied())
+                        .unwrap_or(0);
+                    self.propose_intent(&intent, payload, line)?;
+                }
+                Op::StageCandidate => {
+                    let component = self.pop()?;
+                    let entity = self.pop()?;
+                    self.stage_candidate(entity, component)?;
+                }
 
                 Op::MatchState => {
                     let pattern_idx = self.read_u16()? as usize;

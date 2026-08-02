@@ -12,6 +12,7 @@ impl Checker {
             in_async: prev.in_async,
             in_loop: prev.in_loop,
             effect_context: prev.effect_context.clone(),
+            causal_context: prev.causal_context.clone(),
         };
         self.scopes.push(new);
     }

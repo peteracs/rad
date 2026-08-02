@@ -1,0 +1,5 @@
+---
+source: tests\fixtures\causal-laws\duplicate_proposals_preserved.rad
+exit_code: 0
+---
+80

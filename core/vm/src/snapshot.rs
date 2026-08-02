@@ -7,7 +7,12 @@ use crate::module_loader::load_program_with_source_map_and_options;
 use crate::parser::ParserOptions;
 use crate::vm::VM;
 
-pub fn execute_snapshot(directory: Option<String>, update: bool, create: bool) {
+pub fn execute_snapshot(
+    directory: Option<String>,
+    update: bool,
+    create: bool,
+    experimental_laws: bool,
+) {
     let dir = directory.unwrap_or_else(|| {
         if Path::new("tests").is_dir() {
             "tests".to_string()
@@ -43,7 +48,8 @@ pub fn execute_snapshot(directory: Option<String>, update: bool, create: bool) {
         let snap_path = filepath.with_extension("snap");
 
         if create && !snap_path.exists() {
-            let (stdout, stderr, exit_code) = run_file_in_memory(&filepath.to_string_lossy());
+            let (stdout, stderr, exit_code) =
+                run_file_in_memory_with_features(&filepath.to_string_lossy(), experimental_laws);
             write_snapshot(&snap_path, &filepath, &stdout, &stderr, exit_code);
             println!("  CREATE {}", filepath.display());
             created += 1;
@@ -54,7 +60,8 @@ pub fn execute_snapshot(directory: Option<String>, update: bool, create: bool) {
             continue;
         }
 
-        let (stdout, stderr, exit_code) = run_file_in_memory(&filepath.to_string_lossy());
+        let (stdout, stderr, exit_code) =
+            run_file_in_memory_with_features(&filepath.to_string_lossy(), experimental_laws);
 
         if update {
             write_snapshot(&snap_path, &filepath, &stdout, &stderr, exit_code);
@@ -228,6 +235,13 @@ fn normalize_repo_path(line: &str) -> String {
 }
 
 pub fn run_file_in_memory(filepath: &str) -> (String, String, i32) {
+    run_file_in_memory_with_features(filepath, false)
+}
+
+fn run_file_in_memory_with_features(
+    filepath: &str,
+    experimental_laws: bool,
+) -> (String, String, i32) {
     let parser_options = ParserOptions {
         compat_v0_5_dx: false,
     };
@@ -262,7 +276,11 @@ pub fn run_file_in_memory(filepath: &str) -> (String, String, i32) {
         compat_v0_5_dx: false,
         warn_compat: true,
         strict_types: false,
-        features: vec![],
+        features: if experimental_laws {
+            vec!["causal_laws".to_string()]
+        } else {
+            vec![]
+        },
     });
     checker.set_aliases(aliases.clone());
     let errors = checker.check(&program);
@@ -281,7 +299,12 @@ pub fn run_file_in_memory(filepath: &str) -> (String, String, i32) {
 
     let compiler = Compiler::new()
         .with_checker_output(checker_output)
-        .with_aliases(aliases);
+        .with_aliases(aliases)
+        .with_features(if experimental_laws {
+            vec!["causal_laws".to_string()]
+        } else {
+            vec![]
+        });
     let compile_result = match compiler.compile(&program) {
         Ok(c) => c,
         Err(e) => {

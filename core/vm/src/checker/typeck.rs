@@ -207,6 +207,9 @@ impl Checker {
             Decl::Component(c) => self.check_component_decl(c),
             Decl::Resource(_) => {}
             Decl::Struct(s) => self.check_struct_decl(s),
+            Decl::Intent(i) => self.check_intent_decl(i),
+            Decl::Law(l) => self.check_law_decl(l),
+            Decl::Resolver(r) => self.check_resolver_decl(r),
             Decl::Entity(e) => self.check_entity_decl(e),
             Decl::State(s) => self.check_state_decl(s),
             Decl::System(s) => self.check_system_decl(s),
@@ -1033,6 +1036,7 @@ impl Checker {
     }
 
     pub(super) fn check_stmt(&mut self, stmt: &Stmt) {
+        self.check_causal_statement_boundary(stmt);
         match stmt {
             Stmt::Let(s) => self.check_let(s),
             Stmt::LetElse(le) => self.check_let_else(le),
@@ -1046,6 +1050,9 @@ impl Checker {
             Stmt::Emit(s) => self.check_emit(s),
             Stmt::Schedule(s) => self.check_schedule(s),
             Stmt::Update(s) => self.check_update(s),
+            Stmt::Settle(s) => self.check_settle_stmt(s),
+            Stmt::Propose(s) => self.check_propose_stmt(s),
+            Stmt::Next(s) => self.check_next_stmt(s),
             Stmt::Match(s) => {
                 self.check_match_stmt(s);
             }
@@ -3461,6 +3468,7 @@ impl Checker {
                     resolved_callee_name.as_deref()
                 };
                 if let Some(name) = callee_name_ref {
+                    self.check_law_call_context(name, span);
                     if let Some(sys) = self.systems.get(name).cloned() {
                         if !sys.is_pub && is_cross_file(sys.file_id, span.file) {
                             self.error(

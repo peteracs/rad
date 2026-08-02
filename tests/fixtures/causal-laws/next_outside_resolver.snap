@@ -1,0 +1,7 @@
+---
+source: tests\fixtures\causal-laws\next_outside_resolver.rad
+exit_code: 1
+---
+
+---stderr---
+Error: `next` is only valid inside a resolver

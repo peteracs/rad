@@ -1,0 +1,5 @@
+---
+source: tests\fixtures\causal-laws\order_independent.rad
+exit_code: 0
+---
+true

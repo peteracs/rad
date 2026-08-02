@@ -1,0 +1,16 @@
+---
+source: tests\fixtures\causal-laws\conflicting_candidate_writes.rad
+exit_code: 1
+---
+
+---stderr---
+Error: [line 16] in main: Settlement aborted: conflicting candidate writes
+
+`Health` of entity `hero` was written by:
+  - resolver `ResolveDamage` for Damage(hero)
+  - resolver `ResolveHealing` for Healing(hero)
+
+No world state was changed.
+
+help: combine these causes under one owning intent/resolver,
+      or split them into two explicit settle boundaries.

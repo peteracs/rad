@@ -110,7 +110,7 @@ impl LspBackend {
         match load_program_with_overrides(&entry_path, parser_options, &overrides) {
             Ok(r) => {
                 let mut checker = Checker::new_with_options(CheckerOptions {
-                    features: vec![],
+                    features: vec!["causal_laws".to_string()],
                     compat_v0_5_dx: false,
                     warn_compat: true,
                     strict_types: false,
@@ -331,7 +331,7 @@ impl LanguageServer for LspBackend {
         };
         if let Ok(r) = load_program_with_overrides(&entry_path, parser_options, &overrides) {
             let mut checker = Checker::new_with_options(CheckerOptions {
-                features: vec![],
+                features: vec!["causal_laws".to_string()],
                 compat_v0_5_dx: false,
                 warn_compat: true,
                 strict_types: false,
@@ -363,6 +363,36 @@ impl LanguageServer for LspBackend {
                         "```rad\ncomponent {} {{ {} }}\n```",
                         word,
                         fs.join(", ")
+                    ))),
+                    range: None,
+                }));
+            }
+            if let Some(intent) = checker.intents.get(&word) {
+                let fs: Vec<String> = intent
+                    .fields
+                    .iter()
+                    .map(|(n, t)| format!("{}: {}", n, t))
+                    .collect();
+                return Ok(Some(Hover {
+                    contents: HoverContents::Scalar(MarkedString::String(format!(
+                        "```rad\nintent {} {{ {} }}\n```",
+                        word,
+                        fs.join(", ")
+                    ))),
+                    range: None,
+                }));
+            }
+            if let Some(law) = checker.laws.get(&word) {
+                let params = law
+                    .params
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                return Ok(Some(Hover {
+                    contents: HoverContents::Scalar(MarkedString::String(format!(
+                        "```rad\nlaw {}({})\n```",
+                        word, params
                     ))),
                     range: None,
                 }));
@@ -496,7 +526,7 @@ impl LanguageServer for LspBackend {
             if let Some(path) = system_ref_path_at(line_text, char_col) {
                 let q = simulate_syntax::system_ref_qualified_string(&path);
                 let mut checker = Checker::new_with_options(CheckerOptions {
-                    features: vec![],
+                    features: vec!["causal_laws".to_string()],
                     compat_v0_5_dx: false,
                     warn_compat: true,
                     strict_types: false,
@@ -681,7 +711,7 @@ impl LanguageServer for LspBackend {
 
         if let Ok(r) = load_program_with_overrides(&entry_path, parser_options, &overrides) {
             let mut checker = Checker::new_with_options(CheckerOptions {
-                features: vec![],
+                features: vec!["causal_laws".to_string()],
                 compat_v0_5_dx: false,
                 warn_compat: true,
                 strict_types: false,
@@ -815,6 +845,38 @@ impl LanguageServer for LspBackend {
                             label: name.clone(),
                             kind: Some(CompletionItemKind::CLASS),
                             detail: Some(format!("component {{ {} }}", fs.join(", "))),
+                            ..Default::default()
+                        });
+                    }
+                }
+                for (name, intent) in &checker.intents {
+                    if name.starts_with(&prefix) {
+                        let fs = intent
+                            .fields
+                            .iter()
+                            .map(|(n, t)| format!("{}: {}", n, t))
+                            .collect::<Vec<_>>()
+                            .join(", ");
+                        items.push(CompletionItem {
+                            label: name.clone(),
+                            kind: Some(CompletionItemKind::STRUCT),
+                            detail: Some(format!("intent {{ {} }}", fs)),
+                            ..Default::default()
+                        });
+                    }
+                }
+                for (name, law) in &checker.laws {
+                    if name.starts_with(&prefix) {
+                        let params = law
+                            .params
+                            .iter()
+                            .map(ToString::to_string)
+                            .collect::<Vec<_>>()
+                            .join(", ");
+                        items.push(CompletionItem {
+                            label: name.clone(),
+                            kind: Some(CompletionItemKind::FUNCTION),
+                            detail: Some(format!("law({}) — settle only", params)),
                             ..Default::default()
                         });
                     }

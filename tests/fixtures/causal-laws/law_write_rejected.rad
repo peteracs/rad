@@ -1,0 +1,14 @@
+// flags: --experimental-laws
+// expect-runtime-error: law `IllegalLaw` cannot call `set`
+
+component Health { hp: int = 100 }
+intent Damage { key target: entity, amount: int }
+law IllegalLaw(target: entity) {
+    set(target, Health { hp: 0 })
+    propose Damage { target: target, amount: 10 }
+}
+resolver ResolveDamage for Damage(target, proposals) {
+    next(target, Health { hp: 90 })
+}
+entity hero { Health {} }
+settle { IllegalLaw(hero) }

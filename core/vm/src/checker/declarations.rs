@@ -18,6 +18,9 @@ impl Checker {
                     self.register_struct(s);
                     self.define(&s.name, Ty::Str, false, s.span.clone(), s.is_pub, false);
                 }
+                Decl::Intent(i) => self.register_intent(i),
+                Decl::Law(l) => self.register_law(l),
+                Decl::Resolver(r) => self.register_resolver(r),
                 Decl::State(s) => {
                     self.register_state_machine(s);
                     self.define(&s.name, Ty::Any, false, s.span.clone(), s.is_pub, false);
@@ -822,7 +825,17 @@ impl Checker {
                 .map(|e| self.expr_is_conservatively_pure(e))
                 .unwrap_or(true),
             Stmt::Break(_) | Stmt::Continue(_) => true,
-            Stmt::Emit(_) | Stmt::Schedule(_) | Stmt::Update(_) => false,
+            Stmt::Emit(_) | Stmt::Schedule(_) | Stmt::Update(_) | Stmt::Settle(_) => false,
+            Stmt::Propose(s) => s
+                .fields
+                .iter()
+                .all(|(_, expr)| self.expr_is_conservatively_pure(expr)),
+            Stmt::Next(s) => {
+                self.expr_is_conservatively_pure(&s.entity)
+                    && s.fields
+                        .iter()
+                        .all(|(_, expr)| self.expr_is_conservatively_pure(expr))
+            }
             Stmt::Match(m) => {
                 self.expr_is_conservatively_pure(&m.subject)
                     && m.cases.iter().all(|case| {
@@ -898,7 +911,17 @@ impl Checker {
                 .map(|e| self.expr_is_conservatively_readonly(e))
                 .unwrap_or(true),
             Stmt::Break(_) | Stmt::Continue(_) => true,
-            Stmt::Emit(_) | Stmt::Schedule(_) | Stmt::Update(_) => false,
+            Stmt::Emit(_) | Stmt::Schedule(_) | Stmt::Update(_) | Stmt::Settle(_) => false,
+            Stmt::Propose(s) => s
+                .fields
+                .iter()
+                .all(|(_, expr)| self.expr_is_conservatively_readonly(expr)),
+            Stmt::Next(s) => {
+                self.expr_is_conservatively_readonly(&s.entity)
+                    && s.fields
+                        .iter()
+                        .all(|(_, expr)| self.expr_is_conservatively_readonly(expr))
+            }
             Stmt::Match(m) => {
                 self.expr_is_conservatively_readonly(&m.subject)
                     && m.cases.iter().all(|case| {
@@ -1216,6 +1239,16 @@ impl Checker {
             Stmt::Emit(_) => Some("emits an event".to_string()),
             Stmt::Schedule(_) => Some("runs a system schedule".to_string()),
             Stmt::Update(_) => Some("calls impure builtin 'set'".to_string()),
+            Stmt::Settle(_) => Some("opens a causal settlement".to_string()),
+            Stmt::Propose(s) => s
+                .fields
+                .iter()
+                .find_map(|(_, expr)| self.find_expr_purity_breach(expr)),
+            Stmt::Next(s) => self.find_expr_purity_breach(&s.entity).or_else(|| {
+                s.fields
+                    .iter()
+                    .find_map(|(_, expr)| self.find_expr_purity_breach(expr))
+            }),
             Stmt::Match(m) => self.find_expr_purity_breach(&m.subject).or_else(|| {
                 m.cases.iter().find_map(|case| {
                     case.guard
@@ -1231,7 +1264,7 @@ impl Checker {
         }
     }
 
-    fn find_expr_purity_breach(&self, expr: &Expr) -> Option<String> {
+    pub(super) fn find_expr_purity_breach(&self, expr: &Expr) -> Option<String> {
         match expr {
             Expr::IntLit(_, _)
             | Expr::FloatLit(_, _)
@@ -1488,6 +1521,16 @@ impl Checker {
                 .find_map(|(_, expr)| self.find_expr_sim_breach(expr))
                 .or_else(|| e.delay.as_ref().and_then(|d| self.find_expr_sim_breach(d))),
             Stmt::Schedule(_) | Stmt::Update(_) => None,
+            Stmt::Settle(s) => self.find_block_sim_breach_with_locals(&s.body, local_muts),
+            Stmt::Propose(s) => s
+                .fields
+                .iter()
+                .find_map(|(_, expr)| self.find_expr_sim_breach(expr)),
+            Stmt::Next(s) => self.find_expr_sim_breach(&s.entity).or_else(|| {
+                s.fields
+                    .iter()
+                    .find_map(|(_, expr)| self.find_expr_sim_breach(expr))
+            }),
             Stmt::Match(m) => self.find_expr_sim_breach(&m.subject).or_else(|| {
                 m.cases.iter().find_map(|case| {
                     case.guard

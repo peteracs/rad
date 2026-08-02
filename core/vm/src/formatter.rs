@@ -5,7 +5,17 @@ const INDENT: &str = "    ";
 fn is_decl_keyword(word: &str) -> bool {
     matches!(
         word,
-        "component" | "entity" | "system" | "event" | "fn" | "state" | "type" | "on"
+        "component"
+            | "entity"
+            | "system"
+            | "event"
+            | "fn"
+            | "state"
+            | "type"
+            | "on"
+            | "intent"
+            | "law"
+            | "resolver"
     )
 }
 

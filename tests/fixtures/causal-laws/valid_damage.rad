@@ -1,0 +1,40 @@
+// flags: --experimental-laws
+// expect: 55
+// expect: 0
+
+component Health { hp: int = 100, max: int = 100 }
+
+component Shield { hp: int = 10 }
+intent Damage {
+    key target: entity
+    source: entity
+    amount: int
+    kind: str
+}
+law DirectHit(source: entity, target: entity, amount: int, kind: str) {
+    propose Damage { target: target, source: source, amount: amount, kind: kind }
+}
+resolver ResolveDamage for Damage(target, proposals) {
+    let health = require(target, Health)
+    let shield = require(target, Shield)
+    let raw = proposals |> map(fn(p) { return p.amount }) |> sum()
+    let absorbed = min(shield.hp, raw)
+    let remaining = raw - absorbed
+    next(target, Shield { hp: shield.hp - absorbed })
+    next(target, Health { hp: max(0, health.hp - remaining), max: health.max })
+}
+
+entity attacker_a {}
+
+entity attacker_b {}
+
+entity environment {}
+
+entity hero { Health {}, Shield {} }
+settle {
+    DirectHit(attacker_a, hero, 20, "physical")
+    DirectHit(attacker_b, hero, 30, "fire")
+    DirectHit(environment, hero, 5, "burn")
+}
+print(require(hero, Health).hp)
+print(require(hero, Shield).hp)

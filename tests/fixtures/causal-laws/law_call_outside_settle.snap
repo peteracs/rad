@@ -1,0 +1,7 @@
+---
+source: tests\fixtures\causal-laws\law_call_outside_settle.rad
+exit_code: 1
+---
+
+---stderr---
+Error: law `Hit` may only be called inside `settle`

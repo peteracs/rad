@@ -1,0 +1,7 @@
+---
+source: tests\fixtures\causal-laws\nested_settle.rad
+exit_code: 1
+---
+
+---stderr---
+Error: nested settlements are not allowed

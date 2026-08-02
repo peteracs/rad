@@ -58,6 +58,7 @@ assert_only_changed(before, after, [Health]) would fail here:
 | Record & replay | `rad app.rad --record trace.radr`, `rad replay` |
 | Time-travel debugging | `rad replay trace.radr --serve` (`goto_frame`, `diff_frames`, `why`) |
 | Retroactive edits | `rad replay trace.radr --with fixed.rad` |
+| Causal settlements (experimental) | `intent`, `law`, `resolver`, `settle`, `why()` fan-in |
 
 `simulate_par` is bit-identical for the same inputs at any thread count — each
 fork's RNG seed is derived from `(seed, index)` via a SplitMix64 finalizer. A
@@ -86,6 +87,7 @@ rad projects/dogfood/causality/main.rad             # why() across two event hop
 rad projects/dogfood/speculation/blast_radius.rad   # diff / assert_only_changed
 rad projects/dogfood/speculation/main.rad           # capability sandbox
 rad projects/dogfood/worldmerge/main.rad            # three-way world merge
+rad projects/dogfood/causal-laws/main.rad --experimental-laws # typed causal fan-in
 ```
 
 Build:
@@ -116,6 +118,8 @@ and known limits are in the [Introduction](docs/src/introduction.md#status).
 - [Built-in functions](docs/src/reference/builtins.md) — `why`, `fork`, `diff`, `sandbox_run`, and contracts
 - [Language guarantees](docs/src/reference/guarantees.md) — behavioral contracts with maturity labels
 - [Language spec](docs/src/reference/spec.md)
+- [Causal Laws guide](docs/src/guide/causal-laws.md) â€” experimental typed intents and atomic settlements
+- [RFC-0001](docs/rfcs/0001-causal-settlements.md) â€” normative v0 semantics
 - [Performance](docs/src/reference/performance.md)
 - [Contributing](docs/src/project/contributing.md)
 - [Repository map](docs/src/project/repo-map.md)

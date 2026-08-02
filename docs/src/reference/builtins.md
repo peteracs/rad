@@ -1567,6 +1567,10 @@ between same-browser tabs by default, or a real WebSocket relay
 machines join the same session — the relay is dumb fan-out; every
 semantic stays in the VM.
 
+`runtime_features()` reports `"causal_laws": 1` when the embedder can compile
+RFC-0001 syntax. WASM hosts opt in by checking that marker before providing a
+Causal Laws program; the native CLI uses `--experimental-laws`.
+
 ```js
 const runtime = new RadRuntime()
 JSON.parse(runtime.runtime_features())

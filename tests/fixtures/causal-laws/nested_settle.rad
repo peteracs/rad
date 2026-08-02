@@ -1,0 +1,4 @@
+// flags: --experimental-laws
+// expect-runtime-error: nested settlements are not allowed
+
+settle { settle {} }

@@ -22,6 +22,10 @@
 //! in frame k. This makes the ledger composable with the time-travel
 //! server: "why, as of timeline index k" = writes with `frame < k`.
 
+mod settlement;
+pub use settlement::{ProposalRecord, ResolutionRecord, SettlementRecord};
+pub(crate) use settlement::{SettlementProposalInput, SettlementResolutionInput};
+
 /// Who performed a write or an emit.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Cause {
@@ -62,6 +66,8 @@ pub struct WriteRecord {
     /// machine's ledger (it rode a fork payload). Frames inside such records
     /// follow the *sender's* clock; `why()` discloses the origin.
     pub origin: Option<String>,
+    /// Fan-in resolution that produced this write, for RFC-0001 settlements.
+    pub resolution_id: Option<u64>,
 }
 
 #[derive(Clone, Debug)]
@@ -91,6 +97,9 @@ pub struct WireProvenance {
     pub origin: String,
     pub writes: Vec<WriteRecord>,
     pub emits: Vec<EmitRecord>,
+    pub settlements: Vec<SettlementRecord>,
+    pub proposals: Vec<ProposalRecord>,
+    pub resolutions: Vec<ResolutionRecord>,
 }
 
 /// High-bit namespace tag for emit ids that came over the wire. Local ledger
@@ -121,6 +130,12 @@ pub struct CausalityLedger {
     /// originate from the committed timeline — `why()` discloses that seam
     /// honestly instead of presenting pre-fork provenance as the whole truth.
     pub commits: Vec<(u64, usize)>,
+    pub settlements: std::collections::VecDeque<SettlementRecord>,
+    pub proposals: std::collections::VecDeque<ProposalRecord>,
+    pub resolutions: std::collections::VecDeque<ResolutionRecord>,
+    pub(crate) next_settlement_id: u64,
+    pub(crate) next_proposal_id: u64,
+    pub(crate) next_resolution_id: u64,
     /// Retention window: the ledger keeps at most this many write and emit
     /// records each, evicting the oldest. Long-running processes must not
     /// OOM by bookkeeping; recent provenance stays in RAM, full history
@@ -142,6 +157,12 @@ impl Default for CausalityLedger {
             writes: std::collections::VecDeque::new(),
             emits: std::collections::VecDeque::new(),
             commits: Vec::new(),
+            settlements: std::collections::VecDeque::new(),
+            proposals: std::collections::VecDeque::new(),
+            resolutions: std::collections::VecDeque::new(),
+            next_settlement_id: 1,
+            next_proposal_id: 1,
+            next_resolution_id: 1,
             cap: DEFAULT_RETENTION_CAP,
             write_base: 0,
             emit_base: 0,
@@ -187,6 +208,18 @@ impl CausalityLedger {
             self.emit_base += n;
             self.truncated = true;
         }
+        while self.settlements.len() > self.cap {
+            self.settlements.pop_front();
+            self.truncated = true;
+        }
+        while self.proposals.len() > self.cap {
+            self.proposals.pop_front();
+            self.truncated = true;
+        }
+        while self.resolutions.len() > self.cap {
+            self.resolutions.pop_front();
+            self.truncated = true;
+        }
     }
 
     /// Returns the emit id used by `Cause::Handler` links (1-based; 0 is
@@ -226,6 +259,7 @@ impl CausalityLedger {
             kind,
             by,
             origin: None,
+            resolution_id: None,
         });
         self.evict_overflow();
     }
@@ -255,6 +289,45 @@ impl CausalityLedger {
         let mut wanted: Vec<u64> = queue_ids.iter().copied().filter(|&id| id != 0).collect();
         for w in newest.values() {
             if let Cause::Handler { emit_id, .. } = w.by {
+                wanted.push(emit_id);
+            }
+        }
+
+        // Settlement writes carry a fan-in tree. Keep only the resolution
+        // records reachable from the live writes in this fork, along with
+        // their proposals and owning settlement records.
+        let wanted_resolution_ids: HashSet<u64> = newest
+            .values()
+            .filter_map(|write| write.resolution_id)
+            .collect();
+        let resolutions: Vec<ResolutionRecord> = self
+            .resolutions
+            .iter()
+            .filter(|resolution| wanted_resolution_ids.contains(&resolution.id))
+            .cloned()
+            .collect();
+        let wanted_proposal_ids: HashSet<u64> = resolutions
+            .iter()
+            .flat_map(|resolution| resolution.proposal_ids.iter().copied())
+            .collect();
+        let proposals: Vec<ProposalRecord> = self
+            .proposals
+            .iter()
+            .filter(|proposal| wanted_proposal_ids.contains(&proposal.id))
+            .cloned()
+            .collect();
+        let wanted_settlement_ids: HashSet<u64> = resolutions
+            .iter()
+            .map(|resolution| resolution.settlement_id)
+            .collect();
+        let settlements: Vec<SettlementRecord> = self
+            .settlements
+            .iter()
+            .filter(|settlement| wanted_settlement_ids.contains(&settlement.id))
+            .cloned()
+            .collect();
+        for settlement in &settlements {
+            if let Cause::Handler { emit_id, .. } = settlement.by {
                 wanted.push(emit_id);
             }
         }
@@ -304,10 +377,20 @@ impl CausalityLedger {
                 e
             })
             .collect();
+        let settlements = settlements
+            .into_iter()
+            .map(|mut settlement| {
+                settlement.by = tag_cause(&settlement.by);
+                settlement
+            })
+            .collect();
         WireProvenance {
             origin: String::new(),
             writes,
             emits,
+            settlements,
+            proposals,
+            resolutions,
         }
     }
 
@@ -350,6 +433,71 @@ impl CausalityLedger {
             id_map.insert(e.id, new_id);
             self.evict_overflow();
         }
+        let mut settlement_id_map = std::collections::HashMap::new();
+        for settlement in &prov.settlements {
+            let id = self.next_settlement_id;
+            self.next_settlement_id += 1;
+            let by = match &settlement.by {
+                Cause::Handler { event, emit_id } => Cause::Handler {
+                    event: event.clone(),
+                    emit_id: id_map.get(emit_id).copied().unwrap_or(*emit_id),
+                },
+                other => other.clone(),
+            };
+            self.settlements.push_back(SettlementRecord {
+                id,
+                frame: settlement.frame,
+                by,
+            });
+            settlement_id_map.insert(settlement.id, id);
+        }
+        let mut proposal_id_map = std::collections::HashMap::new();
+        for proposal in &prov.proposals {
+            let Some(settlement_id) = settlement_id_map.get(&proposal.settlement_id).copied()
+            else {
+                continue;
+            };
+            let id = self.next_proposal_id;
+            self.next_proposal_id += 1;
+            self.proposals.push_back(ProposalRecord {
+                id,
+                settlement_id,
+                intent: proposal.intent.clone(),
+                key: entity_remap
+                    .get(&proposal.key)
+                    .copied()
+                    .unwrap_or(proposal.key),
+                payload: proposal.payload.clone(),
+                law: proposal.law.clone(),
+                source_line: proposal.source_line,
+            });
+            proposal_id_map.insert(proposal.id, id);
+        }
+        let mut resolution_id_map = std::collections::HashMap::new();
+        for resolution in &prov.resolutions {
+            let Some(settlement_id) = settlement_id_map.get(&resolution.settlement_id).copied()
+            else {
+                continue;
+            };
+            let id = self.next_resolution_id;
+            self.next_resolution_id += 1;
+            self.resolutions.push_back(ResolutionRecord {
+                id,
+                settlement_id,
+                intent: resolution.intent.clone(),
+                key: entity_remap
+                    .get(&resolution.key)
+                    .copied()
+                    .unwrap_or(resolution.key),
+                resolver: resolution.resolver.clone(),
+                proposal_ids: resolution
+                    .proposal_ids
+                    .iter()
+                    .filter_map(|proposal_id| proposal_id_map.get(proposal_id).copied())
+                    .collect(),
+            });
+            resolution_id_map.insert(resolution.id, id);
+        }
         for w in &prov.writes {
             let by = match &w.by {
                 Cause::Handler { event, emit_id } => Cause::Handler {
@@ -368,9 +516,12 @@ impl CausalityLedger {
                 kind: w.kind,
                 by,
                 origin: Some(w.origin.clone().unwrap_or_else(|| origin.clone())),
+                resolution_id: w
+                    .resolution_id
+                    .and_then(|id| resolution_id_map.get(&id).copied()),
             });
-            self.evict_overflow();
         }
+        self.evict_overflow();
         id_map
     }
 
@@ -490,6 +641,16 @@ impl CausalityLedger {
         if let Some(origin) = &w.origin {
             // Remote provenance: the frame number is the sender's clock.
             out.push_str(&format!("   [via {}, remote frame]", origin));
+        }
+
+        if let Some(resolution_id) = w.resolution_id {
+            if let Some(tree) = self.render_resolution(resolution_id) {
+                out.push_str(&tree);
+            } else {
+                out.push_str(
+                    "\n  note: settlement fan-in provenance was evicted by the retention window",
+                );
+            }
         }
 
         // Walk the causal chain: write -> cause -> (emit -> cause)*.

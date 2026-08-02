@@ -1,0 +1,8 @@
+---
+source: tests\fixtures\causal-laws\law_write_rejected.rad
+exit_code: 1
+---
+
+---stderr---
+Error: law `IllegalLaw` cannot perform this effect: calls impure builtin 'set'
+Error: Effect violation: 'set' requires ecs effect(s), but current context is readonly

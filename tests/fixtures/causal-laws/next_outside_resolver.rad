@@ -1,0 +1,6 @@
+// flags: --experimental-laws
+// expect-runtime-error: `next` is only valid inside a resolver
+
+component Health { hp: int = 100 }
+entity hero { Health {} }
+next(hero, Health { hp: 0 })

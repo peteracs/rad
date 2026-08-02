@@ -2,7 +2,7 @@
 use wasm_bindgen::prelude::*;
 
 use crate::ast::Decl;
-use crate::checker::Checker;
+use crate::checker::{Checker, CheckerOptions};
 use crate::compiler::{Compiler, StateTransitionInfo};
 use crate::gc::GcHeap;
 use crate::lexer::Lexer;
@@ -38,6 +38,17 @@ pub struct RadRuntime {
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 impl RadRuntime {
+    fn checker() -> Checker {
+        Checker::new_with_options(CheckerOptions {
+            features: vec!["causal_laws".to_string()],
+            ..CheckerOptions::default()
+        })
+    }
+
+    fn compiler() -> Compiler {
+        Compiler::new().with_features(vec!["causal_laws".to_string()])
+    }
+
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(constructor))]
     pub fn new() -> Self {
         Self {
@@ -58,6 +69,7 @@ impl RadRuntime {
         serde_json::json!({
             "version": env!("CARGO_PKG_VERSION"),
             "session": 2,
+            "causal_laws": 1,
             "features": [
                 "streaming-session",
                 "render-delta",
@@ -162,7 +174,7 @@ impl RadRuntime {
             return Err("Module imports are not supported in browser playground yet".to_string());
         }
 
-        let mut checker = Checker::new();
+        let mut checker = Self::checker();
         let checker_errors = checker.check(&program);
         let checker_output = checker.output();
 
@@ -177,7 +189,7 @@ impl RadRuntime {
             return Err(all_errors.join("\n"));
         }
 
-        let compile_result = Compiler::new()
+        let compile_result = Self::compiler()
             .with_checker_output(checker_output)
             .compile(&program)
             .map_err(|e| format!("Compile error: {}", e.message))?;
@@ -248,7 +260,7 @@ impl RadRuntime {
             return Err("Module imports are not supported in browser playground yet".to_string());
         }
 
-        let mut checker = Checker::new();
+        let mut checker = Self::checker();
         let checker_errors = checker.check(&program);
         let checker_output = checker.output();
 
@@ -263,7 +275,7 @@ impl RadRuntime {
             return Err(all_errors.join("\n"));
         }
 
-        let compile_result = Compiler::new()
+        let compile_result = Self::compiler()
             .with_checker_output(checker_output)
             .compile(&program)
             .map_err(|e| format!("Compile error: {}", e.message))?;
@@ -307,7 +319,7 @@ impl RadRuntime {
             return Err("Module imports are not supported in browser playground yet".to_string());
         }
 
-        let mut checker = Checker::new();
+        let mut checker = Self::checker();
         let checker_errors = checker.check(&program);
 
         for e in checker_errors {
@@ -825,7 +837,7 @@ impl RadRuntime {
         {
             return Err("Module imports are not supported in browser playground yet".to_string());
         }
-        let mut checker = Checker::new();
+        let mut checker = Self::checker();
         let checker_errors = checker.check(&program);
         let checker_output = checker.output();
         for e in checker_errors {
@@ -837,7 +849,7 @@ impl RadRuntime {
         if !all_errors.is_empty() {
             return Err(all_errors.join("\n"));
         }
-        let compile_result = Compiler::new()
+        let compile_result = Self::compiler()
             .with_checker_output(checker_output)
             .compile(&program)
             .map_err(|e| format!("Compile error: {}", e.message))?;
@@ -931,7 +943,7 @@ impl RadRuntime {
             return Err("Module imports are not supported in browser sessions yet".to_string());
         }
 
-        let mut checker = Checker::new();
+        let mut checker = Self::checker();
         let checker_errors = checker.check(&program);
         let checker_output = checker.output();
         for e in checker_errors {
@@ -944,7 +956,7 @@ impl RadRuntime {
             return Err(all_errors.join("\n"));
         }
 
-        let compile_result = Compiler::new()
+        let compile_result = Self::compiler()
             .with_checker_output(checker_output)
             .compile(&program)
             .map_err(|e| format!("Compile error: {}", e.message))?;
@@ -1221,6 +1233,26 @@ mod tests {
         let mut rt = RadRuntime::new();
         let result = rt.compile_and_run("print(2 + 3)").unwrap();
         assert_eq!(result, "5");
+    }
+
+    #[test]
+    fn compile_and_run_causal_settlement_when_capability_is_advertised() {
+        let mut rt = RadRuntime::new();
+        let source = r#"
+component Health { hp: int = 100 }
+intent Damage { key target: entity, amount: int }
+law Hit(target: entity) { propose Damage { target: target, amount: 20 } }
+resolver ResolveDamage for Damage(target, proposals) {
+    next(target, Health { hp: require(target, Health).hp - 20 })
+}
+entity hero { Health {} }
+settle { Hit(hero) }
+print(require(hero, Health).hp)
+"#;
+        assert_eq!(rt.compile_and_run(source).unwrap(), "80");
+        let features: serde_json::Value =
+            serde_json::from_str(&rt.runtime_features()).expect("feature JSON");
+        assert_eq!(features["causal_laws"], 1);
     }
 
     #[test]

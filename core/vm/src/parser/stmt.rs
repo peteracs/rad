@@ -41,6 +41,15 @@ impl Parser {
     }
 
     pub(super) fn parse_statement(&mut self) -> Result<Stmt, ParseError> {
+        if self.check_ident_text("settle") && self.peek_at(1).ty == TokenType::LBrace {
+            return self.parse_settle();
+        }
+        if self.check_ident_text("propose") && self.peek_at(1).ty == TokenType::Ident {
+            return self.parse_propose();
+        }
+        if self.check_ident_text("next") && self.peek_at(1).ty == TokenType::LParen {
+            return self.parse_next();
+        }
         if self.check(TokenType::Let) {
             return self.parse_let();
         }

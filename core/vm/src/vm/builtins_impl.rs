@@ -5325,7 +5325,10 @@ impl VM {
     /// each value conforming to the declared type. Host-unknown components
     /// (no declared schema) are left alone — the host chose to grant that
     /// name, and there is no schema to bind against. No-op outside a sandbox.
-    fn sandbox_check_write_shape(&self, data: &crate::value::ComponentData) -> Result<(), String> {
+    pub(crate) fn sandbox_check_write_shape(
+        &self,
+        data: &crate::value::ComponentData,
+    ) -> Result<(), String> {
         if self.sandbox_caps.is_none() {
             return Ok(());
         }

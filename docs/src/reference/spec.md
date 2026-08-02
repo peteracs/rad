@@ -39,7 +39,7 @@ async  await  rec  pub  readonly  phase  update
 
 In **v0.5 DX compatibility mode**, `..` is recognized in `match` binding lists as a rest-binding marker.
 
-Note: some declaration keywords are accepted as contextual identifiers in identifier positions where parsing is unambiguous (for example, `entity`, `before`, `after`, and `update` can be used as variable names). `update` is a contextual keyword: `update(...)` starts an update statement only when followed by `(`; otherwise it parses as an identifier.
+Note: some declaration keywords are accepted as contextual identifiers in identifier positions where parsing is unambiguous (for example, `entity`, `before`, `after`, and `update` can be used as variable names). `update` is a contextual keyword: `update(...)` starts an update statement only when followed by `(`; otherwise it parses as an identifier. The experimental Causal Laws words `intent`, `law`, `resolver`, `settle`, `propose`, `next`, and `key` are also contextual rather than reserved.
 
 ### 1.3 Literals
 
@@ -69,7 +69,8 @@ The following Extended Backus-Naur Form grammar defines the complete syntax of R
 program        = { declaration } ;
 
 declaration    = [ "pub" ] ( component_decl | resource_decl | struct_decl | entity_decl | state_decl
-               | system_decl | event_decl | fn_decl | type_decl | type_alias_decl )
+               | system_decl | event_decl | fn_decl | type_decl | type_alias_decl
+               | intent_decl | law_decl | resolver_decl )
                | on_handler | use_decl | test_decl | statement ;
 
 (* Top-level declarations *)
@@ -79,6 +80,9 @@ resource_decl  = [ "transient" ] "resource" IDENT [ VERSION ] "{" { field_def [ 
    declared schema version, embedded per type in save_world() output and
    handed to `migrate X(old, from_version)` on load. *)
 struct_decl    = "struct" IDENT "{" { field_def [ "," ] } "}" ;
+intent_decl    = "intent" IDENT "{" { [ "key" ] IDENT ":" type_expr [ "," ] } "}" ;
+law_decl       = "law" IDENT "(" [ typed_params ] ")" block ;
+resolver_decl  = "resolver" IDENT "for" IDENT "(" IDENT "," IDENT ")" block ;
 entity_decl    = "entity" IDENT "{" { component_entry [ "," ] } "}" ;
 entity_expr    = "entity" [ expr ] "{" { component_entry [ "," ] } "}" ;
 component_entry = component_init | expr ;
@@ -122,7 +126,8 @@ test_decl      = "test" ( IDENT | STRING ) [ "for" IDENT "in" expr { "," IDENT "
 (* Statements *)
 block          = "{" { statement } "}" ;
 statement      = let_stmt | let_else_stmt | assign_stmt | if_stmt | while_stmt | for_stmt
-               | return_stmt | emit_stmt | schedule_stmt | match_stmt
+               | return_stmt | emit_stmt | schedule_stmt | match_stmt | settle_stmt
+               | propose_stmt | next_stmt
                | "break" | "continue" | expr_stmt ;
 
 let_stmt       = "let" [ "unique" ] [ "mut" ] [ "rec" ] ( IDENT | "(" IDENT { "," IDENT } ")" ) [ ":" type_expr ] "=" expr ;
@@ -137,6 +142,9 @@ schedule_stmt  = "schedule" [ "serial" ] "[" schedule_target { "," schedule_targ
 schedule_target = IDENT [ "." IDENT ] | "system" "::" IDENT { "::" IDENT } ;
 match_stmt     = "match" expr "{" { match_case } "}" ;
 match_case     = match_pattern [ ( "when" | "if" ) expr ] "=>" ( block | expr ) ;
+settle_stmt    = "settle" "{" { statement } "}" ;
+propose_stmt   = "propose" IDENT "{" { field_init [ "," ] } "}" ;
+next_stmt      = "next" "(" expr "," component_init ")" ;
 match_pattern  = "_" | INT | FLOAT | STRING | "true" | "false"
                | "has" IDENT [ "(" IDENT ")" ]
                | IDENT [ "{" { IDENT [ ":" IDENT ] [ "," ] } [ ".." ] "}" | "(" IDENT ")" ] ;
@@ -1851,6 +1859,29 @@ Notes:
 
 - Async task failures propagate at the `await` site.
 - Awaiting a failed task raises a runtime error with task context.
+
+### 7.7 Causal Settlements (experimental)
+
+When `--experimental-laws` is enabled, a `settle` statement captures one
+immutable base-world snapshot. Laws invoked by its body may read that snapshot
+and create typed proposals. Proposals are grouped by intent and entity key and
+canonically ordered by typed payload, not by producer invocation order.
+
+Every proposed intent has exactly one same-module resolver. Each resolver reads
+the original base snapshot and stages replacements in an isolated sparse patch
+with `next`. Resolvers never observe proposals as world state or read any
+candidate patch. Resolver declaration or execution order is unobservable and
+cannot be configured.
+
+After all resolvers finish, two candidate writes to the same `(entity,
+component type)` are a settlement error. A conflict or any producer/resolver
+failure discards all transient proposals and patches without changing the live
+world or provenance ledger. A conflict-free patch is applied to a copy-on-write
+world and adopted atomically.
+
+The complete v0 syntax, static restrictions, interoperability rules, and
+non-goals are specified by [RFC-0001](https://github.com/peteracs/rad/blob/main/docs/rfcs/0001-causal-settlements.md)
+and summarized in the [Causal Laws guide](../guide/causal-laws.md).
 
 ---
 

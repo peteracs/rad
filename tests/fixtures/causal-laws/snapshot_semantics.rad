@@ -1,0 +1,17 @@
+// flags: --experimental-laws
+// expect: 80
+
+component Health { hp: int = 100 }
+intent Damage { key target: entity, observed_hp: int, amount: int }
+law ObserveAndHit(target: entity, amount: int) {
+    let observed = require(target, Health).hp
+    propose Damage { target: target, observed_hp: observed, amount: amount }
+}
+resolver ResolveDamage for Damage(target, proposals) {
+    let base = require(target, Health)
+    let total = proposals |> map(fn(p) { return p.amount }) |> sum()
+    next(target, Health { hp: base.hp - total })
+}
+entity hero { Health {} }
+settle { ObserveAndHit(hero, 5) ObserveAndHit(hero, 15) }
+print(require(hero, Health).hp)

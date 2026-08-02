@@ -1,0 +1,7 @@
+---
+source: tests\fixtures\causal-laws\cross_entity_next.rad
+exit_code: 1
+---
+
+---stderr---
+Error: resolver `ResolveDamage` attempted to write another entity, but its current key is `target`

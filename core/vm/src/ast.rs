@@ -135,6 +135,9 @@ pub enum Decl {
     Component(DataDecl),
     Resource(ResourceDecl),
     Struct(DataDecl),
+    Intent(IntentDecl),
+    Law(LawDecl),
+    Resolver(ResolverDecl),
     Entity(EntityDecl),
     State(StateDecl),
     System(SystemDecl),
@@ -157,6 +160,9 @@ impl Decl {
             Decl::Component(c) => Some(&c.span),
             Decl::Resource(r) => Some(&r.span),
             Decl::Struct(s) => Some(&s.span),
+            Decl::Intent(i) => Some(&i.span),
+            Decl::Law(l) => Some(&l.span),
+            Decl::Resolver(r) => Some(&r.span),
             Decl::Entity(e) => Some(&e.span),
             Decl::State(s) => Some(&s.span),
             Decl::System(s) => Some(&s.span),
@@ -303,6 +309,49 @@ pub struct EventDecl {
     pub fields: Vec<(String, Option<TypeExpr>)>,
 }
 
+/// A transient proposal schema owned by one resolver in its defining module.
+#[derive(Debug, Clone)]
+pub struct IntentDecl {
+    pub id: NodeId,
+    pub span: Span,
+    pub name: String,
+    pub is_pub: bool,
+    pub fields: Vec<IntentField>,
+}
+
+#[derive(Debug, Clone)]
+pub struct IntentField {
+    pub span: Span,
+    pub name: String,
+    pub type_annotation: TypeExpr,
+    pub is_key: bool,
+}
+
+/// A read-only producer that can only be invoked from a settlement.
+#[derive(Debug, Clone)]
+pub struct LawDecl {
+    pub id: NodeId,
+    pub span: Span,
+    pub name: String,
+    pub is_pub: bool,
+    pub params: Vec<String>,
+    pub param_types: Vec<TypeExpr>,
+    pub body: Block,
+}
+
+/// The single semantic owner of one intent type.
+#[derive(Debug, Clone)]
+pub struct ResolverDecl {
+    pub id: NodeId,
+    pub span: Span,
+    pub name: String,
+    pub is_pub: bool,
+    pub intent_name: String,
+    pub key_param: String,
+    pub proposals_param: String,
+    pub body: Block,
+}
+
 /// Schema migration (list item #5): `migrate Health(old) { return Health { … } }`.
 /// Invoked by `load_world` when a persisted component/resource shape differs
 /// from the declared one. `param_name` binds the stored fields as a
@@ -410,6 +459,9 @@ pub enum Stmt {
     Emit(EmitStmt),
     Schedule(ScheduleStmt),
     Update(UpdateStmt),
+    Settle(SettleStmt),
+    Propose(ProposeStmt),
+    Next(NextStmt),
     Match(MatchStmt),
     Expr(ExprStmt),
     OnceGuardPass(Span),
@@ -431,12 +483,39 @@ impl Stmt {
             Stmt::Emit(s) => &s.span,
             Stmt::Schedule(s) => &s.span,
             Stmt::Update(s) => &s.span,
+            Stmt::Settle(s) => &s.span,
+            Stmt::Propose(s) => &s.span,
+            Stmt::Next(s) => &s.span,
             Stmt::Match(s) => &s.span,
             Stmt::Expr(s) => &s.span,
             Stmt::OnceGuardPass(span) => span,
             Stmt::Error(span) => span,
         }
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct SettleStmt {
+    pub id: NodeId,
+    pub span: Span,
+    pub body: Block,
+}
+
+#[derive(Debug, Clone)]
+pub struct ProposeStmt {
+    pub id: NodeId,
+    pub span: Span,
+    pub intent_name: String,
+    pub fields: Vec<(String, Expr)>,
+}
+
+#[derive(Debug, Clone)]
+pub struct NextStmt {
+    pub id: NodeId,
+    pub span: Span,
+    pub entity: Expr,
+    pub component_name: String,
+    pub fields: Vec<(String, Expr)>,
 }
 
 #[derive(Debug, Clone)]

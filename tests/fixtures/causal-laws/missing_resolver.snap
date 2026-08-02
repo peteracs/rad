@@ -1,0 +1,7 @@
+---
+source: tests\fixtures\causal-laws\missing_resolver.rad
+exit_code: 1
+---
+
+---stderr---
+Error: proposed intent `Damage` has no resolver

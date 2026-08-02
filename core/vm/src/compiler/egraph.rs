@@ -203,6 +203,32 @@ fn optimize_stmt(stmt: &Stmt) -> Stmt {
                 })
                 .collect(),
         }),
+        Stmt::Settle(s) => Stmt::Settle(SettleStmt {
+            id: s.id,
+            span: s.span.clone(),
+            body: optimize_block(&s.body),
+        }),
+        Stmt::Propose(s) => Stmt::Propose(ProposeStmt {
+            id: s.id,
+            span: s.span.clone(),
+            intent_name: s.intent_name.clone(),
+            fields: s
+                .fields
+                .iter()
+                .map(|(name, expr)| (name.clone(), optimize_expr(expr)))
+                .collect(),
+        }),
+        Stmt::Next(s) => Stmt::Next(NextStmt {
+            id: s.id,
+            span: s.span.clone(),
+            entity: optimize_expr(&s.entity),
+            component_name: s.component_name.clone(),
+            fields: s
+                .fields
+                .iter()
+                .map(|(name, expr)| (name.clone(), optimize_expr(expr)))
+                .collect(),
+        }),
         Stmt::Match(m) => Stmt::Match(optimize_match_stmt(m)),
         Stmt::Expr(e) => Stmt::Expr(ExprStmt {
             id: e.id,

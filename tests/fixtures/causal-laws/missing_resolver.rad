@@ -1,0 +1,7 @@
+// flags: --experimental-laws
+// expect-runtime-error: proposed intent `Damage` has no resolver
+
+intent Damage { key target: entity, amount: int }
+law Hit(target: entity) { propose Damage { target: target, amount: 1 } }
+entity hero {}
+settle { Hit(hero) }

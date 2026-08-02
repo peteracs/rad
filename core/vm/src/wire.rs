@@ -18,7 +18,10 @@
 //! every machine, which is what makes the wire digest and the
 //! re-encode-is-byte-identical guarantee possible.
 
-use crate::causality::{Cause, EmitRecord, WireProvenance, WriteKind, WriteRecord};
+use crate::causality::{
+    Cause, EmitRecord, ProposalRecord, ResolutionRecord, SettlementRecord, WireProvenance,
+    WriteKind, WriteRecord,
+};
 use crate::value::{Allocator, MapKey, MapStorage, Value};
 use std::fmt::Write;
 
@@ -26,8 +29,9 @@ use std::fmt::Write;
 // Provenance section: the sender's ledger closure rides the fork payload so
 // the receiver can answer why() for state it never computed.
 //
-//   "prov":[[writes...],[emits...]]
-//   write: [frame, entity|null, name|null, component, value, kind, cause, origin|null]
+//   "prov":[[writes...],[emits...],[settlements...],[proposals...],[resolutions...]]
+//   write: [frame, entity|null, name|null, component, value, kind, cause, origin|null,
+//           resolution_id|null]
 //   emit:  [id, event, frame, payload, cause, origin|null]
 //   cause: [0] main | [1, system] | [2, event, emit_id] ; kind: 0..=4
 // ---------------------------------------------------------------------------
@@ -56,6 +60,16 @@ fn encode_opt_str_into(s: &Option<String>, out: &mut String) {
 }
 
 pub fn encode_prov_into(prov: &WireProvenance, out: &mut String) {
+    // Preserve the pre-RFC wire bytes for worlds without causal fan-in. The
+    // five-section form is negotiated by the `causal_laws` capability and is
+    // emitted only when it actually carries settlement records.
+    let extended = !prov.settlements.is_empty()
+        || !prov.proposals.is_empty()
+        || !prov.resolutions.is_empty()
+        || prov
+            .writes
+            .iter()
+            .any(|write| write.resolution_id.is_some());
     out.push_str("[[");
     for (i, w) in prov.writes.iter().enumerate() {
         if i > 0 {
@@ -84,6 +98,15 @@ pub fn encode_prov_into(prov: &WireProvenance, out: &mut String) {
         encode_cause_into(&w.by, out);
         out.push(',');
         encode_opt_str_into(&w.origin, out);
+        if extended {
+            out.push(',');
+            match w.resolution_id {
+                Some(id) => {
+                    let _ = write!(out, "{}", id);
+                }
+                None => out.push_str("null"),
+            }
+        }
         out.push(']');
     }
     out.push_str("],[");
@@ -100,6 +123,50 @@ pub fn encode_prov_into(prov: &WireProvenance, out: &mut String) {
         out.push(',');
         encode_opt_str_into(&e.origin, out);
         out.push(']');
+    }
+    if !extended {
+        out.push_str("]]");
+        return;
+    }
+    out.push_str("],[");
+    for (i, settlement) in prov.settlements.iter().enumerate() {
+        if i > 0 {
+            out.push(',');
+        }
+        let _ = write!(out, "[{},{},", settlement.id, settlement.frame);
+        encode_cause_into(&settlement.by, out);
+        out.push(']');
+    }
+    out.push_str("],[");
+    for (i, proposal) in prov.proposals.iter().enumerate() {
+        if i > 0 {
+            out.push(',');
+        }
+        let _ = write!(out, "[{},{},", proposal.id, proposal.settlement_id);
+        escape_json_into(out, &proposal.intent);
+        let _ = write!(out, ",{},", proposal.key);
+        escape_json_into(out, &proposal.payload);
+        out.push(',');
+        escape_json_into(out, &proposal.law);
+        let _ = write!(out, ",{}]", proposal.source_line);
+    }
+    out.push_str("],[");
+    for (i, resolution) in prov.resolutions.iter().enumerate() {
+        if i > 0 {
+            out.push(',');
+        }
+        let _ = write!(out, "[{},{},", resolution.id, resolution.settlement_id);
+        escape_json_into(out, &resolution.intent);
+        let _ = write!(out, ",{},", resolution.key);
+        escape_json_into(out, &resolution.resolver);
+        out.push_str(",[");
+        for (index, proposal_id) in resolution.proposal_ids.iter().enumerate() {
+            if index > 0 {
+                out.push(',');
+            }
+            let _ = write!(out, "{}", proposal_id);
+        }
+        out.push_str("]]");
     }
     out.push_str("]]");
 }
@@ -174,15 +241,15 @@ fn decode_opt_str(j: &serde_json::Value) -> Option<String> {
 }
 
 pub fn decode_prov(j: &serde_json::Value) -> Result<WireProvenance, String> {
-    let pair = j
+    let sections = j
         .as_array()
-        .filter(|a| a.len() == 2)
+        .filter(|a| a.len() == 2 || a.len() == 5)
         .ok_or("prov: malformed section")?;
     let mut writes = Vec::new();
-    for w in pair[0].as_array().ok_or("prov: malformed writes")? {
+    for w in sections[0].as_array().ok_or("prov: malformed writes")? {
         let f = w
             .as_array()
-            .filter(|a| a.len() == 8)
+            .filter(|a| a.len() == 8 || a.len() == 9)
             .ok_or("prov: malformed write")?;
         writes.push(WriteRecord {
             frame: f[0].as_u64().ok_or("prov: malformed write")?,
@@ -200,10 +267,11 @@ pub fn decode_prov(j: &serde_json::Value) -> Result<WireProvenance, String> {
             },
             by: decode_cause(&f[6])?,
             origin: decode_opt_str(&f[7]),
+            resolution_id: f.get(8).and_then(|value| value.as_u64()),
         });
     }
     let mut emits = Vec::new();
-    for e in pair[1].as_array().ok_or("prov: malformed emits")? {
+    for e in sections[1].as_array().ok_or("prov: malformed emits")? {
         let f = e
             .as_array()
             .filter(|a| a.len() == 6)
@@ -217,10 +285,84 @@ pub fn decode_prov(j: &serde_json::Value) -> Result<WireProvenance, String> {
             origin: decode_opt_str(&f[5]),
         });
     }
+    let mut settlements = Vec::new();
+    let mut proposals = Vec::new();
+    let mut resolutions = Vec::new();
+    if sections.len() == 5 {
+        for settlement in sections[2]
+            .as_array()
+            .ok_or("prov: malformed settlements")?
+        {
+            let fields = settlement
+                .as_array()
+                .filter(|fields| fields.len() == 3)
+                .ok_or("prov: malformed settlement")?;
+            settlements.push(SettlementRecord {
+                id: fields[0].as_u64().ok_or("prov: malformed settlement")?,
+                frame: fields[1].as_u64().ok_or("prov: malformed settlement")?,
+                by: decode_cause(&fields[2])?,
+            });
+        }
+        for proposal in sections[3].as_array().ok_or("prov: malformed proposals")? {
+            let fields = proposal
+                .as_array()
+                .filter(|fields| fields.len() == 7)
+                .ok_or("prov: malformed proposal")?;
+            proposals.push(ProposalRecord {
+                id: fields[0].as_u64().ok_or("prov: malformed proposal")?,
+                settlement_id: fields[1].as_u64().ok_or("prov: malformed proposal")?,
+                intent: fields[2]
+                    .as_str()
+                    .ok_or("prov: malformed proposal")?
+                    .to_string(),
+                key: fields[3].as_u64().ok_or("prov: malformed proposal")? as u32,
+                payload: fields[4]
+                    .as_str()
+                    .ok_or("prov: malformed proposal")?
+                    .to_string(),
+                law: fields[5]
+                    .as_str()
+                    .ok_or("prov: malformed proposal")?
+                    .to_string(),
+                source_line: fields[6].as_u64().ok_or("prov: malformed proposal")? as u32,
+            });
+        }
+        for resolution in sections[4]
+            .as_array()
+            .ok_or("prov: malformed resolutions")?
+        {
+            let fields = resolution
+                .as_array()
+                .filter(|fields| fields.len() == 6)
+                .ok_or("prov: malformed resolution")?;
+            resolutions.push(ResolutionRecord {
+                id: fields[0].as_u64().ok_or("prov: malformed resolution")?,
+                settlement_id: fields[1].as_u64().ok_or("prov: malformed resolution")?,
+                intent: fields[2]
+                    .as_str()
+                    .ok_or("prov: malformed resolution")?
+                    .to_string(),
+                key: fields[3].as_u64().ok_or("prov: malformed resolution")? as u32,
+                resolver: fields[4]
+                    .as_str()
+                    .ok_or("prov: malformed resolution")?
+                    .to_string(),
+                proposal_ids: fields[5]
+                    .as_array()
+                    .ok_or("prov: malformed resolution")?
+                    .iter()
+                    .map(|id| id.as_u64().ok_or("prov: malformed resolution"))
+                    .collect::<Result<Vec<_>, _>>()?,
+            });
+        }
+    }
     Ok(WireProvenance {
         origin: String::new(),
         writes,
         emits,
+        settlements,
+        proposals,
+        resolutions,
     })
 }
 

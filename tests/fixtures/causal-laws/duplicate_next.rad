@@ -1,0 +1,12 @@
+// flags: --experimental-laws
+// expect-runtime-error: attempted to stage `Health` more than once
+
+component Health { hp: int = 100 }
+intent Damage { key target: entity, amount: int }
+law Hit(target: entity) { propose Damage { target: target, amount: 10 } }
+resolver ResolveDamage for Damage(target, proposals) {
+    next(target, Health { hp: 90 })
+    next(target, Health { hp: 80 })
+}
+entity hero { Health {} }
+settle { Hit(hero) }

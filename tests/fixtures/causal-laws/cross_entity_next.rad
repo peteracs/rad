@@ -1,0 +1,14 @@
+// flags: --experimental-laws
+// expect-runtime-error: its current key is
+
+component Health { hp: int = 100 }
+intent Damage { key target: entity, other: entity }
+law Hit(target: entity, other: entity) {
+    propose Damage { target: target, other: other }
+}
+resolver ResolveDamage for Damage(target, proposals) {
+    next(proposals[0].other, Health { hp: 0 })
+}
+entity hero { Health {} }
+entity attacker { Health {} }
+settle { Hit(hero, attacker) }

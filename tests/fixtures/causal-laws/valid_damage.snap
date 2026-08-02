@@ -1,0 +1,6 @@
+---
+source: tests\fixtures\causal-laws\valid_damage.rad
+exit_code: 0
+---
+55
+0

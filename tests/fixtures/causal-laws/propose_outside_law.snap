@@ -1,0 +1,7 @@
+---
+source: tests\fixtures\causal-laws\propose_outside_law.rad
+exit_code: 1
+---
+
+---stderr---
+Error: `propose Damage` is only valid inside a law
