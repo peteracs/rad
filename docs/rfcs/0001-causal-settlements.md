@@ -272,6 +272,17 @@ After every resolver succeeds and the patch is conflict-free, the runtime:
 
 Any failure discards transient proposals and staged writes. The live world and
 main provenance ledger remain byte-identical to their pre-settlement state.
+Every externally observable execution boundary also guarantees:
+
+```text
+Result returned => no unfinished settlement remains
+```
+
+This includes top-level execution, host function calls, event-handler
+dispatch, replay, and sandbox execution. Internal resolver calls retain the
+context only until their owning settlement boundary converts the failure into
+an atomic abort. A VM remains reusable after a failed law or resolver.
+
 Memory cost is proportional to proposals and touched candidate columns;
 untouched archetypes are not deep-cloned.
 

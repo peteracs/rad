@@ -680,6 +680,13 @@ impl VM {
         &self.ledger
     }
 
+    /// Bound retained causal history for long-running embedded VMs.
+    /// Settlement proposal fan-in uses the same retention policy as legacy
+    /// writes and event ancestry.
+    pub fn set_causality_retention_cap(&mut self, cap: usize) {
+        self.ledger.set_retention_cap(cap);
+    }
+
     /// Take the ledger out of the VM (the time-travel server keeps it to
     /// answer `why` at any frame).
     pub fn take_causality_ledger(&mut self) -> crate::causality::CausalityLedger {
@@ -1168,6 +1175,14 @@ impl VM {
                 self.runtime_error(e)
             }
         });
+        if result.is_err() {
+            // BeginSettlement and EndSettlement are separate bytecodes. A
+            // body/law failure can bypass EndSettlement, so every public run
+            // return must explicitly discard an unfinished transaction.
+            self.abort_settlement();
+            self.frames.clear();
+            self.stack.truncate(stack_base);
+        }
         crate::value::set_profile_copy_context(false, 0);
         if self.op_profile {
             let total: u64 = self.op_counts.iter().sum();

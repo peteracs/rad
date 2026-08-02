@@ -71,6 +71,17 @@ pub(crate) struct SettlementContext {
 }
 
 impl VM {
+    /// Discard an in-flight causal transaction without touching the live
+    /// world or committed provenance ledger.
+    ///
+    /// Public execution boundaries call this while unwinding an error that
+    /// escaped past `BeginSettlement`. Resolver calls deliberately do not own
+    /// that boundary: `finish_settlement` remains responsible for aborting
+    /// errors raised while the candidate patch is being built.
+    pub(crate) fn abort_settlement(&mut self) {
+        self.settlement = None;
+    }
+
     pub(crate) fn begin_settlement(&mut self) -> Result<(), String> {
         if self.settlement.is_some() {
             return Err("nested settlements are not allowed".to_string());
@@ -208,7 +219,7 @@ impl VM {
     pub(crate) fn finish_settlement(&mut self) -> Result<(), String> {
         let result = self.resolve_and_commit_settlement();
         if result.is_err() {
-            self.settlement = None;
+            self.abort_settlement();
         }
         result
     }

@@ -5,6 +5,7 @@
 //!   - `fork_from_bytes`                        (full fork codec)
 //!   - `fork_apply`                             (delta codec, vs a real base)
 //!   - `load_world`                             (save codec, v2 + drifted schema)
+//!   - `decode_prov`                            (legacy and causal fan-in ledger wire)
 //!   - `merge_forks` (fed *decoded mutants*: forks that survived the codec
 //!     are piped into the merge engine)
 //!
@@ -529,6 +530,52 @@ fn fuzz_decode_paths_never_panic() {
         findings.join("\n")
     );
     eprintln!("fuzz_decode_paths_never_panic: {} cases, 0 panics", cases);
+}
+
+/// Settlement fan-in extends the fork provenance section with several new
+/// attacker-controlled arrays and numeric identifiers. Mutate a valid
+/// extended closure directly so malformed inputs reach `decode_prov` rather
+/// than dying at the outer fork digest.
+#[test]
+fn fuzz_provenance_decoder_never_panics_or_wraps_overflow() {
+    let budget = iters() * 8;
+    let seed = r#"[
+        [[12,7,"hero","Health","{ hp: 55 }",0,[0],null,31]],
+        [],
+        [[9,12,[0]]],
+        [[21,9,"Damage",7,"{ amount: 20 }","DirectHit",14]],
+        [[31,9,"Damage",7,"ResolveDamage",[21]]]
+    ]"#;
+    let mut rng = Rng(0xCA55_A1F0_0000_0001);
+    for case in 0..budget {
+        let mut mutant = seed.to_string();
+        for _ in 0..(1 + rng.below(3)) {
+            mutant = mutate_once(&mut rng, &mutant);
+        }
+        let result = catch_unwind(AssertUnwindSafe(|| {
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&mutant) {
+                let _ = crate::wire::decode_prov(&json);
+            }
+        }));
+        assert!(
+            result.is_ok(),
+            "decode_prov panicked on generated case {case}: {mutant}"
+        );
+    }
+
+    for overflow in [u32::MAX as u64 + 1, u64::MAX] {
+        let json = serde_json::json!([
+            [],
+            [],
+            [[9, 12, [0]]],
+            [[21, 9, "Damage", overflow, "{}", "DirectHit", 14]],
+            []
+        ]);
+        assert!(
+            crate::wire::decode_prov(&json).is_err(),
+            "overflow {overflow} must be rejected, never narrowed"
+        );
+    }
 }
 
 /// The binary boundary: recorded tapes are zstd/deflate envelopes read by

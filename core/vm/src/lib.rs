@@ -52,6 +52,8 @@ pub mod replay_serve;
 pub mod sandbox;
 pub mod sandbox_serve;
 pub mod scaffold;
+#[doc(hidden)]
+pub mod settlement_reference;
 pub mod snapshot;
 pub mod types;
 pub mod value;

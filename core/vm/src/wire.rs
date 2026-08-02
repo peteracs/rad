@@ -240,6 +240,13 @@ fn decode_opt_str(j: &serde_json::Value) -> Option<String> {
     j.as_str().map(String::from)
 }
 
+fn decode_u32(j: &serde_json::Value, field: &str) -> Result<u32, String> {
+    let raw = j
+        .as_u64()
+        .ok_or_else(|| format!("{}: expected unsigned integer", field))?;
+    u32::try_from(raw).map_err(|_| format!("{} exceeds u32", field))
+}
+
 pub fn decode_prov(j: &serde_json::Value) -> Result<WireProvenance, String> {
     let sections = j
         .as_array()
@@ -253,7 +260,11 @@ pub fn decode_prov(j: &serde_json::Value) -> Result<WireProvenance, String> {
             .ok_or("prov: malformed write")?;
         writes.push(WriteRecord {
             frame: f[0].as_u64().ok_or("prov: malformed write")?,
-            entity: f[1].as_u64().map(|e| e as u32),
+            entity: if f[1].is_null() {
+                None
+            } else {
+                Some(decode_u32(&f[1], "prov: write entity")?)
+            },
             entity_name: decode_opt_str(&f[2]),
             component: f[3].as_str().ok_or("prov: malformed write")?.to_string(),
             value: f[4].as_str().ok_or("prov: malformed write")?.to_string(),
@@ -315,7 +326,7 @@ pub fn decode_prov(j: &serde_json::Value) -> Result<WireProvenance, String> {
                     .as_str()
                     .ok_or("prov: malformed proposal")?
                     .to_string(),
-                key: fields[3].as_u64().ok_or("prov: malformed proposal")? as u32,
+                key: decode_u32(&fields[3], "prov: proposal key")?,
                 payload: fields[4]
                     .as_str()
                     .ok_or("prov: malformed proposal")?
@@ -324,7 +335,7 @@ pub fn decode_prov(j: &serde_json::Value) -> Result<WireProvenance, String> {
                     .as_str()
                     .ok_or("prov: malformed proposal")?
                     .to_string(),
-                source_line: fields[6].as_u64().ok_or("prov: malformed proposal")? as u32,
+                source_line: decode_u32(&fields[6], "prov: proposal source line")?,
             });
         }
         for resolution in sections[4]
@@ -342,7 +353,7 @@ pub fn decode_prov(j: &serde_json::Value) -> Result<WireProvenance, String> {
                     .as_str()
                     .ok_or("prov: malformed resolution")?
                     .to_string(),
-                key: fields[3].as_u64().ok_or("prov: malformed resolution")? as u32,
+                key: decode_u32(&fields[3], "prov: resolution key")?,
                 resolver: fields[4]
                     .as_str()
                     .ok_or("prov: malformed resolution")?
@@ -419,22 +430,46 @@ fn encode_map_key_into(k: &MapKey, out: &mut String) {
 
 /// Decode a `[tag, payload]` map key pair (inverse of
 /// `encode_map_key_into`).
-fn decode_map_key(karr: &[serde_json::Value]) -> Option<MapKey> {
-    match karr.first()?.as_str()? {
-        "s" => Some(MapKey::Str(karr.get(1)?.as_str()?.to_string())),
-        "i" => Some(MapKey::Int(karr.get(1)?.as_i64()?)),
-        "b" => Some(MapKey::Bool(karr.get(1)?.as_bool()?)),
-        "e" => Some(MapKey::Entity(karr.get(1)?.as_u64()? as u32)),
+fn decode_map_key(karr: &[serde_json::Value]) -> Result<MapKey, String> {
+    let tag = karr
+        .first()
+        .and_then(|value| value.as_str())
+        .ok_or_else(|| "wire codec: malformed map key tag".to_string())?;
+    let payload = karr
+        .get(1)
+        .ok_or_else(|| "wire codec: missing map key payload".to_string())?;
+    match tag {
+        "s" => Ok(MapKey::Str(
+            payload
+                .as_str()
+                .ok_or_else(|| "wire codec: malformed string map key".to_string())?
+                .to_string(),
+        )),
+        "i" => Ok(MapKey::Int(payload.as_i64().ok_or_else(|| {
+            "wire codec: malformed integer map key".to_string()
+        })?)),
+        "b" => Ok(MapKey::Bool(payload.as_bool().ok_or_else(|| {
+            "wire codec: malformed boolean map key".to_string()
+        })?)),
+        "e" => Ok(MapKey::Entity(decode_u32(
+            payload,
+            "wire codec: entity map key",
+        )?)),
         "t" => {
-            let items = karr.get(1)?.as_array()?;
+            let items = payload
+                .as_array()
+                .ok_or_else(|| "wire codec: malformed tuple map key".to_string())?;
             let mut out = Vec::with_capacity(items.len());
             for item in items {
-                let pair = item.as_array().filter(|a| a.len() == 2)?;
+                let pair = item
+                    .as_array()
+                    .filter(|a| a.len() == 2)
+                    .ok_or_else(|| "wire codec: malformed tuple map key item".to_string())?;
                 out.push(decode_map_key(pair)?);
             }
-            Some(MapKey::Tuple(out))
+            Ok(MapKey::Tuple(out))
         }
-        _ => None,
+        _ => Err(format!("wire codec: unknown map key tag '{}'", tag)),
     }
 }
 
@@ -601,7 +636,7 @@ pub fn decode_value(gc: &mut dyn Allocator, j: &serde_json::Value) -> Result<Val
             match tag.as_str() {
                 "e" => Ok(Value::from_entity_id(
                     gc,
-                    body.as_u64().ok_or_else(|| bad("entity"))? as u32,
+                    decode_u32(body, "wire codec: entity id")?,
                 )),
                 "t" => {
                     let items = body.as_array().ok_or_else(|| bad("tuple"))?;
@@ -623,7 +658,7 @@ pub fn decode_value(gc: &mut dyn Allocator, j: &serde_json::Value) -> Result<Val
                             .as_array()
                             .filter(|a| a.len() == 2)
                             .ok_or_else(|| bad("map key"))?;
-                        let key = decode_map_key(karr).ok_or_else(|| bad("map key"))?;
+                        let key = decode_map_key(karr)?;
                         m.insert(key, decode_value(gc, &kv[1])?);
                     }
                     Ok(Value::map(gc, m))
@@ -833,5 +868,68 @@ mod tests {
         let back = decode_value(&mut gc, &j).unwrap();
         assert!(back.as_float().is_some());
         assert!(back.as_int().is_none() || back.as_float() == Some(5.0));
+    }
+
+    #[test]
+    fn provenance_u32_fields_reject_overflow_instead_of_wrapping() {
+        let overflows = [u32::MAX as u64 + 1, u64::MAX];
+        for overflow in overflows {
+            let write = serde_json::json!([
+                [[0, overflow, null, "Health", "{}", 0, [0], null, null]],
+                [],
+                [],
+                [],
+                []
+            ]);
+            let error = decode_prov(&write).expect_err("write entity overflow");
+            assert!(error.contains("write entity exceeds u32"), "{error}");
+
+            let proposal_key = serde_json::json!([
+                [],
+                [],
+                [[1, 0, [0]]],
+                [[1, 1, "Damage", overflow, "{}", "Hit", 1]],
+                []
+            ]);
+            let error = decode_prov(&proposal_key).expect_err("proposal key overflow");
+            assert!(error.contains("proposal key exceeds u32"), "{error}");
+
+            let proposal_line = serde_json::json!([
+                [],
+                [],
+                [[1, 0, [0]]],
+                [[1, 1, "Damage", 0, "{}", "Hit", overflow]],
+                []
+            ]);
+            let error = decode_prov(&proposal_line).expect_err("source line overflow");
+            assert!(
+                error.contains("proposal source line exceeds u32"),
+                "{error}"
+            );
+
+            let resolution = serde_json::json!([
+                [],
+                [],
+                [[1, 0, [0]]],
+                [],
+                [[1, 1, "Damage", overflow, "ResolveDamage", []]]
+            ]);
+            let error = decode_prov(&resolution).expect_err("resolution key overflow");
+            assert!(error.contains("resolution key exceeds u32"), "{error}");
+        }
+    }
+
+    #[test]
+    fn wire_entity_values_and_map_keys_reject_overflow() {
+        let mut gc = GcHeap::new();
+        for overflow in [u32::MAX as u64 + 1, u64::MAX] {
+            let entity = serde_json::json!({"e": overflow});
+            let error = decode_value(&mut gc, &entity).expect_err("entity overflow");
+            assert!(error.contains("entity id exceeds u32"), "{error}");
+
+            let map = serde_json::json!({"m": [[["e", overflow], 1]]});
+            let error = decode_value(&mut gc, &map).expect_err("map key overflow");
+            assert!(error.contains("entity map key exceeds u32"), "{error}");
+        }
     }
 }

@@ -35,6 +35,7 @@
 - [Language Guarantees](./reference/guarantees.md)
 - [Built-in Functions](./reference/builtins.md)
 - [Performance](./reference/performance.md)
+- [Causal Laws Performance](./reference/causal-laws-performance.md)
 - [Benchmark Results](./reference/benchmark-results.md)
 - [External Baselines](./reference/external-baselines.md)
 - [External Baseline Results](./reference/external-baseline-results.md)

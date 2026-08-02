@@ -120,22 +120,50 @@ fn map_key_to_json(k: &MapKey) -> serde_json::Value {
 }
 
 /// Inverse of `map_key_to_json`.
-fn json_to_map_key(karr: &[serde_json::Value]) -> Option<MapKey> {
-    match karr.first()?.as_str()? {
-        "s" => Some(MapKey::Str(karr.get(1)?.as_str()?.to_string())),
-        "i" => Some(MapKey::Int(karr.get(1)?.as_i64()?)),
-        "b" => Some(MapKey::Bool(karr.get(1)?.as_bool()?)),
-        "e" => Some(MapKey::Entity(karr.get(1)?.as_u64()? as u32)),
+fn trace_u32(value: &serde_json::Value, field: &str) -> Result<u32, String> {
+    let raw = value
+        .as_u64()
+        .ok_or_else(|| format!("trace codec: malformed {}", field))?;
+    u32::try_from(raw).map_err(|_| format!("trace codec: {} exceeds u32", field))
+}
+
+fn json_to_map_key(karr: &[serde_json::Value]) -> Result<MapKey, String> {
+    let tag = karr
+        .first()
+        .and_then(|value| value.as_str())
+        .ok_or_else(|| "trace codec: malformed map key tag".to_string())?;
+    let payload = karr
+        .get(1)
+        .ok_or_else(|| "trace codec: missing map key payload".to_string())?;
+    match tag {
+        "s" => Ok(MapKey::Str(
+            payload
+                .as_str()
+                .ok_or_else(|| "trace codec: malformed string map key".to_string())?
+                .to_string(),
+        )),
+        "i" => Ok(MapKey::Int(payload.as_i64().ok_or_else(|| {
+            "trace codec: malformed integer map key".to_string()
+        })?)),
+        "b" => Ok(MapKey::Bool(payload.as_bool().ok_or_else(|| {
+            "trace codec: malformed boolean map key".to_string()
+        })?)),
+        "e" => Ok(MapKey::Entity(trace_u32(payload, "entity map key")?)),
         "t" => {
-            let items = karr.get(1)?.as_array()?;
+            let items = payload
+                .as_array()
+                .ok_or_else(|| "trace codec: malformed tuple map key".to_string())?;
             let mut out = Vec::with_capacity(items.len());
             for item in items {
-                let pair = item.as_array().filter(|a| a.len() == 2)?;
+                let pair = item
+                    .as_array()
+                    .filter(|a| a.len() == 2)
+                    .ok_or_else(|| "trace codec: malformed tuple map key item".to_string())?;
                 out.push(json_to_map_key(pair)?);
             }
-            Some(MapKey::Tuple(out))
+            Ok(MapKey::Tuple(out))
         }
-        _ => None,
+        _ => Err(format!("trace codec: unknown map key tag '{}'", tag)),
     }
 }
 
@@ -221,10 +249,7 @@ pub fn decode_value(gc: &mut GcHeap, j: &serde_json::Value) -> Result<Value, Str
         "float" => Ok(Value::from_float(
             j["v"].as_f64().ok_or_else(|| bad("float"))?,
         )),
-        "entity" => Ok(Value::from_entity_id(
-            gc,
-            j["v"].as_u64().ok_or_else(|| bad("entity"))? as u32,
-        )),
+        "entity" => Ok(Value::from_entity_id(gc, trace_u32(&j["v"], "entity id")?)),
         "str" => Ok(Value::from_string(
             gc,
             j["v"].as_str().ok_or_else(|| bad("str"))?.to_string(),
@@ -253,7 +278,7 @@ pub fn decode_value(gc: &mut GcHeap, j: &serde_json::Value) -> Result<Value, Str
                     .as_array()
                     .filter(|p| p.len() == 2)
                     .ok_or_else(|| bad("map key"))?;
-                let key = json_to_map_key(key_arr).ok_or_else(|| bad("map key"))?;
+                let key = json_to_map_key(key_arr)?;
                 m.insert(key, decode_value(gc, &kv[1])?);
             }
             Ok(Value::map(gc, m))
@@ -853,6 +878,23 @@ mod tests {
                 "roundtrip changed value: {}",
                 encoded
             );
+        }
+    }
+
+    #[test]
+    fn trace_entity_values_and_map_keys_reject_u32_overflow() {
+        let mut vm = VM::new();
+        for overflow in [u32::MAX as u64 + 1, u64::MAX] {
+            let entity = serde_json::json!({"t": "entity", "v": overflow});
+            let error = decode_value(&mut vm.gc, &entity).expect_err("entity overflow");
+            assert!(error.contains("entity id exceeds u32"), "{error}");
+
+            let map = serde_json::json!({
+                "t": "map",
+                "v": [[["e", overflow], {"t": "nil"}]]
+            });
+            let error = decode_value(&mut vm.gc, &map).expect_err("map key overflow");
+            assert!(error.contains("entity map key exceeds u32"), "{error}");
         }
     }
 

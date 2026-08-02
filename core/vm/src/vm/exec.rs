@@ -3121,6 +3121,24 @@ impl VM {
     }
 
     pub fn call_value(&mut self, callee: &Value, args: Vec<Value>) -> Result<Value, String> {
+        // A host call starts with no active frames and owns any settlement it
+        // opens. If execution escapes before EndSettlement, unwind it here.
+        // Nested VM calls (notably resolver invocation) preserve both their
+        // causal context and frames so the outer boundary can render the full
+        // runtime call chain before aborting.
+        let frame_depth = self.frames.len();
+        let stack_depth = self.stack.len();
+        let owns_execution_boundary = frame_depth == 0;
+        let result = self.call_value_inner(callee, args);
+        if result.is_err() && owns_execution_boundary {
+            self.frames.truncate(frame_depth);
+            self.stack.truncate(stack_depth);
+            self.abort_settlement();
+        }
+        result
+    }
+
+    fn call_value_inner(&mut self, callee: &Value, args: Vec<Value>) -> Result<Value, String> {
         if self.frames.len() >= MAX_CALL_DEPTH {
             return Err(format!(
                 "Stack overflow: exceeded {} call frames",
