@@ -1,0 +1,118 @@
+// =====================================================================
+//  Music Player — Media player FSM with playlist pipeline
+// =====================================================================
+
+state PlayerState {
+    Stopped {
+        on play -> Playing
+    }
+    Playing {
+        on pause -> Paused
+        on stop -> Stopped
+        on next -> Playing
+        on prev -> Playing
+    }
+    Paused {
+        on play -> Playing
+        on stop -> Stopped
+    }
+}
+
+event TrackChanged { track_name, artist, index }
+
+event PlaybackEvent { action, detail }
+
+on TrackChanged(e) {
+    print(f"  Now playing: {e.artist} - {e.track_name} [#{e.index + 1}]")
+}
+
+on PlaybackEvent(e) {
+    print(f"  [{e.action}] {e.detail}")
+}
+
+fn main() -> any {
+    print("=== Music Player ===\n")
+
+    let tracks = [
+        "Midnight City",
+        "Electric Feel",
+        "Time to Pretend",
+        "Kids",
+        "Flash Delirium"
+    ]
+    let artists = [
+        "M83",
+        "MGMT",
+        "MGMT",
+        "MGMT",
+        "MGMT"
+    ]
+    let durations = [243, 229, 204, 311, 261]
+
+    // Show playlist
+    print("Playlist:")
+    for i in range(len(tracks)) {
+        let mins = durations[i] / 60
+        let secs = durations[i] % 60
+        print(f"  {i + 1}. {artists[i]} - {tracks[i]} ({mins}:{secs})")
+    }
+    print("")
+
+    // Playlist stats using pipelines
+    let total_duration = durations |> reduce(0, fn(a, b) { return a + b })
+    let avg_duration = total_duration / len(tracks)
+    let longest = durations |> reduce(0, fn(a, b) { if a > b { return a } return b })
+    let shortest = durations |> reduce(999, fn(a, b) { if a < b { return a } return b })
+    print("Stats:")
+    print(f"  Total: {total_duration / 60}m {total_duration % 60}s")
+    print(f"  Avg: {avg_duration}s")
+    print(f"  Longest: {longest}s")
+    print(f"  Shortest: {shortest}s")
+    print("")
+
+    // Playback simulation
+    let mut ps = PlayerState::Stopped
+    let mut current = 0
+
+    ps = transition(ps, "play") ?
+    emit TrackChanged { track_name: tracks[current], artist: artists[current], index: current }
+    emit PlaybackEvent { action: "PLAY", detail: "Playback started" }
+
+    // Listen, then skip
+    ps = transition(ps, "next") ?
+    current = current + 1
+    emit TrackChanged { track_name: tracks[current], artist: artists[current], index: current }
+
+    // Pause
+    ps = transition(ps, "pause") ?
+    emit PlaybackEvent { action: "PAUSE", detail: "Paused at 1:32" }
+
+    // Resume
+    ps = transition(ps, "play") ?
+    emit PlaybackEvent { action: "PLAY", detail: "Resumed" }
+
+    // Skip forward twice
+    ps = transition(ps, "next") ?
+    current = current + 1
+    emit TrackChanged { track_name: tracks[current], artist: artists[current], index: current }
+
+    ps = transition(ps, "next") ?
+    current = current + 1
+    emit TrackChanged { track_name: tracks[current], artist: artists[current], index: current }
+
+    // Go back
+    ps = transition(ps, "prev") ?
+    current = current - 1
+    emit TrackChanged { track_name: tracks[current], artist: artists[current], index: current }
+
+    // Stop
+    ps = transition(ps, "stop") ?
+    emit PlaybackEvent { action: "STOP", detail: "Playback ended" }
+
+    print("")
+    match ps {
+        Stopped => { print("Player stopped.") }
+        Playing => { print("Still playing...") }
+        Paused => { print("Paused.") }
+    }
+}

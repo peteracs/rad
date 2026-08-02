@@ -1,0 +1,44 @@
+{
+  "name": "rad-lang",
+  "displayName": "Rad Language",
+  "description": "Syntax highlighting and language support for the Rad simulation language",
+  "version": "0.2.0",
+  "license": "MIT",
+  "publisher": "radlang",
+  "categories": ["Programming Languages"],
+  "engines": { "vscode": "^1.80.0" },
+  "main": "./out/extension.js",
+  "activationEvents": [
+    "onLanguage:rad"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "rad",
+        "aliases": ["Rad", "rad"],
+        "extensions": [".rad"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "rad",
+        "scopeName": "source.rad",
+        "path": "./syntaxes/rad.tmLanguage.json"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.80.0",
+    "@types/node": "^18.0.0",
+    "typescript": "^5.0.0"
+  }
+}

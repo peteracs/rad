@@ -1,0 +1,39 @@
+// CRITICAL BUG TEST: Nested simulate() via a system that calls fork/simulate
+// Before the fix: in_simulation_fork was a bool, and inner simulate() would
+// reset it to false, breaking outer simulation's event suppression.
+
+component Val { n: 0 }
+
+system InnerBump(v: mut Val) {
+    v = Val { n: v.n + 100 }
+}
+
+// This system calls fork/simulate INSIDE itself (nested speculation)
+system Speculator(v: mut Val) {
+    // Increment once
+    v = Val { n: v.n + 1 }
+
+    // Now speculatively peek 2 ticks ahead using a nested fork/simulate
+    let inner_fork = fork()
+    let _inner_result = simulate(inner_fork, [system::InnerBump], 2)
+    // The inner simulate doesn't commit — we just discard it
+    // But the key thing: after this inner simulate returns,
+    // in_simulation_fork must STILL be > 0 for the outer simulation!
+}
+
+let e = spawn("e", Val { n: 0 })
+
+// Simulate Speculator for 3 ticks
+let f = fork()
+let f = simulate(f, [system::Speculator], 3)
+
+// Main world should be untouched
+let main_val = get(e, Val) |> unwrap
+assert(main_val.n == 0, f"Main world should be 0, got {main_val.n}")
+
+// Commit and verify — Speculator increments by 1 each tick, for 3 ticks = 3
+commit(f)
+let final_val = get(e, Val) |> unwrap
+assert(final_val.n == 3, f"After 3 ticks of Speculator: expected 3, got {final_val.n}")
+
+print("PASS: nested simulate (depth counter)")

@@ -1,0 +1,105 @@
+fn mod_pos(a: int, m: int) -> int {
+    let r = a % m
+    if r < 0 { return r + m }
+    return r
+}
+
+fn djb2(s: str) -> int {
+    let mut h = 5381
+    let mut i = 0
+    while i < len(s) {
+        let c = s[i]
+        h = mod_pos(h * 33 + c, 4294967296)
+        i = i + 1
+    }
+    return h
+}
+
+fn fnv1a(s: str) -> int {
+    let mut h = 2166136261
+    let mut i = 0
+    while i < len(s) {
+        let c = s[i]
+        // no bitwise XOR in Rad? We can just use another simple hash
+        h = mod_pos(h * 31 + c, 4294967296)
+        i = i + 1
+    }
+    return h
+}
+
+fn chd(keys: list<str>) -> nil {
+    let n = len(keys)
+    if n == 0 { return nil }
+    let r = n
+    let m = n
+    
+    let mut buckets: map<str, list<str>> = {}
+    let mut i = 0
+    while i < r {
+        buckets[str(i)] = []
+        i = i + 1
+    }
+    
+    for k in keys {
+        let b = mod_pos(djb2(k), r)
+        let mut lst = buckets[str(b)]
+        lst << k
+        buckets[str(b)] = lst
+    }
+    
+    let mut max_sz = 0
+    for b in buckets {
+        let sz = len(buckets[b])
+        if sz > max_sz { max_sz = sz }
+    }
+    
+    let mut G: map<str, int> = {}
+    let mut V: map<str, str> = {}
+    
+    let mut sz = max_sz
+    while sz > 0 {
+        for b in buckets {
+            let b_keys = buckets[b]
+            if len(b_keys) == sz {
+                let mut d = 0
+                let mut found = false
+                while not found {
+                    let mut ok = true
+                    let mut temp_slots: map<str, bool> = {}
+                    for k in b_keys {
+                        let h1 = djb2(k)
+                        let mut h2 = fnv1a(k)
+                        if h2 == 0 { h2 = 1 }
+                        let slot = mod_pos(h1 + d * h2, m)
+                        let slot_s = str(slot)
+                        if typeof(V[slot_s]) != "nil" or typeof(temp_slots[slot_s]) != "nil" {
+                            ok = false
+                        }
+                        temp_slots[slot_s] = true
+                    }
+                    if ok {
+                        found = true
+                        G[b] = d
+                        for k in b_keys {
+                            let h1 = djb2(k)
+                            let mut h2 = fnv1a(k)
+                            if h2 == 0 { h2 = 1 }
+                            let slot = mod_pos(h1 + d * h2, m)
+                            V[str(slot)] = k
+                        }
+                    } else {
+                        d = d + 1
+                    }
+                }
+            }
+        }
+        sz = sz - 1
+    }
+    
+    print(f"G: {G}")
+    print(f"V: {V}")
+}
+
+fn main() -> nil {
+    chd(["sys_physics", "sys_render", "sys_input", "sys_ai", "sys_audio"])
+}

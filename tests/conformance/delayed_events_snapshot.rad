@@ -1,0 +1,48 @@
+// Delayed (`emit … after N`) timers are PROGRAM STATE: forks capture
+// them, commit() restores them (and discards the abandoned timeline's
+// timers), and simulate() results carry sim-scheduled timers forward.
+// A snapshot that drops timers loses every scheduled respawn.
+
+component Hits { n: int = 0 }
+
+event Land { who: entity }
+
+on Land(e) {
+    update(e.who, Hits) { n = require(e.who, Hits).n + 1 }
+}
+
+system planter(Hits) {
+    emit Land { who: self } after 1
+}
+
+fn main() -> nil {
+    let u = entity "u" { Hits {} }
+
+    // a timer in flight crosses fork() and fires after commit()
+    emit Land { who: u } after 2
+    let cp = fork()
+    flush_events()
+    flush_events()
+    print(f"fires live: {require(u, Hits).n}")          // 1
+
+    commit(cp)
+    print(f"after rewind: {require(u, Hits).n}")        // 0 (world rewound)
+    flush_events()
+    flush_events()
+    print(f"fires again post-commit: {require(u, Hits).n}")  // 1
+
+    // the abandoned timeline's timers do NOT tick after a rewind
+    let cp2 = fork()
+    emit Land { who: u } after 1
+    commit(cp2)
+    flush_events()
+    flush_events()
+    print(f"abandoned timer dropped: {require(u, Hits).n}")  // 1 (unchanged)
+
+    // simulate(): a sim-scheduled timer rides the result fork and
+    // delivers exactly once after committing it
+    let end = simulate(fork(), [system::planter], 1)
+    commit(end)
+    flush_events()
+    print(f"sim timer carried: {require(u, Hits).n}")   // 2
+}

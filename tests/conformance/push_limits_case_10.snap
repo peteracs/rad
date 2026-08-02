@@ -1,0 +1,5 @@
+---
+source: tests\conformance\push_limits_case_10.rad
+exit_code: 0
+---
+CASE10:[2, 1, 4, 2, 6, 3]

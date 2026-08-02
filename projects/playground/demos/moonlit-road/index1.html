@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>MOBA Lane — Three.js Scene</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #05060a; }
+  body { font-family: "Segoe UI", Arial, sans-serif; color: #e8e8f0; user-select: none; }
+
+  #app { position: fixed; inset: 0; }
+  canvas { display: block; }
+
+  /* ---------------- HUD ---------------- */
+  .hud { position: absolute; inset: 0; pointer-events: none; }
+
+  /* shared panel look */
+  .panel {
+    background: linear-gradient(180deg, rgba(18,24,40,0.92), rgba(8,11,20,0.95));
+    border: 1px solid rgba(120,150,200,0.35);
+    border-radius: 6px;
+    box-shadow: 0 4px 18px rgba(0,0,0,0.6), inset 0 0 12px rgba(40,70,120,0.25);
+  }
+
+  /* Top-left stats */
+  .stats {
+    position: absolute; top: 8px; left: 8px;
+    display: flex; gap: 16px; padding: 8px 14px;
+    font-size: 12px; line-height: 1.5;
+  }
+  .stats .col { display: flex; flex-direction: column; gap: 2px; }
+  .stats .row { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .stats .ico { width: 12px; height: 12px; display: inline-block; border-radius: 2px; }
+  .stats .gold { color: #f6cf5b; font-weight: 700; }
+  .topbars { display: flex; flex-direction: column; gap: 3px; min-width: 150px; justify-content: center; }
+  .bar { height: 11px; border-radius: 3px; position: relative; overflow: hidden; border: 1px solid rgba(0,0,0,0.5); }
+  .bar .fill { position: absolute; inset: 0; }
+  .bar .txt { position: absolute; inset: 0; text-align: center; font-size: 9px; line-height: 11px; color: #fff; text-shadow: 0 1px 1px #000; font-weight: 700; }
+  .hp .fill { background: linear-gradient(180deg, #6fe36f, #2faa2f); }
+  .mp .fill { background: linear-gradient(180deg, #57b6ff, #2569c8); }
+
+  /* Top-center score/timer */
+  .scorebar {
+    position: absolute; top: 6px; left: 50%; transform: translateX(-50%);
+    display: flex; align-items: center; gap: 14px; padding: 6px 20px; font-weight: 800;
+  }
+  .scorebar .blue { color: #5db4ff; font-size: 18px; }
+  .scorebar .red { color: #ff5d5d; font-size: 18px; }
+  .scorebar .vs { color: #9aa4bd; font-size: 11px; letter-spacing: 1px; }
+  .scorebar .timer { color: #f0e9d2; font-size: 15px; font-variant-numeric: tabular-nums; }
+
+  /* Top-right perf */
+  .perf {
+    position: absolute; top: 8px; right: 10px; text-align: right;
+    font-size: 12px; color: #cfd6e6; font-variant-numeric: tabular-nums;
+    text-shadow: 0 1px 2px #000;
+  }
+  .perf b { color: #fff; }
+
+  /* Bottom ability bar */
+  .abilities {
+    position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%);
+    display: flex; align-items: stretch; gap: 8px; padding: 8px;
+  }
+  .portrait {
+    width: 64px; height: 64px; border-radius: 6px;
+    background: radial-gradient(circle at 50% 35%, #2a4d86, #0b1730);
+    border: 2px solid #4f7bc0; position: relative;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .portrait .lvl {
+    position: absolute; left: 2px; bottom: 2px; width: 18px; height: 18px;
+    background: #0b1018; border: 1px solid #caa24a;
+    color: #f6cf5b; font-size: 11px; font-weight: 800; border-radius: 3px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .portrait .gem { width: 26px; height: 32px; background: linear-gradient(180deg,#7fd2ff,#2f6fd6); clip-path: polygon(50% 0,100% 35%,75% 100%,25% 100%,0 35%); box-shadow: 0 0 10px #57b6ff; }
+  .skills { display: flex; gap: 6px; }
+  .skill {
+    width: 50px; height: 50px; border-radius: 5px; position: relative;
+    background: radial-gradient(circle at 50% 30%, #1c2c52, #0a1124);
+    border: 1px solid #3c63a8; overflow: hidden;
+  }
+  .skill .glyph { position: absolute; inset: 6px; border-radius: 4px; opacity: 0.9; }
+  .skill .cost { position: absolute; top: 2px; left: 4px; font-size: 10px; color: #7fc6ff; font-weight: 700; text-shadow: 0 1px 1px #000; }
+  .skill .key { position: absolute; bottom: 1px; right: 4px; font-size: 11px; color: #e7ecf7; font-weight: 800; text-shadow: 0 1px 1px #000; }
+  .midbars { display: flex; flex-direction: column; justify-content: center; gap: 4px; width: 220px; padding: 0 6px; }
+  .midbars .bar { height: 16px; }
+  .midbars .bar .txt { line-height: 16px; font-size: 10px; }
+  .slots { display: flex; gap: 5px; align-items: center; }
+  .slot { width: 30px; height: 30px; border-radius: 4px; background: rgba(10,14,24,0.85); border: 1px solid rgba(120,150,200,0.3); }
+  .slot.potion { background: radial-gradient(circle at 50% 40%, #7a1f2a, #2a0b10); border-color: #b04250; }
+  .goldbox {
+    display: flex; align-items: center; gap: 6px; padding: 0 14px; border-radius: 6px;
+    font-weight: 800; color: #f6cf5b; font-size: 14px;
+  }
+  .coin { width: 16px; height: 16px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #ffe9a0, #c8932a); border: 1px solid #8a6418; }
+
+  /* shop top-right */
+  .shop { position: absolute; bottom: 250px; right: 10px; display: flex; gap: 6px; padding: 6px 8px; }
+  .shop .item { width: 26px; height: 26px; border-radius: 4px; background: rgba(20,28,48,0.9); border: 1px solid rgba(120,150,200,0.4); display:flex; align-items:center; justify-content:center; font-size: 13px; }
+
+  /* minimap */
+  .minimap {
+    position: absolute; bottom: 8px; right: 10px;
+    width: 220px; height: 220px; border-radius: 8px; overflow: hidden;
+    background:
+      radial-gradient(circle at 30% 70%, rgba(40,70,40,0.4), transparent 50%),
+      radial-gradient(circle at 70% 30%, rgba(70,40,40,0.4), transparent 50%),
+      linear-gradient(135deg, #14110a, #0a0d14);
+  }
+  .minimap svg { width: 100%; height: 100%; display: block; }
+
+  .vignette { position: absolute; inset: 0; pointer-events: none;
+    box-shadow: inset 0 0 220px 40px rgba(0,0,0,0.85); }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<div class="hud">
+  <!-- top-left stats -->
+  <div class="stats panel">
+    <div class="col">
+      <div class="row"><span class="ico" style="background:#c0533b"></span> 62</div>
+      <div class="row"><span class="ico" style="background:#9aa4bd"></span> 0.73</div>
+      <div class="row"><span class="ico" style="background:#caa24a"></span> 340</div>
+    </div>
+    <div class="col">
+      <div class="row"><span class="ico" style="background:#7a6f5a"></span> 35</div>
+      <div class="row"><span class="ico" style="background:#7a6f5a"></span> 30</div>
+      <div class="row gold"><span class="coin"></span> 210</div>
+    </div>
+    <div class="topbars">
+      <div class="bar hp"><div class="fill" style="width:100%"></div><div class="txt">876 / 876</div></div>
+      <div class="bar mp"><div class="fill" style="width:100%"></div><div class="txt">420 / 420</div></div>
+    </div>
+  </div>
+
+  <!-- top-center score -->
+  <div class="scorebar panel">
+    <span class="blue">2</span>
+    <span class="vs">VS</span>
+    <span class="red">1</span>
+    <span class="timer">04:27</span>
+  </div>
+
+  <!-- top-right perf -->
+  <div class="perf">
+    <div>FPS: <b id="fps">60</b></div>
+    <div><span id="ping">22</span> ms</div>
+  </div>
+
+  <!-- shop -->
+  <div class="shop panel">
+    <div class="item">&#9876;</div>
+    <div class="item">&#128737;</div>
+    <div class="item">&#10010;</div>
+  </div>
+
+  <!-- bottom abilities -->
+  <div class="abilities panel">
+    <div class="portrait">
+      <div class="gem"></div>
+      <div class="lvl">4</div>
+    </div>
+    <div class="skills">
+      <div class="skill"><div class="glyph" style="background:radial-gradient(circle,#9fd4ff,#2f6fd6)"></div><span class="cost">50</span><span class="key">Q</span></div>
+      <div class="skill"><div class="glyph" style="background:radial-gradient(circle,#7fb6ff,#1f4fb0)"></div><span class="cost">60</span><span class="key">W</span></div>
+      <div class="skill"><div class="glyph" style="background:radial-gradient(circle,#b39bff,#5a2fc0)"></div><span class="cost">70</span><span class="key">E</span></div>
+      <div class="skill"><div class="glyph" style="background:radial-gradient(circle,#ff9bf0,#a02fb0)"></div><span class="cost">100</span><span class="key">R</span></div>
+    </div>
+    <div class="midbars">
+      <div class="bar hp"><div class="fill" style="width:100%"></div><div class="txt">876 / 876</div></div>
+      <div class="bar mp"><div class="fill" style="width:100%"></div><div class="txt">420 / 420</div></div>
+    </div>
+    <div class="slots">
+      <div class="slot potion"></div>
+      <div class="slot"></div>
+      <div class="slot"></div>
+    </div>
+    <div class="goldbox"><span class="coin"></span> 210</div>
+  </div>
+
+  <!-- minimap -->
+  <div class="minimap panel">
+    <svg viewBox="0 0 100 100" preserveAspectRatio="none">
+      <path d="M8 92 L8 70 Q8 40 40 12 L92 12" fill="none" stroke="rgba(180,160,90,0.35)" stroke-width="5"/>
+      <path d="M8 92 L92 8" fill="none" stroke="rgba(180,160,90,0.25)" stroke-width="5"/>
+      <path d="M8 92 Q40 88 70 60 Q88 40 92 8" fill="none" stroke="rgba(180,160,90,0.3)" stroke-width="4"/>
+      <!-- blue structures -->
+      <circle cx="14" cy="86" r="2.4" fill="#5db4ff"/><circle cx="26" cy="78" r="2" fill="#5db4ff"/>
+      <circle cx="40" cy="64" r="2" fill="#5db4ff"/><circle cx="12" cy="60" r="2" fill="#5db4ff"/>
+      <!-- red structures -->
+      <circle cx="86" cy="14" r="2.4" fill="#ff5d5d"/><circle cx="74" cy="22" r="2" fill="#ff5d5d"/>
+      <circle cx="60" cy="36" r="2" fill="#ff5d5d"/><circle cx="88" cy="40" r="2" fill="#ff5d5d"/>
+      <!-- viewport box -->
+      <rect x="40" y="52" width="22" height="16" fill="none" stroke="#e8e8f0" stroke-width="1"/>
+    </svg>
+  </div>
+
+  <div class="vignette"></div>
+</div>
+
+<script type="importmap">
+{ "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+
+const app = document.getElementById('app');
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.3;
+app.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x05070d);
+scene.fog = new THREE.Fog(0x05070d, 28, 64);
+
+// ---- Orthographic MOBA camera (angled top-down) ----
+const aspect = window.innerWidth / window.innerHeight;
+const viewSize = 16;
+const camera = new THREE.OrthographicCamera(
+  -viewSize * aspect, viewSize * aspect, viewSize, -viewSize, 0.1, 200
+);
+camera.position.set(0, 26, 20);
+camera.lookAt(0, 0, 2);
+
+// ---------------- Lighting ----------------
+const ambient = new THREE.AmbientLight(0x33425f, 1.5);
+scene.add(ambient);
+
+const moon = new THREE.DirectionalLight(0x9fb8ff, 1.6);
+moon.position.set(-14, 26, 12);
+moon.castShadow = true;
+moon.shadow.mapSize.set(2048, 2048);
+moon.shadow.camera.left = -34; moon.shadow.camera.right = 34;
+moon.shadow.camera.top = 34; moon.shadow.camera.bottom = -34;
+moon.shadow.camera.near = 1; moon.shadow.camera.far = 80;
+moon.shadow.bias = -0.0004;
+scene.add(moon);
+
+const fill = new THREE.DirectionalLight(0x3a4f80, 0.4);
+fill.position.set(10, 12, -8);
+scene.add(fill);
+
+// ---------------- Ground / lane ----------------
+const WORLD = 70;
+
+// dark jungle base
+const jungleMat = new THREE.MeshStandardMaterial({ color: 0x10130f, roughness: 1 });
+const jungle = new THREE.Mesh(new THREE.PlaneGeometry(WORLD, WORLD), jungleMat);
+jungle.rotation.x = -Math.PI / 2;
+jungle.position.y = -0.02;
+jungle.receiveShadow = true;
+scene.add(jungle);
+
+// cobblestone lane texture (procedural canvas)
+function makeLaneTexture() {
+  const c = document.createElement('canvas'); c.width = 512; c.height = 512;
+  const x = c.getContext('2d');
+  x.fillStyle = '#3d4759'; x.fillRect(0, 0, 512, 512);
+  for (let i = 0; i < 1400; i++) {
+    const px = Math.random()*512, py = Math.random()*512;
+    const s = 6 + Math.random()*16;
+    const g = 60 + Math.random()*70;
+    x.fillStyle = `rgb(${g*0.8|0},${g*0.95|0},${g*1.1|0})`;
+    x.beginPath();
+    x.ellipse(px, py, s, s*0.8, Math.random()*Math.PI, 0, Math.PI*2);
+    x.fill();
+    x.strokeStyle = 'rgba(10,12,18,0.5)'; x.lineWidth = 1.5; x.stroke();
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(6, 6);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+const laneMat = new THREE.MeshStandardMaterial({ map: makeLaneTexture(), roughness: 0.95 });
+const lane = new THREE.Mesh(new THREE.PlaneGeometry(WORLD, 17), laneMat);
+lane.rotation.x = -Math.PI / 2;
+lane.position.y = 0;
+lane.receiveShadow = true;
+scene.add(lane);
+
+// ---------------- Terrain materials ----------------
+const rockMat = new THREE.MeshStandardMaterial({ color: 0x363b49, roughness: 1, flatShading: true });
+const rockDarkMat = new THREE.MeshStandardMaterial({ color: 0x262a36, roughness: 1, flatShading: true });
+const rootMat = new THREE.MeshStandardMaterial({ color: 0x46324f, roughness: 0.9, flatShading: true });
+const rootDarkMat = new THREE.MeshStandardMaterial({ color: 0x342542, roughness: 0.95, flatShading: true });
+
+// faceted angular rock (low-poly, jittered)
+function makeRock(s, mat) {
+  const geo = new THREE.DodecahedronGeometry(s, 0);
+  const pos = geo.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    pos.setXYZ(i,
+      pos.getX(i) * (0.6 + Math.random()*0.7),
+      pos.getY(i) * (0.5 + Math.random()*0.6),
+      pos.getZ(i) * (0.6 + Math.random()*0.7));
+  }
+  geo.computeVertexNormals();
+  const m = new THREE.Mesh(geo, mat);
+  m.rotation.set(Math.random(), Math.random(), Math.random());
+  m.castShadow = true; m.receiveShadow = true;
+  return m;
+}
+
+// smooth twisted root as a tube draped along a path
+function makeRoot(points, radius, mat) {
+  const curve = new THREE.CatmullRomCurve3(points.map(p => new THREE.Vector3(p[0], p[1], p[2])));
+  const geo = new THREE.TubeGeometry(curve, 60, radius, 7, false);
+  const m = new THREE.Mesh(geo, mat);
+  m.castShadow = true; m.receiveShadow = true;
+  return m;
+}
+
+// rocky bank: a row of faceted rocks hugged by flowing roots
+function addRootBank(zCenter, depth, color, twin) {
+  const grp = new THREE.Group();
+  // faceted rocks forming the bank
+  const rockPeaks = [];
+  for (let i = 0; i < 26; i++) {
+    const x = -WORLD/2 + Math.random()*WORLD;
+    const z = zCenter + (Math.random()-0.5)*depth;
+    const s = 1.4 + Math.random()*2.6;
+    const r = makeRock(s, Math.random() < 0.5 ? rockMat : rockDarkMat);
+    r.position.set(x, s*0.35, z);
+    grp.add(r);
+    rockPeaks.push([x, s*0.55, z]);
+  }
+  // long horizontal roots that snake across, draping over the rocks
+  const rootLayers = 5;
+  for (let k = 0; k < rootLayers; k++) {
+    const pts = [];
+    const zBase = zCenter + (k - rootLayers/2) * (depth/rootLayers) * 0.9;
+    const yBase = 0.5 + k * 0.18;
+    for (let x = -WORLD/2 - 2; x <= WORLD/2 + 2; x += 4) {
+      pts.push([
+        x,
+        yBase + Math.sin(x*0.35 + k) * 0.55 + Math.random()*0.25,
+        zBase + Math.sin(x*0.2 + k*1.7) * 1.6
+      ]);
+    }
+    grp.add(makeRoot(pts, 0.35 + Math.random()*0.35, k % 2 ? rootMat : rootDarkMat));
+  }
+  // a few gnarled root knots curling up over stones
+  for (let i = 0; i < 8; i++) {
+    const [px, , pz] = rockPeaks[(Math.random()*rockPeaks.length)|0];
+    const pts = [
+      [px-2, 0.3, pz+1.2],
+      [px-0.8, 1.0, pz],
+      [px, 1.5, pz-0.4],
+      [px+1.0, 0.9, pz-0.2],
+      [px+2.2, 0.3, pz+1.0]
+    ];
+    grp.add(makeRoot(pts, 0.28 + Math.random()*0.2, rootDarkMat));
+  }
+  scene.add(grp);
+}
+// foreground (bottom) heavy root bank + background (top) lighter rocky edge
+addRootBank(14, 8, 0x33243f, false);
+addRootBank(-14, 7, 0x262a36, true);
+
+// purple crystal gem embedded in foreground terrain
+function addGem(x, z) {
+  const mat = new THREE.MeshStandardMaterial({ color: 0xa463ff, emissive: 0x5a2fb0, emissiveIntensity: 1.0, roughness: 0.2, metalness: 0.35, flatShading: true });
+  const gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.85, 0), mat);
+  gem.scale.set(0.55, 1.4, 0.55);
+  gem.position.set(x, 0.9, z);
+  gem.rotation.y = Math.random();
+  gem.castShadow = true;
+  scene.add(gem);
+  const l = new THREE.PointLight(0x9b59ff, 1.6, 7); l.position.set(x, 1.2, z);
+  scene.add(l);
+}
+addGem(-13, 11);
+
+// dim purple fill light to reveal the foreground root bank
+const foreFill = new THREE.DirectionalLight(0x7a5fae, 0.6);
+foreFill.position.set(2, 8, 20);
+foreFill.target.position.set(0, 0, 14);
+scene.add(foreFill); scene.add(foreFill.target);
+
+// ---------------- Bare dead trees (haunted silhouettes) ----------------
+const barkMat = new THREE.MeshStandardMaterial({ color: 0x271d1a, roughness: 1, flatShading: true });
+function makeBranch(len) {
+  const geo = new THREE.CylinderGeometry(0.04, 0.13, len, 5);
+  geo.translate(0, len/2, 0);
+  return new THREE.Mesh(geo, barkMat);
+}
+function addDeadTree(x, z, scale = 1) {
+  const t = new THREE.Group();
+  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.5, 4.4, 6), barkMat);
+  trunk.position.y = 2.2; trunk.rotation.z = (Math.random()-0.5)*0.25; trunk.castShadow = true;
+  t.add(trunk);
+  const nb = 6 + (Math.random()*5|0);
+  for (let i = 0; i < nb; i++) {
+    const len = 1.3 + Math.random()*2.0;
+    const br = makeBranch(len);
+    br.position.set((Math.random()-0.5)*0.4, 2.6 + Math.random()*2.0, (Math.random()-0.5)*0.4);
+    br.rotation.set((Math.random()-0.5)*1.7, Math.random()*Math.PI, (Math.random()-0.5)*1.7);
+    br.castShadow = true;
+    t.add(br);
+    // an occasional forked twig
+    if (Math.random() < 0.5) {
+      const twig = makeBranch(len*0.55);
+      twig.position.y = len*0.6;
+      twig.rotation.z = (Math.random()-0.5)*1.4;
+      br.add(twig);
+    }
+  }
+  t.position.set(x, 0, z);
+  t.scale.setScalar(scale);
+  scene.add(t);
+}
+for (let i = 0; i < 8; i++) addDeadTree(-WORLD/2 + 5 + i*9 + (Math.random()*3), -15 - Math.random()*5, 0.85 + Math.random()*0.7);
+addDeadTree(7, -12.5, 1.35); addDeadTree(-9, -13.5, 1.15); addDeadTree(16, -13, 1.2);
+
+// ---------------- Grass tufts (lane edge) ----------------
+const grassMat = new THREE.MeshStandardMaterial({ color: 0x3a6a2f, roughness: 1, flatShading: true, side: THREE.DoubleSide });
+function addGrass(x, z, n = 16) {
+  const g = new THREE.Group();
+  for (let i = 0; i < n; i++) {
+    const h = 0.5 + Math.random()*0.8;
+    const blade = new THREE.Mesh(new THREE.ConeGeometry(0.07, h, 3), grassMat);
+    blade.position.set((Math.random()-0.5)*1.1, h/2, (Math.random()-0.5)*1.1);
+    blade.rotation.z = (Math.random()-0.5)*0.5;
+    blade.castShadow = true;
+    g.add(blade);
+  }
+  g.position.set(x, 0, z);
+  scene.add(g);
+}
+addGrass(-7, -8.4, 22); addGrass(15, -8.6, 14);
+
+// ---------------- Stone wall ruins ----------------
+const wallMat = new THREE.MeshStandardMaterial({ color: 0x49505f, roughness: 0.85, flatShading: true });
+function addWallCluster(x, z) {
+  const grp = new THREE.Group();
+  const n = 3 + (Math.random()*3|0);
+  for (let i = 0; i < n; i++) {
+    const w = 1.1 + Math.random()*0.6, h = 1.2 + Math.random()*1.0, d = 1.1;
+    const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), wallMat);
+    b.position.set(i*1.25 - n*0.6, h/2, (Math.random()-0.5)*0.8);
+    b.rotation.y = (Math.random()-0.5)*0.3;
+    b.castShadow = true; b.receiveShadow = true;
+    grp.add(b);
+  }
+  grp.position.set(x, 0, z);
+  scene.add(grp);
+}
+// row of stone blocks lining the top lane edge
+addWallCluster(-24, -9.2); addWallCluster(-19, -9.4); addWallCluster(-13, -9.2);
+addWallCluster(8, -9.3); addWallCluster(13, -9.5); addWallCluster(20, -9.2);
+addWallCluster(26, -9.4);
+
+// ---------------- Glowing plants ----------------
+const glowPlants = [];
+function addGlowPlant(x, z, color) {
+  const grp = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.7, roughness: 0.5 });
+  for (let i = 0; i < 5; i++) {
+    const s = new THREE.Mesh(new THREE.SphereGeometry(0.16 + Math.random()*0.12, 8, 8), mat);
+    s.position.set((Math.random()-0.5)*0.9, 0.5 + Math.random()*0.7, (Math.random()-0.5)*0.9);
+    grp.add(s);
+  }
+  const light = new THREE.PointLight(color, 2.2, 9);
+  light.position.y = 0.8;
+  grp.add(light);
+  grp.position.set(x, 0, z);
+  scene.add(grp);
+  glowPlants.push({ grp, base: 2.2, light, phase: Math.random()*Math.PI*2 });
+}
+addGlowPlant(-22, -7, 0x2fe6c0); addGlowPlant(-3, -8, 0x2fe6c0);
+addGlowPlant(2, -7.5, 0x37e0a0); addGlowPlant(20, -8, 0x9b59ff);
+addGlowPlant(-20, 9, 0x9b59ff); addGlowPlant(-26, 7, 0x9b59ff);
+
+// ---------------- Health bar sprites ----------------
+function makeHealthBar(frac, team) {
+  const c = document.createElement('canvas'); c.width = 128; c.height = 24;
+  const x = c.getContext('2d');
+  const col = team === 'blue' ? '#34d24a' : '#e23a3a';
+  // level box
+  const lvl = team === 'blue' ? '4' : '4';
+  x.fillStyle = 'rgba(8,10,16,0.9)'; x.fillRect(2, 2, 20, 20);
+  x.strokeStyle = '#caa24a'; x.lineWidth = 1; x.strokeRect(2, 2, 20, 20);
+  x.fillStyle = '#f6cf5b'; x.font = 'bold 13px Arial'; x.textAlign = 'center'; x.fillText(lvl, 12, 17);
+  // bar bg
+  x.fillStyle = 'rgba(0,0,0,0.8)'; x.fillRect(26, 6, 98, 12);
+  x.fillStyle = col; x.fillRect(27, 7, 96*frac, 10);
+  x.strokeStyle = 'rgba(0,0,0,0.9)'; x.lineWidth = 1; x.strokeRect(26, 6, 98, 12);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, depthWrite: false }));
+  spr.scale.set(2.6, 0.49, 1);
+  spr.renderOrder = 999;
+  return spr;
+}
+
+function simpleHealthBar(frac, team) {
+  const c = document.createElement('canvas'); c.width = 96; c.height = 12;
+  const x = c.getContext('2d');
+  const col = team === 'blue' ? '#34d24a' : '#e23a3a';
+  x.fillStyle = 'rgba(0,0,0,0.8)'; x.fillRect(0, 0, 96, 12);
+  x.fillStyle = col; x.fillRect(1, 1, 94*frac, 10);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, depthWrite: false }));
+  spr.scale.set(1.5, 0.19, 1);
+  spr.renderOrder = 999;
+  return spr;
+}
+
+// ---------------- Crystal unit (minion / champion) ----------------
+function makeCrystalUnit(team, isChampion = false) {
+  const grp = new THREE.Group();
+  const baseColor = team === 'blue' ? 0x2f6fd6 : 0xd63a3a;
+  const emissive = team === 'blue' ? 0x1f4fb0 : 0x901414;
+  const mat = new THREE.MeshStandardMaterial({
+    color: baseColor, emissive, emissiveIntensity: 0.5,
+    roughness: 0.25, metalness: 0.3, flatShading: true
+  });
+
+  const size = isChampion ? 1.0 : 0.7;
+  // body: octahedron-ish crystal
+  const body = new THREE.Mesh(new THREE.OctahedronGeometry(size, 0), mat);
+  body.scale.set(0.75, 1.5, 0.75);
+  body.position.y = size * 1.4;
+  body.castShadow = true;
+  grp.add(body);
+
+  // small base shards
+  const shardMat = mat.clone();
+  for (let i = 0; i < 3; i++) {
+    const sh = new THREE.Mesh(new THREE.ConeGeometry(size*0.22, size*0.7, 4), shardMat);
+    const a = i/3 * Math.PI*2;
+    sh.position.set(Math.cos(a)*size*0.4, size*0.35, Math.sin(a)*size*0.4);
+    sh.castShadow = true;
+    grp.add(sh);
+  }
+
+  // glow point
+  const pl = new THREE.PointLight(baseColor, isChampion ? 1.6 : 0.7, isChampion ? 7 : 4);
+  pl.position.y = size * 1.4;
+  grp.add(pl);
+
+  // health bar
+  const hp = isChampion
+    ? makeHealthBar(1.0, team)
+    : simpleHealthBar(0.85 + Math.random()*0.15, team);
+  hp.position.y = size * (isChampion ? 3.4 : 2.4);
+  grp.add(hp);
+
+  return grp;
+}
+
+const units = [];
+// blue minions advancing right
+const bluePos = [[-12, 0.5], [-11, -1.6], [-9.5, 1.4], [-8, -0.6]];
+bluePos.forEach(([x, z]) => {
+  const u = makeCrystalUnit('blue');
+  u.position.set(x, 0, z);
+  scene.add(u); units.push({ obj: u, phase: Math.random()*6 });
+});
+// blue champion
+const champ = makeCrystalUnit('blue', true);
+champ.position.set(-5.5, 0, 0.2);
+scene.add(champ); units.push({ obj: champ, phase: 0 });
+
+// red minions
+const redPos = [[6.5, -1.2], [8, 1.0], [9.5, -0.3]];
+redPos.forEach(([x, z]) => {
+  const u = makeCrystalUnit('red');
+  u.position.set(x, 0, z);
+  scene.add(u); units.push({ obj: u, phase: Math.random()*6 });
+});
+
+// ---------------- Tower ----------------
+function makeTower() {
+  const grp = new THREE.Group();
+  const stoneMat = new THREE.MeshStandardMaterial({ color: 0x4a5160, roughness: 0.85, flatShading: true });
+  const darkStone = new THREE.MeshStandardMaterial({ color: 0x343a48, roughness: 0.9, flatShading: true });
+
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(2.4, 3.0, 0.8, 12), darkStone);
+  base.position.y = 0.4; base.castShadow = true; base.receiveShadow = true; grp.add(base);
+
+  const mid = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 2.0, 2.6, 10), stoneMat);
+  mid.position.y = 2.0; mid.castShadow = true; grp.add(mid);
+
+  const top = new THREE.Mesh(new THREE.CylinderGeometry(1.9, 1.5, 0.7, 10), darkStone);
+  top.position.y = 3.6; top.castShadow = true; grp.add(top);
+
+  // battlements
+  for (let i = 0; i < 8; i++) {
+    const a = i/8 * Math.PI*2;
+    const b = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.6, 0.5), stoneMat);
+    b.position.set(Math.cos(a)*1.7, 4.1, Math.sin(a)*1.7); b.castShadow = true; grp.add(b);
+  }
+
+  // red crystal core
+  const coreMat = new THREE.MeshStandardMaterial({ color: 0xff3a3a, emissive: 0xb01010, emissiveIntensity: 1.4, roughness: 0.2, flatShading: true });
+  const core = new THREE.Mesh(new THREE.OctahedronGeometry(0.95, 0), coreMat);
+  core.scale.set(0.7, 1.5, 0.7); core.position.y = 5.0; core.castShadow = true; grp.add(core);
+  const coreLight = new THREE.PointLight(0xff3a3a, 2.5, 12); coreLight.position.y = 5.0; grp.add(coreLight);
+
+  // health bar
+  const hp = makeHealthBar(1.0, 'red');
+  hp.scale.set(3.2, 0.6, 1);
+  hp.position.y = 6.4; grp.add(hp);
+
+  grp.userData.core = core;
+  return grp;
+}
+const tower = makeTower();
+tower.position.set(1.0, 0, 0);
+scene.add(tower);
+
+// ---------------- Projectile (champion auto-attack) ----------------
+const projMat = new THREE.MeshStandardMaterial({ color: 0x9fd4ff, emissive: 0x57b6ff, emissiveIntensity: 2.2 });
+const projectile = new THREE.Mesh(new THREE.SphereGeometry(0.25, 12, 12), projMat);
+const projLight = new THREE.PointLight(0x57b6ff, 2.0, 6);
+projectile.add(projLight);
+scene.add(projectile);
+const projStart = new THREE.Vector3(-5.5, 1.4, 0.2);
+const projEnd = new THREE.Vector3(1.0, 1.6, 0);
+
+// ---------------- Animate ----------------
+const clock = new THREE.Clock();
+let frames = 0, fpsTimer = 0;
+const fpsEl = document.getElementById('fps');
+const pingEl = document.getElementById('ping');
+
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = clock.getDelta();
+  const t = clock.elapsedTime;
+
+  // unit idle bob + rotation
+  units.forEach(u => {
+    u.obj.children[0].rotation.y += dt * 0.6;
+    u.obj.position.y = Math.sin(t*2 + u.phase) * 0.06;
+  });
+
+  // tower core spin
+  tower.userData.core.rotation.y += dt * 0.8;
+
+  // projectile travel loop
+  const cyc = (t % 1.6) / 1.6;
+  projectile.position.lerpVectors(projStart, projEnd, cyc);
+  projectile.position.y += Math.sin(cyc * Math.PI) * 0.6;
+  projMat.emissiveIntensity = 1.8 + Math.sin(t*20)*0.4;
+
+  // glow plant flicker
+  glowPlants.forEach(p => {
+    p.light.intensity = p.base + Math.sin(t*3 + p.phase) * 0.6;
+  });
+
+  renderer.render(scene, camera);
+
+  // fps counter
+  frames++; fpsTimer += dt;
+  if (fpsTimer >= 0.5) {
+    fpsEl.textContent = Math.round(frames / fpsTimer);
+    frames = 0; fpsTimer = 0;
+    pingEl.textContent = 20 + (Math.random()*6|0);
+  }
+}
+animate();
+
+// ---------------- Resize ----------------
+window.addEventListener('resize', () => {
+  const a = window.innerWidth / window.innerHeight;
+  camera.left = -viewSize * a; camera.right = viewSize * a;
+  camera.top = viewSize; camera.bottom = -viewSize;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+</script>
+</body>
+</html>

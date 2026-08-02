@@ -1,0 +1,12 @@
+---
+source: tests\conformance\for_tuple_destructure.rad
+exit_code: 0
+---
+70
+ez -> (0, 0)
+ez
+ez
+kat
+50
+a1b2
+brackets ok

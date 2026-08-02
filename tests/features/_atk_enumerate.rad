@@ -1,0 +1,34 @@
+// Attack enumerate with edge cases
+
+fn main() -> nil {
+    // 1. Empty list
+    let e1 = enumerate([])
+    print("empty:", e1)
+
+    // 2. Single element
+    let e2 = enumerate(["only"])
+    print("single:", e2)
+
+    // 3. Nested lists
+    let e3 = enumerate([[1, 2], [3, 4]])
+    print("nested:", e3)
+
+    // 4. Mixed types
+    let e4 = enumerate([1, "two", true, nil, 3.14])
+    print("mixed:", e4)
+
+    // 5. Large list — verify indices correct
+    let big = range(100)
+    let pairs = enumerate(big)
+    let last = pairs[99]
+    print("last of 100:", last)
+
+    // 6. Pipeline chaining
+    let result = enumerate(["a", "b", "c"])
+        |> map(fn(pair) { return f"{pair[0]}:{pair[1]}" })
+    print("piped:", result)
+
+    // 7. Double enumerate
+    let d = enumerate(enumerate(["x"]))
+    print("double:", d)
+}

@@ -1,0 +1,22 @@
+// backend: both
+state RequestState {
+    Draft { on submit -> WaitingManager }
+    WaitingManager { on manager_approve -> WaitingFinance, on reject -> Rejected }
+    WaitingFinance { on finance_approve -> Approved, on reject -> Rejected }
+    Approved {}
+    Rejected {}
+}
+
+let mut s = RequestState::Draft
+s = transition(s, "submit") |> unwrap
+s = transition(s, "manager_approve") |> unwrap
+s = transition(s, "finance_approve") |> unwrap
+
+match s {
+    Draft => { print("draft") }
+    WaitingManager => { print("manager") }
+    WaitingFinance => { print("finance") }
+    Approved => { print("approved") }
+    Rejected => { print("rejected") }
+}
+// expect: approved

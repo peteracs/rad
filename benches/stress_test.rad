@@ -1,0 +1,397 @@
+// ==========================================================================
+// Bootstrap Benchmark Stress Test
+//
+// A self-contained, valid Rad program that exercises the full compilation
+// pipeline: lexer, parser, checker, compiler, and VM execution.
+// Designed to be large enough to produce meaningful timings.
+// ==========================================================================
+
+component Pos { x: 0.0, y: 0.0 }
+component Vel { dx: 0.0, dy: 0.0 }
+component Health { hp: 100, max_hp: 100 }
+component Name { label: "" }
+component Score { value: 0 }
+
+// --- Pure utility functions ---
+
+pure fn clamp(val: int, lo: int, hi: int) -> int {
+    if val < lo { return lo }
+    if val > hi { return hi }
+    return val
+}
+
+pure fn abs_val(n: int) -> int {
+    if n < 0 { return 0 - n }
+    return n
+}
+
+pure fn gcd(a: int, b: int) -> int {
+    let mut x = abs_val(a)
+    let mut y = abs_val(b)
+    while y != 0 {
+        let tmp = y
+        y = x % y
+        x = tmp
+    }
+    return x
+}
+
+pure fn lcm(a: int, b: int) -> int {
+    if a == 0 or b == 0 { return 0 }
+    return abs_val(a * b) / gcd(a, b)
+}
+
+pure fn fib(n: int) -> int {
+    if n < 2 { return n }
+    let mut a = 0
+    let mut b = 1
+    let mut i = 2
+    while i <= n {
+        let tmp = a + b
+        a = b
+        b = tmp
+        i = i + 1
+    }
+    return b
+}
+
+pure fn factorial(n: int) -> int {
+    let mut result = 1
+    let mut i = 2
+    while i <= n {
+        result = result * i
+        i = i + 1
+    }
+    return result
+}
+
+pure fn is_prime(n: int) -> bool {
+    if n < 2 { return false }
+    if n < 4 { return true }
+    if n % 2 == 0 { return false }
+    let mut i = 3
+    while i * i <= n {
+        if n % i == 0 { return false }
+        i = i + 2
+    }
+    return true
+}
+
+pure fn count_primes(limit: int) -> int {
+    let mut count = 0
+    let mut n = 2
+    while n <= limit {
+        if is_prime(n) { count = count + 1 }
+        n = n + 1
+    }
+    return count
+}
+
+// --- Sorting ---
+
+fn bubble_sort(lst: list<int>) -> list<int> {
+    let mut arr = lst
+    let n = len(arr)
+    let mut i = 0
+    while i < n {
+        let mut j = 0
+        while j < n - i - 1 {
+            if arr[j] > arr[j + 1] {
+                let tmp = arr[j]
+                arr[j] = arr[j + 1]
+                arr[j + 1] = tmp
+            }
+            j = j + 1
+        }
+        i = i + 1
+    }
+    return arr
+}
+
+fn insertion_sort(lst: list<int>) -> list<int> {
+    let mut arr = lst
+    let n = len(arr)
+    let mut i = 1
+    while i < n {
+        let key = arr[i]
+        let mut j = i - 1
+        while j >= 0 and arr[j] > key {
+            arr[j + 1] = arr[j]
+            j = j - 1
+        }
+        arr[j + 1] = key
+        i = i + 1
+    }
+    return arr
+}
+
+// --- String utilities ---
+
+fn repeat_str(s: str, n: int) -> str {
+    let mut result = ""
+    let mut i = 0
+    while i < n {
+        result = result + s
+        i = i + 1
+    }
+    return result
+}
+
+fn pad_left(s: str, width: int, ch: str) -> str {
+    let mut result = s
+    while len(result) < width {
+        result = ch + result
+    }
+    return result
+}
+
+fn pad_right(s: str, width: int, ch: str) -> str {
+    let mut result = s
+    while len(result) < width {
+        result = result + ch
+    }
+    return result
+}
+
+// --- List utilities ---
+
+fn make_range(start: int, stop: int) -> list<int> {
+    let mut result: list<int> = []
+    let mut i = start
+    while i < stop {
+        result << i
+        i = i + 1
+    }
+    return result
+}
+
+fn sum_list(lst: list<int>) -> int {
+    let mut total = 0
+    for x in lst {
+        total = total + x
+    }
+    return total
+}
+
+fn reverse_list(lst: list<int>) -> list<int> {
+    let mut result: list<int> = []
+    let mut i = len(lst) - 1
+    while i >= 0 {
+        result << lst[i]
+        i = i - 1
+    }
+    return result
+}
+
+fn map_list(lst: list<int>, f: fn(int) -> int) -> list<int> {
+    let mut result: list<int> = []
+    for x in lst {
+        result << f(x)
+    }
+    return result
+}
+
+fn filter_list(lst: list<int>, pred: fn(int) -> bool) -> list<int> {
+    let mut result: list<int> = []
+    for x in lst {
+        if pred(x) { result << x }
+    }
+    return result
+}
+
+// --- ECS workload ---
+
+system MoveAll(pos: mut Pos, vel: Vel) {
+    pos.x = pos.x + vel.dx
+    pos.y = pos.y + vel.dy
+}
+
+system DamageAll(hp: mut Health) {
+    hp.hp = hp.hp - 1
+}
+
+fn run_ecs_benchmark() -> nil {
+    let count = 50
+    let mut ids: list<entity> = []
+    let mut i = 0
+    while i < count {
+        let e = spawn(
+            Name { label: f"e{i}" },
+            Pos { x: float(i), y: float(i * 2) },
+            Vel { dx: 1.0, dy: 0.5 },
+            Health { hp: 100, max_hp: 100 },
+            Score { value: i * 10 }
+        )
+        ids << e
+        i = i + 1
+    }
+
+    let mut tick = 0
+    while tick < 20 {
+        MoveAll()
+        DamageAll()
+        tick = tick + 1
+    }
+
+    let first = ids[0]
+    let p = require(first, Pos)
+    let h = require(first, Health)
+    assert(p.x == 20.0, "pos x should be 20")
+    assert(h.hp == 80, "hp should be 80")
+}
+
+// --- Compute-heavy workloads ---
+
+fn run_math_tests() -> nil {
+    assert(fib(0) == 0, "fib 0")
+    assert(fib(1) == 1, "fib 1")
+    assert(fib(10) == 55, "fib 10")
+    assert(fib(20) == 6765, "fib 20")
+
+    assert(factorial(0) == 1, "fact 0")
+    assert(factorial(5) == 120, "fact 5")
+    assert(factorial(10) == 3628800, "fact 10")
+
+    assert(gcd(12, 8) == 4, "gcd 12 8")
+    assert(gcd(100, 75) == 25, "gcd 100 75")
+    assert(lcm(4, 6) == 12, "lcm 4 6")
+
+    assert(is_prime(2), "2 is prime")
+    assert(is_prime(17), "17 is prime")
+    assert(not is_prime(15), "15 not prime")
+    assert(count_primes(100) == 25, "primes up to 100")
+
+    assert(clamp(5, 0, 10) == 5, "clamp mid")
+    assert(clamp(-3, 0, 10) == 0, "clamp lo")
+    assert(clamp(99, 0, 10) == 10, "clamp hi")
+}
+
+fn run_sort_tests() -> nil {
+    let unsorted = [5, 3, 8, 1, 9, 2, 7, 4, 6, 0]
+    let expected = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+    assert(bubble_sort(unsorted) == expected, "bubble sort")
+    assert(insertion_sort(unsorted) == expected, "insertion sort")
+
+    let mut big: list<int> = []
+    let mut i = 50
+    while i > 0 {
+        i = i - 1
+        big << i
+    }
+    let sorted = bubble_sort(big)
+    assert(sorted[0] == 0, "big sort first")
+    assert(sorted[49] == 49, "big sort last")
+}
+
+fn run_string_tests() -> nil {
+    assert(repeat_str("ab", 3) == "ababab", "repeat_str")
+    assert(pad_left("42", 5, "0") == "00042", "pad_left")
+    assert(pad_right("hi", 5, ".") == "hi...", "pad_right")
+}
+
+fn run_list_tests() -> nil {
+    let r = make_range(0, 10)
+    assert(len(r) == 10, "range len")
+    assert(sum_list(r) == 45, "sum list")
+
+    let rev = reverse_list(r)
+    assert(rev[0] == 9, "reverse first")
+    assert(rev[9] == 0, "reverse last")
+
+    let doubled = map_list(r, fn(x: int) -> int { return x * 2 })
+    assert(doubled[5] == 10, "map double")
+
+    let evens = filter_list(r, fn(x: int) -> bool { return x % 2 == 0 })
+    assert(len(evens) == 5, "filter evens")
+}
+
+// --- Pipeline workload ---
+
+fn run_pipeline_tests() -> nil {
+    let data = range(1, 21)
+
+    let evens = data |> filter(fn(x) { return x % 2 == 0 })
+    let squares = evens |> map(fn(x) { return x * x })
+    let result = reduce(squares, 0, fn(a, b) { return a + b })
+    assert(result == 2 * 2 + 4 * 4 + 6 * 6 + 8 * 8 + 10 * 10 + 12 * 12 + 14 * 14 + 16 * 16 + 18 * 18 + 20 * 20, "pipeline reduce")
+
+    let words = ["hello", "world", "foo", "bar", "baz"]
+    let long_words = words |> filter(fn(w) { return len(w) > 3 })
+    assert(len(long_words) == 2, "pipeline filter words")
+}
+
+// --- Type system workload ---
+
+type Shape {
+    Circle { radius: 0.0 }
+    Rect { w: 0.0, h: 0.0 }
+    Triangle { base: 0.0, height: 0.0 }
+}
+
+fn shape_area(s: Shape) -> float {
+    match s {
+        Circle { radius } => { return 3.14159 * radius * radius }
+        Rect { w, h } => { return w * h }
+        Triangle { base, height } => { return 0.5 * base * height }
+    }
+}
+
+fn run_type_tests() -> nil {
+    let c = Shape::Circle { radius: 5.0 }
+    let r = Shape::Rect { w: 4.0, h: 6.0 }
+    let t = Shape::Triangle { base: 3.0, height: 4.0 }
+
+    let _a1 = shape_area(c)
+    let a2 = shape_area(r)
+    let a3 = shape_area(t)
+
+    assert(a2 == 24.0, "rect area")
+    assert(a3 == 6.0, "triangle area")
+}
+
+// --- State machine workload ---
+
+state TrafficLight {
+    Red {
+        on timer -> Green
+    }
+    Green {
+        on timer -> Yellow
+    }
+    Yellow {
+        on timer -> Red
+    }
+}
+
+fn run_state_machine_tests() -> nil {
+    let mut light = TrafficLight::Red
+    light = transition(light, "timer") |> unwrap
+    match light {
+        Green => {}
+        _ => { assert(false, "expected green") }
+    }
+    light = transition(light, "timer") |> unwrap
+    match light {
+        Yellow => {}
+        _ => { assert(false, "expected yellow") }
+    }
+    light = transition(light, "timer") |> unwrap
+    match light {
+        Red => {}
+        _ => { assert(false, "expected red") }
+    }
+}
+
+// --- Entry point ---
+
+fn main() -> nil {
+    run_math_tests()
+    run_sort_tests()
+    run_string_tests()
+    run_list_tests()
+    run_pipeline_tests()
+    run_type_tests()
+    run_state_machine_tests()
+    run_ecs_benchmark()
+    print("All stress tests passed.")
+}

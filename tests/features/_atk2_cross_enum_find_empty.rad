@@ -1,0 +1,19 @@
+// Cross: enumerate empty, find on empty, max_by on empty
+fn main() -> nil {
+    let e = enumerate([])
+    print("enum empty:", e)
+
+    let f = find([], fn(x) { return x > 0 })
+    print("find empty:", f)
+
+    let m = max_by([], fn(x) { return x })
+    print("max_by empty:", m)
+
+    let n = min_by([], fn(x) { return x })
+    print("min_by empty:", n)
+}
+
+// expect: enum empty: []
+// expect: find empty: None
+// expect: max_by empty: None
+// expect: min_by empty: None

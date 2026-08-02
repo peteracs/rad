@@ -1,0 +1,8 @@
+set B1 1250
+set B2 500
+sync
+yours
+digest
+sgrid
+swhy B3
+quit

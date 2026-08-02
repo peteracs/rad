@@ -1,0 +1,20 @@
+// Authority lifecycle smoke test: no sockets, no proxy. It locks the resource
+// transition that lets the live server loop exit and close its UDP handle.
+
+use "../server/state.rad"
+
+fn main() -> nil {
+    start_authority(1000)
+    let started = res(ServerControl)
+    assert(started.running, "authority must run after start_authority")
+    assert(started.started_ms == 1000, "authority start time must be recorded")
+    assert(started.shutdown_requested_ms == 0, "fresh authority must not carry a stale shutdown time")
+
+    request_authority_shutdown("smoke-stop", 1250)
+    let stopped = res(ServerControl)
+    assert(not stopped.running, "shutdown request must stop the authority loop")
+    assert(stopped.started_ms == 1000, "shutdown must preserve the start time")
+    assert(stopped.shutdown_requested_ms == 1250, "shutdown time must be recorded")
+    assert(stopped.shutdown_reason == "smoke-stop", "shutdown reason must be recorded")
+    assert(shutdown_reason() == "smoke-stop", "shutdown_reason helper must expose the recorded reason")
+}

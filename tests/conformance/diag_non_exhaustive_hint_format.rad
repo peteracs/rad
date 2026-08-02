@@ -1,0 +1,14 @@
+// backend: both
+// expect-runtime-error: Add a case: Nothing => { ... }
+
+type Maybe {
+    Just { value: 0 }
+    Nothing {}
+}
+
+fn main() -> nil {
+    let m = Maybe::Just { value: 1 }
+    match m {
+        Just { value } => { print(str(value)) }
+    }
+}

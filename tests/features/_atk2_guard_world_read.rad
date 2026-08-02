@@ -1,0 +1,22 @@
+// Attack: guard expression that reads ECS world state
+component Flag { active: true }
+event Check { id }
+
+on Check(e) where unwrap(get(e.id, Flag)).active {
+    print("active")
+}
+
+fn main() -> nil {
+    let e = spawn(Flag { active: true })
+    emit Check { id: e }
+    flush_events()
+
+    set(e, Flag { active: false })
+    emit Check { id: e }
+    flush_events()
+
+    print("done")
+}
+
+// expect: active
+// expect: done

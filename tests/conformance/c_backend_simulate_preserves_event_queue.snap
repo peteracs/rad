@@ -1,0 +1,6 @@
+---
+source: tests\conformance\c_backend_simulate_preserves_event_queue.rad
+exit_code: 0
+---
+0
+1

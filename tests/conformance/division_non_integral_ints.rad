@@ -1,0 +1,5 @@
+// backend: both
+print(10 / 2)
+print(5 / 2)
+// expect: 5
+// expect: 2

@@ -1,0 +1,5 @@
+---
+source: tests\conformance\test_fork_purity_event.rad
+exit_code: 0
+---
+live=0 future=11

@@ -1,0 +1,11 @@
+// Attack: max_by with ties — should return first occurrence
+fn main() -> nil {
+    let data = ["a", "bb", "cc", "dd"]
+    let result = max_by(data, fn(s) { return len(s) })
+    match result {
+        Some(v) => { print("max:", v) }
+        None => { print("none") }
+    }
+}
+
+// expect: max: bb

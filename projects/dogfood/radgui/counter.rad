@@ -1,0 +1,75 @@
+// RADGUI rung 0 — the counter. Proves: builder API, click round-trip,
+// text patching, style knobs. Identity-by-marker-component is the ECS way:
+// the handler asks `has(target, IncBtn)`, never string-matches labels.
+
+use "lib_gui.rad"
+
+component IncBtn { z: int = 0 }
+
+component DecBtn { z: int = 0 }
+
+component ResetBtn { z: int = 0 }
+
+component CountLabel { z: int = 0 }
+
+resource Counter { n: int = 0 }
+
+fn refresh() -> nil {
+    let n = (get_resource(Counter) |> unwrap).n
+    for l in entities(CountLabel) {
+        ui_set_text(l, f"{n}")
+        let mut color = "#e8e6f0"
+        if n > 0 { color = "#5dff8f" }
+        if n < 0 { color = "#ff5d5d" }
+        update(l, Style) { fg = color }
+    }
+}
+
+fn bump(d: int) -> nil {
+    let c = get_resource(Counter) |> unwrap
+    set_resource(Counter, Counter { n: c.n + d })
+    refresh()
+}
+
+on Click(e) {
+    if has(e.target, IncBtn) { bump(1) }
+    if has(e.target, DecBtn) { bump(0 - 1) }
+    if has(e.target, ResetBtn) {
+        set_resource(Counter, Counter { n: 0 })
+        refresh()
+    }
+}
+
+on Key(e) {
+    if e.code == "ArrowUp" { bump(1) }
+    if e.code == "ArrowDown" { bump(0 - 1) }
+}
+
+fn main() -> nil {
+    ui_title("RADGUI counter")
+    ui_enable_undo() // Ctrl+Z rewinds the world — zero app code
+    ui_enable_preview() // hovering a button simulates the click in a fork
+
+    let root = ui_root()
+    update(root, Style) { pad = 24, gap = 12, align = "center" }
+
+    let head = ui_label(root, "the world's first ECS-native counter")
+    update(head, Style) { fg = "#8a87a0", size = 13 }
+
+    let count = ui_label(root, "0")
+    update(count, Style) { size = 64, mono = 1 }
+    set(count, CountLabel { z: 0 })
+
+    let row = ui_row(root)
+    update(row, Style) { gap = 8 }
+
+    let dec = ui_button(row, "-1")
+    set(dec, DecBtn { z: 0 })
+    let reset = ui_button(row, "reset")
+    set(reset, ResetBtn { z: 0 })
+    let inc = ui_button(row, "+1")
+    set(inc, IncBtn { z: 0 })
+
+    let hint = ui_label(root, "arrow keys work too")
+    update(hint, Style) { fg = "#8a87a0", size = 11 }
+}

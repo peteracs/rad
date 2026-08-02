@@ -1,0 +1,6 @@
+// `pub let` exports exactly one name; tuple destructuring is rejected.
+pub let (A, B) = (1, 2)
+
+fn main() -> nil {
+    print(A)
+}

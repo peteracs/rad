@@ -1,0 +1,9 @@
+// ILLEGAL: statements after a diverging `return`. Spec 4.6.
+fn f() -> int {
+    return 1
+    print("never")
+}
+
+fn main() -> nil {
+    print(f"{f()}")
+}

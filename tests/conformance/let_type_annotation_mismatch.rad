@@ -1,0 +1,4 @@
+// backend: both
+let x: int = "wrong"
+print(x)
+// expect-runtime-error: Type mismatch: 'x' declared as int, got str

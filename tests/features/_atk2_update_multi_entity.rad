@@ -1,0 +1,16 @@
+// Attack: update different entities in sequence
+component Pos { x: 0, y: 0 }
+
+fn main() -> nil {
+    let a = spawn(Pos { x: 0, y: 0 })
+    let b = spawn(Pos { x: 0, y: 0 })
+    update(a, Pos) { x = 10 }
+    update(b, Pos) { y = 20 }
+    let pa = unwrap(get(a, Pos))
+    let pb = unwrap(get(b, Pos))
+    print(f"a: x={pa.x} y={pa.y}")
+    print(f"b: x={pb.x} y={pb.y}")
+}
+
+// expect: a: x=10 y=0
+// expect: b: x=0 y=20

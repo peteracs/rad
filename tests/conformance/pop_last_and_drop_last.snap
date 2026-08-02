@@ -1,0 +1,7 @@
+---
+source: tests\conformance\pop_last_and_drop_last.rad
+exit_code: 0
+---
+3
+[1, 2]
+3

@@ -1,0 +1,19 @@
+// backend: both
+type Policy {
+    Emergency { description: "" }
+}
+
+fn apply_policy(policy) {
+    let mut description = ""
+    match policy {
+        Emergency { description } => {
+            description = "overwrite attempt"
+        }
+    }
+    return description
+}
+
+let p = Policy::Emergency { description: "fire" }
+let result = apply_policy(p)
+print(result)
+// expect-runtime-error: Cannot assign to 'description'

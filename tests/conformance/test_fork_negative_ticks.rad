@@ -1,0 +1,8 @@
+// Test: negative tick count should error
+
+component X { v: 0 }
+
+let e = spawn("e", X { v: 0 })
+let f = fork()
+let f = simulate(f, [], -5)
+print("FAIL: negative ticks should have errored")

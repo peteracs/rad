@@ -1,0 +1,46 @@
+// `emit E { .. } after N` — delayed events. The timer lives in the event
+// queue: one tick of delay per event flush, firing in emit order on the
+// tick it lands. Spellwork's cast points and channels are built on this.
+
+resource Clock { tick: int = 0 }
+
+event Ping { tag: str }
+
+event Chain { hop: int }
+
+on Ping(e) {
+    print(f"t{res(Clock).tick} ping {e.tag}")
+}
+
+// delayed emits compose from handlers: each hop re-arms the next
+on Chain(e) {
+    print(f"t{res(Clock).tick} hop {e.hop}")
+    if e.hop < 3 {
+        emit Chain { hop: e.hop + 1 } after 2
+    }
+}
+
+system noop(c: mut Clock) { c.tick = c.tick }
+
+fn step(n: int) -> nil {
+    for _ in range(0, n) {
+        update(Clock) { tick = res(Clock).tick + 1 }
+        schedule [noop]
+    }
+}
+
+fn main() -> nil {
+    // zero (and negative) delay is an ordinary emit
+    emit Ping { tag: "now" } after 0
+    step(1)                        // t1 ping now
+
+    // delays age one tick per flush; order within a tick = emit order
+    emit Ping { tag: "three" } after 3
+    emit Ping { tag: "one" } after 1
+    emit Ping { tag: "also-one" } after 1
+    step(4)                        // t2: one, also-one; t4: three
+
+    // a delayed chain hops every 2 ticks
+    emit Chain { hop: 1 } after 2
+    step(8)                        // t7 hop 1, t9 hop 2, t11 hop 3
+}

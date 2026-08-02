@@ -1,0 +1,9 @@
+---
+source: tests\conformance\integer_division_int_semantics.rad
+exit_code: 0
+---
+3
+-3
+-3
+3.5
+3.5

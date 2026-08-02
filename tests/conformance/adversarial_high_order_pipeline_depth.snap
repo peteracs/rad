@@ -1,0 +1,6 @@
+---
+source: tests\conformance\adversarial_high_order_pipeline_depth.rad
+exit_code: 0
+---
+7
+5040

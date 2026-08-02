@@ -1,0 +1,11 @@
+---
+source: tests\conformance\recent_events.rad
+exit_code: 0
+---
+[1, 2, 3]
+[99]
+[2, 3]
+1
+0
+6
+mid

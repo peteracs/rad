@@ -1,0 +1,25 @@
+// Test: Discarding many forks should never affect state
+// Create and discard forks in a loop — state must remain pristine
+
+component V { val: 42 }
+
+system Mutate(v: mut V) {
+    v = V { val: v.val * 2 }
+}
+
+let e = spawn("e", V { val: 42 })
+
+// Create and discard 50 forks with heavy simulation
+let mut i = 0
+while i < 50 {
+    let f = fork()
+    let _discarded = simulate(f, [system::Mutate], 10)
+    // Never commit — just discard
+    i = i + 1
+}
+
+// State must be pristine
+let v = get(e, V) |> unwrap
+assert(v.val == 42, f"After discarding 50 forks, val should still be 42, got {v.val}")
+
+print("PASS: discard preserves state (50 forks)")

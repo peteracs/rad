@@ -1,0 +1,16 @@
+// Sort 200k LCG-generated ints with the stdlib sort, checksum the result.
+fn main() -> nil {
+    let mut xs = []
+    let mut x = 42
+    let mut i = 0
+    while i < 200000 {
+        x = (x * 48271) % 2147483647
+        xs << x % 100000
+        i = i + 1
+    }
+    let t0 = now_unix_ms()
+    let sorted = sort(xs)
+    let t1 = now_unix_ms()
+    let chk = sorted[0] + sorted[99999] + sorted[199999]
+    print(f"RESULT {chk} MS {t1 - t0}")
+}

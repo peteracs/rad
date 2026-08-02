@@ -1,0 +1,9 @@
+// caps case 1: "write" is a string, not an array.
+component Reactor { temp: 0 }
+let _s = spawn("site", Reactor { temp: 1 })
+print("before")
+match sandbox_run("print(\"hi\")", fork(), f"""{ "write": "Reactor" }""") {
+    Ok(_f) => { print("Ok") }
+    Err(m) => { print(f"Err: {m}") }
+}
+print("after")

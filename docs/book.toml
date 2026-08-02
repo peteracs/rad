@@ -1,0 +1,25 @@
+[book]
+title = "Rad — The Three-Law Language"
+description = "Beautiful, simple, elegant docs for the Rad language."
+authors = ["peteracs"]
+language = "en"
+src = "src"
+
+[build]
+build-dir = "book"
+
+[output.html]
+default-theme = "rust"
+preferred-dark-theme = "rust"
+git-repository-url = "https://github.com/peteracs/rad"
+edit-url-template = "https://github.com/peteracs/rad/edit/main/docs/{path}"
+additional-css = ["theme/custom.css", "theme/highlight.css"]
+additional-js = ["theme/force-theme.js"]
+no-section-label = false
+
+[output.html.search]
+enable = true
+limit-results = 20
+
+[output.html.playground]
+editable = false

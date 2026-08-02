@@ -1,0 +1,50 @@
+// Dogfood: List item #4 — causality queries.
+//
+// The gold-drain mystery from the time-travel dogfood, solved without any
+// bisection: the runtime tracks the provenance of every main-timeline write,
+// so "where did the gold go?" is one builtin call:
+//
+//   rad projects/dogfood/causality/main.rad
+//
+// why() walks the chain  write -> handler -> event instance -> emitter,
+// across as many event hops as it takes.
+
+component Health { hp: 100 }
+
+component Gold { amount: 50 }
+
+resource Tally { drains: 0 }
+
+event Hit { amount }
+
+event Drained { }
+
+let hero = spawn("hero", Health { hp: 100 }, Gold { amount: 50 })
+
+on Hit(e) {
+    let h = get(hero, Health) |> unwrap
+    set(hero, Health { hp: h.hp - e.amount })
+    if h.hp - e.amount < 80 {
+        set(hero, Gold { amount: 0 })   // <- the bug
+        emit Drained { }
+    }
+}
+
+on Drained(_d) {
+    let t = get_resource(Tally) |> unwrap
+    set_resource(Tally, Tally { drains: t.drains + 1 })
+}
+
+for _i in range(0, 4) {
+    emit Hit { amount: 10 }
+    flush_events()
+}
+
+let g = get(hero, Gold) |> unwrap
+print(f"hero's gold: {g.amount}  (where did it go?)")
+print("")
+print("=== why(hero, Gold) ===")
+print(why(hero, Gold))
+print("")
+print("=== why_resource(Tally) — two event hops ===")
+print(why_resource(Tally))

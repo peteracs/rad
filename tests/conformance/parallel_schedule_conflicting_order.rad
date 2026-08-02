@@ -1,0 +1,20 @@
+// expect: 2
+
+component Counter { value: 0 }
+
+entity target {
+    Counter { value: 0 }
+}
+
+system AddOne(c: mut Counter) {
+    c.value = c.value + 1
+}
+
+system AddOneAgain(c: mut Counter) {
+    c.value = c.value + 1
+}
+
+schedule [AddOne, AddOneAgain]
+
+let c = get(target, Counter) |> unwrap
+print(c.value)

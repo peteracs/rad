@@ -1,0 +1,6 @@
+fn main() -> nil {
+    let s = "A"
+    let c = s[0]
+    print(c)
+    // print(c + 1) // this would error if it's a string
+}

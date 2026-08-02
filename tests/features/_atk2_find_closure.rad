@@ -1,0 +1,12 @@
+// Attack: find with a closure capturing outer state
+fn main() -> nil {
+    let threshold = 5
+    let data = [1, 3, 7, 2, 9]
+    let result = find(data, fn(x) { return x > threshold })
+    match result {
+        Some(v) => { print("found:", v) }
+        None => { print("none") }
+    }
+}
+
+// expect: found: 7

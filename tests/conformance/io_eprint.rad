@@ -1,0 +1,5 @@
+// Test: eprint runs without error (output goes to stderr, not stdout)
+eprint("hello stderr")
+eprint("multi", "args", 42)
+print("eprint ok")
+// expect: eprint ok

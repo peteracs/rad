@@ -1,0 +1,10 @@
+// cheater — a hostile player bot for RADTACTICS.
+//
+// Tries to win by giving itself 999 hp. The sandbox capability grant is
+// { "write": ["Intent"] }; Stats is not on the allowlist, so this write is
+// denied at the runtime ACL, the whole guest run errors out, and the unit
+// forfeits its turn. The live world never sees any of it — the guest was
+// running against a discarded fork to begin with.
+
+update(me, Stats) { hp = 999 }
+update(me, Intent) { kind = "wait", tx = 0, ty = 0, target = "" }

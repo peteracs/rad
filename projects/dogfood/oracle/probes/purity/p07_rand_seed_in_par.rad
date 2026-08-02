@@ -1,0 +1,20 @@
+// P07: rand_seed() under simulate_par(). Docs: "rand_seed stays banned, since
+// re-seeding would collapse the per-fork divergence." If it slips through, every
+// rollout collapses to the same stream and simulate_par silently stops exploring.
+// EXPECT: compile-time rejection.
+component C { v: int = 0 }
+
+system Leak(c: mut C) {
+    rand_seed(42)
+    c.v = c.v + rand_int(1, 6)
+}
+
+let e = spawn("e", C { v: 0 })
+let f = fork()
+let outs = simulate_par(f, [system::Leak], 2, 4, 999)
+let mut seen = []
+for o in outs {
+    let got = peek(o, e, C) |> unwrap
+    seen = push(seen, got.v)
+}
+print(f"COMPILED-AND-RAN values={seen}")

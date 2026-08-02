@@ -1,0 +1,31 @@
+// `transient resource` — runtime state excluded from the world's
+// identity. Command tapes, derived caches, and spatial indexes must
+// not change world_digest()/save_world(); forks and commits still
+// carry their values (they are real state, just not identity).
+
+resource Score { points: int = 0 }
+
+transient resource Tape { entries: list = [] }
+
+fn main() -> nil {
+    let d0 = world_digest()
+
+    // transient writes do not move the digest
+    update(Tape) { entries = ["order a", "order b"] }
+    print(f"transient write keeps digest: {world_digest() == d0}")
+
+    // normal resource writes do
+    update(Score) { points = 1 }
+    print(f"real write moves digest: {world_digest() != d0}")
+
+    // forks still carry transient values across commit
+    let cp = fork()
+    update(Tape) { entries = [] }
+    update(Score) { points = 99 }
+    commit(cp)
+    print(f"restored: score={res(Score).points} tape={len(res(Tape).entries)}")
+
+    // fork digests skip transients too
+    update(Tape) { entries = push(res(Tape).entries, "more") }
+    print(f"fork digest stable: {world_digest(cp) == world_digest()}")
+}

@@ -1,0 +1,47 @@
+// The 10k-edit script, rad side. 2000 cells, 10,000 edits (MINSTD-driven,
+// same stream as the Yjs/Automerge scripts), then:
+//   APPLY_MS    authoring cost of the 10k edits
+//   DELTA_BYTES bytes shipped to a peer who holds the base
+//   INGEST_MS   peer-side cost to reconstruct our world from base + delta
+//   MERGE_MS    three-way merge of the reconstruction against the base
+component Cell { v: int = 0 }
+
+fn main() -> nil {
+    let mut i = 0
+    while i < 2000 {
+        let _ = spawn(f"cell_{i}", Cell { v: 0 })
+        i = i + 1
+    }
+    let base = fork()
+
+    let t0 = now_unix_ms()
+    let mut x = 7
+    let mut k = 0
+    while k < 10000 {
+        x = (x * 48271) % 2147483647
+        let ent = get_entity(f"cell_{x % 2000}")
+        set(ent, Cell { v: x % 1000000 })
+        k = k + 1
+    }
+    let t1 = now_unix_ms()
+
+    let delta = fork_delta(base, fork())
+    let t2 = now_unix_ms()
+    let theirs = fork_apply(base, delta) |> unwrap
+    let t3 = now_unix_ms()
+    let merged = merge_forks(base, base, theirs) |> unwrap
+    let t4 = now_unix_ms()
+    commit(merged)
+
+    // checksum so the harness can cross-check the stream landed identically
+    let mut sum = 0
+    for e in entities(Cell) {
+        let c = get(e, Cell) |> unwrap
+        sum = sum + c.v
+    }
+    print(f"CHECK {sum}")
+    print(f"APPLY_MS {t1 - t0}")
+    print(f"DELTA_BYTES {len(delta)}")
+    print(f"INGEST_MS {t3 - t2}")
+    print(f"MERGE_MS {t4 - t3}")
+}

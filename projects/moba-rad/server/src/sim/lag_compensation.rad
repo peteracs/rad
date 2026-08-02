@@ -1,0 +1,175 @@
+// Server-authority lag compensation.
+//
+// An esports server cannot trust the client's view of where a target *is*, but
+// it must respect where the shooter *saw* the target when they acted. This
+// module keeps a short rolling history of every player's authoritative position
+// keyed by simulation tick, so a hit can be validated against the world the
+// shooter was actually looking at (their interpolated render tick), not the
+// newer authoritative tick.
+//
+// History lives in dedicated `PositionHistory` entities keyed by `player_id`,
+// not on the avatar itself. That keeps this purely server-side machinery out of
+// the shared, browser-concatenated component vocabulary: the prediction client
+// never needs to carry a lag-compensation ring buffer per avatar.
+//
+// Reuse is deliberate: the ring is fixed at spawn and only scalar slots are
+// rewritten each tick, so recording never allocates inside the 128 Hz loop.
+
+use "components.rad"
+use "../world/avatars.rad"
+
+pub fn history_capacity() -> int {
+    return 64
+}
+
+pub fn max_chaos_rewind_ticks() -> int {
+    return 45
+}
+
+pub component PositionHistory {
+    indexed owner_id: int = 0,
+    cursor: int = 0,
+    count: int = 0,
+    ticks: list < int > = [
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0
+    ],
+    xs: list < float > = [
+        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
+    ],
+    ys: list < float > = [
+        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
+    ]
+}
+
+pub fn history_for(player_id: int) -> entity {
+    match lookup(PositionHistory, "owner_id", player_id) {
+        Some(e) => { return e }
+        None => {
+            return spawn(f"history_{player_id}", PositionHistory { owner_id: player_id })
+        }
+    }
+}
+
+pub fn remove_history_for(player_id: int) -> nil {
+    match lookup(PositionHistory, "owner_id", player_id) {
+        Some(e) => { despawn(e) }
+        None => {}
+    }
+}
+
+// Records one player's current authoritative position at `server_tick`. Call
+// this once per tick after movement has resolved.
+pub fn record_position_history(player_id: int, server_tick: int) -> nil {
+    let avatar = player_avatar(player_id)
+    let pos = get(avatar, Position) |> unwrap
+    let e = history_for(player_id)
+    let h = get(e, PositionHistory) |> unwrap
+    let slot = h.cursor
+
+    update(e, PositionHistory) {
+        ticks[slot] = server_tick,
+        xs[slot] = pos.x,
+        ys[slot] = pos.y
+    }
+    update(e, PositionHistory) {
+        cursor = (h.cursor + 1) % history_capacity(),
+        count = min(h.count + 1, history_capacity())
+    }
+}
+
+pub fn record_all_history(server_tick: int) -> nil {
+    for avatar in entities(PlayerControlled) {
+        let owned = get(avatar, PlayerControlled) |> unwrap
+        record_position_history(owned.player_id, server_tick)
+    }
+}
+
+// Returns the ring slot whose recorded tick is the newest at or before
+// `view_tick`. Rolling back never reads a *future* tick, so a laggy shooter can
+// never be credited with information they could not have seen. Returns -1 when
+// `view_tick` predates the retained window (the caller then falls back to the
+// current position rather than fabricating one).
+pub fn historic_slot_for_tick(history_entity: entity, view_tick: int) -> int {
+    let h = get(history_entity, PositionHistory) |> unwrap
+    let mut best = -1
+    let mut best_tick = -2147483648
+    let mut i = 0
+    while i < h.count {
+        let t = h.ticks[i]
+        if t <= view_tick and t >= best_tick {
+            best_tick = t
+            best = i
+        }
+        i = i + 1
+    }
+    return best
+}
+
+pub fn historic_x(player_id: int, view_tick: int) -> float {
+    match lookup(PositionHistory, "owner_id", player_id) {
+        Some(e) => {
+            let slot = historic_slot_for_tick(e, view_tick)
+            if slot >= 0 {
+                let h = get(e, PositionHistory) |> unwrap
+                return h.xs[slot]
+            }
+            let pos = get(player_avatar(player_id), Position) |> unwrap
+            return pos.x
+        }
+        None => {
+            let pos = get(player_avatar(player_id), Position) |> unwrap
+            return pos.x
+        }
+    }
+}
+
+pub fn historic_y(player_id: int, view_tick: int) -> float {
+    match lookup(PositionHistory, "owner_id", player_id) {
+        Some(e) => {
+            let slot = historic_slot_for_tick(e, view_tick)
+            if slot >= 0 {
+                let h = get(e, PositionHistory) |> unwrap
+                return h.ys[slot]
+            }
+            let pos = get(player_avatar(player_id), Position) |> unwrap
+            return pos.y
+        }
+        None => {
+            let pos = get(player_avatar(player_id), Position) |> unwrap
+            return pos.y
+        }
+    }
+}
+
+// Validates a hit against a target by temporarily rolling that target back to
+// where it was at `view_tick` (the tick the shooter was rendering), then doing a
+// simple circle test. This is the whole point of lag compensation: the shooter
+// is judged against the world they saw, not the world that has since advanced.
+pub fn lag_compensated_hit(target_player_id: int, aim_x: float, aim_y: float, hit_radius: float, view_tick: int) -> bool {
+    let tx = historic_x(target_player_id, view_tick)
+    let ty = historic_y(target_player_id, view_tick)
+    let dx = tx - aim_x
+    let dy = ty - aim_y
+    return dx * dx + dy * dy <= hit_radius * hit_radius
+}

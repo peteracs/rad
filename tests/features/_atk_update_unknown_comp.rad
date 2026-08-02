@@ -1,0 +1,5 @@
+// Attack: update with unknown component name
+fn main() -> nil {
+    let e = spawn()
+    update(e, NonExistent) { x = 5 }
+}

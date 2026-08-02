@@ -1,0 +1,7 @@
+---
+source: tests\conformance\test_fork_commit_in_sim_rejected.rad
+exit_code: 1
+---
+
+---stderr---
+Error: System 'BadCommit' cannot be used in simulate(): calls 'commit' (forbidden in simulation — would corrupt the forked world)

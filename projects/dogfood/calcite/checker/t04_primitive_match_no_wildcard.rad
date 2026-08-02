@@ -1,0 +1,11 @@
+// ILLEGAL: matching a primitive requires a `_` wildcard arm. Spec 4.10.
+fn label(n: int) -> str {
+    match n {
+        1 => { return "one" }
+        2 => { return "two" }
+    }
+}
+
+fn main() -> nil {
+    print(label(3))
+}

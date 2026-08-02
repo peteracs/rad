@@ -1,0 +1,125 @@
+// =====================================================================
+//  Binary Search Tree -- array-backed, no pointers, no recursive types
+//  Deliberately the wrong tool for the job.
+//
+//  BUG LOG:
+//    1. Value semantics means every function must return and rebind
+//       all mutated state. No escape.
+// =====================================================================
+
+fn bst_insert(tree, val) {
+    let mut t = tree
+    t[0] = push(t[0], val)
+    t[1] = push(t[1], 0)
+    t[2] = push(t[2], 0)
+    t[3][0] = t[3][0] + 1
+    let sz = t[3][0]
+    if sz == 1 { return t }
+
+    let new_idx = sz
+    let mut cur = 1
+    let mut placed = false
+    while placed == false {
+        if val < t[0][cur] {
+            if t[1][cur] == 0 {
+                t[1][cur] = new_idx
+                placed = true
+            } else {
+                cur = t[1][cur]
+            }
+        } else {
+            if t[2][cur] == 0 {
+                t[2][cur] = new_idx
+                placed = true
+            } else {
+                cur = t[2][cur]
+            }
+        }
+    }
+    return t
+}
+
+pure fn bst_search(tree, val) {
+    if tree[3][0] == 0 { return false }
+    let mut cur = 1
+    while cur != 0 {
+        if tree[0][cur] == val { return true }
+        if val < tree[0][cur] {
+            cur = tree[1][cur]
+        } else {
+            cur = tree[2][cur]
+        }
+    }
+    return false
+}
+
+fn bst_inorder(tree) {
+    if tree[3][0] == 0 { return [] }
+
+    let values = tree[0]
+    let left_arr = tree[1]
+    let right_arr = tree[2]
+
+    let mut result = []
+    let mut stack = []
+    let mut cur = 1
+
+    let mut done = false
+    while done == false {
+        while cur != 0 {
+            stack = push(stack, cur)
+            cur = left_arr[cur]
+        }
+        if len(stack) == 0 {
+            done = true
+        } else {
+            cur = pop(stack)
+            stack = drop_last(stack)
+            result = push(result, values[cur])
+            cur = right_arr[cur]
+        }
+    }
+    return result
+}
+
+fn bst_height(tree, idx) {
+    if idx == 0 { return 0 }
+    let lh = bst_height(tree, tree[1][idx])
+    let rh = bst_height(tree, tree[2][idx])
+    if lh > rh { return lh + 1 }
+    return rh + 1
+}
+
+fn main() -> any {
+    print("=== Cursed BST (array-backed, no pointers) ===\n")
+
+    let data = [50, 30, 70, 20, 40, 60, 80, 10, 25, 35, 45]
+    print(f"Insert order: {data}")
+
+    let mut tree = [[0], [0], [0], [0]]
+    for val in data {
+        tree = bst_insert(tree, val)
+    }
+
+    let sorted = bst_inorder(tree)
+    print(f"In-order traversal: {sorted}")
+    print(f"Sorted correctly: {sorted == (data |> sort)}")
+
+    print("\nSearch tests:")
+    let search_for = [50, 25, 45, 99, 10, 0]
+    for val in search_for {
+        let found = bst_search(tree, val)
+        print(f"  search({val}) = {found}")
+    }
+
+    print("\nTree stats:")
+    print(f"  nodes: {tree[3][0]}")
+    print(f"  root value: {tree[0][1]}")
+    print(f"  height: {bst_height(tree, 1)}")
+
+    // Verify with pipeline
+    let all_found = data
+    |> map(fn(v) { return bst_search(tree, v) })
+    |> filter(fn(v) { return v == true })
+    print(f"  all inserted values found: {len(all_found) == len(data)}")
+}

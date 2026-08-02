@@ -1,0 +1,6 @@
+---
+source: tests\features\test_typed_event_fields.rad
+exit_code: 0
+---
+Alice scored 100
+Bob scored 250

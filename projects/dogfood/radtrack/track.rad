@@ -1,0 +1,271 @@
+// RADTRACK client — an offline-first issue tracker CLI.
+//
+//   rad projects/dogfood/radtrack/track.rad <user> <workdir>
+//
+// State lives in <workdir>/world.radw (save_world bytes) and syncs against
+// server.rad with deltas:
+//
+//   <workdir>/base.radw   the last server state this client agreed on
+//                         (full fork bytes; the merge ancestor)
+//
+// Commands:
+//   add <title>                      new ticket
+//   list [open|closed|all]           sorted by priority
+//   show <T-n>                       full ticket
+//   title|assign|prio <T-n> <value>  edit a field
+//   body <T-n> <text>                set the description
+//   tag <T-n> +name [-name ...]      add/remove tags
+//   close <T-n> | reopen <T-n>       lifecycle
+//   find <text>                      substring search
+//   why <T-n>                        who did what, with provenance
+//   pull                             adopt the server's world (first sync)
+//   sync                             three-way merge with the server;
+//                                    conflicts are listed and you choose
+//                                    `ours` or `theirs` per conflict
+//   save | quit
+
+use "lib_track.rad"
+
+let HOST = "127.0.0.1"
+let PORT = 7979
+
+fn now() -> int { return now_unix_s() }
+
+fn rpc(req: str) -> str {
+    let conn = tcp_connect(HOST, PORT)
+    send_msg(conn, req)
+    let reply = read_msg(conn)
+    tcp_close(conn)
+    return reply
+}
+
+fn save_to(dir: str) -> nil {
+    write_file(dir + "/world.radw", save_world())
+}
+
+fn arg_text(parts: list < str > , from: int) -> str {
+    return join(slice(parts, from, len(parts)), " ")
+}
+
+// Apply a MERGED reply: down-delta onto our current state, commit, persist,
+// and remember the merged world as the new base — under the SERVER's name
+// for it. Fork bytes legitimately differ across machines (provenance,
+// counters), so the digest in our own bytes is not the server's key.
+fn adopt_merged(dir: str, reply: str) -> nil {
+    let dparts = split(reply, "\t")
+    let head = split(dparts[0], " ")
+    match fork_apply(fork(), dparts[1]) {
+        Ok(merged) => {
+            commit(merged)
+            write_file(dir + "/base.radw", fork_to_bytes(fork()))
+            write_file(dir + "/base_digest.txt", head[1])
+            save_to(dir)
+            let wd = world_digest()
+            print(f"synced ({len(dparts[1])} B down), world digest {wd}")
+        }
+        Err(m) => { print(f"sync failed applying down-delta: {m}") }
+    }
+}
+
+fn cmd_sync(dir: str, user: str) -> nil {
+    if !file_exists(dir + "/base.radw") {
+        print("no base — `pull` first")
+        return
+    }
+    match fork_from_bytes(read_file(dir + "/base.radw")) {
+        Ok(base) => {
+            let delta = fork_delta(base, fork())
+            let base_name = trim(read_file(dir + "/base_digest.txt"))
+            let reply = rpc(f"SYNC {user} {base_name}\t" + delta)
+            if starts_with(reply, "MERGED ") {
+                adopt_merged(dir, reply)
+            } else if starts_with(reply, "CONFLICTS\t") {
+                let items = split(split(reply, "\t")[1], chr(30))
+                print(f"\n{len(items)} conflict(s) — the server and you changed the same fields:")
+                let mut picks = []
+                let mut i = 0
+                while i < len(items) {
+                    match json_parse(items[i]) {
+                        Some(c) => {
+                            if c["kind"] == "field" {
+                                let cname = c["name"]
+                                let ccomp = c["comp"]
+                                let cfield = c["field"]
+                                let cours = c["ours"]
+                                let ctheirs = c["theirs"]
+                                print(f"  [{i}] {cname} {ccomp}.{cfield}")
+                                print(f"      server: {cours}")
+                                print(f"      yours:  {ctheirs}")
+                                print("      keep which? (server/yours)")
+                                let mut side = trim(readline())
+                                if side != "server" { side = "yours" }
+                                picks << f"{i}:{side}"
+                            } else if c["kind"] == "name" {
+                                // Both sides created this name offline. Keep
+                                // both: the server's becomes <name>/a, yours
+                                // becomes <name>/b (or type two names A|B).
+                                let cname = c["name"]
+                                print(f"  [{i}] name claim: '{cname}' was created on both sides")
+                                print(f"      keep both? server's stays '{cname}/a', yours becomes '{cname}/b' (yes / A|B)")
+                                let ans = trim(readline())
+                                if ans == "yes" or ans == "" {
+                                    picks << f"{i}:rename={cname}/a|{cname}/b"
+                                } else {
+                                    picks << f"{i}:rename={ans}"
+                                }
+                            } else {
+                                let raw = items[i]
+                                print(f"  [{i}] structural conflict: {raw} — cannot auto-resolve")
+                            }
+                        }
+                        None => {
+                            let raw = items[i]
+                            print(f"  [{i}] unparseable conflict: {raw}")
+                        }
+                    }
+                    i = i + 1
+                }
+                let pickstr = join(picks, ",")
+                let reply2 = rpc(f"RESOLVE {user} {pickstr}\t" + delta)
+                if starts_with(reply2, "MERGED ") {
+                    adopt_merged(dir, reply2)
+                } else {
+                    print(f"resolve failed: {reply2}")
+                }
+            } else {
+                print(f"sync refused: {reply}")
+            }
+        }
+        Err(m) => { print(f"corrupt base: {m}") }
+    }
+}
+
+fn main() -> nil {
+    let argv = sys_args()
+    if len(argv) < 2 {
+        print("usage: rad track.rad <user> <workdir>")
+        return
+    }
+    let user = argv[0]
+    let dir = argv[1]
+
+    if file_exists(dir + "/world.radw") {
+        let n = load_world(read_file(dir + "/world.radw"))
+        print(f"radtrack — {user} (restored {n} entities from {dir}/world.radw)")
+    } else {
+        print(f"radtrack — {user} (fresh world in {dir})")
+    }
+
+    let mut running = true
+    while running {
+        let line = trim(readline())
+        if line == "" { continue }
+        let parts = split(line, " ")
+        let cmd = parts[0]
+
+        if cmd == "quit" or cmd == "exit" {
+            save_to(dir)
+            running = false
+        } else if cmd == "save" {
+            save_to(dir)
+            print("saved")
+        } else if cmd == "add" and len(parts) >= 2 {
+            let t = new_ticket(arg_text(parts, 1), user, now())
+            print(f"opened {name_of(t)}")
+        } else if cmd == "list" {
+            let mut status = "open"
+            if len(parts) >= 2 { status = parts[1] }
+            for id in ticket_ids(status) { print(fmt_row(id, now())) }
+        } else if cmd == "show" and len(parts) == 2 {
+            let ent = get_entity(parts[1])
+            if ent == nil { print(f"no ticket {parts[1]}") }
+            else { print(fmt_ticket(parts[1], now())) }
+        } else if (cmd == "title" or cmd == "assign" or cmd == "prio" or cmd == "body") and len(parts) >= 3 {
+            let ent = get_entity(parts[1])
+            if ent == nil { print(f"no ticket {parts[1]}") }
+            else {
+                let mut field = cmd
+                if cmd == "assign" { field = "assignee" }
+                if cmd == "prio" { field = "priority" }
+                set_field(ent, field, arg_text(parts, 2), user, now())
+                print(fmt_row(parts[1], now()))
+            }
+        } else if cmd == "tag" and len(parts) >= 3 {
+            let ent = get_entity(parts[1])
+            if ent == nil { print(f"no ticket {parts[1]}") }
+            else {
+                for spec in slice(parts, 2, len(parts)) {
+                    if starts_with(spec, "+") { add_tag(ent, slice(spec, 1, len(spec)), user, now()) }
+                    if starts_with(spec, "-") { remove_tag(ent, slice(spec, 1, len(spec)), user, now()) }
+                }
+                print(fmt_row(parts[1], now()))
+            }
+        } else if (cmd == "close" or cmd == "reopen") and len(parts) == 2 {
+            let ent = get_entity(parts[1])
+            if ent == nil { print(f"no ticket {parts[1]}") }
+            else {
+                if cmd == "close" { close_ticket(ent, user, now()) }
+                else { reopen_ticket(ent, user, now()) }
+                print(fmt_row(parts[1], now()))
+            }
+        } else if cmd == "find" and len(parts) >= 2 {
+            for id in search(arg_text(parts, 1)) { print(fmt_row(id, now())) }
+        } else if cmd == "why" and len(parts) == 2 {
+            let ent = get_entity(parts[1])
+            if ent == nil { print(f"no ticket {parts[1]}") }
+            else { print(why(ent, Ticket)) }
+        } else if cmd == "pull" {
+            let bytes = rpc("PULL " + user)
+            match fork_from_bytes(bytes) {
+                Ok(server_world) => {
+                    commit(server_world)
+                    write_file(dir + "/base.radw", bytes)
+                    write_file(dir + "/base_digest.txt", split(bytes, " ")[1])
+                    save_to(dir)
+                    let d = split(bytes, " ")[1]
+                    let n = len(ticket_ids("all"))
+                    print(f"pulled {d} ({len(bytes)} B), {n} tickets")
+                }
+                Err(m) => { print(f"pull failed: {m}") }
+            }
+        } else if cmd == "sync" {
+            cmd_sync(dir, user)
+        } else if cmd == "swhy" and len(parts) == 2 {
+            // The server's view of who touched this ticket — including edits
+            // that arrived over the wire from other machines.
+            print(replace(rpc("WHY " + parts[1]), " | ", "\n"))
+        } else if cmd == "slist" {
+            print(replace(rpc("LIST"), " | ", "\n"))
+        } else if cmd == "digest" {
+            // The convergence receipt, schema-skew aware: equal schema
+            // fingerprints compare digests directly; a skew (rolling
+            // upgrade) asks the server to CERTIFY our migrated view
+            // instead of misreading the vintage difference as divergence.
+            let mine = world_digest()
+            let my_schema = schema_digest()
+            let reply = split(rpc("DIGEST"), " ")
+            let theirs = reply[0]
+            let mut their_schema = ""
+            if len(reply) >= 2 { their_schema = reply[1] }
+            print(f"local  {mine}")
+            print(f"server {theirs}")
+            if my_schema == their_schema {
+                if mine == theirs { print("converged: digests agree") }
+                else { print("DIVERGED") }
+            } else {
+                print("schema skew detected (rolling upgrade) — requesting certification")
+                let cert = split(rpc("CERTIFY " + fork_to_bytes(fork())), " ")
+                if len(cert) >= 3 and cert[2] == "MATCH" {
+                    print(f"converged: server certifies our migrated view ({cert[0]})")
+                } else {
+                    print(f"DIVERGED (certified): {join(cert, \" \")}")
+                }
+            }
+        } else if cmd == "shutdown" {
+            print(rpc("SHUTDOWN"))
+        } else {
+            print("commands: add list show title assign prio body tag close reopen find why pull sync save quit")
+        }
+    }
+    print("bye")
+}

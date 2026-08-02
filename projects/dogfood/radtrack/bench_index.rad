@@ -1,0 +1,45 @@
+// Indexed-query receipt: the same "open tickets" question answered by the
+// O(world) scan RADTRACK used to do, and by lookup_all (one hash probe).
+//
+//   ./target/release/rad.exe projects/dogfood/radtrack/bench_index.rad
+
+component Ticket { title: str = "", indexed status: str = "open", priority: int = 3 }
+
+fn main() -> nil {
+    // 50k tickets, ~2% open (the realistic shape: most of a tracker is
+    // closed history; the working set is small)
+    let mut i = 0
+    while i < 50000 {
+        let mut st = "closed"
+        if i % 50 == 0 { st = "open" }
+        let _ = spawn(f"T-{i}", Ticket { title: f"t{i}", status: st, priority: i % 4 + 1 })
+        i = i + 1
+    }
+
+    // the scan (what every list view used to pay)
+    let t0 = now_unix_ms()
+    let mut reps = 0
+    let mut scan_n = 0
+    while reps < 100 {
+        scan_n = 0
+        for t in entities(Ticket) {
+            if (get(t, Ticket) |> unwrap).status == "open" { scan_n = scan_n + 1 }
+        }
+        reps = reps + 1
+    }
+    let t1 = now_unix_ms()
+
+    // the probe
+    reps = 0
+    let mut idx_n = 0
+    while reps < 100 {
+        idx_n = len(lookup_all(Ticket, "status", "open"))
+        reps = reps + 1
+    }
+    let t2 = now_unix_ms()
+
+    print(f"world: 50000 tickets, {idx_n} open")
+    print(f"scan   x100: {t1 - t0} ms  (found {scan_n})")
+    print(f"lookup x100: {t2 - t1} ms  (found {idx_n})")
+    if scan_n != idx_n { print("MISMATCH — index disagrees with scan") }
+}

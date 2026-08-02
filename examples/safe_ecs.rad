@@ -1,0 +1,53 @@
+// =====================================================================
+//  Rad — Safe ECS & state machines
+//  get(entity, "Component") returns Option::Some(value) or Option::None.
+//  transition(state, "event") returns Result::Ok(newState) or Result::Err.
+// =====================================================================
+
+component Label { text: "" }
+
+component Score { points: 0 }
+
+entity player {
+    Label { text: "hero" },
+    Score { points: 10 }
+}
+
+entity prop {
+    Label { text: "rock" }
+}
+
+state Gate {
+    Open { on close -> Closed }
+    Closed { on open -> Open }
+}
+
+fn main() -> any {
+    print("=== get() -> Option (match, unwrap, expect) ===")
+
+    match get(player, "Score") {
+        Some { value } => { print(f"  player Score: {value.points}") }
+        None => { print("  (unexpected None)") }
+    }
+
+    match get(prop, "Score") {
+        Some { value } => { print("  prop has Score") }
+        None => { print("  prop: no Score (Option::None), branch taken safely") }
+    }
+
+    let name = (get(player, "Label") ?).text
+    print(f"  unwrap Label: {name}")
+
+    let sc = get(player, "Score") |> expect("player must have Score")
+    print(f"  expect Score: {sc.points}")
+
+    print("\n=== transition() -> Result ===")
+    let g = Gate::Closed
+    let opened = transition(g, "open") ?
+    print("  after open: ok")
+
+    match transition(opened, "nope") {
+        Ok { value } => { print("  unexpected Ok") }
+        Err { message } => { print(f"  invalid event -> Err: {message}") }
+    }
+}

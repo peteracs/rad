@@ -1,0 +1,6 @@
+---
+source: tests\conformance\phase_and_ordering.rad
+exit_code: 0
+---
+["first", "second", "third"]
+6

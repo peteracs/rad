@@ -1,0 +1,10 @@
+// backend: both
+fn pair < A, B > (a: A, b: B) -> list < any > {
+    return [a, b]
+}
+
+let p = pair("a", 7)
+print(p[0])
+print(p[1])
+// expect: a
+// expect: 7

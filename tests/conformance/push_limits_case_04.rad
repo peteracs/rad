@@ -1,0 +1,5 @@
+// backend: both
+let risky = [23, 77, 51, 91, 14, 68]
+let sorted = sort(risky)
+print(f"CASE04:{sorted[0]}:{sorted[len(sorted) - 1]}")
+// expect: CASE04:14:91

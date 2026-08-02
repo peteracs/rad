@@ -1,0 +1,22 @@
+// BUG 07b: `lint --preset=strict` demands an explicit type annotation on
+// every binding, including bindings that hold a RESOURCE value -- but a
+// resource type name is rejected as a type annotation. The demand cannot be
+// satisfied. Both halves appear in ONE lint invocation.
+//
+// Lint: target\debug\rad.exe lint --preset=strict projects\dogfood\bastion\bugs\07b_strict_resource_annotation.rad
+//
+// Corroborates A2 BUG 02 (seq 21), which found the same rejection in
+// function-parameter position; this is the let-binding position, plus the
+// observation that strict mode makes it an unsatisfiable requirement.
+
+resource Tally { hits: 0 }
+
+// Without an annotation, strict mode errors:
+//   "Strict types: variable 'a' requires an explicit type annotation"
+let a = get_resource(Tally) |> unwrap
+print(f"unannotated: {a.hits}")
+
+// With the annotation strict mode asks for, the compiler errors:
+//   "Unknown type annotation 'Tally'"  (+ "defaulting to any")
+let b: Tally = get_resource(Tally) |> unwrap
+print(f"annotated: {b.hits}")

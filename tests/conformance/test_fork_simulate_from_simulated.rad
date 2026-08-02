@@ -1,0 +1,28 @@
+// Test: Simulate a fork, then simulate from THAT fork's result
+// (Not nested — sequential simulation from an already-simulated fork)
+
+component Acc { total: 0 }
+
+system Add(a: mut Acc) {
+    a = Acc { total: a.total + 1 }
+}
+
+let e = spawn("e", Acc { total: 0 })
+
+// Phase 1: fork and simulate 5 ticks
+let f1 = fork()
+let f1_result = simulate(f1, [system::Add], 5)
+
+// Phase 2: simulate the RESULT fork for 3 more ticks
+let f2_result = simulate(f1_result, [system::Add], 3)
+
+// Main world untouched
+let main_val = get(e, Acc) |> unwrap
+assert(main_val.total == 0, f"Main should be 0, got {main_val.total}")
+
+// Commit the doubly-simulated fork (should be 5 + 3 = 8)
+commit(f2_result)
+let final_val = get(e, Acc) |> unwrap
+assert(final_val.total == 8, f"After double simulate, expected 8, got {final_val.total}")
+
+print("PASS: simulate from simulated fork")

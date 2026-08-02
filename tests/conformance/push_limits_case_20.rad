@@ -1,0 +1,10 @@
+// backend: both
+component Balance { amount: 0 }
+
+component Flag { active: false }
+let acct = spawn("acct", Balance { amount: 100 }, Flag { active: true })
+set(acct, Balance { amount: 145 })
+let b2 = get(acct, Balance) |> unwrap
+print(f"CASE20:{b2.amount}")
+despawn(acct)
+// expect: CASE20:145

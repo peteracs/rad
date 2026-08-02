@@ -1,0 +1,22 @@
+// backend: both
+component Pos { x: 0 }
+
+component Name { value: "" }
+
+fn main() -> nil {
+    let e1 = spawn("p1", Pos { x: 7 }, Name { value: "hero" })
+    let p1 = get(e1, Pos) |> unwrap
+    let n1 = get(e1, Name) |> unwrap
+    print(p1.x)
+    print(n1.value)
+
+    let e2 = spawn(Pos { x: 9 })
+    let p2 = get(e2, Pos) |> unwrap
+    print(p2.x)
+
+    despawn(e1)
+    despawn(e2)
+}
+// expect: 7
+// expect: hero
+// expect: 9

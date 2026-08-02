@@ -1,0 +1,271 @@
+// MISSILEWORK — browser-moba's attack cycle + projectile flight, written
+// the way it wants to be written (fake-port round 2). The code comes
+// first; whatever the language can't run becomes a feature.
+//
+// Architecture (mirrors sim/systems/attack.ts + projectiles.ts):
+//   - The attack cycle is a per-unit state machine whose STATES CARRY
+//     THEIR DATA: Windup knows its remaining ticks and crit roll,
+//     Recover knows its swing timer. No flag soup.
+//   - Positions are 2-tuples and the math is vector math: `pos + dir * step`,
+//     not dx/dz pairs threaded by hand.
+//   - Homing missiles chase a live target and fizzle if it dies — the
+//     payload is lost, exactly like the era engine. Skillshots fly
+//     straight, overlap-test against enemies, and pierce or stop.
+//   - Hits land as events; damage stays someone else's job (damage_core).
+
+pub let TICKS_PER_S = 30
+pub let DT = 1.0 / 30.0
+pub let REPATH_TICKS = 15        // chase repath cadence (0.5s)
+pub let LEASH_M = 6.0            // windup cancel: range + leash
+pub let ARRIVE_SLACK_M = 0.5     // homing arrival plane slack
+
+// ------------------------------------------------------------ sim state
+
+component Pos { at: (float, float) = (0.0, 0.0) }
+
+component Body { radius: float = 0.5 }
+
+component Vitals { hp: float = 1000.0, team: int = 0, targetable: bool = true }
+
+component Ranged { range: float = 11.0, windup_ticks: int = 9, swing_ticks: int = 33, missile_speed: float = 40.0 }
+
+// the attack cycle: states carry their own data
+type Cycle {
+    Idle {}
+    Chase { repath: 0 }
+    Windup { left: 0, crit: false }
+    Recover { swing: 0 }
+}
+
+component Attack {
+    target: entity | nil = nil,
+    phase: Cycle = Cycle::Idle {},
+}
+
+// projectiles are entities too: one component, two flavors
+type Flight {
+    Homing { target: entity }
+    Straight { dir: (float, float), max_range: float, pierce: false }
+}
+
+component Missile {
+    source: entity,       // required: a missile without an owner is a bug
+    flight: Flight = Flight::Straight { dir: (1.0, 0.0), max_range: 0.0, pierce: false },
+    speed: float = 40.0,
+    radius: float = 0.5,
+    payload: float = 0.0,
+    flown: float = 0.0,
+}
+
+pub event AttackLanded { target: entity, source: entity, amount: float, crit: bool }
+pub event SkillshotHit { target: entity, source: entity, amount: float }
+pub event MissileFizzled { source: entity }
+
+// ------------------------------------------------------------- helpers
+
+pure fn dist(a: (float, float), b: (float, float)) -> float {
+    let (ax, ay) = a
+    let (bx, by) = b
+    return sqrt((ax - bx) * (ax - bx) + (ay - by) * (ay - by))
+}
+
+pure fn normalize(v: (float, float)) -> (float, float) {
+    let (x, y) = v
+    let n = sqrt(x * x + y * y)
+    if n == 0.0 { return (0.0, 0.0) }
+    return (x / n, y / n)
+}
+
+fn alive(u: entity) -> bool {
+    return require(u, Vitals).hp > 0.0 and require(u, Vitals).targetable
+}
+
+// ------------------------------------------------------- attack cycle
+
+system attack_cycle(a: mut Attack, p: Pos, r: Ranged) {
+    let target = a.target
+    if target == nil {
+        a.phase = Cycle::Idle {}
+        return
+    }
+    if not alive(target) {
+        a.target = nil
+        a.phase = Cycle::Idle {}
+        return
+    }
+
+    let here = p.at
+    let there = require(target, Pos).at
+    let gap = dist(here, there)
+
+    match a.phase {
+        Cycle::Idle {} => {
+            a.phase = Cycle::Chase { repath: 0 }
+        }
+        Cycle::Chase { repath: n } => {
+            if gap <= r.range {
+                // in range: stop and start the swing
+                a.phase = Cycle::Windup { left: r.windup_ticks, crit: false }
+            } else {
+                // out of range: walk at it, repath on cadence
+                let step = normalize(there - here) * (8.0 * DT)
+                update(self, Pos) { at = here + step }
+                let mut next = n - 1
+                if next <= 0 { next = REPATH_TICKS }
+                a.phase = Cycle::Chase { repath: next }
+            }
+        }
+        Cycle::Windup { left: t, crit: c } => {
+            if gap > r.range + LEASH_M {
+                // leash break: the swing cancels, cooldown untouched
+                a.phase = Cycle::Chase { repath: REPATH_TICKS }
+            } else if t > 1 {
+                a.phase = Cycle::Windup { left: t - 1, crit: c }
+            } else {
+                // FIRE: launch the homing attack missile
+                let _m = entity f"missile-{self}-{res(Clock).tick}" {
+                    Pos { at: here },
+                    Missile {
+                        source: self,
+                        flight: Flight::Homing { target: target },
+                        speed: r.missile_speed,
+                        payload: 62.0,
+                    },
+                }
+                a.phase = Cycle::Recover { swing: r.swing_ticks }
+            }
+        }
+        Cycle::Recover { swing: t } => {
+            if t > 1 {
+                a.phase = Cycle::Recover { swing: t - 1 }
+            } else if gap <= r.range {
+                a.phase = Cycle::Windup { left: r.windup_ticks, crit: false }
+            } else {
+                a.phase = Cycle::Chase { repath: REPATH_TICKS }
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------- projectile flight
+
+system fly_missiles(m: mut Missile, p: mut Pos) {
+    let step = m.speed * DT
+    match m.flight {
+        Flight::Homing { target: t } => {
+            // fizzle: the target died or slipped untargetable mid-flight —
+            // the era destroys the missile, payload lost
+            if not alive(t) {
+                emit MissileFizzled { source: m.source }
+                despawn(self)
+                return
+            }
+            let there = require(t, Pos).at
+            let gap = dist(p.at, there)
+            if gap <= step + ARRIVE_SLACK_M {
+                emit AttackLanded {
+                    target: t, source: m.source, amount: m.payload, crit: false,
+                }
+                despawn(self)
+                return
+            }
+            p.at = p.at + normalize(there - p.at) * step
+        }
+        Flight::Straight { dir: d, max_range: cap, pierce: pierce } => {
+            p.at = p.at + d * step
+            m.flown = m.flown + step
+            if m.flown >= cap {
+                despawn(self)
+                return
+            }
+            // overlap test against every enemy in the lane
+            for (u, v, up) in query { Vitals, Pos } {
+                if v.hp <= 0.0 or not v.targetable { continue }
+                if u == m.source { continue }
+                if dist(up.at, p.at) <= m.radius + require(u, Body).radius {
+                    emit SkillshotHit { target: u, source: m.source, amount: m.payload }
+                    if not pierce {
+                        despawn(self)
+                        return
+                    }
+                }
+            }
+        }
+    }
+}
+
+// hits land as damage someone else computes; here we just bookkeep hp
+on AttackLanded(e) {
+    let v = require(e.target, Vitals)
+    update(e.target, Vitals) { hp = v.hp - e.amount }
+    print(f"  hit {name_of(e.target)} for {e.amount:.0} -> {require(e.target, Vitals).hp:.0}")
+}
+
+on SkillshotHit(e) {
+    let v = require(e.target, Vitals)
+    update(e.target, Vitals) { hp = v.hp - e.amount }
+    print(f"  skillshot {name_of(e.target)} for {e.amount:.0} -> {require(e.target, Vitals).hp:.0}")
+}
+
+on MissileFizzled(e) {
+    print(f"  fizzle (from {name_of(e.source)})")
+}
+
+// ------------------------------------------------------------- demo
+
+resource Clock { tick: int = 0 }
+
+fn phase_name(c: Cycle) -> str {
+    match c {
+        Cycle::Idle {} => { return "idle" }
+        Cycle::Chase { repath: _ } => { return "chase" }
+        Cycle::Windup { left: t, crit: _ } => { return f"windup({t})" }
+        Cycle::Recover { swing: t } => { return f"recover({t})" }
+    }
+}
+
+fn step(n: int) -> nil {
+    for _ in range(0, n) {
+        update(Clock) { tick = res(Clock).tick + 1 }
+        schedule [attack_cycle, fly_missiles]
+    }
+}
+
+fn main() -> nil {
+    let ez = entity "ez" {
+        Pos { at: (0.0, 0.0) }, Body {}, Vitals { team: 0 },
+        Ranged {}, Attack {},
+    }
+    let dummy = entity "dummy" {
+        Pos { at: (20.0, 0.0) }, Body { radius: 0.65 }, Vitals { hp: 200.0, team: 1 },
+    }
+
+    // order the attack: chase in, windup, fire, recover, repeat
+    update(ez, Attack) { target = dummy }
+    step(1)
+    print(f"t1   {phase_name(require(ez, Attack).phase)} at {require(ez, Pos).at}")
+
+    step(40)
+    print(f"t41  {phase_name(require(ez, Attack).phase)} gap={dist(require(ez, Pos).at, require(dummy, Pos).at):.1}")
+
+    step(120)
+    print(f"t161 dummy hp={require(dummy, Vitals).hp:.0}")
+
+    // a skillshot down the lane: pierces the dummy, expires at max range
+    let _q = entity "ezq" {
+        Pos { at: (0.0, 0.0) },
+        Missile {
+            source: ez,
+            flight: Flight::Straight { dir: (1.0, 0.0), max_range: 35.0, pierce: true },
+            speed: 60.0, radius: 1.0, payload: 35.0,
+        },
+    }
+    step(25)
+    print(f"t186 dummy hp={require(dummy, Vitals).hp:.0}")
+
+    // kill the dummy mid-flight: the next attack missile must fizzle
+    step(30)                                   // a fresh missile is airborne
+    update(dummy, Vitals) { hp = 0.0, targetable = false }
+    step(10)
+    print(f"t226 {phase_name(require(ez, Attack).phase)}")
+}

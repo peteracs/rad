@@ -1,0 +1,15 @@
+// RAD_GAPS #6: a parameter named `range` used to shadow the builtin
+// silently and explode at runtime with "Not callable: int". The checker
+// now resolves calls the way the runtime does (bindings shadow builtins)
+// and reports it at compile time, with a rename hint.
+fn walk(range: int) -> int {
+    let mut acc = 0
+    for i in range(0, range) {
+        acc = acc + i
+    }
+    return acc
+}
+
+fn main() -> nil {
+    print(walk(5))
+}

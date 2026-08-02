@@ -1,0 +1,304 @@
+use "arena_schema.rad"
+
+pub struct Vec2 {
+    x: float = 0.0,
+    y: float = 0.0
+}
+
+pub struct AbilitySpec {
+    slot: str = "",
+    label: str = "",
+    mana: float = 0.0,
+    cooldown_ticks: int = 0,
+    range: float = 0.0,
+    radius: float = 0.0,
+    flags: str = ""
+}
+
+pub fn expect_entity(name: str) -> entity {
+    return require_entity(name)
+}
+
+pub fn ent(name: str) -> entity {
+    return expect_entity(name)
+}
+
+pub fn vec2(x: float, y: float) -> Vec2 {
+    return Vec2 { x: x, y: y }
+}
+
+pub fn pos_vec(p: Position) -> Vec2 {
+    return vec2(p.x, p.y)
+}
+
+pub fn pos_from_vec(v: Vec2) -> Position {
+    return Position { x: v.x, y: v.y }
+}
+
+pub fn vec_len(v: Vec2) -> float {
+    return sqrt(v.x * v.x + v.y * v.y)
+}
+
+pub fn vec_dist(a: Vec2, b: Vec2) -> float {
+    return vec_len(Vec2 { x: a.x - b.x, y: a.y - b.y })
+}
+
+pub fn dist(a: Position, b: Position) -> float {
+    return vec_dist(pos_vec(a), pos_vec(b))
+}
+
+pub fn move_towards_pos(pos: Position, target: Position, max_step: float) -> Position {
+    let dx = target.x - pos.x
+    let dy = target.y - pos.y
+    let d = sqrt(dx * dx + dy * dy)
+    if d <= 0.001 or d <= max_step {
+        return target
+    }
+    return pos_from_vec(Vec2 {
+        x: pos.x + (dx / d) * max_step,
+        y: pos.y + (dy / d) * max_step
+    })
+}
+
+pub fn map4_units_per_second(move_speed: float) -> float {
+    return move_speed * (203.0 * 30.0 / 325.0)
+}
+
+pub fn map4_move_step(stats: Stats) -> float {
+    return map4_units_per_second(stats.move_speed) * res(MatchClock).dt
+}
+
+pub fn clamp_world_pos(x: float, y: float) -> Position {
+    return Position {
+        x: clamp(x, map4_min_x() + 40.0, map4_max_x() - 40.0),
+        y: clamp(y, map4_min_y() + 40.0, map4_max_y() - 40.0)
+    }
+}
+
+pub fn unit_alive(e: entity) -> bool {
+    let u = require(e, Unit)
+    return u.alive and u.targetable
+}
+
+pub fn is_enemy(a: entity, b: entity) -> bool {
+    return require(a, Unit).team != require(b, Unit).team
+}
+
+pub fn is_ally(a: entity, b: entity) -> bool {
+    return require(a, Unit).team == require(b, Unit).team
+}
+
+pub fn units_in_radius(center: Position, radius: float, mode: str, caster: entity) -> list {
+    let mut found = []
+    for unit in query { Unit, Position, Health } {
+        if unit_alive(unit) and dist(center, require(unit, Position)) <= radius {
+            if mode == "any" {
+                found << unit
+            } else {
+                if mode == "enemy" and is_enemy(caster, unit) { found << unit }
+                if mode == "ally" and is_ally(caster, unit) { found << unit }
+            }
+        }
+    }
+    return found
+}
+
+pub fn log(msg: str) -> nil {
+    let ids = res(Ids)
+    let n = ids.next_log
+    set_resource(Ids, Ids { next_log: n + 1, next_zone: ids.next_zone })
+    let _line = entity f"log-{n}" {
+        LogLine { key: f"log-{n}", idx: n, text: msg },
+        Lifetime { ticks_left: 700 }
+    }
+}
+
+pub fn buff_key(owner_id: str, name: str) -> str {
+    return f"{owner_id}:{name}"
+}
+
+pub fn hit_key(travel_id: str, target_id: str) -> str {
+    return f"hit:{travel_id}:{target_id}"
+}
+
+pub fn apply_buff(owner_id: str, source_id: str, name: str, kind: str, ticks: int, stacks: int, max_stacks: int, shield: float, move_mod: float) -> nil {
+    let key = buff_key(owner_id, name)
+    match lookup(Buff, "key", key) {
+        Some(existing) => {
+            let old = require(existing, Buff)
+            let mut next_stacks = old.stacks + stacks
+            if max_stacks > 0 and next_stacks > max_stacks { next_stacks = max_stacks }
+            set(existing, Buff {
+                key: key,
+                owner_id: owner_id,
+                source_id: source_id,
+                name: name,
+                kind: kind,
+                ticks_left: ticks,
+                stacks: next_stacks,
+                max_stacks: max_stacks,
+                shield_left: shield,
+                move_mod: move_mod
+            })
+            return nil
+        }
+        None => {
+            let _b = entity key {
+                Buff {
+                    key: key,
+                    owner_id: owner_id,
+                    source_id: source_id,
+                    name: name,
+                    kind: kind,
+                    ticks_left: ticks,
+                    stacks: stacks,
+                    max_stacks: max_stacks,
+                    shield_left: shield,
+                    move_mod: move_mod
+                }
+            }
+        }
+    }
+}
+
+pub fn buff_stacks(owner_id: str, name: str) -> int {
+    let key = buff_key(owner_id, name)
+    match lookup(Buff, "key", key) {
+        Some(existing) => { return require(existing, Buff).stacks }
+        None => { return 0 }
+    }
+}
+
+pub fn q_base(level: int) -> float {
+    if level <= 1 { return 60.0 }
+    if level == 2 { return 100.0 }
+    if level == 3 { return 140.0 }
+    if level == 4 { return 180.0 }
+    return 220.0
+}
+
+pub fn w_base(level: int) -> float {
+    if level <= 1 { return 70.0 }
+    if level == 2 { return 115.0 }
+    if level == 3 { return 160.0 }
+    if level == 4 { return 205.0 }
+    return 250.0
+}
+
+pub fn e_shield(level: int, ap: float) -> float {
+    if level <= 1 { return 80.0 + ap * 0.4 }
+    if level == 2 { return 120.0 + ap * 0.4 }
+    if level == 3 { return 160.0 + ap * 0.4 }
+    if level == 4 { return 200.0 + ap * 0.4 }
+    return 240.0 + ap * 0.4
+}
+
+pub fn r_base(level: int) -> float {
+    if level <= 1 { return 150.0 }
+    if level == 2 { return 225.0 }
+    return 300.0
+}
+
+pub fn passive_base(level: int) -> float {
+    if level <= 3 { return 5.0 }
+    if level <= 6 { return 10.0 }
+    if level <= 9 { return 15.0 }
+    if level <= 12 { return 20.0 }
+    if level <= 15 { return 25.0 }
+    if level <= 18 { return 30.0 }
+    return 35.0
+}
+
+pub fn w_speed_mod(level: int) -> float {
+    if level <= 1 { return 0.20 }
+    if level == 2 { return 0.25 }
+    if level == 3 { return 0.30 }
+    if level == 4 { return 0.35 }
+    return 0.40
+}
+
+pub fn ability_spec(slot: str) -> AbilitySpec {
+    if slot == "q" {
+        return AbilitySpec { slot: "q", label: "Command: Attack", mana: 70.0, cooldown_ticks: 32, range: 885.0, radius: 175.0, flags: "ground,missile,ball" }
+    }
+    if slot == "w" {
+        return AbilitySpec { slot: "w", label: "Dissonance", mana: 110.0, cooldown_ticks: 90, range: 0.0, radius: 225.0, flags: "ball,aoe,zone" }
+    }
+    if slot == "e" {
+        return AbilitySpec { slot: "e", label: "Protect", mana: 60.0, cooldown_ticks: 90, range: 1020.0, radius: 100.0, flags: "ally,shield,line" }
+    }
+    if slot == "r" {
+        return AbilitySpec { slot: "r", label: "Shockwave", mana: 150.0, cooldown_ticks: 900, range: 0.0, radius: 415.0, flags: "ball,ultimate,forced-move" }
+    }
+    return AbilitySpec { slot: slot, label: slot, mana: 0.0, cooldown_ticks: 0, range: 0.0, radius: 0.0, flags: "" }
+}
+
+pub fn ability_damage(slot: str, level: int, ap: float) -> float {
+    if slot == "q" { return q_base(level) + ap * 0.6 }
+    if slot == "w" { return w_base(level) + ap * 0.5 }
+    if slot == "r" { return r_base(level) + ap * 0.7 }
+    return 0.0
+}
+
+pub fn cd_for_slot(slot: str) -> int {
+    return ability_spec(slot).cooldown_ticks
+}
+
+pub fn mana_for_slot(slot: str) -> float {
+    return ability_spec(slot).mana
+}
+
+pub fn cd_remaining(cd: Cooldowns, slot: str) -> int {
+    if slot == "q" { return cd.q }
+    if slot == "w" { return cd.w }
+    if slot == "e" { return cd.e }
+    if slot == "r" { return cd.r }
+    return 0
+}
+
+pub fn cd_ready(cd: Cooldowns, slot: str) -> bool {
+    return cd_remaining(cd, slot) <= 0
+}
+
+pub fn put_cd(unit: entity, slot: str, ticks: int) -> nil {
+    let cd = require(unit, Cooldowns)
+    if slot == "q" { set(unit, Cooldowns { q: ticks, ..cd }) }
+    if slot == "w" { set(unit, Cooldowns { w: ticks, ..cd }) }
+    if slot == "e" { set(unit, Cooldowns { e: ticks, ..cd }) }
+    if slot == "r" { set(unit, Cooldowns { r: ticks, ..cd }) }
+}
+
+pub fn tick_cd_value(v: int) -> int {
+    if v > 0 { return v - 1 }
+    return 0
+}
+
+pub fn tick_cooldowns(cd: Cooldowns) -> Cooldowns {
+    return Cooldowns {
+        q: tick_cd_value(cd.q),
+        w: tick_cd_value(cd.w),
+        e: tick_cd_value(cd.e),
+        r: tick_cd_value(cd.r)
+    }
+}
+
+pub fn spend_and_cd(caster: entity, slot: str) -> bool {
+    let book = require(caster, SpellBook)
+    if book.sealed {
+        log("Spellbook sealed while the ball is moving")
+        return false
+    }
+    let cd = require(caster, Cooldowns)
+    if not cd_ready(cd, slot) {
+        log(f"{slot} is still cooling down")
+        return false
+    }
+    let mana = mana_for_slot(slot)
+    if book.mana < mana {
+        log("Not enough mana")
+        return false
+    }
+    set(caster, SpellBook { mana: book.mana - mana, sealed: book.sealed })
+    put_cd(caster, slot, cd_for_slot(slot))
+    return true
+}

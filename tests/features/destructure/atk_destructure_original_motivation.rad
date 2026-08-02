@@ -1,0 +1,21 @@
+fn main() -> nil {
+    let task_rows = [
+        ["build_frontend", 2, 0.75],
+        ["test_backend", 1, 0.0],
+        ["deploy_staging", 2, 0.50],
+        ["lint_check", 0, 0.0],
+        ["build_backend", 2, 0.90]
+    ]
+
+    let running = task_rows |> filter(fn([name, phase, progress]) { return phase == 2 })
+    let total_progress = running |> reduce(0.0, fn(acc, [name, phase, progress]) {
+        return acc + float(progress)
+    })
+    let names = running |> map(fn([name, phase, progress]) { return name })
+
+    print(len(running))
+    print(total_progress)
+    for [name, phase, progress] in running {
+        print(f"  {name}: {progress}")
+    }
+}

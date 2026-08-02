@@ -1,0 +1,94 @@
+// Deterministic-replay dogfood for server/replay_log.rad.
+//
+// The replay guarantee: a match is perfectly reproducible from the initial world
+// plus the tick-indexed input stream that executed. This test proves both halves
+// against the real recorder:
+//   1. recording writes a well-formed match file (versioned header, embedded
+//      initial world, delimited input stream in tick order, footer with count
+//      and the authoritative final digest), and
+//   2. re-running the same input stream from the same initial state reproduces
+//      the authoritative world bit-for-bit -- which is what makes the
+//      lightweight (seed + inputs) file a perfect reconstruction.
+//
+// Determinism is checked two ways: the authoritative avatar position (a readable,
+// specific invariant) AND the full world_digest matching the tape's recorded
+// final_digest (the comprehensive whole-world guarantee). The MatchReplayLog is a
+// transient resource, so it is excluded from world_digest and cannot mask or
+// manufacture a divergence -- the load_world reset replaces the entity set
+// cleanly, so the replay pass converges to the exact recorded digest.
+
+use "../sim/components.rad"
+use "../world/scene.rad"
+use "../world/avatars.rad"
+use "../sim/movement.rad"
+use "../server/replay_log.rad"
+
+let _seed = seed_moba_world()
+
+fn drive_scripted_match(dt: float, record: bool) -> nil {
+    // A scripted "match": three move orders issued on known ticks. When
+    // recording, each input is logged the instant it is accepted -- the exact
+    // sequenced stream the simulation consumes.
+    let mut t = 1
+    while t <= 220 {
+        if t == 1 {
+            if record { record_replay_move(t, 9001, 1, 1, 1, 60.0, 22.0) }
+            issue_move_order(1, 1, 60.0, 22.0)
+        }
+        if t == 70 {
+            if record { record_replay_move(t, 9001, 1, 2, 2, -45.0, -28.0) }
+            issue_move_order(1, 2, -45.0, -28.0)
+        }
+        if t == 150 {
+            if record { record_replay_move(t, 9001, 1, 3, 3, 30.0, 48.0) }
+            issue_move_order(1, 3, 30.0, 48.0)
+        }
+        tick_movement(dt)
+        t = t + 1
+    }
+}
+
+fn main() -> nil {
+    let dt = 1.0 / 128.0
+    let path = "src/test/.replay-fixture.replay"
+    let initial_world = save_world()
+
+    // --- Live pass: record while simulating ---------------------------------
+    start_match_replay(path, 1000)
+    drive_scripted_match(dt, true)
+    let live = get(player_avatar(1), Position) |> unwrap
+    let live_x = live.x
+    let live_y = live.y
+    let final_digest = world_digest()
+    finish_match_replay(2000)
+
+    // The recorder must persist a well-formed, complete match file.
+    assert(replay_input_count() == 3, "every accepted input must be recorded exactly once")
+    assert(file_exists(path), "finishing a match must leave a persisted replay file")
+    let text = read_file(path)
+    assert(split(text, "\n")[0] == "MOBARAD_REPLAY v1", "replay file must start with the versioned magic header")
+    assert(contains(text, "initial_world_begin") and contains(text, "initial_world_end"),
+        "replay file must embed the initial world snapshot")
+    assert(contains(text, "inputs_begin") and contains(text, "inputs_end"),
+        "replay file must delimit the input stream")
+    assert(contains(text, "M 1 9001 1 1 1"), "replay file must contain the first applied move in tick order")
+    assert(contains(text, "M 70 9001 1 2 2"), "replay file must contain the second applied move")
+    assert(contains(text, "M 150 9001 1 3 3"), "replay file must contain the third applied move")
+    assert(contains(text, "input_count 3"), "replay file footer must record the applied input count")
+    assert(contains(text, f"final_digest {final_digest}"), "replay file footer must carry the authoritative final digest")
+
+    // --- Determinism: same initial state + same input stream => same state ---
+    // load_world hard-resets: the entities the live pass created are replaced by
+    // exactly the saved set, not appended to it.
+    let loaded = load_world(initial_world)
+    assert(loaded > 0, "replay reset must restore the initial world")
+    drive_scripted_match(dt, false)
+    let replayed = get(player_avatar(1), Position) |> unwrap
+    assert(replayed.x == live_x and replayed.y == live_y,
+        "replaying the recorded input stream must reproduce the authoritative avatar state bit-for-bit")
+    assert(world_digest() == final_digest,
+        "the replay must converge to the tape's recorded final_digest -- the whole-world reproduction guarantee")
+
+    remove_file(path)
+    assert(not file_exists(path), "the test must not leave a replay artifact behind")
+}

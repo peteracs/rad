@@ -1,0 +1,3 @@
+// expect-runtime-error: start cannot be greater than end
+let s = "abc"
+print(substring_bytes(s, 2, 1))

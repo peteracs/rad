@@ -1,0 +1,191 @@
+// RADSHEET client — an offline-first spreadsheet CLI.
+//
+//   rad projects/dogfood/radsheet/sheet.rad -- <user> <workdir>
+//
+// State lives in <workdir>/world.radw; syncs against server.rad with
+// deltas, exactly like RADTRACK. Conflicts on a cell's SOURCE come back as
+// a picker; derived values reflow server-side after every merge.
+//
+// Commands:
+//   set <ref> <text|number|=formula>   edit a cell ("" clears: set A1 -)
+//   grid                               render the sheet
+//   cell <ref>                         raw/val/kind of one cell
+//   why <ref>                          who made this value, with provenance
+//   swhy <ref>                         the server's provenance for the cell
+//   pull | sync                        adopt / three-way merge with server
+//   digest                             local vs server world_digest
+//   sgrid                              the server's rendered grid
+//   save | quit                        persist | persist and exit
+//   shutdown                           stop the server (persists first)
+
+use "lib_sheet.rad"
+
+let HOST = "127.0.0.1"
+let PORT = 7981
+
+fn rpc(req: str) -> str {
+    let conn = tcp_connect(HOST, PORT)
+    send_msg(conn, req)
+    let reply = read_msg(conn)
+    tcp_close(conn)
+    return reply
+}
+
+fn save_to(dir: str) -> nil {
+    write_file(dir + "/world.radw", save_world())
+}
+
+fn adopt_merged(dir: str, reply: str) -> nil {
+    let dparts = split(reply, "\t")
+    let head = split(dparts[0], " ")
+    match fork_apply(fork(), dparts[1]) {
+        Ok(merged) => {
+            commit(merged)
+            write_file(dir + "/base.radw", fork_to_bytes(fork()))
+            write_file(dir + "/base_digest.txt", head[1])
+            save_to(dir)
+            let wd = world_digest()
+            print(f"synced ({len(dparts[1])} B down), world digest {wd}")
+        }
+        Err(m) => { print(f"sync failed applying down-delta: {m}") }
+    }
+}
+
+fn cmd_sync(dir: str, user: str) -> nil {
+    if !file_exists(dir + "/base.radw") {
+        print("no base — `pull` first")
+        return
+    }
+    match fork_from_bytes(read_file(dir + "/base.radw")) {
+        Ok(base) => {
+            let delta = fork_delta(base, fork())
+            let base_name = trim(read_file(dir + "/base_digest.txt"))
+            let reply = rpc(f"SYNC {user} {base_name}\t" + delta)
+            if starts_with(reply, "MERGED ") {
+                adopt_merged(dir, reply)
+            } else if starts_with(reply, "CONFLICTS\t") {
+                let items = split(split(reply, "\t")[1], chr(30))
+                print(f"\n{len(items)} conflict(s) — you and the server edited the same cell:")
+                let mut picks = []
+                let mut i = 0
+                while i < len(items) {
+                    match json_parse(items[i]) {
+                        Some(c) => {
+                            if c["kind"] == "field" {
+                                let cname = c["name"]
+                                let cours = c["ours"]
+                                let ctheirs = c["theirs"]
+                                print(f"  [{i}] cell {cname}")
+                                print(f"      server: {cours}")
+                                print(f"      yours:  {ctheirs}")
+                                print("      keep which? (server/yours)")
+                                let mut side = trim(readline())
+                                if side != "server" { side = "yours" }
+                                picks << f"{i}:{side}"
+                            } else {
+                                let raw = items[i]
+                                print(f"  [{i}] structural conflict: {raw}")
+                            }
+                        }
+                        None => {
+                            let raw = items[i]
+                            print(f"  [{i}] unparseable conflict: {raw}")
+                        }
+                    }
+                    i = i + 1
+                }
+                let pickstr = join(picks, ",")
+                let reply2 = rpc(f"RESOLVE {user} {pickstr}\t" + delta)
+                if starts_with(reply2, "MERGED ") {
+                    adopt_merged(dir, reply2)
+                } else {
+                    print(f"resolve failed: {reply2}")
+                }
+            } else {
+                print(f"sync refused: {reply}")
+            }
+        }
+        Err(m) => { print(f"corrupt base: {m}") }
+    }
+}
+
+fn main() -> nil {
+    let argv = sys_args()
+    if len(argv) < 2 {
+        print("usage: rad sheet.rad -- <user> <workdir>")
+        return
+    }
+    let user = argv[0]
+    let dir = argv[1]
+
+    if file_exists(dir + "/world.radw") {
+        let n = load_world(read_file(dir + "/world.radw"))
+        print(f"radsheet — {user} (restored {n} cells from {dir}/world.radw)")
+    } else {
+        init_grid()
+        print(f"radsheet — {user} (fresh grid in {dir})")
+    }
+
+    let mut running = true
+    while running {
+        let line = trim(readline())
+        if line == "" { continue }
+        let parts = split(line, " ")
+        let cmd = parts[0]
+
+        if cmd == "quit" or cmd == "exit" {
+            save_to(dir)
+            running = false
+        } else if cmd == "save" {
+            save_to(dir)
+            print("saved")
+        } else if cmd == "set" and len(parts) >= 3 {
+            let mut text = join(slice(parts, 2, len(parts)), " ")
+            if text == "-" { text = "" }
+            if set_cell(parts[1], text, user, now_unix_s()) {
+                print(fmt_cell(parts[1]))
+            } else {
+                print(f"bad cell ref {parts[1]}")
+            }
+        } else if cmd == "grid" {
+            print(render_grid())
+        } else if cmd == "cell" and len(parts) == 2 {
+            print(fmt_cell(parts[1]))
+        } else if cmd == "why" and len(parts) == 2 {
+            let ent = get_entity(to_upper(parts[1]))
+            if ent == nil { print(f"no cell {parts[1]}") }
+            else { print(why(ent, Cell)) }
+        } else if cmd == "swhy" and len(parts) == 2 {
+            print(replace(rpc("WHY " + to_upper(parts[1])), " | ", "\n"))
+        } else if cmd == "sgrid" {
+            print(replace(rpc("GRID"), " | ", "\n"))
+        } else if cmd == "pull" {
+            let bytes = rpc("PULL " + user)
+            match fork_from_bytes(bytes) {
+                Ok(server_world) => {
+                    commit(server_world)
+                    write_file(dir + "/base.radw", bytes)
+                    write_file(dir + "/base_digest.txt", split(bytes, " ")[1])
+                    save_to(dir)
+                    let d = split(bytes, " ")[1]
+                    print(f"pulled {d} ({len(bytes)} B)")
+                }
+                Err(m) => { print(f"pull failed: {m}") }
+            }
+        } else if cmd == "sync" {
+            cmd_sync(dir, user)
+        } else if cmd == "digest" {
+            let mine = world_digest()
+            let theirs = rpc("DIGEST")
+            print(f"local  {mine}")
+            print(f"server {theirs}")
+            if mine == theirs { print("converged: digests agree") }
+            else { print("DIVERGED") }
+        } else if cmd == "shutdown" {
+            print(rpc("SHUTDOWN"))
+        } else {
+            print("commands: set grid cell why swhy sgrid pull sync digest save quit shutdown")
+        }
+    }
+    print("bye")
+}

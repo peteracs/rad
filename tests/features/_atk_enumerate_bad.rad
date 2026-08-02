@@ -1,0 +1,5 @@
+// Attack: enumerate on a string (should error)
+fn main() -> nil {
+    let x = enumerate("hello")
+    print(x)
+}

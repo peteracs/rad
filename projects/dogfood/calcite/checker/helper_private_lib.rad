@@ -1,0 +1,9 @@
+// Helper for t15/t16 (NOT itself an illegal program - deliberately named
+// outside the t*.rad gallery glob). `secret` is not pub.
+fn secret(x: int) -> int {
+    return x * 2
+}
+
+pub fn public_api(x: int) -> int {
+    return secret(x)
+}

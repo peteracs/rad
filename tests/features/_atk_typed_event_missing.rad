@@ -1,0 +1,11 @@
+// Attack: emit with missing field
+event Msg { text: str, level: int }
+
+on Msg(e) {
+    print(e.text, e.level)
+}
+
+fn main() -> nil {
+    emit Msg { text: "hello" }
+    flush_events()
+}

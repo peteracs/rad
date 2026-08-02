@@ -1,0 +1,64 @@
+// World forking: flagship-style setup (named leader + multi-arg spawn), `assert` invariants,
+// discard-only `simulate()` (no commit — Rad drops the fork), then compare forks and commit one.
+
+component Boid { x: float = 0.0, y: float = 0.0, vx: float = 1.0, vy: float = 1.0 }
+
+system MoveBoids(b: mut Boid) {
+    b = Boid { x: b.x + b.vx, y: b.y + b.vy, ..b }
+}
+
+fn main() -> nil {
+    // Postfix `?` on Option requires a function return type that can carry Option (`?` works in `fn main() -> any`).
+    // Here we use `|> unwrap` like spawn_with_components.rad: leader always has `Boid`, peek matches after simulate.
+    print("Spawning 1000 boids (named leader + 999 component-only spawns)...")
+    let leader = spawn("leader", Boid { x: 0.0, y: 0.0, vx: 1.0, vy: 1.0 })
+    let baseline = get(leader, Boid) |> unwrap
+
+    let mut i = 0
+    while i < 999 {
+        let _rest = spawn(Boid { x: 0.0, y: 0.0, vx: 1.0, vy: 1.0 })
+        i = i + 1
+    }
+
+    // simulate() must not mutate the live world until commit()
+    let preview_only = fork()
+    print("Discard-only simulate (10 ticks on a throwaway fork; no commit)...")
+    let _sim_preview = simulate(preview_only, [system::MoveBoids], 10)
+    // Intentional: no commit(). `preview_only` / simulate result are dropped here.
+
+    let after_preview = get(leader, Boid) |> unwrap
+    assert(
+        after_preview.x == baseline.x and after_preview.y == baseline.y,
+        "live world unchanged after simulate without commit"
+    )
+
+    let fa = fork()
+    let fb = fork()
+    print("Simulating timeline A (10 ticks)...")
+    let future_a = simulate(fa, [system::MoveBoids], 10)
+    print("Simulating timeline B (50 ticks)...")
+    let future_b = simulate(fb, [system::MoveBoids], 50)
+
+    let state_a = peek(future_a, leader, Boid) |> unwrap
+    let state_b = peek(future_b, leader, Boid) |> unwrap
+
+    print("Timeline A predicted X:", state_a.x)
+    print("Timeline B predicted X:", state_b.x)
+
+    assert(state_a.x == 10.0, "10 ticks at vx=1.0 should yield x=10")
+    assert(state_b.x == 50.0, "50 ticks at vx=1.0 should yield x=50")
+
+    if state_b.x > 40.0 {
+        print("Committing timeline B; discarding timeline A without commit (Rad drops the fork).")
+        commit(future_b)
+        let committed = get(leader, Boid) |> unwrap
+        assert(committed.x == state_b.x, "committed world must match peek of chosen fork B")
+        print("Leader X after commit:", committed.x)
+    } else {
+        print("Committing timeline A; discarding timeline B without commit.")
+        commit(future_a)
+        let committed = get(leader, Boid) |> unwrap
+        assert(committed.x == state_a.x, "committed world must match peek of chosen fork A")
+        print("Leader X after commit:", committed.x)
+    }
+}

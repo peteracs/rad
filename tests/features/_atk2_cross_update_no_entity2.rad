@@ -1,0 +1,9 @@
+// Attack: update partial fields on despawned entity — must error
+component Pos { x: 0, y: 0 }
+
+fn main() -> nil {
+    let e = spawn(Pos { x: 1, y: 2 })
+    despawn(e)
+    update(e, Pos) { x = 10 }
+    print("BUG: should not reach")
+}

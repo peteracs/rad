@@ -1,0 +1,55 @@
+// PROBE 10: BUG 03 showed per-entity RESOURCE writes collapse in a parallel
+// batch. Do per-entity COMPONENT writes survive?
+//
+// If component writes are also lossy, nothing in the ECS is trustworthy under
+// parallel scheduling. If they are lossy NON-DETERMINISTICALLY, simulations
+// stop being reproducible.
+//
+// 500 entities, +1 each, so every correct total below is 500.
+
+component Ctr { n: 0 }
+component Other { n: 0 }
+
+resource G1 { n: 0 }
+resource G2 { n: 0 }
+
+// alone in its batch
+system BumpSolo(c: mut Ctr) {
+    c.n = c.n + 1
+}
+
+// a harmless neighbour with disjoint component + disjoint resource, purely to
+// force a parallel batch
+system Neighbour(o: mut Other, _g: mut G1) {
+    o.n = o.n + 1
+}
+
+system BumpParallel(c: mut Ctr, _g: mut G2) {
+    c.n = c.n + 1
+}
+
+for _i in range(0, 500) {
+    spawn(Ctr { n: 0 }, Other { n: 0 })
+}
+
+fn total_ctr() -> int {
+    let rows = query { Ctr } select Ctr
+    return rows |> reduce(0, fn(acc, c) { return acc + c.n })
+}
+
+fn total_other() -> int {
+    let rows = query { Other } select Other
+    return rows |> reduce(0, fn(acc, o) { return acc + o.n })
+}
+
+print(f"entities: {query_count(Ctr)}")
+print("")
+
+// --- serial: single system in the schedule call ---
+schedule [BumpSolo]
+print(f"serial   component total = {total_ctr()}    expected 500")
+
+// --- parallel: two systems, disjoint everything ---
+schedule [BumpParallel, Neighbour]
+print(f"parallel component total = {total_ctr()}   expected 1000")
+print(f"parallel neighbour total = {total_other()}    expected 500")

@@ -1,0 +1,14 @@
+// backend: both
+fn mutate_deep(x) {
+    let mut y = x
+    y[0][1] = 777
+    return y
+}
+
+let original = [[10, 20], [30, 40]]
+let changed = mutate_deep(original)
+
+print(original[0][1])
+// expect: 20
+print(changed[0][1])
+// expect: 777

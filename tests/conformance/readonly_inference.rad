@@ -1,0 +1,39 @@
+// Unannotated functions whose bodies only READ the world infer the
+// readonly effect — they compose into pipelines without ceremony, the
+// same allowance literal closures and `readonly fn` annotations get.
+
+component Score { points: int = 0 }
+
+// reads the world via require(): inferred readonly, no annotation
+fn points_of(u: entity) -> int {
+    return require(u, Score).points
+}
+
+// reads via has()/name_of(): same
+fn tagged_name(u: entity) -> str {
+    if has(u, Score) { return name_of(u) }
+    return "?"
+}
+
+fn main() -> nil {
+    let _a = entity "a" { Score { points: 30 } }
+    let _b = entity "b" { Score { points: 10 } }
+    let _c = entity "c" { Score { points: 20 } }
+
+    let all_units = entities(Score)
+
+    // named readonly-inferred fns ride pipelines directly
+    print(all_units |> map(points_of) |> sum)              // 60
+    print(all_units |> map(tagged_name) |> sort)           // ["a", "b", "c"]
+
+    // and inside closure callbacks
+    let top = all_units |> max_by(fn(u) { return points_of(u) })
+    match top {
+        Some { value: u } => { print(name_of(u)) }         // a
+        None => { print("none") }
+    }
+
+    // ranking through a world-reading key, tuple-ordered
+    let ranked = all_units |> sort_by(fn(u) { return (-points_of(u), name_of(u)) })
+    print(ranked |> map(tagged_name))                      // ["a", "c", "b"]
+}

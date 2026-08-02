@@ -1,0 +1,7 @@
+---
+source: tests\conformance\modules\pub_let_dup_reject.rad
+exit_code: 1
+---
+
+---stderr---
+Error: Duplicate top-level declaration 'LIMIT' (already defined at <repo>/tests/conformance/modules/pub_let_dup_a.rad:3)

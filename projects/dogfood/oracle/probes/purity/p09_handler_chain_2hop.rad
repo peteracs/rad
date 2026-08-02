@@ -1,0 +1,27 @@
+// P09: two event hops between the system and the IO.
+// System emits Alpha (pure). `on Alpha` emits Beta (pure). `on Beta` does IO.
+// The checker must follow the handler graph transitively, not just one hop.
+// EXPECT: compile-time rejection.
+component C { v: int = 0 }
+
+event Alpha { n: int }
+event Beta { n: int }
+
+on Alpha(ev) {
+    emit Beta { n: ev.n }
+}
+
+on Beta(ev) {
+    print(f"ESCAPED-P09 io ran two event hops deep inside simulate n={ev.n}")
+}
+
+system Leak(c: mut C) {
+    c.v = c.v + 1
+    emit Alpha { n: c.v }
+}
+
+let e = spawn("e", C { v: 0 })
+let f = fork()
+let r = simulate(f, [system::Leak], 2)
+let got = peek(r, e, C) |> unwrap
+print(f"COMPILED-AND-RAN v={got.v}")

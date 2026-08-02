@@ -1,0 +1,25 @@
+// Cross: update() inside a guarded event handler
+component Score { points: 0, level: 1 }
+event LevelUp { player: entity, bonus: int }
+
+on LevelUp(e) where e.bonus > 0 {
+    let s = unwrap(get(e.player, Score))
+    update(e.player, Score) {
+        points = s.points + e.bonus,
+        level = s.level + 1
+    }
+    print(f"leveled up: pts={s.points + e.bonus} lvl={s.level + 1}")
+}
+
+fn main() -> nil {
+    let p = spawn(Score { points: 10, level: 1 })
+    emit LevelUp { player: p, bonus: 50 }
+    flush_events()
+    emit LevelUp { player: p, bonus: 0 }
+    flush_events()
+    let s = unwrap(get(p, Score))
+    print(f"final: pts={s.points} lvl={s.level}")
+}
+
+// expect: leveled up: pts=60 lvl=2
+// expect: final: pts=60 lvl=2

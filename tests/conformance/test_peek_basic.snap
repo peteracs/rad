@@ -1,0 +1,5 @@
+---
+source: tests\conformance\test_peek_basic.rad
+exit_code: 0
+---
+PASS: peek basic

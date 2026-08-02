@@ -1,0 +1,7 @@
+---
+source: tests\conformance\modules\pub_let_alias_reject.rad
+exit_code: 1
+---
+
+---stderr---
+Error: let constant 'TICK_RATE' is not accessible through module alias 'cfg'

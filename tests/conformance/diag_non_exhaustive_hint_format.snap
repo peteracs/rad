@@ -1,0 +1,7 @@
+---
+source: tests\conformance\diag_non_exhaustive_hint_format.rad
+exit_code: 1
+---
+
+---stderr---
+Error: Non-exhaustive match: variant 'Nothing' of type 'Maybe' is not covered

@@ -1,0 +1,17 @@
+// The shared-vocabulary module of the composition trio: components,
+// events, helpers — consumed by both the system lib and the app.
+
+pub component Pos { at: (float, float) = (0.0, 0.0) }
+pub component Vitals { hp: float = 100.0, team: int }
+
+pub event Damage { target: entity, amount: float }
+
+pub pure fn dist(a: (float, float), b: (float, float)) -> float {
+    let (dx, dy) = a - b
+    return sqrt(dx * dx + dy * dy)
+}
+
+on Damage(e) {
+    let v = require(e.target, Vitals)
+    update(e.target, Vitals) { hp = v.hp - e.amount }
+}

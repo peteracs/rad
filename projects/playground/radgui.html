@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>RADGUI</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --bg: #0a0a0f; --panel: #14141d; --line: #262636;
+    --text: #e8e6f0; --dim: #8a87a0; --violet: #b58cff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: radial-gradient(1200px 700px at 50% -100px, #181826, var(--bg));
+    color: var(--text); font: 14px/1.5 "Segoe UI", system-ui, sans-serif;
+    min-height: 100vh;
+  }
+  header {
+    padding: 14px 22px; border-bottom: 1px solid var(--line);
+    display: flex; align-items: baseline; gap: 14px;
+  }
+  header h1 { margin: 0; font-size: 16px; letter-spacing: 2px; }
+  header h1 b { color: var(--violet); }
+  header .sub { color: var(--dim); font-size: 12px; }
+  #status { color: var(--violet); font-size: 12px; margin-left: auto; }
+  #mount { padding: 18px 22px; }
+  /* widget defaults — apps override via Style */
+  .rg-button {
+    background: #1d1d2c; border: 1px solid var(--line); color: var(--text);
+    font: 600 13.5px/1 inherit; padding: 9px 18px; border-radius: 8px; cursor: pointer;
+    transition: border-color .15s, transform .08s;
+  }
+  .rg-button:hover { border-color: var(--violet); transform: translateY(-1px); }
+  .rg-button:active { transform: translateY(0); }
+  .rg-input {
+    background: #1d1d2c; border: 1px solid var(--line); color: var(--text);
+    border-radius: 8px; padding: 8px 10px; font: inherit;
+  }
+  .rg-input:focus { outline: none; border-color: var(--violet); }
+  .rg-slider { accent-color: var(--violet); }
+  .rg-pre {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+    padding: 10px 12px; margin: 0; font: 12.5px/1.55 ui-monospace, Consolas, monospace;
+    white-space: pre-wrap;
+  }
+  .rg-error { color: #ff5d5d; white-space: pre-wrap; }
+  /* speculative hover ghosts + inspect overlay */
+  .rg-ghost { color: var(--violet); font-weight: 700; opacity: .9; }
+  .rg-ghosted { outline: 1px dashed var(--violet); outline-offset: 2px; }
+  #rg-inspect {
+    position: fixed; right: 18px; top: 64px; max-width: 480px; z-index: 50;
+    background: var(--panel); border: 1px solid var(--violet); border-radius: 10px;
+    padding: 12px 14px; box-shadow: 0 12px 50px #000c; cursor: pointer;
+  }
+  #rg-inspect pre { margin: 8px 0; font: 11.5px/1.5 ui-monospace, Consolas, monospace; white-space: pre-wrap; }
+  .rg-inspect-head { font-size: 13px; }
+  .rg-inspect-head b { color: var(--violet); }
+  .rg-inspect-hint { color: var(--dim); font-size: 10.5px; }
+  .rg-hovbg:hover { background: var(--rg-hbg) !important; }
+  .rg-hovfg:hover { color: var(--rg-hfg) !important; }
+  .rg-toast {
+    position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
+    background: #2a1215; border: 1px solid #ff5d5d; color: #ffb4b4;
+    padding: 10px 16px; border-radius: 8px; font-size: 12.5px; z-index: 60;
+    transition: opacity .6s;
+  }
+  .rg-toast-out { opacity: 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1><b>RAD</b>GUI</h1>
+  <span class="sub" id="radgui-title"></span>
+  <span class="sub">widgets are entities · the world is the scene graph</span>
+  <span id="status"></span>
+</header>
+<div id="mount"></div>
+
+<script type="module">
+import { RadGui } from "./radgui.js";
+
+const params = new URLSearchParams(location.search);
+const app = params.get("app") || "projects/dogfood/radgui/counter.rad";
+
+const gui = new RadGui(document.getElementById("mount"), document.getElementById("status"));
+window.gui = gui; // console access: inspect the world mirror, poke events
+window.radgui = gui; // for tests and tinkering
+gui.start(app).catch(e => {
+    document.getElementById("mount").textContent = String(e);
+});
+</script>
+</body>
+</html>

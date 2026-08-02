@@ -1,0 +1,9 @@
+---
+source: tests\conformance\systems.rad
+exit_code: 0
+---
+1
+2
+2
+5
+8

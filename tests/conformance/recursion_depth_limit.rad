@@ -1,0 +1,7 @@
+// backend: both
+fn recurse(n) {
+    return recurse(n + 1)
+}
+
+print(recurse(0))
+// expect-runtime-error: Stack overflow

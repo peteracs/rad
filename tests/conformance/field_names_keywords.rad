@@ -1,0 +1,85 @@
+// Reserved words as field names (RAD_GAPS #4). Field positions are
+// grammatically unambiguous, so schema vocabulary like `on`, `state`,
+// `entity`, `component`, `event`, `type`, `match` works everywhere a
+// field name can appear: declarations, literals, `.access`, update
+// blocks, emit payloads, and match patterns.
+
+component Toggle { on: bool = false, off: int = 0, indexed: int = 0 }
+
+component Meta { component: str = "", entity: int = 0, type: str = "none" }
+struct Wire { event: str = "", emit: int = 0 }
+resource Flow { state: str = "idle", match: int = 0 }
+// event declarations accept keyword field names too
+event Pulse { on: bool, system: int }
+
+type Mode {
+    Auto { on: false }
+    Manual { for: 0 }
+}
+
+// handler params reach keyword fields with plain dot access (compile
+// coverage; plain scripts have no flush point, so this never prints)
+on Pulse(p) {
+    print(f"pulse on={p.on} system={p.system}")
+}
+
+fn main() -> nil {
+    // component declaration + literal + field access
+    let t = entity "t" { Toggle { on: true, off: 7 } }
+    let tog = get(t, Toggle) |> unwrap
+    print(tog.on)             // true
+    print(tog.off)            // 7
+
+    // update block with keyword field names
+    update(t, Toggle) { on = false, off = 8 }
+    let tog2 = get(t, Toggle) |> unwrap
+    print(tog2.on)            // false
+    print(tog2.off)           // 8
+
+    // `indexed` works as a plain field name (the marker form needs a
+    // following field name, so `indexed: int` is just a field)
+    update(t, Toggle) { indexed = 5 }
+    let tog3 = get(t, Toggle) |> unwrap
+    print(tog3.indexed)       // 5
+
+    // keyword field access inside f-string interpolations
+    print(f"on={tog3.on} off={tog3.off}")   // on=false off=8
+
+    // several keywords in one component
+    let m = entity "m" { Meta { component: "Meta", entity: 42, type: "demo" } }
+    let meta = get(m, Meta) |> unwrap
+    print(meta.component)     // Meta
+    print(meta.entity)        // 42
+    print(meta.type)          // demo
+
+    // struct literals and access
+    let w = Wire { event: "boot", emit: 3 }
+    print(w.event)            // boot
+    print(w.emit)             // 3
+
+    // spread keeps keyword fields
+    let w2 = Wire { emit: 4, ..w }
+    print(w2.event)           // boot
+    print(w2.emit)            // 4
+
+    // resources
+    update(Flow) { state = "running", match = 5 }
+    let fl = get_resource(Flow) |> unwrap
+    print(fl.state)           // running
+    print(fl.match)           // 5
+
+    // emit payloads accept keyword field names
+    emit Pulse { on: true, system: 9 }
+
+    // sum-type variants with keyword fields, matched by pattern
+    let mode = Mode::Auto { on: true }
+    match mode {
+        Mode::Auto { on: is_on } => { print(f"auto on={is_on}") }
+        Mode::Manual { for: n } => { print(f"manual for={n}") }
+    }
+    let mode2 = Mode::Manual { for: 6 }
+    match mode2 {
+        Mode::Auto { on: is_on } => { print(f"auto on={is_on}") }
+        Mode::Manual { for: n } => { print(f"manual for={n}") }
+    }
+}

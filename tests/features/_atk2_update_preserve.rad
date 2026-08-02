@@ -1,0 +1,11 @@
+// Attack: update one field preserves other fields untouched
+component Info { name: "", age: 0, score: 0 }
+
+fn main() -> nil {
+    let e = spawn(Info { name: "alice", age: 30, score: 100 })
+    update(e, Info) { score = 200 }
+    let i = unwrap(get(e, Info))
+    print(f"name={i.name} age={i.age} score={i.score}")
+}
+
+// expect: name=alice age=30 score=200

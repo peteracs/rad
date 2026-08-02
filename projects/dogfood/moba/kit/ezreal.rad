@@ -1,0 +1,156 @@
+// KIT/EZREAL — the champion as a CONTENT file: spell numbers as
+// constants, casts as functions, on-hit behavior as guarded handlers on
+// the missile layer's events. Every system underneath is a shared
+// library; this file is what a kit author writes.
+//
+// (Numbers from content/champions/ezreal/abilities.ts — the era kit.)
+
+use "core.rad"
+use "surge.rad"
+use "missiles.rad"
+
+// ── Q: Mystic Shot ──────────────────────────────────────────────
+pub let SHOT_DAMAGE = [35.0, 55.0, 75.0, 95.0, 115.0]
+pub let SHOT_AD_RATIO = 1.0
+pub let SHOT_AP_RATIO = 0.2
+pub let SHOT_CDR_TICKS = 30          // landing Q refunds 1s on EVERY slot
+
+// ── W: Essence Flux ─────────────────────────────────────────────
+pub let FLUX_DAMAGE = [70.0, 115.0, 160.0, 205.0, 250.0]
+pub let FLUX_AP_RATIO = 0.7
+pub let FLUX_HASTE_STACKS = 2        // demo-sized stand-in for the AS buff
+
+// ── R: Trueshot Barrage ─────────────────────────────────────────
+pub let BARRAGE_DAMAGE = [350.0, 500.0, 650.0]
+pub let BARRAGE_AP_RATIO = 0.9
+pub let BARRAGE_FALLOFF = 0.8        // per victim already pierced
+pub let BARRAGE_FALLOFF_FLOOR = 0.3
+
+component Kit { cooldowns: map < str, int > = {} }
+
+// kits export their own initializers — Kit stays private to this module
+pub fn ezreal_setup(e: entity, cooldowns: map < str, int > ) -> nil {
+    set(e, Kit { cooldowns: cooldowns })
+}
+
+pub fn ezreal_cooldown(e: entity, slot: str) -> int {
+    return require(e, Kit).cooldowns |> get_or(slot, 0)
+}
+
+// ------------------------------------------------------------ casting
+
+fn fire(caster: entity, slot: str, rank: int, to: (float, float), speed: float, max_range: float, pierce: bool, hits_allies: bool) -> nil {
+    let here = require(caster, Pos).at
+    let _m = entity f"{slot}-of-{name_of(caster)}" {
+        Pos { at: here },
+        Skillshot {
+            source: caster, slot: slot, rank: rank,
+            dir: normalize(to - here),
+            speed: speed, max_range: max_range,
+            pierce: pierce, hits_allies: hits_allies,
+        },
+    }
+}
+
+// the ini affect flags, per spell: only W washes over friends
+pub fn cast_q(caster: entity, rank: int, to: (float, float)) -> nil {
+    fire(caster, "ez.q", rank, to, 24.0, 23.0, false, false)
+}
+
+pub fn cast_w(caster: entity, rank: int, to: (float, float)) -> nil {
+    fire(caster, "ez.w", rank, to, 22.0, 20.0, true, true)
+}
+
+pub fn cast_r(caster: entity, rank: int, to: (float, float)) -> nil {
+    fire(caster, "ez.r", rank, to, 40.0, 999.0, true, false)
+}
+
+// ------------------------------------------------- the kit's scripts
+
+// every missile hit, ally or enemy, stacks Rising Spell Force — guarded
+// on the kit marker: at roster scale OTHER champions fire skillshots
+// too, and an unguarded handler would hand them ezreal's passive
+on SkillshotHit(e) when has(e.source, Kit) {
+    surge_stack(e.source)
+}
+
+// Q: physical damage + the era signature — 1s refunded on every slot
+on SkillshotHit(e) when e.slot == "ez.q" {
+    let v = require(e.source, Vitals)
+    emit Damage {
+        source: e.source, target: e.target,
+        amount: SHOT_DAMAGE[e.rank - 1] + SHOT_AD_RATIO * v.ad + SHOT_AP_RATIO * v.ap,
+        kind: "physical",
+    }
+    let kit = require(e.source, Kit)
+    let mut cds = kit.cooldowns
+    for [slot, left] in entries(cds) where left > 0 {
+        cds = set_at(cds, slot, max(left - SHOT_CDR_TICKS, 0))
+    }
+    update(e.source, Kit) { cooldowns = cds }
+}
+
+// W: allies get hastened, enemies get hurt
+on SkillshotHit(e) when e.slot == "ez.w" {
+    let s = require(e.source, Vitals)
+    if require(e.target, Vitals).team == s.team {
+        for _ in range(0, FLUX_HASTE_STACKS) { surge_stack(e.target) }
+        print(f"    {name_of(e.target)} hastened")
+    } else {
+        emit Damage {
+            source: e.source, target: e.target,
+            amount: FLUX_DAMAGE[e.rank - 1] + FLUX_AP_RATIO * s.ap,
+            kind: "magic",
+        }
+    }
+}
+
+// R: global wave, damage decays per victim already pierced
+on SkillshotHit(e) when e.slot == "ez.r" {
+    let v = require(e.source, Vitals)
+    let full = BARRAGE_DAMAGE[e.rank - 1] + BARRAGE_AP_RATIO * v.ap
+    let mult = max(pow(BARRAGE_FALLOFF, e.hit_index), BARRAGE_FALLOFF_FLOOR)
+    emit Damage {
+        source: e.source, target: e.target,
+        amount: full * mult,
+        kind: "magic",
+    }
+}
+
+// -------------------------------------------------------------- demo
+
+fn tick(n: int) -> nil {
+    for _ in range(0, n) { schedule [fly_skillshots, age_surge] }
+}
+
+fn main() -> nil {
+    let ez = entity "ez" {
+        Pos {}, Vitals { team: 0, ad: 120.0, ap: 50.0 },
+        Surge {}, Kit { cooldowns: {"q": 0, "w": 90, "r": 600} },
+    }
+    let mate = entity "sona" { Pos { at: (8.0, 0.0) }, Vitals { team: 0 }, Surge {} }
+    let d1 = entity "dummy1" { Pos { at: (12.0, 0.0) }, Vitals { team: 1 } }
+    let _d2 = entity "dummy2" { Pos { at: (18.0, 0.0) }, Vitals { team: 1 } }
+    let _d3 = entity "dummy3" { Pos { at: (26.0, 0.0) }, Vitals { team: 1 } }
+
+    // Q lands on the first dummy: damage + every cooldown refunded 1s
+    print("Q:")
+    cast_q(ez, 3, (30.0, 0.0))
+    tick(20)
+    let k = require(ez, Kit)
+    print(f"  cooldowns after Q hit: w={k.cooldowns[\"w\"]} r={k.cooldowns[\"r\"]}")
+    print(f"  surge: {require(ez, Surge).stacks}")
+
+    // W washes over the ally AND the enemy line behind her
+    print("W:")
+    cast_w(ez, 2, (30.0, 0.0))
+    tick(30)
+    print(f"  sona surge: {require(mate, Surge).stacks}")
+
+    // R crosses the whole line: 100% / 80% / 64% falloff
+    print("R:")
+    update(d1, Vitals) { hp = 600.0 }
+    cast_r(ez, 1, (30.0, 0.0))
+    tick(30)
+    print(f"  ez surge: {require(ez, Surge).stacks}")
+}

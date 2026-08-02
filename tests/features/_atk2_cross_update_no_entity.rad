@@ -1,0 +1,9 @@
+// Cross: update on despawned entity — should runtime error from unwrap in spread
+component Tag { v: 0 }
+
+fn main() -> nil {
+    let e = spawn(Tag { v: 1 })
+    despawn(e)
+    update(e, Tag) { v = 2 }
+    print("BUG: should not reach")
+}

@@ -1,0 +1,41 @@
+// The bucket-fill idiom: appending through a map index auto-vivifies
+// a missing key with [], group_by returns REAL keys (int, tuple — not
+// stringified), and entities order by ascending id under one total
+// order (sort, id_of).
+
+component Tag { team: int }
+
+fn main() -> nil {
+    // m[k] << v vivifies [] on a missing key, appends on a present one
+    let mut buckets = {}
+    buckets[(0, 0)] << "a"
+    buckets[(0, 0)] << "b"
+    buckets[(1, 0)] << "c"
+    print(buckets[(0, 0)])              // ["a", "b"]
+    print(len(buckets))                 // 2
+
+    // chained appends through one index
+    let mut rows = {}
+    rows["r"] << 1 << 2 << 3
+    print(rows["r"])                    // [1, 2, 3]
+
+    // tuple±scalar broadcast (checker + VM agree on all four ops)
+    let p = (3.0, 4.0)
+    print(p - 1.0)                      // (2.0, 3.0)
+    print(p + 0.5)                      // (3.5, 4.5)
+    print(2.0 + p)                      // (5.0, 6.0)
+
+    // group_by keys keep their type: ints stay ints, tuples stay tuples
+    let by_parity = [1, 2, 3, 4, 5] |> group_by(fn(v) { return v % 2 })
+    print(by_parity[1])                 // [1, 3, 5]
+    print(keys(by_parity))              // [0, 1]
+    let by_cell = [(0.0, "x"), (9.0, "y"), (1.0, "z")] |> group_by(fn(t) { return (int(t[0] / 4.0), 0) })
+    print(by_cell[(0, 0)] |> len)       // 2
+
+    // entities: id_of is pure; sort orders by ascending id
+    let e2 = entity { Tag { team: 2 } }
+    let e1 = entity { Tag { team: 1 } }
+    let ids = [e1, e2] |> sort |> map(fn(e) { return id_of(e) })
+    print(ids[0] < ids[1])              // true
+    print(id_of(e2) >= 0)               // true
+}

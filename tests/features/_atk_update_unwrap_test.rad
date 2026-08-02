@@ -1,0 +1,10 @@
+// Isolate: does unwrap(get(e, C)) fail when C is missing?
+component C { x: 0 }
+
+fn main() -> nil {
+    let e = spawn()
+    let val = get(e, C)
+    print("get result:", val)
+    let u = unwrap(val)
+    print("unwrap result:", u)
+}

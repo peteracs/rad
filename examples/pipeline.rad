@@ -1,0 +1,98 @@
+// =====================================================================
+//  Rad Language — Pipeline Pattern Deep Dive
+//  Data flows one way. No hidden mutations. No side effects.
+// =====================================================================
+
+// ─── Basic Pipelines ────────────────────────────────────────────────
+
+fn double(x) { return x * 2 }
+
+fn square(x) { return x * x }
+
+fn negate(x) { return 0 - x }
+
+fn is_even(x) { return x % 2 == 0 }
+
+fn is_positive(x) { return x > 0 }
+
+fn main() -> any {
+    print("===== Pipeline Pattern Deep Dive =====\n")
+
+    // ── Chain transformations ───────────────────
+    print("--- Chaining Transformations ---")
+    let data = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    print(f"Input: {data}")
+
+    let result1 = data |> map(double)
+    print(f"  |> map(double)     = {result1}")
+
+    let result2 = data |> filter(is_even)
+    print(f"  |> filter(is_even) = {result2}")
+
+    let result3 = data |> map(square) |> filter(is_even)
+    print(f"  |> map(square) |> filter(is_even) = {result3}")
+
+    let sum = data |> reduce(0, fn(a, b) { return a + b })
+    print(f"  |> reduce(+) = {sum}")
+
+    // ── Composing complex transformations ───────
+    print("\n--- Complex Pipelines ---")
+    let mixed = [3, -1, 4, -1, 5, 9, -2, 6, -5, 3]
+    print(f"Input: {mixed}")
+
+    let processed = mixed
+    |> filter(is_positive)
+    |> map(square)
+    |> sort()
+    |> reverse()
+    print("  |> filter(>0) |> square |> sort |> reverse")
+    print(f"  = {processed}")
+
+    let total = mixed
+    |> filter(is_positive)
+    |> map(fn(x) { return x * 10 })
+    |> reduce(0, fn(a, b) { return a + b })
+    print(f"  |> filter(>0) |> map(*10) |> sum = {total}")
+
+    // ── String pipelines ────────────────────────
+    print("\n--- Working with Lists ---")
+    let words = ["hello", "world", "rad", "language"]
+    print(f"Words: {words}")
+
+    let lengths = words |> map(len)
+    print(f"  |> map(len) = {lengths}")
+
+    let long_words = words |> filter(fn(w) { return len(w) > 4 })
+    print(f"  |> filter(len > 4) = {long_words}")
+
+    // ── Building data step by step ──────────────
+    print("\n--- Step-by-Step Pipeline ---")
+    let grades = [85, 92, 78, 95, 88, 67, 91, 73, 84, 96]
+    print(f"Grades: {grades}")
+
+    let passing = grades |> filter(fn(g) { return g >= 80 })
+    print(f"  Step 1 - passing (>=80):  {passing}")
+
+    let curved = passing |> map(fn(g) { return g + 5 })
+    print(f"  Step 2 - curved (+5):     {curved}")
+
+    let capped = curved |> map(fn(g) { return min(g, 100) })
+    print(f"  Step 3 - capped (<=100):  {capped}")
+
+    let average = capped |> reduce(0, fn(a, b) { return a + b })
+    let avg = average / len(capped)
+    print(f"  Step 4 - average:         {avg}")
+
+    // ── Fibonacci via pipeline ──────────────────
+    print("\n--- Generate and Transform ---")
+    let fibs = [1, 1, 2, 3, 5, 8, 13, 21, 34, 55]
+    print(f"Fibonacci: {fibs}")
+
+    let even_fibs = fibs |> filter(is_even)
+    print(f"  Even fibs: {even_fibs}")
+
+    let fib_sum = even_fibs |> reduce(0, fn(a, b) { return a + b })
+    print(f"  Sum of even fibs: {fib_sum}")
+
+    print("\n===== Pipelines keep data flowing! =====")
+}

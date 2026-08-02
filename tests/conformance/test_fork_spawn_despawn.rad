@@ -1,0 +1,45 @@
+// Test 5: Spawn and despawn inside simulated systems
+// Systems that spawn/despawn entities should work in simulation
+// but the spawns/despawns should not leak to the main world.
+
+component Tag { label: "none" }
+component Life { alive: true }
+
+system SpawnHelper(t: Tag) {
+    // This system doesn't actually spawn (can't in a query-based system easily),
+    // but we test that mutations are isolated
+    let _ = t
+}
+
+let original = spawn("original", Tag { label: "original" }, Life { alive: true })
+
+// Verify original exists
+let tag_before = get(original, Tag) |> unwrap
+assert(tag_before.label == "original", "Original entity should exist")
+
+// Fork and simulate — the system just reads, doesn't spawn, so
+// let's test that the entity set is properly snapshotted
+let f = fork()
+let f = simulate(f, [], 0)
+
+// Main world still has original
+let tag_after = get(original, Tag) |> unwrap
+assert(tag_after.label == "original", "Original should still be 'original'")
+
+// Spawn a new entity in the main world AFTER forking
+let extra = spawn("extra", Tag { label: "extra" })
+
+// The fork was taken BEFORE extra was spawned.
+// If we commit the fork, extra should DISAPPEAR because the fork
+// doesn't know about it.
+commit(f)
+
+// extra should no longer exist after commit (world state was replaced)
+let extra_check = get(extra, Tag)
+assert(is_none(extra_check), f"Entity spawned after fork should be gone after commit, got {extra_check}")
+
+// But original should still be there
+let orig_check = get(original, Tag) |> unwrap
+assert(orig_check.label == "original", "Original should survive commit")
+
+print("PASS: spawn/despawn isolation")

@@ -1,0 +1,6 @@
+---
+source: tests\conformance\for_iter_no_check_map.rad
+exit_code: 0
+---
+x
+y

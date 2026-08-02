@@ -1,0 +1,72 @@
+// __PROJECT_NAME__ — Simulation template
+//
+// Customize agents, production rates, and disruption types
+// for your domain. Run immediately: rad run
+
+component Agent     { name: "", role: "" }
+component Inventory { stock: 50, capacity: 100 }
+component Rate      { production: 10, consumption: 8 }
+
+entity warehouse_a {
+  Agent     { name: "Warehouse-A", role: "primary" },
+  Inventory { stock: 60, capacity: 100 },
+  Rate      { production: 12, consumption: 10 }
+}
+
+entity warehouse_b {
+  Agent     { name: "Warehouse-B", role: "secondary" },
+  Inventory { stock: 40, capacity: 80 },
+  Rate      { production: 8, consumption: 7 }
+}
+
+event Produced     { agent, units, stock }
+event Consumed     { agent, units, stock }
+event StockWarning { agent, stock }
+
+on Produced(e) {
+  print(f"  +{e.units} {e.agent} (stock={e.stock})")
+}
+
+on Consumed(e) {
+  print(f"  -{e.units} {e.agent} (stock={e.stock})")
+}
+
+on StockWarning(e) {
+  print(f"  warning: {e.agent} low stock={e.stock}")
+}
+
+system Produce(a: Agent, inv: mut Inventory, r: Rate) {
+  let new_stock = inv.stock + r.production
+  if new_stock > inv.capacity {
+    inv.stock = inv.capacity
+  } else {
+    inv.stock = new_stock
+  }
+  emit Produced { agent: a.name, units: r.production, stock: inv.stock }
+}
+
+system Consume(a: Agent, inv: mut Inventory, r: Rate) after Produce {
+  if inv.stock >= r.consumption {
+    inv.stock = inv.stock - r.consumption
+    emit Consumed { agent: a.name, units: r.consumption, stock: inv.stock }
+  } else {
+    emit StockWarning { agent: a.name, stock: inv.stock }
+  }
+}
+
+fn main() -> nil {
+  print("=== __PROJECT_NAME__ ===")
+  print("--- tick 1 ---")
+  run [Consume, Produce]
+  print("--- tick 2 ---")
+  run [Consume, Produce]
+  print("--- tick 3 ---")
+  run [Consume, Produce]
+
+  let stocks = [
+    (get(warehouse_a, Inventory) |> unwrap).stock,
+    (get(warehouse_b, Inventory) |> unwrap).stock
+  ]
+  let total = stocks |> reduce(0, fn(a, b) { return a + b })
+  print(f"total inventory: {total}")
+}

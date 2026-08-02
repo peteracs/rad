@@ -1,0 +1,92 @@
+// Probe: are world_fork values first-class? Can they live in lists, maps,
+// tuples? Can simulate() chain on a result fork? Does commit() of a result
+// fork restore exactly (digest equality)?
+//
+// CORRECTED: an earlier note here claimed a struct field cannot hold a fork,
+// on the theory that field types are inferred from a default value and no fork
+// literal exists. That is wrong. A struct field CAN hold a world_fork as long
+// as it is explicitly typed and given no default:
+//     struct Cand { f: world_fork, score: int }
+//     let c = Cand { f: fork(), score: 0 }
+// compiles and runs. The beam in main.rad uses parallel arrays purely because
+// it was written before this was checked, not because the language forbids it.
+
+resource Score {
+    v: int = 0
+}
+
+component Tag {
+    n: int = 0
+}
+
+system Bump(t: mut Tag, s: mut Score) {
+    t = Tag { n: t.n + 1 }
+    s = Score { v: s.v + 1 }
+}
+
+// This declaration has to sit ABOVE the call at step 5. It used to live at the
+// bottom of the file, and the file died there with "Not callable: nil" -- see
+// bugs/01_forward_fn_call.rad. A live demonstration of that bug in this very
+// probe.
+fn passthrough(f: world_fork) -> world_fork {
+    return f
+}
+
+// Structs CAN hold forks. Checked here so the corrected note above is backed by
+// a running example rather than an assertion.
+struct Candidate {
+    f: world_fork,
+    score: int
+}
+
+let e = spawn("e", Tag { n: 0 })
+let base = fork()
+let base_digest = world_digest(base)
+
+// 1. forks in a list
+let mut pool = []
+pool = push(pool, fork())
+pool = push(pool, simulate(fork(), [system::Bump], 2))
+print(f"list of forks: len={len(pool)}")
+let from_list = peek(pool[1], e, Tag) |> unwrap
+print(f"peek from list element: n={from_list.n}")
+
+// 2. chained simulate on a result fork
+let leg1 = simulate(base, [system::Bump], 3)
+let leg2 = simulate(leg1, [system::Bump], 4)
+let t2 = peek(leg2, e, Tag) |> unwrap
+print(f"chained simulate 3 then 4: n={t2.n} (expect 7)")
+
+// 3. heterogeneous list as a poor-man's record: [fork, score, label]
+let slot = [leg2, 42, "cand-a"]
+let tr = peek(slot[0], e, Tag) |> unwrap
+print(f"peek through heterogeneous list: n={tr.n} score={slot[1]} label={slot[2]}")
+
+// 4. fork in a map value
+let m = { "best": leg2 }
+let tm = peek(m["best"], e, Tag) |> unwrap
+print(f"peek through map value: n={tm.n}")
+
+// 5. fork passed to and returned from a user function
+let round_tripped = passthrough(leg1)
+let tp = peek(round_tripped, e, Tag) |> unwrap
+print(f"fork through a user fn: n={tp.n}")
+
+// 5b. fork stored in a struct field and peeked back out
+let cand = Candidate { f: leg2, score: 42 }
+let tc = peek(cand.f, e, Tag) |> unwrap
+print(f"fork through a struct field: n={tc.n} score={cand.score}")
+
+// 6. commit a deep fork then restore to base; digests must match
+commit(leg2)
+let live_after = get(e, Tag) |> unwrap
+print(f"after commit(leg2): live n={live_after.n}")
+commit(base)
+let restored = get(e, Tag) |> unwrap
+print(f"after commit(base): live n={restored.n}")
+print(f"digest restored == base: {world_digest() == base_digest}")
+
+// 7. a fork taken BEFORE a commit still works after that commit
+let t_old = peek(leg1, e, Tag) |> unwrap
+print(f"stale fork still readable: n={t_old.n}")
+

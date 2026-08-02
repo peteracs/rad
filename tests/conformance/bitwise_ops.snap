@@ -1,0 +1,28 @@
+---
+source: tests\conformance\bitwise_ops.rad
+exit_code: 0
+---
+8
+14
+6
+256
+15
+8
+true
+true
+9
+7
+8
+352
+4
+3
+64
+512
+32
+0
+9
+255
+64
+15
+257
+256

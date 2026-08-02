@@ -1,0 +1,7 @@
+---
+source: tests\conformance\string_bytes_len_type_error.rad
+exit_code: 1
+---
+
+---stderr---
+Error: Argument 1 to 'byte_len' expects str, got int

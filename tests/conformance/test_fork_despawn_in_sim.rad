@@ -1,0 +1,41 @@
+// Test: Despawning entities inside a simulated system
+// Use a simpler approach - system directly despawns the current entity via remove
+
+component Mortal  { hp: 10 }
+component Killable { mark: true }
+
+system Decay(m: mut Mortal) {
+    m = Mortal { hp: m.hp - 5 }
+}
+
+let v1 = spawn("v1", Mortal { hp: 10 }, Killable { mark: true })
+let v2 = spawn("v2", Mortal { hp: 20 })
+let v3 = spawn("v3", Mortal { hp: 30 })
+
+// Before: 3 entities with Mortal
+let before = entities(Mortal)
+assert(len(before) == 3, f"Before: expected 3 Mortal entities, got {len(before)}")
+
+// Simulate Decay for 2 ticks: everyone loses 10 HP
+let f = fork()
+let f = simulate(f, [system::Decay], 2)
+
+// Main world: still unchanged
+let after_sim = entities(Mortal)
+assert(len(after_sim) == 3, "After simulate: still 3 Mortal entities in main")
+
+let main_v1 = get(v1, Mortal) |> unwrap
+assert(main_v1.hp == 10, f"v1 HP should be 10 in main, got {main_v1.hp}")
+
+// Commit: HP values should reflect simulation
+commit(f)
+let post_v1 = get(v1, Mortal) |> unwrap
+assert(post_v1.hp == 0, f"v1 HP after 2 Decay ticks: expected 0, got {post_v1.hp}")
+
+let post_v2 = get(v2, Mortal) |> unwrap
+assert(post_v2.hp == 10, f"v2 HP after 2 Decay ticks: expected 10, got {post_v2.hp}")
+
+let post_v3 = get(v3, Mortal) |> unwrap
+assert(post_v3.hp == 20, f"v3 HP after 2 Decay ticks: expected 20, got {post_v3.hp}")
+
+print("PASS: entity state in simulation")

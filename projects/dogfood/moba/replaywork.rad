@@ -1,0 +1,128 @@
+// REPLAYWORK — browser-moba's replay/spectate, written the way it
+// wants to be written (fake-port round 14). The code comes first;
+// whatever the language can't run becomes a feature.
+//
+// The era's replay file is a COMMAND LOG: deterministic sim + the
+// timestamped orders, nothing else. Spectating is replaying near the
+// live head; scrubbing is resuming from the nearest checkpoint.
+//   - The tape is data: (tick, who, x, z) tuples in a resource.
+//   - Checkpoints are forks: the world as a value, every 30 ticks.
+//   - Seek = commit(nearest checkpoint), replay the remainder.
+//   - Bit-exactness is not asserted by tests, it is asserted by the
+//     ARCHITECTURE: world_digest() at every checkpoint, compared on
+//     replay. One divergent bit and the tape is a lie.
+//   - What-if is the same machinery pointed forward: rewind, inject a
+//     different order, watch the timeline split.
+
+component Pos { at: (float, float) = (0.0, 0.0) }
+
+component Goal { to: (float, float) = (0.0, 0.0) }
+
+resource Clock { t: int = 0 }
+
+// the tape is METADATA, not simulation state: it must never enter the
+// world's identity, or recording a match would change its digest
+transient resource Tape { orders: list = [] }
+
+pub event Order { who: entity, to: (float, float) }
+
+pub let SPEED = 1.5
+pub let CHECKPOINT_EVERY = 30
+
+on Order(e) {
+    update(e.who, Goal) { to = e.to }
+}
+
+system step(p: mut Pos, g: Goal) {
+    let d = g.to - p.at
+    let (dx, dz) = d
+    let dist = sqrt(dx * dx + dz * dz)
+    if dist > SPEED {
+        p.at = p.at + d * (SPEED / dist)
+    } else {
+        p.at = g.to
+    }
+}
+
+phase frame { step }
+
+// one tick: deliver due tape orders, advance the frame, move the clock
+fn tick_with(orders: list) -> nil {
+    let t = res(Clock).t
+    for (due, who, x, z) in orders where due == t {
+        emit Order { who: require_entity(who), to: (x, z) }
+    }
+    schedule [frame]
+    update(Clock) { t = t + 1 }
+}
+
+// the recording wrapper: applying an order and taping it is ONE act
+fn record_order(who: str, to: (float, float)) -> nil {
+    let (x, z) = to
+    update(Tape) { orders = push(res(Tape).orders, (res(Clock).t, who, x, z)) }
+}
+
+fn reset_match() -> nil {
+    update(Clock) { t = 0 }
+    let _ez = entity "ez" { Pos {}, Goal {} }
+    let _ka = entity "kat" { Pos { at: (40.0, 0.0) }, Goal { to: (40.0, 0.0) } }
+}
+
+fn main() -> nil {
+    reset_match()
+
+    // ---------------- live match: orders arrive, everything tapes
+    let t0 = fork()
+    let mut checkpoints = [(0, t0, world_digest())]
+    record_order("ez", (30.0, 20.0))
+    record_order("kat", (0.0, 5.0))
+
+    let mut live_digests = []
+    while res(Clock).t < 90 {
+        if res(Clock).t == 25 { record_order("ez", (0.0, 0.0)) }
+        if res(Clock).t == 50 { record_order("kat", (40.0, 40.0)) }
+        tick_with(res(Tape).orders)
+        let t = res(Clock).t
+        if t % CHECKPOINT_EVERY == 0 {
+            checkpoints << (t, fork(), world_digest())
+            live_digests << world_digest()
+        }
+    }
+    let final_digest = world_digest()
+    let tape = res(Tape).orders
+    print(f"live: 90 ticks, {len(tape)} orders, {len(checkpoints)} checkpoints")
+    print(f"  ez ends at {require(require_entity(\"ez\"), Pos).at}")
+
+    // ---------------- replay: the tape against the t0 fork, bit-exact
+    let (_, start, _) = checkpoints[0]
+    commit(start)
+    let mut replay_digests = []
+    while res(Clock).t < 90 {
+        tick_with(tape)
+        if res(Clock).t % CHECKPOINT_EVERY == 0 {
+            replay_digests << world_digest()
+        }
+    }
+    print(f"replay: bit-exact at every checkpoint: {replay_digests == live_digests}")
+    print(f"  final digest match: {world_digest() == final_digest}")
+
+    // ---------------- scrub: spectate tick 75 from the tick-60 fork
+    let (cp_t, cp, cp_dig) = checkpoints[2]
+    commit(cp)
+    print(f"scrub: resumed at t={res(Clock).t} (checkpoint digest ok: {world_digest() == cp_dig})")
+    while res(Clock).t < 75 {
+        tick_with(tape)
+    }
+    print(f"  t=75 spectator view: ez at {require(require_entity(\"ez\"), Pos).at}")
+
+    // ---------------- what-if: rewind to 60, kat dodges instead
+    commit(cp)
+    record_order("kat", (-20.0, 0.0))
+    let whatif_tape = res(Tape).orders
+    while res(Clock).t < 90 {
+        tick_with(whatif_tape)
+    }
+    print(f"what-if: kat ends at {require(require_entity(\"kat\"), Pos).at}")
+    print(f"  timeline diverged: {world_digest() != final_digest}")
+    let _ = cp_t
+}

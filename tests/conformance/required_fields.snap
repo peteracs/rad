@@ -1,0 +1,10 @@
+---
+source: tests\conformance\required_fields.rad
+exit_code: 0
+---
+ez
+40.0
+ez
+60.0
+homing dummy
+straight (1.0, 0.0) 25.0

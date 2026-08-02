@@ -1,0 +1,4 @@
+// expect-runtime-error: `await` expects a task value
+
+let x = await 123
+print(x)

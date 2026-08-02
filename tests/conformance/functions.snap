@@ -1,0 +1,10 @@
+---
+source: tests\conformance\functions.rad
+exit_code: 0
+---
+42
+8
+6
+6
+0
+100

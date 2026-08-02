@@ -1,0 +1,9 @@
+// backend: both
+fn needs_str(s: str) -> int {
+    return len(s)
+}
+
+fn main() -> nil {
+    print(1 |> needs_str)
+}
+// expect-runtime-error: expects

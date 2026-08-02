@@ -1,0 +1,11 @@
+// Enumerate a large list — stress test
+fn main() -> nil {
+    let data = range(0, 1000)
+    let pairs = enumerate(data)
+    let last = pairs[999]
+    print("last idx:", last[0], "val:", last[1])
+    print("len:", len(pairs))
+}
+
+// expect: last idx: 999 val: 999
+// expect: len: 1000

@@ -1,0 +1,17 @@
+// Attack: ? in a helper fn called from main — helper returns Option,
+// main uses ? on the helper's return. Should propagate None cleanly.
+fn maybe_get(x: int) -> Option<int> {
+    if x > 0 {
+        return Some(x * 10)
+    }
+    return None
+}
+
+fn main() -> nil {
+    let a = maybe_get(5) ?
+    print("a:", a)
+    let b = maybe_get(-1) ?
+    print("BUG: should not reach here, b:", b)
+}
+
+// expect: a: 50

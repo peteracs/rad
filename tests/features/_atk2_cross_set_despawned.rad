@@ -1,0 +1,9 @@
+// Baseline: does set() on despawned entity also silently succeed?
+component Tag { v: 0 }
+
+fn main() -> nil {
+    let e = spawn(Tag { v: 1 })
+    despawn(e)
+    set(e, Tag { v: 99 })
+    print("set succeeded on despawned entity")
+}

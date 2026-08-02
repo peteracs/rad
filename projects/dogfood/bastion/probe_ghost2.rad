@@ -1,0 +1,48 @@
+// PROBE (continued): the two mask tests my first pass got wrong -- save_world
+// takes no path argument, and get_entity returns `entity | nil`.
+
+component Reactor { temp: 0 }
+
+let _site = spawn("site", Reactor { temp: 20 })
+let caps = f"""{ "write": ["Reactor"], "fuel": 200000, "mem_bytes": 4194304 }"""
+
+print("=== probe: mask coverage, round 2 ===")
+
+// G6: save_world reaches the disk.
+let g6 = f"""
+save_world()
+"""
+match sandbox_run(g6, fork(), caps) {
+    Ok(_f) => { print("G6 save_world: ALLOWED -- guest wrote to disk") }
+    Err(m) => { print(f"G6 save_world denied: {m}") }
+}
+
+// G7: despawn, which the docs say requires the "*" wildcard. Grant is
+// write:[Reactor], so this must be refused.
+let g7 = f"""
+let e = get_entity("site") |> unwrap
+despawn(e)
+"""
+match sandbox_run(g7, fork(), caps) {
+    Ok(_f) => { print("G7 despawn: ALLOWED without the wildcard") }
+    Err(m) => { print(f"G7 despawn denied: {m}") }
+}
+
+// G8: despawn WITH the wildcard -- documented to be permitted. Confirms the
+// denial in G7 is really about the wildcard and not about despawn generally.
+let star = f"""{ "write": ["*"], "fuel": 200000, "mem_bytes": 4194304 }"""
+match sandbox_run(g7, fork(), star) {
+    Ok(_f) => { print("G8 despawn under \"*\": allowed (as documented)") }
+    Err(m) => { print(f"G8 despawn under \"*\" denied: {m}") }
+}
+
+// G9: does "*" also unlock the builtin mask, or only the write ACL?
+let g9 = f"""
+let s = read_file("secrets.txt")
+"""
+match sandbox_run(g9, fork(), star) {
+    Ok(_f) => { print("G9 read_file under \"*\": ALLOWED -- wildcard widened the mask") }
+    Err(m) => { print(f"G9 read_file under \"*\" denied (correct): {m}") }
+}
+
+print("=== probe done ===")

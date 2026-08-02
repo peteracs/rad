@@ -1,0 +1,7 @@
+// `<<` in expression position is an int shift. List append is the
+// statement form; in expressions the checker points at push().
+fn main() -> nil {
+    let xs = [1, 2]
+    let ys = xs << 3
+    print(ys)
+}

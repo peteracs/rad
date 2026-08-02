@@ -1,0 +1,45 @@
+// Required fields: `name: type` with no default (missilework's
+// `source: entity` — a missile without an owner is a bug, so the
+// construction site must say whose it is). Sum-type variants take the
+// same annotation form.
+
+component Missile {
+    source: entity,                   // required — no sensible zero value
+    speed: float = 40.0,
+}
+
+type Flight {
+    Homing { target: entity }
+    Straight { dir: (float, float), max_range: 10.0 }
+}
+
+fn main() -> nil {
+    let ez = entity "ez" {}
+    let dummy = entity "dummy" {}
+
+    // construction provides the required field; defaults fill the rest
+    let m = entity "bolt" { Missile { source: ez } }
+    let mi = require(m, Missile)
+    print(name_of(mi.source))            // ez
+    print(mi.speed)                      // 40.0
+
+    // spread satisfies requiredness through the base
+    set(m, Missile { speed: 60.0, ..mi })
+    let mi2 = require(m, Missile)
+    print(name_of(mi2.source))           // ez
+    print(mi2.speed)                     // 60.0
+
+    // annotated variant fields construct and match like any other
+    let f = Flight::Homing { target: dummy }
+    match f {
+        Flight::Homing { target: t } => { print(f"homing {name_of(t)}") }
+        Flight::Straight { dir: _, max_range: r } => { print(f"straight {r}") }
+    }
+    // variant fields are always explicit at construction (their declared
+    // values are type witnesses, not fill-in defaults)
+    let s = Flight::Straight { dir: (1.0, 0.0), max_range: 25.0 }
+    match s {
+        Flight::Homing { target: t } => { print(f"homing {name_of(t)}") }
+        Flight::Straight { dir: d, max_range: r } => { print(f"straight {d} {r}") }
+    }
+}

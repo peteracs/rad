@@ -1,0 +1,314 @@
+// Server-authority projectile simulation (the first gameplay element).
+//
+// A projectile is a normal ECS entity carrying `Position` plus `Projectile`. It
+// is spawned by the authority, advances at a fixed velocity each tick, and is
+// despawned when it leaves the map or outlives its lifetime. Collision is
+// resolved with lag compensation: the projectile is tested against where each
+// target *was* at the shooter's render tick (see sim/lag_compensation.rad), so a
+// skillshot lands where the player aimed on their screen.
+//
+// Boundaries: this module owns projectile behavior only. The data model it
+// shares with avatars (`Position`, `RenderAvatar`, `PlayerControlled`) lives in
+// sim/components.rad, map bounds in world/scene.rad, and the rollback machinery
+// in sim/lag_compensation.rad. The wire protocol may snapshot projectile state,
+// but the browser never drives projectile collision or authoritative lifetime.
+
+use "components.rad"
+use "../world/scene.rad"
+use "../world/avatars.rad"
+use "lag_compensation.rad"
+
+pub component Projectile {
+    owner_id: int = 0,
+    command_id: int = 0,
+    x_velocity: float = 0.0,
+    y_velocity: float = 0.0,
+    radius: float = 1.5,
+    spawn_tick: int = 0,
+    fire_view_tick: int = 0,
+    alive: bool = true
+}
+
+// Authority output: a confirmed hit the damage/scoring systems can subscribe to.
+pub event ProjectileHit {
+    owner_id: int,
+    target_id: int,
+    tick: int
+}
+
+pub event ProjectileImpact {
+    event_id: int,
+    projectile_id: int,
+    owner_id: int,
+    target_id: int,
+    tick: int,
+    x: float,
+    y: float,
+    reason: int
+}
+
+pub resource ProjectileStats {
+    total_hits: int = 0,
+    last_owner_id: int = 0,
+    last_target_id: int = 0,
+    last_tick: int = 0,
+    total_impacts: int = 0,
+    last_impact_id: int = 0,
+    last_impact_reason: int = 0
+}
+
+pub resource ProjectileImpactLog {
+    cursor: int = 0,
+    count: int = 0,
+    next_event_id: int = 1,
+    event_ids: list < int > = [
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0
+    ],
+    projectile_ids: list < int > = [
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0
+    ],
+    owner_ids: list < int > = [
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0
+    ],
+    target_ids: list < int > = [
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0
+    ],
+    ticks: list < int > = [
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0
+    ],
+    xs: list < float > = [
+        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
+    ],
+    ys: list < float > = [
+        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
+    ],
+    reasons: list < int > = [
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0
+    ]
+}
+
+pub fn projectile_speed() -> float {
+    return 120.0
+}
+
+pub fn projectile_impact_reason_hit() -> int { return 1 }
+pub fn projectile_impact_reason_range() -> int { return 2 }
+pub fn projectile_impact_reason_lifetime() -> int { return 3 }
+
+pub fn projectile_impact_log_capacity() -> int { return 16 }
+
+// ~3 seconds of travel at 128 Hz before a stray projectile is reclaimed.
+pub fn projectile_lifetime_ticks() -> int {
+    return 384
+}
+
+pub fn projectile_count() -> int {
+    let mut n = 0
+    for _proj in entities(Projectile) {
+        n = n + 1
+    }
+    return n
+}
+
+pub fn projectile_impact_count() -> int {
+    return res(ProjectileImpactLog).count
+}
+
+pub fn record_projectile_impact(projectile_id_value: int, owner_id: int, target_id: int, tick: int, x: float, y: float, reason: int) -> int {
+    let log = res(ProjectileImpactLog)
+    let slot = log.cursor % projectile_impact_log_capacity()
+    let event_id = log.next_event_id
+    update(ProjectileImpactLog) {
+        event_ids[slot] = event_id,
+        projectile_ids[slot] = projectile_id_value,
+        owner_ids[slot] = owner_id,
+        target_ids[slot] = target_id,
+        ticks[slot] = tick,
+        xs[slot] = x,
+        ys[slot] = y,
+        reasons[slot] = reason,
+        cursor = (log.cursor + 1) % projectile_impact_log_capacity(),
+        count = min(log.count + 1, projectile_impact_log_capacity()),
+        next_event_id = event_id + 1
+    }
+    let stats = res(ProjectileStats)
+    update(ProjectileStats) {
+        total_impacts = stats.total_impacts + 1,
+        last_impact_id = event_id,
+        last_impact_reason = reason
+    }
+    emit ProjectileImpact {
+        event_id: event_id,
+        projectile_id: projectile_id_value,
+        owner_id: owner_id,
+        target_id: target_id,
+        tick: tick,
+        x: x,
+        y: y,
+        reason: reason
+    }
+    return event_id
+}
+
+pub fn despawn_projectiles_for(owner_id: int) -> nil {
+    for proj in entities(Projectile) {
+        let p = get(proj, Projectile) |> unwrap
+        if p.owner_id == owner_id {
+            despawn(proj)
+        }
+    }
+}
+
+pub fn projectile_id(owner_id: int, command_id: int, spawn_tick: int) -> int {
+    if command_id > 0 { return owner_id * 1000000 + command_id }
+    return owner_id * 1000000 + spawn_tick
+}
+
+// Spawns a projectile from `owner_id`'s current position travelling along the
+// given direction. `fire_view_tick` is the simulation tick the shooter was
+// rendering when they cast, which collision later rolls targets back to.
+pub fn cast_projectile(owner_id: int, dir_x: float, dir_y: float, spawn_tick: int, fire_view_tick: int) -> entity {
+    return cast_projectile_with_command(owner_id, 0, dir_x, dir_y, spawn_tick, fire_view_tick)
+}
+
+pub fn cast_projectile_with_command(owner_id: int, command_id: int, dir_x: float, dir_y: float, spawn_tick: int, fire_view_tick: int) -> entity {
+    let owner = player_avatar(owner_id)
+    let pos = get(owner, Position) |> unwrap
+    let mag = sqrt(dir_x * dir_x + dir_y * dir_y)
+    let nx = if mag > 0.0001 { dir_x / mag } else { 1.0 }
+    let ny = if mag > 0.0001 { dir_y / mag } else { 0.0 }
+    return spawn(f"projectile_{projectile_id(owner_id, command_id, spawn_tick)}",
+        Position { x: pos.x, y: pos.y },
+        Projectile {
+            owner_id: owner_id,
+            command_id: command_id,
+            x_velocity: nx * projectile_speed(),
+            y_velocity: ny * projectile_speed(),
+            spawn_tick: spawn_tick,
+            fire_view_tick: fire_view_tick
+        }
+    )
+}
+
+pub fn tick_one_projectile(proj: entity, dt: float, server_tick: int) -> nil {
+    let p = get(proj, Projectile) |> unwrap
+    if not p.alive { return nil }
+
+    if server_tick - p.spawn_tick > projectile_lifetime_ticks() {
+        let pos = get(proj, Position) |> unwrap
+        let _impact = record_projectile_impact(
+            projectile_id(p.owner_id, p.command_id, p.spawn_tick),
+            p.owner_id,
+            0,
+            server_tick,
+            pos.x,
+            pos.y,
+            projectile_impact_reason_lifetime()
+        )
+        despawn(proj)
+        return nil
+    }
+
+    let pos = get(proj, Position) |> unwrap
+    let nx = pos.x + p.x_velocity * dt
+    let ny = pos.y + p.y_velocity * dt
+
+    // No wall bounce in this slice: a projectile that leaves the playable plane
+    // is reclaimed rather than clamped, so it cannot hug the boundary forever.
+    let scene = res(MobaScene)
+    let half_w = scene.plane_w / 2.0
+    let half_h = scene.plane_h / 2.0
+    if nx < 0.0 - half_w or nx > half_w or ny < 0.0 - half_h or ny > half_h {
+        let _impact = record_projectile_impact(
+            projectile_id(p.owner_id, p.command_id, p.spawn_tick),
+            p.owner_id,
+            0,
+            server_tick,
+            clamp_world_x(nx),
+            clamp_world_y(ny),
+            projectile_impact_reason_range()
+        )
+        despawn(proj)
+        return nil
+    }
+
+    update(proj, Position) {
+        x = nx,
+        y = ny
+    }
+}
+
+pub fn tick_projectiles(dt: float, server_tick: int) -> nil {
+    for proj in entities(Projectile) {
+        tick_one_projectile(proj, dt, server_tick)
+    }
+}
+
+// Resolves one projectile against every other player's lag-compensated hitbox.
+// Returns 1 on the first confirmed hit (and despawns the projectile), else 0.
+pub fn resolve_one_projectile(proj: entity, server_tick: int) -> int {
+    let p = get(proj, Projectile) |> unwrap
+    if not p.alive { return 0 }
+    let pos = get(proj, Position) |> unwrap
+
+    let mut hit_target = 0
+    for target in entities(PlayerControlled) {
+        if hit_target == 0 {
+            let owned = get(target, PlayerControlled) |> unwrap
+            if owned.player_id != p.owner_id {
+                let render = get(target, RenderAvatar) |> unwrap
+                let hit_radius = p.radius + render.radius
+                if lag_compensated_hit(owned.player_id, pos.x, pos.y, hit_radius, p.fire_view_tick) {
+                    hit_target = owned.player_id
+                }
+            }
+        }
+    }
+
+    if hit_target > 0 {
+        let _impact = record_projectile_impact(
+            projectile_id(p.owner_id, p.command_id, p.spawn_tick),
+            p.owner_id,
+            hit_target,
+            server_tick,
+            pos.x,
+            pos.y,
+            projectile_impact_reason_hit()
+        )
+        emit ProjectileHit {
+            owner_id: p.owner_id,
+            target_id: hit_target,
+            tick: server_tick
+        }
+        flush_events()
+        despawn(proj)
+        return 1
+    }
+    return 0
+}
+
+pub fn resolve_projectile_hits(server_tick: int) -> int {
+    let mut total = 0
+    for proj in entities(Projectile) {
+        total = total + resolve_one_projectile(proj, server_tick)
+    }
+    return total
+}
+
+on ProjectileHit(e) {
+    let stats = res(ProjectileStats)
+    update(ProjectileStats) {
+        total_hits = stats.total_hits + 1,
+        last_owner_id = e.owner_id,
+        last_target_id = e.target_id,
+        last_tick = e.tick
+    }
+}

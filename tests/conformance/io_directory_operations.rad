@@ -1,0 +1,30 @@
+// Test: directory builtins — create_dir, list_dir, remove_dir
+
+let dir = "_test_io_dir_ops_tmp"
+
+// Clean up if leftover
+if file_exists(dir) {
+    remove_dir(dir)
+}
+
+// create_dir makes a directory (including parents)
+create_dir(dir)
+print(file_exists(dir))
+// expect: true
+
+// write a file inside the dir
+write_file(dir + "/a.txt", "aaa")
+write_file(dir + "/b.txt", "bbb")
+
+// list_dir returns entry names
+let entries = list_dir(dir) |> sort
+print(entries)
+// expect: ["a.txt", "b.txt"]
+
+// remove_dir removes recursively
+remove_dir(dir)
+print(file_exists(dir))
+// expect: false
+
+print("dir ops ok")
+// expect: dir ops ok

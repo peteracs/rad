@@ -1,0 +1,106 @@
+// RADTRACK v2 digest server — the upgraded half of the rolling-migration
+// demo. Loads the v2-migrated world and serves the convergence protocol
+// (DIGEST / CERTIFY / SHUTDOWN) to clients that may still run v1.
+//
+//   rad projects/dogfood/radtrack/server_v2_digest.rad -- <v2-save.radw>
+//
+// CERTIFY is the Tier-1 #3 receipt: the v1 client ships its full fork
+// bytes; `fork_from_bytes` migrates them to THIS schema on ingest, and
+// `world_digest(fork)` hashes that migrated view — comparable with our own
+// world_digest even though the client's raw digest never could be.
+
+component Ticket {
+    title: str = "",
+    status: str = "open",
+    priority: int = 3,
+    owner: str = "",
+    estimate: int = 0,
+    created: int = 0,
+    updated: int = 0
+}
+
+component Body { text: str = "" }
+
+component Tags { csv: str = "" }
+resource Tracker { next_id: int = 1, site: str = "radtrack" }
+
+migrate Ticket(old) {
+    let mut est = 3
+    if old["priority"] == 1 { est = 8 }
+    if old["priority"] == 2 { est = 5 }
+    if old["priority"] == 4 { est = 1 }
+    return Ticket {
+        title: old["title"],
+        status: old["status"],
+        priority: old["priority"],
+        owner: old["assignee"],
+        estimate: est,
+        created: old["created"],
+        updated: old["updated"]
+    }
+}
+
+let PORT = 7979
+
+fn read_msg(conn: int) -> str {
+    let mut buf = ""
+    while true {
+        let chunk = tcp_read(conn, 262144)
+        if len(chunk) == 0 { break }
+        buf = buf + chunk
+        if ends_with(buf, "\n") { break }
+    }
+    return trim(buf)
+}
+
+fn send_msg(conn: int, line: str) -> nil {
+    tcp_write(conn, line + "\n")
+}
+
+fn main() -> nil {
+    let argv = sys_args()
+    if len(argv) < 1 {
+        print("usage: rad server_v2_digest.rad -- <v2-save.radw>")
+        return
+    }
+    let n = load_world(read_file(argv[0]))
+    print(f"v2 server: {n} entities from {argv[0]}")
+    print(f"v2 schema {schema_digest()}")
+    print(f"v2 world  {world_digest()}")
+
+    let listener = tcp_listen("127.0.0.1", PORT)
+    print(f"listening on 127.0.0.1:{PORT}")
+
+    let mut running = true
+    while running {
+        let conn = tcp_accept(listener)
+        let msg = read_msg(conn)
+        let parts = split(msg, " ")
+        let cmd = parts[0]
+
+        if cmd == "DIGEST" {
+            send_msg(conn, world_digest() + " " + schema_digest())
+        }
+        if cmd == "CERTIFY" {
+            let payload = join(slice(parts, 1, len(parts)), " ")
+            match fork_from_bytes(payload) {
+                Ok(theirs) => {
+                    let their_view = world_digest(theirs)
+                    let ours = world_digest()
+                    let mut verdict = "MISMATCH"
+                    if their_view == ours { verdict = "MATCH" }
+                    print(f"CERTIFY: migrated client view {their_view} vs ours -> {verdict}")
+                    send_msg(conn, f"{their_view} {ours} {verdict}")
+                }
+                Err(m) => { send_msg(conn, f"ERROR {m}") }
+            }
+        }
+        if cmd == "SHUTDOWN" {
+            send_msg(conn, "BYE")
+            running = false
+        }
+        tcp_close(conn)
+    }
+    tcp_close(listener)
+    print("v2 server down")
+}

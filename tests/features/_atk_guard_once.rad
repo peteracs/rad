@@ -1,0 +1,16 @@
+// Attack: guard combined with 'once' handler
+event Ping { val }
+
+on Ping once (e) where e.val > 5 {
+    print("once handler:", e.val)
+}
+
+fn main() -> nil {
+    emit Ping { val: 3 }
+    flush_events()
+    emit Ping { val: 10 }
+    flush_events()
+    emit Ping { val: 20 }
+    flush_events()
+    print("done")
+}

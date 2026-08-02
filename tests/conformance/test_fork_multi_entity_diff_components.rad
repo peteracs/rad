@@ -1,0 +1,52 @@
+// Test: Multiple entities with different component sets
+// Ensures snapshot handles the archetype-based ECS correctly
+
+component Pos  { x: 0, y: 0 }
+component Vel  { dx: 0, dy: 0 }
+component Mass { kg: 1 }
+component Tag  { label: "" }
+
+system Physics(pos: mut Pos, vel: Vel) {
+    pos = Pos { x: pos.x + vel.dx, y: pos.y + vel.dy }
+}
+
+// Entity A: has Pos + Vel + Mass (in Physics archetype)
+let a = spawn("a", Pos { x: 0, y: 0 }, Vel { dx: 1, dy: 2 }, Mass { kg: 10 })
+
+// Entity B: has Pos + Vel only (different archetype? or same?)
+let b = spawn("b", Pos { x: 100, y: 100 }, Vel { dx: -3, dy: 0 })
+
+// Entity C: has only Tag (not queried by Physics at all)
+let c = spawn("c", Tag { label: "observer" })
+
+// Entity D: has Pos only, no Vel (Physics won't match it)
+let d = spawn("d", Pos { x: 50, y: 50 })
+
+let f = fork()
+let f = simulate(f, [system::Physics], 5)
+commit(f)
+
+// A: x = 0 + 1*5 = 5, y = 0 + 2*5 = 10
+let pa = get(a, Pos) |> unwrap
+assert(pa.x == 5, f"A.x expected 5, got {pa.x}")
+assert(pa.y == 10, f"A.y expected 10, got {pa.y}")
+
+// B: x = 100 + (-3)*5 = 85, y = 100
+let pb = get(b, Pos) |> unwrap
+assert(pb.x == 85, f"B.x expected 85, got {pb.x}")
+assert(pb.y == 100, f"B.y expected 100, got {pb.y}")
+
+// C: Tag should be unchanged
+let tc = get(c, Tag) |> unwrap
+assert(tc.label == "observer", f"C tag expected 'observer', got {tc.label}")
+
+// D: Pos should be unchanged (Physics didn't match it — no Vel)
+let pd = get(d, Pos) |> unwrap
+assert(pd.x == 50, f"D.x expected 50 (not matched by Physics), got {pd.x}")
+assert(pd.y == 50, f"D.y expected 50, got {pd.y}")
+
+// Mass should be preserved through fork/commit
+let ma = get(a, Mass) |> unwrap
+assert(ma.kg == 10, f"A mass should survive fork/commit, got {ma.kg}")
+
+print("PASS: multi-entity different components")

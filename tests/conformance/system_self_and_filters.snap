@@ -1,0 +1,8 @@
+---
+source: tests\conformance\system_self_and_filters.rad
+exit_code: 0
+---
+alpha -> 10
+beta -> 20
+alpha -> 20
+alpha=20 beta=20 gamma=99

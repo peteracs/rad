@@ -1,0 +1,73 @@
+// BUG 02 — a `migrate` block can return wrong-typed fields, unchecked.
+//
+//   rad projects/dogfood/strongbox/gen1_seed.rad    (first, to write gen1.radw)
+//   rad projects/dogfood/strongbox/bugs/02_migrate_return_unchecked.rad
+//
+// This is BUG 01's hole reached through the SANCTIONED path. `old` binds the
+// persisted fields as map<str, any>, so every value read out of it is `any`
+// and the checker cannot see through it. A migration that grabs the wrong old
+// key — a one-word typo, and the single most likely mistake in a migration —
+// writes a str into an int-declared field with no diagnostic at all.
+//
+// Here gen2's Incident migration says `severity: old["code"]` where it meant
+// `old["sev"]`. Both keys exist, so there is no missing-key error.
+//
+// EXPECTED: load_world rejects the migration result that does not match the
+//   declared component types, naming the field.
+// ACTUAL: the world loads, `severity` is a str, and every later consumer of
+//   the field is wrong or dead.
+
+component Incident { code: "", severity: 1, open: true, opened_at: 0 }
+
+component Assignee { name: "", team: "unassigned" }
+
+component Source { origin: "" }
+
+resource Ledger { count: 0, site: "", revision: 2 }
+
+migrate Incident(old) {
+    // TYPO: meant old["sev"]. `old` is map<str, any>, so this type-checks.
+    return Incident {
+        code: old["code"],
+        severity: old["code"],
+        open: old["open"],
+        opened_at: 0,
+    }
+}
+
+migrate Assignee(old) {
+    return Assignee { name: old["who"], team: "platform" }
+}
+
+migrate Ledger(old) {
+    return Ledger { count: old["count"], site: old["site"], revision: 2 }
+}
+
+print("=== BUG 02: unchecked migrate return types ===")
+
+let n = load_world(read_file("projects/dogfood/strongbox/saves/gen1.radw"))
+print(f"load_world accepted the migrated world and returned {n}")
+
+let inc = get(get_entity("inc-1003"), Incident) |> unwrap
+print(f"declared severity: int -> typeof = {typeof(inc.severity)}, value = {inc.severity}")
+
+// The corruption is durable: it survives a save/load cycle...
+let resaved = save_world()
+write_file("projects/dogfood/strongbox/saves/poisoned_by_migration.radw", resaved)
+print(f"re-saved poisoned world ({len(resaved)} bytes) — corruption is now ON DISK")
+
+// ...and it is contagious across the wire codec, which has a blake3 digest
+// but no type validation either.
+let bytes = fork_to_bytes(fork())
+match fork_from_bytes(bytes) {
+    Ok(f) => {
+        print(f"fork_from_bytes accepted the poisoned world; digest {world_digest(f)}")
+    }
+    Err(m) => { print(f"fork_from_bytes rejected it: {m}") }
+}
+
+print("about to sort incidents by severity (checker types this as int)")
+let sevs = entities(Incident) |> map(fn(e) { return get(e, Incident) |> unwrap |> .severity })
+print(f"severities as loaded: {sevs}")
+let worst = reduce(sevs, 0, fn(a, b) { return if a > b { a } else { b } })
+print(f"worst severity = {worst}")

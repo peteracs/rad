@@ -1,0 +1,33 @@
+// =====================================================================
+//  Rad — Pure functions & pipeline purity
+//  Use pure fn for functions meant to be side-effect free. Pipeline
+//  evaluation sets a purity context: set(), spawn(), and emit cannot
+//  appear inside a |> chain (runtime error if they run under |>).
+// =====================================================================
+
+pure fn triple(x) {
+    return x * 3
+}
+
+pure fn clamp01(x) {
+    if x < 0 { return 0 }
+    if x > 1 { return 1 }
+    return x
+}
+
+fn main() -> any {
+    print("=== Pure functions in pipelines ===")
+    let xs = [1, 2, 3, 4, 5]
+    let scaled = xs |> map(triple)
+    print(f"  [1..5] |> map(triple) = {scaled}")
+
+    let mixed = [-1, 0, 2]
+    print(f"  clamp01 each: {mixed |> map(clamp01)}")
+
+    let piped = 10 |> triple |> triple
+    print(f"  10 |> triple |> triple = {piped}")
+
+    print("\n=== Pipelines stay pure ===")
+    print("  Inside |>, set(), spawn(), and emit are runtime errors.")
+    print("  Do ECS updates and events outside the chain; pipe data transforms.")
+}

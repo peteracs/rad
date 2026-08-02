@@ -1,0 +1,23 @@
+// Attack: guard that doesn't use the event parameter
+let mut global = 0
+
+event Tick { n }
+
+on Tick(e) where global < 2 {
+    global = global + 1
+    print("tick:", e.n, "global:", global)
+}
+
+fn main() -> nil {
+    emit Tick { n: 1 }
+    flush_events()
+    emit Tick { n: 2 }
+    flush_events()
+    emit Tick { n: 3 }
+    flush_events()
+    print("final:", global)
+}
+
+// expect: tick: 1 global: 1
+// expect: tick: 2 global: 2
+// expect: final: 2

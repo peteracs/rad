@@ -1,0 +1,5 @@
+---
+source: tests\conformance\push_limits_case_20.rad
+exit_code: 0
+---
+CASE20:145

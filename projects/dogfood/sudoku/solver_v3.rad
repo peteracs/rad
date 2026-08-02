@@ -1,0 +1,634 @@
+// RADOKU v3 — incremental pencilmark DPLL with locked candidates.
+//
+// v2 recomputed an O(81) candidate table per node and rescanned all 27
+// groups for hidden singles. v3 keeps per-cell candidate masks ALIVE and
+// maintains them incrementally with a trail-based undo (the SAT-solver
+// way, per tdoku's DPLL writeup):
+//
+//   - assign(cell, bit) eliminates the bit from 20 peers, pushing every
+//     actual change onto a trail as cell*512|removed_bits
+//   - backtrack = pop trail entries and OR the bits back: no recompute
+//   - hidden singles scan only DIRTY groups (touched since last scan)
+//   - locked candidates (pointing/claiming) — eliminations unit
+//     propagation can't see (the "merge resolution" consequences from the
+//     tdoku paper) — run at fixpoint before conceding a guess
+//
+// Run:   rad projects/dogfood/sudoku/solver_v3.rad            (famous puzzles)
+//        rad projects/dogfood/sudoku/solver_v3.rad <file> [n] (benchmark)
+
+fn build_box() -> list < int > {
+    let mut bx = []
+    for i in range(0, 81) {
+        bx << ((i / 9) / 3) * 3 + (i % 9) / 3
+    }
+    return bx
+}
+
+let BOX = build_box()
+
+// 27 groups (9 rows, 9 cols, 9 boxes) as cell-index lists.
+fn build_groups() -> list {
+    let mut gs = []
+    for r in range(0, 9) {
+        let mut g = []
+        for c in range(0, 9) { g << r * 9 + c }
+        gs << g
+    }
+    for c in range(0, 9) {
+        let mut g = []
+        for r in range(0, 9) { g << r * 9 + c }
+        gs << g
+    }
+    for bb in range(0, 9) {
+        let mut g = []
+        let r0 = (bb / 3) * 3
+        let c0 = (bb % 3) * 3
+        for dr in range(0, 3) {
+            for dc in range(0, 3) { g << (r0 + dr) * 9 + (c0 + dc) }
+        }
+        gs << g
+    }
+    return gs
+}
+
+let GROUPS = build_groups()
+
+// 20 peers of each cell, flat: PEERS[cell*20 .. cell*20+20].
+fn build_peers() -> list < int > {
+    let mut ps = []
+    for i in range(0, 81) {
+        let r = i / 9
+        let c = i % 9
+        let b = BOX[i]
+        let mut seen = []
+        for j in range(0, 81) {
+            if j == i { continue }
+            if j / 9 == r or j % 9 == c or BOX[j] == b {
+                seen << j
+            }
+        }
+        for j in seen { ps << j }
+    }
+    return ps
+}
+
+let PEERS = build_peers()
+
+// the 3 group ids of each cell, flat: CGROUPS[cell*3..+3] (row, col, box+18).
+fn build_cgroups() -> list < int > {
+    let mut cg = []
+    for i in range(0, 81) {
+        cg << i / 9
+        cg << 9 + i % 9
+        cg << 18 + BOX[i]
+    }
+    return cg
+}
+
+let CGROUPS = build_cgroups()
+
+// 54 box-line intersections: for each box (9) x each line through it
+// (3 rows + 3 cols), the 3 cells, plus the 6 other box cells and the 6
+// other line cells. Flat layout: 54 records x 15 ints.
+fn build_intersections() -> list < int > {
+    let mut out = []
+    for bb in range(0, 9) {
+        let r0 = (bb / 3) * 3
+        let c0 = (bb % 3) * 3
+        for dr in range(0, 3) {
+            let r = r0 + dr
+            // cells of box-row intersection
+            for dc in range(0, 3) { out << r * 9 + c0 + dc }
+            // rest of box
+            for odr in range(0, 3) {
+                if odr == dr { continue }
+                for dc in range(0, 3) { out << (r0 + odr) * 9 + c0 + dc }
+            }
+            // rest of row
+            for c in range(0, 9) {
+                if c / 3 == c0 / 3 { continue }
+                out << r * 9 + c
+            }
+        }
+        for dc in range(0, 3) {
+            let c = c0 + dc
+            for dr in range(0, 3) { out << (r0 + dr) * 9 + c }
+            for odc in range(0, 3) {
+                if odc == dc { continue }
+                for dr in range(0, 3) { out << (r0 + dr) * 9 + c0 + odc }
+            }
+            for r in range(0, 9) {
+                if r / 3 == r0 / 3 { continue }
+                out << r * 9 + c
+            }
+        }
+    }
+    return out
+}
+
+let INTERSECT = build_intersections()
+
+// Solve up to `want` solutions. Returns (solutions, guesses, first_solution).
+fn solve(puzzle: str, want: int) -> (int, int, str) {
+    let peers_t = PEERS
+    let groups_t = GROUPS
+    let cgroups_t = CGROUPS
+    let inter_t = INTERSECT
+
+    let unique mut cands = filled(81, 511)
+    let unique mut fixed = filled(81, 0)   // 0/1: cell has a final value
+    let unique mut grid = filled(81, 0)
+    let unique mut dirty = filled(27, 1)   // groups needing a hidden-single rescan
+
+    // trail of cands changes: entry = cell*512 | removed_bits. Preallocated:
+    // trail_len/queue_len are the logical tops — appending with << would
+    // desync from them after the first backtrack rewind.
+    let unique mut trail = filled(2048, 0)
+    let mut trail_len = 0
+    let unique mut queue = filled(1024, 0)
+    let mut queue_len = 0
+
+    // ---- incremental core (inlined where hot; helpers for clarity) ----
+    // eliminate bit from cell. Returns false on wipeout.
+    // (defined inline via closures is slow — use explicit code blocks below)
+
+    let mut contradiction = false
+
+    // -- clues --
+    let cells = chars(puzzle)
+    let mut clue_list = []
+    for i in range(0, 81) {
+        let d = ord(cells[i]) - 48
+        if d >= 1 and d <= 9 {
+            clue_list << i * 16 + d
+        }
+    }
+
+    // assign clues: set cands and eliminate from peers (trail not needed yet
+    // — clue state is the search root and never undone)
+    for cl in clue_list {
+        let cell = cl / 16
+        let d = cl % 16
+        let bit = shl(1, d - 1)
+        if (cands[cell] & bit) == 0 {
+            contradiction = true
+            break
+        }
+        cands[cell] = bit
+        fixed[cell] = 1
+        grid[cell] = d
+        for pk in range(cell * 20, cell * 20 + 20) {
+            let p = peers_t[pk]
+            let pc = cands[p]
+            if (pc & bit) != 0 {
+                let nc = pc ^ bit
+                if nc == 0 { contradiction = true }
+                cands[p] = nc
+            }
+        }
+        if contradiction { break }
+    }
+    if contradiction { return (0, 0, "") }
+
+    let mut n_open = 0
+    let unique mut todo = []
+    for i in range(0, 81) {
+        if fixed[i] == 0 {
+            todo << i
+            n_open = n_open + 1
+        }
+    }
+
+    // per-depth bookkeeping
+    let unique mut d_trail_mark = filled(n_open + 2, 0)
+    let unique mut d_cand_left = filled(n_open + 2, 0)
+    let unique mut d_cell = filled(n_open + 2, -1)
+
+    let mut found = 0
+    let mut guesses = 0
+    let mut solution = ""
+    let mut depth = 0
+    let mut fixed_count = 81 - n_open
+    // Locked candidates earn their cost only on puzzles that actually
+    // backtrack; easy puzzles (most of any dataset) never pay for the
+    // 54-intersection scan. fsss2 ships the same toggle.
+    let mut hard = false
+
+    let mut running = true
+    let mut failed = false
+    while running {
+        // ---------------- propagation to fixpoint ----------------
+        // naked singles from the queue + hidden singles from dirty groups +
+        // locked candidates when nothing simpler fires. NOTE: `failed` is
+        // NOT reset here — a wipeout detected while placing a guess must
+        // survive into this iteration and route to backtracking.
+        let mut quiet = false
+        while !quiet and !failed {
+            quiet = true
+            // naked singles
+            while queue_len > 0 and !failed {
+                queue_len = queue_len - 1
+                let cell = queue[queue_len]
+                if fixed[cell] == 1 { continue }
+                let bit = cands[cell]
+                if bit == 0 {
+                    failed = true
+                    break
+                }
+                if popcount(bit) != 1 { continue }
+                // fix it
+                fixed[cell] = 1
+                grid[cell] = ctz(bit) + 1
+                fixed_count = fixed_count + 1
+                trail[trail_len] = cell * 512   // marker: cell was fixed (no bits removed)
+                trail_len = trail_len + 1
+                for pk in range(cell * 20, cell * 20 + 20) {
+                    let p = peers_t[pk]
+                    let pc = cands[p]
+                    if (pc & bit) != 0 {
+                        let nc = pc ^ bit
+                        cands[p] = nc
+                        trail[trail_len] = p * 512 | bit
+                        trail_len = trail_len + 1
+                        dirty[cgroups_t[p * 3]] = 1
+                        dirty[cgroups_t[p * 3 + 1]] = 1
+                        dirty[cgroups_t[p * 3 + 2]] = 1
+                        if nc == 0 {
+                            failed = true
+                            break
+                        }
+                        if popcount(nc) == 1 and fixed[p] == 0 {
+                            queue[queue_len] = p
+                            queue_len = queue_len + 1
+                        }
+                    }
+                }
+                quiet = false
+            }
+            if failed { break }
+
+            // hidden singles in dirty groups
+            let mut g = 0
+            while g < 27 and !failed {
+                if dirty[g] == 1 {
+                    dirty[g] = 0
+                    let cells_g = groups_t[g]
+                    let mut seen1 = 0
+                    let mut seen2 = 0
+                    let mut all_fixed = 0
+                    for j in range(0, 9) {
+                        let i = cells_g[j]
+                        if fixed[i] == 1 {
+                            all_fixed = all_fixed | cands[i]
+                        } else {
+                            let m = cands[i]
+                            seen2 = seen2 | (seen1 & m)
+                            seen1 = seen1 | m
+                        }
+                    }
+                    if (seen1 | all_fixed) != 511 {
+                        failed = true
+                        break
+                    }
+                    let singles = seen1 & (511 ^ seen2) & (511 ^ all_fixed)
+                    if singles != 0 {
+                        let bit = singles & (0 - singles)
+                        for j in range(0, 9) {
+                            let i = cells_g[j]
+                            if fixed[i] == 0 and (cands[i] & bit) != 0 {
+                                // shrink the cell to this bit via trail
+                                let removed = cands[i] ^ bit
+                                if removed != 0 {
+                                    cands[i] = bit
+                                    trail[trail_len] = i * 512 | removed
+                                    trail_len = trail_len + 1
+                                }
+                                queue[queue_len] = i
+                                queue_len = queue_len + 1
+                                quiet = false
+                                break
+                            }
+                        }
+                    }
+                }
+                g = g + 1
+            }
+            if failed or !quiet { continue }
+
+            // locked candidates (pointing/claiming): for each of 54
+            // intersections, a digit confined to the intersection within
+            // its box is eliminated from the rest of the line, and vice
+            // versa. Only worth running when singles are exhausted.
+            let mut x = 0
+            if !hard { x = 54 }
+            while x < 54 and quiet and !failed {
+                let base = x * 15
+                let mut in_mask = 0
+                for k in range(0, 3) {
+                    let i = inter_t[base + k]
+                    if fixed[i] == 0 { in_mask = in_mask | cands[i] }
+                }
+                if in_mask != 0 {
+                    let mut box_rest = 0
+                    for k in range(3, 9) {
+                        let i = inter_t[base + k]
+                        if fixed[i] == 0 { box_rest = box_rest | cands[i] }
+                    }
+                    let mut line_rest = 0
+                    for k in range(9, 15) {
+                        let i = inter_t[base + k]
+                        if fixed[i] == 0 { line_rest = line_rest | cands[i] }
+                    }
+                    // digits only in the intersection within the box ->
+                    // remove from rest of line; and the dual.
+                    let point = in_mask & (511 ^ box_rest) & line_rest
+                    let claim = in_mask & (511 ^ line_rest) & box_rest
+                    if point != 0 {
+                        for k in range(9, 15) {
+                            let i = inter_t[base + k]
+                            if fixed[i] == 0 {
+                                let rm = cands[i] & point
+                                if rm != 0 {
+                                    let nc = cands[i] ^ rm
+                                    cands[i] = nc
+                                    trail[trail_len] = i * 512 | rm
+                                    trail_len = trail_len + 1
+                                    dirty[cgroups_t[i * 3]] = 1
+                                    dirty[cgroups_t[i * 3 + 1]] = 1
+                                    dirty[cgroups_t[i * 3 + 2]] = 1
+                                    if nc == 0 {
+                                        failed = true
+                                        break
+                                    }
+                                    if popcount(nc) == 1 {
+                                        queue[queue_len] = i
+                                        queue_len = queue_len + 1
+                                    }
+                                    quiet = false
+                                }
+                            }
+                        }
+                    }
+                    if claim != 0 and !failed {
+                        for k in range(3, 9) {
+                            let i = inter_t[base + k]
+                            if fixed[i] == 0 {
+                                let rm = cands[i] & claim
+                                if rm != 0 {
+                                    let nc = cands[i] ^ rm
+                                    cands[i] = nc
+                                    trail[trail_len] = i * 512 | rm
+                                    trail_len = trail_len + 1
+                                    dirty[cgroups_t[i * 3]] = 1
+                                    dirty[cgroups_t[i * 3 + 1]] = 1
+                                    dirty[cgroups_t[i * 3 + 2]] = 1
+                                    if nc == 0 {
+                                        failed = true
+                                        break
+                                    }
+                                    if popcount(nc) == 1 {
+                                        queue[queue_len] = i
+                                        queue_len = queue_len + 1
+                                    }
+                                    quiet = false
+                                }
+                            }
+                        }
+                    }
+                }
+                x = x + 1
+            }
+        }
+        queue_len = 0
+
+        // ---------------- solved / guess / backtrack ----------------
+        if !failed and fixed_count == 81 {
+            found = found + 1
+            if solution == "" {
+                let mut out = ""
+                for i in range(0, 81) { out = out + str(grid[i]) }
+                solution = out
+            }
+            if found >= want {
+                running = false
+                continue
+            }
+            failed = true   // keep searching: unwind to the last guess
+        }
+
+        if failed {
+            hard = true
+            // backtrack to the most recent depth with candidates left
+            let mut back = true
+            while back {
+                if depth == 0 {
+                    running = false
+                    back = false
+                } else {
+                    depth = depth - 1
+                    // undo trail to this depth's mark
+                    let mark = d_trail_mark[depth]
+                    while trail_len > mark {
+                        trail_len = trail_len - 1
+                        let e = trail[trail_len]
+                        let cell = e / 512
+                        let bits = e % 512
+                        if bits == 0 {
+                            fixed[cell] = 0
+                            grid[cell] = 0
+                            fixed_count = fixed_count - 1
+                        } else {
+                            cands[cell] = cands[cell] | bits
+                        }
+                    }
+                    if d_cand_left[depth] != 0 { back = false }
+                }
+            }
+            if !running { continue }
+            // try the next candidate at this depth
+            let cell = d_cell[depth]
+            let bit = d_cand_left[depth] & (0 - d_cand_left[depth])
+            d_cand_left[depth] = d_cand_left[depth] ^ bit
+            if d_cand_left[depth] != 0 { guesses = guesses + 1 }
+            // place it (same as the guess path below)
+            fixed[cell] = 1
+            grid[cell] = ctz(bit) + 1
+            fixed_count = fixed_count + 1
+            let removed = cands[cell] ^ bit
+            cands[cell] = bit
+            trail[trail_len] = cell * 512
+            trail_len = trail_len + 1
+            if removed != 0 {
+                trail[trail_len] = cell * 512 | removed
+                trail_len = trail_len + 1
+            }
+            failed = false
+            for pk in range(cell * 20, cell * 20 + 20) {
+                let p = peers_t[pk]
+                let pc = cands[p]
+                if (pc & bit) != 0 {
+                    let nc = pc ^ bit
+                    cands[p] = nc
+                    trail[trail_len] = p * 512 | bit
+                    trail_len = trail_len + 1
+                    dirty[cgroups_t[p * 3]] = 1
+                    dirty[cgroups_t[p * 3 + 1]] = 1
+                    dirty[cgroups_t[p * 3 + 2]] = 1
+                    if nc == 0 { failed = true }
+                    if popcount(nc) == 1 and fixed[p] == 0 {
+                        queue[queue_len] = p
+                        queue_len = queue_len + 1
+                    }
+                }
+            }
+            depth = depth + 1
+            continue
+        }
+
+        // MRV guess
+        let mut best = -1
+        let mut best_n = 10
+        for k in range(0, n_open) {
+            let i = todo[k]
+            if fixed[i] == 0 {
+                let pc = popcount(cands[i])
+                if pc < best_n {
+                    best_n = pc
+                    best = i
+                    if pc == 2 { break }
+                }
+            }
+        }
+        if best < 0 {
+            // nothing open but fixed_count < 81 can't happen; treat as fail
+            failed = true
+            continue
+        }
+
+        d_trail_mark[depth] = trail_len
+        d_cell[depth] = best
+        let mask = cands[best]
+        let bit = mask & (0 - mask)
+        d_cand_left[depth] = mask ^ bit
+        if mask != bit { guesses = guesses + 1 }
+
+        let cell = best
+        fixed[cell] = 1
+        grid[cell] = ctz(bit) + 1
+        fixed_count = fixed_count + 1
+        let removed = cands[cell] ^ bit
+        cands[cell] = bit
+        trail[trail_len] = cell * 512
+        trail_len = trail_len + 1
+        if removed != 0 {
+            trail[trail_len] = cell * 512 | removed
+            trail_len = trail_len + 1
+        }
+        for pk in range(cell * 20, cell * 20 + 20) {
+            let p = peers_t[pk]
+            let pc = cands[p]
+            if (pc & bit) != 0 {
+                let nc = pc ^ bit
+                cands[p] = nc
+                trail[trail_len] = p * 512 | bit
+                trail_len = trail_len + 1
+                dirty[cgroups_t[p * 3]] = 1
+                dirty[cgroups_t[p * 3 + 1]] = 1
+                dirty[cgroups_t[p * 3 + 2]] = 1
+                if nc == 0 { failed = true }
+                if popcount(nc) == 1 and fixed[p] == 0 {
+                    queue[queue_len] = p
+                    queue_len = queue_len + 1
+                }
+            }
+        }
+        depth = depth + 1
+    }
+
+    return (found, guesses, solution)
+}
+
+fn check_solution(puzzle: str, sol: str) -> bool {
+    if len(sol) != 81 { return false }
+    let p = chars(puzzle)
+    let s = chars(sol)
+    let mut ok = true
+    for i in range(0, 81) {
+        let d = ord(p[i]) - 48
+        if d >= 1 and d <= 9 and ord(s[i]) - 48 != d { ok = false }
+    }
+    let mut rs = [0, 0, 0, 0, 0, 0, 0, 0, 0]
+    let mut cs = [0, 0, 0, 0, 0, 0, 0, 0, 0]
+    let mut bs = [0, 0, 0, 0, 0, 0, 0, 0, 0]
+    for i in range(0, 81) {
+        let bit = shl(1, ord(s[i]) - 49)
+        rs[i / 9] = rs[i / 9] | bit
+        cs[i % 9] = cs[i % 9] | bit
+        bs[BOX[i]] = bs[BOX[i]] | bit
+    }
+    for g in range(0, 9) {
+        if rs[g] != 511 or cs[g] != 511 or bs[g] != 511 { ok = false }
+    }
+    return ok
+}
+
+fn bench_file(path: str, limit: int) -> nil {
+    let raw = read_file(path)
+    let mut puzzles = []
+    for line in split(raw, "\n") {
+        let t = trim(line)
+        if len(t) >= 81 and !starts_with(t, "#") {
+            puzzles << slice(t, 0, 81)
+        }
+        if limit > 0 and len(puzzles) >= limit { break }
+    }
+    print(f"{path}: {len(puzzles)} puzzles")
+
+    let t0 = clock()
+    let mut total_guesses = 0
+    let mut no_guess = 0
+    let mut solved = 0
+    for p in puzzles {
+        let res = solve(p, 2)
+        if res[0] == 1 { solved = solved + 1 }
+        total_guesses = total_guesses + res[1]
+        if res[1] == 0 { no_guess = no_guess + 1 }
+    }
+    let elapsed = clock() - t0
+
+    let per = elapsed * 1000000.0 / float(len(puzzles))
+    let rate = float(len(puzzles)) / elapsed
+    let gp = float(total_guesses) / float(len(puzzles))
+    let ng = float(no_guess) * 100.0 / float(len(puzzles))
+    print(f"solved {solved}/{len(puzzles)} | {to_fixed(rate, 1)} puzzles/sec | {to_fixed(per, 1)} usec/puzzle | {to_fixed(ng, 1)}% no_guess | {to_fixed(gp, 2)} guesses/puzzle")
+}
+
+fn main() -> nil {
+    let args = sys_args()
+
+    let escargot = "1....7.9..3..2...8..96..5....53..9...1..8...26....4...3......1..4......7..7...3.."
+    let inkala2012 = "8..........36......7..9.2...5...7.......457.....1...3...1....68..85...1..9....4.."
+    let easy = "53..7....6..195....98....6.8...6...34..8.3..17...2...6.6....28....419..5....8..79"
+
+    print("=== RADOKU v3: incremental pencilmarks + locked candidates ===")
+    for entry in [("easy (wikipedia)", easy), ("AI Escargot (2006)", escargot), ("Inkala 'world's hardest' (2012)", inkala2012)] {
+        let t0 = clock()
+        let res = solve(entry[1], 2)
+        let ms = (clock() - t0) * 1000.0
+        let mut unique_str = "UNIQUE"
+        if res[0] != 1 { unique_str = f"NOT UNIQUE ({res[0]})" }
+        let valid = check_solution(entry[1], res[2])
+        print(f"{entry[0]}: solved={valid} {unique_str} guesses={res[1]} {to_fixed(ms, 2)} ms")
+    }
+
+    if len(args) >= 1 {
+        let mut limit = 0
+        if len(args) >= 2 {
+            match try_int(args[1]) {
+                Some(v) => { limit = v }
+                None => {}
+            }
+        }
+        bench_file(args[0], limit)
+    }
+}

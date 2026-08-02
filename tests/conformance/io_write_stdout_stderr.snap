@@ -1,0 +1,10 @@
+---
+source: tests\conformance\io_write_stdout_stderr.rad
+exit_code: 0
+---
+part1
+-part2
+
+write ok
+---stderr---
+err-text

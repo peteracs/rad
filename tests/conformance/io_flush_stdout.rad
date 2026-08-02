@@ -1,0 +1,4 @@
+// Test: flush_stdout() does not error
+flush_stdout()
+print("flush ok")
+// expect: flush ok

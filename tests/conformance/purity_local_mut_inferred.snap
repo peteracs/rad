@@ -1,0 +1,5 @@
+---
+source: tests\conformance\purity_local_mut_inferred.rad
+exit_code: 0
+---
+[3, 7, 11]

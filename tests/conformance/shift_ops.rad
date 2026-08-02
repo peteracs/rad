@@ -1,0 +1,88 @@
+// Shift operators `<<` / `>>` as int expressions (RAD_GAPS #3).
+// Statement-position `<<` stays list append; both forms share one file
+// to pin the disambiguation forever.
+
+// basics + constant folding (both literal operands fold at compile time)
+print(1 << 5)                 // 32
+print(1024 >> 3)              // 128
+print(0 << 0)                 // 0
+print(1 << 0)                 // 1
+print(1 << 62)                // 4611686018427387904
+
+// precedence: looser than + and *, tighter than & | ^ and comparisons
+print(1 + 1 << 3)             // (1+1)<<3 = 16
+print(2 * 3 << 1)             // 6<<1 = 12
+print(255 >> 2 & 7)           // (255>>2)&7 = 7
+print(1 << 4 | 1)             // 16|1 = 17
+print(1 << 4 ^ 16)            // 0
+print(1 << 4 > 15)            // true
+print(1 << 4 == 16)           // true
+
+// left associativity
+print(1 << 2 << 3)            // (1<<2)<<3 = 32
+print(256 >> 2 >> 2)          // 16
+
+// mixing shifts binds left-to-right at the same level
+print(1 << 10 >> 5)           // 32
+
+// out-of-range counts yield 0 — identical to shl()/shr() builtins
+print(1 << 64)                // 0
+print(1 << -1)                // 0
+print(8 >> 99)                // 0
+print(8 >> -3)                // 0
+
+// logical (u64) semantics on negatives, matching shr()
+print(-1 >> 60)               // 15
+print(-8 >> 1)                // 9223372036854775804
+
+// operator and builtin can never disagree
+print((123456789 << 7) == shl(123456789, 7))     // true
+print((-987654321 >> 13) == shr(-987654321, 13)) // true
+
+// runtime path (non-foldable operands) must agree with the folded path
+let mut mismatches = 0
+for i in range(0, 64) {
+    if (1 << i) != shl(1, i) { mismatches = mismatches + 1 }
+    if (-1 >> i) != shr(-1, i) { mismatches = mismatches + 1 }
+}
+print(mismatches)             // 0
+
+// fused constant-rhs path (variable lhs, literal rhs hits ConstArith)
+let mut base = 3
+print(base << 4)              // 48
+print(base << 64)             // 0 (out-of-range through the fused path)
+print(base >> 1)              // 1
+base = -16
+print(base >> 2)              // 4611686018427387900 (logical, fused)
+
+// statement-position `<<` is still list append
+let mut xs = [1]
+xs << 2
+xs << 3 << 4                  // chained append, in order
+print(xs)                     // [1, 2, 3, 4]
+
+// the appended value may itself be a shift expression
+xs << (1 << 8)
+print(xs[4])                  // 256
+
+// append through an indexed target
+let mut grid = [[0], [0]]
+grid[1] << 7
+print(grid[1])                // [0, 7]
+
+// statement `<<` on strings is push() too (concatenation), unchanged
+let mut s = "ra"
+s << "d"
+print(s)                      // rad
+
+// appended values that are comparisons need parens, because shifts bind
+// tighter than comparisons (`xs << a > b` would be `(xs << a) > b` and
+// the checker rejects it with a hint)
+let mut flags = []
+flags << (2 > 1)
+flags << (1 == 2)
+print(flags)                  // [true, false]
+
+// `>>` stays two tokens, so nested generic types still parse
+let m: map < str, list < int >> = {"a": [1, 2]}
+print(m["a"][1])              // 2

@@ -1,0 +1,33 @@
+fn main() -> nil {
+    let words = ["hello", "hi", "hey", "greetings"]
+
+    let longest = max_by(words, fn(w) { len(w) })
+    match longest {
+        Some(v) => { print(f"longest: {v}") }
+        None => { print("empty") }
+    }
+
+    let shortest = min_by(words, fn(w) { len(w) })
+    match shortest {
+        Some(v) => { print(f"shortest: {v}") }
+        None => { print("empty") }
+    }
+
+    let nums = [3, 1, 4, 1, 5, 9]
+    let biggest = max_by(nums, fn(n) { n })
+    match biggest {
+        Some(v) => { print(f"max: {v}") }
+        None => { print("empty") }
+    }
+
+    let empty: list<int> = []
+    let none_result = max_by(empty, fn(n) { n })
+    match none_result {
+        Some(v) => { print(f"got: {v}") }
+        None => { print("empty list") }
+    }
+}
+// expect: longest: greetings
+// expect: shortest: hi
+// expect: max: 9
+// expect: empty list

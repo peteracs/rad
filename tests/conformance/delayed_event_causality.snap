@@ -1,0 +1,10 @@
+---
+source: tests\conformance\delayed_event_causality.rad
+exit_code: 0
+---
+Gold of hero = { amount: 7 }   (set in frame 2)
+  <- by `on Later` handler
+  <- Later { who: hero } emitted in frame 1
+  <- by `on Start` handler
+  <- Start { who: hero } emitted in frame 0
+  <- by top-level code

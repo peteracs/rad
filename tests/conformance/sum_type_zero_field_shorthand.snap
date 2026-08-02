@@ -1,0 +1,13 @@
+---
+source: tests\conformance\sum_type_zero_field_shorthand.rad
+exit_code: 1
+---
+
+---stderr---
+Error: Error[E2502]: Zero-field variant shorthand 'Status::Active' requires --compat-v0.5-dx
+Error: Error[E2502]: Zero-field variant shorthand 'Status::Active' requires --compat-v0.5-dx
+Error: Error[E2502]: Zero-field variant shorthand 'Status::Inactive' requires --compat-v0.5-dx
+Error: Error[E2502]: Zero-field variant shorthand 'Status::Active' requires --compat-v0.5-dx
+Error: Error[E2502]: Zero-field variant shorthand 'Status::Inactive' requires --compat-v0.5-dx
+Error: Error[E2502]: Zero-field variant shorthand 'Status::Active' requires --compat-v0.5-dx
+Error: Error[E2502]: Zero-field variant shorthand 'Status::Active' requires --compat-v0.5-dx

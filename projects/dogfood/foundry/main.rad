@@ -1,0 +1,467 @@
+// =====================================================================
+//  Foundry - a headless factory simulation in Rad.
+//
+//  Run:  target\debug\rad.exe projects\dogfood\foundry\main.rad
+//
+//  A three-stage production chain (smelter -> press -> assembler) run
+//  entirely on Rad's core simulation machinery:
+//
+//    * every machine is a state machine, driven by transition() called
+//      from inside event handlers
+//    * work is scheduled through named `phase` declarations plus
+//      after/before ordering edges
+//    * breakdowns arm repair timers with delayed `emit ... after N`
+//    * finished goods become real entities that are spawned and
+//      despawned every tick (ECS churn)
+//    * machines are addressed by an `indexed` field via lookup()
+//    * the end-of-run report is built with destructuring pipelines
+//    * the run ends with eight conservation invariants, so a scheduling
+//      or delivery fault shows up as a FAIL rather than as a
+//      plausible-looking wrong total
+//
+//  The whole run is deterministic: a pure LCG supplies all randomness,
+//  and the tick drives one phase per schedule call, so repeated runs
+//  produce byte-identical output. Getting there was most of the work --
+//  see the bugs/ directory, and in particular:
+//
+//    bugs/03  a per-entity `mut` resource accumulator keeps ONE of its
+//             writes once the system shares a schedule call
+//    bugs/04  a resource written via update() is invisible to parallel
+//             conflict analysis, so two systems race on it
+//    bugs/11  the idiomatic `schedule [Intake, Production, Upkeep]`
+//             is not reproducible: six runs, six answers
+//
+//  An earlier revision of this file hit all three at once. It reported
+//  234 job starts against 7269 job finishes, and the lost take() writes
+//  were feeding the factory ore it had never mined.
+// =====================================================================
+
+// ---------------------------------------------------------------- config
+
+let SMELTERS = 40
+let PRESSES = 28
+let ASSEMBLERS = 18
+let TICKS = 240
+let SEED = 20260725
+let CRATE_TTL = 6
+
+// ------------------------------------------------------------ data model
+
+component Machine { indexed code: "", kind: "", speed: 1 }
+
+component Fsm { state: MachineState::Idle }
+
+component Job { remaining: 0, runs: 0 }
+
+component Wear { level: 0, limit: 40 }
+
+// Finished goods live as entities so the sim churns the ECS every tick.
+component Crate { kind: "", qty: 0, age: 0 }
+
+state MachineState {
+    Idle { on start -> Running, on stall -> Blocked }
+    Running { on finish -> Idle, on wear_out -> Broken }
+    Blocked { on feed -> Idle }
+    Broken { on repair_begin -> Mending }
+    Mending { on repair_done -> Idle }
+}
+
+resource Clock { tick: 0 }
+
+resource Store { ore: 0, plate: 0, gear: 0, widget: 0 }
+
+resource Stats {
+    starts: 0,
+    finishes: 0,
+    stalls: 0,
+    breakdowns: 0,
+    repairs: 0,
+    scrapped: 0,
+    crates_spawned: 0,
+    crates_shipped: 0,
+}
+
+resource Rng { seed: 1 }
+
+resource Marks { hit: 0 }
+
+// Sampled at the very top of the tick by a `before` system.
+resource Gauge { peak_ore: 0, samples: 0 }
+
+event JobStarted { code: str, tick: int }
+
+event JobFinished { code: str, kind: str, tick: int }
+
+event Stalled { code: str, tick: int }
+
+event BrokeDown { code: str, tick: int }
+
+event RepairFinished { code: str, tick: int }
+
+event Milestone { label: str, tick: int }
+
+// ------------------------------------------------------------- utilities
+
+// Deterministic LCG so the run is reproducible without a seeded builtin.
+pure fn lcg_next(seed: int) -> int {
+    return (seed * 1103515245 + 12345) % 2147483647
+}
+
+fn roll(bound: int) -> int {
+    let n = lcg_next(res(Rng).seed)
+    update(Rng) { seed = n }
+    return n % bound
+}
+
+pure fn input_of(kind: str) -> str {
+    if kind == "smelter" { return "ore" }
+    if kind == "press" { return "plate" }
+    return "gear"
+}
+
+pure fn output_of(kind: str) -> str {
+    if kind == "smelter" { return "plate" }
+    if kind == "press" { return "gear" }
+    return "widget"
+}
+
+// give() is only ever reached from an event handler. Handlers run serially
+// at flush_events(), so writing Store through update() here is safe from the
+// conflict-analysis race in bugs/04. A system may NOT do this.
+fn give(good: str, n: int) -> nil {
+    let s = res(Store)
+    if good == "ore" { update(Store) { ore = s.ore + n } }
+    if good == "plate" { update(Store) { plate = s.plate + n } }
+    if good == "gear" { update(Store) { gear = s.gear + n } }
+    if good == "widget" { update(Store) { widget = s.widget + n } }
+}
+
+// --------------------------------------------------------------- systems
+
+// A `before` edge, the mirror of `after`: the floor gauge samples the ore
+// pile at the very top of the tick, before the haulers top it up. It reads
+// Store while HaulOre writes it, so the two genuinely conflict and the
+// ordering edge fixes which side of the write the sample lands on.
+system SampleBacklog(st: Store, g: mut Gauge) before HaulOre {
+    if st.ore > g.peak_ore {
+        g.peak_ore = st.ore
+    }
+    g.samples = g.samples + 1
+}
+
+// Raw ore arrives from the mine every tick.
+system HaulOre(st: mut Store) {
+    st.ore = st.ore + 6
+}
+
+// Idle machines pull their input good and begin a job; if the upstream
+// stage has not produced yet they stall, which is where backpressure
+// shows up in the state machine.
+//
+// Store is taken as a `mut` PARAMETER and mutated through it, rather than
+// written by a take()/give() helper calling update(Store). See bugs/04: a
+// resource written via update() is invisible to parallel conflict analysis,
+// so this system and HaulOre would be parallel neighbours silently racing on
+// Store every single tick. Declaring the parameter makes the conflict real
+// and the scheduler serialises the pair.
+//
+// The job counter is an `emit` rather than an `update(Stats)` for the same
+// family of reasons: see bugs/03 and bugs/07. A per-entity accumulation into
+// a resource from inside a system loses all but one write once the system is
+// scheduled alongside another; events survive the merge intact, so counting
+// happens in the handler where it is exact.
+system FeedMachines(m: Machine, f: mut Fsm, j: mut Job, st: mut Store, c: Clock) after HaulOre {
+    let good = input_of(m.kind)
+
+    let mut have = 0
+    if good == "ore" { have = st.ore }
+    if good == "plate" { have = st.plate }
+    if good == "gear" { have = st.gear }
+
+    if f.state is Blocked {
+        if have > 0 {
+            f.state = unwrap(transition(f.state, "feed"))
+        }
+    }
+    if f.state is Idle {
+        if have > 0 {
+            if good == "ore" { st.ore = st.ore - 1 }
+            if good == "plate" { st.plate = st.plate - 1 }
+            if good == "gear" { st.gear = st.gear - 1 }
+            j.remaining = m.speed
+            f.state = unwrap(transition(f.state, "start"))
+            emit JobStarted { code: m.code, tick: c.tick }
+        } else {
+            f.state = unwrap(transition(f.state, "stall"))
+            emit Stalled { code: m.code, tick: c.tick }
+        }
+    }
+}
+
+// Running machines burn down their job clock and announce completion.
+system AdvanceJobs(m: Machine, f: Fsm, j: mut Job, c: Clock) after FeedMachines {
+    if f.state is Running {
+        j.remaining = j.remaining - 1
+        if j.remaining <= 0 {
+            j.runs = j.runs + 1
+            emit JobFinished { code: m.code, kind: m.kind, tick: c.tick }
+        }
+    }
+}
+
+// Wear only accrues under load. Crossing the limit arms a breakdown.
+system AccrueWear(m: Machine, f: Fsm, w: mut Wear, c: Clock) after AdvanceJobs {
+    if f.state is Running {
+        w.level = w.level + 1
+        if w.level >= w.limit {
+            emit BrokeDown { code: m.code, tick: c.tick }
+        }
+    }
+}
+
+// Crates age, then get shipped out. This is the churn engine: several
+// entities are despawned and respawned every single tick.
+system AgeCrates(c: mut Crate) after AccrueWear {
+    c.age = c.age + 1
+}
+
+// ------------------------------------------------------------ event flow
+
+// The finish transition happens here, inside a handler, addressed by the
+// machine's indexed code rather than by a raw entity id.
+// A machine can break down in the same tick its job completes, so the
+// handler guards on the live state instead of trusting the event: the
+// finish is only valid while the machine is still Running.
+on JobFinished(e) {
+    let m = lookup(Machine, "code", e.code)
+    match m {
+        Some(id) => {
+            let f = require(id, Fsm)
+            if f.state is Running {
+                update(id, Fsm) { state = unwrap(transition(f.state, "finish")) }
+                give(output_of(e.kind), 1)
+                spawn(Crate { kind: output_of(e.kind), qty: 1, age: 0 })
+                update(Stats) {
+                    finishes = res(Stats).finishes + 1,
+                    crates_spawned = res(Stats).crates_spawned + 1,
+                }
+            } else {
+                update(Stats) { scrapped = res(Stats).scrapped + 1 }
+            }
+        }
+        None => { print(f"lost machine {e.code}") }
+    }
+}
+
+// A guarded handler: only the tail of the chain counts as real output.
+on JobFinished(e) where e.kind == "assembler" {
+    if res(Store).widget == 25 {
+        emit Milestone { label: "25 widgets", tick: e.tick }
+    }
+}
+
+// Counting happens here, not in the system that detected the event: an
+// event handler runs serially, so this increment is exact. See bugs/07.
+on JobStarted(_e) {
+    update(Stats) { starts = res(Stats).starts + 1 }
+}
+
+on Stalled(_e) {
+    update(Stats) { stalls = res(Stats).stalls + 1 }
+}
+
+// Two transitions in one handler: Running -> Broken -> Mending, then the
+// repair timer is armed as a delayed event instead of a countdown field.
+on BrokeDown(e) {
+    let m = lookup(Machine, "code", e.code)
+    match m {
+        Some(id) => {
+            let f = require(id, Fsm)
+            if f.state is Running {
+                let broken = unwrap(transition(f.state, "wear_out"))
+                let mending = unwrap(transition(broken, "repair_begin"))
+                update(id, Fsm) { state = mending }
+                update(Stats) { breakdowns = res(Stats).breakdowns + 1 }
+                emit RepairFinished { code: e.code, tick: e.tick } after 4
+            }
+        }
+        None => { }
+    }
+}
+
+on RepairFinished(e) {
+    let m = lookup(Machine, "code", e.code)
+    match m {
+        Some(id) => {
+            let f = require(id, Fsm)
+            if f.state is Mending {
+                update(id, Fsm) { state = unwrap(transition(f.state, "repair_done")) }
+                update(id, Wear) { level = 0 }
+                update(Stats) { repairs = res(Stats).repairs + 1 }
+            }
+        }
+        None => { }
+    }
+}
+
+// A guarded `once`: it must survive every non-matching emission and fire
+// exactly one time, on the first milestone that actually matches.
+on Milestone once (e) where e.label == "25 widgets" {
+    update(Marks) { hit = res(Marks).hit + 1 }
+    print(f"  [milestone] {e.label} at tick {e.tick}")
+}
+
+// -------------------------------------------------------------- schedule
+
+phase Intake { SampleBacklog, HaulOre, FeedMachines }
+phase Jobs { AdvanceJobs }
+phase Wearing { AccrueWear }
+phase Upkeep { AgeCrates }
+
+// ------------------------------------------------------------ world init
+
+fn build_line(kind: str, count: int, speed: int) -> nil {
+    for i in range(0, count) {
+        spawn(
+            Machine { code: f"{kind}-{i}", kind: kind, speed: speed },
+            Fsm { state: MachineState::Idle },
+            Job { remaining: 0, runs: 0 },
+            Wear { level: 0, limit: 24 + roll(20) },
+        )
+    }
+}
+
+// Ship crates that have outlived their TTL. Despawning is done from a
+// plain (non-mut) query loop; see bugs/02 for why the mut form cannot be
+// used here.
+fn ship_old_crates() -> nil {
+    let doomed = query { Crate } where Crate.age >= CRATE_TTL
+    for id in doomed {
+        despawn(id)
+    }
+    update(Stats) { crates_shipped = res(Stats).crates_shipped + len(doomed) }
+}
+
+// The idiomatic spelling of this tick is a single call:
+//
+//     schedule [Intake, Production, Upkeep]
+//
+// It type-checks, it runs, and it is NOT reproducible: see bugs/11, where
+// that spelling gives six different answers in six runs while the same
+// systems scheduled one batch at a time are bit-stable. A factory sim whose
+// output changes between runs is not a simulation, so Foundry pays the
+// verbosity and drives one phase per call.
+//
+// Intake's three systems all touch Store, so they conflict, serialise, and
+// stay inside one call safely. Jobs and Upkeep are split out because
+// AdvanceJobs and AccrueWear have no overlapping writes -- which is exactly
+// what makes the scheduler race them.
+fn tick_once() -> nil {
+    update(Clock) { tick = res(Clock).tick + 1 }
+    schedule [Intake]
+    schedule [Jobs]
+    schedule [Wearing]
+    schedule [Upkeep]
+    flush_events()
+    ship_old_crates()
+}
+
+// ------------------------------------------------------------------ main
+
+update(Rng) { seed = SEED }
+
+build_line("smelter", SMELTERS, 2)
+build_line("press", PRESSES, 3)
+build_line("assembler", ASSEMBLERS, 4)
+
+let machine_count = SMELTERS + PRESSES + ASSEMBLERS
+
+print("=== Foundry ===")
+print(f"machines: {machine_count}  ticks: {TICKS}  seed: {SEED}")
+print("")
+
+for _t in range(0, TICKS) {
+    tick_once()
+}
+
+// --------------------------------------------------------------- report
+
+let s = res(Stats)
+let store = res(Store)
+
+print("")
+print("--- production ---")
+print(f"  ore left     {store.ore}")
+print(f"  plate        {store.plate}")
+print(f"  gear         {store.gear}")
+print(f"  widget       {store.widget}")
+print("")
+print("--- machine activity ---")
+print(f"  job starts   {s.starts}")
+print(f"  job finishes {s.finishes}")
+print(f"  scrapped     {s.scrapped}")
+print(f"  stalls       {s.stalls}")
+print(f"  breakdowns   {s.breakdowns}")
+print(f"  repairs      {s.repairs}")
+print("")
+print("--- ecs churn ---")
+print(f"  crates spawned {s.crates_spawned}")
+print(f"  crates shipped {s.crates_shipped}")
+print(f"  crates live    {query_count(Crate)}")
+print(f"  milestone fired {res(Marks).hit} time(s)")
+
+// The report itself is a destructuring pipeline over a multi-select query.
+let rows = query { Machine, Job } select Machine, Job
+
+let busiest = rows
+|> map(fn([m, j]) { return (m.code, j.runs) })
+|> sort_by(fn([code, runs]) { return (0 - runs, code) })
+|> slice(0, 5)
+
+print("")
+print("--- busiest machines ---")
+for [code, runs] in busiest {
+    print(f"  {code}  {runs} runs")
+}
+
+let total_runs = rows |> reduce(0, fn(acc, [_m, j]) { return acc + j.runs })
+print("")
+print(f"total completed jobs across the floor: {total_runs}")
+
+// ------------------------------------------------------------ invariants
+//
+// The sim is only interesting if its books balance. Each of these is a
+// conservation law that ties a number produced by one mechanism to a number
+// produced by a different one, so a scheduling or event-delivery fault shows
+// up as a mismatch rather than as a plausible-looking wrong total.
+//
+// These checks are what caught bugs/03 and bugs/04 in the first place: an
+// earlier revision counted job starts with update(Stats) from inside a
+// system and reported 234 starts against 7269 finishes.
+
+let g = res(Gauge)
+
+fn check(label: str, ok: bool) -> nil {
+    if ok {
+        print(f"  ok    {label}")
+    } else {
+        print(f"  FAIL  {label}")
+    }
+}
+
+print("")
+print("--- invariants ---")
+check("a job cannot finish without starting", s.starts >= s.finishes)
+check("every finished job made exactly one crate", s.finishes == s.crates_spawned)
+check(
+    "crates are conserved: spawned == shipped + live",
+    s.crates_spawned == s.crates_shipped + query_count(Crate),
+)
+check(
+    "per-machine run tally == finishes + scrapped",
+    total_runs == s.finishes + s.scrapped,
+)
+check("every breakdown was repaired or is still mending", s.breakdowns >= s.repairs)
+check("the guarded `once` handler fired exactly once", res(Marks).hit == 1)
+check("the `before` gauge sampled every tick", g.samples == TICKS)
+check("no good went negative", store.ore >= 0 and store.plate >= 0 and store.gear >= 0)

@@ -1,0 +1,272 @@
+// RADTACTICS arena server - the authoritative battlefield (protocol v2).
+//
+// Two clients command one side each from their own machines. Combat math,
+// schema, validator: all imported from lib_combat.rad - the referee and the
+// players literally share one brain.
+//
+// v2 wire design - deltas BOTH ways, zero polling:
+//   - a client syncs once with PULL (full fork bytes, base remembered by
+//     digest). That is the last full world it will ever receive.
+//   - each round the client pushes ORDERS carrying fork_delta bytes (its
+//     divergence: a few Intent/Pos rows). The server DOES NOT reply yet -
+//     it parks the connection. When the second side's orders arrive it
+//     resolves the round once, then answers BOTH parked connections with
+//       RESOLVED <next_round> <winner|-> <new_digest>\t<delta>
+//     where <delta> is fork_delta(your_pushed_state, resolved_world) -
+//     each client gets back exactly the divergence the referee's resolution
+//     added on top of what that client already knows. No ROUND polling, no
+//     re-PULL, no idle wire traffic at all.
+//
+// The server reads exactly one thing out of an applied client delta: the
+// Intent rows of the pushing side. Stats tampering is detected and logged;
+// illegal intents are refused by the same candidates_for() validator the
+// local game uses.
+//
+// Line protocol (one request per connection, "\n"-terminated):
+//   PULL                              -> fork bytes (initial sync only)
+//   ORDERS <side> <round> <digest>\t<delta>
+//                                     -> [parks until round resolves]
+//                                        RESOLVED <next> <winner|-> <digest>\t<delta>
+//                                      | STALE <round> | ERROR ...
+//   ROUND                             -> ROUND <n> <winner|->   (join sync)
+//   LOG                               -> battle log, newlines as " | "
+//   WHY <unit>                        -> cross-machine provenance of Stats
+//   SHUTDOWN                          -> BYE
+//
+// Run:  rad projects/dogfood/tactics/arena_server.rad     (listens on 127.0.0.1:7878)
+
+use "lib_combat.rad"
+
+let MAX_ROUNDS = 40
+let RING_ROUND = 15
+
+// ---- wire helpers ----------------------------------------------------------
+
+fn read_msg(conn) -> str {
+    let mut buf = ""
+    while true {
+        let chunk = tcp_read(conn, 65536)
+        if len(chunk) == 0 { break }
+        buf = buf + chunk
+        if ends_with(buf, "\n") { break }
+    }
+    return trim(buf)
+}
+
+fn send(conn, line: str) -> nil {
+    tcp_write(conn, line + "\n")
+}
+
+fn digest_of(f: world_fork) -> str {
+    return split(fork_to_bytes(f), " ")[1]
+}
+
+// Pull the pushing side's orders out of an applied delta. Returns encoded
+// "unit|kind|tx|ty|target" strings; everything else in the fork is ignored,
+// and Stats tampering is called out in the server log.
+fn extract_orders(f: world_fork, side: str) -> list < str > {
+    let mut orders = []
+    for unit in living(side) {
+        let n = name_of(unit)
+        match peek(f, unit, Stats) {
+            Some(fs) => {
+                let ls = get(unit, Stats) |> unwrap
+                if fs.hp != ls.hp or fs.atk != ls.atk or fs.max_hp != ls.max_hp {
+                    print(f"  TAMPER: {n} Stats differ in pushed delta - ignored (live world is sovereign)")
+                }
+            }
+            None => {}
+        }
+        match peek(f, unit, Intent) {
+            Some(i) => { orders << f"{n}|{i.kind}|{i.tx}|{i.ty}|{i.target}" }
+            None => {}
+        }
+    }
+    return orders
+}
+
+fn resolve_round(round: int, red_orders: list < str > , blue_orders: list < str > ) -> str {
+    let b0 = get_resource(Battle) |> unwrap
+    set_resource(Battle, Battle { round: round, winner: "", log: b0.log, futures: b0.futures })
+    let round_start = fork()
+
+    let mut winner = ""
+    for orders in [red_orders, blue_orders] {
+        for o in orders {
+            let parts = split(o, "|")
+            let unit = get_entity(parts[0])
+            if unit == nil { continue }
+            let s = get(unit, Stats) |> unwrap
+            if s.hp <= 0 { continue }
+            let a = find_act(unit, parts[1], int(parts[2]), int(parts[3]), parts[4])
+            if a.kind == "illegal" {
+                print(f"  REFUSED: {parts[0]} ordered {parts[1]} -> ({parts[2]},{parts[3]}) {parts[4]} - unit hesitates")
+            } else {
+                act_live(unit, a)
+            }
+        }
+        if side_hp("red") == 0 { winner = "blue" }
+        if side_hp("blue") == 0 { winner = "red" }
+        if winner != "" { break }
+    }
+
+    if winner == "" and round >= RING_ROUND {
+        for side in ["red", "blue"] {
+            for unit in living(side) {
+                emit Sapped { unit: unit, amount: 2 }
+            }
+        }
+        flush_events()
+        let rh = side_hp("red")
+        let bh = side_hp("blue")
+        // a simultaneous ring wipe is a draw, not a win for whichever side
+        // happens to be checked last
+        if rh == 0 and bh == 0 { winner = "draw" }
+        else if rh == 0 { winner = "blue" }
+        else if bh == 0 { winner = "red" }
+    }
+    if winner == "" and round >= MAX_ROUNDS { winner = "draw" }
+
+    // Networked or not, the fence holds: a round touches combat state and
+    // the journal, nothing else.
+    assert_only_changed(round_start, fork(), [Pos, Stats, Intent, Battle])
+
+    print(f"-- round {round} resolved (red {side_hp(\"red\")} hp, blue {side_hp(\"blue\")} hp) --")
+    draw()
+    return winner
+}
+
+fn main() -> nil {
+    roster("red", 1, -1)
+    roster("blue", W - 2, 1)
+
+    let listener = tcp_listen("127.0.0.1", 7878)
+    print("arena v2 listening on 127.0.0.1:7878 (parked-connection resolve, deltas both ways)")
+    draw()
+
+    let mut pulls = {}
+    let mut round = 1
+    let mut winner = ""
+    let mut red_orders = []
+    let mut blue_orders = []
+    let mut red_in = false
+    let mut blue_in = false
+    // Parked ORDERS connections + the fork each client pushed (the state it
+    // believes in). The RESOLVED delta is computed against that fork.
+    // -1 = no parked connection; the fork sentinels are throwaway snapshots.
+    let mut red_conn = -1
+    let mut blue_conn = -1
+    let mut red_theirs = fork()
+    let mut blue_theirs = fork()
+    let mut down_bytes = 0
+
+    let mut running = true
+    while running {
+        let conn = tcp_accept(listener)
+        let msg = read_msg(conn)
+        let parts = split(msg, " ")
+        let cmd = parts[0]
+        // ORDERS parks the connection; everything else replies and closes.
+        let mut parked = false
+
+        if cmd == "PULL" {
+            if len(keys(pulls)) > 16 { pulls = {} }
+            let base = fork()
+            let bytes = fork_to_bytes(base)
+            pulls[split(bytes, " ")[1]] = base
+            send(conn, bytes)
+        }
+        if cmd == "ORDERS" {
+            let side = parts[1]
+            let for_round = int(parts[2])
+            let rest = join(slice(parts, 3, len(parts)), " ")
+            let dparts = split(rest, "\t")
+            let mut reply = "ERROR orders want <side> <round> <digest>\t<delta>"
+            if winner != "" {
+                reply = "ERROR battle is over"
+            } else if for_round != round {
+                reply = f"STALE {round}"
+            } else if len(dparts) == 2 and contains(keys(pulls), dparts[0]) {
+                let b = pulls[dparts[0]]
+                match fork_apply(b, dparts[1]) {
+                    Ok(theirs) => {
+                        let orders = extract_orders(theirs, side)
+                        if side == "red" {
+                            red_orders = orders
+                            red_in = true
+                            red_conn = conn
+                            red_theirs = theirs
+                        } else {
+                            blue_orders = orders
+                            blue_in = true
+                            blue_conn = conn
+                            blue_theirs = theirs
+                        }
+                        parked = true
+                        print(f"orders parked: {side} round {round} ({len(orders)} units, delta {len(dparts[1])} B up)")
+                    }
+                    Err(m) => { reply = f"ERROR delta: {m}" }
+                }
+            } else {
+                reply = "ERROR unknown base (pull again)"
+            }
+            if !parked { send(conn, reply) }
+
+            if red_in and blue_in {
+                winner = resolve_round(round, red_orders, blue_orders)
+                round = round + 1
+                let mut w = winner
+                if w == "" { w = "-" }
+                // One answer per parked client: the round verdict plus the
+                // delta from THAT client's pushed state to the resolved
+                // world. The new base is remembered server-side by digest;
+                // next round's ORDERS reference it - no client ever pulls
+                // a full world again.
+                let new_base = fork()
+                let nd = digest_of(new_base)
+                pulls = {}
+                pulls[nd] = new_base
+                let red_delta = fork_delta(red_theirs, new_base)
+                let blue_delta = fork_delta(blue_theirs, new_base)
+                down_bytes = down_bytes + len(red_delta) + len(blue_delta)
+                send(red_conn, f"RESOLVED {round} {w} {nd}\t" + red_delta)
+                send(blue_conn, f"RESOLVED {round} {w} {nd}\t" + blue_delta)
+                tcp_close(red_conn)
+                tcp_close(blue_conn)
+                print(f"  pushed down: red {len(red_delta)} B, blue {len(blue_delta)} B (resolution divergence only)")
+                red_in = false
+                blue_in = false
+                red_conn = -1
+                blue_conn = -1
+                // conn is one of the two just closed; `parked` stays true so
+                // the close at the bottom of the loop skips it.
+            }
+        }
+        if cmd == "ROUND" {
+            let mut w = winner
+            if w == "" { w = "-" }
+            send(conn, f"ROUND {round} {w}")
+        }
+        if cmd == "LOG" {
+            send(conn, replace((get_resource(Battle) |> unwrap).log, "\n", " | "))
+        }
+        if cmd == "WHY" {
+            let t = get_entity(parts[1])
+            if t == nil {
+                send(conn, f"no unit named {parts[1]}")
+            } else {
+                send(conn, replace(why(t, Stats), "\n", " | "))
+            }
+        }
+        if cmd == "SHUTDOWN" {
+            send(conn, "BYE")
+            running = false
+        }
+        if !parked { tcp_close(conn) }
+    }
+    tcp_close(listener)
+    let b = get_resource(Battle) |> unwrap
+    print(f"\n=== {winner} wins after {round - 1} rounds ===")
+    print(f"server pushed {down_bytes} B of resolution deltas down the wire, total")
+    print(b.log)
+}

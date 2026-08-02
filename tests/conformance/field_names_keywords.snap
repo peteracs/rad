@@ -1,0 +1,21 @@
+---
+source: tests\conformance\field_names_keywords.rad
+exit_code: 0
+---
+true
+7
+false
+8
+5
+on=false off=8
+Meta
+42
+demo
+boot
+3
+boot
+4
+running
+5
+auto on=true
+manual for=6

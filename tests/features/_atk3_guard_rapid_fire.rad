@@ -1,0 +1,17 @@
+// Rapid-fire events with guard — stress the guard check path
+event Tick { n: int }
+let mut count = 0
+
+on Tick(e) where e.n % 2 == 0 {
+    count = count + 1
+}
+
+fn main() -> nil {
+    for i in range(0, 100) {
+        emit Tick { n: i }
+    }
+    flush_events()
+    print("even count:", count)
+}
+
+// expect: even count: 50

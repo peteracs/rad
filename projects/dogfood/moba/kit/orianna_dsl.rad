@@ -1,0 +1,334 @@
+// ORIANNA DSL DOGFOOD
+//
+// This is intentionally raw Rad: typed events, tuple Vec2 math,
+// spatial-query helpers, delayed `emit ... after N` timers, and `why()`
+// provenance. The important receipt is that Shockwave does not write HP or
+// movement directly; it emits typed semantic events and lets the VM ledger
+// connect the chain.
+
+pub let TICKS_PER_S = 30
+pub let DT = 1.0 / 30.0
+
+pub let SHOCKWAVE_RADIUS = 415.0
+pub let SHOCKWAVE_DELAY_S = 0.75
+pub let SHOCKWAVE_CC_S = 0.75
+pub let SHOCKWAVE_PULL = 250.0
+
+pub let PROTECT_WIDTH = 80.0
+
+pub type Slot {
+    Q {}
+    W {}
+    E {}
+    R {}
+}
+
+pub type DamageKind {
+    Magic {}
+}
+
+pub component Unit {
+    team: int = 0,
+    targetable: bool = true,
+}
+
+pub component Pos { at: (float, float) = (0.0, 0.0) }
+pub component Body { radius: float = 65.0 }
+
+pub component Vitals {
+    hp: float = 1000.0,
+    max_hp: float = 1000.0,
+    ap: float = 0.0,
+}
+
+pub component Ball { owner: entity = nil }
+pub component BallLink { ball: entity = nil }
+pub component DetachedBall {}
+pub component AttachedBall { host: entity = nil }
+
+pub component Stunned { remaining: int = 0 }
+
+pub component ForcedMove {
+    vector: (float, float) = (0.0, 0.0),
+    remaining: int = 0,
+}
+
+pub struct Segment {
+    a: (float, float) = (0.0, 0.0),
+    b: (float, float) = (0.0, 0.0),
+    radius: float = 0.0,
+}
+
+pub event CastRequest {
+    caster: entity,
+    slot: Slot,
+    rank: int,
+    focus: entity,
+}
+
+pub event ShockwaveSweep {
+    caster: entity,
+    ball: entity,
+    rank: int,
+    center: (float, float),
+    radius: float,
+    windup_ticks: int,
+}
+
+pub event RadiusHit {
+    caster: entity,
+    ball: entity,
+    target: entity,
+    rank: int,
+    center: (float, float),
+    radius: float,
+}
+
+pub event Damage {
+    source: entity,
+    target: entity,
+    amount: float,
+    kind: DamageKind,
+}
+
+pub event ForceMove {
+    source: entity,
+    target: entity,
+    vector: (float, float),
+    duration_ticks: int,
+}
+
+pub event Stun {
+    source: entity,
+    target: entity,
+    duration_ticks: int,
+}
+
+resource Clock { tick: int = 0 }
+
+pub pure fn seconds(s: float) -> int {
+    return round(s * float(TICKS_PER_S))
+}
+
+pub pure fn dot(a: (float, float), b: (float, float)) -> float {
+    return a[0] * b[0] + a[1] * b[1]
+}
+
+pub pure fn dist(a: (float, float), b: (float, float)) -> float {
+    let d = a - b
+    return sqrt(dot(d, d))
+}
+
+pub pure fn normalize(v: (float, float)) -> (float, float) {
+    let n = sqrt(dot(v, v))
+    if n == 0.0 { return (0.0, 0.0) }
+    return v * (1.0 / n)
+}
+
+pub pure fn clampf(v: float, lo: float, hi: float) -> float {
+    if v < lo { return lo }
+    if v > hi { return hi }
+    return v
+}
+
+pub pure fn distance_to_segment(p: (float, float), s: Segment) -> float {
+    let ab = s.b - s.a
+    let denom = dot(ab, ab)
+    if denom == 0.0 { return dist(p, s.a) }
+    let t = clampf(dot(p - s.a, ab) / denom, 0.0, 1.0)
+    return dist(p, s.a + ab * t)
+}
+
+pub pure fn pull_vector(from: (float, float), toward: (float, float), max_distance: float) -> (float, float) {
+    let delta = toward - from
+    let gap = sqrt(dot(delta, delta))
+    if gap == 0.0 { return (0.0, 0.0) }
+    return normalize(delta) * min(max_distance, gap)
+}
+
+pub fn alive_enemy(e: entity, caster_team: int) -> bool {
+    let u = require(e, Unit)
+    let v = require(e, Vitals)
+    return u.team != caster_team and u.targetable and v.hp > 0.0
+}
+
+pub fn query_radius(center: (float, float), radius: float, caster_team: int) -> list<entity> {
+    return query { Unit, Pos, Body, Vitals } |> filter(fn(e) {
+        let p = require(e, Pos)
+        let b = require(e, Body)
+        return alive_enemy(e, caster_team) and dist(p.at, center) <= radius + b.radius
+    })
+}
+
+pub fn query_segment(path: Segment, caster_team: int) -> list<entity> {
+    return query { Unit, Pos, Body, Vitals } |> filter(fn(e) {
+        let p = require(e, Pos)
+        let b = require(e, Body)
+        return alive_enemy(e, caster_team) and distance_to_segment(p.at, path) <= path.radius + b.radius
+    })
+}
+
+pub fn ball_of(caster: entity) -> entity {
+    return require(caster, BallLink).ball
+}
+
+pub fn ball_pos(caster: entity) -> (float, float) {
+    return require(ball_of(caster), Pos).at
+}
+
+pub fn shockwave_damage(caster: entity, rank: int) -> float {
+    return [150.0, 225.0, 300.0][rank - 1] + require(caster, Vitals).ap * 0.7
+}
+
+pub fn protect_line_damage(caster: entity, rank: int) -> float {
+    return [60.0, 90.0, 120.0, 150.0, 180.0][rank - 1] + require(caster, Vitals).ap * 0.3
+}
+
+pub fn attach_ball_to(caster: entity, ally: entity) -> nil {
+    let ball = ball_of(caster)
+    update(ball, Pos) { at = require(ally, Pos).at }
+    remove(ball, DetachedBall)
+    set(ball, AttachedBall { host: ally })
+}
+
+pub fn orianna_e(caster: entity, rank: int, ally: entity) -> nil {
+    let path = Segment { a: ball_pos(caster), b: require(ally, Pos).at, radius: PROTECT_WIDTH }
+    for enemy in query_segment(path, require(caster, Unit).team) {
+        emit Damage { source: caster, target: enemy, amount: protect_line_damage(caster, rank), kind: DamageKind::Magic {} }
+    }
+    attach_ball_to(caster, ally)
+}
+
+pub fn request_shockwave(caster: entity, ball: entity, rank: int) -> nil {
+    if not has(ball, DetachedBall) { return }
+    let delay = seconds(SHOCKWAVE_DELAY_S)
+    emit ShockwaveSweep {
+        caster: caster,
+        ball: ball,
+        rank: rank,
+        center: require(ball, Pos).at,
+        radius: SHOCKWAVE_RADIUS,
+        windup_ticks: delay,
+    } after delay
+}
+
+on CastRequest(e) {
+    match e.slot {
+        Slot::R {} => { request_shockwave(e.caster, e.focus, e.rank) }
+        Slot::E {} => { orianna_e(e.caster, e.rank, e.focus) }
+        _ => {}
+    }
+}
+
+on ShockwaveSweep(e) {
+    let caster_team = require(e.caster, Unit).team
+    for target in query_radius(e.center, e.radius, caster_team) {
+        emit RadiusHit {
+            caster: e.caster,
+            ball: e.ball,
+            target: target,
+            rank: e.rank,
+            center: e.center,
+            radius: e.radius,
+        }
+    }
+}
+
+on RadiusHit(e) {
+    let target_pos = require(e.target, Pos).at
+    let duration = seconds(SHOCKWAVE_CC_S)
+    emit ForceMove {
+        source: e.caster,
+        target: e.target,
+        vector: pull_vector(target_pos, e.center, SHOCKWAVE_PULL),
+        duration_ticks: duration,
+    }
+    emit Stun { source: e.caster, target: e.target, duration_ticks: duration }
+    emit Damage {
+        source: e.caster,
+        target: e.target,
+        amount: shockwave_damage(e.caster, e.rank),
+        kind: DamageKind::Magic {},
+    }
+}
+
+on ForceMove(e) {
+    let p = require(e.target, Pos)
+    set(e.target, ForcedMove { vector: e.vector, remaining: e.duration_ticks })
+    update(e.target, Pos) { at = p.at + e.vector }
+}
+
+on Stun(e) {
+    set(e.target, Stunned { remaining: e.duration_ticks })
+}
+
+on Damage(e) {
+    let v = require(e.target, Vitals)
+    update(e.target, Vitals) { hp = max(0.0, v.hp - e.amount) }
+}
+
+system tick(c: mut Clock) {
+    c.tick = c.tick + 1
+}
+
+fn step(n: int) -> nil {
+    for _ in range(0, n) {
+        schedule [tick]
+    }
+}
+
+fn main() -> nil {
+    let orianna = entity "orianna" {
+        Unit { team: 0 },
+        Pos { at: (0.0, 0.0) },
+        Body {},
+        Vitals { hp: 1000.0, max_hp: 1000.0, ap: 100.0 },
+        BallLink {},
+    }
+    let ball = entity "orianna-ball" {
+        Unit { team: 0, targetable: false },
+        Pos { at: (300.0, 0.0) },
+        Body { radius: 40.0 },
+        Ball { owner: orianna },
+        DetachedBall {},
+    }
+    set(orianna, BallLink { ball: ball })
+
+    let dummy = entity "dummy-a" {
+        Unit { team: 1 },
+        Pos { at: (500.0, 0.0) },
+        Body { radius: 65.0 },
+        Vitals { hp: 1000.0, max_hp: 1000.0 },
+    }
+    let _far = entity "dummy-far" {
+        Unit { team: 1 },
+        Pos { at: (900.0, 0.0) },
+        Body { radius: 65.0 },
+        Vitals { hp: 1000.0, max_hp: 1000.0 },
+    }
+    let ally = entity "blue-ally" {
+        Unit { team: 0 },
+        Pos { at: (100.0, 0.0) },
+        Body { radius: 65.0 },
+        Vitals { hp: 1000.0, max_hp: 1000.0 },
+    }
+
+    emit CastRequest { caster: orianna, slot: Slot::R {}, rank: 1, focus: ball }
+    flush_events()
+    step(seconds(SHOCKWAVE_DELAY_S))
+    flush_events()
+    flush_events()
+
+    print("=== Shockwave receipts ===")
+    print(why(dummy, ForcedMove))
+    print("")
+    print(why(dummy, Vitals))
+
+    emit CastRequest { caster: orianna, slot: Slot::E {}, rank: 1, focus: ally }
+    flush_events()
+    flush_events()
+
+    print("")
+    print("=== Protect line receipt ===")
+    print(why(dummy, Vitals))
+}

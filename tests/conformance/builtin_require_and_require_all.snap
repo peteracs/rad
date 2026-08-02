@@ -1,0 +1,6 @@
+---
+source: tests\conformance\builtin_require_and_require_all.rad
+exit_code: 0
+---
+5
+6

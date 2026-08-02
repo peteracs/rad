@@ -1,0 +1,6 @@
+---
+source: tests\conformance\test_clock.rad
+exit_code: 0
+---
+sum=499999500000
+clock works

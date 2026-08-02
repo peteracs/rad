@@ -1,0 +1,66 @@
+// Shared movement data model: the components and events that both the RAD
+// authority and the browser prediction client agree on. This file is pure
+// vocabulary: no systems, no scene config, no content. Keep it free of `use`
+// statements so the browser client can concatenate it (the browser session
+// runtime does not resolve module imports).
+
+pub component Position {
+    x: float = 0.0,
+    y: float = 0.0
+}
+
+pub component MoveTarget {
+    x: float = 0.0,
+    y: float = 0.0,
+    active: bool = false,
+    command_id: int = 0
+}
+
+pub component MoveSpeed {
+    units_per_sec: float = 58.0
+}
+
+// Render metadata only. `model` is intentionally empty by default: the
+// concrete avatar (a roster character) is chosen by world content, never
+// baked into the shared data model. The render client falls back to its own
+// default model when this is empty.
+pub component RenderAvatar {
+    model: str = "",
+    radius: float = 3.8
+}
+
+pub component PlayerControlled {
+    indexed player_id: int = 1
+}
+
+// `player_id` identifies the owning peer so the simulation is multi-peer
+// ready. The current single-avatar handlers route every order to the
+// controlled avatar; per-player routing then becomes a handler change, not a
+// wire change.
+pub event MoveOrder {
+    player_id: int,
+    command_id: int,
+    target_x: float,
+    target_y: float
+}
+
+pub event Tick {
+    dt: float
+}
+
+// Emitted by a client to materialize its OWN locally-predicted avatar at session
+// start, using the client's persistent player_id. The server seeds peer avatars
+// on connect instead, so this handler is only ever driven client-side.
+pub event SeedLocalAvatar {
+    player_id: int
+}
+
+pub event AuthoritativeState {
+    player_id: int,
+    command_id: int,
+    x: float,
+    y: float,
+    target_x: float,
+    target_y: float,
+    target_active: bool
+}

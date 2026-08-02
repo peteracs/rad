@@ -1,0 +1,13 @@
+use "../core/c-backend/src/lexer.rad"
+
+fn main() -> nil {
+    let src = "let mut x = 42 + 3\nif x > 10 { print(x) }\nfn foo(a: int) { return a + 1 }"
+    let tokens = lex(src)
+    let mut i = 0
+    for t in tokens {
+        let kind = variant_of(t.kind)
+        print(kind)
+        i = i + 1
+    }
+    print(i)
+}

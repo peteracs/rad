@@ -1,0 +1,14 @@
+// P06: rand_int() under plain simulate(). A plain fork carries no seed, so the
+// docs state rand_* is banned here and permitted only under simulate_par().
+// EXPECT: compile-time rejection.
+component C { v: int = 0 }
+
+system Leak(c: mut C) {
+    c.v = c.v + rand_int(1, 6)
+}
+
+let e = spawn("e", C { v: 0 })
+let f = fork()
+let r = simulate(f, [system::Leak], 2)
+let got = peek(r, e, C) |> unwrap
+print(f"COMPILED-AND-RAN v={got.v}")

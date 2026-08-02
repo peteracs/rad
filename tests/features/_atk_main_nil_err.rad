@@ -1,0 +1,11 @@
+// Attack: ? propagating Err inside main() -> nil
+// Expected: should exit cleanly or print the error, not panic
+
+fn fallible() -> any {
+    return Err("something went wrong")
+}
+
+fn main() -> nil {
+    let x = fallible()?
+    print("unreachable:", x)
+}

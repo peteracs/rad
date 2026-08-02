@@ -1,0 +1,13 @@
+// backend: both
+// expect-runtime-error: Match arms use destructuring patterns but the subject type is unknown
+
+fn process(x) {
+    match x {
+        Foo { bar } => { print(bar) }
+        Baz => { print("baz") }
+    }
+}
+
+fn main() -> nil {
+    print("unreachable")
+}

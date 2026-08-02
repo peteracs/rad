@@ -1,0 +1,6 @@
+set B1 1300
+why B3
+set B4 =B3*12
+sync
+digest
+quit

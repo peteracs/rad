@@ -1,0 +1,44 @@
+// split, join, trim, replace, starts_with, ends_with
+print(split("a,b,c", ","))
+// expect: ["a", "b", "c"]
+print(split("hello", "ll"))
+// expect: ["he", "o"]
+print(split("no-match", ","))
+// expect: ["no-match"]
+print(split(",,", ","))
+// expect: ["", "", ""]
+
+print(join(["a", "b", "c"], ", "))
+// expect: a, b, c
+print(join(["only"], "-"))
+// expect: only
+print(join([], ","))
+// expect:
+print(join([1, 2, 3], " + "))
+// expect: 1 + 2 + 3
+
+print(trim("  hello  "))
+// expect: hello
+print(trim("already"))
+// expect: already
+
+print(replace("hello world", "world", "rad"))
+// expect: hello rad
+print(replace("aaa", "a", "bb"))
+// expect: bbbbbb
+print(replace("no match", "xyz", "abc"))
+// expect: no match
+
+print(starts_with("hello", "hel"))
+// expect: true
+print(starts_with("hello", "bye"))
+// expect: false
+print(starts_with("", ""))
+// expect: true
+
+print(ends_with("hello", "llo"))
+// expect: true
+print(ends_with("hello", "hel"))
+// expect: false
+print(ends_with("", ""))
+// expect: true

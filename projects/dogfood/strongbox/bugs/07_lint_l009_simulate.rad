@@ -1,0 +1,37 @@
+// BUG 07 — lint RAD-L009 (strict preset) calls a system "never run" when
+// simulate() runs it, and suggests a fix that is not valid Rad.
+//
+//   rad lint --preset=strict projects/dogfood/strongbox/bugs/07_lint_l009_simulate.rad
+//   rad projects/dogfood/strongbox/bugs/07_lint_l009_simulate.rad   (runs fine)
+//
+// `Age` below is genuinely exercised: simulate() advances it 5 ticks and
+// peek() reads the result. Speculative forecasting is the documented purpose
+// of simulate(), and for a forecast-only system simulate IS how it runs —
+// scheduling it on the main timeline would change the live world, which is
+// the exact opposite of what the code wants.
+//
+// EXPECTED: no L009 — the system is referenced by system::Age and executed.
+// ACTUAL:
+//   WARNING L__ [RAD-L009] Systems are declared but never run;
+//               add `run SystemName` or `run [A, B]`
+//
+// And the suggested remedy does not exist. `run Decay` gives
+// "Error: Undefined variable 'run'"; `run` is absent from the keyword list in
+// spec.md section 1.1. The real spelling is `schedule [system::Age]`, which
+// would also be the wrong advice here.
+
+component Health { hp: 100 }
+
+system Age(h: mut Health) {
+    h = Health { hp: h.hp - 1 }
+}
+
+let e = spawn("e", Health { hp: 10 })
+
+let before = fork()
+let after = simulate(before, [system::Age], 5)
+let projected = peek(after, e, Health) |> unwrap
+let live = get(e, Health) |> unwrap
+
+print(f"simulate ran Age 5 times: {live.hp} -> {projected.hp}")
+print(f"live world untouched: {live.hp == 10}")

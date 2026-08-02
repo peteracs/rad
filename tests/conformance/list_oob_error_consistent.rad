@@ -1,0 +1,4 @@
+// backend: both
+let xs = [1, 2, 3]
+print(xs[5])
+// expect-runtime-error: List index 5 out of bounds

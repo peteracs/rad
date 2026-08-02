@@ -1,0 +1,48 @@
+// KIT/TRYND — the third kit: the MELEE-stat shape. No projectiles, no
+// targeted nukes — Tryndamere's identity is rage arithmetic (Bloodlust
+// stacks fuel a heal) and the era's most famous rule: Undying Rage,
+// five seconds where damage cannot kill him. That rule is not written
+// here — it is the core library's HpFloor seam, attached and detached
+// by this content file.
+
+use "core.rad"
+
+// ── Q: Bloodlust ────────────────────────────────────────────────
+pub let BLOODLUST_HEAL = [40.0, 80.0, 120.0, 160.0, 200.0]
+pub let BLOODLUST_PER_STACK = [4.5, 9.0, 13.5, 18.0, 22.5]
+pub let RAGE_MAX = 8
+
+// ── R: Undying Rage ─────────────────────────────────────────────
+pub let UNDYING_TICKS = 150              // 5 s
+pub let UNDYING_FLOOR = 1.0
+
+pub component TryndKit { rage: int = 0 }
+
+pub event RageExpired { who: entity }
+
+// rage builds as he deals damage (the kit listening to the core event)
+on Damage(e) when has(e.source, TryndKit) and e.kind == "physical" {
+    let k = require(e.source, TryndKit)
+    update(e.source, TryndKit) { rage = min(k.rage + 1, RAGE_MAX) }
+}
+
+// Q: consume every stack for a heal that scales with what was consumed
+pub fn trynd_q(trynd: entity, rank: int) -> nil {
+    let k = require(trynd, TryndKit)
+    let heal = BLOODLUST_HEAL[rank - 1] + BLOODLUST_PER_STACK[rank - 1] * float(k.rage)
+    let v = require(trynd, Vitals)
+    update(trynd, Vitals) { hp = v.hp + heal }
+    update(trynd, TryndKit) { rage = 0 }
+    print(f"    {name_of(trynd)} heals {heal:.1} ({k.rage} stacks)")
+}
+
+// R: attach the floor, schedule its removal — the whole ultimate
+pub fn trynd_r(trynd: entity) -> nil {
+    set(trynd, HpFloor { at: UNDYING_FLOOR })
+    emit RageExpired { who: trynd } after UNDYING_TICKS
+    print(f"    {name_of(trynd)} REFUSES TO DIE")
+}
+
+on RageExpired(e) {
+    remove(e.who, HpFloor)
+}

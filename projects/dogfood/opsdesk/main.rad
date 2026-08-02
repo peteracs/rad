@@ -1,0 +1,119 @@
+// OpsDesk — an incident console that runs all seven primitives as ONE
+// machine, in one program:
+//
+//   #5 migrate      yesterday's v1 save loads through a schema migration
+//   #1 speculate    fork() + simulate() forecast SLA breaches, untouched world
+//   #7 merge        two concurrent shifts reconciled field-by-field,
+//                   WITH an in-flight event that survives the merge
+//   #3 blast radius diff() + assert_only_changed() fence the merge
+//   #4 causality    why() explains a status through the handler chain,
+//                   and discloses the commit seam honestly
+//   #2 record       run it under `--record`, then `rad replay` the trace
+//
+//   rad projects/dogfood/opsdesk/seed_v1.rad
+//   rad run projects/dogfood/opsdesk/main.rad --record projects/dogfood/opsdesk/ops.radr
+//   rad replay projects/dogfood/opsdesk/ops.radr
+
+component Incident { title: "", priority: 0, age: 0, status: "open" }
+
+component Assignee { name: "" }
+resource Board { open: 0 }
+resource Audit { log: "" }
+
+// The v1 schema had `sev` and no `status` — the migration is the schema's
+// changelog, in the grammar.
+migrate Incident(old) {
+    return Incident {
+        title: old["title"],
+        priority: old["sev"],
+        age: old["age"],
+        status: "open",
+    }
+}
+
+event StatusChange { inc, to }
+
+on StatusChange(e) {
+    let i = get(e.inc, Incident) |> unwrap
+    set(e.inc, Incident { title: i.title, priority: i.priority, age: i.age, status: e.to })
+    let a = get_resource(Audit) |> unwrap
+    set_resource(Audit, Audit { log: a.log + f"[{i.title} -> {e.to}] " })
+    if e.to == "resolved" {
+        let b = get_resource(Board) |> unwrap
+        set_resource(Board, Board { open: b.open - 1 })
+    }
+}
+
+system Escalate(i: mut Incident) {
+    i = Incident { title: i.title, priority: i.priority, age: i.age + 1, status: i.status }
+}
+
+// ---- #5: load the v1 save through the migration --------------------------
+load_world(read_file("projects/dogfood/opsdesk/world.json"))
+// The migration above guarantees these exist, so fail fast rather than
+// threading `entity | nil` through peek()/why(), which require a real entity.
+let inc1 = require_entity("INC-1")
+let inc2 = require_entity("INC-2")
+let inc3 = require_entity("INC-3")
+let i3 = get(inc3, Incident) |> unwrap
+print("== opsdesk ==")
+print(f"v1 save migrated: INC-3 '{i3.title}' priority {i3.priority} status '{i3.status}'")
+
+// ---- #1: forecast — what breaches if nobody acts? -------------------------
+let now = fork()
+let later = simulate(now, [system::Escalate], 3)
+let f3 = peek(later, inc3, Incident) |> unwrap
+let live3 = get(inc3, Incident) |> unwrap
+print(f"forecast: in 3 ticks INC-3 ages {i3.age} -> {f3.age} (live world untouched: age {live3.age})")
+
+// ---- #7: two shifts, one timeline -----------------------------------------
+let base = fork()
+
+// Day shift: assigns INC-1, queues INC-3's resolution as an event, and
+// files a new incident. The StatusChange is IN FLIGHT when the shift ends —
+// it travels with the fork instead of being silently dropped.
+set(inc1, Assignee { name: "maya" })
+emit StatusChange { inc: inc3, to: "resolved" }
+let _day_new = spawn("INC-4", Incident { title: "cert expiry", priority: 2, age: 0, status: "open" })
+let day = fork()
+
+// Night shift, from the same base: assigns INC-2 and files its own incident —
+// which lands on the SAME runtime id INC-4 took in the day branch.
+commit(base)
+set(inc2, Assignee { name: "raj" })
+let _night_new = spawn("INC-5", Incident { title: "queue backlog", priority: 1, age: 0, status: "open" })
+let night = fork()
+
+commit(base)
+match merge_forks(base, day, night) {
+    Ok(merged) => {
+        // ---- #3: fence the merge before adopting it.
+        let d = diff(base, merged)
+        print(f"merge blast radius: {d}")
+        assert_only_changed(base, merged, [Incident, Assignee])
+        commit(merged)
+    }
+    Err(conflicts) => { print(f"merge refused: {len(conflicts)} conflicts") }
+}
+
+// Both shifts' incidents exist — the id collision was remapped, not lost.
+let four = get_entity("INC-4")
+let five = get_entity("INC-5")
+print(f"INC-4 and INC-5 both filed: {four != five}")
+
+// The day shift's in-flight resolution fires on the merged timeline.
+flush_events()
+let r3 = get(inc3, Incident) |> unwrap
+let board = get_resource(Board) |> unwrap
+let audit = get_resource(Audit) |> unwrap
+print(f"INC-3 status '{r3.status}' | board open: {board.open} | audit: {audit.log}")
+
+// ---- #4: why is INC-3 resolved? why is INC-1 assigned? --------------------
+print("-- why(INC-3, Incident) --")
+print(why(inc3, Incident))
+print("-- why(INC-1, Assignee) -- (note the disclosed commit seam)")
+print(why(inc1, Assignee))
+
+// ---- persist v2 for tomorrow ----------------------------------------------
+write_file("projects/dogfood/opsdesk/world.json", save_world())
+print("v2 world saved")

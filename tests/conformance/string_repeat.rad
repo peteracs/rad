@@ -1,0 +1,27 @@
+// backend: both
+// String repeat via * operator
+
+print("=" * 40)
+// expect: ========================================
+
+print("ha" * 3)
+// expect: hahaha
+
+print(3 * "ab")
+// expect: ababab
+
+print("x" * 0)
+// expect:
+
+print("x" * 1)
+// expect: x
+
+print("hello " * 2)
+// expect: hello hello
+
+// Negative count returns empty string
+print("x" * -5)
+// expect:
+
+print("-" * 20)
+// expect: --------------------

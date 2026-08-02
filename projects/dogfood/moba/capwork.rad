@@ -1,0 +1,236 @@
+// CAPWORK — browser-moba's capture points (Dominion), written the way
+// they want to be written (fake-port round 16). The code comes first;
+// whatever the language can't run becomes a feature.
+//
+// Architecture (mirrors sim/systems/capturePoints.ts, RE'd from the
+// original's CapturePointMath):
+//   - Progress is ONE SIGNED NUMBER, west-positive (-100..+100). Every
+//     rule is arithmetic on it: capture pushes toward your pole, owner
+//     regen drifts to the pole, neutral decay drifts to 0.
+//   - Capture needs EXCLUSIVE presence (never against your own point);
+//     extra champions stack with diminishing returns; stealthed
+//     champions don't count.
+//   - The TWO-STAGE flip: owned points NEUTRALIZE crossing 0; neutral
+//     points CAPTURE past ±99. Flips are events.
+//   - Scoring: each second, victory points drain by SCORE_RATES[held].
+//   - Verification is a scenario table (round 15's harness): each rule
+//     is a staged fork, simulated, and judged by a verdict closure.
+
+pub let WEST = 0
+pub let EAST = 1
+pub let NEUTRAL = -1
+
+pub let CAPTURE_RADIUS = 12.0
+pub let BASE_RATE = 0.85
+pub let EXTRA_RATE = 0.175
+pub let REGEN_RATE = 0.14
+pub let THRESHOLD = 99.0
+pub let SCORE_RATES = [0.0, 1.0, 1.5, 2.0, 2.5, 10.0]
+
+component Point { progress: float = 0.0, owner: int = NEUTRAL, at: (float, float) = (0.0, 0.0) }
+
+component Champ { team: int, at: (float, float) = (0.0, 0.0), stealthed: bool = false }
+
+resource Score { west_vp: float = 200.0, east_vp: float = 200.0 }
+
+pub event Neutralized { point: entity, by: int }
+pub event Captured { point: entity, by: int }
+
+// non-stealthed living champions inside the radius, per team
+fn champs_on(p: (float, float), team: int) -> int {
+    let present = query { Champ } |> filter(fn(e) {
+        let c = require(e, Champ)
+        return c.team == team and not c.stealthed and dist(c.at, p) <= CAPTURE_RADIUS
+    })
+    return len(present)
+}
+
+pure fn capture_rate(attackers: int) -> float {
+    return BASE_RATE + EXTRA_RATE * float(attackers - 1)
+}
+
+pure fn dist(a: (float, float), b: (float, float)) -> float {
+    let (dx, dz) = a - b
+    return sqrt(dx * dx + dz * dz)
+}
+
+// the 1 s beat: all signed arithmetic, west-positive
+system evaluate(pt: mut Point) {
+    let west = champs_on(pt.at, WEST)
+    let east = champs_on(pt.at, EAST)
+
+    let delta = if west > 0 and east == 0 and pt.owner != WEST {
+        capture_rate(west)                        // exclusive capture
+    } else if east > 0 and west == 0 and pt.owner != EAST {
+        -capture_rate(east)
+    } else if pt.owner == WEST and east == 0 {
+        REGEN_RATE                                // owner regen to pole
+    } else if pt.owner == EAST and west == 0 {
+        -REGEN_RATE
+    } else if pt.owner == NEUTRAL and west == 0 and east == 0 {
+        -sign(pt.progress) * min(abs(pt.progress), REGEN_RATE)
+    } else {
+        0.0                                       // contested: frozen
+    }
+    pt.progress = clamp(pt.progress + delta, -100.0, 100.0)
+
+    // the two-stage flip
+    if pt.owner == WEST and pt.progress < 0.0 {
+        pt.owner = NEUTRAL
+        emit Neutralized { point: self, by: EAST }
+    } else if pt.owner == EAST and pt.progress > 0.0 {
+        pt.owner = NEUTRAL
+        emit Neutralized { point: self, by: WEST }
+    } else if pt.owner == NEUTRAL and pt.progress > THRESHOLD {
+        pt.owner = WEST
+        emit Captured { point: self, by: WEST }
+    } else if pt.owner == NEUTRAL and pt.progress < -THRESHOLD {
+        pt.owner = EAST
+        emit Captured { point: self, by: EAST }
+    }
+}
+
+// the score beat: holding more points drains the enemy nexus faster
+system score(Score) {
+    let held_w = query { Point } |> filter(fn(e) { return require(e, Point).owner == WEST }) |> len
+    let held_e = query { Point } |> filter(fn(e) { return require(e, Point).owner == EAST }) |> len
+    update(Score) {
+        east_vp = max(res(Score).east_vp - SCORE_RATES[held_w], 0.0),
+        west_vp = max(res(Score).west_vp - SCORE_RATES[held_e], 0.0),
+    }
+}
+
+phase beat { evaluate, score }
+
+// ------------------------------------------------------- scenarios
+
+fn point_at(at: (float, float), owner: int, progress: float) -> entity {
+    return entity "pt" { Point { at: at, owner: owner, progress: progress } }
+}
+
+fn champ(name: str, team: int, at: (float, float)) -> entity {
+    return entity name { Champ { team: team, at: at } }
+}
+
+pub fn scenarios() -> list {
+    return [
+        (
+            "solo-capture",
+            "one champion flips a neutral point in 117 beats",
+            fn() {
+                let p = point_at((0.0, 0.0), NEUTRAL, 0.0)
+                let _ = champ("w1", WEST, (3.0, 0.0))
+                return p
+            },
+            117,
+            fn(end, p) {
+                let pt = unwrap(peek(end, p, Point))
+                if pt.owner != WEST { return f"not captured: progress={pt.progress:.2}" }
+                return ""
+            },
+        ),
+        (
+            "contest-freezes",
+            "opposed presence freezes progress exactly",
+            fn() {
+                let p = point_at((0.0, 0.0), NEUTRAL, 40.0)
+                let _ = champ("w1", WEST, (2.0, 0.0))
+                let _ = champ("e1", EAST, (-2.0, 0.0))
+                return p
+            },
+            50,
+            fn(end, p) {
+                let pt = unwrap(peek(end, p, Point))
+                if pt.progress != 40.0 { return f"contested point moved: {pt.progress}" }
+                return ""
+            },
+        ),
+        (
+            "two-stage-flip",
+            "an owned point neutralizes at 0, then captures past -99",
+            fn() {
+                let p = point_at((0.0, 0.0), WEST, 8.0)
+                let _ = champ("e1", EAST, (1.0, 0.0))
+                let _ = champ("e2", EAST, (0.0, 1.0))
+                return p
+            },
+            110,
+            fn(end, p) {
+                let pt = unwrap(peek(end, p, Point))
+                if pt.owner != EAST { return f"owner={pt.owner} progress={pt.progress:.2}" }
+                return ""
+            },
+        ),
+        (
+            "owner-regen",
+            "an owned point drifts back to its pole when safe",
+            fn() {
+                let p = point_at((0.0, 0.0), WEST, 55.0)
+                return p
+            },
+            30,
+            fn(end, p) {
+                let pt = unwrap(peek(end, p, Point))
+                let want = 55.0 + 30.0 * REGEN_RATE
+                if abs(pt.progress - want) > 0.001 { return f"regen drift wrong: {pt.progress:.2} != {want:.2}" }
+                return ""
+            },
+        ),
+        (
+            "stealth-doesnt-count",
+            "a stealthed champion captures nothing",
+            fn() {
+                let p = point_at((0.0, 0.0), NEUTRAL, 0.0)
+                let _ = entity "tw" { Champ { team: WEST, at: (1.0, 0.0), stealthed: true } }
+                return p
+            },
+            40,
+            fn(end, p) {
+                let pt = unwrap(peek(end, p, Point))
+                if pt.progress != 0.0 { return f"stealth captured: {pt.progress}" }
+                return ""
+            },
+        ),
+        (
+            "score-drain",
+            "holding a point drains the enemy nexus at 1 VP per beat",
+            fn() {
+                let p = point_at((0.0, 0.0), WEST, 100.0)
+                return p
+            },
+            25,
+            fn(end, p) {
+                let s = unwrap(peek_resource(end, Score))
+                if s.east_vp != 175.0 { return f"east vp: {s.east_vp} (want 175)" }
+                if s.west_vp != 200.0 { return f"west vp moved: {s.west_vp}" }
+                let _ = p
+                return ""
+            },
+        ),
+    ]
+}
+
+// --------------------------------------------------------- harness
+
+fn main() -> nil {
+    let mut passed = 0
+    let mut failed = 0
+    let blank = fork()
+
+    for (id, describe, stage, beats, verify) in scenarios() {
+        commit(blank)
+        let subject = stage()
+        let end = simulate(fork(), [system::evaluate, system::score], beats)
+        let verdict = verify(end, subject)
+        if verdict == "" {
+            passed = passed + 1
+            print(f"  pass  {id}: {describe}")
+        } else {
+            failed = failed + 1
+            print(f"  FAIL  {id}: {verdict}")
+        }
+    }
+
+    print(f"{passed} passed, {failed} failed")
+    assert(failed == 0, "the dominion rules must hold")
+}

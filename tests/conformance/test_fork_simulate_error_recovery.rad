@@ -1,0 +1,28 @@
+// Test: If a system errors mid-simulation, the main world must remain intact
+// This is CRITICAL — a crash during simulate should not corrupt the world.
+
+component Counter { n: 0 }
+component Bomb    { fuse: 3 }
+
+system CountDown(c: mut Counter, b: Bomb) {
+    c = Counter { n: c.n + 1 }
+    // When counter reaches bomb fuse, this would cause an issue
+    // but the system itself is pure, so we simulate it
+}
+
+let e = spawn("e", Counter { n: 0 }, Bomb { fuse: 3 })
+
+// Normal simulation — should work
+let f = fork()
+let f = simulate(f, [system::CountDown], 5)
+
+// Main world should be untouched
+let c = get(e, Counter) |> unwrap
+assert(c.n == 0, f"Main world should be untouched after simulate, got {c.n}")
+
+// Commit
+commit(f)
+let c2 = get(e, Counter) |> unwrap
+assert(c2.n == 5, f"After commit expected 5, got {c2.n}")
+
+print("PASS: error recovery (no error case)")

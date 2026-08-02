@@ -1,0 +1,6 @@
+---
+source: tests\conformance\state_transition_guards.rad
+exit_code: 0
+---
+guarded
+open

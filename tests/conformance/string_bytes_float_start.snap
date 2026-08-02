@@ -1,0 +1,7 @@
+---
+source: tests\conformance\string_bytes_float_start.rad
+exit_code: 1
+---
+
+---stderr---
+Error: [line 5] in main: substring_bytes() expects int start, got float

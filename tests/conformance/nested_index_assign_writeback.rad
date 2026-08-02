@@ -1,0 +1,12 @@
+// backend: both
+fn main() -> nil {
+    let mut nested = [[1, 2], [3, 4]]
+    nested[0][1] = 99
+    print(nested[0][1])
+
+    let mut m = {"a": [10, 20]}
+    m["a"][0] = 77
+    print(m["a"][0])
+}
+// expect: 99
+// expect: 77

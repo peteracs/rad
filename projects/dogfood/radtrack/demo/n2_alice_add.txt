@@ -1,0 +1,4 @@
+add Add dark mode toggle
+sync
+digest
+quit

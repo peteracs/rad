@@ -1,0 +1,6 @@
+---
+source: tests\conformance\systems_main_multiple_runs.rad
+exit_code: 0
+---
+6.0
+2

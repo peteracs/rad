@@ -1,0 +1,6 @@
+// Tuple arithmetic demands matching arity — silent truncation is how
+// physics bugs are born.
+fn main() -> nil {
+    let v = (1.0, 2.0) + (1.0, 2.0, 3.0)
+    print(v)
+}

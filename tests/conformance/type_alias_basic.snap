@@ -1,0 +1,5 @@
+---
+source: tests\conformance\type_alias_basic.rad
+exit_code: 0
+---
+42

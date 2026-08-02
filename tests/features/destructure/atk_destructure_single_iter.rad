@@ -1,0 +1,8 @@
+fn main() -> nil {
+    let rows = [[42, 99]]
+    for [only_a, only_b] in rows {
+        print(only_a)
+        print(only_b)
+    }
+    print("done_single")
+}

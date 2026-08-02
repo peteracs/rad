@@ -1,0 +1,211 @@
+// =====================================================================
+//  calcite - a small expression language implemented in Rad
+//
+//    source text -> lexer -> Pratt parser -> recursive sum-type AST
+//                -> tree-walking evaluator -> pretty printer
+//
+//  Run: target\debug\rad.exe projects\dogfood\calcite\main.rad
+// =====================================================================
+
+use "parser.rad"
+use "eval.rad"
+
+fn base_env() -> map {
+    return {
+        "x": Value::VNum { num: 3.0 },
+        "y": Value::VNum { num: 4.0 },
+        "yes": Value::VBool { flag: true },
+        "no": Value::VBool { flag: false },
+    }
+}
+
+fn rule(width: int) -> nil {
+    print("-" * width)
+}
+
+// Parse, print and evaluate one expression. Returns true when the whole
+// pipeline succeeded.
+fn run_case(src: str, env: map) -> bool {
+    match parse(src) {
+        Err(msg) => {
+            print(f"  {src:<30} PARSE ERROR: {msg}")
+            return false
+        }
+        Ok(tree) => {
+            let shown = render(tree)
+            match eval_expr(tree, env) {
+                Err(msg) => {
+                    print(f"  {src:<30} EVAL ERROR:  {msg}")
+                    return false
+                }
+                Ok(v) => {
+                    let out = value_str(v)
+                    let kind = type_name(v)
+                    print(f"  {src:<30} = {out:<10} [{kind}]  ast: {shown}")
+                    return true
+                }
+            }
+        }
+    }
+}
+
+// A case that is SUPPOSED to fail. Returns true when it failed as expected.
+fn run_failing_case(src: str, env: map) -> bool {
+    match parse(src) {
+        Err(msg) => {
+            print(f"  {src:<30} rejected: {msg}")
+            return true
+        }
+        Ok(tree) => {
+            match eval_expr(tree, env) {
+                Err(msg) => {
+                    print(f"  {src:<30} rejected: {msg}")
+                    return true
+                }
+                Ok(v) => {
+                    let out = value_str(v)
+                    print(f"  {src:<30} UNEXPECTEDLY ACCEPTED -> {out}")
+                    return false
+                }
+            }
+        }
+    }
+}
+
+// Property: rendering an AST and re-parsing it must produce the same tree.
+// render is fully parenthesized, so the second render must be byte-identical.
+fn check_round_trip(src: str) -> bool {
+    match parse(src) {
+        Err(msg) => {
+            print(f"  {src:<30} parse failed: {msg}")
+            return false
+        }
+        Ok(first) => {
+            let pass1 = render(first)
+            match parse(pass1) {
+                Err(msg) => {
+                    print(f"  {src:<30} reparse failed: {msg}")
+                    return false
+                }
+                Ok(second) => {
+                    let pass2 = render(second)
+                    if pass1 == pass2 {
+                        print(f"  stable   {pass1}")
+                        return true
+                    }
+                    print(f"  UNSTABLE {pass1}  ->  {pass2}")
+                    return false
+                }
+            }
+        }
+    }
+}
+
+fn main() -> nil {
+    let env = base_env()
+    let mut passed = 0
+    let mut failed = 0
+
+    print("=====================================================================")
+    print(" calcite - expression language interpreter written in Rad")
+    print("=====================================================================")
+
+    print("")
+    print("[1] parse -> render -> evaluate")
+    rule(69)
+    let cases = [
+        "1 + 2 * 3",
+        "(1 + 2) * 3",
+        "2 ^ 3 ^ 2",
+        "-x + 10",
+        "100 / 8",
+        "17 % 5",
+        "x * y >= 12",
+        "yes and not no",
+        "min(x, y) + max(x, y)",
+        "sqrt(144) + floor(3.7)",
+        "let a = 5 in a * a",
+        "let a = 2 in let b = 3 in a ^ b",
+        "if x < y then 10 else 20",
+        "if yes and x == 3 then min(1, 2) else 99",
+    ]
+    for src in cases {
+        if run_case(src, env) {
+            passed = passed + 1
+        } else {
+            failed = failed + 1
+        }
+    }
+
+    print("")
+    print("[2] printer / parser round-trip stability")
+    rule(69)
+    let round_trips = [
+        "1 + 2 * 3 - 4 / 5",
+        "2 ^ 3 ^ 2",
+        "let a = 1 + 2 in if a > 2 then a else -a",
+        "min(max(1, 2), 3) + abs(-4)",
+    ]
+    for src in round_trips {
+        if check_round_trip(src) {
+            passed = passed + 1
+        } else {
+            failed = failed + 1
+        }
+    }
+
+    print("")
+    print("[3] errors the interpreter must reject")
+    rule(69)
+    let bad = [
+        "1 +",
+        "(1 + 2",
+        "1 + + 2",
+        "unknown_var * 2",
+        "nope(1)",
+        "1 / 0",
+        "yes + 1",
+        "if 1 then 2 else 3",
+        "let = 5 in 1",
+        "1 2",
+        "3 @ 4",
+    ]
+    for src in bad {
+        if run_failing_case(src, env) {
+            passed = passed + 1
+        } else {
+            failed = failed + 1
+        }
+    }
+
+    print("")
+    print("[4] AST shape - recursion over the sum type")
+    rule(69)
+    let shapes = [
+        "1",
+        "1 + 2",
+        "1 + 2 * 3 - 4",
+        "let a = 1 in if a then min(a, 2) else max(a, 3)",
+    ]
+    for [idx, src] in enumerate(shapes) {
+        match parse(src) {
+            Err(msg) => {
+                print(f"  #{idx} parse failed: {msg}")
+                failed = failed + 1
+            }
+            Ok(tree) => {
+                let n = node_count(tree)
+                let d = depth(tree)
+                print(f"  #{idx}  nodes={n:>3}  depth={d:>3}   {src}")
+                passed = passed + 1
+            }
+        }
+    }
+
+    print("")
+    rule(69)
+    let total = passed + failed
+    let pct = float(passed) / float(total)
+    print(f" {passed} passed, {failed} failed of {total} checks ({pct:.1%})")
+    rule(69)
+}

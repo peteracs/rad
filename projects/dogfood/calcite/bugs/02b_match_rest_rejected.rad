@@ -1,0 +1,26 @@
+// BUG 02b - applying the fix that BUG 02's hint suggested.
+//
+// Run:  target\debug\rad.exe projects\dogfood\calcite\bugs\02b_match_rest_rejected.rad
+//
+// This is exactly what the "Use `..` to ignore remaining fields" hint asks
+// for. In default mode it fails with E2503, and the single parse failure
+// then cascades into two further bogus errors.
+//
+// Works only with: target\debug\rad.exe --compat-v0.5-dx <this file>
+
+type Expr {
+    ENum { num: 0.0 }
+    EBin { op: "", lhs: 0.0, rhs: 0.0 }
+}
+
+fn kind(e: Expr) -> str {
+    match e {
+        ENum { .. } => { return "num" }
+        EBin { op, .. } => { return op }
+    }
+}
+
+fn main() -> nil {
+    print(kind(Expr::ENum { num: 1.0 }))
+    print(kind(Expr::EBin { op: "+", lhs: 1.0, rhs: 2.0 }))
+}

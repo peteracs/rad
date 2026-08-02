@@ -1,0 +1,12 @@
+// ILLEGAL: `is` RHS must be a real variant of the LHS type. Spec 5.5.
+type Light {
+    Red {}
+    Green {}
+}
+
+fn main() -> nil {
+    let l = Light::Red {}
+    if l is Purple {
+        print("purple")
+    }
+}

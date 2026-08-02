@@ -1,0 +1,6 @@
+// backend: both
+use "modules/a.rad"
+print(a_label())
+print(b_label())
+// expect: A
+// expect: B

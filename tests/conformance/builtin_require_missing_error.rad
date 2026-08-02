@@ -1,0 +1,9 @@
+// require() on missing component must produce a runtime error
+// rust-mode: no-check
+component Label { text: "" }
+
+entity box {
+    Label { text: "crate" }
+}
+require(box, "Health")
+// expect-runtime-error: require() missing component 'Health' on entity

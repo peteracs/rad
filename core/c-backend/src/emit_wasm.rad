@@ -1,0 +1,55 @@
+// Native WebAssembly backend (Phase 3): lower the full typed AST to WebAssembly modules.
+// Scope mirrors emit_c.rad. Full lowering is incremental; the Rust host emits the reactor stub
+// via wasm_binary_emit.rs until this pipeline reaches parity.
+//
+use "wasm_encode.rad"
+
+pub fn emit_wasm_unstable_gate() -> nil {
+    assert(false, "Full AST WASM lowering is still in progress; use rad build --target wasm (Rust reactor stub) or wasm_binary_emit.")
+}
+
+/// Returns bytes of a minimal valid WASM v1 module (legacy placeholder export). Kept for tests.
+pub fn emit_wasm_minimal_placeholder() -> str {
+    let mut m = wasm_preamble()
+    m = append_byte(m, 1)
+    m = append_byte(m, 4)
+    m = append_byte(m, 1)
+    m = append_byte(m, 96)
+    m = append_byte(m, 0)
+    m = append_byte(m, 0)
+    m = append_byte(m, 3)
+    m = append_byte(m, 2)
+    m = append_byte(m, 1)
+    m = append_byte(m, 0)
+    m = append_byte(m, 7)
+    m = append_byte(m, 19)
+    m = append_byte(m, 1)
+    m = append_byte(m, 15)
+    m = append_byte(m, 114)
+    m = append_byte(m, 97)
+    m = append_byte(m, 100)
+    m = append_byte(m, 95)
+    m = append_byte(m, 112)
+    m = append_byte(m, 108)
+    m = append_byte(m, 97)
+    m = append_byte(m, 99)
+    m = append_byte(m, 101)
+    m = append_byte(m, 104)
+    m = append_byte(m, 111)
+    m = append_byte(m, 108)
+    m = append_byte(m, 100)
+    m = append_byte(m, 101)
+    m = append_byte(m, 114)
+    m = append_byte(m, 0)
+    m = append_byte(m, 0)
+    m = append_byte(m, 10)
+    m = append_byte(m, 4)
+    m = append_byte(m, 1)
+    m = append_byte(m, 2)
+    m = append_byte(m, 0)
+    m = append_byte(m, 11)
+    return m
+}
+
+fn placeholder() -> nil {
+}

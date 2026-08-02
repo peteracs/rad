@@ -1,0 +1,58 @@
+// BUG 01 - `rad fmt` mangles generic type arguments into comparison spacing.
+//
+// Run:  target\debug\rad.exe fmt projects\dogfood\calcite\bugs\01_fmt_mangles_generics.rad
+//
+// Every `Name<Args>` type annotation below is rewritten to `Name < Args >`.
+// Expected: generic type arguments are left tight, as written.
+// Actual:   the formatter spaces `<` and `>` as if they were comparisons:
+//
+//     fn ret_generic(n: int) -> Result < int, str >
+//     fn ret_nested(n: int) -> Result < list < int > , str >     <- space before the comma
+//     fn param_generic(xs: list < int > ) -> int                 <- space before the paren
+//     fn generic_fn < T > (x: T) -> T                            <- type params detached
+//     let annotated: list < int > = [1, 2, 3]
+//
+// The mangled form re-parses and runs identically, `fmt` pass 2 reports
+// "unchanged", and `fmt --check` exits 0 - so the corruption is stable and
+// would be CI-enforced.
+//
+// NOTE: this file is kept in its CORRECT form. Running `rad fmt` on it
+// reproduces the bug; do not commit the formatted output.
+
+fn ret_generic(n: int) -> Result<int, str> {
+    if n < 0 {
+        return Err("negative")
+    }
+    return Ok(n)
+}
+
+fn ret_nested(n: int) -> Result<list<int>, str> {
+    return Ok([n, n])
+}
+
+fn param_generic(xs: list<int>) -> int {
+    return len(xs)
+}
+
+fn opt_generic(n: int) -> Option<int> {
+    if n > 0 {
+        return Some(n)
+    }
+    return None
+}
+
+fn generic_fn<T>(x: T) -> T {
+    return x
+}
+
+fn main() -> nil {
+    let annotated: list<int> = [1, 2, 3]
+    let m: map<int> = { "a": 1 }
+    print(f"{ret_generic(5)?} {param_generic(annotated)} {len(keys(m))}")
+    print(f"{ret_nested(2)?} {opt_generic(1)?} {generic_fn(7)}")
+
+    // A genuine comparison, for contrast: this one SHOULD get spaces.
+    let a = 1
+    let b = 2
+    print(f"{a < b}")
+}

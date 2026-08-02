@@ -1,0 +1,527 @@
+﻿// lib_combat - the shared brain of RADTA
+//
+// Imported with `use "lib_combat.rad"` by main.rad (local game),
+// arena_server.rad (referee), arena_client.rad (war room), and
+// tournament.rad (bot league). Before this module existed the arena pair
+// carried a hand-copied 150-line fork of everything below; this file IS the
+// dogfood receipt for rad's module system.
+//
+// Contents: the ECS schema, the evented live combat path, the speculative
+// systems the AI imagines with, candidate generation + legality, the
+// fork-per-candidate oracle, and the sandboxed-bot decision pipeline.
+
+pub component Pos { x: int = 0, y: int = 0 }
+pub component Stats { cls: str = "", hp: int = 0, max_hp: int = 0, atk: int = 0, rng: int = 1, mov: int = 2 }
+pub component Team { side: str = "" }
+pub component Intent { kind: str = "wait", tx: int = 0, ty: int = 0, target: str = "" }
+
+pub resource Battle { round: int = 0, winner: str = "", log: str = "", futures: int = 0 }
+
+pub event Struck { attacker: entity, defender: entity, dmg: int }
+pub event Healed { healer: entity, ally: entity, amount: int }
+pub event Fell { unit: entity }
+pub event Sapped { unit: entity, amount: int }
+
+let W = 10
+let H = 7
+// Lookahead depth and how many jittered opponent futures to sample per
+// candidate. Depth 2 with one deterministic future lost to a greedy bot;
+// depth 4 with worst-case scoring over jittered futures is the fix.
+let DEPTH = 4
+let PAR_FUTURES = 3
+
+// ---------------------------------------------------------------------------
+// Combat math: pure, shared by the AI's imagination and the real fight.
+// ---------------------------------------------------------------------------
+
+pub pure fn dist(ax: int, ay: int, bx: int, by: int) -> int {
+    return abs(ax - bx) + abs(ay - by)
+}
+
+pub pure fn base_damage(atk: int, cls: str, d: int) -> int {
+    // Archers reward keeping distance; everyone else hits flat.
+    if cls == "archer" and d >= 3 { return atk + 2 }
+    return atk
+}
+
+// ---------------------------------------------------------------------------
+// Event handlers - the *live* combat path. Every hp write flows through an
+// event, so why() can answer "who killed this unit" after the battle.
+// ---------------------------------------------------------------------------
+
+on Struck(e) {
+    let s = get(e.defender, Stats) ?
+    let mut hp = s.hp - e.dmg
+    if hp < 0 { hp = 0 }
+    update(e.defender, Stats) { hp = hp }
+    let an = name_of(e.attacker)
+    let dn = name_of(e.defender)
+    let b = get_resource(Battle) |> unwrap
+    set_resource(Battle, Battle {
+        round: b.round, winner: b.winner, futures: b.futures,
+        log: b.log + f"r{b.round}: {an} strikes {dn} for {e.dmg} ({hp} hp left)\n",
+    })
+    if hp <= 0 { emit Fell { unit: e.defender } }
+}
+
+on Healed(e) {
+    let s = get(e.ally, Stats) ?
+    let mut hp = s.hp + e.amount
+    if hp > s.max_hp { hp = s.max_hp }
+    update(e.ally, Stats) { hp = hp }
+    let hn = name_of(e.healer)
+    let an = name_of(e.ally)
+    let b = get_resource(Battle) |> unwrap
+    set_resource(Battle, Battle {
+        round: b.round, winner: b.winner, futures: b.futures,
+        log: b.log + f"r{b.round}: {hn} heals {an} for {e.amount} ({hp} hp)\n",
+    })
+}
+
+on Fell(e) {
+    let n = name_of(e.unit)
+    let b = get_resource(Battle) |> unwrap
+    set_resource(Battle, Battle {
+        round: b.round, winner: b.winner, futures: b.futures,
+        log: b.log + f"r{b.round}: {n} falls!\n",
+    })
+}
+
+on Sapped(e) {
+    let s = get(e.unit, Stats) ?
+    let mut hp = s.hp - e.amount
+    if hp < 0 { hp = 0 }
+    update(e.unit, Stats) { hp = hp }
+    if hp <= 0 { emit Fell { unit: e.unit } }
+}
+
+// ---------------------------------------------------------------------------
+// The AI's imagination: systems that run only inside simulate_par. The
+// axis-order jitter (seeded per fork by simulate_par) samples *different
+// plausible opponent behaviors* so the oracle can score against the worst
+// case instead of one fixed script. rand_* inside a speculated system is
+// legal exactly here: simulate_par seeds every fork explicitly.
+// ---------------------------------------------------------------------------
+
+pub system TargetNearest(i: mut Intent, p: Pos, s: Stats, t: Team) {
+    if s.hp <= 0 { return }
+    if i.kind != "wait" { return }   // a unit already commanded keeps its order
+    let mut best = ""
+    let mut best_d = 9999
+    for other in entities(Team) {
+        let ot = get(other, Team) |> unwrap
+        if ot.side == t.side { continue }
+        let os = get(other, Stats) |> unwrap
+        if os.hp <= 0 { continue }
+        let op = get(other, Pos) |> unwrap
+        let d = dist(p.x, p.y, op.x, op.y)
+        if d < best_d {
+            best_d = d
+            best = name_of(other)
+        }
+    }
+    if best == "" { return }
+    if best_d <= s.rng {
+        i = Intent { kind: "attack", tx: p.x, ty: p.y, target: best }
+    } else {
+        // step toward the target (sim ignores collision: it's a forecast);
+        // jittered axis preference = sampled opponent pathing
+        let op = get(get_entity(best), Pos) |> unwrap
+        let mut nx = p.x
+        let mut ny = p.y
+        if rand_int(0, 1) == 0 {
+            if op.x > p.x { nx = p.x + 1 } else { if op.x < p.x { nx = p.x - 1 } }
+            if nx == p.x {
+                if op.y > p.y { ny = p.y + 1 } else { if op.y < p.y { ny = p.y - 1 } }
+            }
+        } else {
+            if op.y > p.y { ny = p.y + 1 } else { if op.y < p.y { ny = p.y - 1 } }
+            if ny == p.y {
+                if op.x > p.x { nx = p.x + 1 } else { if op.x < p.x { nx = p.x - 1 } }
+            }
+        }
+        i = Intent { kind: "move", tx: nx, ty: ny, target: "" }
+    }
+}
+
+pub system SimResolve(i: mut Intent, p: mut Pos, s: Stats, _t: Team) after TargetNearest {
+    if s.hp <= 0 { return }
+    if i.kind == "move" {
+        p = Pos { x: i.tx, y: i.ty }
+    }
+    if i.kind == "attack" {
+        let foe = get_entity(i.target)
+        let fs = get(foe, Stats) |> unwrap
+        if fs.hp > 0 {
+            let fp = get(foe, Pos) |> unwrap
+            let d = dist(p.x, p.y, fp.x, fp.y)
+            let dmg = base_damage(s.atk, s.cls, d)
+            let mut hp = fs.hp - dmg
+            if hp < 0 { hp = 0 }
+            update(foe, Stats) { hp = hp }
+        }
+    }
+    if i.kind == "heal" {
+        let ally = get_entity(i.target)
+        let als = get(ally, Stats) |> unwrap
+        if als.hp > 0 {
+            let mut hp = als.hp + s.atk
+            if hp > als.max_hp { hp = als.max_hp }
+            update(ally, Stats) { hp = hp }
+        }
+    }
+    i = Intent { kind: "wait", tx: 0, ty: 0, target: "" }
+}
+
+// ---------------------------------------------------------------------------
+// Scoring a future: my side's hp minus theirs, plus pressure for closing in.
+// ---------------------------------------------------------------------------
+
+pub fn score_future(fut: world_fork, side: str) -> int {
+    let mut mine = 0
+    let mut theirs = 0
+    let mut closeness = 0
+    for ent in entities(Team) {
+        let t = get(ent, Team) |> unwrap
+        match peek(fut, ent, Stats) {
+            Some(s) => {
+                let mut hp = s.hp
+                if hp < 0 { hp = 0 }
+                if t.side == side { mine = mine + hp } else { theirs = theirs + hp }
+            }
+            None => {}
+        }
+    }
+    // pursuit pressure: nearness to enemies is worth points, and wounded
+    // enemies pull harder - blood in the water ends stalemates that pure
+    // hp-counting would let kite forever.
+    for ent in entities(Team) {
+        let t = get(ent, Team) |> unwrap
+        if t.side != side { continue }
+        match peek(fut, ent, Pos) {
+            Some(p) => {
+                for foe in entities(Team) {
+                    let ft = get(foe, Team) |> unwrap
+                    if ft.side == side { continue }
+                    match peek(fut, foe, Stats) {
+                        Some(fs) => {
+                            if fs.hp <= 0 { continue }
+                            let mut w = 1
+                            if fs.hp * 2 < fs.max_hp { w = 3 }
+                            match peek(fut, foe, Pos) {
+                                Some(fp) => { closeness = closeness - dist(p.x, p.y, fp.x, fp.y) * w }
+                                None => {}
+                            }
+                        }
+                        None => {}
+                    }
+                }
+            }
+            None => {}
+        }
+    }
+    return (mine - theirs) * 100 + closeness
+}
+
+// ---------------------------------------------------------------------------
+// Candidate generation on the live world (collision-aware) + legality.
+// One definition of "a legal order", three masters: the oracle searches it,
+// the player types against it, bots and remote clients are validated by it.
+// ---------------------------------------------------------------------------
+
+pub struct Act { kind: str = "wait", tx: int = 0, ty: int = 0, target: str = "" }
+
+pub fn tile_blocked(x: int, y: int) -> bool {
+    if x < 0 or y < 0 or x >= W or y >= H { return true }
+    for ent in entities(Pos) {
+        let s = get(ent, Stats) |> unwrap
+        if s.hp <= 0 { continue }
+        let p = get(ent, Pos) |> unwrap
+        if p.x == x and p.y == y { return true }
+    }
+    return false
+}
+
+pub fn candidates_for(me: entity) -> list < Act > {
+    let p = get(me, Pos) |> unwrap
+    let s = get(me, Stats) |> unwrap
+    let t = get(me, Team) |> unwrap
+    let mut acts = [Act { kind: "wait", tx: p.x, ty: p.y, target: "" }]
+
+    // reachable tiles within mov (manhattan), unoccupied
+    let mut tiles = [(p.x, p.y)]
+    for dx in range(0 - s.mov, s.mov + 1) {
+        for dy in range(0 - s.mov, s.mov + 1) {
+            if abs(dx) + abs(dy) == 0 { continue }
+            if abs(dx) + abs(dy) > s.mov { continue }
+            let nx = p.x + dx
+            let ny = p.y + dy
+            if tile_blocked(nx, ny) { continue }
+            tiles << (nx, ny)
+            acts << Act { kind: "move", tx: nx, ty: ny, target: "" }
+        }
+    }
+
+    // from every reachable tile: attacks (or heals, for clerics)
+    for tile in tiles {
+        for other in entities(Team) {
+            let os = get(other, Stats) |> unwrap
+            if os.hp <= 0 { continue }
+            let ot = get(other, Team) |> unwrap
+            let op = get(other, Pos) |> unwrap
+            let d = dist(tile[0], tile[1], op.x, op.y)
+            if s.cls == "cleric" {
+                if ot.side == t.side and os.hp < os.max_hp and d <= s.rng and name_of(other) != name_of(me) {
+                    acts << Act { kind: "heal", tx: tile[0], ty: tile[1], target: name_of(other) }
+                }
+            } else {
+                if ot.side != t.side and d <= s.rng {
+                    acts << Act { kind: "attack", tx: tile[0], ty: tile[1], target: name_of(other) }
+                }
+            }
+        }
+    }
+    return acts
+}
+
+// Exact-match legality check: the order must be one of the unit's candidates.
+pub fn find_act(me: entity, kind: str, tx: int, ty: int, target: str) -> Act {
+    let p = get(me, Pos) |> unwrap
+    if kind == "wait" { return Act { kind: "wait", tx: p.x, ty: p.y, target: "" } }
+    for a in candidates_for(me) {
+        if a.kind == kind and a.tx == tx and a.ty == ty and a.target == target { return a }
+    }
+    return Act { kind: "illegal" }
+}
+
+// Targeted order without an explicit tile: prefer acting from where the
+// unit stands, otherwise take the first reachable firing position.
+pub fn find_targeted(me: entity, kind: str, target: str) -> Act {
+    let p = get(me, Pos) |> unwrap
+    let mut found = Act { kind: "illegal" }
+    for a in candidates_for(me) {
+        if a.kind != kind or a.target != target { continue }
+        if a.tx == p.x and a.ty == p.y { return a }
+        if found.kind == "illegal" { found = a }
+    }
+    return found
+}
+
+pub fn describe_act(a: Act) -> str {
+    if a.kind == "move" { return f"move to ({a.tx},{a.ty})" }
+    if a.kind == "attack" { return f"go to ({a.tx},{a.ty}) and strike {a.target}" }
+    if a.kind == "heal" { return f"go to ({a.tx},{a.ty}) and heal {a.target}" }
+    return "hold position"
+}
+
+// ---------------------------------------------------------------------------
+// The oracle: pick a move by forking the universe per candidate, sampling
+// PAR_FUTURES jittered opponent behaviors DEPTH frames deep **in parallel**,
+// and keeping the candidate whose WORST sampled future is best. Paranoia as
+// a search strategy.
+// ---------------------------------------------------------------------------
+
+pub fn choose(me: entity) -> Act {
+    let checkpoint = fork()
+    let acts = candidates_for(me)
+    let side = (get(me, Team) |> unwrap).side
+    let mut best = acts[0]
+    let mut best_score = -999999999
+    let mut explored = 0
+    let mut salt = 0
+
+    for a in acts {
+        // stage the candidate on the live world...
+        update(me, Pos) { x = a.tx, y = a.ty }
+        update(me, Intent) { kind = a.kind, tx = a.tx, ty = a.ty, target = a.target }
+        // ...value the order in isolation: one strict simulate() frame that
+        // resolves ONLY the staged intent (no opponent model, no rand)...
+        let near = simulate(fork(), [system::SimResolve], 1)
+        let greedy = score_future(near, side)
+        // ...then sample futures where everyone fights back differently.
+        // The deep futures model *every* unit with TargetNearest, including
+        // this one - that's a berserker self-model, so the deep term is a
+        // worst-case CORRECTION, not the whole valuation. Blending greedy
+        // immediate value with sampled paranoia is what finally beat the
+        // greedy bot.
+        salt = salt + 1
+        let futs = simulate_par(fork(), [system::TargetNearest, system::SimResolve], DEPTH, PAR_FUTURES, salt)
+        let mut worst = 999999999
+        for fut in futs {
+            let s = score_future(fut, side)
+            if s < worst { worst = s }
+            explored = explored + 1
+        }
+        let sc = greedy * 2 + worst
+        // ...and put the universe back exactly as it was.
+        commit(checkpoint)
+        if sc > best_score {
+            best_score = sc
+            best = a
+        }
+    }
+
+    let b = get_resource(Battle) |> unwrap
+    set_resource(Battle, Battle {
+        round: b.round, winner: b.winner, log: b.log,
+        futures: b.futures + explored,
+    })
+    return best
+}
+
+// Apply the chosen action for real - through events, so provenance exists.
+pub fn act_live(me: entity, a: Act) -> nil {
+    if a.kind == "move" or a.tx != (get(me, Pos) |> unwrap).x or a.ty != (get(me, Pos) |> unwrap).y {
+        update(me, Pos) { x = a.tx, y = a.ty }
+    }
+    if a.kind == "attack" {
+        let foe = get_entity(a.target)
+        let fp = get(foe, Pos) |> unwrap
+        let s = get(me, Stats) |> unwrap
+        let d = dist(a.tx, a.ty, fp.x, fp.y)
+        emit Struck { attacker: me, defender: foe, dmg: base_damage(s.atk, s.cls, d) }
+        flush_events()
+    }
+    if a.kind == "heal" {
+        let ally = get_entity(a.target)
+        let s = get(me, Stats) |> unwrap
+        emit Healed { healer: me, ally: ally, amount: s.atk }
+        flush_events()
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Sandboxed bot pipeline. The bot script runs against a throwaway fork with
+// a capability grant of exactly { write: Intent }; its identity arrives
+// through sandbox_input() (a data-only JSON channel), NOT by splicing host
+// values into guest source. The host peeks the Intent back out, validates
+// it like any other order, and discards the fork.
+// ---------------------------------------------------------------------------
+
+let BOT_CAPS = f"""{ "write": ["Intent"], "fuel": 2000000, "seed": 7 }"""
+
+let BOT_PRELUDE = f"""
+component Pos    { x: 0, y: 0 }
+component Stats  { cls: "", hp: 0, max_hp: 0, atk: 0, rng: 1, mov: 2 }
+component Team   { side: "" }
+component Intent { kind: "wait", tx: 0, ty: 0, target: "" }
+pure fn dist(ax: int, ay: int, bx: int, by: int) -> int {
+    return abs(ax - bx) + abs(ay - by)
+}
+let me = get_entity(sandbox_input()["unit"])
+"""
+
+// Returns (Act, status): status is "ok", or a reason the unit hesitates.
+pub fn bot_decide(me: entity, bot_src: str) -> (Act, str) {
+    let n = name_of(me)
+    let p = get(me, Pos) |> unwrap
+    let wait = Act { kind: "wait", tx: p.x, ty: p.y, target: "" }
+    let src = BOT_PRELUDE + bot_src
+
+    match sandbox_run(src, fork(), BOT_CAPS, { "unit": n }) {
+        Ok(f) => {
+            match peek(f, me, Intent) {
+                Some(i) => {
+                    let chosen = find_act(me, i.kind, i.tx, i.ty, i.target)
+                    if chosen.kind == "illegal" {
+                        return (wait, f"ILLEGAL {i.kind} -> ({i.tx},{i.ty}) {i.target}")
+                    }
+                    return (chosen, "ok")
+                }
+                None => { return (wait, "wrote no Intent") }
+            }
+        }
+        Err(msg) => { return (wait, f"DENIED: {msg}") }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Presentation & bookkeeping
+// ---------------------------------------------------------------------------
+
+pub fn glyph(ent: entity) -> str {
+    let s = get(ent, Stats) |> unwrap
+    let t = get(ent, Team) |> unwrap
+    let mut g = "?"
+    if s.cls == "knight" { g = "K" }
+    if s.cls == "archer" { g = "A" }
+    if s.cls == "mage" { g = "M" }
+    if s.cls == "cleric" { g = "C" }
+    if t.side == "blue" { g = to_lower(g) }
+    return g
+}
+
+pub fn draw() -> nil {
+    let mut rows = []
+    for y in range(0, H) {
+        let mut row = ""
+        for x in range(0, W) {
+            let mut cell = "."
+            for ent in entities(Pos) {
+                let s = get(ent, Stats) |> unwrap
+                if s.hp <= 0 { continue }
+                let p = get(ent, Pos) |> unwrap
+                if p.x == x and p.y == y { cell = glyph(ent) }
+            }
+            row = row + cell + " "
+        }
+        rows << row
+    }
+    print(join(rows, "\n"))
+    let mut status = []
+    for ent in entities(Team) {
+        let s = get(ent, Stats) |> unwrap
+        if s.hp <= 0 { continue }
+        status << f"{name_of(ent)} {s.hp}/{s.max_hp}"
+    }
+    print(join(status, " | "))
+}
+
+pub fn side_hp(side: str) -> int {
+    let mut total = 0
+    for ent in entities(Team) {
+        let t = get(ent, Team) |> unwrap
+        if t.side != side { continue }
+        let s = get(ent, Stats) |> unwrap
+        if s.hp > 0 { total = total + s.hp }
+    }
+    return total
+}
+
+pub fn living(side: str) -> list {
+    let mut out = []
+    for ent in entities(Team) {
+        let t = get(ent, Team) |> unwrap
+        if t.side != side { continue }
+        let s = get(ent, Stats) |> unwrap
+        if s.hp > 0 { out << ent }
+    }
+    return out
+}
+
+pub fn roster(side: str, x: int, dir: int) -> nil {
+    let _k = spawn(f"{side}-knight", Team { side: side },
+        Pos { x: x, y: 3 }, Intent {},
+        Stats { cls: "knight", hp: 34, max_hp: 34, atk: 6, rng: 1, mov: 3 })
+    let _a = spawn(f"{side}-archer", Team { side: side },
+        Pos { x: x - dir, y: 1 }, Intent {},
+        Stats { cls: "archer", hp: 20, max_hp: 20, atk: 5, rng: 4, mov: 3 })
+    let _m = spawn(f"{side}-mage", Team { side: side },
+        Pos { x: x - dir, y: 5 }, Intent {},
+        Stats { cls: "mage", hp: 16, max_hp: 16, atk: 8, rng: 3, mov: 2 })
+    let _c = spawn(f"{side}-cleric", Team { side: side },
+        Pos { x: x - dir - dir, y: 3 }, Intent {},
+        Stats { cls: "cleric", hp: 18, max_hp: 18, atk: 4, rng: 2, mov: 2 })
+}
+
+pub fn to_num(s: str) -> int {
+    // -1 = not a number; board coordinates are non-negative so it's free.
+    if len(s) == 0 { return -1 }
+    let digits = { "0": 0, "1": 1, "2": 2, "3": 3, "4": 4, "5": 5, "6": 6, "7": 7, "8": 8, "9": 9 }
+    let mut n = 0
+    for c in chars(s) {
+        if !contains(keys(digits), c) { return -1 }
+        n = n * 10 + digits[c]
+    }
+    return n
+}

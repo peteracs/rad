@@ -1,0 +1,53 @@
+// World content: who is in the match and which roster character represents
+// them. This is the only place a concrete character name belongs: the shared
+// components, movement system, and protocol stay character-agnostic so new
+// roster entries never touch engine code. Keep this file free of `use`
+// statements for browser-client concatenation.
+
+// Every avatar is named by gameplay role, not by character. Renaming the
+// roster character must never change this identity, and there is no global
+// "controlled avatar": ownership is always resolved per `player_id`.
+pub fn player_avatar_name(player_id: int) -> str {
+    return f"player_{player_id}"
+}
+
+// The roster character a freshly seeded player avatar is dressed as. The render
+// client maps this id to a visual model. This is the only place a concrete
+// character name belongs.
+pub fn default_avatar_model() -> str {
+    return "clockwork_mage"
+}
+
+pub fn player_avatar(player_id: int) -> entity {
+    match lookup(PlayerControlled, "player_id", player_id) {
+        Some(avatar) => {
+            return avatar
+        }
+        None => {
+            return seed_moba_player(player_id)
+        }
+    }
+}
+
+pub fn despawn_player_avatar_if_present(player_id: int) -> nil {
+    match lookup(PlayerControlled, "player_id", player_id) {
+        Some(avatar) => {
+            despawn(avatar)
+        }
+        None => {}
+    }
+}
+
+pub fn seed_moba_player(player_id: int) -> entity {
+    return spawn(player_avatar_name(player_id),
+        Position { x: res(MobaScene).avatar_spawn_x, y: res(MobaScene).avatar_spawn_y },
+        MoveTarget {},
+        MoveSpeed {},
+        RenderAvatar { model: default_avatar_model() },
+        PlayerControlled { player_id: player_id }
+    )
+}
+
+pub fn seed_moba_world() -> entity {
+    return seed_moba_player(1)
+}

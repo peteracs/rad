@@ -1,0 +1,300 @@
+// lib_gui — RADGUI's widget schema and builder API.
+//
+// The ECS world IS the scene graph: a widget is an entity carrying a
+// `Widget` component (kind + parent + order); the generic browser renderer
+// (projects/playground/radgui.js) draws whatever widget entities exist and pushes
+// DOM interactions back as the events declared here. No app-specific code
+// ever lives in the renderer.
+//
+// Conventions:
+//   - parenting is by entity NAME (stable across the wire); "" = root
+//   - every builder returns the spawned entity; names are "ui-<n>" unless
+//     you pass an explicit name via the *_named variants
+//   - all visual knobs live in `Style`; unset fields ("" / 0) mean
+//     "renderer default"
+//
+// Used with `use "lib_gui.rad"` natively; in the browser the page is the
+// module loader (radgui.js fetches and prepends this file).
+
+pub component Widget { kind: str = "", parent: str = "", order: int = 0 }
+
+pub component Text { value: str = "" }
+
+// fg/bg: CSS colors. size: px font. pad/gap/width/height: px (0 = auto).
+// grow: flexbox grow. mono: monospace. scroll: clip + scroll overflow.
+// border: CSS border shorthand. title: hover tooltip.
+// hover_bg/hover_fg: visual-only hover colors, applied renderer-side with
+// ZERO session round trips. anim: transition duration in ms — position,
+// color, and size changes glide instead of teleporting.
+pub component Style {
+    fg: str = "", bg: str = "", size: int = 0, pad: int = 0, gap: int = 0,
+    width: int = 0, height: int = 0, grow: int = 0, mono: int = 0,
+    scroll: int = 0, border: str = "", align: str = "", title: str = "",
+    hover_bg: str = "", hover_fg: str = "", anim: int = 0,
+}
+
+// input / slider / checkbox / select / textarea state. For sliders
+// min/max/step are ints. Checkboxes use value "0"/"1".
+pub component Input { value: str = "", placeholder: str = "", min: int = 0, max: int = 0, step: int = 1 }
+
+// select options, |-separated ("red|green|blue")
+pub component Options { items: str = "" }
+
+// image source (url or data: uri); alt text comes from Text
+pub component Src { url: str = "" }
+
+// absolute placement inside the nearest `panel` ancestor (px). z stacks.
+pub component Bounds { x: int = 0, y: int = 0, w: int = 0, h: int = 0, z: int = 0 }
+
+// opt-in event markers: only marked widgets emit Hover/Drag/Focus (no spam)
+pub component Hoverable { z: int = 0 }
+
+pub component Draggable { z: int = 0 }
+
+pub component Focusable { z: int = 0 }
+
+// scroll container marker: the renderer reports scrollTop via Scroll
+// events (rAF-throttled). Pair with Style.scroll=1 + a fixed height.
+pub component Scrollable { z: int = 0 }
+
+// programmatic focus: bump seq and the renderer focuses the element once
+pub component FocusNow { seq: int = 0 }
+
+pub component Hidden { active: int = 1 }
+
+// host -> app events (emitted by the renderer)
+pub event Click { target: entity }
+
+pub event Changed { target: entity, value: str }
+
+pub event Submit { target: entity, value: str }
+
+pub event Key { code: str }
+
+pub event Tick { dt: float }
+
+// entered: 1 on enter, 0 on leave (Hoverable widgets only)
+pub event Hover { target: entity, entered: int }
+
+// phase: "start" | "move" | "end"; x/y are px inside the nearest panel
+pub event Drag { target: entity, x: int, y: int, phase: str }
+
+// focused: 1 on focus, 0 on blur (Focusable widgets only)
+pub event Focus { target: entity, focused: int }
+
+// top: px scrolled (Scrollable widgets only, rAF-throttled)
+pub event Scroll { target: entity, top: int }
+
+// renderer config the app can flip at runtime: tick=1 subscribes the app
+// to requestAnimationFrame Tick events; title sets the page header;
+// undo=1 checkpoints the world before discrete interactions (Ctrl+Z
+// rewinds — zero app code); preview=1 simulates button clicks in a fork
+// on hover and ghosts the consequences; collab=1 syncs the session across
+// browser tabs (host election + fork_delta streaming); persist=1 saves
+// the whole world to localStorage and restores it on reload.
+pub resource UiConfig {
+    tick: int = 0, title: str = "", undo: int = 0, preview: int = 0,
+    collab: int = 0, persist: int = 0,
+}
+
+pub fn ui_enable_undo() -> nil {
+    let c = get_resource(UiConfig) |> unwrap
+    set_resource(UiConfig, UiConfig { undo: 1, ..c })
+}
+
+pub fn ui_enable_preview() -> nil {
+    let c = get_resource(UiConfig) |> unwrap
+    set_resource(UiConfig, UiConfig { preview: 1, ..c })
+}
+
+pub fn ui_enable_collab() -> nil {
+    let c = get_resource(UiConfig) |> unwrap
+    set_resource(UiConfig, UiConfig { collab: 1, ..c })
+}
+
+pub fn ui_enable_persist() -> nil {
+    let c = get_resource(UiConfig) |> unwrap
+    set_resource(UiConfig, UiConfig { persist: 1, ..c })
+}
+
+// Default plumbing: typing always lands in the Input component, so the
+// world is never stale about its own widgets (apps then clear/set values
+// by writing Input.value, and the renderer applies world CHANGES only).
+on Changed(e) {
+    if has(e.target, Input) {
+        update(e.target, Input) { value = e.value }
+    }
+}
+
+resource UiState { next: int = 0, rooted: int = 0 }
+
+// one monotonic counter serves both naming and sibling order — O(1),
+// no widget scans (the old per-spawn scan was O(widgets²) at build time).
+// pub: apps that spawn custom-named widgets need unique orders too.
+pub fn fresh_id() -> int {
+    let s = get_resource(UiState) |> unwrap
+    set_resource(UiState, UiState { next: s.next + 1, rooted: s.rooted })
+    return s.next
+}
+
+// programmatic focus: the renderer focuses the element when seq changes
+pub fn ui_focus(w: entity) -> nil {
+    set(w, FocusNow { seq: fresh_id() })
+}
+
+// The single top-level container. Always call this first; every other
+// builder takes a real parent entity (the checker rejects nil entities,
+// and rightly so).
+pub fn ui_root() -> entity {
+    let s = get_resource(UiState) |> unwrap
+    if s.rooted == 1 {
+        return require_entity("ui-root")
+    }
+    set_resource(UiState, UiState { next: s.next, rooted: 1 })
+    let e = entity "ui-root" {
+        Widget { kind: "col", parent: "", order: 0 },
+        Style {},
+    }
+    return e
+}
+
+pub fn ui_node(kind: str, parent: entity) -> entity {
+    let pname = name_of(parent)
+    let n = fresh_id()
+    let e = entity f"ui-{n}" {
+        Widget { kind: kind, parent: pname, order: n },
+        Style {},
+    }
+    return e
+}
+
+pub fn ui_col(parent: entity) -> entity {
+    return ui_node("col", parent)
+}
+
+pub fn ui_row(parent: entity) -> entity {
+    return ui_node("row", parent)
+}
+
+pub fn ui_label(parent: entity, text: str) -> entity {
+    let e = ui_node("label", parent)
+    set(e, Text { value: text })
+    return e
+}
+
+// `pre`: monospace block that preserves whitespace — for code, traces,
+// boards, why() chains.
+pub fn ui_pre(parent: entity, text: str) -> entity {
+    let e = ui_node("pre", parent)
+    set(e, Text { value: text })
+    return e
+}
+
+pub fn ui_button(parent: entity, text: str) -> entity {
+    let e = ui_node("button", parent)
+    set(e, Text { value: text })
+    return e
+}
+
+pub fn ui_input(parent: entity, placeholder: str) -> entity {
+    let e = ui_node("input", parent)
+    set(e, Input { value: "", placeholder: placeholder, min: 0, max: 0, step: 1 })
+    return e
+}
+
+pub fn ui_slider(parent: entity, min_value: int, max_value: int, value: int) -> entity {
+    let e = ui_node("slider", parent)
+    set(e, Input { value: f"{value}", placeholder: "", min: min_value, max: max_value, step: 1 })
+    return e
+}
+
+// a relative-positioned canvas for absolutely-placed (Bounds) children
+pub fn ui_panel(parent: entity, w: int, h: int) -> entity {
+    let e = ui_node("panel", parent)
+    update(e, Style) { width = w, height = h }
+    return e
+}
+
+// checked: Input.value "1"/"0"; Changed fires with the new value
+pub fn ui_checkbox(parent: entity, checked: bool) -> entity {
+    let e = ui_node("checkbox", parent)
+    let mut v = "0"
+    if checked { v = "1" }
+    set(e, Input { value: v, placeholder: "", min: 0, max: 0, step: 1 })
+    return e
+}
+
+// options are |-separated; Changed fires with the selected option text
+pub fn ui_select(parent: entity, options: str, value: str) -> entity {
+    let e = ui_node("select", parent)
+    set(e, Options { items: options })
+    set(e, Input { value: value, placeholder: "", min: 0, max: 0, step: 1 })
+    return e
+}
+
+pub fn ui_image(parent: entity, url: str, alt: str) -> entity {
+    let e = ui_node("image", parent)
+    set(e, Src { url: url })
+    set(e, Text { value: alt })
+    return e
+}
+
+pub fn ui_textarea(parent: entity, placeholder: str) -> entity {
+    let e = ui_node("textarea", parent)
+    set(e, Input { value: "", placeholder: placeholder, min: 0, max: 0, step: 1 })
+    return e
+}
+
+// absolute placement helper (parent chain should contain a panel)
+pub fn ui_place(e: entity, x: int, y: int, w: int, h: int) -> nil {
+    set(e, Bounds { x: x, y: y, w: w, h: h, z: 0 })
+}
+
+// ---- mutation helpers -------------------------------------------------
+
+pub fn ui_set_text(e: entity, text: str) -> nil {
+    set(e, Text { value: text })
+}
+
+pub fn ui_show(e: entity, visible: bool) -> nil {
+    if visible {
+        remove(e, Hidden)
+    } else {
+        set(e, Hidden { active: 1 })
+    }
+}
+
+// despawn all of a widget's children (the widget itself stays)
+pub fn ui_clear(parent: entity) -> nil {
+    let nm = name_of(parent)
+    let mut doomed = []
+    for c in entities(Widget) {
+        let w = get(c, Widget) |> unwrap
+        if w.parent == nm { doomed << c }
+    }
+    for c in doomed { ui_remove(c) }
+}
+
+// despawn a widget and everything under it
+pub fn ui_remove(e: entity) -> nil {
+    let nm = name_of(e)
+    let mut doomed = []
+    for c in entities(Widget) {
+        let w = get(c, Widget) |> unwrap
+        if w.parent == nm { doomed << c }
+    }
+    for c in doomed { ui_remove(c) }
+    despawn(e)
+}
+
+pub fn ui_title(t: str) -> nil {
+    let c = get_resource(UiConfig) |> unwrap
+    set_resource(UiConfig, UiConfig { title: t, ..c })
+}
+
+pub fn ui_enable_tick(enabled: bool) -> nil {
+    let c = get_resource(UiConfig) |> unwrap
+    let mut t = 0
+    if enabled { t = 1 }
+    set_resource(UiConfig, UiConfig { tick: t, ..c })
+}

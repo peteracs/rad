@@ -1,0 +1,8 @@
+---
+source: tests\conformance\c_backend_fork_cow_isolation.rad
+exit_code: 0
+---
+11
+7
+10
+7

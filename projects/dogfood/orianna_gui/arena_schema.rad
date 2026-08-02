@@ -1,0 +1,248 @@
+use "../moba/map4_data.rad"
+
+pub resource MatchClock {
+    tick: int = 0,
+    dt: float = 0.1
+}
+
+pub resource Ids {
+    next_log: int = 0,
+    next_zone: int = 0
+}
+
+pub resource HostContract {
+    runtime_min: str = "0.4.0",
+    game_stack_version: str = "moba-stack/0.2",
+    entry: str = "projects/dogfood/orianna_gui/orianna_arena.rad",
+    event_schema: str = "Tick(dt:float)|MoveCommand(x:float,y:float)|CastCommand(slot:str,x:float,y:float,target_id:str)|ResetGame(reason:str)|BasicAttackCommand(target_id:str)",
+    host_features: str = "modules,event-bridge,runtime-contract,undo-redo,inspect-why,vec2,spatial,cooldowns,ability-dsl,map4-world",
+    ability_schema: str = "q,w,e,r,aa"
+}
+
+pub resource GameHostConfig {
+    world_w: float = 282000.0,
+    world_h: float = 155000.0,
+    world_x0: float = -136210.0,
+    world_y0: float = -72080.0,
+    world_x1: float = 145790.0,
+    world_y1: float = 82920.0,
+    tick_dt: float = 0.1,
+    schema_version: str = "orianna-arena/3",
+    map_name: str = "browser-moba/map4",
+    map_cols: int = 282,
+    map_rows: int = 155,
+    map_x0: int = -136210,
+    map_z0: int = -72080,
+    map_cell: int = 1000,
+    camera_pitch_deg: float = 57.0,
+    camera_yaw_deg: float = 0.0,
+    camera_zoom: float = 1.05
+}
+
+pub component Unit {
+    indexed id: str = "",
+    champion: str = "",
+    team: str = "blue",
+    kind: str = "hero",
+    level: int = 1,
+    alive: bool = true,
+    targetable: bool = true
+}
+
+pub component Position {
+    x: float = 0.0,
+    y: float = 0.0
+}
+
+pub fn map4_world_w() -> float {
+    return float(map_cols() * map_cell())
+}
+
+pub fn map4_world_h() -> float {
+    return float(map_rows() * map_cell())
+}
+
+pub fn map4_min_x() -> float {
+    return float(map_x0())
+}
+
+pub fn map4_min_y() -> float {
+    return float(map_z0())
+}
+
+pub fn map4_max_x() -> float {
+    return float(map_x0() + (map_cols() * map_cell()))
+}
+
+pub fn map4_max_y() -> float {
+    return float(map_z0() + (map_rows() * map_cell()))
+}
+
+pub fn map4_spawn_west() -> Position {
+    return Position { x: float(map_spawn_west_x()), y: float(map_spawn_west_z()) }
+}
+
+pub fn map4_spawn_east() -> Position {
+    return Position { x: float(map_spawn_east_x()), y: float(map_spawn_east_z()) }
+}
+
+pub fn configure_map4_host() -> nil {
+    set_resource(GameHostConfig, GameHostConfig {
+        world_w: map4_world_w(),
+        world_h: map4_world_h(),
+        world_x0: map4_min_x(),
+        world_y0: map4_min_y(),
+        world_x1: map4_max_x(),
+        world_y1: map4_max_y(),
+        tick_dt: 0.1,
+        schema_version: "orianna-arena/3",
+        map_name: "browser-moba/map4",
+        map_cols: map_cols(),
+        map_rows: map_rows(),
+        map_x0: map_x0(),
+        map_z0: map_z0(),
+        map_cell: map_cell(),
+        camera_pitch_deg: 57.0,
+        camera_yaw_deg: 0.0,
+        camera_zoom: 1.05
+    })
+}
+
+pub component MoveTarget {
+    x: float = 0.0,
+    y: float = 0.0
+}
+
+pub component Health {
+    hp: float = 1000.0,
+    max: float = 1000.0,
+    shield: float = 0.0
+}
+
+pub component Stats {
+    ap: float = 0.0,
+    armor: float = 0.0,
+    mr: float = 0.0,
+    move_speed: float = 300.0
+}
+
+pub component SpellBook {
+    mana: float = 100.0,
+    sealed: bool = false
+}
+
+pub component Cooldowns {
+    q: int = 0,
+    w: int = 0,
+    e: int = 0,
+    r: int = 0
+}
+
+pub component OriannaState {
+    ball_id: str = "",
+    anchor_id: str = "",
+    ball_deployed: bool = false,
+    ball_attached: bool = true,
+    in_flight: bool = false,
+    ghost_alive: bool = false,
+    ultimate_x: float = 0.0,
+    ultimate_y: float = 0.0
+}
+
+pub component Ball {
+    owner_id: str = ""
+}
+
+pub component BallTravel {
+    indexed id: str = "",
+    caster_id: str = "",
+    kind: str = "",
+    target_id: str = "",
+    target_x: float = 0.0,
+    target_y: float = 0.0,
+    speed: float = 1200.0,
+    hit_radius: float = 100.0,
+    finish_radius: float = 25.0,
+    damage: float = 0.0,
+    q_percent: float = 1.0,
+    shield_on_arrival: float = 0.0
+}
+
+pub component BallHitMarker {
+    indexed key: str = "",
+    travel_id: str = "",
+    target_id: str = ""
+}
+
+pub component Buff {
+    indexed key: str = "",
+    owner_id: str = "",
+    source_id: str = "",
+    name: str = "",
+    kind: str = "",
+    ticks_left: int = 0,
+    stacks: int = 1,
+    max_stacks: int = 1,
+    shield_left: float = 0.0,
+    move_mod: float = 0.0
+}
+
+pub component Zone {
+    indexed key: str = "",
+    caster_id: str = "",
+    name: str = "",
+    x: float = 0.0,
+    y: float = 0.0,
+    radius: float = 0.0,
+    ticks_left: int = 0,
+    tick_every: int = 3,
+    tick_counter: int = 0,
+    level: int = 1
+}
+
+pub component ForcedMove {
+    center_x: float = 0.0,
+    center_y: float = 0.0,
+    ticks_left: int = 0
+}
+
+pub component Lifetime {
+    ticks_left: int = 0
+}
+
+pub component LogLine {
+    indexed key: str = "",
+    idx: int = 0,
+    text: str = ""
+}
+
+pub event Tick {
+    dt: float
+}
+
+pub event MoveCommand {
+    x: float,
+    y: float
+}
+
+pub event CastCommand {
+    slot: str,
+    x: float,
+    y: float,
+    target_id: str
+}
+
+pub event ResetGame {
+    reason: str
+}
+
+pub event DamageRequest {
+    source_id: str,
+    target_id: str,
+    amount: float,
+    tag: str
+}
+
+pub event BasicAttackCommand {
+    target_id: str
+}

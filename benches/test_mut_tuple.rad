@@ -1,0 +1,26 @@
+pub component Tab { count: int = 0 }
+
+fn do_something(mut tab: entity) {
+    let t = require(tab, Tab)
+    set(tab, Tab { count: t.count + 1 })
+}
+
+fn test_tuple() -> list<int> {
+    return [42, 100]
+}
+
+fn main() -> nil {
+    let tab = entity { Tab { count: 10 } }
+    
+    let t1 = require(tab, Tab)
+    print(t1.count)
+    
+    do_something(&tab)
+    
+    let t2 = require(tab, Tab)
+    print(t2.count)
+
+    let (a, b) = test_tuple()
+    print(a)
+    print(b)
+}

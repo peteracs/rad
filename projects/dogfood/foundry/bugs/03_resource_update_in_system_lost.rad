@@ -1,0 +1,58 @@
+// BUG 03: a per-entity system that accumulates into a resource silently
+// loses almost every write when it shares a `schedule [...]` call with
+// another system (i.e. when it lands in a PARALLEL batch).
+//
+// Identical systems, identical entities, identical work. The only thing
+// that changes between run 1 and run 2 is how the schedule is spelled.
+//
+//   run 1  schedule [BumpA, BumpB]     -> a=1  b=1     WRONG
+//   run 2  schedule [BumpA]            -> a=10 b=10    correct
+//          schedule [BumpB]
+//
+// guide/ecs.md ("Resources in systems") documents run 1 as the supported
+// accumulator pattern: "This system iterates all entities with HP,
+// injecting the same DamageLog resource on each iteration. The resource
+// accumulates damage across all entities."
+//
+// BumpA and BumpB touch disjoint resources, so the conflict analyser puts
+// them in one parallel batch; each worker runs against a world snapshot
+// and the merge keeps only a single increment instead of the ten the body
+// actually performed. 03b_diagnose_resource_accumulate.rad proves the body
+// really does run once per entity (a per-entity probe component reaches
+// 1000) while the resource counter stops at 1.
+//
+// Severity: HIGH - silent numeric corruption, no error, no warning. Any
+// tally, score, damage total or event counter computed this way is wrong,
+// and it only goes wrong once you schedule more than one system at a time.
+
+component Tag { probe: 0 }
+
+resource A { n: 0 }
+resource B { n: 0 }
+
+system BumpA(_t: Tag, a: mut A) {
+    a.n = a.n + 1
+}
+
+system BumpB(_t: Tag, b: mut B) {
+    b.n = b.n + 1
+}
+
+for _i in range(0, 10) {
+    spawn(Tag { probe: 0 })
+}
+
+print(f"entities: {query_count(Tag)}")
+print("")
+
+// ---- run 1: both systems in ONE schedule call (parallel batch) ----
+schedule [BumpA, BumpB]
+print(f"run 1  schedule [BumpA, BumpB]   a={res(A).n} b={res(B).n}   (expected a=10 b=10)")
+
+set_resource(A, A { n: 0 })
+set_resource(B, B { n: 0 })
+
+// ---- run 2: one system per schedule call (forced serial) ----
+schedule [BumpA]
+schedule [BumpB]
+print(f"run 2  schedule [BumpA]/[BumpB]  a={res(A).n} b={res(B).n}   (expected a=10 b=10)")

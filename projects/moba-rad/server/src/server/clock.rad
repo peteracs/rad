@@ -1,0 +1,86 @@
+use "state.rad"
+use "input_queue.rad"
+use "../sim/components.rad"
+use "../world/scene.rad"
+use "../world/avatars.rad"
+use "../sim/movement.rad"
+use "../sim/lag_compensation.rad"
+use "../sim/projectiles.rad"
+
+pub fn server_tick_us() -> int {
+    let cfg = res(ServerConfig)
+    let us = 1000000 / cfg.tick_hz
+    if us < 1 { return 1 }
+    return us
+}
+
+pub fn server_tick_dt() -> float {
+    let cfg = res(ServerConfig)
+    return 1.0 / float(cfg.tick_hz)
+}
+
+pub fn authority_udp_timeout_ms(now_ms: int) -> int {
+    let cfg = res(ServerConfig)
+    let clock_state = res(ServerClock)
+    if clock_state.last_ms == 0 { return 0 }
+
+    let elapsed_ms = now_ms - clock_state.last_ms
+    if elapsed_ms <= 0 {
+        return cfg.udp_idle_timeout_ms
+    }
+
+    let elapsed_us = clock_state.accumulator_us + (elapsed_ms * 1000)
+    let remaining_us = server_tick_us() - elapsed_us
+    if remaining_us <= 0 { return 0 }
+
+    let mut wait_ms = remaining_us / 1000
+    if wait_ms < 1 { wait_ms = 1 }
+    if wait_ms > cfg.udp_idle_timeout_ms { wait_ms = cfg.udp_idle_timeout_ms }
+    return wait_ms
+}
+
+pub fn pump_authority_clock(now_ms: int) -> int {
+    let cfg = res(ServerConfig)
+    let clock_state = res(ServerClock)
+
+    if clock_state.last_ms == 0 {
+        set_resource(ServerClock, ServerClock {
+            last_ms: now_ms,
+            accumulator_us: clock_state.accumulator_us,
+            tick_count: clock_state.tick_count,
+            server_seq: clock_state.server_seq
+        })
+        return 0
+    }
+
+    let mut elapsed_ms = now_ms - clock_state.last_ms
+    if elapsed_ms <= 0 { return 0 }
+
+    let step_us = server_tick_us()
+    let mut elapsed_us = elapsed_ms * 1000
+    let max_elapsed_us = step_us * cfg.max_catchup_ticks
+    if elapsed_us > max_elapsed_us { elapsed_us = max_elapsed_us }
+
+    let mut accumulator_us = clock_state.accumulator_us + elapsed_us
+    let mut ticks = 0
+    while accumulator_us >= step_us and ticks < cfg.max_catchup_ticks {
+        let next_tick = clock_state.tick_count + ticks + 1
+        apply_queued_move_for_tick(next_tick)
+        emit Tick { dt: server_tick_dt() }
+        flush_events()
+        apply_queued_cast_for_tick(next_tick)
+        record_all_history(next_tick)
+        tick_projectiles(server_tick_dt(), next_tick)
+        resolve_projectile_hits(next_tick)
+        accumulator_us = accumulator_us - step_us
+        ticks = ticks + 1
+    }
+
+    set_resource(ServerClock, ServerClock {
+        last_ms: now_ms,
+        accumulator_us: accumulator_us,
+        tick_count: clock_state.tick_count + ticks,
+        server_seq: clock_state.server_seq
+    })
+    return ticks
+}

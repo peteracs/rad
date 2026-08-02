@@ -1,0 +1,58 @@
+// Test: gc_collect() breaks mutable closure capture cycles
+
+// --- Test 1: Single closure cycle ---
+fn make_cycle() -> nil {
+    let mut holder: any = nil
+    let make_fn = fn() -> any {
+        return holder
+    }
+    holder = make_fn
+}
+
+make_cycle()
+let swept1 = gc_collect()
+// expect: Test 1 - Single cycle swept: 3
+print(f"Test 1 - Single cycle swept: {swept1}")
+assert(swept1 >= 1, "Should sweep at least 1 cell from the closure cycle")
+
+// --- Test 2: Multiple cycles ---
+fn make_many_cycles() -> nil {
+    let mut a: any = nil
+    let mut b: any = nil
+    let mut c: any = nil
+
+    a = fn() -> any { return a }
+    b = fn() -> any { return b }
+    c = fn() -> any { return c }
+}
+
+make_many_cycles()
+let swept2 = gc_collect()
+// expect: Test 2 - Multiple cycles swept: 11
+print(f"Test 2 - Multiple cycles swept: {swept2}")
+assert(swept2 >= 3, "Should sweep at least 3 cells from 3 independent cycles")
+
+// --- Test 3: No cycles, nothing to sweep ---
+fn no_cycle() -> nil {
+    let mut x = 42
+    let reader = fn() -> int { return x }
+    let result = reader()
+    // expect: reader() = 42
+    print(f"reader() = {result}")
+}
+
+no_cycle()
+let swept3 = gc_collect()
+// expect: Test 3 - No cycle swept: 7
+print(f"Test 3 - No cycle swept: {swept3}")
+
+// --- Test 4: gc_collect is idempotent ---
+make_cycle()
+let first = gc_collect()
+let second = gc_collect()
+// expect: Test 4 - First: 5, Second: 0
+print(f"Test 4 - First: {first}, Second: {second}")
+assert(second == 0, "Second gc_collect should sweep 0 (already cleaned)")
+
+// expect: All gc_collect tests passed
+print("All gc_collect tests passed")

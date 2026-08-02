@@ -1,0 +1,218 @@
+// DAMAGE CORE — P0 of the JS->RAD migration: browser-moba's damage
+// resolution pipeline as a rad spec. The game will consume this through
+// the COMPILED chain (rad spec -> Rust -> wasm); this file is the
+// debuggable source of truth and the golden generator.
+//
+// Pipeline, ported statement-for-statement from sim/systems/combat.ts:
+//   1. class-vs-class attack ratio (dr_* table; basic attacks only)
+//   2. outgoing damage amp (physical/magic only)
+//   3. era ward clamp (turret full / attack 1 / else 0; internalRaw
+//      self-destruct pierces)
+//   4. mitigation: penetration (percent THEN flat), 100/(100+resist);
+//      true damage skips
+//   5. absorption shields, oldest-first, soak post-mitigation
+//   6. hp write (clamped at 0)
+//   7. vamp: lifesteal on attacks, spell vamp on everything else,
+//      feeding on the FULL mitigated amount (absorbed included),
+//      only while the source lives
+//   8. outputs: mitigated amount per request (the damage event),
+//      death flags in request order
+//
+// OUT OF SCOPE in P0 (stays JS, requests routed to the legacy path):
+// every hook tier — onPreDealDamage / onHitUnit / onBeingHit /
+// onPreDamage (pre + post mitigation) — and assist stamps / on-death
+// consequences.
+//
+// Fixed-point: amounts/hp in milli, rates in per-mille. The JS adapter
+// converts floats once per batch at the boundary.
+
+// entity table (SoA via parallel lists), POOL entries — exported so
+// harnesses and mirrors share one source for the corpus shape
+pub let POOL = 64
+pub let SHIELD_SLOTS = 3
+
+// klass: 0 = hero, 1 = unit, 2 = building
+// via:   0 attack, 1 spell, 2 spellAoE, 3 spellPersist, 4 periodic,
+//        5 proc, 6 reactive, 7 onDeath, 8 item, 9 raw, 10 internalRaw
+
+pub component Ent {
+    hp: int = 0, hp_max: int = 0, armor_m: int = 0, mr_m: int = 0,
+    apen_pct_pm: int = 0, apen_flat_m: int = 0,
+    mpen_pct_pm: int = 0, mpen_flat_m: int = 0,
+    lifesteal_pm: int = 0, spellvamp_pm: int = 0, amp_pm: int = 1000,
+    klass: int = 0, is_ward: int = 0, is_turret: int = 0, alive: int = 1,
+    shields: list = [0, 0, 0],
+}
+
+pub resource DrTable {
+    hero_unit: int = 1000, hero_building: int = 1000,
+    unit_hero: int = 700, unit_building: int = 500,
+    building_hero: int = 1050, building_unit: int = 1105,
+}
+
+fn ent(i: int) -> entity {
+    return require_entity(f"e-{i}")
+}
+
+fn class_ratio_pm(src_klass: int, dst_klass: int) -> int {
+    let dr = res(DrTable)
+    if src_klass == 0 and dst_klass == 1 { return dr.hero_unit }
+    if src_klass == 0 and dst_klass == 2 { return dr.hero_building }
+    if src_klass == 1 and dst_klass == 0 { return dr.unit_hero }
+    if src_klass == 1 and dst_klass == 2 { return dr.unit_building }
+    if src_klass == 2 and dst_klass == 0 { return dr.building_hero }
+    if src_klass == 2 and dst_klass == 1 { return dr.building_unit }
+    return 1000
+}
+
+// mitigation: pen percent first, then flat (the original's order),
+// floor at 0, then the classic 100/(100+resist) — all milli/per-mille
+fn mitigate(amount: int, dtype: int, src: int, dst: int) -> int {
+    if dtype == 2 { return amount }
+    let s = get(ent(src), Ent) |> unwrap
+    let d = get(ent(dst), Ent) |> unwrap
+    let mut resist = 0
+    if dtype == 0 {
+        resist = d.armor_m * (1000 - s.apen_pct_pm) / 1000 - s.apen_flat_m
+    } else {
+        resist = d.mr_m * (1000 - s.mpen_pct_pm) / 1000 - s.mpen_flat_m
+    }
+    if resist < 0 { resist = 0 }
+    return amount * 100000 / (100000 + resist)
+}
+
+// one request through the core; returns the mitigated amount (the
+// damage event's payload). via/dtype codes in the header comment.
+pub fn resolve(src: int, dst: int, amount: int, dtype: int, via: int) -> int {
+    let d0 = get(ent(dst), Ent) |> unwrap
+    if d0.alive == 0 { return 0 }
+    let s0 = get(ent(src), Ent) |> unwrap
+
+    // 1. class ratio: basic attacks only
+    let mut scaled = amount
+    if via == 0 {
+        scaled = scaled * class_ratio_pm(s0.klass, d0.klass) / 1000
+    }
+    // 2. outgoing amp: physical/magic only
+    if dtype != 2 {
+        scaled = scaled * s0.amp_pm / 1000
+    }
+    // 3. ward clamp (after hooks, which are JS-side in P0): turrets
+    //    deal full, attacks deal exactly 1 hp (1000 milli), everything
+    //    else 0 — except a ward's own internalRaw self-destruct
+    if scaled >= 1000 and d0.is_ward == 1 {
+        let self_destruct = via == 10 and src == dst
+        if self_destruct == false and s0.is_turret == 0 {
+            if via == 0 { scaled = 1000 } else { scaled = 0 }
+        }
+    }
+    // 4. mitigation
+    let mitigated = mitigate(scaled, dtype, src, dst)
+    // 5. shields oldest-first soak post-mitigation damage
+    let mut to_health = mitigated
+    let mut shields = d0.shields
+    for si in range(0, SHIELD_SLOTS) {
+        if to_health > 0 and shields[si] > 0 {
+            let mut soak = shields[si]
+            if to_health < soak { soak = to_health }
+            shields = set_at(shields, si, shields[si] - soak)
+            to_health = to_health - soak
+        }
+    }
+    // 6. hp write, clamped at zero
+    let mut hp = d0.hp - to_health
+    if hp < 0 { hp = 0 }
+    let mut alive = d0.alive
+    if hp <= 0 { alive = 0 }
+    update(ent(dst), Ent) { hp = hp, alive = alive, shields = shields }
+    // 7. vamp on the FULL mitigated amount, only while the source lives
+    let s1v = get(ent(src), Ent) |> unwrap
+    let mut vamp_pm = s1v.spellvamp_pm
+    if via == 0 { vamp_pm = s1v.lifesteal_pm }
+    if vamp_pm > 0 and s1v.hp > 0 {
+        let mut shp = s1v.hp + mitigated * vamp_pm / 1000
+        if shp > s1v.hp_max { shp = s1v.hp_max }
+        update(ent(src), Ent) { hp = shp }
+    }
+    return mitigated
+}
+
+// ------------------------------------------------- golden corpus
+// Deterministic LCG (identical constants in the Rust mirror): builds a
+// random entity table, fires thousands of randomized requests, prints
+// canonical checkpoints. THE conformance fixture for every backend.
+
+pub resource Rng { s: int = 12345 }
+
+// LCG with HIGH-bit extraction: low bits of an LCG mod 2^31 cycle with
+// tiny periods (the first corpus sampled src=43/dst=8 at every
+// checkpoint because of it). Dividing by 2^16 draws from the
+// well-mixed high bits instead.
+fn rng_next(modulo: int) -> int {
+    update(Rng) { s = (res(Rng).s * 1103515245 + 12345) % 2147483648 }
+    return (res(Rng).s / 65536) % modulo
+}
+
+fn build_corpus() -> nil {
+    set_resource(DrTable, DrTable {
+        hero_unit: 1000, hero_building: 1000, unit_hero: 700,
+        unit_building: 500, building_hero: 1050, building_unit: 1105,
+    })
+    set_resource(Rng, Rng { s: 12345 })
+    for i in range(0, POOL) {
+        let hp_max = 400000 + rng_next(2400000)
+        let mut sh = 0
+        if rng_next(4) == 0 { sh = rng_next(300000) }
+        let _e = entity f"e-{i}" {
+            Ent {
+                hp: hp_max - rng_next(hp_max / 2), hp_max: hp_max,
+                armor_m: rng_next(250000), mr_m: rng_next(200000),
+                apen_pct_pm: rng_next(400), apen_flat_m: rng_next(40000),
+                mpen_pct_pm: rng_next(400), mpen_flat_m: rng_next(40000),
+                lifesteal_pm: rng_next(300), spellvamp_pm: rng_next(250),
+                amp_pm: 950 + rng_next(150),
+                klass: rng_next(3), is_ward: 0, is_turret: 0, alive: 1,
+                shields: [sh, 0, 0],
+            },
+        }
+    }
+    // a few wards and turrets for the clamp paths
+    for k in range(0, 4) {
+        let w = ent(k * 7 + 2)
+        update(w, Ent) { is_ward = 1, hp = 3000, hp_max = 3000 }
+        let t = ent(k * 9 + 5)
+        update(t, Ent) { is_turret = 1, klass = 2 }
+    }
+}
+
+fn corpus_digest() -> int {
+    let mut acc = 0
+    for i in range(0, POOL) {
+        let e = get(ent(i), Ent) |> unwrap
+        acc = (acc * 31 + e.hp) % 1000000007
+        acc = (acc * 31 + e.shields[0]) % 1000000007
+        acc = (acc * 31 + e.alive) % 1000000007
+    }
+    return acc
+}
+
+fn main() -> nil {
+    build_corpus()
+    print(f"D 0 {corpus_digest()}")
+    let mut k = 0
+    while k < 4096 {
+        let src = rng_next(POOL)
+        let dst = rng_next(POOL)
+        let amount = 10000 + rng_next(400000)
+        let dtype = rng_next(3)
+        let via = rng_next(11)
+        if src != dst {
+            let mitigated = resolve(src, dst, amount, dtype, via)
+            if k % 256 == 0 {
+                print(f"R {k} {src} {dst} {mitigated} {corpus_digest()}")
+            }
+        }
+        k = k + 1
+    }
+    print(f"D 1 {corpus_digest()}")
+}

@@ -1,0 +1,22 @@
+// The system-library module: a pub system over core components, firing
+// a pub event the APP handles — the library knows no content.
+
+use "kit_core.rad"
+
+pub component Bolt { source: entity, speed: float = 10.0, radius: float = 1.0 }
+
+pub event BoltHit { source: entity, target: entity }
+
+pub system fly_bolts(b: Bolt, p: mut Pos) {
+    let (x, y) = p.at
+    p.at = (x + b.speed / 30.0, y)
+    for (u, v, up) in query { Vitals, Pos } {
+        if u == b.source { continue }
+        if v.hp <= 0.0 { continue }
+        if dist(up.at, p.at) <= b.radius {
+            emit BoltHit { source: b.source, target: u }
+            despawn(self)
+            return
+        }
+    }
+}

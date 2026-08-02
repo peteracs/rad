@@ -1,0 +1,35 @@
+// Unary `~` — flip all 64 bits. Born from buffcore's permission masks:
+// `allowed & ~revokes` reads like the rule it implements.
+
+// basics + constant folding
+print(~0)                     // -1
+print(~-1)                    // 0
+print(~5)                     // -6
+print(~~42)                   // 42 (involution)
+
+// the revoke-mask idiom
+let CAN_MOVE = 1 << 0
+let CAN_ATTACK = 1 << 1
+let CAN_CAST = 1 << 2
+let ALL = CAN_MOVE | CAN_ATTACK | CAN_CAST
+print(ALL & ~CAN_ATTACK)      // 5 (move + cast)
+print(ALL & ~(CAN_MOVE | CAN_CAST))   // 2
+
+// precedence: unary binds tighter than every binary op
+print(~1 & 3)                 // (~1)&3 = 2
+print(~1 + 1)                 // (~1)+1 = -1
+
+// runtime (non-folded) path agrees with the folded path
+let mut x = 0
+for i in range(0, 8) {
+    x = x | (1 << i)
+}
+print(~x)                     // ~255 = -256
+print(x & ~(1 << 3))          // 247
+
+// identity: ~n == -n - 1 (two's complement)
+let mut mismatches = 0
+for n in [-1000000, -7, 0, 1, 42, 9223372036854775807] {
+    if ~n != -n - 1 { mismatches = mismatches + 1 }
+}
+print(mismatches)             // 0

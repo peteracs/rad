@@ -1,0 +1,9 @@
+// backend: both
+// expect-runtime-error: Error[E2503]: Match rest binding '..' requires --compat-v0.5-dx
+
+let x = Some { value: 7 }
+
+match x {
+    Some { value, .. } => { print(value) }
+    None => { print("none") }
+}

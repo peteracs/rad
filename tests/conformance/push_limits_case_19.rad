@@ -1,0 +1,9 @@
+// backend: both
+component Balance { amount: 0 }
+
+component Flag { active: false }
+let acct = spawn("acct", Balance { amount: 100 }, Flag { active: true })
+let b1 = get(acct, Balance) |> unwrap
+print(f"CASE19:{b1.amount}")
+despawn(acct)
+// expect: CASE19:100

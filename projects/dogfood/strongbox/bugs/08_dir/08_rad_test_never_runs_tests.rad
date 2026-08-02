@@ -1,0 +1,61 @@
+// BUG 08 (CRITICAL tooling) — `test` blocks are never executed by anything.
+// A suite written with the documented `test` declaration is permanently green.
+//
+//   rad test projects/dogfood/strongbox/bugs/08_dir     (see the dir below)
+//
+// This file asserts 1 == 2 twice. Put it alone in a directory and run
+// `rad test <that dir>`:
+//
+//     PASS  08_rad_test_never_runs_tests.rad
+//     Results: 1 passed, 0 failed, 1 total      (exit code 0)
+//
+// WHAT ACTUALLY HAPPENS
+//   `rad test <dir>` executes each file's TOP-LEVEL code and reports pass or
+//   fail on that alone. Proof that top level runs: move an identical
+//   assert_eq(1, 2) to the top level of a file and `rad test` correctly
+//   reports FAIL with "assert_eq failed: 1 != 2" and exit 1.
+//   Proof that test blocks do NOT run: the same assertion inside a `test`
+//   block passes, and a print() inside a test block never appears.
+//   A plain `rad file.rad` run does not execute them either. So `test`
+//   blocks are dead code under every invocation.
+//
+// WHY IT IS CRITICAL
+//   This is the failure mode where the tool is worse than absent. `rad test`
+//   answers "11 passed, 0 failed" for a suite that verifies nothing, so the
+//   more tests you write, the more confident and the more wrong you are.
+//   My own projects/dogfood/strongbox/tests.rad has 11 real test blocks
+//   asserting the round-trip contracts; `rad test` reported all 11 green
+//   before I checked, and every one of them is vacuous.
+//
+// SUPPORTING FACT: grepping the repo for `^test \w` matches only my file.
+//   Nothing in examples/, projects/ or tests/ uses the documented `test`
+//   declaration, which is presumably how this survived.
+//
+// DOCUMENTED, so this is a real contract and not an unsupported syntax:
+//   spec.md line 73    declaration = ... | on_handler | use_decl | test_decl | statement
+//   spec.md line 117   test_decl = "test" ( IDENT | STRING )
+//                                  [ "for" IDENT "in" expr { "," IDENT "in" expr } ] block
+//   spec.md 1681       "Testing": assert / assert_eq
+//   spec.md 1687       "Test Data Generation": gen_int/gen_float/... "deterministic
+//                      test generators", which only make sense with the
+//                      `test X for v in gen_int()` property-test form.
+//   CLI usage banner:  rad test [dir]
+//
+// EXPECTED: each `test` block runs as an isolated case, is reported by NAME,
+//   and a failing assertion fails the run with a non-zero exit code. The
+//   `for v in gen_int()` form should run the body once per generated value.
+
+test this_test_must_fail {
+    assert_eq(1, 2)
+}
+
+test this_test_must_also_fail {
+    assert(false, "deliberate failure that rad test does not notice")
+}
+
+test this_one_would_pass {
+    assert_eq(1, 1)
+}
+
+// The documented property-test form does not even PARSE — see the companion
+// repro 08b_property_form_parse.rad.

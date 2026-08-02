@@ -1,0 +1,4 @@
+---
+source: tests\conformance\modules\pub_let_lib.rad
+exit_code: 0
+---

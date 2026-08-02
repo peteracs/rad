@@ -1,0 +1,396 @@
+// RADSCOPE — a visual time-travel debugger for rad programs, built in
+// RADGUI. The flagship dogfood: the GUI framework debugging the language
+// it is written in.
+//
+// The page bridge (projects/playground/radscope.html) watches the ScopeReq resource
+// and runs operations against a second, TRACED runtime in the same worker:
+// every frame boundary of the target program is a CoW world snapshot.
+// Results come back as Scope* events. Scrub the slider, click an entity,
+// read its components at that exact frame — and ask why() about any of
+// them: the causality ledger answers as of that frame.
+
+use "lib_gui.rad"
+
+component TreeCol { z: int = 0 }
+
+component DetailCol { z: int = 0 }
+
+component WhyPre { z: int = 0 }
+
+component OutPre { z: int = 0 }
+
+component FrameLabel { z: int = 0 }
+
+component StatusLabel { z: int = 0 }
+
+component Scrubber { z: int = 0 }
+
+component EntityBtn { ename: str = "" }
+
+component WhyBtn { comp: str = "" }
+
+component TargetBtn { key: str = "", label: str = "" }
+
+component EventsPre { z: int = 0 }
+
+component SrcArea { z: int = 0 }
+
+component RunSrcBtn { z: int = 0 }
+
+component PatchInput { z: int = 0 }
+
+component PatchBtn { z: int = 0 }
+
+component DiffPre { z: int = 0 }
+
+resource Scope { frames: int = 0, frame: int = 0, selected: str = "", world: str = "" }
+
+// the page bridge watches seq and executes ops against the target runtime
+resource ScopeReq { seq: int = 0, op: str = "", frame: int = 0, ent: str = "", comp: str = "", target: str = "", src: str = "" }
+
+pub event ScopeRan { frames: int, output: str, error: str }
+
+pub event ScopeWorld { frame: int, json: str }
+
+pub event ScopeWhy { text: str }
+
+pub event ScopeEvents { json: str }
+
+// bridge-computed diff between the unpatched and patched runs at a frame
+pub event ScopeDiff { text: str }
+
+fn req(op: str, frame: int, ent: str, comp: str, target: str) -> nil {
+    let r = get_resource(ScopeReq) |> unwrap
+    set_resource(ScopeReq, ScopeReq {
+        seq: r.seq + 1, op: op, frame: frame, ent: ent,
+        comp: comp, target: target, src: "",
+    })
+}
+
+fn req_src(src: str) -> nil {
+    let r = get_resource(ScopeReq) |> unwrap
+    set_resource(ScopeReq, ScopeReq {
+        seq: r.seq + 1, op: "run_custom", frame: 0, ent: "",
+        comp: "", target: "", src: src,
+    })
+}
+
+// retroactive edit: Comp.field=value at the scrubbed frame, then the
+// whole run recomputes deterministically from the edited past.
+fn req_patch(frame: int, ent: str, comp: str, field_eq_value: str) -> nil {
+    let r = get_resource(ScopeReq) |> unwrap
+    set_resource(ScopeReq, ScopeReq {
+        seq: r.seq + 1, op: "patch", frame: frame, ent: ent,
+        comp: comp, target: "", src: field_eq_value,
+    })
+}
+
+fn set_status(t: str) -> nil {
+    for l in entities(StatusLabel) { ui_set_text(l, t) }
+}
+
+fn tree_col() -> entity {
+    let mut found = get_entity("ui-root")
+    for c in entities(TreeCol) { found = c }
+    return found
+}
+
+fn detail_col() -> entity {
+    let mut found = get_entity("ui-root")
+    for c in entities(DetailCol) { found = c }
+    return found
+}
+
+// ---- rendering the inspected frame -----------------------------------
+
+fn rebuild_tree() -> nil {
+    let s = get_resource(Scope) |> unwrap
+    let col = tree_col()
+    ui_clear(col)
+    match json_parse(s.world) {
+        Some(w) => {
+            for ent in w["entities"] {
+                let id = ent["id"]
+                let raw_name = ent["name"]
+                let mut nm = f"#{id}"
+                if raw_name != nil { nm = f"{raw_name}" }
+                let mut kinds = []
+                for c in ent["components"] {
+                    let t = c["type"]
+                    kinds << f"{t}"
+                }
+                let kind_list = join(kinds, ", ")
+                let b = ui_button(col, f"{nm}  ({kind_list})")
+                set(b, EntityBtn { ename: nm })
+                if nm == s.selected {
+                    update(b, Style) { border = "1px solid #b58cff" }
+                }
+            }
+        }
+        None => {
+            let _e = ui_label(col, "world parse failed")
+        }
+    }
+}
+
+fn rebuild_detail() -> nil {
+    let s = get_resource(Scope) |> unwrap
+    let col = detail_col()
+    ui_clear(col)
+    if s.selected == "" {
+        let _hint = ui_label(col, "select an entity to inspect it at this frame")
+        return
+    }
+    let head = ui_label(col, f"{s.selected} @ frame {s.frame}")
+    update(head, Style) { fg = "#b58cff", size = 15 }
+    match json_parse(s.world) {
+        Some(w) => {
+            for ent in w["entities"] {
+                let id = ent["id"]
+                let raw_name = ent["name"]
+                let mut nm = f"#{id}"
+                if raw_name != nil { nm = f"{raw_name}" }
+                if nm == s.selected {
+                    for c in ent["components"] {
+                        let row = ui_row(col)
+                        update(row, Style) { gap = 8, align = "center" }
+                        let ctype = c["type"]
+                        let why = ui_button(row, "why?")
+                        set(why, WhyBtn { comp: f"{ctype}" })
+                        let mut fields = []
+                        for kv in entries(c["fields"]) {
+                            let k = kv[0]
+                            let v = kv[1]
+                            fields << f"{k}: {v}"
+                        }
+                        let body = join(fields, ", ")
+                        let _p = ui_pre(row, f"{ctype} {body}")
+                    }
+                }
+            }
+        }
+        None => {}
+    }
+}
+
+// ---- event handlers ----------------------------------------------------
+
+on Click(e) {
+    if has(e.target, TargetBtn) {
+        let t = get(e.target, TargetBtn) |> unwrap
+        set_status(f"running {t.label} traced…")
+        let s = get_resource(Scope) |> unwrap
+        set_resource(Scope, Scope { frames: 0, frame: 0, selected: "", world: s.world })
+        req("run", 0, "", "", t.key)
+    }
+    if has(e.target, EntityBtn) {
+        let b = get(e.target, EntityBtn) |> unwrap
+        let s = get_resource(Scope) |> unwrap
+        set_resource(Scope, Scope { frames: s.frames, frame: s.frame, selected: b.ename, world: s.world })
+        for p in entities(WhyPre) { ui_set_text(p, "") }
+        rebuild_tree()
+        rebuild_detail()
+    }
+    if has(e.target, WhyBtn) {
+        let b = get(e.target, WhyBtn) |> unwrap
+        let s = get_resource(Scope) |> unwrap
+        for p in entities(WhyPre) { ui_set_text(p, "consulting the ledger…") }
+        req("why", s.frame, s.selected, b.comp, "")
+    }
+    if has(e.target, RunSrcBtn) {
+        for t in entities(SrcArea) {
+            let src = (get(t, Input) |> unwrap).value
+            if trim(src) != "" {
+                set_status("running pasted source traced…")
+                let s = get_resource(Scope) |> unwrap
+                set_resource(Scope, Scope { frames: 0, frame: 0, selected: "", world: s.world })
+                req_src(src)
+            }
+        }
+    }
+    if has(e.target, PatchBtn) {
+        let s = get_resource(Scope) |> unwrap
+        if s.selected != "" {
+            for pi in entities(PatchInput) {
+                let spec = (get(pi, Input) |> unwrap).value
+                // spec: "Comp.field=value"
+                let dot = split(spec, ".")
+                if len(dot) == 2 {
+                    let rest = split(dot[1], "=")
+                    if len(rest) == 2 {
+                        set_status(f"rewriting frame {s.frame} and replaying the future…")
+                        req_patch(s.frame, s.selected, trim(dot[0]), f"{trim(rest[0])}={trim(rest[1])}")
+                    }
+                }
+            }
+        }
+    }
+}
+
+on ScopeDiff(e) {
+    for p in entities(DiffPre) {
+        let mut t = e.text
+        if t == "" { t = "(identical to the unpatched run at this frame)" }
+        ui_set_text(p, t)
+    }
+}
+
+on ScopeEvents(e) {
+    match json_parse(e.json) {
+        Some(evs) => {
+            let mut lines = []
+            for ev in evs {
+                let t = ev["tick"]
+                let nm = ev["event"]
+                let pl = ev["payload"]
+                lines << f"t{t}: {nm} {pl}"
+            }
+            let text = join(lines, "\n")
+            for p in entities(EventsPre) { ui_set_text(p, text) }
+        }
+        None => {}
+    }
+}
+
+on Changed(e) {
+    if has(e.target, Scrubber) {
+        match try_int(e.value) {
+            Some(f) => {
+                let s = get_resource(Scope) |> unwrap
+                if f != s.frame {
+                    set_resource(Scope, Scope { frames: s.frames, frame: f, selected: s.selected, world: s.world })
+                    for l in entities(FrameLabel) { ui_set_text(l, f"frame {f} / {s.frames - 1}") }
+                    req("world", f, "", "", "")
+                }
+            }
+            None => {}
+        }
+    }
+}
+
+on ScopeRan(e) {
+    let s = get_resource(Scope) |> unwrap
+    set_resource(Scope, Scope { frames: e.frames, frame: 0, selected: "", world: s.world })
+    let mut status = f"traced: {e.frames} frames"
+    if e.error != "" { status = f"traced {e.frames} frames; target ended with: {e.error}" }
+    set_status(status)
+    for p in entities(OutPre) { ui_set_text(p, e.output) }
+    for l in entities(FrameLabel) { ui_set_text(l, f"frame 0 / {e.frames - 1}") }
+    for sl in entities(Scrubber) {
+        update(sl, Input) { min = 0, max = e.frames - 1, value = "0" }
+    }
+    req("world", 0, "", "", "")
+}
+
+on ScopeWorld(e) {
+    let s = get_resource(Scope) |> unwrap
+    set_resource(Scope, Scope { frames: s.frames, frame: e.frame, selected: s.selected, world: e.json })
+    rebuild_tree()
+    rebuild_detail()
+}
+
+on ScopeWhy(e) {
+    for p in entities(WhyPre) { ui_set_text(p, e.text) }
+}
+
+// ---- layout --------------------------------------------------------------
+
+fn main() -> nil {
+    ui_title("RADSCOPE — time-travel debugger")
+
+    let root = ui_root()
+    update(root, Style) { pad = 8, gap = 10 }
+
+    let bar = ui_row(root)
+    update(bar, Style) { gap = 8, align = "center" }
+    let lbl = ui_label(bar, "target:")
+    update(lbl, Style) { fg = "#8a87a0" }
+    let t1 = ui_button(bar, "whodunit (gold mystery)")
+    set(t1, TargetBtn { key: "whodunit", label: "whodunit" })
+    let t2 = ui_button(bar, "orbit (36 frames of sky)")
+    set(t2, TargetBtn { key: "orbit", label: "orbit" })
+    let t3 = ui_button(bar, "radscope (debug thyself)")
+    set(t3, TargetBtn { key: "self", label: "radscope itself" })
+    let status = ui_label(bar, "pick a target to trace")
+    set(status, StatusLabel { z: 0 })
+    update(status, Style) { fg = "#b58cff", size = 12 }
+
+    let src_row = ui_row(root)
+    update(src_row, Style) { gap = 8 }
+    let src = ui_textarea(src_row, "…or paste any rad program here and trace it")
+    set(src, SrcArea { z: 0 })
+    update(src, Style) { grow = 1, height = 64, mono = 1 }
+    let run_src = ui_button(src_row, "trace pasted")
+    set(run_src, RunSrcBtn { z: 0 })
+
+    let scrub = ui_row(root)
+    update(scrub, Style) { gap = 10, align = "center" }
+    let slider = ui_slider(scrub, 0, 0, 0)
+    set(slider, Scrubber { z: 0 })
+    update(slider, Style) { grow = 1 }
+    let fl = ui_label(scrub, "frame - / -")
+    set(fl, FrameLabel { z: 0 })
+    update(fl, Style) { fg = "#8a87a0", size = 12 }
+
+    let main_row = ui_row(root)
+    update(main_row, Style) { gap = 10 }
+
+    let tree_wrap = ui_col(main_row)
+    update(tree_wrap, Style) { gap = 6, width = 320 }
+    let th = ui_label(tree_wrap, "entities")
+    update(th, Style) { fg = "#8a87a0", size = 11 }
+    let tree = ui_col(tree_wrap)
+    set(tree, TreeCol { z: 0 })
+    update(tree, Style) { gap = 4, scroll = 1, height = 320 }
+
+    let det_wrap = ui_col(main_row)
+    update(det_wrap, Style) { gap = 6, grow = 1 }
+    let dh = ui_label(det_wrap, "components at frame")
+    update(dh, Style) { fg = "#8a87a0", size = 11 }
+    let det = ui_col(det_wrap)
+    set(det, DetailCol { z: 0 })
+    update(det, Style) { gap = 6 }
+    let _hint = ui_label(det, "select an entity to inspect it at this frame")
+
+    let patch_row = ui_row(root)
+    update(patch_row, Style) { gap = 8, align = "center" }
+    let pl = ui_label(patch_row, "rewrite history:")
+    update(pl, Style) { fg = "#8a87a0", size = 12 }
+    let pinput = ui_input(patch_row, "Comp.field=value — applied at the scrubbed frame to the selected entity")
+    set(pinput, PatchInput { z: 0 })
+    update(pinput, Style) { grow = 1, mono = 1 }
+    let pbtn = ui_button(patch_row, "patch & replay the future")
+    set(pbtn, PatchBtn { z: 0 })
+    update(pbtn, Style) { hover_bg = "#231542", hover_fg = "#b58cff" }
+
+    let dl = ui_label(root, "this timeline vs the unpatched one — at the scrubbed frame")
+    update(dl, Style) { fg = "#8a87a0", size = 12 }
+    let dpre = ui_pre(root, "(patch something first)")
+    set(dpre, DiffPre { z: 0 })
+    update(dpre, Style) { mono = 1, size = 12, height = 110, scroll = 1 }
+
+    let why_head = ui_label(root, "why? — the causality ledger as of the scrubbed frame")
+    update(why_head, Style) { fg = "#8a87a0", size = 11 }
+    let why = ui_pre(root, "")
+    set(why, WhyPre { z: 0 })
+    update(why, Style) { height = 120, scroll = 1 }
+
+    let bottom = ui_row(root)
+    update(bottom, Style) { gap = 10 }
+
+    let out_wrap = ui_col(bottom)
+    update(out_wrap, Style) { gap = 6, grow = 1 }
+    let out_head = ui_label(out_wrap, "target stdout")
+    update(out_head, Style) { fg = "#8a87a0", size = 11 }
+    let outp = ui_pre(out_wrap, "")
+    set(outp, OutPre { z: 0 })
+    update(outp, Style) { height = 110, scroll = 1 }
+
+    let ev_wrap = ui_col(bottom)
+    update(ev_wrap, Style) { gap = 6, grow = 1 }
+    let ev_head = ui_label(ev_wrap, "event log (every emit, with payloads)")
+    update(ev_head, Style) { fg = "#8a87a0", size = 11 }
+    let evp = ui_pre(ev_wrap, "")
+    set(evp, EventsPre { z: 0 })
+    update(evp, Style) { height = 110, scroll = 1 }
+}

@@ -1,0 +1,44 @@
+// Element-wise tuple arithmetic — the vector dialect from missilework:
+// `pos + dir * speed * dt` instead of dx/dz pairs threaded by hand.
+
+fn main() -> nil {
+    // element-wise + and -
+    print((1.0, 2.0) + (3.0, 4.0))        // (4.0, 6.0)
+    print((10, 20) - (1, 2))              // (9, 18)
+    print((1, 2, 3) + (10, 20, 30))       // (11, 22, 33)
+
+    // scalar broadcast on * and /
+    print((3.0, 4.0) * 2.0)               // (6.0, 8.0)
+    print(2 * (3, 4))                     // (6, 8)
+    print((10.0, 20.0) / 4.0)             // (2.5, 5.0)
+
+    // element-wise * (Hadamard)
+    print((2, 3) * (4, 5))                // (8, 15)
+
+    // unary negation
+    print(-(1.5, -2.5))                   // (-1.5, 2.5)
+
+    // int/float promotion is per element
+    print((1, 2.0) + (1, 1))              // (2, 3.0)
+
+    // compose into the projectile step
+    let pos = (0.0, 0.0)
+    let target = (3.0, 4.0)
+    let delta = target - pos
+    let (dx, dy) = delta
+    let n = sqrt(dx * dx + dy * dy)
+    let dir = delta / n
+    let after = pos + dir * 2.5
+    print(after)                          // (1.5, 2.0)
+
+    // nested tuples recurse
+    print(((1, 2), (3, 4)) + ((10, 10), (10, 10)))   // ((11, 12), (13, 14))
+
+    // tuples in components flow through systems untouched
+    print(dist_sq((1.0, 1.0), (4.0, 5.0)))           // 25.0
+}
+
+pure fn dist_sq(a: (float, float), b: (float, float)) -> float {
+    let (x, y) = a - b
+    return x * x + y * y
+}

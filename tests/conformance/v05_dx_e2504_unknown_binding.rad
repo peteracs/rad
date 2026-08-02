@@ -1,0 +1,13 @@
+// backend: both
+// vm-args: --compat-v0.5-dx
+// expect-runtime-error: Error[E2504]: Unknown binding 'bogus' for variant 'Sig::Alarm'
+
+type Sig {
+    Alarm { severity: 0 }
+}
+
+let s = Sig::Alarm { severity: 5 }
+
+match s {
+    Alarm { bogus, .. } => { print(bogus) }
+}

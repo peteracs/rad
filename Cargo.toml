@@ -1,0 +1,35 @@
+[workspace]
+members = ["core/vm", "core/simcore"]
+resolver = "2"
+
+# One shared `target/` at the repo root instead of per-crate target directories
+# (saves duplicate dependencies and confusion).
+#
+# Dev builds still go to `target/debug` — Cargo has no "off" switch for that.
+# To shrink footprint: `cargo clean`, or build with `--release` when you do not
+# need fast incremental dev builds.
+
+[profile.dev]
+# Incremental on: small compiler edits rebuild in seconds instead of
+# recompiling all of rad-vm. Costs disk (`target/debug/incremental`);
+# `cargo clean` reclaims it.
+incremental = true
+# Strip debug info for dependencies to drastically reduce disk space (PDBs)
+[profile.dev.package."*"]
+debug = 0
+
+# opt-level 3 for the native CLI: the interpreter dispatch loop gains
+# double-digit percent over "s" (which was chosen for wasm bundle size —
+# if playground size regresses, build wasm with --profile wasm-size).
+[profile.release]
+opt-level = 3
+lto = true
+
+[profile.wasm-size]
+inherits = "release"
+opt-level = "s"
+
+# `samply record` needs symbols; perf characteristics match release.
+[profile.profiling]
+inherits = "release"
+debug = true

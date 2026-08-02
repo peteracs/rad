@@ -1,0 +1,14 @@
+// Attack: multiple ? in main() -> nil, second one fails
+// Expected: first succeeds, second propagates None, clean exit
+
+fn ok_val() -> any { return Some(10) }
+fn bad_val() -> any { return None }
+
+fn main() -> nil {
+    let a = ok_val()?
+    print("a =", a)
+    let b = bad_val()?
+    print("unreachable:", b)
+}
+
+// expect: a = 10

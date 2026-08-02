@@ -1,0 +1,83 @@
+// Example: Transaction Rollback with Inspection
+//
+// A banking system uses fork/simulate/peek to preview transactions
+// before committing, rolling back if constraints are violated.
+
+component Balance { gold: 0 }
+
+component Credit { limit: 0, used: 0 }
+
+component Account { name: "" }
+
+// Monthly interest: 2% charge on used credit
+system ChargeInterest(c: mut Credit) {
+    let interest = c.used / 50
+    c = Credit { used: c.used + interest, ..c }
+}
+
+// Monthly fee: flat 5 gold deduction
+system MonthlyFee(b: mut Balance) {
+    b = Balance { gold: b.gold - 5 }
+}
+
+// --- Setup accounts ---
+let checking = spawn("checking",
+    Balance { gold: 1000 },
+    Credit { limit: 500, used: 100 },
+    Account { name: "Checking" }
+)
+
+let savings = spawn("savings",
+    Balance { gold: 5000 },
+    Account { name: "Savings" }
+)
+
+print("=== Transaction Preview System ===")
+print("Checking: 1000 gold, 100/500 credit used")
+print("Savings:  5000 gold")
+print("")
+
+// --- Preview 12 months of fees + interest ---
+let preview_12mo = simulate(fork(), [system::ChargeInterest, system::MonthlyFee], 12)
+
+let check_12 = peek(preview_12mo, checking, Balance) ?
+let check_credit_12 = peek(preview_12mo, checking, Credit) ?
+let save_12 = peek(preview_12mo, savings, Balance) ?
+
+print("12-month projection:")
+print(f"  Checking balance: {check_12.gold}")
+print(f"  Checking credit used: {check_credit_12.used}")
+print(f"  Savings balance: {save_12.gold}")
+print("")
+
+// --- Check constraint: is checking still positive? ---
+if check_12.gold > 0 {
+    print("Checking stays positive after 12 months. Safe to proceed.")
+} else {
+    print("WARNING: Checking would go negative! Aborting.")
+}
+
+// --- Try a shorter 6-month preview ---
+let preview_6mo = simulate(fork(), [system::ChargeInterest, system::MonthlyFee], 6)
+
+let check_6 = peek(preview_6mo, checking, Balance) ?
+let check_credit_6 = peek(preview_6mo, checking, Credit) ?
+
+print("")
+print("6-month projection:")
+print(f"  Checking balance: {check_6.gold}")
+print(f"  Checking credit used: {check_credit_6.used}")
+
+// --- Main world is untouched throughout all previews ---
+let main_check = get(checking, Balance) ?
+assert(main_check.gold == 1000, "Main world should be untouched")
+
+// --- Commit the 6-month preview as a "fast-forward" ---
+commit(preview_6mo)
+let after = get(checking, Balance) ?
+print("")
+print(f"Committed 6-month fast-forward. Checking balance: {after.gold}")
+assert(after.gold == check_6.gold, "Committed balance should match preview")
+
+print("")
+print("Transaction rollback demo complete!")

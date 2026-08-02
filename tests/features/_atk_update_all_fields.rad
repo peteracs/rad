@@ -1,0 +1,11 @@
+// Attack: update all fields at once
+component C { x: 0, y: 0, z: 0 }
+
+fn main() -> nil {
+    let e = spawn(C { x: 1, y: 2, z: 3 })
+    update(e, C) { x = 10, y = 20, z = 30 }
+    let c = unwrap(get(e, C))
+    print(c.x, c.y, c.z)
+}
+
+// expect: 10 20 30

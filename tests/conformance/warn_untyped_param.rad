@@ -1,0 +1,7 @@
+// backend: both
+fn echo(x) {
+    return x
+}
+
+print(echo(3))
+// expect: 3

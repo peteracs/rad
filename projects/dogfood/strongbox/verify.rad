@@ -1,0 +1,70 @@
+// strongbox — archive verification against the receipt chain.
+//
+//   rad projects/dogfood/strongbox/verify.rad                 (the real archive)
+//   rad projects/dogfood/strongbox/verify.rad -- forged_downgrade
+//
+// The save format carries no integrity envelope, so a well-formed edit to an
+// archive is undetectable BY THE FORMAT: load_world() reads it back happily.
+// This program supplies the missing check. It loads the archive under the
+// current schema and compares the resulting world_digest() against the last
+// receipt main.rad wrote when it sealed that archive.
+//
+// SCOPE, stated honestly: the chain pins the FINAL state. It proves the
+// archive on disk is the archive that was sealed; it does not by itself
+// localise WHICH transition an attacker rewrote, because the intermediate
+// states are not recoverable from the final document alone. Localising the
+// edit is what the recorded trace is for — see replay_check.ps1.
+
+component Incident { code: "", severity: 1, status: "open", age: 0, sla_mins: 60 }
+
+component Assignee { name: "", team: "unassigned" }
+
+component Source { origin: "" }
+
+resource Ledger { count: 0, region: "", revision: 3 }
+
+let argv = sys_args()
+let mut which = "archive"
+if len(argv) > 0 {
+    which = argv[0]
+}
+
+print(f"=== strongbox verify: {which}.radw ===")
+
+let chain = read_file("projects/dogfood/strongbox/saves/receipts.log")
+let receipts = split(chain, "\n") |> filter(fn(l: str) -> bool { return len(l) > 0 })
+let last = receipts[len(receipts) - 1]
+let expected = split(replace(last, "\r", ""), "|")[2]
+
+print(f"receipt chain: {len(receipts)} entries, sealed at {slice(expected, 0, 16)}…")
+
+let n = load_world(read_file(f"projects/dogfood/strongbox/saves/{which}.radw"))
+let actual = world_digest()
+
+print(f"archive loaded: {n} entities, digest {slice(actual, 0, 16)}…")
+
+if actual == expected {
+    print("VERDICT: VERIFIED — the archive matches its receipt chain")
+} else {
+    print("VERDICT: TAMPERED — the archive does not match its receipt chain")
+    print(f"  expected {expected}")
+    print(f"  actual   {actual}")
+}
+
+// Whatever the verdict, show the state an operator would be acting on, so a
+// silent edit is visible rather than merely flagged.
+print("-- archive contents as loaded --")
+let mut open_count = 0
+for e in sort(entities(Incident)) {
+    let i = get(e, Incident) |> unwrap
+    let a = get(e, Assignee) |> unwrap
+    if i.status == "open" {
+        open_count = open_count + 1
+    }
+    print(f"  {i.code:<12} sev {i.severity}  {i.status:<9} sla {i.sla_mins}m  {a.name}/{a.team}")
+}
+let l = res(Ledger)
+print(f"  Ledger says {l.count} incidents; {len(entities(Incident))} are present, {open_count} still open")
+if l.count != len(entities(Incident)) {
+    print("  !! internal inconsistency: Ledger count disagrees with entity count")
+}

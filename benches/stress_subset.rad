@@ -1,0 +1,369 @@
+// ==========================================================================
+// Bootstrap Subset Stress Test
+//
+// Uses ONLY the language features the self-hosted parser (parser.rad) can
+// handle: fn declarations, let/let mut, return, if/else, while, for,
+// function calls, arithmetic, comparisons, and literals.
+//
+// No: component, system, state, type, match, use, pub, pure, pipes,
+//     closures, list indexing, dot access, <<, or, and, not.
+// ==========================================================================
+
+fn abs_val(n: int) -> int {
+    if n < 0 { return 0 - n }
+    return n
+}
+
+fn clamp(val: int, lo: int, hi: int) -> int {
+    if val < lo { return lo }
+    if val > hi { return hi }
+    return val
+}
+
+fn max_of(a: int, b: int) -> int {
+    if a > b { return a }
+    return b
+}
+
+fn min_of(a: int, b: int) -> int {
+    if a < b { return a }
+    return b
+}
+
+fn gcd(a: int, b: int) -> int {
+    let mut x = abs_val(a)
+    let mut y = abs_val(b)
+    while y != 0 {
+        let tmp = y
+        y = x % y
+        x = tmp
+    }
+    return x
+}
+
+fn lcm(a: int, b: int) -> int {
+    if a == 0 { return 0 }
+    if b == 0 { return 0 }
+    return abs_val(a * b) / gcd(a, b)
+}
+
+fn fib(n: int) -> int {
+    if n < 2 { return n }
+    let mut a = 0
+    let mut b = 1
+    let mut i = 2
+    while i <= n {
+        let tmp = a + b
+        a = b
+        b = tmp
+        i = i + 1
+    }
+    return b
+}
+
+fn fib_recursive(n: int) -> int {
+    if n < 2 { return n }
+    return fib_recursive(n - 1) + fib_recursive(n - 2)
+}
+
+fn factorial(n: int) -> int {
+    let mut result = 1
+    let mut i = 2
+    while i <= n {
+        result = result * i
+        i = i + 1
+    }
+    return result
+}
+
+fn factorial_recursive(n: int) -> int {
+    if n <= 1 { return 1 }
+    return n * factorial_recursive(n - 1)
+}
+
+fn is_prime(n: int) -> bool {
+    if n < 2 { return false }
+    if n < 4 { return true }
+    if n % 2 == 0 { return false }
+    let mut i = 3
+    while i * i <= n {
+        if n % i == 0 { return false }
+        i = i + 2
+    }
+    return true
+}
+
+fn count_primes(limit: int) -> int {
+    let mut count = 0
+    let mut n = 2
+    while n <= limit {
+        if is_prime(n) { count = count + 1 }
+        n = n + 1
+    }
+    return count
+}
+
+fn sum_range(lo: int, hi: int) -> int {
+    let mut total = 0
+    let mut i = lo
+    while i <= hi {
+        total = total + i
+        i = i + 1
+    }
+    return total
+}
+
+fn sum_squares(n: int) -> int {
+    let mut total = 0
+    let mut i = 1
+    while i <= n {
+        total = total + i * i
+        i = i + 1
+    }
+    return total
+}
+
+fn power(base: int, exp: int) -> int {
+    let mut result = 1
+    let mut i = 0
+    while i < exp {
+        result = result * base
+        i = i + 1
+    }
+    return result
+}
+
+fn repeat_str(s: str, n: int) -> str {
+    let mut result = ""
+    let mut i = 0
+    while i < n {
+        result = result + s
+        i = i + 1
+    }
+    return result
+}
+
+fn pad_left(s: str, width: int, ch: str) -> str {
+    let mut result = s
+    while len(result) < width {
+        result = ch + result
+    }
+    return result
+}
+
+fn pad_right(s: str, width: int, ch: str) -> str {
+    let mut result = s
+    while len(result) < width {
+        result = result + ch
+    }
+    return result
+}
+
+fn collatz_steps(n: int) -> int {
+    let mut val = n
+    let mut steps = 0
+    while val != 1 {
+        if val % 2 == 0 {
+            val = val / 2
+        } else {
+            val = val * 3 + 1
+        }
+        steps = steps + 1
+    }
+    return steps
+}
+
+fn digit_sum(n: int) -> int {
+    let mut val = abs_val(n)
+    let mut total = 0
+    while val > 0 {
+        total = total + val % 10
+        val = val / 10
+    }
+    return total
+}
+
+fn is_palindrome_num(n: int) -> bool {
+    let mut val = abs_val(n)
+    let mut reversed = 0
+    let original = val
+    while val > 0 {
+        reversed = reversed * 10 + val % 10
+        val = val / 10
+    }
+    return reversed == original
+}
+
+fn triangle_number(n: int) -> int {
+    return n * (n + 1) / 2
+}
+
+fn is_even(n: int) -> int {
+    if n % 2 == 0 { return 1 }
+    return 0
+}
+
+fn count_even(lo: int, hi: int) -> int {
+    let mut count = 0
+    let mut i = lo
+    while i <= hi {
+        count = count + is_even(i)
+        i = i + 1
+    }
+    return count
+}
+
+fn ackermann(m: int, n: int) -> int {
+    if m == 0 { return n + 1 }
+    if n == 0 { return ackermann(m - 1, 1) }
+    return ackermann(m - 1, ackermann(m, n - 1))
+}
+
+fn euler_totient(n: int) -> int {
+    let mut result = n
+    let mut p = 2
+    let mut tmp = n
+    while p * p <= tmp {
+        if tmp % p == 0 {
+            while tmp % p == 0 {
+                tmp = tmp / p
+            }
+            result = result - result / p
+        }
+        p = p + 1
+    }
+    if tmp > 1 {
+        result = result - result / tmp
+    }
+    return result
+}
+
+fn count_divisors(n: int) -> int {
+    let mut count = 0
+    let mut i = 1
+    while i * i <= n {
+        if n % i == 0 {
+            count = count + 1
+            if i != n / i { count = count + 1 }
+        }
+        i = i + 1
+    }
+    return count
+}
+
+fn sum_divisors(n: int) -> int {
+    let mut total = 0
+    let mut i = 1
+    while i * i <= n {
+        if n % i == 0 {
+            total = total + i
+            if i != n / i { total = total + n / i }
+        }
+        i = i + 1
+    }
+    return total
+}
+
+fn is_perfect(n: int) -> bool {
+    if n < 2 { return false }
+    return sum_divisors(n) - n == n
+}
+
+fn binomial(n: int, k: int) -> int {
+    if k == 0 { return 1 }
+    if k > n { return 0 }
+    let mut result = 1
+    let mut i = 0
+    while i < k {
+        result = result * (n - i)
+        result = result / (i + 1)
+        i = i + 1
+    }
+    return result
+}
+
+fn stirling_second(n: int, k: int) -> int {
+    if n == 0 { if k == 0 { return 1 } else { return 0 } }
+    if k == 0 { return 0 }
+    if k == 1 { return 1 }
+    if k == n { return 1 }
+    return k * stirling_second(n - 1, k) + stirling_second(n - 1, k - 1)
+}
+
+fn catalan(n: int) -> int {
+    return binomial(2 * n, n) / (n + 1)
+}
+
+fn harmonic_int(n: int) -> int {
+    let mut total = 0
+    let mut i = 1
+    while i <= n {
+        total = total + 1000 / i
+        i = i + 1
+    }
+    return total
+}
+
+fn build_number_string(n: int) -> str {
+    let mut result = ""
+    let mut i = 1
+    while i <= n {
+        result = f"{result}{i}"
+        if i < n { result = f"{result}," }
+        i = i + 1
+    }
+    return result
+}
+
+fn run_math_checks() -> nil {
+    print(f"math: fib(10) = {fib(10)}")
+    print(f"math: fib(20) = {fib(20)}")
+    print(f"math: fib_rec(10) = {fib_recursive(10)}")
+    print(f"math: factorial(10) = {factorial(10)}")
+    print(f"math: factorial_rec(7) = {factorial_recursive(7)}")
+    print(f"math: gcd(48,18) = {gcd(48, 18)}")
+    print(f"math: lcm(12,8) = {lcm(12, 8)}")
+    print(f"math: power(2,10) = {power(2, 10)}")
+    print(f"math: count_primes(100) = {count_primes(100)}")
+    print(f"math: sum_range(1,100) = {sum_range(1, 100)}")
+    print(f"math: sum_squares(10) = {sum_squares(10)}")
+}
+
+fn run_number_theory_checks() -> nil {
+    print(f"nt: collatz_steps(27) = {collatz_steps(27)}")
+    print(f"nt: digit_sum(12345) = {digit_sum(12345)}")
+    print(f"nt: is_palindrome(121) = {is_palindrome_num(121)}")
+    print(f"nt: is_palindrome(123) = {is_palindrome_num(123)}")
+    print(f"nt: triangle(10) = {triangle_number(10)}")
+    print(f"nt: count_even(1,100) = {count_even(1, 100)}")
+    print(f"nt: euler_totient(12) = {euler_totient(12)}")
+    print(f"nt: count_divisors(60) = {count_divisors(60)}")
+    print(f"nt: sum_divisors(12) = {sum_divisors(12)}")
+    print(f"nt: is_perfect(6) = {is_perfect(6)}")
+    print(f"nt: is_perfect(28) = {is_perfect(28)}")
+    print(f"nt: is_perfect(10) = {is_perfect(10)}")
+}
+
+fn run_combinatorics_checks() -> nil {
+    print(f"comb: binomial(10,3) = {binomial(10, 3)}")
+    print(f"comb: binomial(20,10) = {binomial(20, 10)}")
+    print(f"comb: stirling(5,3) = {stirling_second(5, 3)}")
+    print(f"comb: catalan(5) = {catalan(5)}")
+    print(f"comb: ackermann(3,3) = {ackermann(3, 3)}")
+}
+
+fn run_string_checks() -> nil {
+    print(f"str: repeat('ab',4) = {repeat_str("ab", 4)}")
+    print(f"str: pad_left('42',6,'0') = {pad_left("42", 6, "0")}")
+    print(f"str: pad_right('hi',6,'.') = {pad_right("hi", 6, ".")}")
+    print(f"str: build_numbers(5) = {build_number_string(5)}")
+    print(f"str: harmonic_int(20) = {harmonic_int(20)}")
+}
+
+fn main() -> nil {
+    run_math_checks()
+    run_number_theory_checks()
+    run_combinatorics_checks()
+    run_string_checks()
+    print("All subset stress tests completed.")
+}

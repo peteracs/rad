@@ -1,0 +1,120 @@
+// =====================================================================
+//  calcite / ast.rad
+//  The expression AST as a recursive sum type, plus a pretty printer.
+//
+//  Recursive variant fields are spelled `field: TypeName`. The default
+//  slot of a variant field doubles as its type hint, and naming the type
+//  there is the only spelling that types a self-referential field:
+//  `rhs: nil` infers the field as nil, and `rhs: Expr = nil` is a parse
+//  error. See bugs/01_recursive_sum_type_field.rad.
+// =====================================================================
+
+pub type Expr {
+    ENum { num: 0.0 }
+    EVar { name: "" }
+    EUnary { op: "", rhs: Expr }
+    EBinary { op: "", lhs: Expr, rhs: Expr }
+    ECall { name: "", args: [] }
+    ELet { name: "", bound: Expr, body: Expr }
+    EIf { test: Expr, then_br: Expr, else_br: Expr }
+}
+
+// Render a float without a trailing ".0" when it is integral, and without
+// the padding zeros that a fixed `.4f` spec would leave behind.
+pub fn fmt_num(x: float) -> str {
+    let whole = int(x)
+    if float(whole) == x {
+        return f"{whole}"
+    }
+    let mut s = f"{x:.4f}"
+    while ends_with(s, "0") {
+        s = slice(s, 0, len(s) - 1)
+    }
+    if ends_with(s, ".") {
+        s = slice(s, 0, len(s) - 1)
+    }
+    return s
+}
+
+// Fully parenthesized source text for an AST. Round-tripping this through
+// the parser must produce an identical string (checked in main.rad).
+pub fn render(e: Expr) -> str {
+    match e {
+        ENum { num } => { return fmt_num(num) }
+        EVar { name } => { return name }
+        EUnary { op, rhs } => {
+            let inner = render(rhs)
+            if op == "not" {
+                return f"(not {inner})"
+            }
+            return f"({op}{inner})"
+        }
+        EBinary { op, lhs, rhs } => {
+            let l = render(lhs)
+            let r = render(rhs)
+            return f"({l} {op} {r})"
+        }
+        ECall { name, args } => {
+            let mut parts = []
+            for a in args {
+                parts = push(parts, render(a))
+            }
+            let joined = join(parts, ", ")
+            return f"{name}({joined})"
+        }
+        ELet { name, bound, body } => {
+            let b = render(bound)
+            let inner = render(body)
+            return f"(let {name} = {b} in {inner})"
+        }
+        EIf { test, then_br, else_br } => {
+            let c = render(test)
+            let t = render(then_br)
+            let f = render(else_br)
+            return f"(if {c} then {t} else {f})"
+        }
+    }
+}
+
+// Total node count - recursion over every variant, used by the stats report.
+pub fn node_count(e: Expr) -> int {
+    match e {
+        ENum => { return 1 }
+        EVar => { return 1 }
+        EUnary { op: _op, rhs } => { return 1 + node_count(rhs) }
+        EBinary { op: _op, lhs, rhs } => { return 1 + node_count(lhs) + node_count(rhs) }
+        ECall { name: _name, args } => {
+            let mut total = 1
+            for a in args {
+                total = total + node_count(a)
+            }
+            return total
+        }
+        ELet { name: _name, bound, body } => { return 1 + node_count(bound) + node_count(body) }
+        EIf { test, then_br, else_br } => {
+            return 1 + node_count(test) + node_count(then_br) + node_count(else_br)
+        }
+    }
+}
+
+// Maximum nesting depth, so the report can show that parsing really is
+// building a tree rather than a flat list.
+pub fn depth(e: Expr) -> int {
+    match e {
+        ENum => { return 1 }
+        EVar => { return 1 }
+        EUnary { op: _op, rhs } => { return 1 + depth(rhs) }
+        EBinary { op: _op, lhs, rhs } => { return 1 + max(depth(lhs), depth(rhs)) }
+        ECall { name: _name, args } => {
+            let mut best = 0
+            for a in args {
+                best = max(best, depth(a))
+            }
+            return 1 + best
+        }
+        ELet { name: _name, bound, body } => { return 1 + max(depth(bound), depth(body)) }
+        EIf { test, then_br, else_br } => {
+            return 1 + max(depth(test), max(depth(then_br), depth(else_br)))
+        }
+    }
+}

@@ -1,0 +1,20 @@
+// ISO E: why does the HOST survive the same bomb the guest hangs on?
+// Hypothesis: an explicit flush_events() drains exactly ONE generation, so
+// re-emitted events sit in the next buffer and the chain stops. The
+// sandbox wraps that same call in `while !events_next.is_empty()`, which
+// never terminates for a self-re-emitting handler.
+event Ping { n }
+
+on Ping(e) {
+    print(f"host handled n={e.n}")
+    if e.n < 5 {
+        emit Ping { n: e.n + 1 }
+    }
+}
+
+print("E: emit, then ONE flush")
+emit Ping { n: 0 }
+flush_events()
+print("E: after one flush -- if only n=0 printed, one generation per flush")
+flush_events()
+print("E: after a second flush")

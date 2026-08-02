@@ -1,0 +1,21 @@
+// Attack: guard references event field — filter by value
+event Score { points, player }
+
+on Score(e) where e.points > 50 {
+    print(f"high score: {e.player} got {e.points}")
+}
+
+on Score(e) when e.points <= 50 {
+    print(f"low score: {e.player} got {e.points}")
+}
+
+fn main() -> nil {
+    emit Score { points: 100, player: "alice" }
+    emit Score { points: 20, player: "bob" }
+    emit Score { points: 75, player: "carol" }
+    flush_events()
+}
+
+// expect: high score: alice got 100
+// expect: low score: bob got 20
+// expect: high score: carol got 75

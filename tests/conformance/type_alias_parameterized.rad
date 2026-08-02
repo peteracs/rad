@@ -1,0 +1,11 @@
+// backend: both
+type Boxed < T > = list < T >
+
+fn head < T > (xs: Boxed < T > ) -> T {
+    return xs[0]
+}
+
+print(head([10, 20, 30]))
+print(head(["a", "b"]))
+// expect: 10
+// expect: a

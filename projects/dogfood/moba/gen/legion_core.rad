@@ -1,0 +1,85 @@
+// LEGION_CORE — the shared vocabulary under 84 generated champion
+// modules (fake-port round 20). One component schema, one spawn path,
+// one brawl: the generated content is DATA over this.
+
+pub let MAX_LEVEL = 18
+
+pub component LPos { at: (float, float) = (0.0, 0.0) }
+pub component LChamp {
+    cname: str,
+    team: int,
+    level: int = 1,
+    hp: float = 0.0,
+    max_hp: float = 0.0,
+    ad: float = 0.0,
+    armor: float = 0.0,
+    mr: float = 0.0,
+    range: float = 0.0,
+    ms: float = 0.0,
+    shape: str = "melee",
+    alive: bool = true,
+}
+
+pub event LHit { source: entity, target: entity, amount: float }
+
+// the one spawn path every generated module calls: the stat tuple is
+// the module's content, this is the engine
+pub fn spawn_champ(row: (str, float, float, float, float, float, float, float, float, str), team: int, at: (float, float)) -> entity {
+    let (cname, hp, _hp_lvl, ad, _ad_lvl, armor, mr, reach, ms, shape) = row
+    return entity cname {
+        LPos { at: at },
+        LChamp {
+            cname: cname, team: team,
+            hp: hp, max_hp: hp, ad: ad,
+            armor: armor, mr: mr, range: reach, ms: ms, shape: shape,
+        },
+    }
+}
+
+// era stat growth: level the whole roster off the same tuples
+pub fn level_to(e: entity, row: (str, float, float, float, float, float, float, float, float, str), level: int) -> nil {
+    let (_, hp, hp_lvl, ad, ad_lvl, _, _, _, _, _) = row
+    let grown_hp = hp + hp_lvl * float(level - 1)
+    update(e, LChamp) {
+        level = level,
+        max_hp = grown_hp,
+        hp = grown_hp,
+        ad = ad + ad_lvl * float(level - 1),
+    }
+}
+
+// the era's pre-mitigation -> post-armor pipeline, one formula
+pub pure fn mitigated(raw: float, armor: float) -> float {
+    return raw * 100.0 / (100.0 + max(armor, 0.0))
+}
+
+pub pure fn ldist(a: (float, float), b: (float, float)) -> float {
+    let (dx, dy) = a - b
+    return sqrt(dx * dx + dy * dy)
+}
+
+// the brawl: walk at the nearest living enemy, swing when in reach
+pub system brawl(me: mut LChamp, p: mut LPos) {
+    if not me.alive { return }
+    let foes = query { LChamp, LPos } |> filter(fn(e) {
+        let c = require(e, LChamp)
+        return c.team != me.team and c.alive
+    })
+    if len(foes) == 0 { return }
+    let nearest = foes |> min_by(fn(e) { return ldist(require(e, LPos).at, p.at) }) |> unwrap
+    let there = require(nearest, LPos).at
+    let gap = ldist(there, p.at)
+    if gap <= me.range {
+        emit LHit { source: self, target: nearest, amount: me.ad }
+    } else {
+        p.at = p.at + (there - p.at) * (me.ms / 30.0 / gap)
+    }
+}
+
+on LHit(e) {
+    let v = require(e.target, LChamp)
+    if not v.alive { return }
+    let dealt = mitigated(e.amount, v.armor)
+    let hp = max(v.hp - dealt, 0.0)
+    update(e.target, LChamp) { hp = hp, alive = hp > 0.0 }
+}

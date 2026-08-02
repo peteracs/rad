@@ -1,0 +1,4 @@
+{"jsonrpc":"2.0","id":1,"method":"info"}
+{"jsonrpc":"2.0","id":2,"method":"why","params":{"frame":3,"entity":"hero","component":"Gold"}}
+{"jsonrpc":"2.0","id":3,"method":"why","params":{"frame":4,"entity":"hero","component":"Gold"}}
+{"jsonrpc":"2.0","id":4,"method":"shutdown"}

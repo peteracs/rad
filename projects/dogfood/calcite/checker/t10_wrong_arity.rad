@@ -1,0 +1,8 @@
+// ILLEGAL: calling a 2-parameter function with 3 arguments.
+fn add(a: int, b: int) -> int {
+    return a + b
+}
+
+fn main() -> nil {
+    print(f"{add(1, 2, 3)}")
+}

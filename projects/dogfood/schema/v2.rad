@@ -1,0 +1,45 @@
+// Schema evolution demo (list item #5) — version 2, months later.
+// The schema drifted three ways while players kept their old saves:
+//   Health gained max_hp        (added field)
+//   Pos    became Pos{col,row}  (renamed fields)
+//   Bank   gained vault         (resource migration)
+//
+// The `migrate` blocks below are the whole story: load_world() runs them
+// only for shapes that actually drifted. Delete one and the load fails
+// loudly, naming the added/removed fields.
+//
+//   rad projects/dogfood/schema/v1.rad   (first, to produce world.radw)
+//   rad projects/dogfood/schema/v2.rad
+
+component Health { hp: 100, max_hp: 100 }
+
+component Pos { col: 0, row: 0 }
+resource Bank { gold: 0, vault: "copper" }
+
+migrate Health(old) {
+    return Health { hp: old["hp"], max_hp: old["hp"] * 2 }
+}
+
+migrate Pos(old) {
+    return Pos { col: old["x"], row: old["y"] }
+}
+
+migrate Bank(old) {
+    let mut tier = "copper"
+    if old["gold"] > 100 {
+        tier = "gold"
+    }
+    return Bank { gold: old["gold"], vault: tier }
+}
+
+let n = load_world(read_file("projects/dogfood/schema/world.radw"))
+print(f"v2: loaded {n} entities from a v1 save")
+
+let hero = get_entity("hero")
+let h = get(hero, Health) |> unwrap
+let p = get(hero, Pos) |> unwrap
+print(f"hero: hp {h.hp}/{h.max_hp} at ({p.col}, {p.row})")
+print(why(hero, Health))
+
+let bank = get_resource(Bank) |> unwrap
+print(f"bank: {bank.gold} gold in the {bank.vault} vault")

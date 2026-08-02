@@ -1,0 +1,79 @@
+name: Good First Issue
+description: Suggest a task suitable for new contributors
+title: "[Good First Issue] "
+labels: ["good-first-issue", "help-wanted"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping grow the Rad contributor community!
+        Good first issues should be completable in a few hours by someone unfamiliar with the codebase.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - "Builtin function (new)"
+        - "Builtin function (improve existing)"
+        - "Error message improvement"
+        - "Conformance test"
+        - "Example program"
+        - "Documentation"
+        - "Tooling (CLI, LSP, playground)"
+        - "Other"
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What needs to be done
+      description: Clear, specific description of the task.
+      placeholder: |
+        Add a `split(str, separator) -> list` builtin function that splits a string
+        by the given separator and returns a list of substrings.
+
+        Example:
+        ```rad
+        let parts = split("a,b,c", ",")
+        // parts == ["a", "b", "c"]
+        ```
+    validations:
+      required: true
+
+  - type: textarea
+    id: files
+    attributes:
+      label: Files to touch
+      description: Which files will need changes? (Helps newcomers navigate the codebase.)
+      placeholder: |
+        - `core/vm/src/value.rs` — add the builtin variant and name
+        - `core/vm/src/vm/builtins_impl.rs` — implement the runtime behavior
+        - `tests/conformance/builtins_split.rad` — conformance test
+        - `docs/src/reference/builtins.md` — document it
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: How do we know this is done?
+      placeholder: |
+        - [ ] `split("a,b,c", ",")` returns `["a", "b", "c"]`
+        - [ ] `split("hello", "")` returns `["h", "e", "l", "l", "o"]`
+        - [ ] Conformance test passes in the Rust VM
+        - [ ] `cargo test -p rad-vm` passes
+        - [ ] `cargo run -p rad-vm --bin rad -- snapshot tests/` passes (after `cargo build -p rad-vm` if needed)
+    validations:
+      required: true
+
+  - type: textarea
+    id: hints
+    attributes:
+      label: Hints / getting started
+      description: Optional pointers to help the contributor get started.
+      placeholder: |
+        Look at how `len` is implemented in `core/vm/src/vm/builtins_impl.rs` for the pattern.
+        The `Builtin` enum in `value.rs` lists all existing builtins.

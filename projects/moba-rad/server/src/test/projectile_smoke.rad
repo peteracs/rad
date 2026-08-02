@@ -1,0 +1,104 @@
+// Projectile + lag-compensation smoke test. Exercises the gameplay sim without
+// sockets, the same way netcode_smoke covers the authority netcode:
+//
+// - position history records authoritative positions per tick and rolls back to
+//   the newest tick at or before a shooter's view tick (never the future),
+// - a hit is judged against where the target *was* on the shooter's screen, so
+//   the same aim point hits at the view tick and misses at the current tick,
+// - projectiles spawn from the owner, travel at a fixed velocity, and are
+//   reclaimed when they leave the map or outlive their lifetime,
+// - a resolved hit emits ProjectileHit and advances ProjectileStats.
+
+use "../sim/components.rad"
+use "../world/scene.rad"
+use "../world/avatars.rad"
+use "../sim/movement.rad"
+use "../server/clock.rad"
+use "../sim/lag_compensation.rad"
+use "../sim/projectiles.rad"
+
+let _local_avatar = seed_moba_world()
+
+fn place_player(player_id: int, x: float, y: float) -> nil {
+    update(player_avatar(player_id), Position) {
+        x = x,
+        y = y
+    }
+}
+
+fn main() -> nil {
+    assert(history_capacity() >= max_chaos_rewind_ticks(), "lag history must cover the maximum chaos RTT rewind budget")
+
+    assert(pump_authority_clock(1000) == 0, "first authority clock call must initialize time")
+    assert(pump_authority_clock(1008) == 1, "authority clock must advance exactly one fixed tick")
+    assert(not is_none(lookup(PositionHistory, "owner_id", 1)), "authority clock must record lag history")
+
+    // Target (player 2) moves over time; the authority records each tick.
+    place_player(2, 10.0, 0.0)
+    record_position_history(2, 10)
+    place_player(2, 50.0, 0.0)
+    record_position_history(2, 20)
+
+    // Rollback reads the newest sample at or before the view tick.
+    assert(historic_x(2, 10) == 10.0, "history must return the tick-10 position")
+    assert(historic_x(2, 20) == 50.0, "history must return the tick-20 position")
+    assert(historic_x(2, 15) == 10.0, "rollback must use the newest sample at or before the view tick")
+
+    // A view tick older than the retained window falls back to the current
+    // position rather than fabricating one (defensive, never errors).
+    assert(historic_x(2, 5) == 50.0, "a view tick before the window must fall back to the current position")
+
+    // Lag compensation is the deciding factor: the same aim point at (10, 0)
+    // hits when judged at the shooter's view tick (target was there) and misses
+    // when judged at the newer tick (target has since moved to (50, 0)).
+    assert(lag_compensated_hit(2, 10.0, 0.0, 5.3, 10), "aim must hit the target where it was at the view tick")
+    assert(not lag_compensated_hit(2, 10.0, 0.0, 5.3, 20), "the same aim must miss against the newer authoritative position")
+    assert(lag_compensated_hit(2, 50.0, 0.0, 5.3, 20), "aiming at the current position must hit at the current tick")
+
+    // Build the projectile scenario: at view tick 30 the target was at (30, 0),
+    // but it has since run to the map edge at (140, 0).
+    place_player(2, 30.0, 0.0)
+    record_position_history(2, 30)
+    place_player(2, 140.0, 0.0)
+    record_position_history(2, 40)
+
+    // Player 1 (at origin) fires straight along +x, rendering tick 30.
+    let shot = cast_projectile(1, 1.0, 0.0, 30, 30)
+    assert(projectile_count() == 1, "casting a projectile must spawn exactly one entity")
+    let spawn_pos = get(shot, Position) |> unwrap
+    assert(spawn_pos.x == 0.0 and spawn_pos.y == 0.0, "projectile must spawn at the owner position")
+
+    // One tick at dt=0.25 advances 120 * 0.25 = 30 units to (30, 0).
+    tick_projectiles(0.25, 31)
+    let flown = get(shot, Position) |> unwrap
+    assert(flown.x == 30.0 and flown.y == 0.0, "projectile must travel at its fixed velocity")
+
+    // Resolution lands the hit only because the target is rolled back to tick 30
+    // (30, 0); against its current position (140, 0) it would whiff.
+    let hits = resolve_projectile_hits(31)
+    assert(hits == 1, "lag-compensated resolution must land the skillshot")
+    assert(projectile_count() == 0, "a projectile must be reclaimed once it hits")
+    let stats = res(ProjectileStats)
+    assert(stats.total_hits == 1, "a confirmed hit must advance ProjectileStats")
+    assert(stats.last_owner_id == 1, "hit telemetry must record the shooter")
+    assert(stats.last_target_id == 2, "hit telemetry must record the target")
+    assert(stats.last_tick == 31, "hit telemetry must record the resolution tick")
+    assert(stats.total_impacts == 1, "a confirmed hit must also record one impact")
+    assert(stats.last_impact_reason == projectile_impact_reason_hit(), "hit impact telemetry must carry the hit reason")
+    assert(projectile_impact_count() == 1, "impact log must retain the confirmed hit")
+
+    // A projectile that leaves the playable plane is reclaimed, not clamped.
+    let _stray = cast_projectile(1, 1.0, 0.0, 50, 50)
+    assert(projectile_count() == 1, "second cast must spawn a projectile")
+    tick_projectiles(2.0, 51)
+    assert(projectile_count() == 0, "an out-of-bounds projectile must be despawned")
+    assert(res(ProjectileStats).last_impact_reason == projectile_impact_reason_range(), "range cleanup must record an impact reason")
+
+    // A projectile that outlives its lifetime is reclaimed even while in bounds.
+    let _stale = cast_projectile(1, 1.0, 0.0, 100, 100)
+    assert(projectile_count() == 1, "third cast must spawn a projectile")
+    tick_projectiles(0.0, 100 + projectile_lifetime_ticks() + 1)
+    assert(projectile_count() == 0, "a projectile past its lifetime must be despawned")
+    assert(res(ProjectileStats).total_impacts == 3, "hit, range, and lifetime cleanup must all enter the impact log")
+    assert(res(ProjectileStats).last_impact_reason == projectile_impact_reason_lifetime(), "lifetime cleanup must record an impact reason")
+}

@@ -1,0 +1,4 @@
+// backend: both
+let xs = [1, 2, 3]
+print(xs[-1])
+// expect-runtime-error: Negative index

@@ -1,0 +1,33 @@
+// BUG 01: calling a function before its declaration statement has executed
+// passes the type checker, then dies at runtime with a nameless error.
+//
+// Run: target\debug\rad.exe projects\dogfood\oracle\bugs\01_forward_fn_call.rad
+//
+// EXPECTED (per docs/src/project/adversarial-round2-findings.md line 27-29,
+// "Forward references now work for top-level functions / Calling a function
+// before its declaration is accepted"):  prints "twice(21) = 42".
+//
+// ACTUAL: compiles with zero diagnostics, then:
+//     Runtime error: [line 14] in main: Not callable: nil
+//
+// Two distinct problems:
+//   1. Static/runtime divergence. The type checker fully resolves `twice`:
+//      it reports no "undefined function", and it type-checks the call site
+//      (passing a str here IS reported as a compile-time type error). So the
+//      declaration is in scope statically but holds nil at runtime.
+//   2. The diagnostic names nothing. "Not callable: nil" omits the callee
+//      name and gives no hint that declaration order is the cause.
+//
+// Real rule (see probes/02_forward_ref_shape.rad): `fn` declarations bind only
+// when top-level execution REACHES the declaration statement, so this also
+// breaks a call made from inside an earlier-declared function body.
+//
+// Fix should be either hoisting (match the checker and the docs) or a
+// compile-time error that names the function and the ordering constraint.
+
+let doubled = twice(21)
+print(f"twice(21) = {doubled}")
+
+fn twice(n: int) -> int {
+    return n * 2
+}

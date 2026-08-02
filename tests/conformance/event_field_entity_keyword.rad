@@ -1,0 +1,13 @@
+// backend: both
+event LevelUp { entity, new_level }
+
+on LevelUp(e) {
+    print(e.entity)
+    print(e.new_level)
+}
+
+emit LevelUp { entity: "hero", new_level: 2 }
+flush_events()
+flush_events()
+// expect: hero
+// expect: 2

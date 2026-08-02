@@ -1,0 +1,6 @@
+// backend: both
+match try_int("123") {
+    Some { value } => { print(f"CASE11:{value + 1}") }
+    None => { print("CASE11:none") }
+}
+// expect: CASE11:124

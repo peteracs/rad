@@ -1,0 +1,6 @@
+---
+source: tests\conformance\use_import_cycle.rad
+exit_code: 0
+---
+A
+B

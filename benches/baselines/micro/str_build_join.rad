@@ -1,0 +1,16 @@
+// The builder idiom: same output as str_build.rad, O(n) instead of O(n²) —
+// collect parts in a list, join once. This is the documented accumulation
+// pattern; the naive str_build.rad exists to measure the concat loop that
+// every language in the suite also pays quadratically.
+fn main() -> nil {
+    let t0 = now_unix_ms()
+    let mut parts = []
+    let mut i = 0
+    while i < 60000 {
+        parts << "ab" + f"{i % 10}"
+        i = i + 1
+    }
+    let s = join(parts, "")
+    let t1 = now_unix_ms()
+    print(f"RESULT {len(s)} MS {t1 - t0}")
+}

@@ -1,0 +1,45 @@
+// Lag-compensation depth audit, locked as a regression test.
+//
+// A high-ping shooter forces the authority to rewind a target far into the past
+// (their delayed render tick). If the position-history ring is shorter than the
+// worst-case rewind the proxy chaos harness can produce, `fire_view_tick` gets
+// clamped forward and the shooter's skillshots silently miss. This pins that the
+// retained window covers that rewind, and that a view older than the window
+// falls back to the current position instead of fabricating a past one.
+
+use "../sim/components.rad"
+use "../world/scene.rad"
+use "../world/avatars.rad"
+use "../sim/movement.rad"
+use "../sim/lag_compensation.rad"
+
+let _seed = seed_moba_world()
+
+fn main() -> nil {
+    assert(history_capacity() >= max_chaos_rewind_ticks(),
+        "lag-comp history must cover the worst-case chaos RTT rewind")
+
+    let avatar = player_avatar(1)
+
+    // Record a known position per tick (x == tick) and overfill so the ring wraps
+    // at least once, exercising the cursor wrap-around path.
+    let newest = history_capacity() + 10
+    let mut t = 1
+    while t <= newest {
+        update(avatar, Position) { x = float(t), y = 0.0 }
+        record_position_history(1, t)
+        t = t + 1
+    }
+
+    // A rewind at the documented worst-case depth must resolve to the exact tick:
+    // the shooter is judged against the world they actually saw.
+    let deep_view = newest - max_chaos_rewind_ticks()
+    assert(historic_x(1, deep_view) == float(deep_view),
+        "a rewind within the supported window must return the exact historic position")
+
+    // The oldest tick that has been evicted from the ring must NOT fabricate a
+    // hit: it falls back to the avatar's current authoritative position.
+    let evicted_view = newest - history_capacity()
+    assert(historic_x(1, evicted_view) == float(newest),
+        "a view older than the retained window falls back to the current position")
+}

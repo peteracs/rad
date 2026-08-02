@@ -1,0 +1,111 @@
+use "../lexer.rad"
+use "../parser.rad"
+
+// Compact AST printer for eyeballing parse results.
+fn dump(node: any) -> str {
+    let k = node["k"]
+    if k == "int" { return str(node["v"]) }
+    if k == "float" { return str(node["v"]) }
+    if k == "str" { return f"\"{node["v"]}\"" }
+    if k == "bool" { return str(node["v"]) }
+    if k == "nil" { return "nil" }
+    if k == "ident" { return node["name"] }
+    if k == "binary" { return f"({node["op"]} {dump(node["l"])} {dump(node["r"])})" }
+    if k == "logic" { return f"({node["op"]} {dump(node["l"])} {dump(node["r"])})" }
+    if k == "unary" { return f"({node["op"]} {dump(node["e"])})" }
+    if k == "call" {
+        let mut parts: list<str> = []
+        for a in node["args"] { parts << dump(a) }
+        return f"(call {dump(node["callee"])} [{join(parts, " ")}])"
+    }
+    if k == "index" { return f"(index {dump(node["obj"])} {dump(node["idx"])})" }
+    if k == "field" { return f"(field {dump(node["obj"])} {node["name"]})" }
+    if k == "closure" { return f"(fn [{join(node["params"], " ")}] {dump(node["body"])})" }
+    if k == "list" {
+        let mut parts: list<str> = []
+        for a in node["items"] { parts << dump(a) }
+        return f"[list {join(parts, " ")}]"
+    }
+    if k == "map" { return "(map ...)" }
+    if k == "fstr" {
+        let mut parts: list<str> = []
+        for a in node["parts"] { parts << dump(a) }
+        return f"(fstr {join(parts, " ")})"
+    }
+    if k == "complit" { return f"(complit {node["cname"]} fields={node["fields"]})" }
+    if k == "stateref" { return f"(stateref {node["machine"]}::{node["state"]})" }
+    if k == "variantlit" { return f"(variant {node["tname"]}::{node["vname"]})" }
+    if k == "entitylit" { return f"(entitylit comps={len(node["comps"])})" }
+    if k == "isvariant" { return f"(is {dump(node["e"])} {node["name"]})" }
+    if k == "ifexpr" { return f"(ifexpr {dump(node["cond"])} {dump(node["then"])} {dump(node["else"])})" }
+    if k == "try" { return f"(try {dump(node["e"])})" }
+    if k == "block" {
+        let mut parts: list<str> = []
+        for s in node["stmts"] { parts << dump(s) }
+        return f"{{ {join(parts, " ; ")} }}"
+    }
+    if k == "let" { return f"(let {node["name"]} {dump(node["value"])})" }
+    if k == "lettuple" { return f"(let-tuple {node["names"]} {dump(node["value"])})" }
+    if k == "assign" { return f"(assign {dump(node["target"])} {dump(node["value"])})" }
+    if k == "push" { return f"(push {dump(node["target"])} {dump(node["value"])})" }
+    if k == "if" { return f"(if {dump(node["cond"])} {dump(node["then"])} else {dump(node["else"])})" }
+    if k == "while" { return f"(while {dump(node["cond"])} {dump(node["body"])})" }
+    if k == "for" { return f"(for {node["names"]} in {dump(node["iter"])} {dump(node["body"])})" }
+    if k == "return" { return f"(return {dump(node["value"])})" }
+    if k == "break" { return "(break)" }
+    if k == "continue" { return "(continue)" }
+    if k == "exprstmt" { return dump(node["e"]) }
+    if k == "emit" { return f"(emit {node["ename"]} fields={node["fields"]})" }
+    if k == "schedule" { return f"(schedule {node["names"]})" }
+    if k == "match" {
+        let mut parts: list<str> = []
+        for c in node["cases"] {
+            let p = c["pat"]
+            parts << f"{p["pk"]}=>{dump(c["body"])}"
+        }
+        return f"(match {dump(node["subject"])} {join(parts, " | ")})"
+    }
+    if k == "fndecl" { return f"(fn-decl {node["name"]} [{join(node["params"], " ")}] {dump(node["body"])})" }
+    if k == "componentdecl" { return f"({node["ckind"]}-decl {node["name"]} fields={node["fields"]})" }
+    if k == "eventdecl" { return f"(event-decl {node["name"]} fields={node["fields"]})" }
+    if k == "statedecl" { return f"(state-decl {node["name"]} states={len(node["states"])})" }
+    if k == "systemdecl" { return f"(system-decl {node["name"]} params={node["pnames"]} comps={node["pcomps"]})" }
+    if k == "onhandler" { return f"(on {node["ename"]} ({node["pname"]}) {dump(node["body"])})" }
+    if k == "entitydecl" { return f"(entity-decl {node["name"]} comps={len(node["comps"])})" }
+    if k == "use" { return f"(use {node["path"]})" }
+    return f"(?{k})"
+}
+
+fn parse_and_dump(src: str) -> nil {
+    let ast = parse(lex(src))
+    let errs = ast["errors"]
+    if len(errs) > 0 {
+        for e in errs { print(f"  ERR {e}") }
+    }
+    for d in ast["decls"] {
+        print(dump(d))
+    }
+    print("---")
+}
+
+fn main() -> nil {
+    parse_and_dump("let x = 1 + 2 * 3")
+    parse_and_dump("let y = (1 + 2) * 3")
+    parse_and_dump("print(f\"hp={h.hp}!\")")
+    parse_and_dump("component Health { hp: 100, max: 100 }")
+    parse_and_dump("event Hit { target: str, amount: int }")
+    parse_and_dump("on Hit(e) { print(e.amount) }")
+    parse_and_dump("system Physics(pos: mut Position, vel: Velocity) { pos.x = pos.x + vel.dx }")
+    parse_and_dump("state Door { Locked { on unlock -> Closed } Closed { on open -> Open, on lock -> Locked } Open { on close -> Closed } }")
+    parse_and_dump("let door = Door::Locked")
+    parse_and_dump("let r = xs |> filter(fn(v) { return v > 0 }) |> map(double)")
+    parse_and_dump("match door { Locked => { print(1) } Closed => { print(2) } Open => { print(3) } }")
+    parse_and_dump("entity hero { Health { hp: 100 }, Position { x: 0.0 } }")
+    parse_and_dump("fn add(a: int, b: int) -> int { return a + b }")
+    parse_and_dump("for i in range(10) { if i % 2 == 0 { continue } print(i) }")
+    parse_and_dump("schedule [Physics, Render]")
+    parse_and_dump("let t = if hp < 25 { \"low\" } else { \"ok\" }")
+    parse_and_dump("xs[0] = 5")
+    parse_and_dump("m[\"key\"] = { \"a\": 1 }")
+    parse_and_dump("let ok = get(hero, Health)")
+}

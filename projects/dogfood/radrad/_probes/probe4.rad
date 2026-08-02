@@ -1,0 +1,104 @@
+// Probe 4: final semantics before building radrad.
+
+fn main() -> nil {
+    // 1. int keys in maps
+    let mut m: map<int, str> = {}
+    m[1] = "one"
+    m[42] = "forty-two"
+    print(f"int keys: {m[42]} {contains(m, 1)} {contains(m, 2)}")
+
+    // 2. substring_bytes end semantics
+    let s = "hello world"
+    print(f"sub: [{substring_bytes(s, 0, 5)}] [{substring_bytes(s, 6, 11)}]")
+
+    // 3. match int in a loop with many arms (dispatch pattern)
+    let mut total = 0
+    for op in [1, 2, 3, 1, 1] {
+        let delta = match op {
+            1 => 10
+            2 => 100
+            3 => 1000
+            _ => 0
+        }
+        total = total + delta
+    }
+    print(f"dispatch total: {total}")
+
+    // 4. list index assignment persists via global-style locals
+    let mut stack: list<any> = []
+    stack << 1
+    stack << 2
+    let tos = stack[len(stack) - 1]
+    stack = drop_last(stack)
+    print(f"stack pop: {tos} rest: {stack}")
+
+    // 5. closures capturing loop var
+    let mut fns: list<any> = []
+    for i in range(3) {
+        let captured = i
+        fns << fn() -> int { return captured * 10 }
+    }
+    let f0 = fns[0]
+    let f2 = fns[2]
+    print(f"closure capture: {f0()} {f2()}")
+
+    // 6. string concat in loop (perf pattern), plus join
+    let mut parts: list<str> = []
+    for i in range(5) {
+        parts << str(i)
+    }
+    print(f"join: {join(parts, ",")}")
+
+    // 7. nil handling: nil == nil, is nil in list
+    let x = nil
+    print(f"nil eq: {x == nil} {nil == nil}")
+
+    // 8. bool ops short circuit
+    let mut hits = 0
+    let bump = fn() -> bool {
+        hits = hits + 1
+        return true
+    }
+    if false and bump() { }
+    if true or bump() { }
+    print(f"short circuit hits: {hits}")
+
+    // 9. float to str round trip
+    print(f"floats: {str(1.0)} {str(0.5)} {str(100.25)}")
+
+    // 10. chr/ord roundtrip for ASCII
+    print(f"chr/ord: {chr(65)} {ord("A")} {chr(10) == "\n"}")
+
+    // 11. map with any values holding closures?
+    let mut reg: map<str, any> = {}
+    reg["double"] = fn(v: int) -> int { return v * 2 }
+    let d = reg["double"]
+    print(f"closure in map: {d(21)}")
+
+    // 12. equality of variant-ish tagged maps nested
+    let a = { "t": "Some", "v": [1, 2] }
+    let b = { "t": "Some", "v": [1, 2] }
+    print(f"tagged eq: {a == b}")
+
+    // 13. while true + break
+    let mut n = 0
+    while true {
+        n = n + 1
+        if n >= 3 { break }
+    }
+    print(f"while true: {n}")
+
+    // 14. not operator and !=
+    print(f"not: {not false} {1 != 2}")
+
+    // 15. string escapes in lexer input
+    let esc = "a\tb\"c\\d"
+    print(f"escapes len: {byte_len(esc)}")
+
+    // 16. modifying map value that is a list, via nested writeback
+    let mut world: map<str, any> = { "queue": [] }
+    world["queue"] << "evt1"
+    world["queue"] << "evt2"
+    let q = world["queue"]
+    print(f"queue: {len(q)} {q[0]}")
+}

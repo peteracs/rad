@@ -1,0 +1,11 @@
+// The O(n) accumulation idiom that works TODAY: build all parts in one
+// map() (one list allocation, no per-push copying), join once.
+// (`parts << x` loops are O(n²): every push deep-copies the list — see
+// the baselines README.)
+fn main() -> nil {
+    let t0 = now_unix_ms()
+    let parts = map(range(0, 60000), fn(i) { return "ab" + f"{i % 10}" })
+    let s = join(parts, "")
+    let t1 = now_unix_ms()
+    print(f"RESULT {len(s)} MS {t1 - t0}")
+}

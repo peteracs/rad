@@ -1,0 +1,5 @@
+// backend: both
+let risky = [23, 77, 51, 91, 14, 68]
+let high = risky |> filter(fn(x) { return x >= 70 })
+print(f"CASE02:{len(high)}")
+// expect: CASE02:2

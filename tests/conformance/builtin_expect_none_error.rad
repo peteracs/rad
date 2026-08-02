@@ -1,0 +1,5 @@
+// expect() on Option::None must produce a runtime error with the custom message
+// rust-mode: no-check
+let bad = try_int("nope")
+expect(bad, "conversion failed")
+// expect-runtime-error: expect() failed: conversion failed

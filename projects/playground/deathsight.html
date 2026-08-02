@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>DEATHSIGHT — the dungeon knows when you will die</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --bg: #0a0a0f; --panel: #14141d; --line: #262636;
+    --text: #e8e6f0; --dim: #8a87a0;
+    --red: #ff5d5d; --gold: #ffc857; --green: #5dff8f; --violet: #b58cff;
+    --tile: 56px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: radial-gradient(1200px 700px at 50% -100px, #181826, var(--bg));
+    color: var(--text); font: 14px/1.5 "Segoe UI", system-ui, sans-serif;
+  }
+  header { padding: 22px 28px 6px; text-align: center; }
+  header h1 {
+    margin: 0; font-size: 34px; letter-spacing: 8px; font-weight: 800;
+    color: #fff; text-shadow: 0 0 18px rgba(255, 93, 93, .55), 0 0 60px rgba(181, 140, 255, .25);
+  }
+  header h1 .eye { color: var(--red); }
+  header .sub { color: var(--dim); font-size: 13px; margin-top: 4px; }
+  .controls {
+    display: flex; gap: 10px; justify-content: center; align-items: center;
+    padding: 14px; flex-wrap: wrap;
+  }
+  button {
+    background: #1d1d2c; border: 1px solid var(--line); color: var(--text);
+    font: 600 13.5px/1 inherit; padding: 11px 20px; border-radius: 8px; cursor: pointer;
+    transition: transform .1s, border-color .2s, box-shadow .2s;
+  }
+  button:hover:not(:disabled) { border-color: var(--violet); box-shadow: 0 0 12px rgba(181,140,255,.25); transform: translateY(-1px); }
+  button:disabled { opacity: .45; cursor: wait; }
+  button.primary { background: linear-gradient(160deg, #7c3aed, #4c1d95); border-color: #7c3aed; }
+  button.danger  { background: linear-gradient(160deg, #b91c1c, #6b0f0f); border-color: #b91c1c; }
+  #status { color: var(--gold); font-size: 13px; min-height: 18px; text-align: center; }
+  main { display: flex; flex-wrap: wrap; gap: 18px; padding: 10px 26px 30px; justify-content: center; align-items: flex-start; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+  /* --- the dungeon --- */
+  #stage { position: relative; }
+  #banner {
+    text-align: center; min-height: 30px; font-size: 17px; font-weight: 700;
+    letter-spacing: 3px; color: var(--gold); margin-bottom: 8px; text-transform: uppercase;
+  }
+  #board { position: relative; border-radius: 10px; overflow: hidden; box-shadow: 0 8px 40px #000a; }
+  .tile { position: absolute; width: var(--tile); height: var(--tile); }
+  .tile.floor { background: #191923; box-shadow: inset 0 0 0 1px #1f1f2c; }
+  .tile.floor.alt { background: #1b1b26; }
+  .tile.wall {
+    background: linear-gradient(160deg, #3a3a52, #232334);
+    box-shadow: inset 0 3px 0 #4c4c6a, inset 0 -4px 0 #15151f, inset 2px 0 0 #44445e;
+    border-radius: 3px;
+  }
+  .tile.exit { background: radial-gradient(circle, #143a22, #191923 75%); }
+  .tile.exit::after {
+    content: "🚪"; position: absolute; inset: 0; display: flex; align-items: center;
+    justify-content: center; font-size: 30px; filter: drop-shadow(0 0 8px #5dff8f);
+  }
+  .tile.clickable { cursor: pointer; }
+  .tile.clickable:hover { box-shadow: inset 0 0 0 2px var(--violet); }
+  .unit {
+    position: absolute; width: var(--tile); height: var(--tile);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    font-size: 34px; transition: left .45s cubic-bezier(.2,.9,.3,1.2), top .45s cubic-bezier(.2,.9,.3,1.2), opacity .5s;
+    filter: drop-shadow(0 3px 4px #000c); z-index: 5; pointer-events: none;
+  }
+  .unit .hp { width: 70%; height: 5px; border-radius: 3px; background: #000a; overflow: hidden; margin-top: -3px; }
+  .unit .hp i { display: block; height: 100%; background: var(--green); transition: width .4s; }
+  .unit.hurt .hp i { background: var(--gold); }
+  .unit.critical .hp i { background: var(--red); }
+  .unit.dead { opacity: 0; transform: scale(.4) rotate(40deg); }
+  .unit.ghost { opacity: .85; filter: drop-shadow(0 0 10px #b58cff); }
+  .corpse {
+    position: absolute; width: var(--tile); height: var(--tile); z-index: 3;
+    display: flex; align-items: center; justify-content: center; font-size: 30px;
+    opacity: .9; filter: saturate(.6) drop-shadow(0 0 6px #ff5d5d88); pointer-events: none;
+  }
+  /* death odds badges */
+  .odds {
+    position: absolute; z-index: 4; display: flex; align-items: center; justify-content: center;
+    width: var(--tile); height: var(--tile); font-weight: 800; font-size: 15px;
+    color: #fff; text-shadow: 0 1px 3px #000; pointer-events: none;
+    animation: oddpop .35s ease-out;
+  }
+  .odds .pill { padding: 3px 8px; border-radius: 999px; backdrop-filter: blur(1px); }
+  @keyframes oddpop { from { opacity: 0; transform: scale(.6); } to { opacity: 1; } }
+  .odds.self { align-items: flex-start; justify-content: flex-end; font-size: 11.5px; padding: 3px; }
+  /* flash + corpse */
+  #flash { position: absolute; inset: 0; background: #d31b1b; opacity: 0; pointer-events: none; z-index: 9; transition: opacity .15s; }
+  #ticker { margin-top: 10px; min-height: 46px; font-size: 13px; color: var(--dim); text-align: center; }
+  #ticker .big { font-size: 14px; color: var(--text); }
+  #ticker .ghostline { color: var(--violet); }
+  #hint { color: var(--dim); font-size: 12px; text-align: center; margin-top: 4px; min-height: 16px; }
+  /* --- right column --- */
+  .right { width: 380px; display: flex; flex-direction: column; gap: 14px; }
+  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 2px; color: var(--dim); margin: 0 0 8px; }
+  #necro { font: 12.5px/1.7 ui-monospace, Consolas, monospace; white-space: pre-wrap; min-height: 20px; }
+  #necro .probe { color: var(--dim); animation: oddpop .3s; }
+  #necro .foundline { color: var(--green); font-weight: 700; }
+  #necro .pnr {
+    display: block; margin: 8px 0; padding: 10px; border: 1px solid var(--gold); border-radius: 8px;
+    color: var(--gold); font-weight: 700; font-size: 13.5px; animation: oddpop .5s;
+  }
+  #autopsy { font: 12px/1.6 ui-monospace, Consolas, monospace; white-space: pre-wrap; color: var(--dim); }
+  #autopsy b { color: var(--red); }
+  #journal { font: 12px/1.6 ui-monospace, Consolas, monospace; white-space: pre-wrap; max-height: 180px; overflow-y: auto; color: var(--text); }
+  #journal .death { color: var(--red); font-weight: 700; }
+  #stats { color: var(--dim); font-size: 12.5px; }
+  #stats b { color: var(--violet); font-size: 15px; }
+  footer { padding: 0 26px 26px; color: var(--dim); font-size: 12px; text-align: center; }
+  footer code { color: var(--violet); }
+</style>
+</head>
+<body>
+<header>
+  <h1>DEATH<span class="eye">SIGHT</span></h1>
+  <div class="sub">the dungeon forks the universe before your every move — and shows you the odds you die</div>
+</header>
+
+<div class="controls">
+  <button id="btn-demo" class="danger">☠ watch the doomed hero</button>
+  <button id="btn-oracle">👁 watch the oracle escape</button>
+  <button id="btn-play" class="primary">⚔ PLAY (wasd / click)</button>
+  <label style="color:var(--dim);font-size:13px">seed <input id="seed" type="number" value="1337"
+    style="width:84px;background:#1d1d2c;color:var(--text);border:1px solid var(--line);border-radius:6px;padding:6px 8px;font:inherit"></label>
+</div>
+<div id="status"></div>
+
+<main>
+  <div class="panel" id="stage">
+    <div id="banner">choose your fate</div>
+    <div id="board"><div id="flash"></div></div>
+    <div id="ticker"></div>
+    <div id="hint"></div>
+  </div>
+  <div class="right">
+    <div class="panel">
+      <h2>the multiverse</h2>
+      <div id="stats">every % you see = staged move × 8 jittered futures × 6 turns deep, then the universe is rolled back</div>
+    </div>
+    <div class="panel">
+      <h2>necromancy</h2>
+      <div id="necro">when you die, the game digs through rewound timelines for the one where you live</div>
+    </div>
+    <div class="panel">
+      <h2>autopsy — why()</h2>
+      <div id="autopsy">the causality ledger will name your killer</div>
+    </div>
+    <div class="panel">
+      <h2>journal</h2>
+      <div id="journal"></div>
+    </div>
+  </div>
+</main>
+
+<footer>
+  the full rad VM, compiled to WebAssembly, runs in a Web Worker in this tab —
+  <code>fork()</code> / <code>simulate_par()</code> / <code>commit()</code> / <code>why()</code> are language builtins.
+  brain: <code>projects/dogfood/deathsight/lib_sight.rad</code> · host: <code>web_deathsight.rad</code>
+</footer>
+
+<script type="module">
+const TILE = 56;
+const $ = id => document.getElementById(id);
+const boardEl = $("board"), banner = $("banner"), ticker = $("ticker"), hintEl = $("hint");
+const statusEl = $("status"), necroEl = $("necro"), autopsyEl = $("autopsy");
+const journalEl = $("journal"), statsEl = $("stats"), flashEl = $("flash");
+const buttons = [$("btn-demo"), $("btn-oracle"), $("btn-play")];
+
+const GLYPH = { you: "🧝", ghoul: "🧟", hound: "🐺", spitter: "🦂" };
+const worker = new Worker("./deathsight_worker.js", { type: "module" });
+let sources = null;
+
+async function loadSources() {
+  if (sources) return sources;
+  const [lib, host] = await Promise.all([
+    fetch("../../projects/dogfood/deathsight/lib_sight.rad").then(r => r.text()),
+    fetch("../../projects/dogfood/deathsight/web_deathsight.rad").then(r => r.text()),
+  ]);
+  sources = lib + "\n" + host.replace(/^use "lib_sight.rad"\s*$/m, "");
+  return sources;
+}
+
+// ---------- protocol parser ----------
+function parseRun(text) {
+  const run = { meta: null, map: [], turns: [], final: null, fate: null, fateTurn: 0,
+                why: "", probes: [], found: null, went: "", gframes: [], stats: null };
+  let target = null, inWhy = false, curG = null;
+  for (const line of text.split("\n")) {
+    if (inWhy) { if (line === "@endwhy") inWhy = false; else run.why += line + "\n"; continue; }
+    if (line.startsWith("@meta ")) {
+      const p = line.slice(6).split(" ");
+      run.meta = { w: +p[0], h: +p[1], ex: +p[2], ey: +p[3], mode: p[4], seed: +p[5] };
+    } else if (line.startsWith("@maprow ")) run.map.push(line.slice(8));
+    else if (line.startsWith("@turn ")) { target = { t: +line.slice(6), units: [], sight: [], move: null, logs: [] }; run.turns.push(target); }
+    else if (line === "@final") { run.final = { units: [] }; target = run.final; }
+    else if (line.startsWith("@unit ")) {
+      const p = line.slice(6).split(" ");
+      target.units.push({ name: p[0], kind: p[1], x: +p[2], y: +p[3], hp: +p[4], max: +p[5] });
+    } else if (line.startsWith("@sight ")) {
+      const p = line.slice(7).split("|");
+      target.sight.push({ dir: p[0], pct: +p[1], tx: +p[2], ty: +p[3], kind: p[4], target: p[5] });
+    } else if (line.startsWith("@move ")) {
+      const rest = line.slice(6); const sp = rest.indexOf(" ");
+      run.turns[run.turns.length - 1].move = rest.slice(sp + 1);
+    } else if (line.startsWith("@log ")) run.turns[run.turns.length - 1].logs.push(line.slice(5));
+    else if (line.startsWith("@fate ")) { const p = line.slice(6).split(" "); run.fate = p[0]; run.fateTurn = +p[1]; }
+    else if (line === "@why") inWhy = true;
+    else if (line.startsWith("@probe ")) { const p = line.slice(7).split(" "); run.probes.push({ back: +p[0], tried: +p[1] }); }
+    else if (line.startsWith("@nofound ")) run.found = { none: true, max: +line.slice(9) };
+    else if (line.startsWith("@found ")) { const p = line.slice(7).split(" "); run.found = { back: +p[0], pnr: +p[1], first: p.slice(2).join(" ") }; }
+    else if (line.startsWith("@went ")) run.went = line.slice(6);
+    else if (line.startsWith("@gframe ")) { const p = line.slice(8).split("|"); curG = { t: +p[0], label: p[1], yours: p[2], units: [] }; run.gframes.push(curG); }
+    else if (line.startsWith("@gunit ")) { const p = line.slice(7).split(" "); curG.units.push({ name: p[0], kind: p[1], x: +p[2], y: +p[3], hp: +p[4], max: +p[5] }); }
+    else if (line.startsWith("@reject ")) run.rejected = true;
+    else if (line.startsWith("@stats ")) { const p = line.slice(7).split(" "); run.stats = { futures: +p[0], ms: +p[1] }; }
+  }
+  return run;
+}
+
+// ---------- board renderer ----------
+const unitEls = new Map();
+let boardBuilt = false, meta = null, mapRows = null;
+
+function buildBoard(m, map) {
+  meta = m; mapRows = map;
+  boardEl.style.width = m.w * TILE + "px";
+  boardEl.style.height = m.h * TILE + "px";
+  [...boardEl.querySelectorAll(".tile,.unit,.odds,.corpse")].forEach(el => el.remove());
+  unitEls.clear();
+  for (let y = 0; y < m.h; y++) for (let x = 0; x < m.w; x++) {
+    const d = document.createElement("div");
+    const wall = map[y][x] === "#";
+    d.className = "tile " + (wall ? "wall" : (x === m.ex && y === m.ey ? "exit" : "floor" + ((x + y) % 2 ? " alt" : "")));
+    d.style.left = x * TILE + "px"; d.style.top = y * TILE + "px";
+    d.dataset.x = x; d.dataset.y = y;
+    boardEl.appendChild(d);
+  }
+  boardBuilt = true;
+}
+
+function renderUnits(units, ghostMode = false) {
+  const seen = new Set();
+  for (const u of units) {
+    seen.add(u.name);
+    let el = unitEls.get(u.name);
+    if (!el) {
+      el = document.createElement("div");
+      el.innerHTML = `<span class="g"></span><span class="hp"><i></i></span>`;
+      boardEl.appendChild(el);
+      unitEls.set(u.name, el);
+    }
+    const pct = Math.max(0, u.hp / u.max);
+    let glyph = GLYPH[u.kind] || "?";
+    if (u.name === "you" && u.hp <= 0) glyph = "💀";
+    if (u.name === "you" && ghostMode && u.hp > 0) glyph = "👻";
+    el.querySelector(".g").textContent = glyph;
+    el.className = "unit" + (u.hp <= 0 && u.name !== "you" ? " dead" : pct < 0.34 ? " critical" : pct < 0.67 ? " hurt" : "")
+      + (u.name === "you" && ghostMode ? " ghost" : "");
+    el.style.left = u.x * TILE + "px";
+    el.style.top = u.y * TILE + "px";
+    el.querySelector(".hp i").style.width = pct * 100 + "%";
+  }
+  for (const [name, el] of unitEls) if (!seen.has(name)) el.classList.add("dead");
+}
+
+function clearOdds() { [...boardEl.querySelectorAll(".odds")].forEach(el => el.remove()); }
+
+function oddsColor(p) {
+  const t = p / 100;
+  const r = Math.round(40 + 215 * t), g = Math.round(200 - 165 * t);
+  return `rgba(${r},${g},70,.78)`;
+}
+
+function renderSight(sight) {
+  clearOdds();
+  for (const s of sight) {
+    const d = document.createElement("div");
+    d.className = "odds" + (s.dir === "stay" ? " self" : "");
+    d.style.left = s.tx * TILE + "px";
+    d.style.top = s.ty * TILE + "px";
+    const tag = s.kind === "attack" ? "⚔" : "";
+    d.innerHTML = `<span class="pill" style="background:${oddsColor(s.pct)}">${tag}${s.pct}%</span>`;
+    boardEl.appendChild(d);
+  }
+}
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+function tick(html, cls = "") { ticker.innerHTML = `<div class="${cls}">${html}</div>`; }
+function addJournal(lines) {
+  for (const l of lines) {
+    const d = document.createElement("div");
+    d.textContent = l;
+    if (l.includes("kills you")) d.className = "death";
+    journalEl.appendChild(d);
+  }
+  journalEl.scrollTop = journalEl.scrollHeight;
+}
+
+async function typeInto(el, text) {
+  el.innerHTML = "";
+  for (const line of text.split("\n")) {
+    const d = document.createElement("div");
+    el.appendChild(d);
+    for (const ch of line) { d.textContent += ch; await sleep(6); }
+  }
+}
+
+// ---------- cinematics ----------
+async function playTurns(run, animate) {
+  if (!boardBuilt) buildBoard(run.meta, run.map);
+  journalEl.innerHTML = "";
+  for (let i = 0; i < run.turns.length; i++) {
+    const f = run.turns[i];
+    const last = i === run.turns.length - 1;
+    banner.textContent = `turn ${f.t}`;
+    renderUnits(f.units);
+    renderSight(f.sight);
+    addJournal(f.logs);
+    if (f.move) tick(`<span class="big">→ ${f.move}</span>`);
+    if (animate) await sleep(last ? 500 : 760);
+  }
+}
+
+async function deathCinematic(run) {
+  // the blow
+  flashEl.style.opacity = .55; await sleep(170); flashEl.style.opacity = 0;
+  clearOdds();
+  if (run.final) renderUnits(run.final.units);
+  banner.textContent = `☠ YOU DIE — turn ${run.fateTurn}`;
+  tick(`<span class="big" style="color:var(--red)">the dungeon takes you</span>`);
+  addJournal(run.turns[run.turns.length - 1] ? [] : []);
+  await sleep(700);
+
+  // autopsy
+  await typeInto(autopsyEl, run.why.trim());
+  await sleep(500);
+
+  // necromancy
+  necroEl.innerHTML = "";
+  tick(`<span class="ghostline">⏪ necromancy: searching rewound timelines…</span>`);
+  for (const p of run.probes) {
+    const d = document.createElement("div");
+    d.className = "probe";
+    d.textContent = `⏪ rewind ${p.back} turn${p.back > 1 ? "s" : ""} — all ${p.tried} first moves die`;
+    necroEl.appendChild(d);
+    await sleep(420);
+  }
+  if (run.found?.none) {
+    const d = document.createElement("div");
+    d.className = "pnr";
+    d.textContent = `no surviving timeline within ${run.found.max} rewound turns — your death was sealed before you ever saw it coming.`;
+    necroEl.appendChild(d);
+    return;
+  }
+  const f = document.createElement("div");
+  f.className = "foundline";
+  f.textContent = `⏪ rewind ${run.found.back}, first move ${run.found.first} → A SURVIVING TIMELINE EXISTS`;
+  necroEl.appendChild(f);
+  await sleep(900);
+  const pnr = document.createElement("div");
+  pnr.className = "pnr";
+  pnr.innerHTML = run.found.pnr === -1
+    ? `your death was never inevitable — the move you made on turn ${run.fateTurn} (<b>${run.went}</b>) is itself what killed you.`
+    : `THE POINT OF NO RETURN was turn ${run.found.pnr}.<br>
+       <span style="font-weight:400;color:var(--text)">you went <b>${run.went}</b> on turn ${run.found.pnr - 1} — after that move, every probed future ended in death. you had ${run.fateTurn - run.found.pnr + 1} turns left and were already gone.</span>`;
+  necroEl.appendChild(pnr);
+  await sleep(1200);
+
+  // ghost replay — your corpse stays where you fell while the ghost lives on
+  const corpseU = run.final?.units.find(u => u.name === "you");
+  if (corpseU) {
+    const c = document.createElement("div");
+    c.className = "corpse"; c.textContent = "💀";
+    c.style.left = corpseU.x * TILE + "px"; c.style.top = corpseU.y * TILE + "px";
+    boardEl.appendChild(c);
+  }
+  banner.textContent = "👻 the life you should have lived";
+  for (const g of run.gframes) {
+    renderUnits(g.units, true);
+    const yours = g.yours ? ` <span style="color:var(--dim)">(you went: ${g.yours})</span>` : "";
+    tick(`<span class="ghostline">ghost turn ${g.t}: goes ${g.label}</span>${yours}`);
+    await sleep(620);
+  }
+  banner.textContent = "👻 the ghost walks out alive";
+  tick(`<span class="big">you died on turn ${run.fateTurn}. the ghost escaped.</span>`);
+}
+
+function showStats(run, ms) {
+  if (!run.stats) return;
+  const ups = run.stats.ms > 0 ? Math.round(run.stats.futures / (run.stats.ms / 1000)) : 0;
+  statsEl.innerHTML = `this run burned <b>${run.stats.futures.toLocaleString()}</b> forked universes ` +
+    `in ${(run.stats.ms / 1000).toFixed(1)}s inside your tab (${ups.toLocaleString()} universes/sec, wasm) — ` +
+    `every fork is a copy-on-write snapshot of the whole game world.`;
+}
+
+// ---------- driver ----------
+let busy = false, playState = null, thinkTimer = null;
+
+function setBusy(b, label) {
+  busy = b;
+  buttons.forEach(x => x.disabled = b);
+  clearInterval(thinkTimer);
+  if (b) {
+    const t0 = performance.now();
+    statusEl.textContent = label;
+    thinkTimer = setInterval(() => {
+      statusEl.textContent = `${label} ${((performance.now() - t0) / 1000).toFixed(0)}s`;
+    }, 1000);
+  } else statusEl.textContent = "";
+}
+
+function runVM(mode, script) {
+  return new Promise(async (resolve, reject) => {
+    const source = await loadSources();
+    const seed = +$("seed").value || 1337;
+    worker.onmessage = ev => ev.data.ok ? resolve(ev.data) : reject(new Error(ev.data.error));
+    worker.postMessage({ source, mode, script, seed });
+  });
+}
+
+function resetPanels() {
+  autopsyEl.textContent = "the causality ledger will name your killer";
+  necroEl.textContent = "when you die, the game digs through rewound timelines for the one where you live";
+  journalEl.innerHTML = ""; ticker.innerHTML = ""; hintEl.textContent = "";
+  boardBuilt = false;
+}
+
+async function watch(mode) {
+  if (busy) return;
+  resetPanels(); playState = null;
+  setBusy(true, mode === "demo"
+    ? "the doomed hero walks — and the multiverse prices every step…"
+    : "the oracle is forking universes…");
+  try {
+    const res = await runVM(mode, "");
+    const run = parseRun(res.output);
+    setBusy(false);
+    showStats(run, res.ms);
+    await playTurns(run, true);
+    if (run.fate === "died") await deathCinematic(run);
+    else if (run.fate === "escaped") {
+      clearOdds();
+      if (run.final) renderUnits(run.final.units);
+      banner.textContent = `🏆 ESCAPED on turn ${run.fateTurn}`;
+      tick(`<span class="big" style="color:var(--green)">the sight wins. same dungeon, zero deaths.</span>`);
+    }
+  } catch (e) { setBusy(false); statusEl.textContent = "VM error: " + e.message; }
+}
+
+// ---- interactive play: every move = re-run the deterministic universe ----
+async function playMove(dir) {
+  if (busy || !playState || playState.over) return;
+  playState.script.push(dir);
+  setBusy(true, "forking your futures…");
+  try {
+    const res = await runVM("play", playState.script.join(" "));
+    const run = parseRun(res.output);
+    setBusy(false);
+    showStats(run, res.ms);
+    const lastTurn = run.turns[run.turns.length - 1];
+    if (!boardBuilt) buildBoard(run.meta, run.map);
+    journalEl.innerHTML = "";
+    for (const f of run.turns) addJournal(f.logs);
+
+    if (run.fate === "awaiting") {
+      if (run.rejected) playState.script.pop(); // that way is a wall — forget the move
+      banner.textContent = `turn ${run.fateTurn}`;
+      renderUnits(lastTurn.units);
+      renderSight(lastTurn.sight);
+      const prev = run.turns[run.turns.length - 2];
+      if (run.rejected) tick(`<span class="big">that way is a wall</span>`);
+      else if (prev?.move) tick(`<span class="big">→ ${prev.move}</span>`);
+      hintEl.textContent = "wasd / arrows / click a glowing tile · space = wait";
+    } else if (run.fate === "died") {
+      playState.over = true;
+      renderUnits(lastTurn.units); renderSight(lastTurn.sight);
+      await sleep(400);
+      await deathCinematic(run);
+    } else if (run.fate === "escaped") {
+      playState.over = true;
+      clearOdds();
+      if (run.final) renderUnits(run.final.units);
+      banner.textContent = `🏆 YOU ESCAPED — turn ${run.fateTurn}`;
+      tick(`<span class="big" style="color:var(--green)">you outran every future that killed you</span>`);
+    }
+  } catch (e) { setBusy(false); statusEl.textContent = "VM error: " + e.message; }
+}
+
+async function startPlay() {
+  if (busy) return;
+  resetPanels();
+  playState = { script: [], over: false };
+  setBusy(true, "opening the dungeon…");
+  try {
+    const res = await runVM("play", "");
+    const run = parseRun(res.output);
+    setBusy(false);
+    buildBoard(run.meta, run.map);
+    const f = run.turns[0];
+    banner.textContent = "turn 1 — the floor is watching";
+    renderUnits(f.units);
+    renderSight(f.sight);
+    hintEl.textContent = "wasd / arrows / click a glowing tile · space = wait · the % is the chance you die within 6 turns";
+    showStats(run, res.ms);
+  } catch (e) { setBusy(false); statusEl.textContent = "VM error: " + e.message; }
+}
+
+$("btn-demo").onclick = () => watch("demo");
+$("btn-oracle").onclick = () => watch("oracle");
+$("btn-play").onclick = startPlay;
+
+document.addEventListener("keydown", ev => {
+  if (!playState || playState.over || busy) return;
+  const k = ev.key.toLowerCase();
+  const dir = { w: "N", arrowup: "N", s: "S", arrowdown: "S", a: "W", arrowleft: "W", d: "E", arrowright: "E", " ": "stay", ".": "stay" }[k];
+  if (dir) { ev.preventDefault(); playMove(dir); }
+});
+boardEl.addEventListener("click", ev => {
+  if (!playState || playState.over || busy) return;
+  const t = ev.target.closest(".tile"); if (!t) return;
+  const you = unitEls.get("you"); if (!you) return;
+  const ux = Math.round(parseInt(you.style.left) / TILE), uy = Math.round(parseInt(you.style.top) / TILE);
+  const dx = +t.dataset.x - ux, dy = +t.dataset.y - uy;
+  const dir = dx === 0 && dy === 0 ? "stay"
+    : dx === 1 && dy === 0 ? "E" : dx === -1 && dy === 0 ? "W"
+    : dx === 0 && dy === 1 ? "S" : dx === 0 && dy === -1 ? "N" : null;
+  if (dir) playMove(dir);
+});
+</script>
+</body>
+</html>

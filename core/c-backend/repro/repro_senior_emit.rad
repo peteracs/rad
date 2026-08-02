@@ -1,0 +1,5 @@
+use "../src/emit_c.rad"
+
+fn main() -> nil {
+    compile_file_to_c_unchecked("core/c-backend/repro/_repro_senior_points.rad", "core/c-backend/target/repro_senior/gen_repro.c")
+}

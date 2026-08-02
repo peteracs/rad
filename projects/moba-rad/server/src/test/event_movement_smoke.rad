@@ -1,0 +1,35 @@
+use "../sim/components.rad"
+use "../world/scene.rad"
+use "../world/avatars.rad"
+use "../sim/movement.rad"
+
+// Event-driven movement smoke. The browser prediction client never calls
+// issue_move_order/tick_movement directly: RadGameSession.moveOrder() emits a
+// `MoveOrder` event and tickFixed() emits a `Tick` event, then pumps the event
+// queue. movement_smoke.rad only calls the functions directly, so it cannot
+// catch a regression in the `on MoveOrder` / `on Tick` dispatch path that the
+// client depends on. This test drives movement exclusively through events.
+let _seed = seed_moba_world()
+
+fn main() -> nil {
+    let spawn_pos = get(player_avatar(1), Position) |> unwrap
+    assert(spawn_pos.x == 0.0 and spawn_pos.y == 0.0, "avatar must spawn at scene origin")
+
+    emit MoveOrder { player_id: 1, command_id: 1, target_x: 50.0, target_y: 0.0 }
+    flush_events()
+
+    let target = get(player_avatar(1), MoveTarget) |> unwrap
+    assert(target.active, "MoveOrder event must set an active move target")
+    assert(target.command_id == 1, "MoveOrder event must record the command id")
+
+    let mut ticks = 0
+    while ticks < 16 {
+        emit Tick { dt: 1.0 / 128.0 }
+        flush_events()
+        ticks = ticks + 1
+    }
+
+    let moved = get(player_avatar(1), Position) |> unwrap
+    assert(moved.x > 0.0, "Tick events must integrate avatar movement toward the target")
+    assert(moved.x < 50.0, "16 ticks must not snap the avatar onto a distant target")
+}

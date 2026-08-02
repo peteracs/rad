@@ -1,0 +1,16 @@
+---
+source: tests\conformance\builtins.rad
+exit_code: 0
+---
+[0, 1, 2, 3]
+[2, 3, 4]
+3
+7
+9
+int
+bool
+list
+100
+42
+2.5
+["a", "b"]

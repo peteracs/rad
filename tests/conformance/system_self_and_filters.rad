@@ -1,0 +1,37 @@
+// Systems know their own entity as `self` (the VM always bound it; the
+// checker now agrees), and bare component names are type-only filter
+// params — the tag-component idiom without an unused binding.
+
+component Tagged {}
+
+component Score { points: int = 0 }
+
+event Scored { who: entity, total: int }
+
+on Scored(e) {
+    print(f"{name_of(e.who)} -> {e.total}")
+}
+
+// `Tagged` filters; `self` is the visited entity
+system award(Tagged, s: mut Score) {
+    s.points = s.points + 10
+    emit Scored { who: self, total: s.points }
+    if s.points >= 20 {
+        remove(self, Tagged)
+    }
+}
+
+fn main() -> nil {
+    let _a = entity "alpha" { Tagged {}, Score {} }
+    let _b = entity "beta" { Tagged {}, Score { points: 10 } }
+    let _c = entity "gamma" { Score { points: 99 } }   // untagged: never visited
+
+    schedule [award]
+    schedule [award]
+    schedule [award]    // beta untags after pass 1, alpha after pass 2
+
+    let sa = require(get_entity("alpha"), Score)
+    let sb = require(get_entity("beta"), Score)
+    let sc = require(get_entity("gamma"), Score)
+    print(f"alpha={sa.points} beta={sb.points} gamma={sc.points}")
+}

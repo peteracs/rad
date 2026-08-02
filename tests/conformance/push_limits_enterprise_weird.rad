@@ -1,0 +1,182 @@
+// Push-the-language stress suite (25 checks)
+// backend: both
+
+component Balance { amount: 0 }
+
+component Flag { active: false }
+
+event Alert { code, msg }
+
+state Incident {
+    Green { on warn -> Yellow }
+    Yellow { on fail -> Red on clear -> Green }
+    Red { on clear -> Yellow }
+}
+
+fn make_multiplier(k) {
+    return fn(x) { return x * k }
+}
+
+fn fact(n) {
+    if n <= 1 { return 1 }
+    return n * fact(n - 1)
+}
+
+fn mutate(xs) {
+    let mut y = xs
+    y[0] = 999
+    return y
+}
+
+fn bucket(n) {
+    if n < 50 { return "low" }
+    if n < 80 { return "mid" }
+    return "high"
+}
+
+on Alert(e) {
+    print(f"EVENT:{e.code}:{e.msg}")
+}
+
+fn main() -> nil {
+    print(f"CASE01:{reduce([10, 20, 30, 40], 0, fn(a, b) { return a + b })}")
+    // expect: CASE01:100
+
+    let risky = [23, 77, 51, 91, 14, 68]
+    let high = risky |> filter(fn(x) { return x >= 70 })
+    print(f"CASE02:{len(high)}")
+    // expect: CASE02:2
+    print(f"CASE03:{reduce(high, 0, fn(a, b) { return a + b })}")
+    // expect: CASE03:168
+
+    let sorted = sort(risky)
+    print(f"CASE04:{sorted[0]}:{sorted[len(sorted) - 1]}")
+    // expect: CASE04:14:91
+
+    let raw = "  finance,security,platform  "
+    let cleaned = trim(raw)
+    let teams = split(cleaned, ",")
+    let teams_joined = join(teams, "|")
+    print(f"CASE05:{teams_joined}")
+    // expect: CASE05:finance|security|platform
+
+    let pci_underscored = replace("pci-audit-2026", "-", "_")
+    print(f"CASE06:{pci_underscored}")
+    // expect: CASE06:pci_audit_2026
+
+    let c07_ent = contains("enterprise", "rise")
+    let c07_lst = contains([1, 2, 3], 4)
+    print(f"CASE07:{c07_ent}:{c07_lst}")
+    // expect: CASE07:true:false
+
+    let merged = merge( {"a": 1, "x": 9}, {"b": 2, "a": 3})
+    let merged_sum = merged["a"] + merged["b"] + merged["x"]
+    print(f"CASE08:{merged_sum}")
+    // expect: CASE08:14
+
+    let zipped = zip(["a", "b", "c"], [10, 20, 30])
+    print(f"CASE09:{len(zipped)}:{zipped[1][1]}")
+    // expect: CASE09:3:20
+
+    let exploded = flat_map([2, 4, 6], fn(x) { return [x, x / 2] })
+    print(f"CASE10:{exploded}")
+    // expect: CASE10:[2, 1, 4, 2, 6, 3]
+
+    match try_int("123") {
+        Some { value } => { print(f"CASE11:{value + 1}") }
+        None => { print("CASE11:none") }
+    }
+    // expect: CASE11:124
+
+    match try_int("bad") {
+        Some { value } => { print(f"CASE12:{value}") }
+        None => { print("CASE12:none") }
+    }
+    // expect: CASE12:none
+
+    match try_float("3.5") {
+        Some { value } => { print(f"CASE13:{int(value * 10)}") }
+        None => { print("CASE13:none") }
+    }
+    // expect: CASE13:35
+
+    let mul7 = make_multiplier(7)
+    print(f"CASE14:{mul7(9)}")
+    // expect: CASE14:63
+
+    print(f"CASE15:{fact(6)}")
+    // expect: CASE15:720
+
+    let mut mode = Incident::Green
+    mode = transition(mode, "warn") |> unwrap
+    match mode {
+        Green => { print("CASE16:green") }
+        Yellow => { print("CASE16:yellow") }
+        Red => { print("CASE16:red") }
+    }
+    // expect: CASE16:yellow
+
+    mode = transition(mode, "fail") |> unwrap
+    match mode {
+        Green => { print("CASE17:green") }
+        Yellow => { print("CASE17:yellow") }
+        Red => { print("CASE17:red") }
+    }
+    // expect: CASE17:red
+
+    match transition(mode, "unknown") {
+        Ok { value } => { print("CASE18:ok") }
+        Err { message } => { print("CASE18:err") }
+    }
+    // expect: CASE18:err
+
+    emit Alert { code: 1001, msg: "policy_violation" }
+    flush_events()
+    // expect: EVENT:1001:policy_violation
+    emit Alert { code: 2002, msg: "manual_override" }
+    flush_events()
+    // expect: EVENT:2002:manual_override
+
+    let acct = spawn("acct", Balance { amount: 100 }, Flag { active: true })
+    let b1 = get(acct, Balance) |> unwrap
+    print(f"CASE19:{b1.amount}")
+    // expect: CASE19:100
+
+    set(acct, Balance { amount: 145 })
+    let b2 = get(acct, Balance) |> unwrap
+    print(f"CASE20:{b2.amount}")
+    // expect: CASE20:145
+
+    print(f"CASE21:{has(acct, Flag)}")
+    // expect: CASE21:true
+    print(f"CASE22:{remove(acct, Flag)}:{has(acct, Flag)}")
+    // expect: CASE22:true:false
+    print(f"CASE23:{despawn(acct)}")
+    // expect: CASE23:true
+
+    let grouped = group_by([10, 70, 20, 90, 55], bucket)
+    let n_lo = len(grouped["low"])
+    let n_mid = len(grouped["mid"])
+    let n_hi = len(grouped["high"])
+    print(f"CASE24:{n_lo}:{n_mid}:{n_hi}")
+    // expect: CASE24:2:2:1
+
+    let mut nested = [[1, 2], [3, 4]]
+    nested[1][0] = 99
+    print(f"CASE25:{nested[1][0]}")
+    // expect: CASE25:99
+
+    let original = [5, 6, 7]
+    let changed = mutate(original)
+    print(f"CASE26:{original[0]}:{changed[0]}")
+    // expect: CASE26:5:999
+
+    let mut upper = 0
+    for ch in "AbCdeFG" {
+        if contains("ABCDEFGHIJKLMNOPQRSTUVWXYZ", chr(ch)) {
+            upper = upper + 1
+        }
+    }
+    print(f"CASE27:{upper}")
+    // expect: CASE27:4
+}

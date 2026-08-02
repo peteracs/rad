@@ -1,0 +1,8 @@
+fn double(x) { return x * 2 }
+fn triple(x) { return x * 3 }
+fn main() -> nil {
+    let pairs = [[double, 5], [triple, 10]]
+    let out = pairs |> map(fn([f, x]) { return f(x) })
+    print(out[0])
+    print(out[1])
+}

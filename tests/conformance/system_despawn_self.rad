@@ -1,0 +1,31 @@
+// A system may dispose of the entity it is visiting — projectiles
+// despawn on arrival — even while holding `mut` params. The writeback
+// has nothing to write to, by design, and must not explode.
+
+component Fuse { left: int = 2 }
+
+event Boom { what: str }
+
+on Boom(e) {
+    print(f"boom {e.what}")
+}
+
+system burn(f: mut Fuse) {
+    f.left = f.left - 1
+    if f.left <= 0 {
+        emit Boom { what: name_of(self) }
+        despawn(self)
+        return
+    }
+}
+
+fn main() -> nil {
+    let _a = entity "alpha" { Fuse {} }
+    let _b = entity "beta" { Fuse { left: 4 } }
+
+    for _ in range(0, 5) {
+        schedule [burn]
+    }
+    let survivors = entities(Fuse) |> len
+    print(f"survivors={survivors}")     // 0: alpha pops on pass 2, beta on pass 4
+}

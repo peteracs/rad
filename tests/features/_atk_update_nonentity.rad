@@ -1,0 +1,6 @@
+// Attack: update with non-entity first arg
+component C { x: 0 }
+
+fn main() -> nil {
+    update(42, C) { x = 5 }
+}

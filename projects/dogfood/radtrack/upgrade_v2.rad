@@ -1,0 +1,70 @@
+// RADTRACK v2 deploy — schema migration against an organically-grown save.
+//
+//   rad projects/dogfood/radtrack/upgrade_v2.rad -- projects/dogfood/radtrack/demo/server_world.radw
+//
+// v2 changes the Ticket schema in two ways a real tracker eventually does:
+//   - rename: assignee -> owner
+//   - add:    estimate (story points), seeded from priority at migration
+//
+// The v1 save was produced by live multi-user syncs, not by a fixture
+// generator. `load_world` runs the migrate block per row; a v1 row that
+// reaches v2 code without a migrate block fails loudly instead of silently
+// zero-filling.
+
+component Ticket {
+    title: str = "",
+    status: str = "open",
+    priority: int = 3,
+    owner: str = "",
+    estimate: int = 0,
+    created: int = 0,
+    updated: int = 0
+}
+
+component Body { text: str = "" }
+
+component Tags { csv: str = "" }
+resource Tracker { next_id: int = 1, site: str = "radtrack" }
+
+migrate Ticket(old) {
+    // story points seeded from urgency: P1=8, P2=5, P3=3, P4=1
+    let mut est = 3
+    if old["priority"] == 1 { est = 8 }
+    if old["priority"] == 2 { est = 5 }
+    if old["priority"] == 4 { est = 1 }
+    return Ticket {
+        title: old["title"],
+        status: old["status"],
+        priority: old["priority"],
+        owner: old["assignee"],      // the rename
+        estimate: est,               // the addition
+        created: old["created"],
+        updated: old["updated"]
+    }
+}
+
+fn main() -> nil {
+    let argv = sys_args()
+    if len(argv) < 1 {
+        print("usage: rad upgrade_v2.rad -- <v1-save.radw>")
+        return
+    }
+    let path = argv[0]
+    let n = load_world(read_file(path))
+    print(f"migrated {n} entities from v1 save {path}")
+
+    for t in entities(Ticket) {
+        let tk = get(t, Ticket) |> unwrap
+        let mut who = tk.owner
+        if who == "" { who = "-" }
+        print(f"  {name_of(t)}  P{tk.priority}  est={tk.estimate}  owner={who}  [{tk.status}]  {tk.title}")
+    }
+
+    // v2 save: the next deploy loads this without any migration.
+    let out = replace(path, ".radw", "_v2.radw")
+    write_file(out, save_world())
+    let n2 = load_world(read_file(out))
+    print(f"v2 save round-trips clean ({n2} entities, no migrate needed): {out}")
+    let wd = world_digest()
+    print(f"world digest after upgrade: {wd}")
+}

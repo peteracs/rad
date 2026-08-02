@@ -1,0 +1,10 @@
+fn main() -> nil {
+    let items = ["a", "b", "c"]
+    let pairs = enumerate(items)
+    for pair in pairs {
+        print(format("{}: {}", pair[0], pair[1]))
+    }
+}
+// expect: 0: a
+// expect: 1: b
+// expect: 2: c

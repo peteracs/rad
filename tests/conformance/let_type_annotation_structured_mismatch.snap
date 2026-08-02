@@ -1,0 +1,7 @@
+---
+source: tests\conformance\let_type_annotation_structured_mismatch.rad
+exit_code: 1
+---
+
+---stderr---
+Error: Type mismatch: 'p' declared as Position, got list<int>

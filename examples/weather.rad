@@ -1,0 +1,121 @@
+// =====================================================================
+//  Weather Simulation — FSM-based weather patterns
+// =====================================================================
+
+state Weather {
+    Sunny {
+        on clouds_form -> Cloudy
+    }
+    Cloudy {
+        on clear_up -> Sunny
+        on rain_start -> Rainy
+        on snow_start -> Snowy
+    }
+    Rainy {
+        on clear_up -> Cloudy
+        on intensify -> Stormy
+    }
+    Stormy {
+        on calm_down -> Rainy
+    }
+    Snowy {
+        on clear_up -> Cloudy
+        on intensify -> Blizzard
+    }
+    Blizzard {
+        on calm_down -> Snowy
+    }
+}
+
+event WeatherChanged { day, from_weather, to_weather, temp }
+
+event DayReport { day, weather, temp, wind }
+
+on WeatherChanged(e) {
+    print(f"  Weather shift: {e.from_weather} -> {e.to_weather} (temp: {e.temp})")
+}
+
+on DayReport(e) {
+    print(f"  Day {e.day} | {e.weather} | {e.temp}F | Wind: {e.wind}mph")
+}
+
+fn weather_str(w) {
+    let mut s = ""
+    match w {
+        Sunny => { s = "Sunny" }
+        Cloudy => { s = "Cloudy" }
+        Rainy => { s = "Rainy" }
+        Stormy => { s = "Stormy" }
+        Snowy => { s = "Snowy" }
+        Blizzard => { s = "Blizzard" }
+    }
+    return s
+}
+
+fn temp_for(w) {
+    let mut t = 72
+    match w {
+        Sunny => { t = 78 }
+        Cloudy => { t = 65 }
+        Rainy => { t = 58 }
+        Stormy => { t = 52 }
+        Snowy => { t = 28 }
+        Blizzard => { t = 12 }
+    }
+    return t
+}
+
+fn wind_for(w) {
+    let mut speed = 5
+    match w {
+        Sunny => { speed = 5 }
+        Cloudy => { speed = 10 }
+        Rainy => { speed = 15 }
+        Stormy => { speed = 35 }
+        Snowy => { speed = 12 }
+        Blizzard => { speed = 45 }
+    }
+    return speed
+}
+
+fn main() -> any {
+    print("=== Weather Simulation ===\n")
+
+    let mut weather = Weather::Sunny
+    let events_sequence = [
+        "clouds_form",
+        "rain_start",
+        "intensify",
+        "calm_down",
+        "clear_up",
+        "clear_up",
+        "clouds_form",
+        "snow_start",
+        "intensify",
+        "calm_down",
+        "clear_up",
+        "clear_up"
+    ]
+
+    let mut day = 1
+    print("--- 7-Day Forecast ---\n")
+
+    emit DayReport { day: day, weather: weather_str(weather), temp: temp_for(weather), wind: wind_for(weather) }
+
+    for evt in events_sequence {
+        let old_name = weather_str(weather)
+        weather = transition(weather, evt) ?
+        let new_name = weather_str(weather)
+        day = day + 1
+
+        emit WeatherChanged { day: day, from_weather: old_name, to_weather: new_name, temp: temp_for(weather) }
+        emit DayReport { day: day, weather: new_name, temp: temp_for(weather), wind: wind_for(weather) }
+    }
+
+    // Analysis
+    print("\n--- Season Summary ---")
+    let temps = events_sequence |> map(fn(e) { return day })
+    print(f"  Total days simulated: {day}")
+    print(f"  Final weather: {weather_str(weather)}")
+    print(f"  Final temp: {temp_for(weather)}F")
+}

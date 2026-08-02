@@ -1,0 +1,14 @@
+// Library side of the `pub let` conformance pair (RAD_GAPS #2):
+// exported constants instead of zero-arg constant functions.
+
+pub let TICK_RATE = 30
+pub let MAP_NAME = "treeline"
+pub let SPAWN_GRID = [12, 34, 56]
+pub let MS_PER_TICK = 1000 / TICK_RATE
+
+// private module internals stay private to the merged-namespace rules
+let INTERNAL_SCALE = 1000
+
+pub fn scaled(v: int) -> int {
+    return v * INTERNAL_SCALE
+}

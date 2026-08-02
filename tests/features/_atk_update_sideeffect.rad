@@ -1,0 +1,18 @@
+// Attack: side-effecting entity expression — must run once
+component C { x: 0 }
+
+let mut call_count = 0
+
+fn make_entity() -> entity {
+    call_count = call_count + 1
+    print(f"make_entity called {call_count} times")
+    return spawn(C { x: 0 })
+}
+
+fn main() -> nil {
+    update(make_entity(), C) { x = 99 }
+    print(f"total calls: {call_count}")
+}
+
+// expect: make_entity called 1 times
+// expect: total calls: 1

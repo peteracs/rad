@@ -1,0 +1,10 @@
+fn main() -> nil {
+    let data = [[1, "a", true], [2, "b", false], [3, "c", true], [4, "d", false]]
+    let result = data
+        |> filter(fn([id, name, active]) { return active })
+        |> map(fn([id, name, active]) { return [id * 10, name] })
+        |> map(fn([id, name]) { return f"{name}:{id}" })
+    print(len(result))
+    print(result[0])
+    print(result[1])
+}

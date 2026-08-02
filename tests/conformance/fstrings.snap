@@ -1,0 +1,6 @@
+---
+source: tests\conformance\fstrings.rad
+exit_code: 0
+---
+hello Rad
+Rad #8

@@ -1,0 +1,7 @@
+---
+source: tests\conformance\string_bytes_at_len.rad
+exit_code: 1
+---
+
+---stderr---
+Error: [line 3] in main: byte_at() index 3 out of bounds (len 3)

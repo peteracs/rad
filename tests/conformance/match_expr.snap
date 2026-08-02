@@ -1,0 +1,13 @@
+---
+source: tests\conformance\match_expr.rad
+exit_code: 0
+---
+move (4.0, 0.0)
+hold
+hold
+move (7.0, 0.0)
+hold
+two
+4
+[2, 3]
+0

@@ -1,0 +1,21 @@
+// Attack: handler emits another typed event — cascading dispatch
+event A { x: int }
+event B { y: str }
+
+on A(e) {
+    print("A:", e.x)
+    emit B { y: f"from-A-{e.x}" }
+    flush_events()
+}
+
+on B(e) {
+    print("B:", e.y)
+}
+
+fn main() -> nil {
+    emit A { x: 42 }
+    flush_events()
+}
+
+// expect: A: 42
+// expect: B: from-A-42

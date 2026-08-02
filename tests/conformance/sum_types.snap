@@ -1,0 +1,11 @@
+---
+source: tests\conformance\sum_types.rad
+exit_code: 0
+---
+circle
+rect
+on
+off
+b
+free
+pro

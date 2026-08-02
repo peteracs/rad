@@ -1,0 +1,10 @@
+---
+source: tests\conformance\symbolic_logical_ops.rad
+exit_code: 0
+---
+false
+true
+true
+2
+5
+3

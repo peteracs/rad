@@ -1,0 +1,44 @@
+// Binary helpers for Phase 3 WebAssembly v1 emission (LEB128 + byte buffers).
+// Used by emit_wasm.rad; mirrors core/vm/src/wasm_binary_emit.rs (Rust) until full AST lowering exists.
+
+fn leb128_u32(mut n: int) -> str {
+    let mut buf = buffer_new()
+    let mut done = false
+    while not done {
+        let rest = n / 128
+        let low = n - rest * 128
+        if rest == 0 {
+            buf = buffer_append(buf, chr(low))
+            done = true
+        } else {
+            buf = buffer_append(buf, chr(low + 128))
+            n = rest
+        }
+    }
+    return buffer_to_str(buf)
+}
+
+fn append_byte(buf: str, b: int) -> str {
+    return buffer_append(buf, chr(b))
+}
+
+pub fn wasm_preamble() -> str {
+    let mut b = buffer_new()
+    b = append_byte(b, 0)
+    b = append_byte(b, 97)
+    b = append_byte(b, 115)
+    b = append_byte(b, 109)
+    b = append_byte(b, 1)
+    b = append_byte(b, 0)
+    b = append_byte(b, 0)
+    b = append_byte(b, 0)
+    return buffer_to_str(b)
+}
+
+fn section_with_bytes(section_id: int, payload: str) -> str {
+    let mut out = buffer_new()
+    out = append_byte(out, section_id)
+    out = buffer_append(out, leb128_u32(byte_len(payload)))
+    out = buffer_append(out, payload)
+    return buffer_to_str(out)
+}

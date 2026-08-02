@@ -1,0 +1,9 @@
+---
+source: tests\conformance\tuple_ordering.rad
+exit_code: 0
+---
+near-champ
+["near-champ", "far-champ", "mid-minion", "near-minion"]
+[(0, (9, "z")), (1, (2, "a")), (1, (2, "b"))]
+[(1, 2), (1, 2.5)]
+near-champ

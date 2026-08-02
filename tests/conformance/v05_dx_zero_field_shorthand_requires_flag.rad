@@ -1,0 +1,9 @@
+// backend: both
+// expect-runtime-error: requires --compat-v0.5-dx
+
+type AccessSignal {
+    MfaDisabled { }
+}
+
+let sig = AccessSignal::MfaDisabled
+print(sig)

@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>RADSCOPE</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --bg: #0a0a0f; --panel: #14141d; --line: #262636;
+    --text: #e8e6f0; --dim: #8a87a0; --violet: #b58cff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: radial-gradient(1200px 700px at 50% -100px, #181826, var(--bg));
+    color: var(--text); font: 14px/1.5 "Segoe UI", system-ui, sans-serif; min-height: 100vh;
+  }
+  header {
+    padding: 14px 22px; border-bottom: 1px solid var(--line);
+    display: flex; align-items: baseline; gap: 14px;
+  }
+  header h1 { margin: 0; font-size: 16px; letter-spacing: 2px; }
+  header h1 b { color: var(--violet); }
+  header .sub { color: var(--dim); font-size: 12px; }
+  #status { color: var(--violet); font-size: 12px; margin-left: auto; }
+  #mount { padding: 18px 22px; }
+  .rg-button {
+    background: #1d1d2c; border: 1px solid var(--line); color: var(--text);
+    font: 600 13px/1.2 inherit; padding: 8px 14px; border-radius: 8px; cursor: pointer;
+    text-align: left; transition: border-color .15s;
+  }
+  .rg-button:hover { border-color: var(--violet); }
+  .rg-input { background: #1d1d2c; border: 1px solid var(--line); color: var(--text); border-radius: 8px; padding: 8px 10px; font: inherit; }
+  .rg-slider { accent-color: var(--violet); }
+  .rg-pre {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+    padding: 10px 12px; margin: 0; font: 12.5px/1.55 ui-monospace, Consolas, monospace;
+    white-space: pre-wrap; flex: 1;
+  }
+  .rg-error { color: #ff5d5d; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<header>
+  <h1><b>RAD</b>SCOPE</h1>
+  <span class="sub" id="radgui-title"></span>
+  <span class="sub">every frame of a rad program, frozen, inspectable, and accountable</span>
+  <span id="status"></span>
+</header>
+<div id="mount"></div>
+
+<script type="module">
+import { RadGui } from "./radgui.js";
+
+const TARGETS = {
+    whodunit: "projects/dogfood/radgui/targets/whodunit.rad",
+    orbit: "projects/dogfood/radgui/targets/orbit.rad",
+};
+
+const gui = new RadGui(document.getElementById("mount"), document.getElementById("status"));
+window.radgui = gui;
+
+// The bridge: RADSCOPE (a rad program) asks for target operations by
+// bumping the ScopeReq resource; we run them against the worker's second,
+// traced runtime and answer with Scope* events. The renderer itself stays
+// app-agnostic — this page only brokers debugger ops.
+let lastSeq = 0;
+let lastSource = null; // what's currently traced — patch & replay re-runs it
+let oldTimeline = null; // the unpatched run's frames, kept for the diff view
+
+// capture every frame of the CURRENT run before a patch overwrites it
+async function captureTimeline(frames) {
+    const out = [];
+    for (let i = 0; i < Math.min(frames, 64); i++) {
+        const r = await gui.target("world", { frame: i });
+        out.push(r.json);
+    }
+    return out;
+}
+
+// old-vs-new world diff, the receipt for "the future recomputed":
+// changed fields, spawns, despawns — entity by entity
+function worldDiff(oldJson, newJson) {
+    const index = (j) => {
+        const m = new Map();
+        for (const e of JSON.parse(j).entities) {
+            const comps = {};
+            for (const c of e.components) comps[c.type] = c.fields;
+            m.set(e.name || `eid-${e.id}`, comps);
+        }
+        return m;
+    };
+    const a = index(oldJson), b = index(newJson);
+    const lines = [];
+    for (const [name, bc] of b) {
+        const ac = a.get(name);
+        if (!ac) { lines.push(`+ ${name} (${Object.keys(bc).join(", ")})`); continue; }
+        for (const [type, bf] of Object.entries(bc)) {
+            const af = ac[type];
+            if (!af) { lines.push(`+ ${name}.${type}`); continue; }
+            for (const [k, v] of Object.entries(bf)) {
+                if (JSON.stringify(af[k]) !== JSON.stringify(v)) {
+                    lines.push(`${name}.${type}.${k}: ${JSON.stringify(af[k])} → ${JSON.stringify(v)}`);
+                }
+            }
+        }
+    }
+    for (const name of a.keys()) {
+        if (!b.has(name)) lines.push(`- ${name}`);
+    }
+    return lines.slice(0, 40).join("\n");
+}
+
+gui.onframe = async (snap) => {
+    const req = snap.resources && snap.resources.ScopeReq;
+    if (!req || req.seq === lastSeq) return;
+    lastSeq = req.seq;
+    try {
+        if (req.op === "run" || req.op === "run_custom") {
+            let source;
+            if (req.op === "run_custom") {
+                source = req.src;
+            } else if (req.target === "self") {
+                // the debugger debugging itself: trace the very source
+                // this page compiled into the GUI session
+                source = gui.source;
+            } else {
+                const path = TARGETS[req.target];
+                if (!path) throw new Error(`unknown target ${req.target}`);
+                source = await fetch("../" + path).then(r => r.text());
+            }
+            lastSource = source;
+            oldTimeline = null; // fresh run, no baseline to diff against
+            const r = await gui.target("run_traced", { source });
+            gui.send("ScopeRan", {
+                frames: r.frames,
+                output: r.output || "",
+                error: r.error || "",
+            });
+            const ev = await gui.target("events", {});
+            gui.send("ScopeEvents", { json: ev.json });
+            gui.send("ScopeDiff", { text: "" });
+        } else if (req.op === "patch") {
+            if (!lastSource) throw new Error("nothing traced yet");
+            const [field, raw] = req.src.split("=");
+            let value;
+            try { value = JSON.parse(raw); } catch { value = raw; } // bare words = strings
+            // keep the doomed timeline: it's the "before" of the diff view
+            const prevFrames = snap.resources.Scope ? snap.resources.Scope.frames : 0;
+            oldTimeline = await captureTimeline(prevFrames);
+            const r = await gui.target("run_traced_with_patch", {
+                source: lastSource, frame: req.frame, entity: req.ent,
+                component: req.comp, field, value: JSON.stringify(value),
+            });
+            gui.send("ScopeRan", {
+                frames: r.frames,
+                output: r.output || "",
+                error: r.error || "",
+            });
+            const ev = await gui.target("events", {});
+            gui.send("ScopeEvents", { json: ev.json });
+        } else if (req.op === "world") {
+            const r = await gui.target("world", { frame: req.frame });
+            gui.send("ScopeWorld", { frame: req.frame, json: r.json });
+            if (oldTimeline && oldTimeline[req.frame]) {
+                gui.send("ScopeDiff", { text: worldDiff(oldTimeline[req.frame], r.json) });
+            }
+        } else if (req.op === "why") {
+            const r = await gui.target("why", {
+                frame: req.frame, entity: req.ent, component: req.comp,
+            });
+            gui.send("ScopeWhy", { text: r.text });
+        }
+    } catch (e) {
+        gui.send("ScopeWhy", { text: "bridge error: " + e.message });
+    }
+};
+
+gui.start("projects/dogfood/radgui/radscope.rad").catch(e => {
+    document.getElementById("mount").textContent = String(e);
+});
+</script>
+</body>
+</html>

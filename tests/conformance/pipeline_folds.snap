@@ -1,0 +1,17 @@
+---
+source: tests\conformance\pipeline_folds.rad
+exit_code: 0
+---
+3
+["ad", "ad", "ap"]
+["ad", "ad", "ap", "ad"]
+55.0
+4.0
+[10.0, 5.0, 40.0]
+6
+3.5
+0
+24
+1.0
+1
+80.5

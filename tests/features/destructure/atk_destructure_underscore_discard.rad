@@ -1,0 +1,6 @@
+fn main() -> nil {
+    let rows = [[1, 2, 3], [4, 5, 6]]
+    let mids = rows |> map(fn([_, mid, _]) { return mid })
+    print(mids[0])
+    print(mids[1])
+}

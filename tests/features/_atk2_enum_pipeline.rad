@@ -1,0 +1,10 @@
+// Attack: enumerate in a pipeline chain
+fn main() -> nil {
+    let result = ["a", "b", "c"]
+        |> enumerate
+        |> filter(fn(pair) { return pair[0] > 0 })
+        |> map(fn(pair) { return f"{pair[0]}:{pair[1]}" })
+    print(result)
+}
+
+// expect: [1:b, 2:c]

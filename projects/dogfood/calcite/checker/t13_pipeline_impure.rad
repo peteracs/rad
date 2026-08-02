@@ -1,0 +1,12 @@
+// ILLEGAL: pipelines are restricted to pure/readonly callees. Spec 8.4.
+component Health { hp: 100 }
+
+fn shout(x: int) -> int {
+    print(f"side effect {x}")
+    return x
+}
+
+fn main() -> nil {
+    let out = [1, 2, 3] |> map(shout)
+    print(f"{out}")
+}

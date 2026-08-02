@@ -1,0 +1,24 @@
+// backend: both
+// Sum type is inferred from match arm variant names when the subject has no annotation
+type Weather {
+    Sunny {}
+    Rainy { mm: 0 }
+    Snowy { cm: 0, temp: 0 }
+}
+
+fn describe(w) {
+    match w {
+        Sunny => { print("sunny") }
+        Rainy { mm } => { print(f"rain:{mm}") }
+        Snowy { cm, temp } => { print(f"snow:{cm}/{temp}") }
+    }
+}
+
+fn main() -> nil {
+    describe(Weather::Sunny {})
+    describe(Weather::Rainy { mm: 12 })
+    describe(Weather::Snowy { cm: 5, temp: -3 })
+}
+// expect: sunny
+// expect: rain:12
+// expect: snow:5/-3

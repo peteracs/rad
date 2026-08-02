@@ -1,0 +1,208 @@
+// SPELLWORK — browser-moba's cast pipeline + crowd control gates, written
+// the way it wants to be written (fake-port round 3). The code comes
+// first; whatever the language can't run becomes a feature.
+//
+// Architecture (mirrors sim/systems/casting.ts + cc.ts):
+//   - The cast flow is a NATIVE state machine: Ready -> Winding ->
+//     Channeling, with interrupts as declared transitions. Illegal
+//     transitions are unrepresentable, not if-guarded.
+//   - Cast completion is a DELAYED EVENT: `emit CastFired { .. } after
+//     def.cast_ticks` — the timer lives in the event queue, not in a
+//     hand-rolled countdown field.
+//   - Validation returns Result: every reason a cast can't start is an
+//     Err the UI can show, not a silent false.
+//   - CC is a permission gate + an interrupt event. Channel protection
+//     (CannotBeSuppressed-style) rides on the spell def.
+
+pub let TICKS_PER_S = 30
+
+// ----------------------------------------------------------- content
+
+pub struct SpellDef {
+    name: str = "",
+    mana: list = [],             // per rank
+    cooldown_s: list = [],       // per rank
+    cast_ticks: int = 8,         // windup (cast point)
+    channel_ticks: int = 0,      // 0 = no channel
+    unstoppable: bool = false,   // channel survives CC
+}
+
+pub fn spell_book() -> map < str, SpellDef > {
+    return {
+        "q": SpellDef {
+            name: "Mystic Shot",
+            mana: [28.0, 31.0, 34.0], cooldown_s: [5.5, 5.0, 4.5],
+            cast_ticks: 8,
+        },
+        "w": SpellDef {
+            name: "Essence Flux",
+            mana: [70.0, 80.0, 90.0], cooldown_s: [9.0, 9.0, 9.0],
+            cast_ticks: 8,
+        },
+        "r": SpellDef {
+            name: "Trueshot Barrage",
+            mana: [100.0, 100.0, 100.0], cooldown_s: [80.0, 70.0, 60.0],
+            cast_ticks: 30, channel_ticks: 60,
+        },
+    }
+}
+
+// ---------------------------------------------------------- sim state
+
+// the cast flow — illegal transitions are unrepresentable
+state CastFlow {
+    Ready { on begin -> Winding }
+    Winding {
+        on fire -> Ready
+        on channel -> Channeling
+        on interrupt -> Ready
+    }
+    Channeling {
+        on finish -> Ready
+        on interrupt -> Ready
+    }
+}
+
+component Caster {
+    flow: CastFlow = CastFlow::Ready,
+    slot: str = "",                   // what's mid-flight
+    ranks: map < str, int > = {},        // slot -> rank (0 = unlearned)
+    cooldowns: map < str, int > = {},    // slot -> ticks left
+    mp: float = 300.0,
+    cdr: float = 0.0,
+    stunned: bool = false,
+}
+
+pub event CastFired { caster: entity, slot: str }
+pub event ChannelDone { caster: entity, slot: str }
+pub event Interrupted { caster: entity, slot: str }
+
+// ----------------------------------------------------------- casting
+
+// every reason a cast can't start, as a value the UI can show
+pub fn try_cast(caster: entity, slot: str) -> Result < str, str > {
+    let c = require(caster, Caster)
+    let book = spell_book()
+    let def = book[slot]
+    let rank = c.ranks |> get_or(slot, 0)
+
+    if rank == 0 { return Err(f"{def.name} is not learned") }
+    if c.flow != CastFlow::Ready { return Err("already casting") }
+    if c.stunned { return Err("stunned") }
+    let cd = c.cooldowns |> get_or(slot, 0)
+    if cd > 0 { return Err(f"{def.name} on cooldown ({cd} ticks)") }
+    let cost = def.mana[rank - 1]
+    if c.mp < cost { return Err(f"out of mana ({c.mp:.0}/{cost:.0})") }
+
+    // commit: the windup begins, completion is a delayed event
+    update(caster, Caster) {
+        flow = transition(c.flow, "begin") |> unwrap,
+        slot = slot,
+    }
+    emit CastFired { caster: caster, slot: slot } after def.cast_ticks
+    return Ok(slot)
+}
+
+// the cast point: pay the cost, start the cooldown (CDR applies HERE,
+// at cast time, like the original), then fire or start the channel
+on CastFired(e) {
+    let c = require(e.caster, Caster)
+    // a stun between windup start and cast point already reset the flow
+    if c.flow != CastFlow::Winding or c.slot != e.slot { return }
+
+    let def = spell_book()[e.slot]
+    let rank = c.ranks |> get_or(e.slot, 1)
+    let cd_s = def.cooldown_s[rank - 1] * (1.0 - clamp(c.cdr, 0.0, 0.4))
+
+    if def.channel_ticks > 0 {
+        update(e.caster, Caster) {
+            flow = transition(c.flow, "channel") |> unwrap,
+            mp = c.mp - def.mana[rank - 1],
+            cooldowns[e.slot] = int(cd_s * float(TICKS_PER_S)),
+        }
+        emit ChannelDone { caster: e.caster, slot: e.slot } after def.channel_ticks
+        print(f"  {def.name}: channeling...")
+    } else {
+        update(e.caster, Caster) {
+            flow = transition(c.flow, "fire") |> unwrap,
+            mp = c.mp - def.mana[rank - 1],
+            cooldowns[e.slot] = int(cd_s * float(TICKS_PER_S)),
+        }
+        print(f"  {def.name} fired! (mp {c.mp:.0} -> {c.mp - def.mana[rank - 1]:.0})")
+    }
+}
+
+on ChannelDone(e) {
+    let c = require(e.caster, Caster)
+    // an interrupt mid-channel already reset the flow — stale timer
+    if c.flow != CastFlow::Channeling or c.slot != e.slot { return }
+    update(e.caster, Caster) { flow = transition(c.flow, "finish") |> unwrap }
+    print(f"  {spell_book()[e.slot].name}: channel complete")
+}
+
+// -------------------------------------------------------------- CC
+
+pub fn stun(target: entity) -> nil {
+    let c = require(target, Caster)
+    update(target, Caster) { stunned = true }
+    // the cancel gate: windups and channels break unless the spell is
+    // unstoppable (CannotBeSuppressed)
+    if c.flow == CastFlow::Ready { return }
+    if spell_book()[c.slot].unstoppable { return }
+    update(target, Caster) { flow = transition(c.flow, "interrupt") |> unwrap }
+    emit Interrupted { caster: target, slot: c.slot }
+}
+
+on Interrupted(e) {
+    print(f"  {spell_book()[e.slot].name}: INTERRUPTED")
+}
+
+// ------------------------------------------------------------ ticking
+
+system tick_cooldowns(c: mut Caster) {
+    for [slot, left] in entries(c.cooldowns) where left > 0 {
+        c.cooldowns = set_at(c.cooldowns, slot, left - 1)
+    }
+}
+
+fn step(n: int) -> nil {
+    for _ in range(0, n) {
+        schedule [tick_cooldowns]
+    }
+}
+
+fn flow_name(c: Caster) -> str {
+    if c.flow == CastFlow::Ready { return "ready" }
+    if c.flow == CastFlow::Winding { return f"winding({c.slot})" }
+    return f"channeling({c.slot})"
+}
+
+// -------------------------------------------------------------- demo
+
+fn main() -> nil {
+    let ez = entity "ez" {
+        Caster { ranks: {"q": 2, "r": 1}, cdr: 0.10 },
+    }
+
+    // happy path: Q winds up 8 ticks, then fires with CDR'd cooldown
+    print(try_cast(ez, "q") |> unwrap_or("?"))
+    step(8)
+    print(f"after q: {flow_name(require(ez, Caster))} mp={require(ez, Caster).mp:.0}")
+
+    // gates: cooldown, unlearned, mana
+    match try_cast(ez, "q") { Ok { value: _ } => {} Err { message: m } => { print(f"  refused: {m}") } }
+    match try_cast(ez, "w") { Ok { value: _ } => {} Err { message: m } => { print(f"  refused: {m}") } }
+
+    // R: windup then channel, stunned mid-channel -> interrupt
+    print(try_cast(ez, "r") |> unwrap_or("?"))
+    step(30)                        // cast point reached, channel starts
+    step(20)                        // 20 of 60 channel ticks
+    stun(ez)
+    print(f"after stun: {flow_name(require(ez, Caster))}")
+    step(40)                        // the stale ChannelDone timer fires harmlessly
+    print(f"final: {flow_name(require(ez, Caster))} mp={require(ez, Caster).mp:.0}")
+
+    // cooldowns ticked the whole time
+    let cds = require(ez, Caster).cooldowns
+    print(f"q cd left: {cds |> get_or(\"q\", 0)}")
+}

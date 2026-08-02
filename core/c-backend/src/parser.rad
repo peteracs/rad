@@ -1,0 +1,2374 @@
+// =====================================================================
+// Stage 2: The Parser
+//
+// Consumes a list of Tokens and spawns an ECS-based AST.
+// Each AST node is an Entity with Components for its properties.
+//
+// AST entities are arena-scoped to parse(): they are not removed when local
+// bindings go out of scope (the GC does not despawn entities). A production
+// compiler would despawn subtrees or recycle IDs per compilation unit; this
+// bootstrap parser relies on process exit for teardown.
+// =====================================================================
+
+use "lexer.rad"
+
+// --- AST Components ---
+
+pub component Span { start: int = 0, end: int = 0, line: int = 1, col: int = 1 }
+pub component AstNode {}
+
+fn spawn_ast() -> entity {
+    return entity { AstNode {} }
+}
+
+pub component Expr {}
+pub component IntLiteral { val: int = 0 }
+pub component FloatLiteral { val: float = 0.0 }
+pub component StringLiteral { text: str = "" }
+pub component BooleanLiteral { val: bool = false }
+pub component NilLiteral {}
+pub component IdentExpr { name: str = "" }
+pub component BinaryOp { op: str = "", lhs: entity = spawn(), rhs: entity = spawn() }
+pub component UnaryOp { op: str = "", operand: entity = spawn() }
+pub component CallExpr { callee: entity = spawn(), args: list<entity> = [] }
+pub component QueryExpr { components: list<str> = [], is_muts: list<bool> = [], select: list<str> = [], filter: entity | nil = nil }
+
+pub component StructLiteral { path: list<str> = [], fields: list<str> = [], values: list<entity> = [], spread: list<entity> = [] }
+pub component ListLiteral { elements: list<entity> = [] }
+pub component IndexExpr { object: entity = spawn(), index: entity = spawn() }
+pub component ClosureExpr { params: list<entity> = [], body: entity = spawn() }
+pub component FieldAccessExpr { object: entity = spawn(), field: str = "" }
+pub component TryExpr { inner: entity = spawn() }
+pub component AwaitExpr { inner: entity = spawn() }
+pub component AsyncExpr { inner: entity = spawn() }
+pub component TupleLiteral { elements: list<entity> = [] }
+pub component MapLiteral { keys: list<entity> = [], values: list<entity> = [] }
+pub component FStringExpr { parts: list<entity> = [] }
+pub component FStringLitPart { text: str = "" }
+pub component FStringExprPart { expr: entity = spawn(), spec: str = "" }
+pub component SystemRefExpr { path: list<str> = [] }
+
+pub component Stmt {}
+pub component LetStmt { names: list<str> = [], is_mut: bool = false, type_ann: str = "", value: entity = spawn() }
+pub component AssignStmt { name: str = "", value: entity = spawn() }
+pub component PushStmt { target: str = "", value: entity = spawn() }
+pub component BreakStmt {}
+pub component ContinueStmt {}
+pub component ExprStmt { expr: entity = spawn() }
+pub component BlockStmt { stmts: list<entity> = [] }
+pub component IfStmt { cond: entity = spawn(), then_block: entity = spawn(), else_block: entity | nil = nil }
+pub component WhileStmt { cond: entity = spawn(), body: entity = spawn() }
+pub component ForStmt { bindings: list<str> = [], iterable: entity = spawn(), body: entity = spawn() }
+pub component MatchCase { pattern_path: list<str> = [], is_wildcard: bool = false, is_string: bool = false, pattern_str: str = "", is_int: bool = false, pattern_int: int = 0, bindings: list<str> = [], binding_fields: list<str> = [], has_rest: bool = false, body: entity = spawn(), has_component: str = "", has_binding: str = "" }
+pub component MatchStmt { subject: entity = spawn(), cases: list<entity> = [] }
+pub component ReturnStmt { value: entity = spawn(), has_value: bool = false }
+pub component LetElseStmt { variant_name: str = "", field_name: str = "", bind_name: str = "", value: entity = spawn(), else_block: entity = spawn() }
+pub component EntityStmt { name: str = "", components: list<entity> = [] }
+pub component EntityExpr { name: entity | nil = nil, components: list<entity> = [] }
+pub component ScheduleStmt { systems: list<str> = [] }
+pub component EmitEventStmt { event_name: str = "", fields: list<str> = [], values: list<entity> = [] }
+
+pub component Decl { is_pub: bool = false }
+pub component Param { name: str = "", is_mut: bool = false, type_str: str = "" }
+pub component UseDecl { path: str = "" }
+pub component ComponentField { name: str = "", type_str: str = "", default_val: entity = spawn() }
+pub component ComponentDecl { name: str = "", fields: list<entity> = [] }
+
+pub component VariantField { name: str = "", type_str: str = "" }
+pub component TypeVariant { name: str = "", fields: list<entity> = [] }
+pub component TypeDecl { name: str = "", variants: list<entity> = [], alias_target: str = "" }
+
+pub component StateTransition { evt: str = "", target_state: str = "", has_guard: bool = false, guard_value: bool = true }
+pub component StateVariant { name: str = "", transitions: list<entity> = [] }
+pub component StateDecl { name: str = "", variants: list<entity> = [] }
+
+pub component StructDecl { name: str = "", fields: list<entity> = [] }
+pub component FnDecl { name: str = "", params: list<entity> = [], body: entity = spawn(), is_pure: bool = false, ret_type: str = "" }
+pub component EventDecl { name: str = "", fields: list<str> = [], field_types: list<str> = [] }
+pub component OnHandlerMeta { event_name: str = "", is_once: bool = false }
+pub component Program { decls: list<entity> = [] }
+
+// --- Parser API ---
+
+pub fn parse(tokens: list<Token>) -> entity {
+    let tlen = len(tokens)
+    let mut current = 0
+    let mut system_before: map<str, list<str>> = {}
+    let mut on_handler_counter = 0
+    let mut suppress_braced_init = false
+
+    // --- Token Inspection Helpers ---
+
+    let peek = fn() -> Token {
+        if current >= tlen {
+            return tokens[tlen - 1]
+        }
+        return tokens[current]
+    }
+
+    let peek_next = fn() -> Token {
+        if current + 1 >= tlen {
+            return tokens[tlen - 1]
+        }
+        return tokens[current + 1]
+    }
+
+    let advance = fn() -> Token {
+        if current < tlen {
+            current = current + 1
+        }
+        return tokens[current - 1]
+    }
+
+    let check_kw = fn(name: str) -> bool {
+        if current >= tlen { return false }
+        match tokens[current].kind {
+            Kw { kind } => { 
+                let k: KeywordKind = kind
+                return variant_of(k) == name 
+            }
+            _ => { return false }
+        }
+    }
+
+    let check_op = fn(name: str) -> bool {
+        if current >= tlen { return false }
+        match tokens[current].kind {
+            Op { kind } => { 
+                let k: OpKind = kind
+                return variant_of(k) == name 
+            }
+            _ => { return false }
+        }
+    }
+
+    let check_ident = fn() -> bool {
+        if current >= tlen { return false }
+        return variant_of(tokens[current].kind) == "Ident"
+    }
+
+    let check_eof = fn() -> bool {
+        if current >= tlen { return false }
+        return variant_of(tokens[current].kind) == "Eof"
+    }
+
+    let match_kw = fn(name: str) -> bool {
+        if check_kw(name) {
+            advance()
+            return true
+        }
+        return false
+    }
+
+    let match_op = fn(name: str) -> bool {
+        if check_op(name) {
+            advance()
+            return true
+        }
+        return false
+    }
+
+    let expect_kw = fn(name: str, msg: str) -> Token {
+        if check_kw(name) { return advance() }
+        print(f"Parse Error: {msg} at line {peek().line}")
+        return advance()
+    }
+
+    let expect_op = fn(name: str, msg: str) -> Token {
+        if check_op(name) { return advance() }
+        print(f"Parse Error: {msg} at line {peek().line}")
+        return advance()
+    }
+
+    let expect_ident = fn(msg: str) -> Token {
+        if check_ident() { return advance() }
+        print(f"Parse Error: {msg} at line {peek().line}")
+        return advance()
+    }
+
+    // --- Helpers ---
+
+    let get_ident_text = fn(tok: Token) -> str {
+        match tok.kind {
+            Ident { text } => { return text }
+            _ => { return "" }
+        }
+    }
+
+    let get_string_text = fn(tok: Token) -> str {
+        match tok.kind {
+            Lit { kind } => {
+                match kind {
+                    StringLit { text } => { return text }
+                    _ => { return "" }
+                }
+            }
+            _ => { return "" }
+        }
+    }
+
+    let get_op_name = fn(tok: Token) -> str {
+        match tok.kind {
+            Op { kind } => { 
+                let k: OpKind = kind
+                return variant_of(k) 
+            }
+            _ => { return "" }
+        }
+    }
+
+    let token_text = fn(tok: Token) -> str {
+        match tok.kind {
+            Ident { text } => { return text }
+            Kw { kind } => {
+                let k: KeywordKind = kind
+                let v = variant_of(k)
+                if v == "Entity" { return "entity" }
+                if v == "Fn" { return "fn" }
+                if v == "Mut" { return "mut" }
+                return v
+            }
+            Lit { kind } => {
+                let k: LiteralKind = kind
+                let v = variant_of(k)
+                if v == "Nil" { return "nil" }
+                if v == "True" { return "true" }
+                if v == "False" { return "false" }
+                return v
+            }
+            Op { kind } => {
+                let k: OpKind = kind
+                let v = variant_of(k)
+                if v == "Lt" { return "<" }
+                if v == "Gt" { return ">" }
+                if v == "Comma" { return ", " }
+                if v == "Arrow" { return "->" }
+                if v == "LParen" { return "(" }
+                if v == "RParen" { return ")" }
+                if v == "Pipe" { return "|" }
+                return v
+            }
+            _ => { return "" }
+        }
+    }
+
+    let span_from_tok = fn(tok: Token) -> Span {
+        return Span { start: tok.start, end: tok.end, line: tok.line, col: tok.col }
+    }
+
+    let looks_like_struct_lit = fn() -> bool {
+        if suppress_braced_init { return false }
+        if not check_op("LBrace") { return false }
+        let n1 = peek_next()
+        if get_op_name(n1) == "RBrace" { return true }
+        if variant_of(n1.kind) == "Ident" {
+            if current + 2 < tlen {
+                let n2 = tokens[current + 2]
+                if get_op_name(n2) == "Colon" { return true }
+            }
+        }
+        return false
+    }
+
+    // --- Expression Parsing (Recursive Descent, correct precedence) ---
+
+    let mut parse_expr_ref = fn() -> entity { return entity { AstNode {} } }
+    let mut parse_not_operand_ref = fn() -> entity { return entity { AstNode {} } }
+    let mut parse_block_ref = fn() -> entity { return entity { AstNode {} } }
+    let mut parse_fn_params_ref = fn() -> list<entity> { 
+        let _ = entity { AstNode {} }
+        let empty: list<entity> = []
+        return empty
+    }
+
+    let parse_query_expr = fn(start_tok: Token) -> entity {
+        expect_op("LBrace", "Expected '{' after query")
+        let mut components: list<str> = []
+        let mut is_muts: list<bool> = []
+        while not check_op("RBrace") and not check_eof() {
+            let is_mut = match_kw("Mut")
+            let comp_tok = expect_ident("Expected component name")
+            components << get_ident_text(comp_tok)
+            is_muts << is_mut
+            match_op("Comma")
+        }
+        let end_tok = expect_op("RBrace", "Expected '}'")
+        
+        let mut select: list<str> = []
+        if check_ident() and get_ident_text(peek()) == "select" {
+            advance()
+            while true {
+                let sel_tok = expect_ident("Expected component name in select")
+                select << get_ident_text(sel_tok)
+                if not match_op("Comma") { break }
+            }
+        }
+
+        let mut filter: entity | nil = nil
+        if check_ident() and get_ident_text(peek()) == "where" {
+            advance()
+            filter = parse_expr_ref()
+        }
+
+        let mut end_span = span_from_tok(end_tok)
+        if filter != nil {
+            end_span = require(filter, Span)
+        }
+        return entity {
+            AstNode {},
+            Expr {},
+            QueryExpr { components: components, is_muts: is_muts, select: select, filter: filter },
+            Span { start: start_tok.start, end: end_span.end, line: start_tok.line, col: start_tok.col }
+        }
+    }
+
+    let parse_primary = fn() -> entity {
+        // Handle 'not' as a unary prefix (binds tighter than and/or)
+        if check_kw("Not") {
+            let not_tok = advance()
+            let operand = parse_not_operand_ref()
+            let os = require(operand, Span)
+            return entity {
+                AstNode {},
+                Expr {},
+                UnaryOp { op: "Not", operand: operand },
+                Span { start: not_tok.start, end: os.end, line: not_tok.line, col: not_tok.col }
+            }
+        }
+
+        if check_kw("Fn") {
+            let fn_tok = advance()
+            expect_op("LParen", "Expected '(' after fn")
+            let params = parse_fn_params_ref()
+            expect_op("RParen", "Expected ')' after closure params")
+            if check_op("Arrow") {
+                advance()
+                let mut depth = 0
+                while not check_eof() {
+                    if check_op("Lt") {
+                        depth = depth + 1
+                        advance()
+                    } else if check_op("Gt") {
+                        depth = depth - 1
+                        advance()
+                    } else if depth == 0 and check_op("LBrace") {
+                        break
+                    } else {
+                        advance()
+                    }
+                }
+            }
+            let body = parse_block_ref()
+            let bs = require(body, Span)
+            return entity {
+                AstNode {},
+                Expr {},
+                ClosureExpr { params: params, body: body },
+                Span { start: fn_tok.start, end: bs.end, line: fn_tok.line, col: fn_tok.col }
+            }
+        }
+
+        if check_kw("Entity") {
+            let start_tok = advance()
+            let mut name_expr: entity | nil = nil
+            if not check_op("LBrace") {
+                let prev_suppress = suppress_braced_init
+                suppress_braced_init = true
+                name_expr = parse_expr_ref()
+                suppress_braced_init = prev_suppress
+            }
+            expect_op("LBrace", "Expected '{' after entity")
+            let mut comps: list<entity> = []
+            while not check_op("RBrace") and not check_eof() {
+                comps << parse_expr_ref()
+                if not match_op("Comma") { break }
+            }
+            let end_tok = expect_op("RBrace", "Expected '}' after entity literal")
+            return entity {
+                AstNode {},
+                Expr {},
+                EntityExpr { name: name_expr, components: comps },
+                Span { start: start_tok.start, end: end_tok.end, line: start_tok.line, col: start_tok.col }
+            }
+        }
+
+        let tok = advance()
+        let mut node = spawn_ast()
+        set(node, Expr {})
+        // Ensure parse error recovery still yields a spanful Expr node.
+        set(node, span_from_tok(tok))
+
+        match tok.kind {
+            Lit { kind } => {
+                let k: LiteralKind = kind
+                match k {
+                    IntLit { val } => { set(node, IntLiteral { val: val }) }
+                    FloatLit { val } => { set(node, FloatLiteral { val: val }) }
+                    StringLit { text } => { set(node, StringLiteral { text: text }) }
+                    FStringStart { triple } => {
+                        let mut parts: list<entity> = []
+                        let mut fstring_done: bool = false
+                        while not fstring_done {
+                            let ftok = peek()
+                            match ftok.kind {
+                                Lit { kind } => {
+                                    let fk: LiteralKind = kind
+                                    match fk {
+                                        FStringFragment { text } => {
+                                            advance()
+                                            if len(text) > 0 {
+                                                parts << entity { AstNode {}, FStringLitPart { text: text } }
+                                            }
+                                        }
+                                        InterpolationStart => {
+                                            advance()
+                                            let expr = parse_expr_ref()
+                                            let etok = peek()
+                                            let mut got_end: bool = false
+                                            let mut fspec: str = ""
+                                            match etok.kind {
+                                                Lit { kind } => {
+                                                    let ek: LiteralKind = kind
+                                                    match ek {
+                                                        InterpolationEnd { spec } => {
+                                                            fspec = spec
+                                                            advance()
+                                                            got_end = true
+                                                        }
+                                                        _ => {}
+                                                    }
+                                                }
+                                                _ => {}
+                                            }
+                                            if not got_end {
+                                                print(f"Parse Error: Expected '\}' after f-string interpolation at line {etok.line}")
+                                            }
+                                            parts << entity { AstNode {}, FStringExprPart { expr: expr, spec: fspec } }
+                                        }
+                                        FStringEnd => {
+                                            advance()
+                                            fstring_done = true
+                                        }
+                                        _ => {
+                                            advance()
+                                            fstring_done = true
+                                        }
+                                    }
+                                }
+                                Eof => { fstring_done = true }
+                                _ => {
+                                    advance()
+                                    fstring_done = true
+                                }
+                            }
+                        }
+                        set(node, FStringExpr { parts: parts })
+                    }
+                    FStringFragment { text } => {
+                        print(f"Parse Error: Unexpected f-string fragment outside f-string at line {tok.line}")
+                        set(node, StringLiteral { text: text })
+                    }
+                    FStringEnd => {
+                        print(f"Parse Error: Unexpected f-string end outside f-string at line {tok.line}")
+                    }
+                    InterpolationStart => {
+                        print(f"Parse Error: Unexpected interpolation start outside f-string at line {tok.line}")
+                    }
+                    InterpolationEnd { spec } => {
+                        print(f"Parse Error: Unexpected interpolation end outside f-string at line {tok.line}")
+                    }
+                    True => { set(node, BooleanLiteral { val: true }) }
+                    False => { set(node, BooleanLiteral { val: false }) }
+                    Nil => { set(node, NilLiteral {}) }
+                }
+                set(node, span_from_tok(tok))
+            }
+            Ident { text } => {
+                if text == "query" and check_op("LBrace") {
+                    return parse_query_expr(tok)
+                }
+                if text == "await" {
+                    let inner = parse_not_operand_ref()
+                    let is = require(inner, Span)
+                    return entity {
+                        AstNode {},
+                        Expr {},
+                        AwaitExpr { inner: inner },
+                        Span { start: tok.start, end: is.end, line: tok.line, col: tok.col }
+                    }
+                }
+                if text == "async" {
+                    let inner = parse_not_operand_ref()
+                    let is = require(inner, Span)
+                    return entity {
+                        AstNode {},
+                        Expr {},
+                        AsyncExpr { inner: inner },
+                        Span { start: tok.start, end: is.end, line: tok.line, col: tok.col }
+                    }
+                }
+
+                let mut path = [text]
+                while check_op("Colon") and get_op_name(peek_next()) == "Colon" {
+                    advance() // :
+                    advance() // :
+                    let next_id = expect_ident("Expected identifier after ::")
+                    path << get_ident_text(next_id)
+                }
+
+                // Struct literal: path { field: val, ... }
+                if looks_like_struct_lit() {
+                    advance()
+                    let mut fields: list<str> = []
+                    let mut values: list<entity> = []
+                    let mut spread_list: list<entity> = []
+                    while not check_op("RBrace") and not check_eof() {
+                        if check_op("Dot") and get_op_name(peek_next()) == "Dot" {
+                            advance()
+                            advance()
+                            spread_list << parse_expr_ref()
+                            if not match_op("Comma") { break }
+                            continue
+                        }
+                        let f_tok = expect_ident("Expected field name in struct literal")
+                        fields << get_ident_text(f_tok)
+                        
+                        // Optional value: `field: expr` or just `field`
+                        if match_op("Colon") {
+                            values << parse_expr_ref()
+                        } else {
+                            // Shorthand: field name is also variable name
+                            values << entity {
+                                AstNode {},
+                                Expr {},
+                                IdentExpr { name: get_ident_text(f_tok) },
+                                span_from_tok(f_tok)
+                            }
+                        }
+                        
+                        if not match_op("Comma") { break }
+                    }
+                    let end_tok = expect_op("RBrace", "Expected '}' after struct literal")
+                    set(node, StructLiteral { path: path, fields: fields, values: values, spread: spread_list })
+                    set(node, Span { start: tok.start, end: end_tok.end, line: tok.line, col: tok.col })
+                    return node
+                }
+
+                // If path has multiple segments but no braces, it's just a path expression
+                // We'll represent it as a string for now, or add a PathExpr component.
+                // Let's just use IdentExpr with the joined path for simplicity in the subset.
+                let mut joined_path = path[0]
+                let mut i = 1
+                while i < len(path) {
+                    joined_path = f"{joined_path}::{path[i]}"
+                    i = i + 1
+                }
+
+                set(node, IdentExpr { name: joined_path })
+                set(node, span_from_tok(tok))
+            }
+            Op { kind } => {
+                let k: OpKind = kind
+                match k {
+                    LParen => {
+                        let inner = parse_expr_ref()
+                        if check_op("Comma") {
+                            let mut elems: list<entity> = []
+                            elems << inner
+                            while check_op("Comma") and not check_eof() {
+                                advance()
+                                if check_op("RParen") {
+                                    break
+                                }
+                                elems << parse_expr_ref()
+                            }
+                            expect_op("RParen", "Expected ')' after tuple.")
+                            let first_s = require(elems[0], Span)
+                            node = entity {
+                                AstNode {},
+                                Expr {},
+                                TupleLiteral { elements: elems },
+                                Span { start: tok.start, end: first_s.end, line: tok.line, col: tok.col }
+                            }
+                        } else {
+                            expect_op("RParen", "Expected ')' after expression.")
+                            node = inner
+                        }
+                    }
+                    Minus => {
+                        let operand = parse_expr_ref()
+                        let os = require(operand, Span)
+                        let unary = entity {
+                            AstNode {},
+                            Expr {},
+                            UnaryOp { op: "Minus", operand: operand },
+                            Span { start: tok.start, end: os.end, line: tok.line, col: tok.col }
+                        }
+                        node = unary
+                    }
+                    Ampersand => {
+                        let operand = parse_expr_ref()
+                        let os = require(operand, Span)
+                        node = entity {
+                            AstNode {},
+                            Expr {},
+                            UnaryOp { op: "Ampersand", operand: operand },
+                            Span { start: tok.start, end: os.end, line: tok.line, col: tok.col }
+                        }
+                    }
+                    LBracket => {
+                        let mut elements: list<entity> = []
+                        while not check_op("RBracket") and not check_eof() {
+                            elements << parse_expr_ref()
+                            match_op("Comma")
+                        }
+                        let end_tok = expect_op("RBracket", "Expected ']' after list literal.")
+                        set(node, ListLiteral { elements: elements })
+                        set(node, Span { start: tok.start, end: end_tok.end, line: tok.line, col: tok.col })
+                    }
+                    LBrace => {
+                        let mut keys: list<entity> = []
+                        let mut vals: list<entity> = []
+                        while not check_op("RBrace") and not check_eof() {
+                            let k = parse_expr_ref()
+                            expect_op("Colon", "Expected ':' after map key.")
+                            let v = parse_expr_ref()
+                            keys << k
+                            vals << v
+                            match_op("Comma")
+                        }
+                        let end_tok = expect_op("RBrace", "Expected '}' after map literal.")
+                        set(node, MapLiteral { keys: keys, values: vals })
+                        set(node, Span { start: tok.start, end: end_tok.end, line: tok.line, col: tok.col })
+                    }
+                    _ => {
+                        print(f"Parse Error: Unexpected operator {get_op_name(tok)} at line {tok.line}")
+                    }
+                }
+            }
+            Kw { kind } => {
+                let kwd: KeywordKind = kind
+                match kwd {
+                    System {} => {
+                        if check_op("Colon") and get_op_name(peek_next()) == "Colon" {
+                            advance()
+                            advance()
+                            let mut path: list<str> = []
+                            let id_tok = expect_ident("Expected identifier after system::")
+                            path << get_ident_text(id_tok)
+                            let mut end_tok = id_tok
+                            while check_op("Colon") and get_op_name(peek_next()) == "Colon" {
+                                advance()
+                                advance()
+                                let id_tok2 = expect_ident("Expected identifier after ::")
+                                path << get_ident_text(id_tok2)
+                                end_tok = id_tok2
+                            }
+                            set(node, SystemRefExpr { path: path })
+                            set(node, Span { start: tok.start, end: end_tok.end, line: tok.line, col: tok.col })
+                            return node
+                        } else {
+                            print(f"Parse Error: `system` in expression position must be `system::Path` at line {tok.line}")
+                        }
+                    }
+                    _ => {
+                        print(f"Parse Error: Expected expression, got keyword at line {tok.line}")
+                    }
+                }
+            }
+            _ => {
+                print(f"Parse Error: Expected expression at line {tok.line}")
+            }
+        }
+
+        // Postfix loop: calls, indexing, dot access
+        while true {
+            if check_op("LParen") {
+                advance()
+                let mut args: list<entity> = []
+                while not check_op("RParen") and not check_eof() {
+                    args << parse_expr_ref()
+                    match_op("Comma")
+                }
+                let end_tok = expect_op("RParen", "Expected ')' after arguments.")
+                let ns = require(node, Span)
+                node = entity {
+                    AstNode {},
+                    Expr {},
+                    CallExpr { callee: node, args: args },
+                    Span { start: ns.start, end: end_tok.end, line: ns.line, col: ns.col }
+                }
+            } else if check_op("LBracket") {
+                advance()
+                let idx = parse_expr_ref()
+                let end_tok = expect_op("RBracket", "Expected ']' after index.")
+                let ns = require(node, Span)
+                node = entity {
+                    AstNode {},
+                    Expr {},
+                    IndexExpr { object: node, index: idx },
+                    Span { start: ns.start, end: end_tok.end, line: ns.line, col: ns.col }
+                }
+            } else if check_op("Dot") {
+                advance()
+                let field_tok = expect_ident("Expected field name after '.'")
+                let ns = require(node, Span)
+                node = entity {
+                    AstNode {},
+                    Expr {},
+                    FieldAccessExpr { object: node, field: get_ident_text(field_tok) },
+                    Span { start: ns.start, end: field_tok.end, line: ns.line, col: ns.col }
+                }
+            } else if check_op("Question") {
+                let q_tok = advance()
+                let ns = require(node, Span)
+                node = entity {
+                    AstNode {},
+                    Expr {},
+                    TryExpr { inner: node },
+                    Span { start: ns.start, end: q_tok.end, line: ns.line, col: ns.col }
+                }
+            } else {
+                break
+            }
+        }
+
+        return node
+    }
+
+    // Highest binary precedence: * / %
+    let parse_multiplicative = fn() -> entity {
+        let mut expr = parse_primary()
+        while check_op("Star") or check_op("Slash") or check_op("Percent") {
+            let op_tok = advance()
+            let right = parse_primary()
+            let ls = require(expr, Span)
+            let rs = require(right, Span)
+            expr = entity {
+                AstNode {},
+                Expr {},
+                BinaryOp { op: get_op_name(op_tok), lhs: expr, rhs: right },
+                Span { start: ls.start, end: rs.end, line: ls.line, col: ls.col }
+            }
+        }
+        return expr
+    }
+
+    // Mid precedence: + -
+    let parse_additive = fn() -> entity {
+        let mut expr = parse_multiplicative()
+        while check_op("Plus") or check_op("Minus") {
+            let op_tok = advance()
+            let right = parse_multiplicative()
+            let ls = require(expr, Span)
+            let rs = require(right, Span)
+            expr = entity {
+                AstNode {},
+                Expr {},
+                BinaryOp { op: get_op_name(op_tok), lhs: expr, rhs: right },
+                Span { start: ls.start, end: rs.end, line: ls.line, col: ls.col }
+            }
+        }
+        return expr
+    }
+
+    // Lowest binary precedence: == != < > <= >=
+    let parse_comparison = fn() -> entity {
+        let mut expr = parse_additive()
+        while check_op("Eq") or check_op("Neq") or check_op("Lt") or check_op("Lte") or check_op("Gt") or check_op("Gte") {
+            let op_tok = advance()
+            let right = parse_additive()
+            let ls = require(expr, Span)
+            let rs = require(right, Span)
+            expr = entity {
+                AstNode {},
+                Expr {},
+                BinaryOp { op: get_op_name(op_tok), lhs: expr, rhs: right },
+                Span { start: ls.start, end: rs.end, line: ls.line, col: ls.col }
+            }
+        }
+        return expr
+    }
+
+    parse_not_operand_ref = parse_comparison
+
+    // Logical AND
+    let parse_and = fn() -> entity {
+        let mut expr = parse_comparison()
+        while check_kw("And") {
+            let op_tok = advance()
+            let right = parse_comparison()
+            let ls = require(expr, Span)
+            let rs = require(right, Span)
+            expr = entity {
+                AstNode {},
+                Expr {},
+                BinaryOp { op: "And", lhs: expr, rhs: right },
+                Span { start: ls.start, end: rs.end, line: ls.line, col: ls.col }
+            }
+        }
+        return expr
+    }
+
+    // Logical OR
+    let parse_or = fn() -> entity {
+        let mut expr = parse_and()
+        while check_kw("Or") {
+            let op_tok = advance()
+            let right = parse_and()
+            let ls = require(expr, Span)
+            let rs = require(right, Span)
+            expr = entity {
+                AstNode {},
+                Expr {},
+                BinaryOp { op: "Or", lhs: expr, rhs: right },
+                Span { start: ls.start, end: rs.end, line: ls.line, col: ls.col }
+            }
+        }
+        return expr
+    }
+
+    // Pipe (lowest binary precedence)
+    let parse_pipe = fn() -> entity {
+        let mut expr = parse_or()
+        while check_op("PipeOp") {
+            let op_tok = advance()
+            let right = parse_or()
+            let ls = require(expr, Span)
+            let rs = require(right, Span)
+            expr = entity {
+                AstNode {},
+                Expr {},
+                BinaryOp { op: "Pipe", lhs: expr, rhs: right },
+                Span { start: ls.start, end: rs.end, line: ls.line, col: ls.col }
+            }
+        }
+        return expr
+    }
+
+    parse_expr_ref = parse_pipe
+
+    // --- Statement Parsing ---
+
+    let parse_let_stmt = fn() -> entity {
+        let start_tok = advance()
+        let is_mut = match_kw("Mut")
+        let mut names: list<str> = []
+
+        // let-else sugar:
+        //   let Some { value: x } = expr else { ... }
+        //   let Ok { value: x } = expr else { ... }
+        if not is_mut and check_ident() and current + 1 < tlen and (get_op_name(tokens[current + 1]) == "LBrace" or get_op_name(tokens[current + 1]) == "LParen") {
+            let variant_tok = advance()
+            let variant_name = get_ident_text(variant_tok)
+            let pat_op = get_op_name(peek())
+            let mut field_name = "value"
+            if variant_name == "Err" { field_name = "message" }
+            let mut bind_name = ""
+
+            if pat_op == "LBrace" {
+                advance()
+                let field_tok = expect_ident("Expected field name in let-else pattern.")
+                field_name = get_ident_text(field_tok)
+                bind_name = field_name
+                if match_op("Colon") {
+                    let bind_tok = expect_ident("Expected binding name in let-else pattern.")
+                    bind_name = get_ident_text(bind_tok)
+                }
+                while not check_op("RBrace") and not check_eof() {
+                    if not match_op("Comma") {
+                        advance()
+                    }
+                }
+                expect_op("RBrace", "Expected '}' after let-else pattern.")
+            } else {
+                expect_op("LParen", "Expected '(' after let-else variant.")
+                let bind_tok = expect_ident("Expected binding name in let-else pattern.")
+                bind_name = get_ident_text(bind_tok)
+                while not check_op("RParen") and not check_eof() {
+                    if not match_op("Comma") {
+                        advance()
+                    }
+                }
+                expect_op("RParen", "Expected ')' after let-else pattern.")
+            }
+            expect_op("Assign", "Expected '=' after let-else pattern.")
+            let val_expr = parse_expr_ref()
+            if check_kw("Else") {
+                advance()
+                let else_block = parse_block_ref()
+                let bs = require(else_block, Span)
+                return entity {
+                    AstNode {},
+                    Stmt {},
+                    LetElseStmt {
+                        variant_name: variant_name,
+                        field_name: field_name,
+                        bind_name: bind_name,
+                        value: val_expr,
+                        else_block: else_block
+                    },
+                    Span { start: start_tok.start, end: bs.end, line: start_tok.line, col: start_tok.col }
+                }
+            } else {
+                let es = require(val_expr, Span)
+                return entity {
+                    AstNode {},
+                    Stmt {},
+                    LetStmt { names: [bind_name], is_mut: false, type_ann: "", value: val_expr },
+                    Span { start: start_tok.start, end: es.end, line: start_tok.line, col: start_tok.col }
+                }
+            }
+        }
+        
+        if check_op("LParen") {
+            advance()
+            while not check_op("RParen") and not check_eof() {
+                let name_tok = expect_ident("Expected variable name in tuple destructuring.")
+                names << get_ident_text(name_tok)
+                if not check_op("RParen") {
+                    match_op("Comma")
+                }
+            }
+            expect_op("RParen", "Expected ')' after tuple destructuring.")
+        } else {
+            let name_tok = expect_ident("Expected variable name after 'let'.")
+            names << get_ident_text(name_tok)
+        }
+
+        let mut type_ann = ""
+        if check_op("Colon") {
+            advance()
+            let mut depth = 0
+            while not check_eof() {
+                if check_op("Lt") {
+                    depth = depth + 1
+                    type_ann = type_ann + token_text(peek())
+                    advance()
+                } else if check_op("Gt") {
+                    depth = depth - 1
+                    type_ann = type_ann + token_text(peek())
+                    advance()
+                } else if depth == 0 and check_op("Assign") {
+                    break
+                } else {
+                    type_ann = type_ann + token_text(peek())
+                    advance()
+                }
+            }
+        }
+        expect_op("Assign", "Expected '=' after variable name.")
+        let val_expr = parse_expr_ref()
+
+        let es = require(val_expr, Span)
+        return entity {
+            AstNode {},
+            Stmt {},
+            LetStmt { names: names, is_mut: is_mut, type_ann: type_ann, value: val_expr },
+            Span { start: start_tok.start, end: es.end, line: start_tok.line, col: start_tok.col }
+        }
+    }
+
+    let parse_return_stmt = fn() -> entity {
+        let start_tok = advance()
+        let node = spawn_ast()
+        set(node, Stmt {})
+
+        let at_end = check_op("RBrace") or check_eof()
+        if at_end {
+            set(node, ReturnStmt { value: node, has_value: false })
+            set(node, span_from_tok(start_tok))
+        } else {
+            let val = parse_expr_ref()
+            set(node, ReturnStmt { value: val, has_value: true })
+            let vs = require(val, Span)
+            set(node, Span { start: start_tok.start, end: vs.end, line: start_tok.line, col: start_tok.col })
+        }
+        return node
+    }
+
+    let mut parse_statement_ref = fn() -> entity { return entity { AstNode {} } }
+
+    let parse_block = fn() -> entity {
+        let start_tok = expect_op("LBrace", "Expected '{' before block.")
+        let mut stmts: list<entity> = []
+        while not check_op("RBrace") and not check_eof() {
+            stmts << parse_statement_ref()
+        }
+        let end_tok = expect_op("RBrace", "Expected '}' after block.")
+
+        return entity {
+            AstNode {},
+            Stmt {},
+            BlockStmt { stmts: stmts },
+            Span { start: start_tok.start, end: end_tok.end, line: start_tok.line, col: start_tok.col }
+        }
+    }
+    parse_block_ref = parse_block
+
+    let parse_if_stmt = fn() -> entity {
+        let start_tok = advance()
+        let cond = parse_expr_ref()
+        let then_block = parse_block()
+
+        let mut else_block: entity | nil = nil
+        if match_kw("Else") {
+            if check_kw("If") {
+                let elif = parse_statement_ref()
+                else_block = entity {
+                    AstNode {},
+                    Stmt {},
+                    BlockStmt { stmts: [elif] },
+                    require(elif, Span)
+                }
+            } else {
+                else_block = parse_block()
+            }
+        }
+
+        let ts = require(then_block, Span)
+        return entity {
+            AstNode {},
+            Stmt {},
+            IfStmt { cond: cond, then_block: then_block, else_block: else_block },
+            Span { start: start_tok.start, end: ts.end, line: start_tok.line, col: start_tok.col }
+        }
+    }
+
+    let parse_while_stmt = fn() -> entity {
+        let start_tok = advance()
+        let cond = parse_expr_ref()
+        let body = parse_block()
+        let bs = require(body, Span)
+        return entity {
+            AstNode {},
+            Stmt {},
+            WhileStmt { cond: cond, body: body },
+            Span { start: start_tok.start, end: bs.end, line: start_tok.line, col: start_tok.col }
+        }
+    }
+
+    let parse_for_stmt = fn() -> entity {
+        let start_tok = advance() // 'for'
+        let has_parens = match_op("LParen")
+        
+        let mut bindings: list<str> = []
+        let first_tok = expect_ident("Expected identifier in for loop")
+        bindings << get_ident_text(first_tok)
+        
+        while match_op("Comma") {
+            if has_parens and check_op("RParen") { break }
+            let bind_tok = expect_ident("Expected identifier")
+            bindings << get_ident_text(bind_tok)
+        }
+        
+        if has_parens {
+            expect_op("RParen", "Expected ')' after for loop bindings")
+        }
+        
+        expect_kw("In", "Expected 'in' after for loop bindings")
+        let iterable = parse_expr_ref()
+        let body = parse_block()
+        
+        let bs = require(body, Span)
+        return entity {
+            AstNode {},
+            Stmt {},
+            ForStmt { bindings: bindings, iterable: iterable, body: body },
+            Span { start: start_tok.start, end: bs.end, line: start_tok.line, col: start_tok.col }
+        }
+    }
+
+    let parse_break_stmt = fn() -> entity {
+        let start_tok = advance()
+        return entity { AstNode {}, Stmt {}, BreakStmt {}, span_from_tok(start_tok) }
+    }
+
+    let parse_continue_stmt = fn() -> entity {
+        let start_tok = advance()
+        return entity { AstNode {}, Stmt {}, ContinueStmt {}, span_from_tok(start_tok) }
+    }
+
+    let parse_expr_stmt = fn() -> entity {
+        // Peek ahead: if ident followed by '=' it's an assignment
+        if check_ident() {
+            let saved = current
+            let id_tok = advance()
+            let name = get_ident_text(id_tok)
+
+            if check_op("Assign") {
+                advance()
+                let val = parse_expr_ref()
+                let vs = require(val, Span)
+                return entity {
+                    AstNode {},
+                    Stmt {},
+                    AssignStmt { name: name, value: val },
+                    Span { start: id_tok.start, end: vs.end, line: id_tok.line, col: id_tok.col }
+                }
+            }
+
+            if check_op("Shl") {
+                advance()
+                let val = parse_expr_ref()
+                let vs = require(val, Span)
+                return entity {
+                    AstNode {},
+                    Stmt {},
+                    PushStmt { target: name, value: val },
+                    Span { start: id_tok.start, end: vs.end, line: id_tok.line, col: id_tok.col }
+                }
+            }
+
+            // Chained lvalue assignment: ident(.field|[idx])... = expr
+            if check_op("Dot") or check_op("LBracket") {
+                let mut base = entity {
+                    AstNode {},
+                    Expr {},
+                    IdentExpr { name: name },
+                    span_from_tok(id_tok)
+                }
+                let mut lvalue = base
+                let mut last_kind = ""
+                while true {
+                    if check_op("Dot") {
+                        advance()
+                        let field_tok = expect_ident("Expected field name after '.'")
+                        let mut fa = entity {
+                            AstNode {},
+                            Expr {},
+                            FieldAccessExpr { object: lvalue, field: get_ident_text(field_tok) },
+                            span_from_tok(field_tok)
+                        }
+                        lvalue = fa
+                        last_kind = "field"
+                        continue
+                    }
+                    if check_op("LBracket") {
+                        advance()
+                        let idx = parse_expr_ref()
+                        expect_op("RBracket", "Expected ']'")
+                        let is = require(idx, Span)
+                        let mut ie = entity {
+                            AstNode {},
+                            Expr {},
+                            IndexExpr { object: lvalue, index: idx },
+                            Span { start: id_tok.start, end: is.end, line: id_tok.line, col: id_tok.col }
+                        }
+                        lvalue = ie
+                        last_kind = "index"
+                        continue
+                    }
+                    break
+                }
+                if check_op("Assign") and last_kind != "" {
+                    advance()
+                    let val = parse_expr_ref()
+                    let vs = require(val, Span)
+                    let sp = Span { start: id_tok.start, end: vs.end, line: id_tok.line, col: id_tok.col }
+                    if last_kind == "field" {
+                        let fa = require(lvalue, FieldAccessExpr)
+                        return entity { AstNode {}, Stmt {}, FieldAccessExpr { object: fa.object, field: fa.field }, AssignStmt { name: "__field_assign__", value: val }, sp }
+                    } else {
+                        let ie = require(lvalue, IndexExpr)
+                        return entity { AstNode {}, Stmt {}, IndexExpr { object: ie.object, index: ie.index }, AssignStmt { name: "__index_assign__", value: val }, sp }
+                    }
+                }
+                current = saved
+            } else {
+                // Not assignment or push, undo the advance
+                current = saved
+            }
+        }
+
+        let expr = parse_expr_ref()
+        return entity {
+            AstNode {},
+            Stmt {},
+            ExprStmt { expr: expr },
+            require(expr, Span)
+        }
+    }
+
+    let parse_match_stmt = fn() -> entity {
+        let start_tok = advance() // 'match'
+        let subject = parse_expr_ref()
+        expect_op("LBrace", "Expected '{' after match subject.")
+        
+        let mut cases: list<entity> = []
+        while not check_op("RBrace") and not check_eof() {
+            let mut pattern_path: list<str> = []
+            let mut is_wildcard = false
+            let mut is_string = false
+            let mut pattern_str = ""
+            let mut is_int = false
+            let mut pattern_int = 0
+            let mut bindings: list<str> = []
+            let mut binding_fields: list<str> = []
+            let mut has_rest = false
+            
+            let tok = peek()
+            let mut is_lit = false
+            match tok.kind {
+                Lit { kind } => {
+                    match kind {
+                        StringLit { text } => {
+                            is_string = true
+                            pattern_str = text
+                            is_lit = true
+                            advance()
+                            nil
+                        }
+                        IntLit { val } => {
+                            is_int = true
+                            pattern_int = val
+                            is_lit = true
+                            advance()
+                            nil
+                        }
+                        _ => {}
+                    }
+                }
+                _ => {}
+            }
+
+            let mut has_component = ""
+            let mut has_binding = ""
+            if is_lit {
+                is_lit = true // dummy statement to avoid empty block being parsed as struct literal
+            } else if check_ident() and get_ident_text(peek()) == "_" {
+                advance()
+                is_wildcard = true
+            } else if check_ident() and get_ident_text(peek()) == "has" {
+                advance()
+                let comp_tok = expect_ident("Expected component name after 'has'")
+                has_component = get_ident_text(comp_tok)
+                if check_op("LParen") {
+                    advance()
+                    let bind_tok = expect_ident("Expected binding name")
+                    has_binding = get_ident_text(bind_tok)
+                    expect_op("RParen", "Expected ')' after binding name")
+                }
+            } else if check_ident() {
+                let id_tok = expect_ident("Expected pattern identifier")
+                pattern_path << get_ident_text(id_tok)
+                while check_op("Colon") and get_op_name(peek_next()) == "Colon" {
+                    advance()
+                    advance()
+                    let next_id = expect_ident("Expected identifier after ::")
+                    pattern_path << get_ident_text(next_id)
+                }
+                
+                if check_op("LBrace") {
+                    advance()
+                    while not check_op("RBrace") and not check_eof() {
+                        if check_op("Dot") and get_op_name(peek_next()) == "Dot" {
+                            advance()
+                            advance()
+                            has_rest = true
+                            while match_op("Comma") {}
+                            break
+                        }
+                        let bind_tok = expect_ident("Expected binding identifier")
+                        let field_name = get_ident_text(bind_tok)
+                        let mut bind_name = field_name
+                        if match_op("Colon") {
+                            let as_tok = expect_ident("Expected binding alias after ':'")
+                            bind_name = get_ident_text(as_tok)
+                        }
+                        bindings << bind_name
+                        binding_fields << field_name
+                        if not match_op("Comma") { break }
+                    }
+                    expect_op("RBrace", "Expected '}' after pattern bindings")
+                } else if check_op("LParen") {
+                    advance()
+                    while not check_op("RParen") and not check_eof() {
+                        if check_op("Dot") and get_op_name(peek_next()) == "Dot" {
+                            advance()
+                            advance()
+                            has_rest = true
+                            while match_op("Comma") {}
+                            break
+                        }
+                        let bind_tok = expect_ident("Expected positional binding identifier")
+                        let bind_name = get_ident_text(bind_tok)
+                        let mut field_name = "value"
+                        if len(pattern_path) > 0 and pattern_path[len(pattern_path) - 1] == "Err" {
+                            field_name = "message"
+                        }
+                        bindings << bind_name
+                        binding_fields << field_name
+                        if not match_op("Comma") { break }
+                    }
+                    expect_op("RParen", "Expected ')' after pattern bindings")
+                }
+            } else {
+                expect_ident("Expected pattern identifier, literal, or '_'")
+            }
+            
+            expect_op("FatArrow", "Expected '=>' after match pattern")
+            let body = parse_block_ref()
+            
+            cases << entity {
+                AstNode {},
+                MatchCase { pattern_path: pattern_path, is_wildcard: is_wildcard, is_string: is_string, pattern_str: pattern_str, is_int: is_int, pattern_int: pattern_int, bindings: bindings, binding_fields: binding_fields, has_rest: has_rest, body: body, has_component: has_component, has_binding: has_binding }
+            }
+        }
+        
+        let end_tok = expect_op("RBrace", "Expected '}' after match cases.")
+        
+        return entity {
+            AstNode {},
+            Stmt {},
+            MatchStmt { subject: subject, cases: cases },
+            Span { start: start_tok.start, end: end_tok.end, line: start_tok.line, col: start_tok.col }
+        }
+    }
+
+    let parse_entity_stmt = fn() -> entity {
+        let start_tok = advance() // 'entity'
+        let name_tok = expect_ident("Expected entity name after 'entity'.")
+        let name = get_ident_text(name_tok)
+        expect_op("LBrace", "Expected '{' after entity name.")
+
+        let mut comps: list<entity> = []
+        while not check_op("RBrace") and not check_eof() {
+            comps << parse_expr_ref()
+            if not match_op("Comma") { break }
+        }
+        let end_tok = expect_op("RBrace", "Expected '}' after entity literal.")
+
+        return entity {
+            AstNode {},
+            Stmt {},
+            EntityStmt { name: name, components: comps },
+            Span { start: start_tok.start, end: end_tok.end, line: start_tok.line, col: start_tok.col }
+        }
+    }
+
+    let parse_emit_stmt = fn() -> entity {
+        let start_tok = advance() // ident: emit
+        let event_tok = expect_ident("Expected event name after emit.")
+        let event_name = get_ident_text(event_tok)
+        expect_op("LBrace", "Expected '{' after event name.")
+        let mut fields: list<str> = []
+        let mut values: list<entity> = []
+        while not check_op("RBrace") and not check_eof() {
+            let f_tok = expect_ident("Expected event field name.")
+            fields << get_ident_text(f_tok)
+            expect_op("Colon", "Expected ':' after event field name.")
+            values << parse_expr_ref()
+            if not match_op("Comma") { break }
+        }
+        let end_tok = expect_op("RBrace", "Expected '}' after emitted event payload.")
+
+        return entity {
+            AstNode {},
+            Stmt {},
+            EmitEventStmt { event_name: event_name, fields: fields, values: values },
+            Span { start: start_tok.start, end: end_tok.end, line: start_tok.line, col: start_tok.col }
+        }
+    }
+
+    let parse_schedule_stmt = fn() -> entity {
+        let start_tok = advance() // ident: schedule
+        expect_op("LBracket", "Expected '[' after schedule.")
+        let mut requested: list<str> = []
+        while not check_op("RBracket") and not check_eof() {
+            let sys_tok = expect_ident("Expected system name in schedule.")
+            requested << get_ident_text(sys_tok)
+            if not match_op("Comma") { break }
+        }
+        let end_tok = expect_op("RBracket", "Expected ']' after schedule list.")
+
+        // Topological order by `before` constraints recorded from parsed systems.
+        let mut remaining = requested
+        let mut ordered: list<str> = []
+        while len(remaining) > 0 {
+            let mut picked = ""
+            for cand in remaining {
+                let mut has_incoming = false
+                for other in remaining {
+                    if other != cand and contains(keys(system_before), other) {
+                        let deps = system_before[other]
+                        let mut di = 0
+                        while di < len(deps) {
+                            if deps[di] == cand { has_incoming = true }
+                            di = di + 1
+                        }
+                    }
+                }
+                if not has_incoming {
+                    picked = cand
+                    break
+                }
+            }
+
+            if picked == "" {
+                for s in remaining { ordered << s }
+                remaining = []
+            } else {
+                ordered << picked
+                let mut next: list<str> = []
+                for s in remaining {
+                    if s != picked { next << s }
+                }
+                remaining = next
+            }
+        }
+
+        return entity {
+            AstNode {},
+            Stmt {},
+            ScheduleStmt { systems: ordered },
+            Span { start: start_tok.start, end: end_tok.end, line: start_tok.line, col: start_tok.col }
+        }
+    }
+
+    let parse_update_stmt = fn() -> entity {
+        let start_tok = advance() // ident: update
+        expect_op("LParen", "Expected '(' after update.")
+        let entity_expr = parse_expr_ref()
+        expect_op("Comma", "Expected ',' between entity and component in update.")
+        let comp_tok = expect_ident("Expected component name in update.")
+        let comp_name = get_ident_text(comp_tok)
+        expect_op("RParen", "Expected ')' after update arguments.")
+        expect_op("LBrace", "Expected '{' after update(...).")
+        let mut field_names: list<str> = []
+        let mut field_values: list<entity> = []
+        while not check_op("RBrace") and not check_eof() {
+            let fname_tok = expect_ident("Expected field name in update body.")
+            let fname = get_ident_text(fname_tok)
+            expect_op("Assign", "Expected '=' after field name in update body.")
+            let fval = parse_expr_ref()
+            field_names << fname
+            field_values << fval
+            match_op("Comma")
+        }
+        let end_tok = expect_op("RBrace", "Expected '}' at end of update body.")
+        let sp = entity { AstNode {}, Span { start: start_tok.start, end: end_tok.end, line: start_tok.line, col: start_tok.col } }
+        let get_ident = entity { AstNode {}, IdentExpr { name: "get" }, Span { start: start_tok.start, end: end_tok.end, line: start_tok.line, col: start_tok.col } }
+        let comp_ident = entity { AstNode {}, IdentExpr { name: comp_name }, Span { start: comp_tok.start, end: comp_tok.end, line: comp_tok.line, col: comp_tok.col } }
+        let get_call = entity { AstNode {}, CallExpr { callee: get_ident, args: [entity_expr, comp_ident] }, Span { start: start_tok.start, end: end_tok.end, line: start_tok.line, col: start_tok.col } }
+        let unwrap_ident = entity { AstNode {}, IdentExpr { name: "unwrap" }, Span { start: start_tok.start, end: end_tok.end, line: start_tok.line, col: start_tok.col } }
+        let unwrap_call = entity { AstNode {}, CallExpr { callee: unwrap_ident, args: [get_call] }, Span { start: start_tok.start, end: end_tok.end, line: start_tok.line, col: start_tok.col } }
+        let comp_struct = entity { AstNode {}, StructLiteral { path: [comp_name], fields: field_names, values: field_values, spread: [unwrap_call] }, Span { start: start_tok.start, end: end_tok.end, line: start_tok.line, col: start_tok.col } }
+        let set_ident = entity { AstNode {}, IdentExpr { name: "set" }, Span { start: start_tok.start, end: end_tok.end, line: start_tok.line, col: start_tok.col } }
+        let set_call = entity { AstNode {}, CallExpr { callee: set_ident, args: [entity_expr, comp_struct] }, Span { start: start_tok.start, end: end_tok.end, line: start_tok.line, col: start_tok.col } }
+        return entity {
+            AstNode {},
+            Stmt {},
+            ExprStmt { expr: set_call },
+            Span { start: start_tok.start, end: end_tok.end, line: start_tok.line, col: start_tok.col }
+        }
+    }
+
+    let parse_statement = fn() -> entity {
+        if check_kw("Let") { return parse_let_stmt() }
+        if check_kw("Return") { return parse_return_stmt() }
+        if check_kw("If") { return parse_if_stmt() }
+        if check_kw("While") { return parse_while_stmt() }
+        if check_kw("For") { return parse_for_stmt() }
+        if check_kw("Break") { return parse_break_stmt() }
+        if check_kw("Continue") { return parse_continue_stmt() }
+        if check_kw("Match") { return parse_match_stmt() }
+        if check_kw("Entity") and variant_of(peek_next().kind) == "Ident" { return parse_entity_stmt() }
+        if check_ident() and get_ident_text(peek()) == "emit" { return parse_emit_stmt() }
+        if check_ident() and get_ident_text(peek()) == "schedule" { return parse_schedule_stmt() }
+        if check_ident() and get_ident_text(peek()) == "update" and get_op_name(peek_next()) == "LParen" { return parse_update_stmt() }
+        return parse_expr_stmt()
+    }
+
+    parse_statement_ref = parse_statement
+
+    // --- Declaration Parsing ---
+
+    let parse_fn_params = fn() -> list<entity> {
+        let mut params: list<entity> = []
+        while check_ident() or check_kw("Mut") {
+            let mut is_mut = match_kw("Mut")
+            let p = expect_ident("Expected parameter name.")
+            
+            let mut type_str = ""
+            if check_op("Colon") {
+                advance()
+                if check_kw("Mut") {
+                    advance()
+                    is_mut = true
+                }
+                let mut depth = 0
+                while not check_eof() {
+                    if check_op("Lt") {
+                        depth = depth + 1
+                        type_str = type_str + token_text(peek())
+                        advance()
+                    } else if check_op("Gt") {
+                        depth = depth - 1
+                        type_str = type_str + token_text(peek())
+                        advance()
+                    } else if depth == 0 and (check_op("Comma") or check_op("RParen") or check_op("LBrace")) {
+                        break
+                    } else {
+                        type_str = type_str + token_text(peek())
+                        advance()
+                    }
+                }
+            }
+
+            params << entity { AstNode {}, Param { name: get_ident_text(p), is_mut: is_mut, type_str: type_str } }
+            
+            match_op("Comma")
+        }
+        return params
+    }
+    parse_fn_params_ref = parse_fn_params
+
+    let parse_use_decl = fn(is_pub: bool) -> entity {
+        let start_tok = advance() // 'use'
+        let path_tok = advance()
+        let path = get_string_text(path_tok)
+        return entity {
+            AstNode {},
+            Decl { is_pub: is_pub },
+            UseDecl { path: path },
+            Span { start: start_tok.start, end: path_tok.end, line: start_tok.line, col: start_tok.col }
+        }
+    }
+
+    let parse_struct_decl = fn(is_pub: bool) -> entity {
+        let start_tok = advance() // 'struct'
+        let name_tok = expect_ident("Expected struct name.")
+        let name = get_ident_text(name_tok)
+        
+        expect_op("LBrace", "Expected '{' after struct name.")
+        
+        let mut fields: list<entity> = []
+        while not check_op("RBrace") and not check_eof() {
+            let field_name_tok = expect_ident("Expected field name.")
+            let field_name = get_ident_text(field_name_tok)
+            
+            expect_op("Colon", "Expected ':' after field name.")
+            
+            let mut type_text = ""
+            let mut depth = 0
+            while not check_eof() {
+                if check_op("Lt") {
+                    depth = depth + 1
+                    type_text = f"{type_text}<"
+                    advance()
+                } else if check_op("Gt") {
+                    depth = depth - 1
+                    type_text = f"{type_text}>"
+                    advance()
+                } else if depth == 0 and (check_op("Assign") or check_op("Comma") or check_op("RBrace")) {
+                    break
+                } else {
+                    let tt = advance()
+                    match tt.kind {
+                        Ident { text } => { type_text = f"{type_text}{text}" }
+                        Kw { kind } => {
+                            match kind {
+                                Entity {} => { type_text = f"{type_text}entity" }
+                                Fn {} => { type_text = f"{type_text}fn" }
+                                _ => { type_text = f"{type_text}?" }
+                            }
+                        }
+                        Op { kind } => {
+                            match kind {
+                                Comma {} => { type_text = f"{type_text}," }
+                                PipeOp {} => { type_text = f"{type_text}|" }
+                                _ => {}
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            
+            let mut default_val = entity { AstNode {}, Expr {}, NilLiteral {}, Span { start: field_name_tok.start, end: field_name_tok.end, line: field_name_tok.line, col: field_name_tok.col } }
+            
+            if match_op("Assign") {
+                default_val = parse_expr_ref()
+            }
+            
+            fields << entity { AstNode {}, ComponentField { name: field_name, type_str: type_text, default_val: default_val } }
+            
+            match_op("Comma") // Optional comma
+        }
+        
+        let end_tok = expect_op("RBrace", "Expected '}' after struct fields.")
+        return entity {
+            AstNode {},
+            Decl { is_pub: is_pub },
+            StructDecl { name: name, fields: fields },
+            Span { start: start_tok.start, end: end_tok.end, line: start_tok.line, col: start_tok.col }
+        }
+    }
+
+    let parse_component_decl = fn(is_pub: bool) -> entity {
+        let start_tok = advance() // 'component'
+        let name_tok = expect_ident("Expected component name.")
+        let name = get_ident_text(name_tok)
+        
+        expect_op("LBrace", "Expected '{' after component name.")
+        
+        let mut fields: list<entity> = []
+        while not check_op("RBrace") and not check_eof() {
+            let field_name_tok = expect_ident("Expected field name.")
+            let field_name = get_ident_text(field_name_tok)
+            
+            expect_op("Colon", "Expected ':' after field name.")
+            
+            let mut type_text = ""
+            let mut depth = 0
+            while not check_eof() {
+                if check_op("Lt") {
+                    depth = depth + 1
+                    type_text = f"{type_text}<"
+                    advance()
+                } else if check_op("Gt") {
+                    depth = depth - 1
+                    type_text = f"{type_text}>"
+                    advance()
+                } else if depth == 0 and (check_op("Assign") or check_op("Comma") or check_op("RBrace")) {
+                    break
+                } else {
+                    let tt = advance()
+                    match tt.kind {
+                        Ident { text } => { type_text = f"{type_text}{text}" }
+                        Kw { kind } => {
+                            match kind {
+                                Entity {} => { type_text = f"{type_text}entity" }
+                                Fn {} => { type_text = f"{type_text}fn" }
+                                _ => { type_text = f"{type_text}?" }
+                            }
+                        }
+                        Op { kind } => {
+                            match kind {
+                                Comma {} => { type_text = f"{type_text}," }
+                                PipeOp {} => { type_text = f"{type_text}|" }
+                                _ => {}
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            
+            let mut default_val = entity { AstNode {}, Expr {}, NilLiteral {}, Span { start: field_name_tok.start, end: field_name_tok.end, line: field_name_tok.line, col: field_name_tok.col } }
+            
+            if match_op("Assign") {
+                default_val = parse_expr_ref()
+            }
+            
+            fields << entity { AstNode {}, ComponentField { name: field_name, type_str: type_text, default_val: default_val } }
+            
+            match_op("Comma") // Optional comma
+        }
+        
+        let end_tok = expect_op("RBrace", "Expected '}' after component fields.")
+        return entity {
+            AstNode {},
+            Decl { is_pub: is_pub },
+            ComponentDecl { name: name, fields: fields },
+            Span { start: start_tok.start, end: end_tok.end, line: start_tok.line, col: start_tok.col }
+        }
+    }
+
+    let parse_type_decl = fn(is_pub: bool) -> entity {
+        let start_tok = advance() // 'type'
+        let name_tok = expect_ident("Expected type name.")
+        let name = get_ident_text(name_tok)
+
+        // Optional generic parameters on alias/ADT name: type Boxed<T> = ...
+        if check_op("Lt") {
+            let mut depth = 0
+            while not check_eof() {
+                if check_op("Lt") {
+                    depth = depth + 1
+                    advance()
+                } else if check_op("Gt") {
+                    depth = depth - 1
+                    advance()
+                    if depth <= 0 { break }
+                } else {
+                    advance()
+                }
+            }
+        }
+
+        // Type alias form: type Name = <type-expr>
+        if match_op("Assign") {
+            let mut alias_target = ""
+            if check_ident() {
+                alias_target = get_ident_text(peek())
+            }
+            let mut depth = 0
+            while not check_eof() {
+                if check_op("Lt") {
+                    depth = depth + 1
+                    advance()
+                } else if check_op("Gt") {
+                    depth = depth - 1
+                    advance()
+                } else if depth == 0 and (
+                    check_kw("Use") or check_kw("Component") or check_kw("Type") or
+                    check_kw("Pure") or check_kw("Fn") or check_kw("System") or
+                    check_kw("Entity") or check_kw("Let") or check_kw("Return") or
+                    check_kw("If") or check_kw("While") or check_kw("For") or
+                    check_kw("Break") or check_kw("Continue") or check_kw("Match") or
+                    (check_ident() and (
+                        get_ident_text(peek()) == "struct" or
+                        get_ident_text(peek()) == "state" or
+                        get_ident_text(peek()) == "schedule"
+                    ))
+                ) {
+                    break
+                } else {
+                    advance()
+                }
+            }
+
+            return entity {
+                AstNode {},
+                Decl { is_pub: is_pub },
+                TypeDecl { name: name, variants: [], alias_target: alias_target },
+                Span { start: start_tok.start, end: name_tok.end, line: start_tok.line, col: start_tok.col }
+            }
+        }
+
+        expect_op("LBrace", "Expected '{' after type name.")
+        
+        let mut variants: list<entity> = []
+        while not check_op("RBrace") and not check_eof() {
+            let var_name_tok = expect_ident("Expected variant name.")
+            let var_name = get_ident_text(var_name_tok)
+            
+            expect_op("LBrace", "Expected '{' after variant name.")
+            let mut fields: list<entity> = []
+            while not check_op("RBrace") and not check_eof() {
+                let field_name_tok = expect_ident("Expected field name.")
+                let field_name = get_ident_text(field_name_tok)
+                expect_op("Colon", "Expected ':' after field name.")
+                
+                // Skip type tokens
+                let mut depth = 0
+                while not check_eof() {
+                    if check_op("Lt") {
+                        depth = depth + 1
+                        advance()
+                    } else if check_op("Gt") {
+                        depth = depth - 1
+                        advance()
+                    } else if depth == 0 and (check_op("Comma") or check_op("RBrace")) {
+                        break
+                    } else {
+                        advance()
+                    }
+                }
+                
+                fields << entity { AstNode {}, VariantField { name: field_name, type_str: "" } }
+                
+                if not match_op("Comma") { break }
+            }
+            expect_op("RBrace", "Expected '}' after variant fields.")
+            
+            variants << entity { AstNode {}, TypeVariant { name: var_name, fields: fields } }
+            
+            match_op("Comma") // Optional trailing comma
+        }
+        
+        let end_tok = expect_op("RBrace", "Expected '}' after type variants.")
+        return entity {
+            AstNode {},
+            Decl { is_pub: is_pub },
+            TypeDecl { name: name, variants: variants, alias_target: "" },
+            Span { start: start_tok.start, end: end_tok.end, line: start_tok.line, col: start_tok.col }
+        }
+    }
+
+    let parse_state_decl = fn(is_pub: bool) -> entity {
+        let start_tok = advance() // 'state'
+        let name_tok = expect_ident("Expected state name.")
+        let name = get_ident_text(name_tok)
+        
+        expect_op("LBrace", "Expected '{' after state name.")
+        
+        let mut variants: list<entity> = []
+        while not check_op("RBrace") and not check_eof() {
+            let var_name_tok = expect_ident("Expected state variant name.")
+            let var_name = get_ident_text(var_name_tok)
+            
+            expect_op("LBrace", "Expected '{' after state variant name.")
+            let mut transitions: list<entity> = []
+            while not check_op("RBrace") and not check_eof() {
+                // 'on' event '->' State
+                if check_ident() and get_ident_text(peek()) == "on" {
+                    advance()
+                    let event_tok = expect_ident("Expected event name.")
+                    expect_op("Arrow", "Expected '->' after event.")
+                    let target_tok = expect_ident("Expected target state.")
+                    let mut has_guard = false
+                    let mut guard_value = true
+                    if check_ident() and get_ident_text(peek()) == "when" {
+                        advance()
+                        let guard_expr = parse_expr_ref()
+                        has_guard = true
+                        if has(guard_expr, BooleanLiteral) {
+                            guard_value = require(guard_expr, BooleanLiteral).val
+                        }
+                    }
+                    
+                    transitions << entity { AstNode {}, StateTransition { evt: get_ident_text(event_tok), target_state: get_ident_text(target_tok), has_guard: has_guard, guard_value: guard_value } }
+                    while match_op("Comma") {
+                    }
+                } else {
+                    print(f"Parse Error: Expected 'on' in state variant at line {peek().line}")
+                    advance()
+                }
+            }
+            expect_op("RBrace", "Expected '}' after state variant.")
+            
+            variants << entity { AstNode {}, StateVariant { name: var_name, transitions: transitions } }
+            
+            match_op("Comma")
+        }
+        
+        let end_tok = expect_op("RBrace", "Expected '}' after state variants.")
+        return entity {
+            AstNode {},
+            Decl { is_pub: is_pub },
+            StateDecl { name: name, variants: variants },
+            Span { start: start_tok.start, end: end_tok.end, line: start_tok.line, col: start_tok.col }
+        }
+    }
+
+    let parse_fn_decl = fn(is_pub: bool, is_pure: bool) -> entity {
+        let start_tok = advance()
+        let name_tok = expect_ident("Expected function name.")
+        let name = get_ident_text(name_tok)
+
+        // Optional generic parameters: fn name<T, U>(...)
+        if check_op("Lt") {
+            let mut depth = 0
+            while not check_eof() {
+                if check_op("Lt") {
+                    depth = depth + 1
+                    advance()
+                } else if check_op("Gt") {
+                    depth = depth - 1
+                    advance()
+                    if depth <= 0 { break }
+                } else {
+                    advance()
+                }
+            }
+        }
+
+        expect_op("LParen", "Expected '(' after function name.")
+        let params = parse_fn_params()
+        expect_op("RParen", "Expected ')' after parameters.")
+
+        let mut ret_type = ""
+        if check_op("Arrow") {
+            advance()
+            let mut depth = 0
+            while not check_eof() {
+                if check_op("Lt") {
+                    depth = depth + 1
+                    ret_type = ret_type + token_text(peek())
+                    advance()
+                } else if check_op("Gt") {
+                    depth = depth - 1
+                    ret_type = ret_type + token_text(peek())
+                    advance()
+                } else if depth == 0 and check_op("LBrace") {
+                    break
+                } else {
+                    ret_type = ret_type + token_text(peek())
+                    advance()
+                }
+            }
+        }
+
+        let body = parse_block()
+
+        let bs = require(body, Span)
+        return entity {
+            AstNode {},
+            Decl { is_pub: is_pub },
+            FnDecl { name: name, params: params, body: body, is_pure: is_pure, ret_type: ret_type },
+            Span { start: start_tok.start, end: bs.end, line: start_tok.line, col: start_tok.col }
+        }
+    }
+
+    let parse_system_decl = fn(is_pub: bool) -> entity {
+        let start_tok = advance() // 'system'
+        let name_tok = expect_ident("Expected system name.")
+        let name = get_ident_text(name_tok)
+
+        expect_op("LParen", "Expected '(' after system name.")
+        let params = parse_fn_params()
+        expect_op("RParen", "Expected ')' after system parameters.")
+
+        let mut before_list: list<str> = []
+        while check_ident() and get_ident_text(peek()) == "before" {
+            advance()
+            let btok = expect_ident("Expected system name after before.")
+            before_list << get_ident_text(btok)
+            match_op("Comma")
+        }
+        system_before[name] = before_list
+
+        let parsed_body = parse_block()
+        let pb = require(parsed_body, BlockStmt)
+
+        // Lower `system Name(params...) { body }` into:
+        // fn Name() { for __sys_e in query{Comps} { let p = require(__sys_e, Comp); ...body... } }
+        let mut q_comps: list<str> = []
+        let mut q_muts: list<bool> = []
+        for p_eid in params {
+            let pm = require(p_eid, Param)
+            if len(pm.type_str) > 0 {
+                q_comps << pm.type_str
+                q_muts << pm.is_mut
+            }
+        }
+
+        let ss = span_from_tok(start_tok)
+        let q_expr = entity { AstNode {}, Expr {}, QueryExpr { components: q_comps, is_muts: q_muts, select: [], filter: nil }, ss }
+
+        let mut loop_stmts: list<entity> = []
+        for p_eid in params {
+            let pm = require(p_eid, Param)
+            if len(pm.type_str) == 0 { continue }
+
+            let callee = entity { AstNode {}, Expr {}, IdentExpr { name: "require" }, ss }
+            let arg_ent = entity { AstNode {}, Expr {}, IdentExpr { name: "__sys_e" }, ss }
+            let arg_comp = entity { AstNode {}, Expr {}, IdentExpr { name: pm.type_str }, ss }
+            let call = entity { AstNode {}, Expr {}, CallExpr { callee: callee, args: [arg_ent, arg_comp] }, ss }
+            loop_stmts << entity { AstNode {}, Stmt {}, LetStmt { names: [pm.name], is_mut: pm.is_mut, type_ann: pm.type_str, value: call }, ss }
+        }
+        for st in pb.stmts {
+            loop_stmts << st
+        }
+
+        for p_eid in params {
+            let pm = require(p_eid, Param)
+            if len(pm.type_str) == 0 { continue }
+            if not pm.is_mut { continue }
+
+            let set_callee = entity { AstNode {}, Expr {}, IdentExpr { name: "set" }, ss }
+            let set_arg_ent = entity { AstNode {}, Expr {}, IdentExpr { name: "__sys_e" }, ss }
+            let set_arg_comp = entity { AstNode {}, Expr {}, IdentExpr { name: pm.name }, ss }
+            let set_call = entity { AstNode {}, Expr {}, CallExpr { callee: set_callee, args: [set_arg_ent, set_arg_comp] }, ss }
+            loop_stmts << entity { AstNode {}, Stmt {}, ExprStmt { expr: set_call }, ss }
+        }
+
+        let pbs = require(parsed_body, Span)
+        let loop_block = entity { AstNode {}, Stmt {}, BlockStmt { stmts: loop_stmts }, pbs }
+        let for_stmt = entity { AstNode {}, Stmt {}, ForStmt { bindings: ["__sys_e"], iterable: q_expr, body: loop_block }, Span { start: start_tok.start, end: pbs.end, line: start_tok.line, col: start_tok.col } }
+        let lowered_body = entity { AstNode {}, Stmt {}, BlockStmt { stmts: [for_stmt] }, Span { start: start_tok.start, end: pbs.end, line: start_tok.line, col: start_tok.col } }
+
+        return entity {
+            AstNode {},
+            Decl { is_pub: is_pub },
+            FnDecl { name: name, params: [], body: lowered_body, is_pure: false, ret_type: "" },
+            Span { start: start_tok.start, end: pbs.end, line: start_tok.line, col: start_tok.col }
+        }
+    }
+
+    let parse_event_decl = fn(is_pub: bool) -> entity {
+        let start_tok = advance() // ident: event
+        let name_tok = expect_ident("Expected event name.")
+        let name = get_ident_text(name_tok)
+        expect_op("LBrace", "Expected '{' after event name.")
+        let mut fields: list<str> = []
+        let mut field_types: list<str> = []
+        while not check_op("RBrace") and not check_eof() {
+            let f_tok = expect_ident("Expected event field name.")
+            fields << get_ident_text(f_tok)
+            if check_op("Colon") {
+                advance()
+                let mut type_buf = buffer_new()
+                let mut depth = 0
+                while not check_eof() {
+                    if check_op("Lt") {
+                        depth = depth + 1
+                        type_buf = buffer_append(type_buf, "<")
+                        advance()
+                    } else if check_op("Gt") {
+                        depth = depth - 1
+                        type_buf = buffer_append(type_buf, ">")
+                        advance()
+                    } else if depth == 0 and (check_op("Comma") or check_op("RBrace")) {
+                        break
+                    } else {
+                        let t = peek()
+                        if check_ident() {
+                            type_buf = buffer_append(type_buf, get_ident_text(t))
+                        } else {
+                            match t.kind {
+                                Op { kind } => {
+                                    let k: OpKind = kind
+                                    type_buf = buffer_append(type_buf, variant_of(k))
+                                }
+                                _ => {}
+                            }
+                        }
+                        advance()
+                    }
+                }
+                field_types << trim(buffer_to_str(type_buf))
+            } else {
+                field_types << "any"
+            }
+            if not match_op("Comma") { break }
+        }
+        let end_tok = expect_op("RBrace", "Expected '}' after event fields.")
+        return entity {
+            AstNode {},
+            Decl { is_pub: is_pub },
+            EventDecl { name: name, fields: fields, field_types: field_types },
+            Span { start: start_tok.start, end: end_tok.end, line: start_tok.line, col: start_tok.col }
+        }
+    }
+
+    let parse_on_decl = fn(is_pub: bool) -> entity {
+        let start_tok = advance() // ident: on
+        let event_tok = expect_ident("Expected event name after on.")
+        let event_name = get_ident_text(event_tok)
+        let mut is_once = false
+        if check_ident() and get_ident_text(peek()) == "once" {
+            advance()
+            is_once = true
+        }
+        expect_op("LParen", "Expected '(' after event name.")
+        let param_tok = expect_ident("Expected handler parameter name.")
+        let param_name = get_ident_text(param_tok)
+        expect_op("RParen", "Expected ')' after handler parameter.")
+        let mut has_guard = false
+        let mut guard_expr = entity { AstNode {}, NilLiteral {}, Span { start: start_tok.start, end: start_tok.end, line: start_tok.line, col: start_tok.col } }
+        if check_kw("When") or (check_ident() and get_ident_text(peek()) == "where") {
+            advance()
+            has_guard = true
+            guard_expr = parse_expr_ref()
+        }
+        let mut body = parse_block_ref()
+        if has_guard {
+            let bs0 = require(body, Span)
+            let wrapped_if = entity {
+                AstNode {},
+                Stmt {},
+                IfStmt { cond: guard_expr, then_block: body, else_block: nil },
+                Span { start: start_tok.start, end: bs0.end, line: start_tok.line, col: start_tok.col }
+            }
+            body = entity {
+                AstNode {},
+                Stmt {},
+                BlockStmt { stmts: [wrapped_if] },
+                Span { start: start_tok.start, end: bs0.end, line: start_tok.line, col: start_tok.col }
+            }
+        }
+        let bs = require(body, Span)
+
+        let p_node = entity { AstNode {}, Param { name: param_name, is_mut: false, type_str: "" } }
+        let handler_name = f"__on_{event_name}_{on_handler_counter}"
+        on_handler_counter = on_handler_counter + 1
+        return entity {
+            AstNode {},
+            Decl { is_pub: is_pub },
+            FnDecl { name: handler_name, params: [p_node], body: body, is_pure: false, ret_type: "" },
+            OnHandlerMeta { event_name: event_name, is_once: is_once },
+            Span { start: start_tok.start, end: bs.end, line: start_tok.line, col: start_tok.col }
+        }
+    }
+
+    let parse_decl = fn() -> entity {
+        let is_pub = match_kw("Pub")
+        if check_ident() and get_ident_text(peek()) == "event" { return parse_event_decl(is_pub) }
+        if check_ident() and get_ident_text(peek()) == "on" { return parse_on_decl(is_pub) }
+        if check_ident() and get_ident_text(peek()) == "async" {
+            advance()
+            if check_kw("Fn") { return parse_fn_decl(is_pub, false) }
+            if check_ident() and get_ident_text(peek()) == "on" { return parse_on_decl(is_pub) }
+        }
+        if check_kw("Use") { return parse_use_decl(is_pub) }
+        if check_kw("Component") { return parse_component_decl(is_pub) }
+        if check_ident() and get_ident_text(peek()) == "struct" { return parse_struct_decl(is_pub) }
+        if check_kw("Type") { return parse_type_decl(is_pub) }
+        if check_ident() and get_ident_text(peek()) == "state" { return parse_state_decl(is_pub) }
+        if check_kw("System") { return parse_system_decl(is_pub) }
+        if check_kw("Pure") {
+            advance()
+            return parse_fn_decl(is_pub, true)
+        }
+        if check_kw("Fn") { return parse_fn_decl(is_pub, false) }
+        return parse_statement()
+    }
+
+    // --- Main Parse Loop ---
+    let mut decls: list<entity> = []
+    while not check_eof() {
+        decls << parse_decl()
+    }
+
+    return entity { AstNode {}, Program { decls: decls } }
+}
+
+// --- AST Inspector ---
+
+pub fn inspect_ast(root: entity) -> nil {
+    let prog = require(root, Program)
+    print(f"Parsed {len(prog.decls)} declaration(s).\n")
+
+    for decl_id in prog.decls {
+        let decl = require(decl_id, Decl)
+        let mut prefix = ""
+        if decl.is_pub { prefix = "pub " }
+
+        if has(decl_id, UseDecl) {
+            let u = require(decl_id, UseDecl)
+            print(f"{prefix}use \"{u.path}\"")
+        } else if has(decl_id, ComponentDecl) {
+            let cd = require(decl_id, ComponentDecl)
+            print(f"{prefix}component {cd.name} ({len(cd.fields)} fields)")
+        } else if has(decl_id, StructDecl) {
+            let sd = require(decl_id, StructDecl)
+            print(f"{prefix}struct {sd.name} ({len(sd.fields)} fields)")
+        } else if has(decl_id, TypeDecl) {
+            let td = require(decl_id, TypeDecl)
+            print(f"{prefix}type {td.name} ({len(td.variants)} variants)")
+        } else if has(decl_id, StateDecl) {
+            let st = require(decl_id, StateDecl)
+            print(f"{prefix}state {st.name} ({len(st.variants)} variants)")
+        } else if has(decl_id, FnDecl) {
+            let fd = require(decl_id, FnDecl)
+            if fd.is_pure { prefix = f"{prefix}pure " }
+            let mut sig = f"{prefix}fn {fd.name}("
+            let mut pi = 0
+            for p_eid in fd.params {
+                if pi > 0 { sig = f"{sig}, " }
+                let pm = require(p_eid, Param)
+                sig = f"{sig}{pm.name}"
+                if len(pm.type_str) > 0 { sig = f"{sig}: {pm.type_str}" }
+                pi = pi + 1
+            }
+            sig = f"{sig})"
+            if len(fd.ret_type) > 0 { sig = f"{sig} -> {fd.ret_type}" }
+            print(sig)
+            inspect_block(fd.body, "  ")
+            print("")
+        }
+    }
+}
+
+fn inspect_block(block_id: entity, indent: str) -> nil {
+    if not has(block_id, BlockStmt) { return }
+    let block = require(block_id, BlockStmt)
+    for stmt_id in block.stmts {
+        inspect_stmt(stmt_id, indent)
+    }
+}
+
+fn inspect_stmt(stmt_id: entity, indent: str) -> nil {
+    if has(stmt_id, LetStmt) {
+        let ls = require(stmt_id, LetStmt)
+        let mut desc = f"{indent}let "
+        if ls.is_mut { desc = f"{indent}let mut " }
+        desc = f"{desc}{ls.names[0]} = "
+        desc = f"{desc}{describe_expr(ls.value)}"
+        print(desc)
+    } else if has(stmt_id, AssignStmt) {
+        let a = require(stmt_id, AssignStmt)
+        print(f"{indent}{a.name} = {describe_expr(a.value)}")
+    } else if has(stmt_id, PushStmt) {
+        let ps = require(stmt_id, PushStmt)
+        print(f"{indent}{ps.target} << {describe_expr(ps.value)}")
+    } else if has(stmt_id, BreakStmt) {
+        print(f"{indent}break")
+    } else if has(stmt_id, ContinueStmt) {
+        print(f"{indent}continue")
+    } else if has(stmt_id, ReturnStmt) {
+        let rs = require(stmt_id, ReturnStmt)
+        if rs.has_value {
+            print(f"{indent}return {describe_expr(rs.value)}")
+        } else {
+            print(f"{indent}return")
+        }
+    } else if has(stmt_id, IfStmt) {
+        let i = require(stmt_id, IfStmt)
+        print(f"""${indent}if ${describe_expr(i.cond)} {""")
+        inspect_block(i.then_block, f"{indent}  ")
+        let eb = i.else_block
+        if eb != nil {
+            if has(eb, BlockStmt) {
+                print(f"""${indent}} else {""")
+                inspect_block(eb, f"{indent}  ")
+            }
+        }
+        print(f"""${indent}}""")
+    } else if has(stmt_id, WhileStmt) {
+        let w = require(stmt_id, WhileStmt)
+        print(f"""${indent}while ${describe_expr(w.cond)} {""")
+        inspect_block(w.body, f"{indent}  ")
+        print(f"""${indent}}""")
+    } else if has(stmt_id, ForStmt) {
+        let f = require(stmt_id, ForStmt)
+        let mut binds = ""
+        let mut i = 0
+        for b in f.bindings {
+            if i > 0 { binds = f"{binds}, " }
+            binds = f"{binds}{b}"
+            i = i + 1
+        }
+        print(f"""${indent}for ${binds} in ... {""")
+        inspect_block(f.body, f"{indent}  ")
+        print(f"""${indent}}""")
+    } else if has(stmt_id, MatchStmt) {
+        let m = require(stmt_id, MatchStmt)
+        print(f"""${indent}match ${describe_expr(m.subject)} {""")
+        for case_id in m.cases {
+            let mc = require(case_id, MatchCase)
+            if mc.is_wildcard {
+                print(f"""${indent}  _ => {""")
+            } else if mc.is_string {
+                print(f"""${indent}  "${mc.pattern_str}" => {""")
+            } else if mc.is_int {
+                print(f"""${indent}  ${mc.pattern_int} => {""")
+            } else {
+                let mut p = ""
+                if len(mc.pattern_path) > 0 { p = mc.pattern_path[0] }
+                let mut j = 1
+                while j < len(mc.pattern_path) {
+                    p = f"{p}::{mc.pattern_path[j]}"
+                    j = j + 1
+                }
+                print(f"""${indent}  ${p} => {""")
+            }
+            inspect_block(mc.body, f"{indent}    ")
+            print(f"""${indent}  }""")
+        }
+        print(f"""${indent}}""")
+    } else if has(stmt_id, ExprStmt) {
+        let es = require(stmt_id, ExprStmt)
+        print(f"{indent}{describe_expr(es.expr)}")
+    } else {
+        print(f"{indent}<unknown stmt>")
+    }
+}
+
+fn op_symbol(name: str) -> str {
+    if name == "Plus" { return "+" }
+    if name == "Minus" { return "-" }
+    if name == "Star" { return "*" }
+    if name == "Slash" { return "/" }
+    if name == "Percent" { return "%" }
+    if name == "Eq" { return "==" }
+    if name == "Neq" { return "!=" }
+    if name == "Lt" { return "<" }
+    if name == "Gt" { return ">" }
+    if name == "Lte" { return "<=" }
+    if name == "Gte" { return ">=" }
+    if name == "And" { return "and" }
+    if name == "Or" { return "or" }
+    if name == "Not" { return "not" }
+    return name
+}
+
+fn describe_expr(eid: entity) -> str {
+    if has(eid, BinaryOp) {
+        let bin = require(eid, BinaryOp)
+        return f"({describe_expr(bin.lhs)} {op_symbol(bin.op)} {describe_expr(bin.rhs)})"
+    }
+    if has(eid, UnaryOp) {
+        let un = require(eid, UnaryOp)
+        if un.op == "Not" { return f"(not {describe_expr(un.operand)})" }
+        return f"(-{describe_expr(un.operand)})"
+    }
+    if has(eid, CallExpr) {
+        let call = require(eid, CallExpr)
+        let mut s = f"{describe_expr(call.callee)}("
+        let mut i = 0
+        for arg in call.args {
+            if i > 0 { s = f"{s}, " }
+            s = f"{s}{describe_expr(arg)}"
+            i = i + 1
+        }
+        return f"{s})"
+    }
+    if has(eid, ClosureExpr) {
+        let ce = require(eid, ClosureExpr)
+        let mut s = "fn("
+        let mut i = 0
+        for p in ce.params {
+            if i > 0 { s = f"{s}, " }
+            let pm = require(p, Param)
+            s = f"{s}{pm.name}"
+            i = i + 1
+        }
+        return f"""${s}) { ... }"""
+    }
+    if has(eid, FieldAccessExpr) {
+        let fa = require(eid, FieldAccessExpr)
+        return f"{describe_expr(fa.object)}.{fa.field}"
+    }
+    if has(eid, IndexExpr) {
+        let ie = require(eid, IndexExpr)
+        return f"{describe_expr(ie.object)}[{describe_expr(ie.index)}]"
+    }
+    if has(eid, StructLiteral) {
+        let sl = require(eid, StructLiteral)
+        let mut s = sl.path[0]
+        let mut i = 1
+        while i < len(sl.path) {
+            s = f"{s}::{sl.path[i]}"
+            i = i + 1
+        }
+        s = f"""${s} { """
+        i = 0
+        for f in sl.fields {
+            if i > 0 { s = f"{s}, " }
+            s = f"{s}{f}: {describe_expr(sl.values[i])}"
+            i = i + 1
+        }
+        if len(sl.spread) > 0 {
+            if i > 0 { s = f"{s}, " }
+            s = f"{s}..({describe_expr(sl.spread[0])})"
+        }
+        return f"""${s} }"""
+    }
+    if has(eid, ListLiteral) {
+        let ll = require(eid, ListLiteral)
+        let mut s = "["
+        let mut i = 0
+        for elem in ll.elements {
+            if i > 0 { s = f"{s}, " }
+            s = f"{s}{describe_expr(elem)}"
+            i = i + 1
+        }
+        return f"{s}]"
+    }
+    if has(eid, IntLiteral) {
+        return str(require(eid, IntLiteral).val)
+    }
+    if has(eid, FloatLiteral) {
+        return str(require(eid, FloatLiteral).val)
+    }
+    if has(eid, StringLiteral) {
+        let slit = require(eid, StringLiteral)
+        let q = chr(34)
+        return f"{q}{slit.text}{q}"
+    }
+    if has(eid, BooleanLiteral) {
+        return str(require(eid, BooleanLiteral).val)
+    }
+    if has(eid, NilLiteral) {
+        return "nil"
+    }
+    if has(eid, IdentExpr) {
+        return require(eid, IdentExpr).name
+    }
+    return "<expr>"
+}

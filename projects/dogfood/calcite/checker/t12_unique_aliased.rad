@@ -1,0 +1,6 @@
+// ILLEGAL: a `let unique` binding may not be aliased. Spec 4.1.
+fn main() -> nil {
+    let unique xs = [1, 2, 3]
+    let ys = xs
+    print(f"{len(ys)}")
+}

@@ -1,0 +1,11 @@
+// Attack: use 'update' as a variable name
+fn main() -> nil {
+    let update = 42
+    print(update)
+    let mut update = update + 1
+    update = update * 2
+    print(update)
+}
+
+// expect: 42
+// expect: 86

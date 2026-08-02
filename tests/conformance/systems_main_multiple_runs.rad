@@ -1,0 +1,28 @@
+// backend: both
+component Position { x: 0.0 }
+
+component Velocity { dx: 2.0 }
+
+entity player {
+    Position { x: 0.0 },
+    Velocity { dx: 2.0 }
+}
+
+system Physics(pos: mut Position, vel: Velocity) {
+    pos.x = pos.x + vel.dx
+}
+
+fn first_above_one(xs) {
+    let ys = filter(xs, fn(x) { return x > 1 })
+    return ys[0]
+}
+
+fn main() -> nil {
+    Physics()
+    Physics()
+    Physics()
+    print((get(player, Position) |> unwrap).x)
+    print(first_above_one([1, 2, 3]))
+}
+// expect: 6.0
+// expect: 2

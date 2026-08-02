@@ -1,0 +1,6 @@
+{"jsonrpc":"2.0","id":1,"method":"propose","params":{"source":"component Treasury { gold: 1000 }\ncomponent Morale { level: 50 }\nlet plan = sandbox_input()\nlet k = get_entity(\"kingdom\")\nlet t = get(k, Treasury) |> unwrap\nlet m = get(k, Morale) |> unwrap\nset(k, Treasury { gold: t.gold - plan[\"spend\"] })\nset(k, Morale { level: m.level + plan[\"gain\"] })\nsandbox_output({ \"new_gold\": t.gold - plan[\"spend\"], \"new_morale\": m.level + plan[\"gain\"] })","input":{"spend":300,"gain":30}}}
+{"jsonrpc":"2.0","id":2,"method":"peek","params":{"fork_id":1,"entity":"kingdom","component":"Morale"}}
+{"jsonrpc":"2.0","id":3,"method":"propose","params":{"source":"component Army { soldiers: 300 }\nset(get_entity(\"kingdom\"), Army { soldiers: 0 })"}}
+{"jsonrpc":"2.0","id":4,"method":"commit","params":{"fork_id":1}}
+{"jsonrpc":"2.0","id":5,"method":"drop","params":{"fork_id":1}}
+{"jsonrpc":"2.0","id":6,"method":"shutdown"}

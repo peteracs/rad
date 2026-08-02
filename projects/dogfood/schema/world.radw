@@ -1,0 +1,1 @@
+{"entities":[{"components":{"Health":{"hp":{"t":"int","v":73}},"Pos":{"x":{"t":"int","v":4},"y":{"t":"int","v":9}}},"name":"hero"},{"components":{"Health":{"hp":{"t":"int","v":41}},"Pos":{"x":{"t":"int","v":3},"y":{"t":"int","v":9}}},"name":"sidekick"}],"resources":{"Bank":{"gold":{"t":"int","v":250}}},"schema":{"Bank":["gold"],"Health":["hp"],"Pos":["x","y"]},"version":1}

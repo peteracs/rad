@@ -1,0 +1,222 @@
+// RADSHEET incident #1 — the FIXED build (one character: r1 -> r1 + 1).
+//
+// The bug: SUM's range loop reads `range(r0, r1)` — it silently DROPS THE
+// LAST ROW of every range. Every total in every sheet edited with this
+// build is too small, and nothing crashes. The books just don't balance.
+//
+//   record the editing session:
+//     cmd /c "rad --record incident.radr projects\dogfood\radsheet\incident\buggy.rad < edits.txt"
+//   reproduce the corruption from the tape, byte-for-byte:
+//     rad replay incident.radr
+//   the counterfactual — what the same session would have produced
+//   with the fix, replayed against the SAME recorded keystrokes:
+//     rad replay incident.radr --with projects/dogfood/radsheet/incident/fixed.rad
+//
+// This file is the compact single-file cousin of ../lib_sheet.rad: same
+// Cell schema, same CellSet -> Dirty evented recompute, SUM-only formulas.
+
+component Cell { raw: str = "", val: float = 0.0, kind: str = "empty" }
+resource Sheet { cols: int = 4, rows: int = 6 }
+
+event CellSet { cell: entity, raw: str, by: str }
+
+event Dirty { by: str }
+
+fn col_letter(i: int) -> str {
+    let letters = ["A", "B", "C", "D"]
+    return letters[i]
+}
+
+fn cell_name(c: int, r: int) -> str {
+    return f"{col_letter(c)}{r + 1}"
+}
+
+fn parse_ref(s: str) -> (int, int) {
+    let sh = get_resource(Sheet) |> unwrap
+    if len(s) < 2 { return (-1, -1) }
+    let head = to_upper(slice(s, 0, 1))
+    let mut col = -1
+    for i in range(0, sh.cols) {
+        if col_letter(i) == head { col = i }
+    }
+    if col < 0 { return (-1, -1) }
+    match try_int(slice(s, 1, len(s))) {
+        Some(n) => {
+            if n >= 1 and n <= sh.rows { return (col, n - 1) }
+            return (-1, -1)
+        }
+        None => { return (-1, -1) }
+    }
+}
+
+// =SUM(a:b) over the spanned rectangle. Returns (value, ok).
+fn eval_sum(a: str, b: str) -> (float, bool) {
+    let pa = parse_ref(a)
+    let pb = parse_ref(b)
+    if pa[0] < 0 or pb[0] < 0 { return (0.0, false) }
+    let c0 = min(pa[0], pb[0])
+    let c1 = max(pa[0], pb[0])
+    let r0 = min(pa[1], pb[1])
+    let r1 = max(pa[1], pb[1])
+    let mut total = 0.0
+    for c in range(c0, c1 + 1) {
+        for r in range(r0, r1 + 1) {   // the fix: the last row counts
+            let ent = get_entity(cell_name(c, r))
+            if ent == nil { continue }
+            let cl = get(ent, Cell) |> unwrap
+            if cl.kind == "num" or cl.kind == "formula" {
+                total = total + cl.val
+            }
+        }
+    }
+    return (total, true)
+}
+
+// "=SUM(B1:B3)" body (after the =). Also accepts "X+Y" of refs/numbers.
+fn eval_formula(body: str) -> (float, bool) {
+    let src = replace(body, " ", "")
+    if starts_with(to_upper(src), "SUM(") and ends_with(src, ")") {
+        let inner = slice(src, 4, len(src) - 1)
+        let parts = split(inner, ":")
+        if len(parts) != 2 { return (0.0, false) }
+        return eval_sum(parts[0], parts[1])
+    }
+    // ref+ref chains, left to right
+    let mut acc = 0.0
+    for piece in split(src, "+") {
+        let pr = parse_ref(piece)
+        if pr[0] >= 0 {
+            let ent = get_entity(to_upper(piece))
+            let cl = get(ent, Cell) |> unwrap
+            acc = acc + cl.val
+        } else {
+            match try_float(piece) {
+                Some(x) => { acc = acc + x }
+                None => { return (0.0, false) }
+            }
+        }
+    }
+    return (acc, true)
+}
+
+fn derive(raw: str) -> (float, str) {
+    let r = trim(raw)
+    if r == "" { return (0.0, "empty") }
+    if starts_with(r, "=") {
+        let res = eval_formula(slice(r, 1, len(r)))
+        if !res[1] { return (res[0], "err") }
+        return (res[0], "formula")
+    }
+    match try_float(r) {
+        Some(x) => { return (x, "num") }
+        None => { return (0.0, "text") }
+    }
+}
+
+on CellSet(e) {
+    let d = derive(e.raw)
+    set(e.cell, Cell { raw: trim(e.raw), val: d[0], kind: d[1] })
+    emit Dirty { by: e.by }
+}
+
+on Dirty(e) {
+    let mut names = []
+    for ent in entities(Cell) { names << name_of(ent) }
+    let sorted_names = sort(names)
+    let mut passes = 0
+    let mut changed = true
+    while changed and passes < 16 {
+        changed = false
+        for nm in sorted_names {
+            let ent = get_entity(nm)
+            let cl = get(ent, Cell) |> unwrap
+            let d = derive(cl.raw)
+            if d[0] != cl.val or d[1] != cl.kind {
+                set(ent, Cell { raw: cl.raw, val: d[0], kind: d[1] })
+                changed = true
+            }
+        }
+        passes = passes + 1
+    }
+}
+
+fn set_cell(name: str, raw: str, by: str) -> nil {
+    let ent = get_entity(to_upper(name))
+    if ent == nil { return }
+    emit CellSet { cell: ent, raw: raw, by: by }
+    flush_events()
+    flush_events()
+}
+
+fn fmt_val(kind: str, val: float, raw: str) -> str {
+    if kind == "empty" { return "" }
+    if kind == "err" { return "#ERR" }
+    if kind == "text" { return raw }
+    let iv = int(val)
+    if float(iv) == val { return f"{iv}" }
+    return f"{val}"
+}
+
+fn pad(s: str, w: int) -> str {
+    let mut out = s
+    while len(out) < w { out = out + " " }
+    return out
+}
+
+fn render_grid() -> str {
+    let sh = get_resource(Sheet) |> unwrap
+    let w = 10
+    let mut out = pad("", 4)
+    for c in range(0, sh.cols) { out = out + pad(col_letter(c), w) }
+    out = out + "\n"
+    for r in range(0, sh.rows) {
+        let mut line = pad(f"{r + 1}", 4)
+        let mut any = false
+        for c in range(0, sh.cols) {
+            let ent = get_entity(cell_name(c, r))
+            let cl = get(ent, Cell) |> unwrap
+            if cl.kind != "empty" { any = true }
+            line = line + pad(fmt_val(cl.kind, cl.val, cl.raw), w)
+        }
+        if any { out = out + line + "\n" }
+    }
+    return out
+}
+
+fn main() -> nil {
+    let sh = get_resource(Sheet) |> unwrap
+    for c in range(0, sh.cols) {
+        for r in range(0, sh.rows) {
+            let _ = spawn(cell_name(c, r), Cell { raw: "", val: 0.0, kind: "empty" })
+        }
+    }
+
+    // The editing session: "<user> <ref> <raw...>" per line, "done" ends.
+    // readline() is recorded io — the tape captures the real keystrokes,
+    // and the counterfactual replays the same keystrokes against the fix.
+    let mut editing = true
+    while editing {
+        let line = trim(readline())
+        if line == "done" or line == "" {
+            editing = false
+        } else {
+            let parts = split(line, " ")
+            if len(parts) >= 3 {
+                let by = parts[0]
+                let ref = parts[1]
+                let raw = join(slice(parts, 2, len(parts)), " ")
+                set_cell(ref, raw, by)
+                print(f"{by} set {to_upper(ref)} = {raw}")
+            }
+        }
+    }
+
+    print("")
+    print(render_grid())
+    let b5 = get(get_entity("B5"), Cell) |> unwrap
+    let c5 = get(get_entity("C5"), Cell) |> unwrap
+    let d5 = get(get_entity("D5"), Cell) |> unwrap
+    print(f"Q1 total (B5) = {fmt_val(b5.kind, b5.val, b5.raw)}")
+    print(f"Q2 total (C5) = {fmt_val(c5.kind, c5.val, c5.raw)}")
+    print(f"grand  (D5)   = {fmt_val(d5.kind, d5.val, d5.raw)}")
+}

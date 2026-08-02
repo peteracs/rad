@@ -1,0 +1,34 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": ".tmp-test",
+    "rootDir": ".",
+    "types": ["node"],
+    "noEmit": false,
+    "isolatedModules": false
+  },
+  "include": [
+    "src/types.d.ts",
+    "src/netcode/ackDiagnostics.ts",
+    "src/netcode/authorityStateGate.ts",
+    "src/netcode/constants.ts",
+    "src/netcode/fixedTickClock.ts",
+    "src/netcode/inputSequencer.ts",
+    "src/netcode/netcodeLogger.ts",
+    "src/netcode/predictedMoveApplier.ts",
+    "src/netcode/predictionBuffer.ts",
+    "src/netcode/reconciliationPolicy.ts",
+    "src/netcode/runtimeDiagnostics.ts",
+    "src/netcode/seenIdRing.ts",
+    "src/app/clientPredictionRunner.ts",
+    "src/render/avatarInterpolator.ts",
+    "src/render/avatarModelId.ts",
+    "src/render/avatarTimeline.ts",
+    "src/render/renderBufferContract.ts",
+    "src/render/worldView.ts",
+    "src/transport/matchProtocol.ts",
+    "src/transport/stateInbox.ts",
+    "src/transport/serverState.ts",
+    "test/**/*.ts"
+  ]
+}

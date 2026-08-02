@@ -1,0 +1,31 @@
+// backend: both
+// Small tutorial-style fixture: reproducible dungeon outcomes via rand_seed().
+
+fn dungeon_run() {
+    let hero_hp = 18 + rand_int(0, 6)
+    let dragon_hp = 20 + rand_int(0, 8)
+    let has_shield = rand_bool()
+    let crit = rand_float() < 0.25
+    let mut damage = 6 + rand_int(0, 4)
+    if has_shield { damage = damage + 1 }
+    if crit { damage = damage + 3 }
+
+    let mut outcome = "retreat"
+    if damage >= dragon_hp {
+        outcome = "victory"
+    }
+
+    return f"hero={hero_hp} dragon={dragon_hp} shield={has_shield} crit={crit} damage={damage} outcome={outcome}"
+}
+
+rand_seed(1337)
+let run_a = dungeon_run()
+rand_seed(1337)
+let run_b = dungeon_run()
+
+print(run_a)
+// expect: hero=19 dragon=22 shield=false crit=false damage=7 outcome=retreat
+print(run_b)
+// expect: hero=19 dragon=22 shield=false crit=false damage=7 outcome=retreat
+print(run_a == run_b)
+// expect: true

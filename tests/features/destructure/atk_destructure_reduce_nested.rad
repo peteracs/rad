@@ -1,0 +1,9 @@
+fn main() -> nil {
+    let matrix = [[[1, 2], [3, 4]], [[5, 6], [7, 8]]]
+    let flat_sum = matrix
+        |> map(fn(row) {
+            return row |> reduce(0, fn(acc, [a, b]) { return acc + a + b })
+        })
+    print(flat_sum[0])
+    print(flat_sum[1])
+}

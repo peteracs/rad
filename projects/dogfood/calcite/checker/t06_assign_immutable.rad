@@ -1,0 +1,6 @@
+// ILLEGAL: reassigning a `let` binding. Spec 4.2 / 7.4.
+fn main() -> nil {
+    let x = 1
+    x = 2
+    print(f"{x}")
+}

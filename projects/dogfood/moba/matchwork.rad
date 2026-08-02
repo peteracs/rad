@@ -1,0 +1,156 @@
+// MATCHWORK — browser-moba's match frame, written the way it wants to
+// be written (fake-port round 11). The code comes first; whatever the
+// language can't run becomes a feature.
+//
+// Architecture (mirrors sim/systems/structureGating.ts + endOfGame.ts +
+// respawn.ts + fountain.ts):
+//   - The backdoor-protection chain is DATA: each structure names its
+//     protectors; invulnerability is derived — protected while any
+//     protector stands. No expose calls threaded through death code.
+//   - The nexus falling ends the match (a resource flag the loop reads).
+//   - Champion deaths schedule level-scaled respawns as delayed events;
+//     respawn restores full vitals at the fountain.
+//   - The fountain is a heal zone system. The whole frame runs as one
+//     `phase`, with declared ordering where it matters.
+
+pub let RESPAWN_BASE_TICKS = 150          // 5s at level 1...
+pub let RESPAWN_PER_LEVEL = 60            // ...+2s per level
+pub let FOUNTAIN_AT = (0.0, 0.0)
+pub let FOUNTAIN_RADIUS = 6.0
+pub let FOUNTAIN_HEAL_PCT = 0.05
+
+component Pos { at: (float, float) = (0.0, 0.0) }
+
+component Vitals { hp: float = 1000.0, max_hp: float = 1000.0, team: int, alive: bool = true }
+
+component Champion { level: int = 1 }
+
+component Structure { protected_by: list = [] }   // names of protectors
+
+pub event Damage { target: entity, amount: float }
+pub event Felled { what: entity }
+pub event Respawn { who: entity }
+
+resource Match { over: bool = false, winner: int = -1 }
+
+// ------------------------------------------------------ the chain
+
+// protected while ANY named protector still stands — the whole gating
+// script family, derived instead of threaded through death handlers
+fn invulnerable(s: entity) -> bool {
+    let prot = require(s, Structure).protected_by
+    return prot |> any(fn(name) {
+        let p = get_entity(name)          // a named protector may be gone
+        if p == nil { return false }
+        return require(p, Vitals).alive
+    })
+}
+
+// ------------------------------------------------------ damage/death
+
+on Damage(e) {
+    let v = require(e.target, Vitals)
+    if not v.alive { return }
+    if has(e.target, Structure) and invulnerable(e.target) {
+        print(f"    {name_of(e.target)} is protected — no damage")
+        return
+    }
+    let hp = v.hp - e.amount
+    update(e.target, Vitals) { hp = max(hp, 0.0), alive = hp > 0.0 }
+    if hp <= 0.0 {
+        emit Felled { what: e.target }
+    }
+}
+
+on Felled(e) {
+    print(f"    {name_of(e.what)} destroyed")
+}
+
+// the nexus falling ends the match
+on Felled(e) when name_of(e.what) == "red-nexus" {
+    update(Match) { over = true, winner = 0 }
+}
+
+// champion deaths schedule level-scaled respawns
+on Felled(e) when has(e.what, Champion) {
+    let lvl = require(e.what, Champion).level
+    let delay = RESPAWN_BASE_TICKS + (lvl - 1) * RESPAWN_PER_LEVEL
+    print(f"    respawn in {delay} ticks")
+    emit Respawn { who: e.what } after delay
+}
+
+on Respawn(e) {
+    let v = require(e.who, Vitals)
+    update(e.who, Vitals) { hp = v.max_hp, alive = true }
+    update(e.who, Pos) { at = FOUNTAIN_AT }
+    print(f"    {name_of(e.who)} respawns")
+}
+
+// ------------------------------------------------------ the frame
+
+system fountain_heal(Champion, v: mut Vitals, p: Pos) {
+    if not v.alive { return }
+    if dist(p.at, FOUNTAIN_AT) <= FOUNTAIN_RADIUS {
+        v.hp = min(v.hp + v.max_hp * FOUNTAIN_HEAL_PCT, v.max_hp)
+    }
+}
+
+system watch_match(Champion) after fountain_heal {
+    // ordering dogfood: runs after healing settles each tick
+}
+
+phase frame { fountain_heal, watch_match }
+
+pure fn dist(a: (float, float), b: (float, float)) -> float {
+    let (dx, dy) = a - b
+    return sqrt(dx * dx + dy * dy)
+}
+
+fn tick(n: int) -> nil {
+    let mut i = 0
+    while i < n and not res(Match).over {
+        schedule [frame]
+        i = i + 1
+    }
+}
+
+// -------------------------------------------------------------- demo
+
+fn main() -> nil {
+    let ez = entity "ez" {
+        Pos { at: (20.0, 0.0) }, Vitals { team: 0 }, Champion { level: 6 },
+    }
+    let _t1 = entity "red-outer" { Vitals { team: 1, hp: 1300.0, max_hp: 1300.0 }, Structure {}, Pos {} }
+    let _t2 = entity "red-inner" {
+        Vitals { team: 1, hp: 1300.0, max_hp: 1300.0 },
+        Structure { protected_by: ["red-outer"] }, Pos {},
+    }
+    let _nx = entity "red-nexus" {
+        Vitals { team: 1, hp: 2000.0, max_hp: 2000.0 },
+        Structure { protected_by: ["red-inner"] }, Pos {},
+    }
+
+    // backdoor refused: the inner tower shrugs while the outer stands
+    print("backdoor attempt:")
+    emit Damage { target: require_entity("red-inner"), amount: 800.0 }
+    tick(1)
+
+    // the legal order: outer, inner, nexus
+    print("siege:")
+    emit Damage { target: require_entity("red-outer"), amount: 1300.0 }
+    tick(1)
+    emit Damage { target: require_entity("red-inner"), amount: 1300.0 }
+    tick(1)
+
+    // ez falls mid-siege; respawns on the level-6 clock, fountain tops up
+    emit Damage { target: ez, amount: 1000.0 }
+    tick(1)
+    print(f"  ez alive={require(ez, Vitals).alive}")
+    tick(460)
+    print(f"  ez alive={require(ez, Vitals).alive} hp={require(ez, Vitals).hp:.0} at fountain")
+
+    // the nexus is exposed now; the match ends the moment it falls
+    emit Damage { target: require_entity("red-nexus"), amount: 2000.0 }
+    tick(10)
+    print(f"match over={res(Match).over} winner=team {res(Match).winner}")
+}

@@ -1,0 +1,15 @@
+// Importer side of the `pub let` conformance pair: constants come in
+// through a bare `use` like any other pub declaration.
+
+use "pub_let_lib.rad"
+
+fn main() -> nil {
+    print(TICK_RATE)              // 30
+    print(MAP_NAME)               // treeline
+    print(SPAWN_GRID[1])          // 34
+    print(MS_PER_TICK)            // 33
+    print(scaled(MS_PER_TICK))    // 33000
+    // exported constants compose into local expressions
+    let frame_budget = MS_PER_TICK * 2 + 1
+    print(frame_budget)           // 67
+}

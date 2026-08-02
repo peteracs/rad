@@ -1,0 +1,7 @@
+// Attack: max_by where key function returns bool
+// Bools aren't ordered — what happens?
+
+fn main() -> nil {
+    let r = max_by([1, 2, 3], fn(x) { return x > 1 })
+    print(r)
+}

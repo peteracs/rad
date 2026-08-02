@@ -1,0 +1,21 @@
+// backend: both
+let some_val = Option::Some { value: 42 }
+let none_val = Option::None {}
+
+print(is_some(some_val))
+print(is_some(none_val))
+print(is_none(some_val))
+print(is_none(none_val))
+
+let ok_val = Result::Ok { value: 1 }
+let err_val = Result::Err { message: "bad" }
+
+print(is_some(ok_val))
+print(is_none(err_val))
+
+// expect: true
+// expect: false
+// expect: false
+// expect: true
+// expect: true
+// expect: true

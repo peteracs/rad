@@ -1,0 +1,19 @@
+// P11: smuggle the IO through a CLOSURE handed to a higher-order builtin from
+// inside a simulated system. The system body contains no IO token and calls no
+// named impure fn -- the effect rides inside an anonymous function value.
+// EXPECT: compile-time rejection.
+component C { v: int = 0 }
+
+system Leak(c: mut C) {
+    let picked = query_where(C, fn(id: entity) -> bool {
+        print("ESCAPED-P11 io ran inside a closure inside simulate")
+        return true
+    })
+    c.v = c.v + len(picked)
+}
+
+let e = spawn("e", C { v: 0 })
+let f = fork()
+let r = simulate(f, [system::Leak], 2)
+let got = peek(r, e, C) |> unwrap
+print(f"COMPILED-AND-RAN v={got.v}")

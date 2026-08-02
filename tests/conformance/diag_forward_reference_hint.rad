@@ -1,0 +1,11 @@
+// backend: both
+fn caller(x) {
+    return later(x)
+}
+
+fn later(v) {
+    return v + 1
+}
+
+print(caller(1))
+// expect: 2

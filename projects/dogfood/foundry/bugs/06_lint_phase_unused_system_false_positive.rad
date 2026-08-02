@@ -1,0 +1,35 @@
+// BUG 06: `rad lint` does not understand `phase` indirection, so it reports
+// RAD-L009 "Systems are declared but never run" for systems that ARE run
+// through a phase. The normal run path gets this right; only the lint path is
+// wrong, so the two disagree about the same source file.
+//
+//   target\debug\rad.exe projects\dogfood\foundry\bugs\06_lint_phase_unused_system_false_positive.rad
+//     -> runs clean, NO unused-system warning (correct: the phase runs them)
+//
+//   target\debug\rad.exe lint --preset=strict projects\dogfood\foundry\bugs\06_lint_phase_unused_system_false_positive.rad
+//     -> WARNING [RAD-L009] Systems are declared but never run
+//
+// docs/src/project/changelog.md:31 explicitly promises the opposite:
+// "Phases are validated by the checker (unknown system names are errors) and
+//  participate in unused-system diagnostics."
+
+component Widget { n: 0 }
+
+resource Tally { a: 0, b: 0 }
+
+system Alpha(w: Widget, t: mut Tally) {
+    t.a = t.a + w.n
+}
+
+system Beta(t: mut Tally) after Alpha {
+    t.b = t.b + 1
+}
+
+// Alpha and Beta are referenced ONLY through this phase.
+phase Front { Alpha, Beta }
+
+spawn(Widget { n: 5 })
+
+schedule [Front]
+
+print(f"a={res(Tally).a} b={res(Tally).b}")

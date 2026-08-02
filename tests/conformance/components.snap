@@ -1,0 +1,10 @@
+---
+source: tests\conformance\components.rad
+exit_code: 0
+---
+5
+true
+q
+true
+2
+3

@@ -1,0 +1,35 @@
+// BUG 04: `--strict-types` (and `lint --preset=strict`, which turns these into
+// errors) demands an explicit type annotation on every `let`. For a value read
+// out of a RESOURCE there is no annotation you are allowed to write. The preset
+// is therefore unsatisfiable for any program that reads a resource.
+//
+// RUN BOTH:
+//   target\debug\rad.exe --strict-types projects\dogfood\oracle\bugs\04_strict_types_catch22.rad
+//   target\debug\rad.exe projects\dogfood\oracle\bugs\04_strict_types_catch22.rad
+//
+// Without the annotation, strict mode says:
+//     Error: Strict types: variable 'b' requires an explicit type annotation
+// With the only annotation that could be correct (`: Bank`), the compiler says:
+//     Error: Unknown type annotation 'Bank'
+//     hint: Check that this type is declared before use
+// ...and `Bank` is declared on line 22 of this file.
+//
+// There is no third option. `: any` silences strict mode only by discarding the
+// type, which is the opposite of what the preset exists to enforce.
+// See bugs/02_resource_type_annotation.rad for the underlying hole.
+
+resource Bank { gold: int = 10 }
+component Health { hp: int = 100 }
+
+let e = spawn("e", Health { hp: 50 })
+
+// A COMPONENT read annotates fine -- this line satisfies strict mode.
+let h: Health = get(e, Health) |> unwrap
+print(f"component annotation accepted: hp={h.hp}")
+
+// A RESOURCE read cannot be annotated. Uncomment to see the rejection:
+// let b: Bank = get_resource(Bank) |> unwrap
+
+// Leaving it unannotated is what strict mode complains about:
+let b = get_resource(Bank) |> unwrap
+print(f"resource read, unannotated: gold={b.gold}")

@@ -1,0 +1,14 @@
+---
+source: tests\conformance\index_of_and_undo.rad
+exit_code: 0
+---
+1
+-1
+-1
+0
+2
+1
+acted:  40g ["sword", nil, nil]
+acted:  0g ["sword", "shield", nil]
+undo 1: 40g ["sword", nil, nil]
+undo 2: 100g [nil, nil, nil]

@@ -1,0 +1,7 @@
+// backend: both
+fn fact(n) {
+    if n <= 1 { return 1 }
+    return n * fact(n - 1)
+}
+print(f"CASE15:{fact(6)}")
+// expect: CASE15:720

@@ -1,0 +1,52 @@
+// Test 7: Multiple systems per simulate call — execution order matters
+
+component Pos { x: 0 }
+component Vel { dx: 1 }
+component Acc { ddx: 1 }
+
+// AccelerateFirst adds Acc to Vel
+system Accelerate(vel: mut Vel, acc: Acc) {
+    vel = Vel { dx: vel.dx + acc.ddx }
+}
+
+// Then Move adds Vel to Pos
+system Move(pos: mut Pos, vel: Vel) {
+    pos = Pos { x: pos.x + vel.dx }
+}
+
+let e = spawn("obj", Pos { x: 0 }, Vel { dx: 0 }, Acc { ddx: 2 })
+
+// Simulate 1 tick with [Accelerate, Move] — Accelerate runs first, then Move
+// Tick 1: vel = 0 + 2 = 2, then pos = 0 + 2 = 2
+let f = fork()
+let f = simulate(f, [system::Accelerate, system::Move], 1)
+commit(f)
+
+let p1 = get(e, Pos) |> unwrap
+let v1 = get(e, Vel) |> unwrap
+assert(v1.dx == 2, f"Vel after 1 tick: expected 2, got {v1.dx}")
+assert(p1.x == 2, f"Pos after 1 tick: expected 2, got {p1.x}")
+
+// Simulate 1 more tick
+// Tick 2: vel = 2 + 2 = 4, then pos = 2 + 4 = 6
+let f2 = fork()
+let f2 = simulate(f2, [system::Accelerate, system::Move], 1)
+commit(f2)
+
+let p2 = get(e, Pos) |> unwrap
+let v2 = get(e, Vel) |> unwrap
+assert(v2.dx == 4, f"Vel after 2 ticks: expected 4, got {v2.dx}")
+assert(p2.x == 6, f"Pos after 2 ticks: expected 6, got {p2.x}")
+
+// Simulate 3 more ticks at once from current state
+// Tick 3: vel=6, pos=12. Tick 4: vel=8, pos=20. Tick 5: vel=10, pos=30
+let f3 = fork()
+let f3 = simulate(f3, [system::Accelerate, system::Move], 3)
+commit(f3)
+
+let p3 = get(e, Pos) |> unwrap
+let v3 = get(e, Vel) |> unwrap
+assert(v3.dx == 10, f"Vel after 5 ticks: expected 10, got {v3.dx}")
+assert(p3.x == 30, f"Pos after 5 ticks: expected 30, got {p3.x}")
+
+print("PASS: multi-system simulation")

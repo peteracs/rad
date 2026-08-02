@@ -1,0 +1,8 @@
+prio T-1 4
+close T-2
+sync
+yours
+digest
+list all
+swhy T-1
+quit

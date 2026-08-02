@@ -1,0 +1,178 @@
+// SIGHTWORK — browser-moba's fog of war, written the way it wants to be
+// written (fake-port round 5). The code comes first; whatever the
+// language can't run becomes a feature.
+//
+// Architecture (mirrors sim/systems/vision.ts, at unit granularity —
+// the grid/raycast model is that file's perf representation; these are
+// the RULES it implements):
+//   - Vision is per-team: a unit is visible to a team if any friendly
+//     sighted source covers it.
+//   - Stealth (CanSeeCallback): the own team always sees its stealthed
+//     units; enemies see them only where a TRUE-SIGHT source covers.
+//   - Brush (IsInWallOfGrass): a unit standing in grass is hidden from
+//     enemies whose sight does not come from INSIDE that same grass.
+//   - Fog ghosts: when a unit leaves vision, its last seen position
+//     lingers; re-sighting clears the ghost.
+
+pub let BLUE = 0
+pub let RED = 1
+
+// brush clumps as circles for the demo: ((center), radius)
+pub let BRUSHES = [
+    ((20.0, 0.0), 4.0),
+    ((40.0, 10.0), 5.0),
+]
+
+// ---------------------------------------------------------- sim state
+
+component Pos { at: (float, float) = (0.0, 0.0) }
+
+component Unit { team: int }                     // required: team 0 is a team, not a default
+
+component Sight {
+    radius: float = 13.0,
+    true_sight: bool = false,
+    true_sight_radius: float = 8.0,
+}
+
+component Stealth {}
+
+component TeamVision {
+    team: int,
+    visible: list = [],             // enemy entities seen this tick
+    ghosts: map < entity, (float, float) > = {},    // last seen positions
+}
+
+pub event Spotted { team: int, target: entity }
+pub event Faded { team: int, target: entity, last_at: (float, float) }
+
+// ------------------------------------------------------------- rules
+
+pure fn dist(a: (float, float), b: (float, float)) -> float {
+    let (dx, dy) = a - b
+    return sqrt(dx * dx + dy * dy)
+}
+
+// which brush clump covers the point, or -1 in the open
+pub fn brush_at(p: (float, float)) -> int {
+    for i in range(0, len(BRUSHES)) {
+        let (center, r) = BRUSHES[i]
+        if dist(p, center) <= r { return i }
+    }
+    return -1
+}
+
+// one source against one target: range, then the brush rule
+fn covers(source: entity, target: entity) -> bool {
+    let sp = require(source, Pos).at
+    let tp = require(target, Pos).at
+    if dist(sp, tp) > require(source, Sight).radius { return false }
+    let target_brush = brush_at(tp)
+    if target_brush >= 0 and brush_at(sp) != target_brush { return false }
+    return true
+}
+
+// true sight: a revealing source whose reveal radius covers the target
+fn reveals(source: entity, target: entity) -> bool {
+    let s = require(source, Sight)
+    if not s.true_sight { return false }
+    return dist(require(source, Pos).at, require(target, Pos).at) <= s.true_sight_radius
+}
+
+// the CanSeeCallback rule, per team
+pub fn visible_to(team: int, target: entity) -> bool {
+    if require(target, Unit).team == team { return true }
+    let sources = query { Unit, Sight, Pos } where Unit.team == team
+    if has(target, Stealth) {
+        return sources |> any(fn(s) { return reveals(s, target) })
+    }
+    return sources |> any(fn(s) { return covers(s, target) })
+}
+
+// ------------------------------------------------------------ ticking
+
+system update_fog(tv: mut TeamVision) {
+    let mut seen = []
+    let mut ghosts = tv.ghosts
+    for t in query { Unit, Pos } where Unit.team != tv.team {
+        if visible_to(tv.team, t) {
+            seen << t
+            if not contains(tv.visible, t) {
+                emit Spotted { team: tv.team, target: t }
+            }
+            ghosts = remove_key(ghosts, t)
+        } else if contains(tv.visible, t) {
+            // just slipped away: a ghost lingers at the last seen spot
+            let last = require(t, Pos).at
+            ghosts = set_at(ghosts, t, last)
+            emit Faded { team: tv.team, target: t, last_at: last }
+        }
+    }
+    tv.visible = seen
+    tv.ghosts = ghosts
+}
+
+on Spotted(e) {
+    print(f"  [team {e.team}] spotted {name_of(e.target)}")
+}
+
+on Faded(e) {
+    print(f"  [team {e.team}] lost {name_of(e.target)} at {e.last_at}")
+}
+
+// -------------------------------------------------------------- demo
+
+fn tick() -> nil {
+    schedule [update_fog]
+}
+
+fn fog_line(team_eid: entity) -> str {
+    let tv = require(team_eid, TeamVision)
+    let names = tv.visible |> map(fn(t) { return name_of(t) })
+    let ghost_count = tv.ghosts |> len
+    return f"sees {names} ghosts={ghost_count}"
+}
+
+fn main() -> nil {
+    let blue_fog = entity "blue-fog" { TeamVision { team: BLUE } }
+    let _red_fog = entity "red-fog" { TeamVision { team: RED } }
+
+    let _ez = entity "ez" {
+        Unit { team: BLUE }, Pos { at: (0.0, 0.0) }, Sight {},
+    }
+    let annie = entity "annie" {
+        Unit { team: RED }, Pos { at: (10.0, 0.0) }, Sight {},
+    }
+    let _twitch = entity "twitch" {
+        Unit { team: RED }, Pos { at: (6.0, 0.0) }, Sight {}, Stealth {},
+    }
+
+    // open ground: annie visible, stealthed twitch not
+    tick()
+    print(f"t1 blue {fog_line(blue_fog)}")
+
+    // a pink ward reveals: true sight covers twitch
+    let _ward = entity "pink" {
+        Unit { team: BLUE }, Pos { at: (5.0, 0.0) },
+        Sight { radius: 9.0, true_sight: true, true_sight_radius: 8.0 },
+    }
+    tick()
+    print(f"t2 blue {fog_line(blue_fog)}")
+
+    // annie steps into brush: hidden from outside, ghost lingers
+    update(annie, Pos) { at = (20.0, 0.0) }
+    tick()
+    print(f"t3 blue {fog_line(blue_fog)}")
+
+    // ez face-checks the same brush: same-clump sight sees her again
+    let scout = entity "scout" {
+        Unit { team: BLUE }, Pos { at: (19.0, 1.0) }, Sight {},
+    }
+    tick()
+    print(f"t4 blue {fog_line(blue_fog)}")
+
+    // the scout leaves; annie fades back into the grass
+    update(scout, Pos) { at = (60.0, 0.0) }
+    tick()
+    print(f"t5 blue {fog_line(blue_fog)}")
+}

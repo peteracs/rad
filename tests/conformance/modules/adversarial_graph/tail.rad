@@ -1,0 +1,6 @@
+use "hub.rad"
+use "leaf_gamma.rad"
+
+pub fn tail() -> int {
+    return hub() * 2 + leaf_gamma()
+}

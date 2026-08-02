@@ -1,0 +1,7 @@
+[book]
+title = "MOBA RAD"
+src = "."
+language = "en"
+
+[build]
+build-dir = "book"

@@ -1,0 +1,89 @@
+// =====================================================================
+//  Inventory System — ECS with Events
+// =====================================================================
+
+component Name { value: "" }
+
+component Health { hp: 100, max: 100 }
+
+component Inventory { items: 0 }
+
+component Weapon { name: "", damage: 0 }
+
+component Armor { name: "", defense: 0 }
+
+event ItemPickup { eid, item_name }
+
+event ItemDrop { eid, item_name }
+
+event Equip { eid, slot, item_name, val }
+
+on ItemPickup(e) {
+    let n = (get(e.eid, Name) ?).value
+    let inv = get(e.eid, Inventory) ?
+    set(e.eid, Inventory { items: inv.items + 1 })
+    print(f"  {n} picked up: {e.item_name} (total items: {inv.items + 1})")
+}
+
+on ItemDrop(e) {
+    let n = (get(e.eid, Name) ?).value
+    let inv = get(e.eid, Inventory) ?
+    let mut new_count = inv.items - 1
+    if new_count < 0 { new_count = 0 }
+    set(e.eid, Inventory { items: new_count })
+    print(f"  {n} dropped: {e.item_name} (total items: {new_count})")
+}
+
+on Equip(e) {
+    let n = (get(e.eid, Name) ?).value
+    if e.slot == "weapon" {
+        set(e.eid, Weapon { name: e.item_name, damage: e.val })
+        print(f"  {n} equipped weapon: {e.item_name} (+{e.val} damage)")
+    }
+    if e.slot == "armor" {
+        set(e.eid, Armor { name: e.item_name, defense: e.val })
+        print(f"  {n} equipped armor: {e.item_name} (+{e.val} defense)")
+    }
+}
+
+entity hero {
+    Name { value: "Hero" },
+    Health { hp: 100, max: 100 },
+    Inventory { items: 0 },
+    Weapon { name: "Fists", damage: 5 },
+    Armor { name: "Shirt", defense: 1 }
+}
+
+fn print_loadout(eid) {
+    let n = (get(eid, Name) ?).value
+    let w = get(eid, Weapon) ?
+    let a = get(eid, Armor) ?
+    print(f"  {n}'s loadout:")
+    print(f"    Weapon: {w.name} (dmg: {w.damage})")
+    print(f"    Armor:  {a.name} (def: {a.defense})")
+}
+
+fn main() -> any {
+    print("=== Inventory System ===\n")
+
+    print("Starting loadout:")
+    print_loadout(hero)
+    print("")
+
+    print("Exploring the dungeon...")
+    emit ItemPickup { eid: hero, item_name: "Iron Sword" }
+    emit Equip { eid: hero, slot: "weapon", item_name: "Iron Sword", val: 15 }
+
+    emit ItemPickup { eid: hero, item_name: "Leather Armor" }
+    emit Equip { eid: hero, slot: "armor", item_name: "Leather Armor", val: 8 }
+
+    emit ItemPickup { eid: hero, item_name: "Health Potion" }
+    emit ItemPickup { eid: hero, item_name: "Gold Key" }
+
+    print("")
+    emit ItemDrop { eid: hero, item_name: "Health Potion" }
+
+    print("\nFinal loadout:")
+    print_loadout(hero)
+    print(f"  Items in bag: {(get(hero, Inventory) ?).items}")
+}

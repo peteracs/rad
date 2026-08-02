@@ -1,0 +1,6 @@
+// Attack: max_by where key function throws an error on one element
+fn main() -> nil {
+    let data = [10, 0, 20]
+    let result = max_by(data, fn(x) { return 100 / x })
+    print(result)
+}

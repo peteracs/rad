@@ -1,0 +1,10 @@
+---
+source: tests\conformance\heterogeneous_maps.rad
+exit_code: 0
+---
+20
+3
+["alice", "bob", "carol"]
+3
+5
+10

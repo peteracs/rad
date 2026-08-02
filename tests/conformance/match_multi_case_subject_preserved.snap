@@ -1,0 +1,6 @@
+---
+source: tests\conformance\match_multi_case_subject_preserved.rad
+exit_code: 0
+---
+data
+7

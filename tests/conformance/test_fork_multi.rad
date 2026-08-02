@@ -1,0 +1,41 @@
+// Test 4: Multiple forks, divergent timelines, sequential commits
+
+component Score { pts: 0 }
+
+system AddPoint(s: mut Score) {
+    s = Score { pts: s.pts + 1 }
+}
+
+let e = spawn("player", Score { pts: 0 })
+
+// Create two forks from the same state
+let timeline_a = fork()
+let timeline_b = fork()
+
+// Simulate different numbers of ticks
+let timeline_a = simulate(timeline_a, [system::AddPoint], 3)
+let timeline_b = simulate(timeline_b, [system::AddPoint], 7)
+
+// Main world is still 0
+let main_pts = get(e, Score) |> unwrap
+assert(main_pts.pts == 0, f"Main should be 0 before any commit, got {main_pts.pts}")
+
+// Commit timeline A (3 ticks)
+commit(timeline_a)
+let after_a = get(e, Score) |> unwrap
+assert(after_a.pts == 3, f"After commit A, expected 3, got {after_a.pts}")
+
+// Now commit timeline B (7 ticks from ORIGINAL state of 0)
+// This should OVERWRITE the committed A state
+commit(timeline_b)
+let after_b = get(e, Score) |> unwrap
+assert(after_b.pts == 7, f"After commit B, expected 7 (overwrites A), got {after_b.pts}")
+
+// Chain: fork from 7, simulate 2 more, commit
+let c = fork()
+let c = simulate(c, [system::AddPoint], 2)
+commit(c)
+let final_pts = get(e, Score) |> unwrap
+assert(final_pts.pts == 9, f"After chain, expected 9, got {final_pts.pts}")
+
+print("PASS: multiple forks and commits")

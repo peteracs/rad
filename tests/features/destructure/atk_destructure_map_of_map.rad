@@ -1,0 +1,10 @@
+fn main() -> nil {
+    let matrix = [[[1, 2], [3, 4]], [[5, 6], [7, 8]]]
+    let doubled = matrix |> map(fn(row) {
+        return row |> map(fn([a, b]) { return a + b })
+    })
+    print(doubled[0][0])
+    print(doubled[0][1])
+    print(doubled[1][0])
+    print(doubled[1][1])
+}

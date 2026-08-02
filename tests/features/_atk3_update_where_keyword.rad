@@ -1,0 +1,10 @@
+// Attack: variable named 'where' or 'when' — contextual keyword collision
+event Ping { val }
+
+fn main() -> nil {
+    let when = 42
+    let where_ = "test"
+    print(when, where_)
+}
+
+// expect: 42 test

@@ -1,0 +1,71 @@
+// BUG 02: a `resource` type name is not usable as a function type annotation,
+// although `component` and `struct` names are, and although the SAME compiler
+// accepts the resource type in system-parameter position.
+//
+// Run: target\debug\rad.exe projects\dogfood\oracle\bugs\02_resource_type_annotation.rad
+//
+// EXPECTED: `fn topup(b: Bank) -> Bank` compiles, exactly like the component
+// and struct versions directly above it, since spec 3.1.1 says resources are
+// "structurally identical to components" and get_resource(Bank) yields an
+// ordinary first-class value.
+//
+// ACTUAL: three copies of
+//     Error: Unknown type annotation 'Bank'
+//     hint: Check that this type is declared before use
+// The hint is wrong -- Bank IS declared, at the top of this file.
+//
+// The compiler plainly knows the name: `system Interest(b: mut Bank)` below
+// type-checks and runs. So a resource type is spellable in system-parameter
+// position and unspellable in fn-parameter position.
+//
+// Impact: resource values can only cross a function boundary as `any`, which
+// silently drops field type checking, and `-> any` on the way back drops it
+// again. Any program that factors resource logic into helpers loses types.
+
+component Health {
+    hp: int = 100
+}
+
+struct Point {
+    x: int = 0,
+    y: int = 0
+}
+
+resource Bank {
+    gold: int = 10
+}
+
+// Works: component as parameter and return type.
+fn heal(h: Health) -> Health {
+    return Health { hp: h.hp + 10 }
+}
+
+// Works: struct as parameter and return type.
+fn shift(p: Point) -> Point {
+    return Point { x: p.x + 1, y: p.y }
+}
+
+// Works: resource as a SYSTEM parameter.
+system Interest(b: mut Bank) {
+    b.gold = b.gold + 1
+}
+
+// FAILS: the identical resource as a FN parameter/return type.
+fn topup(b: Bank) -> Bank {
+    return Bank { gold: b.gold + 5 }
+}
+
+let e = spawn("e", Health { hp: 50 })
+
+let h = heal(get(e, Health) |> unwrap)
+print(f"component annotation ok: hp={h.hp}")
+
+let p = shift(Point { x: 1, y: 2 })
+print(f"struct annotation ok: x={p.x} y={p.y}")
+
+schedule [Interest]
+let after = get_resource(Bank) |> unwrap
+print(f"resource as system param ok: gold={after.gold}")
+
+let b = topup(get_resource(Bank) |> unwrap)
+print(f"resource annotation: gold={b.gold}")

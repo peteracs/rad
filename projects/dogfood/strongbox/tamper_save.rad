@@ -1,0 +1,106 @@
+// strongbox — adversarial tests for the save/load envelope.
+//
+//   rad projects/dogfood/strongbox/tamper_save.rad -- <case>
+//   powershell -File projects/dogfood/strongbox/run_tamper_saves.ps1   (all cases)
+//
+// Unlike fork_from_bytes, load_world() returns an int and aborts on failure,
+// so each corruption gets its own process and the DRIVER reads exit codes.
+// The contract under test is the honesty of the failure, not its existence:
+// a corrupt archive must be refused with a diagnostic that names the damage.
+// Silent acceptance is the bug.
+//
+// Every case is produced by editing a REAL save, the way a bad disk, a
+// truncated upload, or a text editor would.
+
+component Incident { code: "", sev: 1, open: true }
+
+component Assignee { who: "" }
+
+component Source { origin: "" }
+
+resource Ledger { count: 0, site: "" }
+
+fn clean_save() -> str {
+    spawn("inc-1001", Incident { code: "DISK_FULL", sev: 3, open: false }, Assignee { who: "rivera" }, Source { origin: "pager" })
+    spawn("inc-1002", Incident { code: "CERT_EXPIRY", sev: 2, open: true }, Assignee { who: "okafor" }, Source { origin: "monitor" })
+    set_resource(Ledger, Ledger { count: 2, site: "us-east" })
+    return save_world()
+}
+
+let argv = sys_args()
+let mut case = "S0"
+if len(argv) > 0 {
+    case = argv[0]
+}
+
+let base = clean_save()
+
+let mut payload = base
+let mut what = "clean save, unmodified"
+
+if case == "S0" {
+    payload = base
+    what = "clean save, unmodified"
+} else if case == "S1" {
+    payload = ""
+    what = "empty string"
+} else if case == "S2" {
+    payload = "this is not a world at all"
+    what = "arbitrary text"
+} else if case == "S3" {
+    payload = replace(base, "RADWORLD2", "RADWORLD9")
+    what = "unknown envelope version RADWORLD9"
+} else if case == "S4" {
+    payload = substring_bytes(base, 0, len(base) / 2)
+    what = "truncated to half length"
+} else if case == "S5" {
+    payload = split(base, ",\"schema\":")[0] + "}"
+    what = "schema section deleted"
+} else if case == "S6" {
+    payload = replace(base, "[\"DISK_FULL\",3,false]", "[\"DISK_FULL\",3]")
+    what = "row has 2 values, schema declares 3 fields (arity underflow)"
+} else if case == "S7" {
+    payload = replace(base, "[\"DISK_FULL\",3,false]", "[\"DISK_FULL\",3,false,99]")
+    what = "row has 4 values, schema declares 3 fields (arity overflow)"
+} else if case == "S8" {
+    payload = replace(base, "Source", "Phantom")
+    what = "save contains component 'Phantom' that the program never declares"
+} else if case == "S9" {
+    payload = replace(base, "inc-1002", "inc-1001")
+    what = "two entities share the name inc-1001"
+} else if case == "S10" {
+    payload = replace(base, "[\"DISK_FULL\",3,false]", "[\"DISK_FULL\",\"3\",0]")
+    what = "field types swapped: sev str, open int (see bugs/01)"
+} else if case == "S11" {
+    payload = replace(base, "Ledger", "Vault")
+    what = "save carries resource 'Vault' that the program never declares"
+} else if case == "S12" {
+    payload = replace(base, "inc-1001", "")
+    what = "entity name blanked to the empty string"
+} else if case == "S13" {
+    payload = replace(base, ",3,false]", ",99999999999999999999999999,false]")
+    what = "severity is an integer far past i64 range"
+} else if case == "S14" {
+    payload = replace(base, "[\"DISK_FULL\",3,false]", "[\"DISK_FULL\",3,null]")
+    what = "a field value is JSON null"
+} else {
+    print(f"unknown case {case}")
+}
+
+print(f"--- {case}: {what} ---")
+
+let n = load_world(payload)
+print(f"ACCEPTED: load_world returned {n}")
+
+// If it loaded, report what we actually got, so silent damage is visible.
+let names = entities() |> map(fn(e) { return name_of(e) })
+print(f"entities now: {names}")
+for e in entities(Incident) {
+    let inc = get(e, Incident) |> unwrap
+    print(f"  {name_of(e)}: code={inc.code} sev={inc.sev}({typeof(inc.sev)}) open={inc.open}({typeof(inc.open)})")
+}
+match get_resource(Ledger) {
+    Some(l) => { print(f"  Ledger: count={l.count} site={l.site}") }
+    None => { print("  Ledger: MISSING") }
+}
+print(f"world_digest: {world_digest()}")

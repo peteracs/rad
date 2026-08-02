@@ -1,0 +1,237 @@
+// =====================================================================
+//  calcite / parser.rad
+//  Precedence-climbing (Pratt) parser: token list -> Expr tree.
+//
+//  Every step returns Result<Parsed, str> and callers use postfix `?`
+//  to propagate the first syntax error out to the top.
+// =====================================================================
+
+use "ast.rad"
+use "lexer.rad"
+
+// A parse step yields a node plus the index of the next unconsumed token.
+// Private on purpose: `pub struct` fields must use the `name: Type = default`
+// form, which needs a synthetic default Expr just to satisfy the checker.
+struct Parsed { node: Expr, next: 0 }
+
+// Binding power. 0 means "not an infix operator".
+pure fn prec_of(op: str) -> int {
+    if op == "or" { return 1 }
+    if op == "and" { return 2 }
+    if op == "==" or op == "!=" { return 3 }
+    if op == "<" or op == ">" or op == "<=" or op == ">=" { return 4 }
+    if op == "+" or op == "-" { return 5 }
+    if op == "*" or op == "/" or op == "%" { return 6 }
+    if op == "^" { return 7 }
+    return 0
+}
+
+pure fn is_right_assoc(op: str) -> bool {
+    return op == "^"
+}
+
+// The infix operator spelled by a token, or "" when it is not one.
+// `and` / `or` arrive from the lexer as identifiers.
+fn infix_op(t: Tok) -> str {
+    match t {
+        TPunct { sym } => { return sym }
+        TIdent { name } => {
+            if name == "and" or name == "or" {
+                return name
+            }
+            return ""
+        }
+        TNum => { return "" }
+        TEof => { return "" }
+    }
+}
+
+fn is_punct(t: Tok, want: str) -> bool {
+    match t {
+        TPunct { sym } => { return sym == want }
+        TNum => { return false }
+        TIdent => { return false }
+        TEof => { return false }
+    }
+}
+
+fn is_keyword(t: Tok, want: str) -> bool {
+    match t {
+        TIdent { name } => { return name == want }
+        TNum => { return false }
+        TPunct => { return false }
+        TEof => { return false }
+    }
+}
+
+fn expect_punct(toks: list, pos: int, want: str) -> Result<int, str> {
+    let t = toks[pos]
+    if is_punct(t, want) {
+        return Ok(pos + 1)
+    }
+    let got = tok_text(t)
+    return Err(f"expected '{want}' at token {pos}, found '{got}'")
+}
+
+fn expect_keyword(toks: list, pos: int, want: str) -> Result<int, str> {
+    let t = toks[pos]
+    if is_keyword(t, want) {
+        return Ok(pos + 1)
+    }
+    let got = tok_text(t)
+    return Err(f"expected '{want}' at token {pos}, found '{got}'")
+}
+
+fn parse_call_args(toks: list, pos: int) -> Result<Parsed, str> {
+    // pos points just past '('. Returns a dummy node; args ride in `node`
+    // via an ECall wrapper built by the caller.
+    let mut args = []
+    let mut i = pos
+    if is_punct(toks[i], ")") {
+        return Ok(Parsed { node: Expr::ECall { name: "", args: args }, next: i + 1 })
+    }
+    let mut more = true
+    while more {
+        let arg = parse_bin(toks, i, 1)?
+        args = push(args, arg.node)
+        i = arg.next
+        if is_punct(toks[i], ",") {
+            i = i + 1
+        } else {
+            more = false
+        }
+    }
+    i = expect_punct(toks, i, ")")?
+    return Ok(Parsed { node: Expr::ECall { name: "", args: args }, next: i })
+}
+
+fn parse_primary(toks: list, pos: int) -> Result<Parsed, str> {
+    let t = toks[pos]
+
+    match t {
+        TNum { num } => {
+            return Ok(Parsed { node: Expr::ENum { num: num }, next: pos + 1 })
+        }
+        TPunct { sym } => {
+            if sym == "(" {
+                let inner = parse_bin(toks, pos + 1, 1)?
+                let after = expect_punct(toks, inner.next, ")")?
+                return Ok(Parsed { node: inner.node, next: after })
+            }
+            return Err(f"unexpected '{sym}' at token {pos}")
+        }
+        TEof => {
+            return Err("unexpected end of input")
+        }
+        TIdent { name } => {
+            if name == "let" {
+                let name_tok = toks[pos + 1]
+                match name_tok {
+                    TIdent { name: bound_name } => {
+                        let after_eq = expect_punct(toks, pos + 2, "=")?
+                        let bound = parse_bin(toks, after_eq, 1)?
+                        let after_in = expect_keyword(toks, bound.next, "in")?
+                        let body = parse_bin(toks, after_in, 1)?
+                        let node = Expr::ELet {
+                            name: bound_name,
+                            bound: bound.node,
+                            body: body.node,
+                        }
+                        return Ok(Parsed { node: node, next: body.next })
+                    }
+                    TNum => { return Err("'let' must be followed by a name") }
+                    TPunct => { return Err("'let' must be followed by a name") }
+                    TEof => { return Err("'let' must be followed by a name") }
+                }
+            }
+            if name == "if" {
+                let test = parse_bin(toks, pos + 1, 1)?
+                let after_then = expect_keyword(toks, test.next, "then")?
+                let then_br = parse_bin(toks, after_then, 1)?
+                let after_else = expect_keyword(toks, then_br.next, "else")?
+                let else_br = parse_bin(toks, after_else, 1)?
+                let node = Expr::EIf {
+                    test: test.node,
+                    then_br: then_br.node,
+                    else_br: else_br.node,
+                }
+                return Ok(Parsed { node: node, next: else_br.next })
+            }
+            if name == "then" or name == "else" or name == "in" {
+                return Err(f"'{name}' is a keyword and cannot start an expression")
+            }
+            if is_punct(toks[pos + 1], "(") {
+                let call = parse_call_args(toks, pos + 2)?
+                match call.node {
+                    ECall { name: _n, args } => {
+                        let node = Expr::ECall { name: name, args: args }
+                        return Ok(Parsed { node: node, next: call.next })
+                    }
+                    ENum => { return Err("internal: bad call node") }
+                    EVar => { return Err("internal: bad call node") }
+                    EUnary => { return Err("internal: bad call node") }
+                    EBinary => { return Err("internal: bad call node") }
+                    ELet => { return Err("internal: bad call node") }
+                    EIf => { return Err("internal: bad call node") }
+                }
+            }
+            return Ok(Parsed { node: Expr::EVar { name: name }, next: pos + 1 })
+        }
+    }
+}
+
+fn parse_unary(toks: list, pos: int) -> Result<Parsed, str> {
+    let t = toks[pos]
+    if is_punct(t, "-") {
+        let operand = parse_unary(toks, pos + 1)?
+        let node = Expr::EUnary { op: "-", rhs: operand.node }
+        return Ok(Parsed { node: node, next: operand.next })
+    }
+    if is_keyword(t, "not") {
+        let operand = parse_unary(toks, pos + 1)?
+        let node = Expr::EUnary { op: "not", rhs: operand.node }
+        return Ok(Parsed { node: node, next: operand.next })
+    }
+    return parse_primary(toks, pos)
+}
+
+fn parse_bin(toks: list, pos: int, min_prec: int) -> Result<Parsed, str> {
+    let first = parse_unary(toks, pos)?
+    let mut node = first.node
+    let mut i = first.next
+    let mut climbing = true
+
+    while climbing {
+        let op = infix_op(toks[i])
+        let p = prec_of(op)
+        if p == 0 or p < min_prec {
+            climbing = false
+        } else {
+            let mut next_min = p + 1
+            if is_right_assoc(op) {
+                next_min = p
+            }
+            let rhs = parse_bin(toks, i + 1, next_min)?
+            node = Expr::EBinary { op: op, lhs: node, rhs: rhs.node }
+            i = rhs.next
+        }
+    }
+
+    return Ok(Parsed { node: node, next: i })
+}
+
+// Parse a whole source string, requiring that every token is consumed.
+pub fn parse(src: str) -> Result<Expr, str> {
+    let toks = tokenize(src)?
+    let parsed = parse_bin(toks, 0, 1)?
+    let rest = toks[parsed.next]
+    match rest {
+        TEof => { return Ok(parsed.node) }
+        TNum { num } => {
+            let text = fmt_num(num)
+            return Err(f"trailing input starting at '{text}'")
+        }
+        TIdent { name } => { return Err(f"trailing input starting at '{name}'") }
+        TPunct { sym } => { return Err(f"trailing input starting at '{sym}'") }
+    }
+}

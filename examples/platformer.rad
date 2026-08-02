@@ -1,0 +1,156 @@
+// =====================================================================
+//  2D Platformer — Game loop with physics, collision, scoring
+// =====================================================================
+
+component Position { x: 0.0, y: 0.0 }
+
+component Velocity { dx: 0.0, dy: 0.0 }
+
+component Size { w: 1.0, h: 1.0 }
+
+component Name { value: "" }
+
+component Score { points: 0 }
+
+component Gravity { force: 0.5 }
+
+component Grounded { on_ground: true }
+
+state PlayerState {
+    Idle {
+        on jump -> Jumping
+        on start_run -> Running
+    }
+    Running {
+        on jump -> Jumping
+        on stop -> Idle
+    }
+    Jumping {
+        on land -> Idle
+        on hit -> Hurt
+    }
+    Hurt {
+        on recover -> Idle
+    }
+}
+
+event CoinCollected { collector, value }
+
+event PlayerLanded { eid }
+
+event PlayerHurt { eid, reason }
+
+on CoinCollected(e) {
+    let sc = get(e.collector, Score) ?
+    set(e.collector, Score { points: sc.points + e.value })
+    let n = (get(e.collector, Name) ?).value
+    print(f"  {n} collected a coin! (+{e.value} pts, total: {sc.points + e.value})")
+}
+
+on PlayerLanded(e) {
+    let n = (get(e.eid, Name) ?).value
+    set(e.eid, Grounded { on_ground: true })
+    print(f"  {n} landed.")
+}
+
+on PlayerHurt(e) {
+    let n = (get(e.eid, Name) ?).value
+    print(f"  {n} was hurt by {e.reason}!")
+}
+
+entity player {
+    Name { value: "Mario" },
+    Position { x: 0.0, y: 0.0 },
+    Velocity { dx: 0.0, dy: 0.0 },
+    Size { w: 1.0, h: 2.0 },
+    Score { points: 0 },
+    Gravity { force: 0.8 },
+    Grounded { on_ground: true }
+}
+
+system ApplyGravity(pos: mut Position, vel: mut Velocity, g: Gravity, ground: Grounded) {
+    if ground.on_ground == false {
+        vel.dy = vel.dy + g.force
+    }
+}
+
+system Move(pos: mut Position, vel: Velocity) {
+    pos.x = pos.x + vel.dx
+    pos.y = pos.y + vel.dy
+}
+
+fn clamp_to_ground(eid) {
+    let pos = get(eid, Position) ?
+    if pos.y >= 0.0 {
+        set(eid, Position { x: pos.x, y: 0.0 })
+        let vel = get(eid, Velocity) ?
+        set(eid, Velocity { dy: 0.0, ..vel })
+        return true
+    }
+    return false
+}
+
+fn main() -> any {
+    print("=== 2D Platformer ===\n")
+
+    let mut pstate = PlayerState::Idle
+    let coin_positions = [5.0, 12.0, 20.0, 28.0]
+    let mut coins_left = 4
+
+    print(f"Player starts at origin. Coins at: {coin_positions}")
+    print("")
+
+    // Start running
+    pstate = transition(pstate, "start_run") ?
+    set(player, Velocity { dx: 3.0, dy: 0.0 })
+
+    let mut tick = 0
+    while tick < 12 and coins_left > 0 {
+        print(f"--- Tick {tick} ---")
+
+        ApplyGravity()
+        Move()
+
+        let pos = get(player, Position) ?
+        let vel = get(player, Velocity) ?
+        print(f"  pos=({pos.x}, {pos.y})  vel=({vel.dx}, {vel.dy})")
+        print(f"  state={pstate}")
+
+        // Check coin collection
+        for cx in coin_positions {
+            let mut diff = pos.x - cx
+            if diff < 0.0 { diff = 0.0 - diff }
+            if diff < 2.0 and cx > 0.0 {
+                emit CoinCollected { collector: player, value: 10 }
+                coins_left = coins_left - 1
+            }
+        }
+
+        // Jump at tick 3
+        if tick == 3 {
+            pstate = transition(pstate, "stop") ?
+            pstate = transition(pstate, "jump") ?
+            set(player, Velocity { dx: 3.0, dy: -5.0 })
+            set(player, Grounded { on_ground: false })
+            print("  >> JUMP!")
+        }
+
+        // Check landing
+        if (get(player, Grounded) ?).on_ground == false {
+            if clamp_to_ground(player) {
+                if pstate == PlayerState::Jumping {
+                    pstate = transition(pstate, "land") ?
+                    pstate = transition(pstate, "start_run") ?
+                    emit PlayerLanded { eid: player }
+                }
+            }
+        }
+
+        print("")
+        tick = tick + 1
+    }
+
+    print("=== Game Over ===")
+    print(f"Final score: {(get(player, Score) ?).points}")
+    print(f"Final position: {get(player, Position) ?}")
+}

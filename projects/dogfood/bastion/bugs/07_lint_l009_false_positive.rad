@@ -1,0 +1,23 @@
+// BUG 07: lint RAD-L009 reports a scheduled system as "never run".
+//
+// This program RUNS the system with `schedule [Bump]` and prints proof
+// (n goes 0 -> 1). lint --preset=strict still says it is never run, and
+// suggests a `run` form.
+//
+// Run:  target\debug\rad.exe projects\dogfood\bastion\bugs\07_lint_l009_false_positive.rad
+//       -> "Bump ran: n=1"
+// Lint: target\debug\rad.exe lint --preset=strict projects\dogfood\bastion\bugs\07_lint_l009_false_positive.rad
+//       -> WARNING L14 [RAD-L009] Systems are declared but never run
+
+component Cell { n: 0 }
+
+system Bump(c: mut Cell) {
+    c.n = c.n + 1
+}
+
+let e = spawn("cell", Cell { n: 0 })
+
+schedule [Bump]
+
+let after = get(e, Cell) |> unwrap
+print(f"Bump ran: n={after.n}")

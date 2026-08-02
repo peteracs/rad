@@ -1,0 +1,132 @@
+// Stage 5 — across machines. The same divergence as stage 4, but alice and
+// bob are separate PROCESSES exchanging full program state through files
+// (swap write_file/read_file for tcp_write/tcp_read and nothing else
+// changes). Each side merges the other's fork and prints world_digest():
+// matching digests on both machines are the convergence receipt.
+//
+// Run the whole exchange (each line is one "machine session"):
+//   ./target/release/rad projects/tutorial/task-board/05_sync.rad -- init
+//   ./target/release/rad projects/tutorial/task-board/05_sync.rad -- edit alice
+//   ./target/release/rad projects/tutorial/task-board/05_sync.rad -- edit bob
+//   ./target/release/rad projects/tutorial/task-board/05_sync.rad -- merge alice bob   # alice's machine
+//   ./target/release/rad projects/tutorial/task-board/05_sync.rad -- merge bob alice   # bob's machine
+
+component Task {
+    title: str = "",
+    indexed status: str = "open",
+    assignee: str = ""
+}
+
+resource Board { next_id: int = 1 }
+
+event Opened   { task: entity, title: str, by: str }
+event Closed   { task: entity, by: str }
+event Assigned { task: entity, to: str, by: str }
+
+on Closed(e)   { update(e.task, Task) { status = "closed" } }
+on Assigned(e) { update(e.task, Task) { assignee = e.to } }
+
+let DIR = "projects/tutorial/task-board/sync_demo"
+
+fn new_task(title: str, by: str) -> entity {
+    let b = get_resource(Board) |> unwrap
+    let id = f"T-{b.next_id}"
+    set_resource(Board, Board { next_id: b.next_id + 1 })
+    let t = spawn(id, Task { title: title })
+    emit Opened { task: t, title: title, by: by }
+    flush_events()
+    return t
+}
+
+fn list_all() -> nil {
+    for t in entities(Task) {
+        let tk = get(t, Task) |> unwrap
+        let mut who = tk.assignee
+        if who == "" { who = "-" }
+        let mut mark = " "
+        if tk.status == "closed" { mark = "x" }
+        print(f"[{mark}] {name_of(t)}  {tk.title}  ({who})")
+    }
+}
+
+// The resolution policy. It MUST be perspective-independent — alice runs it
+// with (ours=alice, theirs=bob), bob with (ours=bob, theirs=alice). A
+// "theirs wins" rule would converge to different boards. Picking the
+// sorted-last candidate is arbitrary but symmetric: both machines agree.
+fn resolve(conflicts: list<any>, base: world_fork, ours: world_fork, theirs: world_fork) -> world_fork {
+    let mut decisions = []
+    for c in conflicts {
+        match c {
+            FieldConflict { ent: _e, name, comp, field, base: _b, ours, theirs } => {
+                let pick = sort([ours, theirs])[1]
+                print(f"conflict {name}: {comp}.{field} ours={ours} theirs={theirs} -> {pick}")
+                decisions << (c, pick)
+            }
+            _ => { print("unresolvable structural conflict") }
+        }
+    }
+    return merge_forks_with(base, ours, theirs, decisions) |> unwrap
+}
+
+fn main() -> nil {
+    let argv = sys_args()
+    if len(argv) == 0 {
+        print("usage: rad projects/tutorial/task-board/05_sync.rad -- init | edit <who> | merge <mine> <theirs>")
+        return
+    }
+    let cmd = argv[0]
+
+    if cmd == "init" {
+        // The shared board everyone pulls. fork_to_bytes carries the FULL
+        // program state: entities, names, resources, the id allocator, the
+        // provenance ledger, and any in-flight events.
+        create_dir(DIR)
+        new_task("fix login page", "alice")
+        new_task("update docs", "alice")
+        write_file(f"{DIR}/base.bin", fork_to_bytes(fork()))
+        print(f"seeded {DIR}/base.bin")
+    }
+
+    if cmd == "edit" {
+        let who = argv[1]
+        // Pull the shared base into this process, work offline on top.
+        let base = fork_from_bytes(read_file(f"{DIR}/base.bin")) |> unwrap
+        commit(base)
+        if who == "alice" {
+            emit Closed { task: get_entity("T-1"), by: "alice" }
+            emit Assigned { task: get_entity("T-2"), to: "bob", by: "alice" }
+        }
+        if who == "bob" {
+            emit Assigned { task: get_entity("T-2"), to: "carol", by: "bob" }
+        }
+        flush_events()
+        write_file(f"{DIR}/{who}.bin", fork_to_bytes(fork()))
+        print(f"{who}'s offline session saved to {DIR}/{who}.bin")
+        list_all()
+    }
+
+    if cmd == "merge" {
+        let mine = argv[1]
+        let other = argv[2]
+        let base = fork_from_bytes(read_file(f"{DIR}/base.bin")) |> unwrap
+        let ours = fork_from_bytes(read_file(f"{DIR}/{mine}.bin")) |> unwrap
+        let theirs = fork_from_bytes(read_file(f"{DIR}/{other}.bin")) |> unwrap
+
+        let mut merged = base
+        match merge_forks(base, ours, theirs) {
+            Ok(m) => { merged = m }
+            Err(conflicts) => { merged = resolve(conflicts, base, ours, theirs) }
+        }
+        commit(merged)
+
+        print(f"\n{mine}'s machine after merging {other}:")
+        list_all()
+        print("")
+        // who() crossed the wire too: bob's machine can explain a value
+        // alice's session wrote, and vice versa.
+        print(why(get_entity("T-2"), Task))
+        // The receipt. State-only blake3 — identical on both machines iff
+        // they converged on the same board.
+        print(f"\nworld digest: {world_digest()}")
+    }
+}

@@ -1,0 +1,8 @@
+---
+source: tests\conformance\set_at_oob_reject.rad
+exit_code: 1
+---
+
+---stderr---
+Error: [line 4] in main: set_at() index 3 out of bounds for list of length 3
+  called from [line 0] in main

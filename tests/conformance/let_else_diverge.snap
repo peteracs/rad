@@ -1,0 +1,5 @@
+---
+source: tests\conformance\let_else_diverge.rad
+exit_code: 0
+---
+999

@@ -1,0 +1,8 @@
+fn main() -> nil {
+    let x = 1
+    match x {
+        1 => { print("one") }
+        _ => { false }
+    }
+    print("done")
+}

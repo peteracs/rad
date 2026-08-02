@@ -1,0 +1,24 @@
+// Test: event-emitting systems run inside simulated forks without leaking.
+
+component Dummy { x: 0 }
+event Alert { who: entity }
+
+system Signal(d: mut Dummy) {
+    d = Dummy { x: d.x + 1 }
+    emit Alert { who: self }
+}
+
+on Alert(e) {
+    let d = get(e.who, Dummy) |> unwrap
+    set(e.who, Dummy { x: d.x + 10 })
+}
+
+fn main() -> nil {
+    let e = spawn("e", Dummy { x: 0 })
+    let f = fork()
+    let sim = simulate(f, [system::Signal], 1)
+    let live = get(e, Dummy) |> unwrap
+    let future = peek(sim, e, Dummy) |> unwrap
+    print(f"live={live.x} future={future.x}")
+    return nil
+}

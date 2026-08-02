@@ -1,0 +1,8 @@
+---
+source: tests\conformance\logical_bool.rad
+exit_code: 1
+---
+
+---stderr---
+Error: Right operand of And must be bool, got int
+Error: Right operand of Or must be bool, got str

@@ -1,0 +1,68 @@
+// __PROJECT_NAME__ — Stream Processor template
+//
+// Customize sensors, thresholds, and alert logic for your domain.
+// Run immediately: rad run
+
+component Sensor  { id: "", unit: "" }
+component Buffer  { readings: [], window_size: 5 }
+component Alert   { active: false, threshold: 80 }
+
+entity cpu {
+  Sensor { id: "cpu-host-01", unit: "percent" },
+  Buffer { readings: [], window_size: 5 },
+  Alert  { active: false, threshold: 85 }
+}
+
+entity memory {
+  Sensor { id: "mem-host-01", unit: "percent" },
+  Buffer { readings: [], window_size: 5 },
+  Alert  { active: false, threshold: 90 }
+}
+
+event DataIngested { sensor_id, value }
+event AlertFired   { sensor_id, message }
+
+on DataIngested(e) {
+  print(f"  ingested: {e.sensor_id} = {e.value}")
+}
+
+on AlertFired(e) {
+  print(f"  alert: {e.sensor_id} -> {e.message}")
+}
+
+fn ingest(sensor_entity, values: list) {
+  let s = get(sensor_entity, Sensor) |> unwrap
+  let buf = get(sensor_entity, Buffer) |> unwrap
+  let mut readings = buf.readings
+  for val in values {
+    readings = push(readings, val)
+    if len(readings) > buf.window_size {
+      readings = slice(readings, len(readings) - buf.window_size, len(readings))
+    }
+  }
+  set(sensor_entity, Buffer { readings: readings, window_size: buf.window_size })
+  emit DataIngested { sensor_id: s.id, value: values[len(values) - 1] }
+}
+
+fn check_alert(sensor_entity) {
+  let s = get(sensor_entity, Sensor) |> unwrap
+  let buf = get(sensor_entity, Buffer) |> unwrap
+  let alert = get(sensor_entity, Alert) |> unwrap
+  if len(buf.readings) >= buf.window_size {
+    let avg = (buf.readings |> reduce(0, fn(a, b) { return a + b })) / len(buf.readings)
+    if avg > alert.threshold {
+      emit AlertFired { sensor_id: s.id, message: f"avg={avg} > {alert.threshold}" }
+    }
+  }
+}
+
+fn main() -> nil {
+  print("=== __PROJECT_NAME__ ===")
+  ingest(cpu, [45, 62, 78, 88, 92])
+  ingest(memory, [70, 72, 74, 73, 71])
+  check_alert(cpu)
+  check_alert(memory)
+  let cpu_readings = (get(cpu, Buffer) |> unwrap).readings
+  let avg = (cpu_readings |> reduce(0, fn(a, b) { return a + b })) / len(cpu_readings)
+  print(f"cpu avg: {avg}")
+}

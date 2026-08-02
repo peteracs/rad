@@ -1,0 +1,9 @@
+// expect: 42
+
+async fn add_one(x: int) -> int {
+    return x + 1
+}
+
+let task = async add_one(41)
+let result = await task
+print(result)

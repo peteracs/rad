@@ -1,0 +1,8 @@
+// Importing two modules that export the same `pub let` name is a load
+// error naming both definition sites — never a silent last-write-wins.
+use "pub_let_dup_a.rad"
+use "pub_let_dup_b.rad"
+
+fn main() -> nil {
+    print(LIMIT)
+}

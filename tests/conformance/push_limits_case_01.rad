@@ -1,0 +1,3 @@
+// backend: both
+print(f"CASE01:{reduce([10, 20, 30, 40], 0, fn(a, b) { return a + b })}")
+// expect: CASE01:100

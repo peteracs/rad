@@ -1,0 +1,4 @@
+---
+source: tests\conformance\modules\adversarial_graph\leaf_beta.rad
+exit_code: 0
+---

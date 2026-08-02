@@ -1,0 +1,101 @@
+// Movement simulation shared by the RAD authority and the browser prediction
+// client. It owns only behavior: how a controlled avatar chases its target on
+// each tick, and how move orders and authoritative corrections are applied.
+//
+// The data model lives in sim/components.rad, scene bounds in world/scene.rad,
+// and content/seeding in world/avatars.rad. Keep this file free of `use`
+// statements so the browser client can concatenate the shared sources (the
+// browser session runtime does not resolve module imports).
+
+pub fn issue_move_order(player_id: int, command_id: int, target_x: float, target_y: float) -> nil {
+    let avatar = player_avatar(player_id)
+    let render = get(avatar, RenderAvatar) |> unwrap
+    let clamped_x = clamp_world_x(target_x)
+    let clamped_y = clamp_world_y(target_y)
+    update(avatar, MoveTarget) {
+        x = nearest_free_target_x(clamped_x, clamped_y, render.radius),
+        y = nearest_free_target_y(clamped_x, clamped_y, render.radius),
+        active = true,
+        command_id = command_id
+    }
+}
+
+on MoveOrder(e) {
+    issue_move_order(e.player_id, e.command_id, e.target_x, e.target_y)
+}
+
+// Idempotent: `player_avatar` is lookup-or-seed, so re-emitting (e.g. after a
+// reconnect) never spawns a duplicate avatar.
+on SeedLocalAvatar(e) {
+    let _avatar = player_avatar(e.player_id)
+}
+
+on AuthoritativeState(e) {
+    let avatar = player_avatar(e.player_id)
+    update(avatar, Position) {
+        x = e.x,
+        y = e.y
+    }
+    update(avatar, MoveTarget) {
+        x = e.target_x,
+        y = e.target_y,
+        active = e.target_active,
+        command_id = e.command_id
+    }
+}
+
+pub fn tick_avatar_movement(avatar: entity, dt: float) -> nil {
+    let pos = get(avatar, Position) |> unwrap
+    let target = get(avatar, MoveTarget) |> unwrap
+    let speed = get(avatar, MoveSpeed) |> unwrap
+
+    if not target.active { return nil }
+
+    let dx = target.x - pos.x
+    let dy = target.y - pos.y
+    let distance = sqrt(dx * dx + dy * dy)
+    let step = speed.units_per_sec * dt
+
+    if distance <= 0.001 or distance <= step {
+        update(avatar, Position) {
+            x = target.x,
+            y = target.y
+        }
+        update(avatar, MoveTarget) { active = false }
+        return nil
+    }
+
+    let desired_x = clamp_world_x(pos.x + (dx / distance) * step)
+    let desired_y = clamp_world_y(pos.y + (dy / distance) * step)
+    let render = get(avatar, RenderAvatar) |> unwrap
+    let radius = render.radius
+    let resolved_x = slide_resolved_x(pos.x, pos.y, desired_x, desired_y, radius)
+    let resolved_y = slide_resolved_y(pos.x, pos.y, resolved_x, desired_y, radius)
+
+    update(avatar, Position) {
+        x = resolved_x,
+        y = resolved_y
+    }
+}
+
+pub fn slide_resolved_x(current_x: float, current_y: float, desired_x: float, desired_y: float, radius: float) -> float {
+    if not overlaps_static_collider(desired_x, desired_y, radius) { return desired_x }
+    if not overlaps_static_collider(desired_x, current_y, radius) { return desired_x }
+    return current_x
+}
+
+pub fn slide_resolved_y(current_x: float, current_y: float, resolved_x: float, desired_y: float, radius: float) -> float {
+    if not overlaps_static_collider(resolved_x, desired_y, radius) { return desired_y }
+    if not overlaps_static_collider(current_x, desired_y, radius) { return desired_y }
+    return current_y
+}
+
+pub fn tick_movement(dt: float) -> nil {
+    for avatar in entities(PlayerControlled) {
+        tick_avatar_movement(avatar, dt)
+    }
+}
+
+on Tick(e) {
+    tick_movement(e.dt)
+}

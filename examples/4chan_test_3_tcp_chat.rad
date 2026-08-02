@@ -1,0 +1,25 @@
+component Client { fd: int = 0, username: str = "" }
+
+// `sender` is the connection entity; validate with `has` / `get` — not a raw int fd.
+event ChatMessage { sender: entity, text: str }
+
+on ChatMessage(e) {
+    if not has(e.sender, Client) {
+        print("[Server] Dropping message: unknown or despawned sender entity.")
+        return
+    }
+    let _verify = get(e.sender, Client) |> unwrap
+    let clients = query { Client } select Client
+    print(f"[Server] Broadcasting to {len(clients)} clients: {e.text}")
+}
+
+fn main() -> nil {
+    print("Starting mock TCP chat server...")
+
+    let anon = spawn("anon", Client { fd: 1, username: "anon" })
+    let wagie = spawn("wagie", Client { fd: 2, username: "wagie" })
+
+    emit ChatMessage { sender: anon, text: "Is Rad actually good?" }
+    emit ChatMessage { sender: wagie, text: "No, it forces ECS for everything." }
+    flush_events()
+}

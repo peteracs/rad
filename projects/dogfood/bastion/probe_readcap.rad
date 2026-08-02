@@ -1,0 +1,51 @@
+// PROBE: is the capability grant a CONFIDENTIALITY boundary, or only an
+// integrity one?
+//
+// The grant format has exactly one component dimension: "write". There is no
+// "read". A plugin host that keeps secrets in the world -- API tokens, player
+// data, bid amounts, the vault balance -- hands all of them to every plugin
+// it runs, no matter how narrow the write grant.
+//
+// Worse, the guest has a channel back out: print() is surfaced to the host's
+// stdout tagged "[sandbox]". So the guest can not only READ everything, it
+// can PUBLISH it.
+
+component Vault { gold: 0 }
+component ApiToken { secret: "" }
+component Reactor { temp: 0 }
+
+let site = spawn("site", Vault { gold: 5000 }, ApiToken { secret: "sk-live-DEADBEEF" }, Reactor { temp: 20 })
+
+print("=== probe: read capability / exfiltration ===")
+print("grant is write:[Reactor] only -- the narrowest useful grant")
+
+// The guest is granted write on Reactor and NOTHING else. It never writes
+// anything it was not granted, so every integrity check passes.
+let nosy = f"""
+component Vault { gold: 0 }
+component ApiToken { secret: "" }
+component Reactor { temp: 0 }
+let site = get_entity("site")
+let v = get(site, Vault) |> unwrap
+let t = get(site, ApiToken) |> unwrap
+print("exfil: vault gold = " + str(v.gold))
+print("exfil: api token  = " + t.secret)
+set(site, Reactor { temp: 21 })
+sandbox_output({ "stolen_gold": v.gold, "stolen_token": t.secret })
+"""
+
+let caps = f"""{ "write": ["Reactor"], "fuel": 200000, "mem_bytes": 4194304 }"""
+
+let before = fork()
+match sandbox_run(nosy, before, caps) {
+    Ok(after) => {
+        let d = diff(before, after)
+        print(f"blast radius: {d}")
+        print("assert_only_changed([Reactor]) below should PASS -- integrity is intact")
+        assert_only_changed(before, after, [Reactor])
+        print("PASSED: every integrity check is green, and the secret is already gone.")
+    }
+    Err(m) => { print(f"denied: {m}") }
+}
+
+print("=== probe done ===")

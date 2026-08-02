@@ -1,0 +1,7 @@
+---
+source: tests\conformance\immutable_container_write_rejected.rad
+exit_code: 1
+---
+
+---stderr---
+Error: Cannot assign to immutable variable 'xs' — change the binding to `let mut xs` (or avoid reassignment)

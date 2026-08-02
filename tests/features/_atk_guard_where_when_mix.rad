@@ -1,0 +1,27 @@
+// Attack: mix where and when on different handlers for same event
+event Val { n }
+
+on Val(e) where e.n > 0 {
+    print("positive:", e.n)
+}
+
+on Val(e) when e.n < 0 {
+    print("negative:", e.n)
+}
+
+on Val(e) where e.n == 0 {
+    print("zero")
+}
+
+fn main() -> nil {
+    emit Val { n: 5 }
+    flush_events()
+    emit Val { n: -3 }
+    flush_events()
+    emit Val { n: 0 }
+    flush_events()
+}
+
+// expect: positive: 5
+// expect: negative: -3
+// expect: zero

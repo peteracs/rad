@@ -1,0 +1,13 @@
+// ISO C: GEOMETRIC self-re-emit -- the queue doubles every drain round.
+let src = f"""
+event Ping { n }
+on Ping(e) {
+    emit Ping { n: e.n + 1 }
+    emit Ping { n: e.n + 1 }
+}
+emit Ping { n: 0 }
+"""
+match sandbox_run(src, fork(), f"""{ "write": [], "fuel": 2000 }""") {
+    Ok(_f) => { print("C: ok (fuel did NOT stop the geometric bomb)") }
+    Err(m) => { print(f"C: err {m}") }
+}

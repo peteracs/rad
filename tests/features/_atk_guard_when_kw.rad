@@ -1,0 +1,19 @@
+// Attack: 'when' keyword works identically to 'where'
+event Ping { val }
+
+on Ping(e) when e.val == 42 {
+    print("found 42")
+}
+
+on Ping(e) when e.val != 42 {
+    print("not 42:", e.val)
+}
+
+fn main() -> nil {
+    emit Ping { val: 42 }
+    emit Ping { val: 7 }
+    flush_events()
+}
+
+// expect: found 42
+// expect: not 42: 7

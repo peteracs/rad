@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MOBA RAD</title>
+</head>
+<body>
+<canvas id="scene" aria-label="MOBA RAD scene"></canvas>
+<div id="snap-flash" class="snap-flash" aria-hidden="true"></div>
+<div id="net-mini" class="net-mini" aria-label="Connection status">
+  <span class="net-mini__dot" data-mini="dot"></span>
+  <span data-mini="ping">--</span>
+  <span class="net-mini__sep">|</span>
+  <span data-mini="loss">--</span>
+  <span class="net-mini__hint">F3</span>
+</div>
+<aside id="netcode-hud" class="netcode-hud netcode-hud--hidden" aria-label="Netcode diagnostics">
+  <div class="netcode-hud__title">Netcode <span class="netcode-hud__hint">F3 / ~ to hide</span></div>
+  <dl class="netcode-hud__grid">
+    <div><dt>Authority</dt><dd data-netcode="authority">booting</dd></div>
+    <div><dt>Tick</dt><dd data-netcode="tick">0 / 0</dd></div>
+    <div><dt>Ping</dt><dd data-netcode="ping">0ms +/-0ms</dd></div>
+    <div><dt>Ack</dt><dd data-netcode="ack">0</dd></div>
+    <div><dt>Loss</dt><dd data-netcode="loss">0.0%</dd></div>
+    <div><dt>Snapshots</dt><dd data-netcode="snapshots">0/0 stale 0</dd></div>
+    <div><dt>Corrections</dt><dd data-netcode="corrections">0 smooth 0</dd></div>
+    <div><dt>Resends</dt><dd data-netcode="resends">0 fail 0</dd></div>
+    <div><dt>Peers</dt><dd data-netcode="peers">0/0</dd></div>
+    <div><dt>Queue</dt><dd data-netcode="queue">m 0 c 0 / 0</dd></div>
+    <div><dt>Rejects</dt><dd data-netcode="rejects">l 0 f 0 d 0 o 0</dd></div>
+    <div><dt>Seq</dt><dd data-netcode="seq">0 / 0</dd></div>
+    <div><dt>Roster</dt><dd data-netcode="roster">0/0 p 0 i 0</dd></div>
+    <div><dt>Pools</dt><dd data-netcode="pools">a 0/0 p 0/0 fx 0/0</dd></div>
+    <div><dt>Status</dt><dd data-netcode="status">none / none</dd></div>
+  </dl>
+</aside>
+<script type="module" src="/src/main.ts"></script>
+</body>
+</html>

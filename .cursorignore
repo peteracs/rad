@@ -1,0 +1,28 @@
+# Build outputs — huge trees; keep Cursor indexing off them (aligns with .gitignore)
+target/
+target-*/
+target_*/
+/core/vm/pkg/
+/core/simcore/pkg/
+/projects/playground/pkg/
+/projects/playground/pkg-node/
+/docs/book/
+/projects/moba-rad/docs/book/
+/reports/
+
+# Tooling caches
+node_modules/
+dist/
+/tooling/editors/vscode/out/
+.venv/
+venv/
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local run logs, traces, and scratch
+.codex-runlogs/
+Trace-*.json
+/temp/
+/scratch/

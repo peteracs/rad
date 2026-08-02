@@ -1,0 +1,164 @@
+// DEATHSIGHT — browser host. Same brain as the terminal game (lib_sight.rad),
+// but the output is an @-line protocol that projects/playground/deathsight.html parses
+// into an animated dungeon. The page is the module loader (it strips the
+// `use` and prepends the lib), and interactivity works by determinism:
+// every human move re-runs this whole program with the move script baked
+// into the SCRIPT line below — same universe, one move longer.
+
+use "lib_sight.rad"
+
+let MODE = "demo"
+let SCRIPT = ""
+let SEED = 1337
+
+fn emit_units() -> nil {
+    for u in split(dump_units(), ";") {
+        print(f"@unit {u}")
+    }
+}
+
+fn emit_sight(report: list) -> nil {
+    for entry in report {
+        let c = entry[0]
+        let pct = entry[1] * 100 / SAMPLES
+        print(f"@sight {c.dir}|{pct}|{c.tx}|{c.ty}|{c.kind}|{c.target}")
+    }
+}
+
+// Journal lines added since `mark` — the page gets them as @log events.
+fn emit_log_since(mark: int) -> int {
+    let log = (get_resource(Run) |> unwrap).log
+    if len(log) > mark {
+        for line in split(slice(log, mark, len(log)), "\n") {
+            if line != "" { print(f"@log {line}") }
+        }
+    }
+    return len(log)
+}
+
+fn pick_scripted(report: list, want: str) -> Cand {
+    for entry in report {
+        let c = entry[0]
+        if c.dir == want { return c }
+    }
+    return Cand { kind: "reject" }
+}
+
+fn main() -> nil {
+    rand_seed(SEED)
+    spawn_dungeon()
+    let you = get_entity("you")
+
+    print(f"@meta {W} {H} {EXIT_X} {EXIT_Y} {MODE} {SEED}")
+    for y in range(0, H) {
+        print(f"@maprow {MAP[y]}")
+    }
+
+    let mut script = []
+    if SCRIPT != "" { script = split(SCRIPT, " ") }
+
+    let t_run = clock()
+    let mut checkpoints = []
+    let mut history = []
+    let mut fate = ""
+    let mut log_mark = 0
+    let mut t = 1
+    while fate == "" and t <= MAX_TURNS {
+        let r = get_resource(Run) |> unwrap
+        set_resource(Run, Run { turn: t, futures: r.futures, log: r.log })
+        checkpoints << fork()
+
+        let rep = deathsight()
+        print(f"@turn {t}")
+        emit_units()
+        emit_sight(rep)
+
+        let mut c = Cand {}
+        if MODE == "play" {
+            if t - 1 < len(script) {
+                c = pick_scripted(rep, script[t - 1])
+                if c.kind == "reject" {
+                    print(f"@reject {t} {script[t - 1]}")
+                    fate = "awaiting"
+                    break
+                }
+            } else {
+                fate = "awaiting"
+                break
+            }
+        } else { if MODE == "oracle" {
+            c = choose_oracle(rep)
+            } else {
+                c = choose_doomed(rep)
+        } }
+
+        print(f"@move {t} {c.label}")
+        history << c.label
+        apply_live(c)
+
+        let yp = get(you, Pos) |> unwrap
+        if yp.x == EXIT_X and yp.y == EXIT_Y {
+            fate = "escaped"
+        } else {
+            monsters_act()
+            let yv = get(you, Vital) |> unwrap
+            if yv.hp <= 0 { fate = "died" }
+        }
+        log_mark = emit_log_since(log_mark)
+        t = t + 1
+    }
+
+    let death_turn = t - 1
+    if fate == "" { fate = "kept" } // survived MAX_TURNS without escaping
+
+    if fate == "awaiting" {
+        print(f"@fate awaiting {t}")
+    }
+    if fate == "escaped" or fate == "kept" {
+        print(f"@final")
+        emit_units()
+        print(f"@fate {fate} {death_turn}")
+    }
+    if fate == "died" {
+        print(f"@final")
+        emit_units()
+        print(f"@fate died {death_turn}")
+        print("@why")
+        print(why(you, Vital))
+        print("@endwhy")
+
+        let futures_at_death = (get_resource(Run) |> unwrap).futures
+        let res = necromancy_search(checkpoints, death_turn)
+        let found_back = res[0]
+        let probes = res[3]
+        for p in probes {
+            print(f"@probe {p[0]} {p[1]}")
+        }
+        if found_back == - 1 {
+            print(f"@nofound {MAX_REWIND}")
+        } else {
+            let start_turn = death_turn - found_back + 1
+            let mut pnr = start_turn + 1
+            if found_back == 1 { pnr = - 1 } // death was never inevitable
+            let mut went = ""
+            if found_back == 1 { went = history[death_turn - 1] } else { went = history[start_turn - 1] }
+            print(f"@found {found_back} {pnr} {res[1]}")
+            print(f"@went {went}")
+            for s in res[2] {
+                let mut note = ""
+                if s[0] - 1 < len(history) { note = history[s[0] - 1] }
+                print(f"@gframe {s[0]}|{s[1]}|{note}")
+                for u in split(s[2], ";") {
+                    print(f"@gunit {u}")
+                }
+                print("@endgframe")
+            }
+        }
+        let r = get_resource(Run) |> unwrap
+        set_resource(Run, Run { turn: r.turn, futures: futures_at_death + res[4], log: r.log })
+    }
+
+    let elapsed = clock() - t_run
+    let total = (get_resource(Run) |> unwrap).futures
+    print(f"@stats {total} {to_fixed(elapsed * 1000.0, 0)}")
+}

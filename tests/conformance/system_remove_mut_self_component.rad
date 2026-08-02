@@ -1,0 +1,16 @@
+component Fuse { left: int = 1 }
+
+system burn(f: mut Fuse) {
+    f.left = f.left - 1
+    if f.left <= 0 {
+        remove(self, Fuse)
+        return
+    }
+}
+
+fn main() -> nil {
+    let _a = entity "alpha" { Fuse {} }
+    schedule [burn]
+    schedule [burn]
+    print(f"fuses={entities(Fuse) |> len}")
+}

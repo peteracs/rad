@@ -1,0 +1,7 @@
+---
+source: tests\conformance\modules\kit_app.rad
+exit_code: 0
+---
+hit dummy
+dummy hp: 58
+dist helper: 5.0

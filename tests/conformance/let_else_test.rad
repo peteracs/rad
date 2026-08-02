@@ -1,0 +1,6 @@
+// expect: none
+let none = Option::None {}
+let Some { value: y } = none else {
+    print("none")
+    42
+}

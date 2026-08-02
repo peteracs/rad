@@ -1,0 +1,4 @@
+// backend: both
+let exploded = flat_map([2, 4, 6], fn(x) { return [x, x / 2] })
+print(f"CASE10:{exploded}")
+// expect: CASE10:[2, 1, 4, 2, 6, 3]

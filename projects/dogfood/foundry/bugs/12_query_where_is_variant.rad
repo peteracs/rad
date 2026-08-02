@@ -1,0 +1,54 @@
+// BUG 12: combining a MUTABLE query with a `where` filter passes the type
+// checker and then fails at runtime with an internal-sounding error:
+//
+//   Runtime error: QueryFilter: expected closure or function
+//
+// The filter expression is irrelevant - a plain integer comparison fails just
+// as a sum-type `is` test does. The trigger is `mut` + `where` together.
+//
+//   query { X }     where <cond>   -> OK
+//   query { mut X } where <cond>   -> runtime error
+//
+// Each case below is guarded by a `run_case` flag so the file can be run
+// case-by-case; the first three are the working controls, case D is the bug.
+
+component Fsm { state: MState::Idle, n: 0 }
+
+state MState {
+    Idle { on go -> Running }
+    Running { on stop -> Idle }
+}
+
+for i in range(0, 6) {
+    spawn(Fsm { state: MState::Idle, n: i })
+}
+
+// put the even-numbered ones into Running (mut query, NO where clause - fine)
+for (_id, f) in query { mut Fsm } {
+    if f.n % 2 == 0 {
+        f.state = unwrap(transition(f.state, "go"))
+    }
+}
+
+// ---- CONTROL A: non-mut + comparison filter -> works ----
+let a = query { Fsm } where Fsm.n > 2
+print(f"A  non-mut + comparison : {len(a)}  (expected 3)")
+
+// ---- CONTROL B: non-mut + `is` variant filter -> works ----
+let b = query { Fsm } where Fsm.state is Running
+print(f"B  non-mut + `is`       : {len(b)}  (expected 3)")
+
+// ---- CONTROL C: mut query, NO filter -> works ----
+let mut c = 0
+for (_id, _f) in query { mut Fsm } {
+    c = c + 1
+}
+print(f"C  mut, no filter       : {c}  (expected 6)")
+
+// ---- CASE D: mut + filter -> RUNTIME ERROR ----
+// Runtime error: QueryFilter: expected closure or function
+let mut d = 0
+for (_id, _f) in query { mut Fsm } where Fsm.n > 2 {
+    d = d + 1
+}
+print(f"D  mut + comparison     : {d}  (expected 3)")

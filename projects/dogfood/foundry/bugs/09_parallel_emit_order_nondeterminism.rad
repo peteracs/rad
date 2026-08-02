@@ -1,0 +1,58 @@
+// BUG 09: the delivery ORDER of events emitted by parallel systems is not
+// stable between runs, contradicting spec.md:1754-1755 which promises the
+// main VM "sorts parallel-emitted events by trace id, then event name", and
+// spec.md:1767 which lists "Non-deterministic handler ordering" among the
+// things the event design prevents.
+//
+// Two systems in one schedule call, disjoint components and disjoint
+// resources, so they land in the same parallel batch. Each tags its events
+// with its own letter. The handler folds the arrival order into a checksum
+// that is sensitive to position, so any reordering changes the number.
+//
+// Run it several times on an unchanged binary and unchanged source. A stable
+// program prints the same checksum every time.
+//
+// At small entity counts (4 + 4) the order happened to be stable for me;
+// the instability shows up as the batch gets bigger, which is why this uses
+// 300 of each.
+
+component Odd { n: 0 }
+component Even { n: 0 }
+
+resource Log { checksum: 0, count: 0, head: "" }
+resource GuardA { n: 0 }
+resource GuardB { n: 0 }
+
+event Mark { who: int, n: int }
+
+system EmitA(o: Odd, _g: mut GuardA) {
+    emit Mark { who: 1, n: o.n }
+}
+
+system EmitB(e: Even, _g: mut GuardB) {
+    emit Mark { who: 2, n: e.n }
+}
+
+// position-sensitive fold: reordering any two arrivals changes the checksum
+on Mark(m) {
+    let l = res(Log)
+    let pos = l.count + 1
+    update(Log) {
+        checksum = (l.checksum * 31 + m.who * 7 + pos % 13) % 1000000007,
+        count = pos,
+    }
+    if pos <= 10 {
+        update(Log) { head = res(Log).head + str(m.who) }
+    }
+}
+
+for i in range(0, 300) {
+    spawn(Odd { n: i })
+    spawn(Even { n: i })
+}
+
+schedule [EmitA, EmitB]
+flush_events()
+
+let l = res(Log)
+print(f"events={l.count}  first10={l.head}  order_checksum={l.checksum}")

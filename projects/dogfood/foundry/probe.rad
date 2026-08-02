@@ -1,0 +1,91 @@
+// Syntax probe for the Foundry sim: validates the risky constructs before
+// they get buried in a large program.
+
+component Machine { id: 0, work: 0 }
+
+component Doomed { n: 0 }
+
+resource Log { intake: 0, produce: 0, upkeep: 0, milestones: 0 }
+
+state MachineState {
+    Idle { on start -> Running }
+    Running { on jam -> Blocked, on finish -> Idle }
+    Blocked { on clear -> Running }
+}
+
+event Started { id: int }
+
+event Milestone { label: str }
+
+event Late { n: int }
+
+system Intake(m: mut Machine, l: mut Log) {
+    m.work = m.work + 1
+    l.intake = l.intake + 1
+}
+
+system Produce(m: Machine, l: mut Log) after Intake {
+    l.produce = l.produce + m.work
+}
+
+system Upkeep(l: mut Log) after Produce {
+    l.upkeep = l.upkeep + 1
+}
+
+phase Front { Intake, Produce }
+phase Back { Upkeep }
+
+on Started(e) {
+    // transition() driven from inside a handler
+    let s = MachineState::Idle
+    let r = transition(s, "start")
+    if r is Err {
+        print("transition failed")
+    }
+    emit Milestone { label: f"machine {e.id} started" }
+}
+
+on Milestone once (e) where e.label != "skip" {
+    update(Log) { milestones = res(Log).milestones + 1 }
+    print(f"first milestone: {e.label}")
+}
+
+on Late(e) {
+    print(f"late event landed: {e.n}")
+}
+
+for i in range(0, 3) {
+    spawn(Machine { id: i, work: 0 })
+}
+
+// delayed emit as a timer
+emit Late { n: 42 } after 2
+
+// phase names used in a schedule block
+schedule [Front, Back]
+flush_events()
+
+emit Started { id: 1 }
+flush_events()
+flush_events()
+
+// despawn during mutable query iteration
+for i in range(0, 5) {
+    spawn(Doomed { n: i })
+}
+// Collect first, despawn after. Despawning from inside a `mut` query loop is
+// a hard runtime error ("Cannot set component on non-existent entity N") even
+// when the body never writes the binding -- see bugs/02 and bugs/02b.
+let seen = len(query { Doomed })
+let kill = query { Doomed } where Doomed.n % 2 == 0
+for id in kill {
+    despawn(id)
+}
+print(f"iterated {seen} doomed, remaining {len(query { Doomed })}")
+
+// drain the delayed event
+flush_events()
+flush_events()
+
+let l = res(Log)
+print(f"intake={l.intake} produce={l.produce} upkeep={l.upkeep} milestones={l.milestones}")

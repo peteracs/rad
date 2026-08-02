@@ -1,0 +1,34 @@
+// Tuple map keys: (x, y) coordinates index maps directly — the A*
+// score-map shape. Keys hash by value, mix with other key types under
+// one total order, and survive every lookup builtin.
+
+fn main() -> nil {
+    let mut cost = {}
+    cost[(0, 0)] = 0
+    cost[(4, 2)] = 6
+    cost[(4, 3)] = 7
+
+    print(cost[(4, 2)])                       // 6
+    print(get_or(cost, (9, 9), -1))           // -1
+    print(contains(cost, (4, 3)))             // true
+    print(len(cost))                          // 3
+
+    // overwrite by value equality, not identity
+    let p = (4, 2)
+    cost[p] = 60
+    print(cost[(4, 2)])                       // 60
+
+    // literal syntax
+    let walls = { (1, 1): true, (2, 1): true }
+    print(len(walls))                         // 2
+
+    // nested tuples and mixed elements work; floats stay banned
+    let m = { (1, ("a", true)): "deep" }
+    print(m[(1, ("a", true))])                // deep
+
+    // tuples sort lexicographically — keys() order is deterministic
+    print(sort([(2, 1), (1, 9), (1, 2)]))     // [(1, 2), (1, 9), (2, 1)]
+
+    // json_stringify renders tuple keys as their display form
+    print(json_stringify(cost))
+}

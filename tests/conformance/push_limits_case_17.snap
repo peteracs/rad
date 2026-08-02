@@ -1,0 +1,5 @@
+---
+source: tests\conformance\push_limits_case_17.rad
+exit_code: 0
+---
+CASE17:red

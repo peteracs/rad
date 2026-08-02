@@ -1,0 +1,20 @@
+// backend: both
+component A { x: 1 }
+
+component B { y: 2 }
+
+component C { z: 3 }
+
+entity e1 { A { x: 1 }, B { y: 2 } }
+
+entity e2 { A { x: 1 } }
+
+entity e3 { A { x: 1 }, B { y: 2 }, C { z: 3 } }
+
+let ids_ab = entities(A, B)
+let ids_abc = entities(A, B, C)
+print(len(ids_ab))
+print(len(ids_abc))
+
+// expect: 2
+// expect: 1

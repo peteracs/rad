@@ -1,0 +1,77 @@
+// BUG 04 probe: does parallel conflict analysis see a resource write that is
+// performed with update() rather than through a `mut` parameter?
+//
+// docs/src/guide/ecs.md:400 -- "Resources participate in parallel conflict
+// analysis: two systems that both hold a mutable reference to the same
+// resource are serialized."  Note the wording: "hold a mutable reference",
+// i.e. a `mut` PARAMETER. But update(R) inside a system body is also a write
+// to R. If the analyser only looks at parameter lists, two systems that write
+// the same resource by different means will be wrongly parallelised.
+//
+// Both systems here are RESOURCE-ONLY, which ecs.md:381 says "runs exactly
+// once per schedule invocation". That deliberately keeps BUG 03 (per-entity
+// accumulation loss) out of the picture: each body runs exactly once, so the
+// arithmetic is unambiguous.
+//
+// Case 1: mut-param writer  vs  update() writer, same resource R1
+//         correct (serialized) => R1 = 100 + 1 = 101
+//         wrong  (parallel)    => one write clobbers the other: 100 or 1
+//
+// Case 2: update() writer     vs  update() writer, same resource R2
+//         correct (serialized) => R2 = 100 + 1 = 101
+//         wrong  (parallel)    => 100 or 1
+//
+// Case 3: mut-param writer    vs  helper-fn update() writer, same resource R3
+//         the write is one call frame deep - main.rad does exactly this
+//         (FeedMachines -> take()/give() -> update(Store)) while HaulOre
+//         holds `st: mut Store`.
+//         correct (serialized) => R3 = 101
+
+resource R1 { n: 0 }
+resource R2 { n: 0 }
+resource R3 { n: 0 }
+
+resource D1 { x: 0 }
+resource D2 { x: 0 }
+resource D3 { x: 0 }
+resource D4 { x: 0 }
+
+// ---------------- case 1: mut param vs update() ----------------
+system C1_MutParam(r: mut R1) {
+    r.n = r.n + 100
+}
+system C1_Update(_d: mut D1) {
+    update(R1) { n = res(R1).n + 1 }
+}
+
+// ---------------- case 2: update() vs update() ----------------
+system C2_UpdateA(_d: mut D2) {
+    update(R2) { n = res(R2).n + 100 }
+}
+system C2_UpdateB(_d: mut D3) {
+    update(R2) { n = res(R2).n + 1 }
+}
+
+// ---------------- case 3: mut param vs update() one frame deep ----------------
+fn bump_r3() -> nil {
+    update(R3) { n = res(R3).n + 1 }
+}
+
+system C3_MutParam(r: mut R3) {
+    r.n = r.n + 100
+}
+system C3_IndirectUpdate(_d: mut D4) {
+    bump_r3()
+}
+
+print("each system below is resource-only, so each body runs EXACTLY once")
+print("")
+
+schedule [C1_MutParam, C1_Update]
+print(f"case 1  mut-param vs update()          R1={res(R1).n}   expected 101")
+
+schedule [C2_UpdateA, C2_UpdateB]
+print(f"case 2  update() vs update()           R2={res(R2).n}   expected 101")
+
+schedule [C3_MutParam, C3_IndirectUpdate]
+print(f"case 3  mut-param vs fn->update()      R3={res(R3).n}   expected 101")

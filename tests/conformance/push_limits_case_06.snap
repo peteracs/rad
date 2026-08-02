@@ -1,0 +1,5 @@
+---
+source: tests\conformance\push_limits_case_06.rad
+exit_code: 0
+---
+CASE06:pci_audit_2026

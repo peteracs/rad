@@ -1,0 +1,120 @@
+// RADTACTICS browser arena — the same fork-the-universe oracle as main.rad,
+// commanding BOTH sides, narrating the battle as a structured @-line protocol
+// that the web page (projects/dogfood/tactics/web/) parses and animates.
+//
+// Native check:  rad projects/dogfood/tactics/web_arena.rad
+// Browser:       the page merges lib_combat.rad + this file (minus the `use`)
+//                into one source string and hands it to RadRuntime — the whole
+//                rad VM compiled to WebAssembly, thinking in a Web Worker.
+//
+// The SEED line below is rewritten by the page per battle: it perturbs the
+// opening formation, so every seed is a different war.
+
+use "lib_combat.rad"
+
+let SEED = 2026
+let MAX_ROUNDS = 40
+
+// Nudge each unit a tile off its textbook position — seeded chaos so battles
+// differ per seed while staying perfectly deterministic per seed.
+fn shuffle_formation(side: str) -> nil {
+    for unit in living(side) {
+        let p = get(unit, Pos) |> unwrap
+        let ny = p.y + rand_int(0 - 1, 1)
+        if !tile_blocked(p.x, ny) {
+            update(unit, Pos) { x = p.x, y = ny }
+        }
+    }
+}
+
+fn emit_state() -> nil {
+    for ent in entities(Team) {
+        let s = get(ent, Stats) |> unwrap
+        let t = get(ent, Team) |> unwrap
+        let p = get(ent, Pos) |> unwrap
+        print(f"@unit {name_of(ent)} {t.side} {s.cls} {p.x} {p.y} {s.hp} {s.max_hp}")
+    }
+}
+
+fn main() -> nil {
+    rand_seed(SEED)
+    roster("red", 1, -1)
+    roster("blue", W - 2, 1)
+    shuffle_formation("red")
+    shuffle_formation("blue")
+
+    print(f"@meta {W} {H} {MAX_ROUNDS} {DEPTH} {PAR_FUTURES} {SEED}")
+    print("@round 0")
+    emit_state()
+    print("@endround")
+
+    let t_battle = clock()
+    let mut round = 1
+    let mut winner = ""
+    let mut seen_log = 0
+    while winner == "" and round <= MAX_ROUNDS {
+        let b0 = get_resource(Battle) |> unwrap
+        set_resource(Battle, Battle { round: round, winner: "", log: b0.log, futures: b0.futures })
+        let round_start = fork()
+        print(f"@round {round}")
+
+        for side in ["red", "blue"] {
+            for unit in living(side) {
+                let a = choose(unit)
+                print(f"@act {name_of(unit)} {describe_act(a)}")
+                act_live(unit, a)
+            }
+            if side_hp("red") == 0 { winner = "blue" }
+            if side_hp("blue") == 0 { winner = "red" }
+            if winner != "" { break }
+        }
+
+        // Sudden death: from round 25 the ring closes — everyone bleeds.
+        if winner == "" and round >= 25 {
+            for side in ["red", "blue"] {
+                for unit in living(side) {
+                    emit Sapped { unit: unit, amount: 2 }
+                }
+            }
+            flush_events()
+            let rh = side_hp("red")
+            let bh = side_hp("blue")
+            if rh == 0 and bh == 0 { winner = "draw" }
+            else if rh == 0 { winner = "blue" }
+            else if bh == 0 { winner = "red" }
+        }
+
+        // The always-on fence, in the browser too: a round may touch combat
+        // state and the journal — nothing else, ever.
+        assert_only_changed(round_start, fork(), [Pos, Stats, Intent, Battle])
+
+        // Ship only the journal lines this round appended.
+        let lines = split((get_resource(Battle) |> unwrap).log, "\n")
+        let mut i = seen_log
+        while i < len(lines) {
+            if lines[i] != "" { print(f"@log {lines[i]}") }
+            i = i + 1
+        }
+        seen_log = len(lines)
+
+        emit_state()
+        print("@endround")
+        round = round + 1
+    }
+
+    let elapsed = clock() - t_battle
+    let b = get_resource(Battle) |> unwrap
+    if winner == "" { winner = "draw" }
+    print(f"@winner {winner}")
+    print(f"@futures {b.futures} {to_fixed(elapsed * 1000.0, 1)}")
+
+    // Autopsy for every fallen unit: the causal chain behind the killing blow.
+    for ent in entities(Team) {
+        let s = get(ent, Stats) |> unwrap
+        if s.hp <= 0 {
+            print(f"@why {name_of(ent)}")
+            print(why(ent, Stats))
+            print("@endwhy")
+        }
+    }
+}

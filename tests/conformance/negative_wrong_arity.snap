@@ -1,0 +1,7 @@
+---
+source: tests\conformance\negative_wrong_arity.rad
+exit_code: 1
+---
+
+---stderr---
+Error: Function 'greet' expects 1 argument(s), got 2

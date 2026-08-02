@@ -1,0 +1,1 @@
+goblin:10,chest:25,dragon:100

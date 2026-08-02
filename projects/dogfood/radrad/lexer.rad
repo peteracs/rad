@@ -1,0 +1,266 @@
+// =====================================================================
+// radrad stage 1: lexer
+//
+// Rad-in-Rad. Scans source bytes into a flat token list.
+// Token kinds: "int" "float" "str" "ident" "kw" "op" "eof" "err"
+// F-strings expand into structured token runs:
+//   fs_start, fs_lit, fs_open, ...expr tokens..., fs_close, fs_end
+// =====================================================================
+
+pub struct Token {
+    kind: str = "",
+    text: str = "",
+    ival: int = 0,
+    fval: float = 0.0,
+    line: int = 1,
+}
+
+pure fn lx_is_digit(c: int) -> bool {
+    return c >= 48 and c <= 57
+}
+
+pure fn lx_is_alpha(c: int) -> bool {
+    return (c >= 97 and c <= 122) or (c >= 65 and c <= 90) or c == 95
+}
+
+pure fn lx_is_alnum(c: int) -> bool {
+    return lx_is_alpha(c) or lx_is_digit(c)
+}
+
+pub fn lex(src: str) -> list<Token> {
+    let n = byte_len(src)
+    let mut toks: list<Token> = []
+    let mut pos = 0
+    let mut line = 1
+
+    let keywords = {
+        "let": true, "mut": true, "fn": true, "if": true, "else": true,
+        "while": true, "for": true, "in": true, "return": true,
+        "break": true, "continue": true, "true": true, "false": true,
+        "nil": true, "component": true, "resource": true, "struct": true,
+        "entity": true, "state": true, "system": true, "event": true,
+        "on": true, "emit": true, "schedule": true, "and": true,
+        "or": true, "not": true, "match": true, "use": true, "pub": true,
+        "pure": true, "readonly": true, "when": true, "where": true,
+    }
+
+    let peek_at = fn(i: int) -> int {
+        if i >= n { return 0 }
+        return byte_at(src, i)
+    }
+
+    let push_tok = fn(kind: str, text: str, ln: int) -> nil {
+        toks << Token { kind: kind, text: text, line: ln }
+    }
+
+    // Scans one string body starting after the opening quote.
+    let scan_str_body = fn(start: int) -> (str, int) {
+        let mut i = start
+        let mut out = ""
+        while i < n {
+            let c = byte_at(src, i)
+            if c == 34 {
+                return (out, i + 1)
+            }
+            if c == 92 {
+                let e = peek_at(i + 1)
+                if e == 110 { out = out + "\n" }
+                else if e == 116 { out = out + "\t" }
+                else if e == 114 { out = out + "\r" }
+                else if e == 92 { out = out + "\\" }
+                else if e == 34 { out = out + "\"" }
+                else if e == 48 { out = out + chr(0) }
+                else { out = out + chr(e) }
+                i = i + 2
+                continue
+            }
+            if c == 10 { line = line + 1 }
+            out = out + chr(c)
+            i = i + 1
+        }
+        return (out, i)
+    }
+
+    while pos < n {
+        let c = byte_at(src, pos)
+
+        // whitespace
+        if c == 32 or c == 9 or c == 13 {
+            pos = pos + 1
+            continue
+        }
+        if c == 10 {
+            line = line + 1
+            pos = pos + 1
+            continue
+        }
+
+        // comments
+        if c == 47 and peek_at(pos + 1) == 47 {
+            while pos < n and byte_at(src, pos) != 10 {
+                pos = pos + 1
+            }
+            continue
+        }
+
+        // numbers
+        if lx_is_digit(c) {
+            let start = pos
+            while pos < n and lx_is_digit(byte_at(src, pos)) {
+                pos = pos + 1
+            }
+            if pos < n and byte_at(src, pos) == 46 and lx_is_digit(peek_at(pos + 1)) {
+                pos = pos + 1
+                while pos < n and lx_is_digit(byte_at(src, pos)) {
+                    pos = pos + 1
+                }
+                let text = substring_bytes(src, start, pos)
+                toks << Token { kind: "float", text: text, fval: float(text), line: line }
+            } else {
+                let text = substring_bytes(src, start, pos)
+                toks << Token { kind: "int", text: text, ival: int(text), line: line }
+            }
+            continue
+        }
+
+        // identifiers, keywords, f-strings
+        if lx_is_alpha(c) {
+            let start = pos
+            while pos < n and lx_is_alnum(byte_at(src, pos)) {
+                pos = pos + 1
+            }
+            let word = substring_bytes(src, start, pos)
+
+            // f-string: f"..."  (lex into structured token run)
+            if word == "f" and pos < n and byte_at(src, pos) == 34 {
+                pos = pos + 1
+                push_tok("fs_start", "", line)
+                let mut lit = ""
+                while pos < n {
+                    let fc = byte_at(src, pos)
+                    if fc == 34 {
+                        pos = pos + 1
+                        break
+                    }
+                    if fc == 92 {
+                        let e = peek_at(pos + 1)
+                        if e == 110 { lit = lit + "\n" }
+                        else if e == 116 { lit = lit + "\t" }
+                        else if e == 92 { lit = lit + "\\" }
+                        else if e == 34 { lit = lit + "\"" }
+                        else if e == 123 { lit = lit + "{" }
+                        else if e == 125 { lit = lit + "}" }
+                        else { lit = lit + chr(e) }
+                        pos = pos + 2
+                        continue
+                    }
+                    // {{ and }} are literal braces
+                    if fc == 123 and peek_at(pos + 1) == 123 {
+                        lit = lit + "{"
+                        pos = pos + 2
+                        continue
+                    }
+                    if fc == 125 and peek_at(pos + 1) == 125 {
+                        lit = lit + "}"
+                        pos = pos + 2
+                        continue
+                    }
+                    // interpolation: {expr} or ${expr}
+                    let is_dollar = fc == 36 and peek_at(pos + 1) == 123
+                    if fc == 123 or is_dollar {
+                        if lit != "" {
+                            push_tok("fs_lit", lit, line)
+                            lit = ""
+                        }
+                        push_tok("fs_open", "", line)
+                        if is_dollar { pos = pos + 2 } else { pos = pos + 1 }
+                        // recursively lex the inner expression source
+                        let mut depth = 1
+                        let inner_start = pos
+                        while pos < n and depth > 0 {
+                            let ic = byte_at(src, pos)
+                            if ic == 123 { depth = depth + 1 }
+                            if ic == 125 { depth = depth - 1 }
+                            if depth > 0 { pos = pos + 1 }
+                        }
+                        let inner_src = substring_bytes(src, inner_start, pos)
+                        pos = pos + 1
+                        let inner_toks = lex(inner_src)
+                        let mut k = 0
+                        // append all but trailing eof
+                        while k < len(inner_toks) - 1 {
+                            toks << inner_toks[k]
+                            k = k + 1
+                        }
+                        push_tok("fs_close", "", line)
+                        continue
+                    }
+                    if fc == 10 { line = line + 1 }
+                    lit = lit + chr(fc)
+                    pos = pos + 1
+                }
+                if lit != "" {
+                    push_tok("fs_lit", lit, line)
+                }
+                push_tok("fs_end", "", line)
+                continue
+            }
+
+            if contains(keywords, word) {
+                push_tok("kw", word, line)
+            } else {
+                push_tok("ident", word, line)
+            }
+            continue
+        }
+
+        // strings
+        if c == 34 {
+            let (decoded, next_pos) = scan_str_body(pos + 1)
+            pos = next_pos
+            push_tok("str", decoded, line)
+            continue
+        }
+
+        // operators (longest match first)
+        let c2 = peek_at(pos + 1)
+        if c == 124 and c2 == 62 { push_tok("op", "|>", line) pos = pos + 2 continue }
+        if c == 61 and c2 == 61 { push_tok("op", "==", line) pos = pos + 2 continue }
+        if c == 33 and c2 == 61 { push_tok("op", "!=", line) pos = pos + 2 continue }
+        if c == 60 and c2 == 61 { push_tok("op", "<=", line) pos = pos + 2 continue }
+        if c == 62 and c2 == 61 { push_tok("op", ">=", line) pos = pos + 2 continue }
+        if c == 45 and c2 == 62 { push_tok("op", "->", line) pos = pos + 2 continue }
+        if c == 61 and c2 == 62 { push_tok("op", "=>", line) pos = pos + 2 continue }
+        if c == 60 and c2 == 60 { push_tok("op", "<<", line) pos = pos + 2 continue }
+        if c == 62 and c2 == 62 { push_tok("op", ">>", line) pos = pos + 2 continue }
+        if c == 58 and c2 == 58 { push_tok("op", "::", line) pos = pos + 2 continue }
+        if c == 46 and c2 == 46 { push_tok("op", "..", line) pos = pos + 2 continue }
+
+        if c == 43 { push_tok("op", "+", line) pos = pos + 1 continue }
+        if c == 45 { push_tok("op", "-", line) pos = pos + 1 continue }
+        if c == 42 { push_tok("op", "*", line) pos = pos + 1 continue }
+        if c == 47 { push_tok("op", "/", line) pos = pos + 1 continue }
+        if c == 37 { push_tok("op", "%", line) pos = pos + 1 continue }
+        if c == 61 { push_tok("op", "=", line) pos = pos + 1 continue }
+        if c == 60 { push_tok("op", "<", line) pos = pos + 1 continue }
+        if c == 62 { push_tok("op", ">", line) pos = pos + 1 continue }
+        if c == 40 { push_tok("op", "(", line) pos = pos + 1 continue }
+        if c == 41 { push_tok("op", ")", line) pos = pos + 1 continue }
+        if c == 123 { push_tok("op", "{", line) pos = pos + 1 continue }
+        if c == 125 { push_tok("op", "}", line) pos = pos + 1 continue }
+        if c == 91 { push_tok("op", "[", line) pos = pos + 1 continue }
+        if c == 93 { push_tok("op", "]", line) pos = pos + 1 continue }
+        if c == 44 { push_tok("op", ",", line) pos = pos + 1 continue }
+        if c == 58 { push_tok("op", ":", line) pos = pos + 1 continue }
+        if c == 46 { push_tok("op", ".", line) pos = pos + 1 continue }
+        if c == 63 { push_tok("op", "?", line) pos = pos + 1 continue }
+        if c == 38 { push_tok("op", "&", line) pos = pos + 1 continue }
+        if c == 33 { push_tok("op", "!", line) pos = pos + 1 continue }
+
+        toks << Token { kind: "err", text: f"unexpected byte {c}", line: line }
+        pos = pos + 1
+    }
+
+    toks << Token { kind: "eof", text: "", line: line }
+    return toks
+}

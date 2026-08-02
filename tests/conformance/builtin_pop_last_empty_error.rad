@@ -1,0 +1,4 @@
+// pop_last() on empty list must produce a runtime error
+// rust-mode: no-check
+pop_last([])
+// expect-runtime-error: pop_last() on empty list

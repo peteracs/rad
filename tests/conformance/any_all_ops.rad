@@ -1,0 +1,30 @@
+// any()/all() — short-circuiting predicate sweeps, the shape of every
+// vision check ("does any friendly source cover it?").
+
+struct Mod { stat: str = "", flat: float = 0.0 }
+
+fn main() -> nil {
+    let xs = [1, 5, 8, 12]
+    print(xs |> any(fn(x) { return x > 10 }))     // true
+    print(xs |> any(fn(x) { return x > 99 }))     // false
+    print(xs |> all(fn(x) { return x > 0 }))      // true
+    print(xs |> all(fn(x) { return x > 4 }))      // false
+
+    // vacuous truth on empties
+    print(any([], fn(x) { return x > 0 }))        // false
+    print(all([], fn(x) { return x > 0 }))        // true
+
+    // composes with structs and .field-style pipelines
+    let mods = [Mod { stat: "ad", flat: 10.0 }, Mod { stat: "ap", flat: 0.0 }]
+    print(mods |> any(fn(m) { return m.stat == "ap" }))           // true
+    print(mods |> map(.flat) |> all(fn(f) { return f >= 0.0 }))   // true
+
+    // short-circuit: the predicate stops at the first witness
+    // (direct call — pipeline callbacks must stay pure/readonly)
+    let mut probes = 0
+    let _hit = any([1, 2, 3, 4], fn(x) {
+        probes = probes + 1
+        return x == 2
+    })
+    print(probes)                                 // 2
+}

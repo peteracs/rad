@@ -1,0 +1,31 @@
+// Test 9: Edge case — commit the same fork twice (should be idempotent)
+
+component Val { n: 0 }
+
+system Inc(v: mut Val) {
+    v = Val { n: v.n + 1 }
+}
+
+let e = spawn("x", Val { n: 0 })
+
+let f = fork()
+let f = simulate(f, [system::Inc], 5)
+
+// Commit once
+commit(f)
+let v1 = get(e, Val) |> unwrap
+assert(v1.n == 5, f"After first commit, expected 5, got {v1.n}")
+
+// Mutate main world after first commit
+let f2 = fork()
+let f2 = simulate(f2, [system::Inc], 3)
+commit(f2)
+let v2 = get(e, Val) |> unwrap
+assert(v2.n == 8, f"After mutation, expected 8, got {v2.n}")
+
+// Commit the ORIGINAL fork again — should revert to the snapshot from 5
+commit(f)
+let v3 = get(e, Val) |> unwrap
+assert(v3.n == 5, f"Re-committing original fork should revert to 5, got {v3.n}")
+
+print("PASS: commit twice (idempotent)")

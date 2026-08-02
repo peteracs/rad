@@ -1,0 +1,12 @@
+// Attack: enumerate list with nil elements
+fn main() -> nil {
+    let data = [nil, "x", nil]
+    let pairs = enumerate(data)
+    for p in pairs {
+        print(f"[{p[0]}] = {p[1]}")
+    }
+}
+
+// expect: [0] = nil
+// expect: [1] = x
+// expect: [2] = nil

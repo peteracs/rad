@@ -1,0 +1,63 @@
+// BUG 04 — save_world() can emit a save that load_world() refuses to read.
+//
+//   rad projects/dogfood/strongbox/bugs/04_unloadable_save.rad
+//
+// No tampering. No schema drift. A single ordinary finite float, held and
+// printed happily by the VM, is serialized in EXPANDED DECIMAL form (309
+// digits, no exponent). Re-parsing those digits rounds the value past the
+// f64 range, and the JSON parser rejects the file the program just wrote.
+//
+// EXPECTED: save_world() is total into the set of loadable saves — anything
+//   it writes, load_world() reads back identically.
+// ACTUAL:   "load_world(): invalid JSON: number out of range". The world is
+//   permanently unloadable, and the failure surfaces at LOAD time (possibly
+//   days later, on another machine) rather than at save time.
+//
+// This probe walks the magnitude ladder to locate the threshold and checks
+// whether the wire codec (fork_to_bytes/fork_from_bytes) shares the fault.
+
+component Big { x: 0.0 }
+
+fn probe(label: str, v: float) -> nil {
+    for e in entities() {
+        despawn(e)
+    }
+    spawn("e", Big { x: v })
+
+    let saved = save_world()
+    let bytes = fork_to_bytes(fork())
+
+    // How was it written?
+    let mut form = "expanded"
+    if contains(saved, "e3") or contains(saved, "e-") or contains(saved, "E") {
+        form = "exponent"
+    }
+    print(f"  {label}: save {len(saved)} bytes, written in {form} notation")
+
+    // Wire codec first — it returns a Result, so it cannot abort the probe.
+    match fork_from_bytes(bytes) {
+        Ok(_f) => { print(f"    wire  fork_to_bytes -> fork_from_bytes: OK") }
+        Err(m) => { print(f"    wire  BROKEN: {m}") }
+    }
+
+    // save/load aborts on failure, so this line is the end of the probe if
+    // the value is one of the poisoned ones.
+    let _n = load_world(saved)
+    let back = get(get_entity("e"), Big) |> unwrap
+    if back.x == v {
+        print(f"    save  load_world: OK, value identical")
+    } else {
+        print(f"    save  load_world: VALUE DRIFTED {v} -> {back.x}")
+    }
+    return nil
+}
+
+print("=== BUG 04: unloadable saves from ordinary floats ===")
+
+probe("1.0e17            ", 1.0e17)
+probe("1.0e100           ", 1.0e100)
+probe("1.0e300           ", 1.0e300)
+probe("1.0e308           ", 1.0e308)
+probe("f64::MAX 1.797...e308", 1.7976931348623157e308)
+
+print("if you can read this line, nothing was rejected")

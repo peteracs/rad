@@ -1,0 +1,8 @@
+// expect-runtime-error: Task
+
+async fn fail() -> int {
+    return await async pop([])
+}
+
+let t = async fail()
+print(await t)

@@ -1,0 +1,6 @@
+---
+source: tests\features\test_find.rad
+exit_code: 0
+---
+found: 25
+not found

@@ -1,0 +1,13 @@
+fn sum_pairs(rows: list) -> int {
+    if len(rows) == 0 {
+        return 0
+    }
+    let first = rows[0]
+    let (a, b) = first
+    let rest = rows |> filter(fn(r) { return r != first }) 
+    return a + b + sum_pairs(rest)
+}
+fn main() -> nil {
+    let rows = [(1, 2), (3, 4), (5, 6)]
+    print(sum_pairs(rows))
+}

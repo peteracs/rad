@@ -1,0 +1,49 @@
+// GAP 06 - how do you declare a RECURSIVE sum-type field?
+//
+// Run:  target\debug\rad.exe projects\dogfood\calcite\bugs\06_recursive_sum_type_field.rad
+//
+// A variant field is declared `name: default`, and the default doubles as
+// the type hint (spec 2.4). For a self-referential field there is no
+// sensible default value, and the spec never says what to write.
+//
+// Three spellings, only the last works, and it is undocumented:
+//
+//   A)  rhs: nil          parses, but types the field as `nil`, so every
+//                         use is a type error:
+//                           Error: Argument 1 to 'eval' expects Expr, got nil
+//                           Error: Type error in 'Expr::Add' field 'left':
+//                                  expected nil, got Expr
+//
+//   B)  rhs: Expr = nil   PARSE ERROR: "Expected identifier, got Assign ('')".
+//                         Spec 2.4 promises a TARGETED diagnostic here
+//                         ("the parser emits a targeted diagnostic
+//                         explaining the difference"); the real message
+//                         explains nothing.
+//
+//   C)  rhs: Expr         works. The default slot holds a bare identifier
+//                         that happens to name the type. Undocumented.
+//
+// This file uses spelling C, which is what all of calcite is built on.
+
+type Expr {
+    Num { value: 0 }
+    Add { left: Expr, right: Expr }
+    Mul { left: Expr, right: Expr }
+}
+
+fn eval(e: Expr) -> int {
+    match e {
+        Num { value } => { return value }
+        Add { left, right } => { return eval(left) + eval(right) }
+        Mul { left, right } => { return eval(left) * eval(right) }
+    }
+}
+
+fn main() -> nil {
+    // (2 + 40) * 3
+    let tree = Expr::Mul {
+        left: Expr::Add { left: Expr::Num { value: 2 }, right: Expr::Num { value: 40 } },
+        right: Expr::Num { value: 3 },
+    }
+    print(f"recursive AST evaluates to {eval(tree)}")
+}

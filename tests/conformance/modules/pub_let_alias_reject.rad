@@ -1,0 +1,8 @@
+// `pub let` constants export through bare `use` only; reaching one
+// through a module alias gets a targeted diagnostic, not a mystery
+// "no member" error.
+use "pub_let_lib.rad" as cfg
+
+fn main() -> nil {
+    print(cfg.TICK_RATE)
+}

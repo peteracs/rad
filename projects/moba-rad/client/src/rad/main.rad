@@ -1,0 +1,14 @@
+pub resource HostContract {
+    runtime_min: str = "0.4.0",
+    game_stack_version: str = "moba-rad/0.2",
+    entry: str = "projects/moba-rad/client/src/rad/main.rad",
+    event_schema: str = "",
+    host_features: str = "modules,runtime-contract,prediction,authority-reconcile"
+}
+
+// The local avatar is NOT seeded here. Identity is owned by the host
+// (app/matchIdentity.ts persists a unique id per tab) and injected at boot via
+// a SeedLocalAvatar event, so two tabs predict two distinct avatars instead of
+// fighting over a hardcoded player 1.
+
+fn main() -> nil {}

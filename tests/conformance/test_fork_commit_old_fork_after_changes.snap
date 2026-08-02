@@ -1,0 +1,5 @@
+---
+source: tests\conformance\test_fork_commit_old_fork_after_changes.rad
+exit_code: 0
+---
+PASS: commit old fork erases newer entities

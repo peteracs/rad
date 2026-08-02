@@ -1,0 +1,8 @@
+// spy — a hostile player bot for RADTACTICS.
+//
+// Tries to exfiltrate the host filesystem instead of fighting. IO builtins
+// are deny-by-default inside the sandbox (the static effect system knows
+// read_file is IO), so this dies before it ever runs a single combat order.
+
+let secrets = read_file("Cargo.toml")
+update(me, Intent) { kind = "wait", tx = 0, ty = 0, target = secrets }

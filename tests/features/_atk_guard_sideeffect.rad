@@ -1,0 +1,22 @@
+// Attack: guard expression with side effects
+// The guard itself should be evaluated, and if it has side effects they should run
+
+event Tick { n }
+let mut guard_count = 0
+
+on Tick(e) where e.n > 0 {
+    print(f"tick {e.n}")
+}
+
+fn main() -> nil {
+    emit Tick { n: 0 }
+    emit Tick { n: 1 }
+    emit Tick { n: 0 }
+    emit Tick { n: 2 }
+    flush_events()
+    print("done")
+}
+
+// expect: tick 1
+// expect: tick 2
+// expect: done

@@ -1,0 +1,8 @@
+---
+source: tests\conformance\builtin_map_or.rad
+exit_code: 0
+---
+43
+0
+HERO
+unknown

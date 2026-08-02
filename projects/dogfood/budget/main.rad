@@ -1,0 +1,90 @@
+// ============================================================
+// Dogfood App #2 — Budget Tracker
+// Reads transactions.csv (date,category,description,amount),
+// prints monthly summary, category breakdown, top expenses,
+// and flags overspend against budgets.
+// ============================================================
+
+let CSV_PATH = "projects/dogfood/budget/transactions.csv"
+
+struct Txn { date: str = "", category: str = "", desc: str = "", amount: float = 0.0 }
+
+resource Budgets { limits: {} }
+
+fn parse_line(line: str) -> any {
+    let parts = split(trim(line), ",")
+    if len(parts) < 4 { return None }
+    let amt = try_float(parts[3])
+    match amt {
+        Some(a) => {
+            return Some(Txn { date: parts[0], category: parts[1], desc: parts[2], amount: a })
+        }
+        None => { return None }
+    }
+}
+
+fn money(x: float) -> str {
+    return to_fixed(x, 2)
+}
+
+fn month_of(date: str) -> str {
+    // date is YYYY-MM-DD
+    let parts = split(date, "-")
+    return f"{parts[0]}-{parts[1]}"
+}
+
+fn main() {
+    set_resource(Budgets, Budgets { limits: {
+        "food": 450.0,
+        "transport": 150.0,
+        "entertainment": 100.0,
+        "utilities": 200.0
+    } })
+
+    if !file_exists(CSV_PATH) {
+        print("missing transactions.csv")
+        return nil
+    }
+
+    let body = read_file(CSV_PATH)
+    let txns = split(body, "\n")
+    |> map(parse_line)
+    |> filter(fn(t) { return t != None })
+    |> map(fn(t) { return unwrap(t) })
+
+    print(f"=== {len(txns)} transactions loaded ===")
+
+    // --- monthly totals ---
+    print("\n-- Monthly net --")
+    let by_month = txns |> group_by(fn(t) { return month_of(t.date) })
+    for m, rows in by_month {
+        let total = rows |> reduce(0.0, fn(acc, t) { return acc + t.amount })
+        print(f"{m}: {money(total)}")
+    }
+
+    // --- category breakdown (expenses only) ---
+    print("\n-- Spend by category --")
+    let expenses = txns |> filter(fn(t) { return t.amount < 0.0 })
+    let by_cat = expenses |> group_by(fn(t) { return t.category })
+    let budgets = (get_resource(Budgets) ?).limits
+    for cat, rows in by_cat {
+        let spent = 0.0 - (rows |> reduce(0.0, fn(acc, t) { return acc + t.amount }))
+        let mut flag = ""
+        if contains(budgets, cat) {
+            let lim = budgets[cat]
+            if spent > lim {
+                flag = f"  ** OVER BUDGET (limit {money(lim)})"
+            }
+        }
+        print(f"{cat}: {money(spent)}{flag}")
+    }
+
+    // --- top 3 expenses ---
+    print("\n-- Top 3 expenses --")
+    let top = expenses
+    |> sort_by(fn(t) { return t.amount })
+    |> slice(0, 3)
+    for t in top {
+        print(f"{t.date} {t.desc}: {money(t.amount)}")
+    }
+}

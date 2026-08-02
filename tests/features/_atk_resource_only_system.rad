@@ -1,0 +1,17 @@
+resource Counter {
+  n: 0
+}
+
+system Tick(c: mut Counter) {
+  c.n = c.n + 1
+}
+
+fn main() -> nil {
+  schedule [Tick]
+  schedule [Tick]
+  schedule [Tick]
+  let c = get_resource(Counter) ?
+  print(f"n={c.n}")
+}
+
+// expect: n=3

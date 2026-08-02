@@ -1,0 +1,95 @@
+// Stage 1 — the model. A tiny shared task board, built on rad's three laws:
+// components hold the data, events are the only writers, handlers are the
+// only logic that touches state.
+//
+// Run it:   ./target/release/rad projects/tutorial/task-board/01_model.rad
+// Commands on stdin, one per line:
+//   add <title...>        open a task (gets the next T-<n> name)
+//   close <id>            close it          (e.g. close T-1)
+//   assign <id> <who>     hand it to someone
+//   list                  open tasks
+//   quit
+
+component Task {
+    title: str = "",
+    indexed status: str = "open",   // indexed: list views are a hash probe
+    assignee: str = ""
+}
+
+resource Board { next_id: int = 1 }
+
+// Every mutation is an event that names the human who caused it. This is
+// not bookkeeping for stage 1 — it is what makes stage 2's why() answer
+// with a name instead of a line number.
+event Opened   { task: entity, title: str, by: str }
+event Closed   { task: entity, by: str }
+event Assigned { task: entity, to: str, by: str }
+
+on Closed(e)   { update(e.task, Task) { status = "closed" } }
+on Assigned(e) { update(e.task, Task) { assignee = e.to } }
+
+let USER = "alice"
+
+fn new_task(title: str, by: str) -> entity {
+    let b = get_resource(Board) |> unwrap
+    let id = f"T-{b.next_id}"
+    set_resource(Board, Board { next_id: b.next_id + 1 })
+    let t = spawn(id, Task { title: title })
+    emit Opened { task: t, title: title, by: by }
+    flush_events()
+    print(f"opened {id}: {title}")
+    return t
+}
+
+fn list_tasks() -> nil {
+    let open = lookup_all(Task, "status", "open")   // one hash probe, no scan
+    if len(open) == 0 {
+        print("(no open tasks)")
+        return nil
+    }
+    for t in open {
+        let tk = get(t, Task) |> unwrap
+        let mut who = tk.assignee
+        if who == "" { who = "-" }
+        print(f"[ ] {name_of(t)}  {tk.title}  ({who})")
+    }
+}
+
+fn handle(line: str) -> bool {
+    let trimmed = trim(line)
+    if len(trimmed) == 0 { return true }
+    let parts = split(trimmed, " ")
+    let cmd = parts[0]
+    if cmd == "quit" { return false }
+    if cmd == "list" { list_tasks() }
+    if cmd == "add" {
+        new_task(join(slice(parts, 1, len(parts)), " "), USER)
+    }
+    if cmd == "close" {
+        let t = get_entity(parts[1])
+        if t == nil {
+            print(f"no task {parts[1]}")
+        } else {
+            emit Closed { task: t, by: USER }
+            flush_events()
+            print(f"closed {parts[1]}")
+        }
+    }
+    if cmd == "assign" {
+        let t = get_entity(parts[1])
+        if t == nil {
+            print(f"no task {parts[1]}")
+        } else {
+            emit Assigned { task: t, to: parts[2], by: USER }
+            flush_events()
+            print(f"assigned {parts[1]} to {parts[2]}")
+        }
+    }
+    return true
+}
+
+fn main() -> nil {
+    for line in split(read_stdin_all(), "\n") {
+        if !handle(line) { break }
+    }
+}

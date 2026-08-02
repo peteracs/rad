@@ -1,0 +1,11 @@
+// BUG 04, file 1 of 2 - the imported library.
+// The RAD-L011 "imperative collection building" site lives HERE, on the
+// `for` line below, and the variable is named `basket`.
+
+pub fn collect(xs: list) -> list {
+    let mut basket = []
+    for x in xs {
+        basket = push(basket, x)
+    }
+    return basket
+}

@@ -1,0 +1,10 @@
+// backend: both
+fn mutate(xs) {
+    let mut ys = xs
+    ys[0] = 9
+}
+
+let xs = [1, 2]
+mutate(xs)
+print(xs[0])
+// expect: 1

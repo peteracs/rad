@@ -1,0 +1,17 @@
+C backend status: frozen legacy path
+
+core/vm is the ground truth for Rad syntax, checking, runtime behavior, tests,
+WASM bindings, playground behavior, and developer documentation.
+
+Do not update core/c-backend as part of normal language development. Do not use
+it as a source of truth for feature support or parser/checker behavior.
+
+The files in this directory are kept for historical reference and possible
+future AOT/self-hosting revival. The old test harnesses require an explicit
+opt-in:
+
+  RAD_RUN_FROZEN_C_BACKEND=1
+
+Any future revival should first define a downstream parity plan against
+core/vm-owned conformance tests, instead of reintroducing a second independent
+language implementation.

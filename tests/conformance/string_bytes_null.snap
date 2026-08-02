@@ -1,0 +1,7 @@
+---
+source: tests\conformance\string_bytes_null.rad
+exit_code: 0
+---
+3
+0
+true

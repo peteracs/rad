@@ -1,0 +1,7 @@
+---
+source: tests\conformance\spawn_with_components.rad
+exit_code: 0
+---
+7
+hero
+9

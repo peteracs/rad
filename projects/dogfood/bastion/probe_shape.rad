@@ -1,0 +1,69 @@
+// PROBE: does the component-write ACL authorize a NAME or a SCHEMA?
+//
+// The grant says the guest may write "Vault". The guest declares its own
+// Vault with a different shape / different field types and writes that.
+
+component Vault { gold: 1000 }
+
+component Seal { locked: 1 }
+
+let v = spawn("vault", Vault { gold: 1000 }, Seal { locked: 1 })
+
+print("=== probe: schema confusion on a granted component name ===")
+
+let caps = f"""{ "write": ["Vault"], "fuel": 500000 }"""
+
+// --- Attack 1: extra field smuggled into a granted component ------------
+let wide = f"""
+component Vault { gold: 0, backdoor: 1 }
+set(get_entity("vault"), Vault { gold: 7, backdoor: 999 })
+print("guest wrote a 2-field Vault")
+"""
+
+match sandbox_run(wide, fork(), caps) {
+    Ok(f1) => {
+        print("A1 accepted (guest widened the schema)")
+        match peek(f1, v, Vault) {
+            Some(got) => { print(f"A1 host peek: {got}") }
+            None => { print("A1 host peek: None") }
+        }
+    }
+    Err(m) => { print(f"A1 rejected: {m}") }
+}
+
+// --- Attack 2: field TYPE confusion (str where host expects int) --------
+let typed = f"""
+component Vault { gold: "pwned" }
+set(get_entity("vault"), Vault { gold: "pwned" })
+print("guest wrote a str-typed Vault.gold")
+"""
+
+match sandbox_run(typed, fork(), caps) {
+    Ok(f2) => {
+        print("A2 accepted (guest changed the field type)")
+        match peek(f2, v, Vault) {
+            Some(got) => { print(f"A2 host peek: {got}") }
+            None => { print("A2 host peek: None") }
+        }
+    }
+    Err(m) => { print(f"A2 rejected: {m}") }
+}
+
+// --- Attack 3: rename fields entirely -----------------------------------
+let renamed = f"""
+component Vault { owner: "attacker" }
+set(get_entity("vault"), Vault { owner: "attacker" })
+"""
+
+match sandbox_run(renamed, fork(), caps) {
+    Ok(f3) => {
+        print("A3 accepted (guest replaced the fields)")
+        match peek(f3, v, Vault) {
+            Some(got) => { print(f"A3 host peek: {got}") }
+            None => { print("A3 host peek: None") }
+        }
+    }
+    Err(m) => { print(f"A3 rejected: {m}") }
+}
+
+print("=== probe done, host survived ===")

@@ -1,0 +1,37 @@
+// backend: both
+// Parser sugar: let Some { ... } = expr else { ... } / let Ok { ... } = expr else { ... }
+
+let some = Option::Some { value: 7 }
+let Some { value: x } = some else {
+    print("bad")
+    0
+}
+print(x)
+
+let none = Option::None {}
+let Some { value: y } = none else {
+    print("none")
+    42
+}
+print(y)
+
+let ok = Result::Ok { value: 99 }
+let Ok { value: a } = ok else {
+    print("err")
+    0
+}
+print(a)
+
+let err = Result::Err { message: "oops" }
+let Ok { value: b } = err else {
+    print("caught")
+    100
+}
+print(b)
+
+// expect: 7
+// expect: none
+// expect: 42
+// expect: 99
+// expect: caught
+// expect: 100

@@ -1,0 +1,9 @@
+---
+source: tests\conformance\let_type_annotation_valid.rad
+exit_code: 0
+---
+42
+hello
+3.14
+true
+2

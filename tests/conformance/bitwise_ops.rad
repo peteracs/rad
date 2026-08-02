@@ -1,0 +1,39 @@
+// Bitwise operators and bit-manipulation builtins (added for bitboard
+// workloads: sudoku/chess-style candidate masks).
+
+// operators
+print(12 & 10)            // 8
+print(12 | 10)            // 14
+print(12 ^ 10)            // 6
+print(511 & 256)          // 256
+print(1 | 2 | 4 | 8)      // 15
+
+// precedence: tighter than comparison, looser than arithmetic
+print(12 & 4 + 4)         // 12 & 8 = 8
+print((12 & 4) == 4)      // true
+print(12 & 4 == 4)        // true (same grouping)
+print(5 & 3 | 8)          // (5&3)|8 = 9  (& tighter than |)
+print(5 | 3 ^ 1)          // 5|(3^1) = 7  (^ tighter than |)
+
+// low-bit idioms (the heart of every bitboard solver)
+let c = 360               // 0b101101000
+print(c & (0 - c))        // 8   (lowest set bit)
+print(c & (c - 1))        // 352 (clear lowest set bit)
+
+// builtins
+print(popcount(c))        // 4
+print(ctz(8))             // 3
+print(ctz(0))             // 64
+print(shl(1, 9))          // 512
+print(shr(512, 4))        // 32
+print(shl(1, 64))         // 0 (out-of-range shift)
+print(popcount(511))      // 9
+
+// negative-int semantics (two's complement, logical shr)
+print(-1 & 255)           // 255
+print(popcount(-1))       // 64
+
+// constant folding path (literals on both sides)
+print(255 & 15)           // 15
+print(256 | 1)            // 257
+print(257 ^ 1)            // 256

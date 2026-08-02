@@ -1,0 +1,13 @@
+// __PROJECT_NAME__ — built with Rad
+
+component Greeting { message: "Hello, Rad!" }
+
+entity greeter {
+  Greeting {}
+}
+
+system SayHello(g: Greeting) {
+  print(g.message)
+}
+
+schedule [SayHello]

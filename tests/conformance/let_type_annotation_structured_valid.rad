@@ -1,0 +1,22 @@
+// backend: both
+component Position { x: 0, y: 0 }
+
+state Door {
+    Closed { on open -> Open }
+    Open { on close -> Closed }
+}
+
+fn main() -> nil {
+    let p: Position = Position { x: 1, y: 2 }
+    let d: Door = Door::Closed
+    let xs: list = [1, 2]
+    let m: map = {"a": 1}
+    print(p.x)
+    print(d)
+    print(len(xs))
+    print(typeof(m))
+}
+// expect: 1
+// expect: Door::Closed
+// expect: 2
+// expect: map

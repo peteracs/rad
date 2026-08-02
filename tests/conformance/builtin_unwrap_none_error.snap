@@ -1,0 +1,8 @@
+---
+source: tests\conformance\builtin_unwrap_none_error.rad
+exit_code: 1
+---
+
+---stderr---
+Error: [line 4] in main: unwrap() called on Option::None
+  hint: expect(value, "why") attaches your own message; require(entity, Comp) names the entity and component when a read fails; unwrap_or(value, default) when missing is fine

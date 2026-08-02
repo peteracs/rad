@@ -1,0 +1,14 @@
+fn make_counter() {
+    let mut n = 0
+    let inc = fn() {
+        n = n + 1
+        return n
+    }
+    return inc
+}
+
+let c = make_counter()
+print(c())
+print(c())
+// expect: 1
+// expect: 2

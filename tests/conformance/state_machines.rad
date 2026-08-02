@@ -1,0 +1,35 @@
+// state, transition, match (avoid printing state values — format differs by backend)
+state Toggle {
+    Off { on flip -> On }
+    On { on flip -> Off }
+}
+let mut t = Toggle::Off
+t = transition(t, "flip") |> unwrap
+match t {
+    Off => { print("off") }
+    On => { print("on") }
+}
+// expect: on
+t = transition(t, "flip") |> unwrap
+match t {
+    Off => { print("off") }
+    On => { print("on") }
+}
+// expect: off
+t = transition(t, "flip") |> unwrap
+match t {
+    Off => { print("off") }
+    On => { print("on") }
+}
+// expect: on
+match transition(t, "nope") {
+    Ok { value } => { print("ok") }
+    Err { message } => { print("err") }
+}
+// expect: err
+t = transition(t, "flip") |> unwrap
+match t {
+    Off => { print("off") }
+    On => { print("on") }
+}
+// expect: off

@@ -1,0 +1,26 @@
+// KIT/SURGE — the stacking-buff slice the passive rides: stack-and-renew
+// with a cap, aged per tick. (The full buff engine lives in buffcore;
+// this is the kit-sized cut.)
+
+use "core.rad"
+
+pub let SURGE_MAX = 5
+pub let SURGE_TICKS = 180        // 6s
+
+pub component Surge { stacks: int = 0, left: int = 0 }
+
+// BUFF_STACKS_AND_RENEWS with MaxStack — every ability hit calls this
+pub fn surge_stack(u: entity) -> nil {
+    let s = require(u, Surge)
+    update(u, Surge) {
+        stacks = min(s.stacks + 1, SURGE_MAX),
+        left = SURGE_TICKS,
+    }
+}
+
+pub system age_surge(s: mut Surge) {
+    if s.left > 0 {
+        s.left = s.left - 1
+        if s.left == 0 { s.stacks = 0 }
+    }
+}

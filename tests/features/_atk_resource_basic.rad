@@ -1,0 +1,16 @@
+resource GlobalCounter {
+  value: 0
+}
+
+system Bump(c: mut GlobalCounter) {
+  c.value = c.value + 1
+}
+
+fn main() -> nil {
+  schedule [Bump]
+  schedule [Bump]
+  let c = get_resource(GlobalCounter) ?
+  print(f"counter={c.value}")
+}
+
+// expect: counter=2

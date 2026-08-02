@@ -1,0 +1,11 @@
+// pop() returns the last element of a list (same as pop_last)
+print(pop([1, 2, 3]))
+// expect: 3
+print(pop(["x", "y"]))
+// expect: y
+print(pop([[1], [2], [3]]))
+// expect: [3]
+
+// Use drop_last() to get the remaining list
+print(drop_last([1, 2, 3]))
+// expect: [1, 2]

@@ -1,0 +1,12 @@
+// BUG 05 — baseline program to record.
+//
+//   rad projects/dogfood/strongbox/bugs/05_retro_write_hole/record.rad \
+//       --record projects/dogfood/strongbox/bugs/05_retro_write_hole/base.radr
+
+component Counter { n: 0 }
+
+let _c = spawn("c", Counter { n: 1 })
+let c = get(get_entity("c"), Counter) |> unwrap
+
+write_file("D:/Temp/strongbox_retro_probe.txt", f"value {c.n}")
+print(f"wrote value {c.n}")

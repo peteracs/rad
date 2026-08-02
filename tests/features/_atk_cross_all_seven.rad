@@ -1,0 +1,66 @@
+// Cross: use ALL 7 extensions in one tight program
+component Counter { value: 0, label: "" }
+event Bump { target: entity, amount: int }   // [4] typed event fields
+
+// [7] guarded handler
+on Bump(e) where e.amount != 0 {
+    let c = unwrap(get(e.target, Counter))
+    // [6] update sugar
+    update(e.target, Counter) { value = c.value + e.amount }
+}
+
+system Tick(c: mut Counter) {
+    c.value = c.value + 1
+}
+
+// [3] named phase
+phase Step { Tick }
+
+// [1] main -> nil with ?
+fn main() -> nil {
+    let a = spawn(Counter { value: 0, label: "alpha" })
+    let b = spawn(Counter { value: 10, label: "beta" })
+    let c = spawn(Counter { value: 100, label: "gamma" })
+
+    schedule [Step]
+
+    emit Bump { target: a, amount: 5 }
+    emit Bump { target: b, amount: 0 }
+    emit Bump { target: c, amount: -3 }
+    flush_events()
+
+    let ids = [a, b, c]
+
+    // [2] enumerate
+    for pair in enumerate(ids) {
+        let idx = pair[0]
+        let id = pair[1]
+        let ct = get(id, Counter)?
+        print(f"  [{idx}] {ct.label}: {ct.value}")
+    }
+
+    // [5] find — snapshot data first (pure), then find
+    let mut snapshots = []
+    for id in ids {
+        let ct = unwrap(get(id, Counter))
+        snapshots << [id, ct.label, ct.value]
+    }
+
+    let big = find(snapshots, fn(s) { return s[2] > 50 })
+    match big {
+        Some(s) => { print(f"  big one: {s[1]} = {s[2]}") }
+        None => { print("  none big") }
+    }
+
+    // [5] max_by / min_by
+    let highest = max_by(snapshots, fn(s) { return s[2] })
+    let lowest = min_by(snapshots, fn(s) { return s[2] })
+    match highest {
+        Some(s) => { print(f"  max: {s[1]} = {s[2]}") }
+        None => { print("  empty") }
+    }
+    match lowest {
+        Some(s) => { print(f"  min: {s[1]} = {s[2]}") }
+        None => { print("  empty") }
+    }
+}

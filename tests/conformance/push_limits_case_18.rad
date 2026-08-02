@@ -1,0 +1,14 @@
+// backend: both
+state Incident {
+    Green { on warn -> Yellow }
+    Yellow { on fail -> Red on clear -> Green }
+    Red { on clear -> Yellow }
+}
+let mut mode = Incident::Green
+mode = transition(mode, "warn") |> unwrap
+mode = transition(mode, "fail") |> unwrap
+match transition(mode, "unknown") {
+    Ok { value } => { print("CASE18:ok") }
+    Err { message } => { print("CASE18:err") }
+}
+// expect: CASE18:err

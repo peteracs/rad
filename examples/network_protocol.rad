@@ -1,0 +1,133 @@
+// =====================================================================
+//  Network Protocol — TCP-like connection state machine
+// =====================================================================
+
+state TCPState {
+    Closed {
+        on listen -> Listen
+        on syn_sent -> SynSent
+    }
+    Listen {
+        on syn_rcvd -> SynReceived
+        on close -> Closed
+    }
+    SynSent {
+        on syn_ack -> Established
+        on timeout -> Closed
+    }
+    SynReceived {
+        on ack -> Established
+        on timeout -> Listen
+    }
+    Established {
+        on fin_sent -> FinWait
+        on fin_rcvd -> CloseWait
+    }
+    FinWait {
+        on ack -> Closed
+    }
+    CloseWait {
+        on close -> Closed
+    }
+}
+
+event PacketSent { from_port, to_port, packet_type }
+
+event PacketReceived { port, packet_type }
+
+event ConnectionLog { message }
+
+on PacketSent(e) {
+    print(f"  [->] :{e.from_port} -> :{e.to_port} [{e.packet_type}]")
+}
+
+on PacketReceived(e) {
+    print(f"  [<-] :{e.port} received [{e.packet_type}]")
+}
+
+on ConnectionLog(e) {
+    print(f"  [LOG] {e.message}")
+}
+
+fn state_str(s) {
+    let mut name = ""
+    match s {
+        Closed => { name = "CLOSED" }
+        Listen => { name = "LISTEN" }
+        SynSent => { name = "SYN_SENT" }
+        SynReceived => { name = "SYN_RECEIVED" }
+        Established => { name = "ESTABLISHED" }
+        FinWait => { name = "FIN_WAIT" }
+        CloseWait => { name = "CLOSE_WAIT" }
+    }
+    return name
+}
+
+fn main() -> any {
+    print("=== TCP Connection Simulation ===\n")
+
+    let mut server = TCPState::Closed
+    let mut client = TCPState::Closed
+
+    // Server starts listening
+    emit ConnectionLog { message: "Server starting on port 8080..." }
+    server = transition(server, "listen") ?
+    print(f"  Server: {state_str(server)}")
+
+    // Client initiates connection (3-way handshake)
+    print("\n--- Three-Way Handshake ---")
+
+    // SYN
+    client = transition(client, "syn_sent") ?
+    emit PacketSent { from_port: 49152, to_port: 8080, packet_type: "SYN" }
+    print(f"  Client: {state_str(client)}")
+
+    // SYN-ACK
+    emit PacketReceived { port: 8080, packet_type: "SYN" }
+    server = transition(server, "syn_rcvd") ?
+    emit PacketSent { from_port: 8080, to_port: 49152, packet_type: "SYN-ACK" }
+    print(f"  Server: {state_str(server)}")
+
+    // ACK (client side)
+    emit PacketReceived { port: 49152, packet_type: "SYN-ACK" }
+    client = transition(client, "syn_ack") ?
+    emit PacketSent { from_port: 49152, to_port: 8080, packet_type: "ACK" }
+    print(f"  Client: {state_str(client)}")
+
+    // ACK (server side)
+    emit PacketReceived { port: 8080, packet_type: "ACK" }
+    server = transition(server, "ack") ?
+    print(f"  Server: {state_str(server)}")
+
+    emit ConnectionLog { message: "Connection established!" }
+
+    // Data transfer
+    print("\n--- Data Transfer ---")
+    let messages = ["GET /index.html", "HTTP/1.1 200 OK", "GET /style.css", "HTTP/1.1 200 OK"]
+    for msg in messages {
+        emit PacketSent { from_port: 49152, to_port: 8080, packet_type: f"DATA: {msg}" }
+    }
+
+    // Byte statistics
+    let sizes = [128, 4096, 96, 2048]
+    let total = sizes |> reduce(0, fn(a, b) { return a + b })
+    print(f"  Total bytes: {total}")
+
+    // Connection teardown
+    print("\n--- Connection Teardown ---")
+    client = transition(client, "fin_sent") ?
+    emit PacketSent { from_port: 49152, to_port: 8080, packet_type: "FIN" }
+    print(f"  Client: {state_str(client)}")
+
+    server = transition(server, "fin_rcvd") ?
+    emit PacketSent { from_port: 8080, to_port: 49152, packet_type: "ACK" }
+    print(f"  Server: {state_str(server)}")
+
+    // Close both sides
+    client = transition(client, "ack") ?
+    server = transition(server, "close") ?
+    print(f"  Client: {state_str(client)}")
+    print(f"  Server: {state_str(server)}")
+
+    emit ConnectionLog { message: "Connection closed cleanly." }
+}

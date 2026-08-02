@@ -1,0 +1,18 @@
+// SUSPECT: the same variant matched twice; the second arm is dead.
+type Light {
+    Red {}
+    Green {}
+}
+
+fn go(l: Light) -> str {
+    match l {
+        Red => { return "first" }
+        Red => { return "second (dead)" }
+        Green => { return "green" }
+    }
+}
+
+fn main() -> nil {
+    let r = Light::Red {}
+    print(go(r))
+}

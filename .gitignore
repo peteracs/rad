@@ -1,0 +1,121 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+.venv/
+venv/
+.pytest_cache/
+
+# Rust
+# Any Cargo target dir at any depth, plus the ad-hoc `target-<purpose>` /
+# `target_<purpose>` dirs used for isolated check/test runs. Deliberately not
+# `target*/`, which would also swallow `projects/dogfood/radgui/targets/`.
+target/
+target-*/
+target_*/
+**/*.rs.bk
+
+# Compiled binaries
+*.exe
+*.pdb
+*.dll
+*.so
+*.dylib
+
+# IDE
+.vscode/
+.cursor/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Rad build artifacts
+*.radc
+*.bak
+a.out
+*_err.txt
+
+# wasm-pack output (workflow builds core/vm/pkg; local playground builds projects/playground/pkg)
+/core/vm/pkg/
+# Copied or synced next to playground HTML (same artifacts as core/vm/pkg)
+/projects/playground/pkg/
+/projects/playground/pkg-node/
+/core/simcore/pkg/
+/core/simcore/pkg-node/
+
+# JavaScript (VS Code extension / future tooling)
+node_modules/
+/tooling/editors/vscode/out/
+
+# Python type/check tooling
+.mypy_cache/
+.ruff_cache/
+
+# Test / coverage
+.coverage
+htmlcov/
+coverage.xml
+
+# Local env files
+.env
+.env.*
+!.env.example
+/projects/moba-rad/server/edge-proxy/certs/
+# Persisted self-signed WebTransport dev cert (stable hash across reboots)
+/projects/moba-rad/server/edge-proxy/.dev-certs/
+/projects/moba-rad/client/.tmp-test/
+/projects/moba-rad/client/dist/
+/projects/moba-rad/server/moba-rad-match.replay
+
+# Logs
+*.log
+# Agent/tool run logs and profiler traces: machine-local and large (100s of MB).
+.codex-runlogs/
+Trace-*.json
+
+# Generated screenshots and training outputs
+/projects/playground/*.png
+/arena/runs/
+*.pt
+*.onnx
+
+# Lab demo runtime state
+/projects/dogfood/radsheet/demo/wa/
+/projects/dogfood/radsheet/demo/wb/
+/projects/dogfood/radtrack/demo/na/
+/projects/dogfood/radtrack/demo/nb/
+/projects/dogfood/radtrack/demo/wa/
+/projects/dogfood/radtrack/demo/wa2/
+/projects/dogfood/radtrack/demo/wb2/
+/projects/dogfood/radtrack/demo/wr/
+/projects/dogfood/radtrack/demo/name_world.radw
+/projects/dogfood/radtrack/demo/name_incident.radr
+/projects/dogfood/radtrack/demo/rolling_world.radw
+/projects/dogfood/radtrack/demo/rolling_world_v2.radw
+/projects/dogfood/radtrack/demo/server_world_v2.radw
+/projects/dogfood/radtrack/demo/session_offline.txt
+/projects/dogfood/tactics/session_play.txt
+/projects/dogfood/todo/session*.txt
+/projects/dogfood/syncdesk/session_*.txt
+/projects/dogfood/moba/golden_treeline.txt
+/projects/tutorial/task-board/sync_demo/
+
+# Generated reports
+/reports/
+
+# Docs site (mdBook)
+/docs/book/
+/projects/moba-rad/docs/book/
+
+# Dev scratch / temp files
+/temp/
+/scratch/

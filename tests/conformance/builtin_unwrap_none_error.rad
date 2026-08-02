@@ -1,0 +1,5 @@
+// unwrap() on Option::None must produce a runtime error
+// rust-mode: no-check
+let bad = try_int("nope")
+unwrap(bad)
+// expect-runtime-error: unwrap() called on Option::None

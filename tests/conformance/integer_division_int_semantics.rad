@@ -1,0 +1,13 @@
+// Integer division with int operands must stay int (truncate toward zero)
+print(7 / 2)
+// expect: 3
+print(-7 / 2)
+// expect: -3
+print(7 / -2)
+// expect: -3
+
+// Float semantics still work when either side is float
+print(7.0 / 2)
+// expect: 3.5
+print(7 / 2.0)
+// expect: 3.5

@@ -1,0 +1,57 @@
+// recent_events(name, window) — the queryable past. Every dispatched
+// event lands in the deterministic log; the recap-style consumers window
+// it instead of hand-rolling ring buffers. Also: `_` discards in tuple
+// destructuring (multiple allowed).
+
+component Tick {}
+
+system clock(Tick) {}
+
+pub event Ping { n: int }
+pub event Pong { n: int }
+
+on Ping(e) {
+    let _ = e.n
+}
+
+on Pong(e) {
+    let _ = e.n
+}
+
+fn tick(n: int) -> nil {
+    for _ in range(0, n) { schedule [clock] }
+}
+
+fn main() -> nil {
+    let _c = entity "c" { Tick {} }
+
+    emit Ping { n: 1 }
+    tick(5)
+    emit Ping { n: 2 }
+    emit Pong { n: 99 }
+    tick(2)
+    emit Ping { n: 3 }
+    tick(1)
+
+    // name-filtered, oldest first
+    print(recent_events("Ping", 100) |> map(.n))     // [1, 2, 3]
+    print(recent_events("Pong", 100) |> map(.n))     // [99]
+
+    // the window cuts old history: only the last ~4 ticks
+    print(recent_events("Ping", 4) |> map(.n))       // [2, 3]
+
+    // window N means "this tick and N back" — 0 is the current tick only
+    print(recent_events("Ping", 0) |> len)           // 1
+
+    // unknown names are empty, not errors
+    print(recent_events("Nope", 100) |> len)         // 0
+
+    // aggregation composes: the recap shape
+    let total = recent_events("Ping", 100) |> map(.n) |> sum
+    print(total)                                      // 6
+
+    // `_` discards in tuple destructuring, several at once
+    let row = (1, "mid", 3.5)
+    let (_, lane, _) = row
+    print(lane)                                       // mid
+}

@@ -1,0 +1,60 @@
+// RADSCOPE demo target: a murder mystery for the causality ledger.
+//
+// The hero starts with 100 gold and ends nearly broke. THREE different
+// handlers touch the gold — the taxman, the church, and a burglar — across
+// twelve frames. Scrub the timeline to see WHEN the gold moved, then ask
+// why(hero, Purse) at any frame to get the named culprit of each hit.
+
+component Purse { gold: int = 0 }
+
+component Mood { feeling: str = "fine" }
+
+event Tax { pct: int }
+
+event Tithe { amount: int }
+
+event Heist { burglar: str, amount: int }
+
+on Tax(e) {
+    let hero = get_entity("hero")
+    let p = get(hero, Purse) ?
+    let cut = p.gold * e.pct / 100
+    update(hero, Purse) { gold = p.gold - cut }
+    print(f"the taxman takes {cut}")
+}
+
+on Tithe(e) {
+    let hero = get_entity("hero")
+    let p = get(hero, Purse) ?
+    update(hero, Purse) { gold = p.gold - e.amount }
+    print(f"the church receives {e.amount}")
+}
+
+on Heist(e) {
+    let hero = get_entity("hero")
+    let p = get(hero, Purse) ?
+    update(hero, Purse) { gold = p.gold - e.amount }
+    update(hero, Mood) { feeling = "robbed" }
+    print(f"{e.burglar} makes off with {e.amount}")
+}
+
+fn main() -> nil {
+    let _hero = entity "hero" { Purse { gold: 100 }, Mood { feeling: "fine" } }
+    let _watch = entity "the-watch" { Mood { feeling: "oblivious" } }
+
+    for day in range(1, 13) {
+        if day % 4 == 0 {
+            emit Tax { pct: 10 }
+        }
+        if day % 6 == 0 {
+            emit Tithe { amount: 7 }
+        }
+        if day == 9 {
+            emit Heist { burglar: "moonlight-pete", amount: 30 }
+        }
+        flush_events()
+    }
+
+    let p = get(get_entity("hero"), Purse) |> unwrap
+    print(f"the hero is left with {p.gold} gold. who took it?")
+}

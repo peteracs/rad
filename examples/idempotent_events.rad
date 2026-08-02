@@ -1,0 +1,26 @@
+// =====================================================================
+//  Rad — on ... once: idempotent handler
+//  A normal on Handler runs for every emit. A once handler runs only
+//  the first time that handler is invoked; later emits skip it. Use
+//  this for one-shot side effects (tutorial popups, migrations, etc.).
+//  Order: handlers for the same event run in declaration order; both
+//  may see the first emit, but only the normal handler sees later ones.
+// =====================================================================
+
+event Tick { n }
+
+on Tick(t) {
+    print(f"  every time: Tick n={t.n}")
+}
+
+on Tick once(t) {
+    print(f"  once only:  Tick n={t.n}")
+}
+
+fn main() -> any {
+    print("=== Emit Tick three times ===\n")
+    emit Tick { n: 1 }
+    emit Tick { n: 2 }
+    emit Tick { n: 3 }
+    print("\nCompare: first block prints thrice; second prints once.")
+}

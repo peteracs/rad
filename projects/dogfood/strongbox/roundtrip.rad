@@ -1,0 +1,147 @@
+// strongbox — the round-trip contract harness.
+//
+//   rad projects/dogfood/strongbox/roundtrip.rad
+//
+// Every persistence path in Rad claims to be lossless. This file makes each
+// claim executable and fails loudly if one is not:
+//
+//   R1  load_world(save_world()) leaves world_digest() unchanged
+//   R2  save -> load -> save is BYTE-identical (canonical serialization)
+//   R3  world_digest(fork()) == world_digest() of the world it forked
+//   R4  fork_from_bytes(fork_to_bytes(f)) re-encodes byte-identically
+//   R5  a committed decoded fork restores the original world_digest
+//   R6  split(bytes, " ")[1] is the payload digest in BOTH wire formats
+//       (docs/src/reference/builtins.md: "always the second space-separated
+//       token" — legacy JSON under ~4 KB, RADPACK1 above it)
+//   R7  a save round-trips unchanged a SECOND time (no drift on re-entry)
+
+component Incident { code: "", severity: 1, status: "open", opened_at: 0, sla_mins: 60 }
+
+component Assignee { name: "", team: "unassigned" }
+
+component Source { origin: "" }
+
+resource Ledger { count: 0, region: "", revision: 3 }
+
+fn check(label: str, cond: bool) -> int {
+    if cond {
+        print(f"  PASS  {label}")
+        return 0
+    }
+    print(f"  FAIL  {label}")
+    return 1
+}
+
+fn reset() -> nil {
+    for e in entities() {
+        despawn(e)
+    }
+    return nil
+}
+
+fn seed(n: int) -> nil {
+    for i in range(0, n) {
+        spawn(
+            f"inc-{2000 + i}",
+            Incident { code: f"CODE_{i % 7}", severity: 1 + i % 5, status: "open", opened_at: i * 60, sla_mins: 30 },
+            Assignee { name: f"eng-{i % 3}", team: "platform" },
+            Source { origin: "monitor" },
+        )
+    }
+    set_resource(Ledger, Ledger { count: n, region: "us-east", revision: 3 })
+    return nil
+}
+
+// The wire digest token, per the documented invariant.
+fn wire_token(bytes: str) -> str {
+    let parts = split(bytes, " ")
+    if len(parts) < 2 {
+        return "<no-token>"
+    }
+    return parts[1]
+}
+
+fn wire_format(bytes: str) -> str {
+    if len(bytes) >= 9 and slice(bytes, 0, 9) == "RADPACK1:" {
+        return "RADPACK1"
+    }
+    return "legacy"
+}
+
+let mut fails = 0
+
+print("=== strongbox round-trip contract ===")
+
+// ---------------------------------------------------------------- small world
+seed(4)
+
+let d0 = world_digest()
+let save_a = save_world()
+let _n = load_world(save_a)
+let d1 = world_digest()
+let save_b = save_world()
+
+fails = fails + check("R1 save/load preserves world_digest", d0 == d1)
+fails = fails + check("R2 save -> load -> save is byte-identical", save_a == save_b)
+
+let _n2 = load_world(save_b)
+let save_c = save_world()
+fails = fails + check("R7 second round-trip still byte-identical", save_b == save_c)
+
+let f = fork()
+fails = fails + check("R3 world_digest(fork) == world_digest()", world_digest(f) == world_digest())
+
+let bytes_small = fork_to_bytes(f)
+print(f"  .. small payload {len(bytes_small)} bytes, format {wire_format(bytes_small)}")
+
+match fork_from_bytes(bytes_small) {
+    Ok(decoded) => {
+        let reencoded = fork_to_bytes(decoded)
+        fails = fails + check("R4 fork bytes re-encode byte-identically (small)", bytes_small == reencoded)
+        fails = fails + check("R5 decoded fork keeps world_digest (small)", world_digest(decoded) == d0)
+    }
+    Err(m) => {
+        fails = fails + check(f"R4/R5 decode of clean small payload: {m}", false)
+    }
+}
+
+fails = fails + check(
+    f"R6 digest token present in {wire_format(bytes_small)} payload (got '{wire_token(bytes_small)}')",
+    len(wire_token(bytes_small)) == 64,
+)
+
+// ---------------------------------------------------------------- large world
+// Past ~4 KB the codec switches to RADPACK1; the same invariants must hold.
+print("  -- re-seeding large world (RADPACK path) --")
+reset()
+seed(400)
+
+let dL = world_digest()
+let fL = fork()
+let bytes_big = fork_to_bytes(fL)
+print(f"  .. large payload {len(bytes_big)} bytes, format {wire_format(bytes_big)}")
+
+fails = fails + check("large payload actually took the RADPACK path", wire_format(bytes_big) == "RADPACK1")
+
+match fork_from_bytes(bytes_big) {
+    Ok(decoded) => {
+        let reencoded = fork_to_bytes(decoded)
+        fails = fails + check("R4 fork bytes re-encode byte-identically (large)", bytes_big == reencoded)
+        fails = fails + check("R5 decoded fork keeps world_digest (large)", world_digest(decoded) == dL)
+    }
+    Err(m) => {
+        fails = fails + check(f"R4/R5 decode of clean large payload: {m}", false)
+    }
+}
+
+fails = fails + check(
+    f"R6 digest token present in {wire_format(bytes_big)} payload (got '{wire_token(bytes_big)}')",
+    len(wire_token(bytes_big)) == 64,
+)
+
+let save_big_a = save_world()
+let _n3 = load_world(save_big_a)
+fails = fails + check("R1 save/load preserves world_digest (large)", world_digest() == dL)
+fails = fails + check("R2 save -> load -> save byte-identical (large)", save_world() == save_big_a)
+
+print(f"=== round-trip: {fails} failure(s) ===")

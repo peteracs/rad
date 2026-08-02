@@ -1,0 +1,7 @@
+---
+source: tests\conformance\async_task_error_propagation.rad
+exit_code: 1
+---
+
+---stderr---
+Error: [line 8] in main: Task 1 failed: Task 2 failed: pop() on empty list

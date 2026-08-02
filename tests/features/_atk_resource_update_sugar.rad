@@ -1,0 +1,15 @@
+resource BuildPool {
+  free: 2,
+  last: ""
+}
+
+fn main() -> nil {
+  update(BuildPool) {
+    free = 7,
+    last = "linux-amd64"
+  }
+  let p = get_resource(BuildPool) ?
+  print(f"pool={p.free}:{p.last}")
+}
+
+// expect: pool=7:linux-amd64

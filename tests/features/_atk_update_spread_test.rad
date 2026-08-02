@@ -1,0 +1,9 @@
+// Isolate: does set with ..unwrap(get(e, C)) fail when C is missing?
+component C { x: 0 }
+
+fn main() -> nil {
+    let e = spawn()
+    print("before set")
+    set(e, C { x: 5, ..unwrap(get(e, C)) })
+    print("after set")
+}

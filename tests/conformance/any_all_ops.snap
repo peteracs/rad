@@ -1,0 +1,13 @@
+---
+source: tests\conformance\any_all_ops.rad
+exit_code: 0
+---
+true
+false
+true
+false
+false
+true
+true
+true
+2

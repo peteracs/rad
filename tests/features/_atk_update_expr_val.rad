@@ -1,0 +1,19 @@
+// Attack: update with complex expressions as values
+component Stats { hp: 100, shield: 0 }
+
+fn calc_shield(base: int) -> int {
+    return base * 2 + 5
+}
+
+fn main() -> nil {
+    let e = spawn(Stats { hp: 100, shield: 0 })
+    let damage = 30
+    update(e, Stats) {
+        hp = 100 - damage,
+        shield = calc_shield(10)
+    }
+    let s = unwrap(get(e, Stats))
+    print(f"hp={s.hp} shield={s.shield}")
+}
+
+// expect: hp=70 shield=25

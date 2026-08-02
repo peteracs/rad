@@ -1,0 +1,6 @@
+# Keep text files normalized to LF across platforms. This avoids local
+# core.autocrlf settings rewriting source files on checkout.
+* text=auto eol=lf
+
+# Shell scripts use LF for cross-platform CI.
+*.sh text eol=lf

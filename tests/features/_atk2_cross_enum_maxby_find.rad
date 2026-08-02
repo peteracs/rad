@@ -1,0 +1,28 @@
+// Cross: enumerate + max_by + find chained on same data
+fn main() -> nil {
+    let words = ["hi", "hello", "hey", "howdy", "h"]
+
+    // enumerate then find the pair with longest word
+    let pairs = enumerate(words)
+    let longest_pair = max_by(pairs, fn(p) { return len(p[1]) })
+
+    match longest_pair {
+        Some(p) => { print(f"longest: idx={p[0]} word={p[1]}") }
+        None => { print("empty") }
+    }
+
+    // find first word starting with "he"
+    let he_word = find(words, fn(w) { return len(w) >= 2 and w[0] == 104 and w[1] == 101 })
+    match he_word {
+        Some(w) => { print(f"first 'he' word: {w}") }
+        None => { print("none") }
+    }
+
+    // min_by on enumerated — smallest index with word len > 2
+    let long_pairs = filter(pairs, fn(p) { return len(p[1]) > 2 })
+    let first_long = min_by(long_pairs, fn(p) { return p[0] })
+    match first_long {
+        Some(p) => { print(f"first long word: idx={p[0]} word={p[1]}") }
+        None => { print("none") }
+    }
+}

@@ -1,0 +1,8 @@
+// backend: both
+let mixed = {"scores": [1, 2, 3], "owner_count": 3}
+print(typeof(mixed))
+// expect: map
+print(mixed["owner_count"])
+// expect: 3
+print(len(mixed["scores"]))
+// expect: 3

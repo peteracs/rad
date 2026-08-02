@@ -1,0 +1,35 @@
+// Dogfood: List item #6 — retroactive edits.
+//
+// Phase 3's bisection localized the bug to buggy.rad line 22 (Gold drained
+// when hp crossed 80). This is the fix. Before shipping it, replay the
+// ORIGINAL recorded session against THIS file — the trace's io answers the
+// edited code, and the report shows exactly what the fix changes:
+//
+//   rad replay projects/dogfood/timetravel/buggy.radr --with projects/dogfood/timetravel/fixed.rad
+//
+// Expected blast radius: {Gold: 1} — the fix restores the drained gold and
+// touches nothing else. Health histories are byte-identical.
+
+component Health { hp: 100 }
+
+component Gold { amount: 50 }
+
+event Hit { amount }
+
+let hero = spawn("hero", Health { hp: 100 }, Gold { amount: 50 })
+
+on Hit(e) {
+    let h = get(hero, Health) |> unwrap
+    set(hero, Health { hp: h.hp - e.amount })
+    // The drain is gone. Taking damage no longer robs the hero.
+}
+
+print("=== Fixed run (replayed against the buggy session's inputs) ===")
+for _i in range(0, 4) {
+    emit Hit { amount: 10 }
+    flush_events()
+}
+
+let h = get(hero, Health) |> unwrap
+let g = get(hero, Gold) |> unwrap
+print(f"hero ends with hp={h.hp}, gold={g.amount}")

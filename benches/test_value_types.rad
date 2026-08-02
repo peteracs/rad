@@ -1,0 +1,80 @@
+pub component Point { x: float = 0.0, y: float = 0.0 }
+pub component Config { name: str = "", value: int = 0 }
+
+fn make_point(x: float, y: float) -> Point {
+    return Point { x: x, y: y }
+}
+
+fn point_sum(p: Point) -> float {
+    return p.x + p.y
+}
+
+fn clone_point(p: Point) -> Point {
+    return p
+}
+
+fn add_points(a: Point, b: Point) -> float {
+    return a.x + a.y + b.x + b.y
+}
+
+fn make_config(name: str, value: int) -> Config {
+    return Config { name: name, value: value }
+}
+
+fn describe_config(c: Config) -> str {
+    return f"{c.name}={c.value}"
+}
+
+fn main() -> nil {
+    let p: Point = make_point(3.0, 4.0)
+    print(p.x)
+    print(p.y)
+    print(point_sum(p))
+
+    let p2: Point = Point { x: 10.0, y: 20.0 }
+    print(p2.x)
+    print(p2.y)
+    print(point_sum(p2))
+
+    let c: Config = make_config("debug", 1)
+    print(c.name)
+    print(c.value)
+    print(describe_config(c))
+
+    let c2: Config = Config { name: "release", value: 0 }
+    print(describe_config(c2))
+
+    // Fix #1: value-typed let inside nested block
+    if true {
+        let np: Point = Point { x: 50.0, y: 60.0 }
+        print(np.x)
+        print(np.y)
+    }
+
+    // Fix #2: field access on function return value
+    print(make_point(7.0, 8.0).x)
+    print(make_point(7.0, 8.0).y)
+
+    // Fix #3: inline struct literal as function argument
+    print(point_sum(Point { x: 100.0, y: 200.0 }))
+    print(describe_config(Config { name: "inline", value: 42 }))
+
+    // Bug fix: returning a comp_param by value (dereference)
+    let cloned: Point = clone_point(p)
+    print(cloned.x)
+    print(cloned.y)
+
+    // Bug fix: multiple comp_params in one function
+    print(add_points(p, p2))
+
+    // Bug fix: assigning comp_param to a local value-typed variable
+    let p3: Point = clone_point(Point { x: 77.0, y: 88.0 })
+    print(p3.x)
+    print(p3.y)
+
+    // ECS path still works
+    let e1 = entity { Point { x: 100.0, y: 200.0 } }
+    let ep = require(e1, Point)
+    print(ep.x)
+    print(ep.y)
+}

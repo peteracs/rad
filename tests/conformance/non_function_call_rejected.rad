@@ -1,0 +1,6 @@
+// backend: both
+fn main() -> nil {
+    let x = 1
+    x()
+}
+// expect-runtime-error: call

@@ -1,0 +1,8 @@
+---
+source: tests\conformance\readonly_inference.rad
+exit_code: 0
+---
+60
+["a", "b", "c"]
+a
+["a", "c", "b"]

@@ -1,0 +1,7 @@
+---
+source: tests\features\test_update_sugar.rad
+exit_code: 0
+---
+health after update: 50/100
+position after update: (20, 30)
+health max changed, current preserved: 50/200

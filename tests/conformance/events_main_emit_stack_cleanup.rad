@@ -1,0 +1,29 @@
+// backend: both
+event Ping { k }
+
+on Ping(e) {
+    print(e.k)
+}
+
+state DoorState {
+    Locked { on unlock -> Open }
+    Open { on lock -> Locked }
+}
+
+fn first_even(xs) {
+    let ys = filter(xs, fn(x) { return x % 2 == 0 })
+    return ys[0]
+}
+
+fn main() -> nil {
+    emit Ping { k: 10 }
+    emit Ping { k: 20 }
+    flush_events()
+    let door = DoorState::Locked
+    print(door)
+    print(first_even([1, 2, 3]))
+}
+// expect: 10
+// expect: 20
+// expect: DoorState::Locked
+// expect: 2

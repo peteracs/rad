@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rad Playground</title>
+<style>
+  :root {
+    --bg: #1a1b26;
+    --surface: #24283b;
+    --border: #3b4261;
+    --text: #c0caf5;
+    --muted: #565f89;
+    --accent: #7aa2f7;
+    --green: #9ece6a;
+    --red: #f7768e;
+    --yellow: #e0af68;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+  header {
+    padding: 12px 24px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  header h1 { font-size: 1.2rem; color: var(--accent); }
+  header .subtitle { font-size: 0.85rem; color: var(--muted); }
+  .toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+  }
+  button {
+    padding: 6px 16px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--surface);
+    color: var(--text);
+    cursor: pointer;
+    font-size: 0.85rem;
+    transition: all 0.15s;
+  }
+  button:hover { background: var(--border); }
+  button.primary {
+    background: var(--accent);
+    color: var(--bg);
+    border-color: var(--accent);
+    font-weight: 600;
+  }
+  button.primary:hover { opacity: 0.9; }
+  select {
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--surface);
+    color: var(--text);
+    font-size: 0.85rem;
+  }
+  .main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+  }
+  @media (min-width: 768px) {
+    .main { flex-direction: row; }
+  }
+  .editor-pane, .output-pane {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 300px;
+  }
+  .pane-header {
+    padding: 8px 16px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    font-size: 0.8rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .editor-pane { border-right: 1px solid var(--border); }
+  textarea {
+    flex: 1;
+    width: 100%;
+    padding: 16px;
+    background: var(--bg);
+    color: var(--text);
+    border: none;
+    resize: none;
+    font-family: "JetBrains Mono", "Fira Code", "Consolas", monospace;
+    font-size: 14px;
+    line-height: 1.6;
+    tab-size: 4;
+    outline: none;
+  }
+  #output {
+    flex: 1;
+    padding: 16px;
+    font-family: "JetBrains Mono", "Fira Code", "Consolas", monospace;
+    font-size: 14px;
+    line-height: 1.6;
+    overflow: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+  .output-error { color: var(--red); }
+  .output-success { color: var(--green); }
+  .status {
+    padding: 6px 16px;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    font-size: 0.75rem;
+    color: var(--muted);
+    display: flex;
+    justify-content: space-between;
+  }
+  .loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    font-size: 1.1rem;
+    color: var(--muted);
+  }
+</style>
+</head>
+<body>
+<div id="loading" class="loading">Loading Rad VM (WASM)...</div>
+<div id="app" style="display:none; flex-direction:column; min-height:100vh;">
+  <header>
+    <h1>Rad Playground</h1>
+    <span class="subtitle">The Three-Law Language</span>
+    <div class="toolbar">
+      <select id="examples" title="Load example">
+        <option value="">-- Examples --</option>
+        <option value="hello">Hello World</option>
+        <option value="ecs">ECS Demo</option>
+        <option value="demo">Three Laws Demo</option>
+        <option value="pipeline">Pipeline Pattern</option>
+        <option value="traffic_light">Traffic Light FSM</option>
+      </select>
+      <button class="primary" id="runBtn" title="Ctrl+Enter">Run</button>
+      <button id="clearBtn">Clear</button>
+    </div>
+  </header>
+  <div class="main">
+    <div class="editor-pane">
+      <div class="pane-header">Source</div>
+      <textarea id="editor" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"></textarea>
+    </div>
+    <div class="output-pane">
+      <div class="pane-header">Output</div>
+      <div id="output"></div>
+    </div>
+  </div>
+  <div class="status">
+    <span id="statusText">Ready</span>
+    <span>Rad v0.5 | Rust VM via WebAssembly</span>
+  </div>
+</div>
+
+<script>
+const EXAMPLES = {
+  hello: `// Hello from Rad!
+fn main() -> nil {
+    print("Hello from Rad!")
+    print("The Three-Law Language:")
+    print("  1. Separate Data from Logic (ECS)")
+    print("  2. Move Data Through Pipelines")
+    print("  3. Communicate Via Events")
+
+    let scores = [10, -5, 20, 0, 15]
+        |> filter(fn(s) { return s > 0 })
+        |> map(fn(s) { return s * 2 })
+        |> reduce(0, fn(a, b) { return a + b })
+    print(f"Pipeline result: {scores}")
+}`,
+
+  ecs: `// ECS - Separate Data from Logic
+component Position { x: 0.0, y: 0.0 }
+component Velocity { dx: 1.0, dy: 0.5 }
+component Name { value: "" }
+
+system Physics(pos: mut Position, vel: Velocity) {
+    pos.x = pos.x + vel.dx
+    pos.y = pos.y + vel.dy
+}
+
+fn main() -> nil {
+    let player = spawn("player",
+        Name { value: "Player" },
+        Position { x: 0.0, y: 0.0 },
+        Velocity { dx: 2.0, dy: 1.5 }
+    )
+    print("Before:")
+    let p = get(player, Position) |> unwrap
+    let n = get(player, Name) |> unwrap
+    print(f"  {n.value}: ({p.x}, {p.y})")
+
+    for t in range(3) {
+        Physics()
+    }
+
+    print("After 3 ticks:")
+    let p2 = get(player, Position) |> unwrap
+    print(f"  {n.value}: ({p2.x}, {p2.y})")
+}`,
+
+  demo: `// The Three Laws of Rad
+component Health { hp: 100, max: 100 }
+component Name  { value: "" }
+
+event Hit { target, amount }
+
+on Hit(e) {
+    let h = get(e.target, Health) |> unwrap
+    let mut new_hp = h.hp - e.amount
+    if new_hp < 0 { new_hp = 0 }
+    set(e.target, Health { hp: new_hp, max: h.max })
+    print(f"{(get(e.target, Name) |> unwrap).value} took {e.amount} damage, hp: {new_hp}")
+}
+
+fn main() -> nil {
+    let hero = spawn("hero", Name { value: "Hero" }, Health { hp: 100, max: 100 })
+    emit Hit { target: hero, amount: 35 }
+    emit Hit { target: hero, amount: 50 }
+
+    let scores = [10, -5, 20, 0, 15]
+        |> filter(fn(s) { return s > 0 })
+        |> map(fn(s) { return s * 2 })
+        |> reduce(0, fn(a, b) { return a + b })
+    print(f"Pipeline result: {scores}")
+}`,
+
+  pipeline: `// Pipeline Pattern - Data flows one way
+let data = [3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5]
+
+let result = data
+    |> filter(fn(x) { return x > 3 })
+    |> map(fn(x) { return x * x })
+    |> sort()
+    |> reduce(0, fn(acc, x) { return acc + x })
+
+print(f"Input:  {data}")
+print(f"Filter: > 3")
+print(f"Map:    square")
+print(f"Sort:   ascending")
+print(f"Reduce: sum = {result}")`,
+
+  traffic_light: `// State Machine - Traffic Light
+state Light {
+    Red    { on timer -> Green }
+    Green  { on timer -> Yellow }
+    Yellow { on timer -> Red }
+}
+
+fn main() -> nil {
+    let mut light = Light::Red
+    print(f"Start: {light}")
+
+    for i in range(6) {
+        light = transition(light, "timer") |> unwrap
+        print(f"Tick {i + 1}: {light}")
+    }
+}`,
+};
+
+const DEFAULT_CODE = EXAMPLES.hello;
+
+let runtime = null;
+
+async function init() {
+  try {
+    const cb = '?v=' + Date.now();
+    const wasm = await import('./pkg/rad_vm.js' + cb);
+    await wasm.default('./pkg/rad_vm_bg.wasm' + cb);
+    runtime = new wasm.RadRuntime();
+
+    document.getElementById('loading').style.display = 'none';
+    const app = document.getElementById('app');
+    app.style.display = 'flex';
+
+    document.getElementById('editor').value = DEFAULT_CODE;
+  } catch (e) {
+    document.getElementById('loading').textContent =
+      'Failed to load WASM module. Build with: wasm-pack build --target web --out-dir ../../projects/playground/pkg core/vm/';
+    console.error(e);
+  }
+}
+
+function run() {
+  const source = document.getElementById('editor').value;
+  const output = document.getElementById('output');
+  const status = document.getElementById('statusText');
+
+  if (!runtime) {
+    output.textContent = 'WASM module not loaded';
+    output.className = 'output-error';
+    return;
+  }
+
+  const start = performance.now();
+  try {
+    const result = runtime.compile_and_run(source);
+    const elapsed = (performance.now() - start).toFixed(1);
+    output.textContent = result;
+    output.className = 'output-success';
+    status.textContent = `Executed in ${elapsed}ms`;
+  } catch (e) {
+    const elapsed = (performance.now() - start).toFixed(1);
+    output.textContent = e.toString();
+    output.className = 'output-error';
+    status.textContent = `Error (${elapsed}ms)`;
+  }
+}
+
+document.getElementById('runBtn').addEventListener('click', run);
+document.getElementById('clearBtn').addEventListener('click', () => {
+  document.getElementById('editor').value = '';
+  document.getElementById('output').textContent = '';
+  document.getElementById('statusText').textContent = 'Ready';
+});
+
+document.getElementById('examples').addEventListener('change', (e) => {
+  const key = e.target.value;
+  if (EXAMPLES[key]) {
+    document.getElementById('editor').value = EXAMPLES[key];
+    e.target.value = '';
+  }
+});
+
+document.getElementById('editor').addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+    e.preventDefault();
+    run();
+  }
+  if (e.key === 'Tab') {
+    e.preventDefault();
+    const ta = e.target;
+    const start = ta.selectionStart;
+    ta.value = ta.value.substring(0, start) + '    ' + ta.value.substring(ta.selectionEnd);
+    ta.selectionStart = ta.selectionEnd = start + 4;
+  }
+});
+
+init();
+</script>
+</body>
+</html>

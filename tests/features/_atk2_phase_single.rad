@@ -1,0 +1,13 @@
+// Attack: phase with a single system — trivial expansion
+component C { v: 0 }
+
+system Solo(c: C) { print("solo") }
+
+phase One { Solo }
+
+fn main() -> nil {
+    spawn(C { v: 0 })
+    schedule [One]
+}
+
+// expect: solo

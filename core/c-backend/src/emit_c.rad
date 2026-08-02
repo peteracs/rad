@@ -1,0 +1,4193 @@
+use "lexer.rad"
+use "parser.rad"
+use "checker.rad"
+
+pub component HoistedName { name: str = "" }
+component EmitCompat { compat_v05_dx: bool = false }
+pub component EmitCtx {
+    env_names: list<str> = [],
+    closure_names: list<str> = [],
+    builtins: map<str, str> = {},
+    comp_fields: map<str, list<str>> = {},
+    value_vars: map<str, str> = {},
+    radcomp_locals: list<str> = [],
+    fn_ret_type: str = "",
+    fn_ret_types: map<str, str> = {},
+    fn_param_types: map<str, list<str>> = {},
+    comp_params: map<str, str> = {},
+    type_aliases: map<str, str> = {},
+    state_names: list<str> = [],
+    type_names: list<str> = []
+}
+
+fn make_emit_ctx(env_names: list<str>, closure_names: list<str>, builtins: map<str, str>, comp_fields: map<str, list<str>>, value_vars: map<str, str>, radcomp_locals: list<str>, fn_ret_type: str, fn_ret_types: map<str, str>, fn_param_types: map<str, list<str>>, comp_params: map<str, str>, type_aliases: map<str, str>, state_names: list<str>, type_names: list<str>) -> EmitCtx {
+    return EmitCtx { env_names: env_names, closure_names: closure_names, builtins: builtins, comp_fields: comp_fields, value_vars: value_vars, radcomp_locals: radcomp_locals, fn_ret_type: fn_ret_type, fn_ret_types: fn_ret_types, fn_param_types: fn_param_types, comp_params: comp_params, type_aliases: type_aliases, state_names: state_names, type_names: type_names }
+}
+
+fn collect_comp_fields(root: entity) -> map<str, list<str>> {
+    let mut result: map<str, list<str>> = {}
+    if not has(root, Program) { return result }
+    let p = require(root, Program)
+    for d in p.decls {
+        if has(d, ComponentDecl) {
+            let cd = require(d, ComponentDecl)
+            let mut fields: list<str> = []
+            for f_eid in cd.fields {
+                let cf = require(f_eid, ComponentField)
+                fields << cf.name
+            }
+            result[cd.name] = fields
+        }
+        if has(d, StructDecl) {
+            let sd = require(d, StructDecl)
+            let mut fields: list<str> = []
+            for f_eid in sd.fields {
+                let cf = require(f_eid, ComponentField)
+                fields << cf.name
+            }
+            result[sd.name] = fields
+        }
+    }
+    return result
+}
+
+fn collect_variant_fields(root: entity) -> map<str, list<str>> {
+    let mut result: map<str, list<str>> = {}
+    if not has(root, Program) { return result }
+    let p = require(root, Program)
+    for d in p.decls {
+        if has(d, TypeDecl) {
+            let td = require(d, TypeDecl)
+            for v_eid in td.variants {
+                let tv = require(v_eid, TypeVariant)
+                let mut fields: list<str> = []
+                for f_eid in tv.fields {
+                    if has(f_eid, VariantField) {
+                        fields << require(f_eid, VariantField).name
+                    } else if has(f_eid, ComponentField) {
+                        fields << require(f_eid, ComponentField).name
+                    }
+                }
+                result[f"{td.name}_{tv.name}"] = fields
+            }
+        }
+        if has(d, ComponentDecl) {
+            let cd = require(d, ComponentDecl)
+            let mut fields: list<str> = []
+            for f_eid in cd.fields {
+                let cf = require(f_eid, ComponentField)
+                fields << cf.name
+            }
+            result[cd.name] = fields
+        }
+    }
+    return result
+}
+
+fn is_comp_type(name: str, comp_fields: map<str, list<str>>) -> bool {
+    if name == "" { return false }
+    if contains(name, "<") { return false }
+    return contains(keys(comp_fields), name)
+}
+
+fn trim_ascii_whitespace(s: str) -> str {
+    let mut start = 0
+    let mut end = byte_len(s)
+    while start < end {
+        let ch = byte_at(s, start)
+        if ch != 32 and ch != 9 and ch != 10 and ch != 13 { break }
+        start = start + 1
+    }
+    while end > start {
+        let ch = byte_at(s, end - 1)
+        if ch != 32 and ch != 9 and ch != 10 and ch != 13 { break }
+        end = end - 1
+    }
+    if start == 0 and end == byte_len(s) { return s }
+    return substring_bytes(s, start, end)
+}
+
+fn remove_ascii_whitespace(s: str) -> str {
+    let mut out = ""
+    let mut i = 0
+    while i < byte_len(s) {
+        let b = byte_at(s, i)
+        if not (b == 32 or b == 9 or b == 10 or b == 13) {
+            out = f"{out}{chr(b)}"
+        }
+        i = i + 1
+    }
+    return out
+}
+
+fn annotation_head(name: str) -> str {
+    let trimmed = trim_ascii_whitespace(name)
+    let mut i = 0
+    while i < byte_len(trimmed) {
+        if byte_at(trimmed, i) == 60 {
+            return trim_ascii_whitespace(substring_bytes(trimmed, 0, i))
+        }
+        i = i + 1
+    }
+    return trimmed
+}
+
+/// Qualified name for C dispatch: `system::a::b` → `a.b` (matches VM `system_ref_qualified_string`).
+fn system_ref_emit_str(path: list<str>) -> str {
+    if len(path) == 0 { return "" }
+    if len(path) == 1 { return path[0] }
+    let mut s = path[0]
+    let mut i = 1
+    while i < len(path) {
+        s = f"{s}.{path[i]}"
+        i = i + 1
+    }
+    return s
+}
+
+fn collect_value_typed_lets(body: entity, comp_fields: map<str, list<str>>) -> map<str, str> {
+    let mut result: map<str, str> = {}
+    if not has(body, BlockStmt) { return result }
+    let b = require(body, BlockStmt)
+    for st in b.stmts {
+        if has(st, LetStmt) {
+            let s = require(st, LetStmt)
+            if len(s.names) == 1 and is_comp_type(s.type_ann, comp_fields) {
+                result[s.names[0]] = s.type_ann
+            }
+        }
+        if has(st, IfStmt) {
+            let ifs = require(st, IfStmt)
+            let sub = collect_value_typed_lets(ifs.then_block, comp_fields)
+            for k in keys(sub) { result[k] = sub[k] }
+            let eb = ifs.else_block
+            if eb != nil {
+                let esub = collect_value_typed_lets(eb, comp_fields)
+                for k in keys(esub) { result[k] = esub[k] }
+            }
+        }
+        if has(st, WhileStmt) {
+            let ws = require(st, WhileStmt)
+            let sub = collect_value_typed_lets(ws.body, comp_fields)
+            for k in keys(sub) { result[k] = sub[k] }
+        }
+        if has(st, ForStmt) {
+            let fs = require(st, ForStmt)
+            let sub = collect_value_typed_lets(fs.body, comp_fields)
+            for k in keys(sub) { result[k] = sub[k] }
+        }
+        if has(st, MatchStmt) {
+            let ms = require(st, MatchStmt)
+            for c_eid in ms.cases {
+                let mc = require(c_eid, MatchCase)
+                let sub = collect_value_typed_lets(mc.body, comp_fields)
+                for k in keys(sub) { result[k] = sub[k] }
+            }
+        }
+    }
+    return result
+}
+
+fn collect_radcomp_struct_lets(body: entity, comp_fields: map<str, list<str>>) -> list<str> {
+    let mut result: list<str> = []
+    if not has(body, BlockStmt) { return result }
+    let b = require(body, BlockStmt)
+    for st in b.stmts {
+        if has(st, LetStmt) {
+            let s = require(st, LetStmt)
+            if len(s.names) == 1 and is_comp_type(s.type_ann, comp_fields) {
+                if not list_contains(result, s.names[0]) {
+                    result << s.names[0]
+                }
+            }
+        }
+        if has(st, IfStmt) {
+            let ifs = require(st, IfStmt)
+            let sub = collect_radcomp_struct_lets(ifs.then_block, comp_fields)
+            for x in sub {
+                if not list_contains(result, x) {
+                    result << x
+                }
+            }
+            let eb = ifs.else_block
+            if eb != nil {
+                let esub = collect_radcomp_struct_lets(eb, comp_fields)
+                for x in esub {
+                    if not list_contains(result, x) {
+                        result << x
+                    }
+                }
+            }
+        }
+        if has(st, WhileStmt) {
+            let ws = require(st, WhileStmt)
+            let sub = collect_radcomp_struct_lets(ws.body, comp_fields)
+            for x in sub {
+                if not list_contains(result, x) {
+                    result << x
+                }
+            }
+        }
+        if has(st, ForStmt) {
+            let fs = require(st, ForStmt)
+            let sub = collect_radcomp_struct_lets(fs.body, comp_fields)
+            for x in sub {
+                if not list_contains(result, x) {
+                    result << x
+                }
+            }
+        }
+        if has(st, MatchStmt) {
+            let ms = require(st, MatchStmt)
+            for c_eid in ms.cases {
+                let mc = require(c_eid, MatchCase)
+                let sub = collect_radcomp_struct_lets(mc.body, comp_fields)
+                for x in sub {
+                    if not list_contains(result, x) {
+                        result << x
+                    }
+                }
+            }
+        }
+    }
+    return result
+}
+
+fn collect_fn_ret_types(root: entity, comp_fields: map<str, list<str>>) -> map<str, str> {
+    let mut result: map<str, str> = {}
+    if not has(root, Program) { return result }
+    let p = require(root, Program)
+    for d in p.decls {
+        if has(d, FnDecl) {
+            let f = require(d, FnDecl)
+            if is_comp_type(f.ret_type, comp_fields) {
+                result[f.name] = f.ret_type
+            }
+        }
+    }
+    return result
+}
+
+fn collect_fn_param_types(root: entity) -> map<str, list<str>> {
+    let mut result: map<str, list<str>> = {}
+    if not has(root, Program) { return result }
+    let p = require(root, Program)
+    for d in p.decls {
+        if has(d, FnDecl) {
+            let f = require(d, FnDecl)
+            let mut types: list<str> = []
+            for p_eid in f.params {
+                let param = require(p_eid, Param)
+                types << param.type_str
+            }
+            result[f.name] = types
+        }
+    }
+    return result
+}
+
+fn is_ident_start(c: int) -> bool {
+    return (c >= 65 and c <= 90) or (c >= 97 and c <= 122) or c == 95
+}
+
+fn is_ident_continue(c: int) -> bool {
+    return is_ident_start(c) or (c >= 48 and c <= 57)
+}
+
+fn sanitize_ident(name: str) -> str {
+    if len(name) == 0 { return "_v" }
+    let mut out = ""
+    let mut i = 0
+    while i < byte_len(name) {
+        let c = byte_at(name, i)
+        let ch = substring_bytes(name, i, i + 1)
+        if i == 0 {
+            if is_ident_start(c) {
+                out = f"{out}{ch}"
+            } else if c >= 48 and c <= 57 {
+                out = f"{out}_{ch}"
+            } else {
+                out = f"{out}_"
+            }
+        } else {
+            if is_ident_continue(c) {
+                out = f"{out}{ch}"
+            } else {
+                out = f"{out}_"
+            }
+        }
+        i = i + 1
+    }
+    return out
+}
+
+fn make_builtin_map() -> map<str, str> {
+    return {
+        "print": "print", "len": "rad_len", "str": "str", "range": "range",
+        "assert": "rad_assert", "byte_at": "rad_byte_at", "byte_len": "rad_byte_len",
+        "substring_bytes": "rad_substring_bytes", "try_int": "rad_try_int",
+        "try_float": "rad_try_float", "map_or": "rad_map_or",
+        "read_file": "rad_read_file", "write_file": "rad_write_file",
+        "read_file_bytes": "rad_read_file_bytes", "write_file_bytes": "rad_write_file_bytes",
+        "append_file": "rad_append_file", "file_exists": "rad_file_exists", "remove_file": "rad_remove_file",
+        "write_stdout": "rad_write_stdout", "write_stderr": "rad_write_stderr", "flush_stdout": "rad_flush",
+        "list_dir": "rad_list_dir", "create_dir": "rad_create_dir", "remove_dir": "rad_remove_dir",
+        "variant_of": "rad_variant_of",
+        "bitset_new": "rad_bitset_new", "bitset_set": "rad_bitset_set",
+        "bitset_has": "rad_bitset_has", "bitset_clear": "rad_bitset_clear",
+        "sys_args": "rad_sys_args", "flush_events": "rad_flush_events",
+        "fork": "rad_fork", "simulate": "rad_simulate", "commit": "rad_commit",
+        "debug_trace": "rad_debug_trace",
+        "clock": "rad_clock",
+        "buffer_new": "rad_buffer_new", "buffer_append": "rad_buffer_append",
+        "buffer_to_str": "rad_buffer_to_str",
+        "pop": "rad_pop", "pop_last": "rad_pop_last", "drop_last": "rad_drop_last",
+        "reverse": "rad_reverse", "append": "rad_append", "extend": "rad_append", "zip": "rad_zip",
+        "sort": "rad_sort", "slice": "rad_slice", "min": "rad_min", "max": "rad_max",
+        "typeof": "rad_typeof", "unwrap": "rad_unwrap", "unwrap_or": "rad_unwrap_or",
+        "is_some": "rad_is_some", "is_none": "rad_is_none", "expect": "rad_expect",
+        "chr": "rad_chr", "ord": "rad_ord", "split": "rad_split", "join": "rad_join",
+        "chars": "rad_chars", "trim": "rad_trim",
+        "starts_with": "rad_starts_with", "ends_with": "rad_ends_with",
+        "to_upper": "rad_to_upper", "to_lower": "rad_to_lower",
+        "string_repeat": "rad_string_repeat", "contains": "rad_contains",
+        "replace": "rad_replace",
+        "format": "rad_format", "entries": "rad_entries", "merge": "rad_merge", "group_by": "rad_group_by",
+        "transition": "rad_transition", "gc_collect": "rad_gc_collect",
+        "int": "rad_to_int_val", "float": "rad_to_float",
+        "eprint": "rad_eprint", "flush": "rad_flush",
+        "map": "rad_hof_map", "filter": "rad_hof_filter", "reduce": "rad_hof_reduce",
+        "sort_by": "rad_hof_sort_by", "flat_map": "rad_hof_flat_map",
+        "rand_seed": "rad_rand_seed", "rand_int": "rad_rand_int",
+        "rand_float": "rad_rand_float", "rand_bool": "rad_rand_bool",
+        "abs": "rad_abs", "int_div": "rad_int_div", "push": "rad_push",
+        "map_keys": "rad_map_keys", "map_values": "rad_map_values",
+        "map_contains": "rad_map_contains", "map_remove": "rad_map_remove",
+        "map_set": "rad_map_set", "map_get": "rad_map_get",
+        "keys": "rad_keys", "values": "rad_map_values",
+        "index_set": "rad_index_set",
+        "enumerate": "rad_enumerate",
+        "find": "rad_hof_find",
+        "max_by": "rad_hof_max_by",
+        "min_by": "rad_hof_min_by"
+    }
+}
+
+fn is_builtin(name: str, builtins: map<str, str>) -> bool {
+    return contains(keys(builtins), name)
+}
+
+fn is_ecs_builtin(name: str) -> bool {
+    if name == "spawn" { return true }
+    if name == "has" { return true }
+    if name == "require" { return true }
+    if name == "set" { return true }
+    return false
+}
+
+fn list_contains(lst: list<str>, item: str) -> bool {
+    for s in lst {
+        if s == item { return true }
+    }
+    return false
+}
+
+fn list_index_of(lst: list<str>, item: str) -> int {
+    let mut i = 0
+    for s in lst {
+        if s == item { return i }
+        i = i + 1
+    }
+    return -1
+}
+
+fn entity_list_contains(lst: list<entity>, id: entity) -> bool {
+    for x in lst {
+        if x == id { return true }
+    }
+    return false
+}
+
+fn mangle_ident(name: str, builtins: map<str, str>) -> str {
+    let s = sanitize_ident(name)
+    if is_builtin(s, builtins) { return s }
+    return f"rad_u_{s}"
+}
+
+fn c_fn_name(name: str, builtins: map<str, str>) -> str {
+    let s = sanitize_ident(name)
+    if s == "main" { return "__rad_main" }
+    if contains(keys(builtins), s) {
+        return builtins[s]
+    }
+    return f"rad_u_{s}"
+}
+
+fn get_callee_name(call_eid: entity) -> str {
+    let c = require(call_eid, CallExpr)
+    if has(c.callee, IdentExpr) {
+        let id = require(c.callee, IdentExpr)
+        return id.name
+    }
+    return ""
+}
+
+fn c_escape(s: str) -> str {
+    let slen = byte_len(s)
+    let mut buf = buffer_new()
+    let mut i = 0
+    while i < slen {
+        let c = byte_at(s, i)
+        if c == 34 {
+            buf = buffer_append(buf, "\\\"")
+        } else if c == 92 {
+            if i + 1 < slen {
+                let next = byte_at(s, i + 1)
+                if next == 110 or next == 116 or next == 114 or next == 34 or next == 92 or next == 48 {
+                    buf = buffer_append(buf, substring_bytes(s, i, i + 2))
+                    i = i + 2
+                    continue
+                }
+            }
+            buf = buffer_append(buf, "\\\\")
+        } else if c == 10 {
+            buf = buffer_append(buf, "\\n")
+        } else if c == 13 {
+            buf = buffer_append(buf, "\\r")
+        } else if c == 9 {
+            buf = buffer_append(buf, "\\t")
+        } else {
+            let mut char_len = 1
+            if c >= 192 and c < 224 { char_len = 2 }
+            else if c >= 224 and c < 240 { char_len = 3 }
+            else if c >= 240 and c < 248 { char_len = 4 }
+            
+            buf = buffer_append(buf, substring_bytes(s, i, i + char_len))
+            i = i + char_len
+            continue
+        }
+        i = i + 1
+    }
+    return buffer_to_str(buf)
+}
+
+fn indent(n: int) -> str {
+    let mut s = ""
+    let mut i = 0
+    while i < n {
+        s = f"{s}    "
+        i = i + 1
+    }
+    return s
+}
+
+fn emit_binary_expr(op: str, lhs: str, rhs: str) -> str {
+    if op == "Plus" { return f"""({ RadValue __lhs = ${lhs}; RadValue __rhs = ${rhs}; rad_add(__lhs, __rhs); })""" }
+    if op == "Minus" { return f"""({ RadValue __lhs = ${lhs}; RadValue __rhs = ${rhs}; rad_sub(__lhs, __rhs); })""" }
+    if op == "Star" { return f"""({ RadValue __lhs = ${lhs}; RadValue __rhs = ${rhs}; rad_mul(__lhs, __rhs); })""" }
+    if op == "Slash" { return f"""({ RadValue __lhs = ${lhs}; RadValue __rhs = ${rhs}; rad_div(__lhs, __rhs); })""" }
+    if op == "Percent" { return f"""({ RadValue __lhs = ${lhs}; RadValue __rhs = ${rhs}; rad_mod(__lhs, __rhs); })""" }
+    if op == "Eq" { return f"""({ RadValue __lhs = ${lhs}; RadValue __rhs = ${rhs}; rad_eq(__lhs, __rhs); })""" }
+    if op == "Neq" { return f"""({ RadValue __lhs = ${lhs}; RadValue __rhs = ${rhs}; rad_neq(__lhs, __rhs); })""" }
+    if op == "Lt" { return f"""({ RadValue __lhs = ${lhs}; RadValue __rhs = ${rhs}; rad_lt(__lhs, __rhs); })""" }
+    if op == "Lte" { return f"""({ RadValue __lhs = ${lhs}; RadValue __rhs = ${rhs}; rad_lte(__lhs, __rhs); })""" }
+    if op == "Gt" { return f"""({ RadValue __lhs = ${lhs}; RadValue __rhs = ${rhs}; rad_gt(__lhs, __rhs); })""" }
+    if op == "Gte" { return f"""({ RadValue __lhs = ${lhs}; RadValue __rhs = ${rhs}; rad_gte(__lhs, __rhs); })""" }
+    if op == "And" {
+        return f"rad_make_bool(rad_is_truthy({lhs}) && rad_is_truthy({rhs}))"
+    }
+    if op == "Or" {
+        return f"rad_make_bool(rad_is_truthy({lhs}) || rad_is_truthy({rhs}))"
+    }
+    return "rad_make_nil()"
+}
+
+fn emit_merged_struct_field_exprs(sl_eid: entity, comp_name: str, ctx: EmitCtx) -> str {
+    let sl = require(sl_eid, StructLiteral)
+    if not contains(keys(ctx.comp_fields), comp_name) {
+        return ""
+    }
+    let flds = ctx.comp_fields[comp_name]
+    let mut parts = ""
+    let mut i = 0
+    for f in flds {
+        if i > 0 { parts = f"{parts}, " }
+        let j = list_index_of(sl.fields, f)
+        if j >= 0 {
+            parts = f"{parts}{emit_expr(sl.values[j], ctx)}"
+        } else if len(sl.spread) > 0 {
+            parts = f"{parts}rad_value_get_comp_field({emit_expr(sl.spread[0], ctx)}, {i}, __field_{f})"
+        } else {
+            parts = f"{parts}rad_make_nil()"
+        }
+        i = i + 1
+    }
+    return parts
+}
+
+fn emit_struct_value(sl_eid: entity, ctx: EmitCtx) -> str {
+    let sl = require(sl_eid, StructLiteral)
+    let comp_name = join_path(sl.path)
+    let mut out = f"""(RadComp_${comp_name}){ """
+    if not contains(keys(ctx.comp_fields), comp_name) {
+        let mut i = 0
+        for f in sl.fields {
+            if i > 0 { out = f"{out}, " }
+            out = f"""${out}.${f} = ${emit_expr(sl.values[i], ctx)}"""
+            i = i + 1
+        }
+        out = f"""${out} }"""
+        return out
+    }
+    let flds = ctx.comp_fields[comp_name]
+    let mut i = 0
+    for f in flds {
+        if i > 0 { out = f"{out}, " }
+        let j = list_index_of(sl.fields, f)
+        if j >= 0 {
+            out = f"""${out}.${f} = ${emit_expr(sl.values[j], ctx)}"""
+        } else if len(sl.spread) > 0 {
+            out = f"{out}.{f} = rad_value_get_comp_field({emit_expr(sl.spread[0], ctx)}, {i}, __field_{f})"
+        } else {
+            out = f"""${out}.${f} = rad_make_nil()"""
+        }
+        i = i + 1
+    }
+    out = f"""${out} }"""
+    return out
+}
+
+fn emit_unpack_comp_to_stack(src_expr: str, comp_name: str, ctx: EmitCtx) -> str {
+    if not contains(keys(ctx.comp_fields), comp_name) {
+        return src_expr
+    }
+    let c_ty = f"RadComp_{comp_name}"
+    let fields = ctx.comp_fields[comp_name]
+    let mut out = f"""({ RadValue __us = ${src_expr}; ${c_ty} __uca = { """
+    let mut i = 0
+    for f in fields {
+        if i > 0 { out = f"{out}, " }
+        out = f"{out}.{f} = rad_value_get_comp_field(__us, {i}, __field_{f})"
+        i = i + 1
+    }
+    out = f"""${out} }; &__uca; })"""
+    return out
+}
+
+fn emit_struct_var_as_value(var_name: str, comp_name: str, ctx: EmitCtx) -> str {
+    if not contains(keys(ctx.comp_fields), comp_name) {
+        return "rad_make_nil()"
+    }
+    let fields = ctx.comp_fields[comp_name]
+    let is_param_ptr = contains(keys(ctx.comp_params), var_name)
+    let base = mangle_ident(var_name, ctx.builtins)
+    let mut parts = ""
+    let mut i = 0
+    for f in fields {
+        if i > 0 { parts = f"{parts}, " }
+        let mut rhs = f"{base}.{f}"
+        if is_param_ptr { rhs = f"{base}->{f}" }
+        parts = f"{parts}{rhs}"
+        i = i + 1
+    }
+    return f"""rad_make_struct_literal((RadValue[]){${parts}}, ${len(fields)}, __comp_${comp_name})"""
+}
+
+fn emit_comp_expr_as_value(expr_code: str, comp_name: str, ctx: EmitCtx) -> str {
+    if not contains(keys(ctx.comp_fields), comp_name) {
+        return expr_code
+    }
+    let fields = ctx.comp_fields[comp_name]
+    let mut parts = ""
+    let mut i = 0
+    for f in fields {
+        if i > 0 { parts = f"{parts}, " }
+        parts = f"{parts}__sv.{f}"
+        i = i + 1
+    }
+    return f"""({ RadComp_${comp_name} __sv = ${expr_code}; rad_make_struct_literal((RadValue[]){${parts}}, ${len(fields)}, __comp_${comp_name}); })"""
+}
+
+fn emit_expr_as_value(eid: entity, ctx: EmitCtx) -> str {
+    let vtype = infer_value_type(eid, ctx)
+    if not is_comp_type(vtype, ctx.comp_fields) {
+        return emit_expr(eid, ctx)
+    }
+    if has(eid, IdentExpr) {
+        let id = require(eid, IdentExpr)
+        if contains(keys(ctx.comp_params), id.name) {
+            return emit_struct_var_as_value(id.name, vtype, ctx)
+        }
+        return emit_expr(eid, ctx)
+    }
+    if has(eid, CallExpr) {
+        return emit_comp_expr_as_value(emit_expr(eid, ctx), vtype, ctx)
+    }
+    return emit_expr(eid, ctx)
+}
+
+fn emit_var_ref(name: str, ctx: EmitCtx) -> str {
+    let env_names = ctx.env_names
+    let idx = list_index_of(env_names, name)
+    if idx >= 0 {
+        return f"__env->slots[{idx}]"
+    }
+    if contains(keys(ctx.comp_params), name) {
+        return f"(*{mangle_ident(name, ctx.builtins)})"
+    }
+    if is_builtin(name, ctx.builtins) or is_ecs_builtin(name) { return name }
+    return mangle_ident(name, ctx.builtins)
+}
+
+fn has_local_binding(name: str, ctx: EmitCtx) -> bool {
+    if contains(keys(ctx.value_vars), name) { return true }
+    if contains(keys(ctx.comp_params), name) { return true }
+    if list_contains(ctx.env_names, name) { return true }
+    if list_contains(ctx.closure_names, name) { return true }
+    return false
+}
+
+fn infer_value_type(eid: entity, ctx: EmitCtx) -> str {
+    if has(eid, IdentExpr) {
+        let id = require(eid, IdentExpr)
+        if contains(keys(ctx.value_vars), id.name) {
+            return ctx.value_vars[id.name]
+        }
+        if contains(keys(ctx.comp_params), id.name) {
+            return ctx.comp_params[id.name]
+        }
+        return ""
+    }
+    if has(eid, CallExpr) {
+        let fname = get_callee_name(eid)
+        if fname != "" {
+            if contains(keys(ctx.fn_ret_types), fname) {
+                return ctx.fn_ret_types[fname]
+            }
+        }
+        return ""
+    }
+    return ""
+}
+
+fn emit_call_arg(arg_eid: entity, expected_type: str, ctx: EmitCtx) -> str {
+    if not is_comp_type(expected_type, ctx.comp_fields) {
+        return emit_expr(arg_eid, ctx)
+    }
+    let c_ty = f"RadComp_{expected_type}"
+    if has(arg_eid, StructLiteral) {
+        return f"&{emit_struct_value(arg_eid, ctx)}"
+    }
+    if has(arg_eid, IdentExpr) {
+        let id = require(arg_eid, IdentExpr)
+        if contains(keys(ctx.comp_params), id.name) {
+            return mangle_ident(id.name, ctx.builtins)
+        }
+        if list_contains(ctx.radcomp_locals, id.name) {
+            return f"&{mangle_ident(id.name, ctx.builtins)}"
+        }
+        if contains(keys(ctx.value_vars), id.name) {
+            return emit_unpack_comp_to_stack(mangle_ident(id.name, ctx.builtins), expected_type, ctx)
+        }
+    }
+    return emit_unpack_comp_to_stack(emit_expr(arg_eid, ctx), expected_type, ctx)
+}
+
+fn emit_typed_call(callee_c: str, callee_name: str, args: list<entity>, ctx: EmitCtx) -> str {
+    let mut out = f"{callee_c}("
+    let mut i = 0
+    for a in args {
+        if i > 0 { out = f"{out}, " }
+        let mut exp_type = ""
+        if contains(keys(ctx.fn_param_types), callee_name) {
+            let ptypes = ctx.fn_param_types[callee_name]
+            if i < len(ptypes) {
+                exp_type = ptypes[i]
+            }
+        }
+        out = f"{out}{emit_call_arg(a, exp_type, ctx)}"
+        i = i + 1
+    }
+    return f"{out})"
+}
+
+fn emit_dynamic_call(callee_code: str, args: list<entity>, ctx: EmitCtx) -> str {
+    let mut args_code = ""
+    let mut i = 0
+    for a in args {
+        if i > 0 { args_code = f"{args_code}, " }
+        args_code = f"{args_code}{emit_expr(a, ctx)}"
+        i = i + 1
+    }
+    return f"""rad_call(${callee_code}, (RadValue[]){${args_code}}, ${len(args)})"""
+}
+
+fn emit_call_dispatch(callee_eid: entity, args: list<entity>, ctx: EmitCtx) -> str {
+    if has(callee_eid, IdentExpr) {
+        let id = require(callee_eid, IdentExpr)
+        let name = id.name
+        if has_local_binding(name, ctx) {
+            return emit_dynamic_call(emit_var_ref(name, ctx), args, ctx)
+        }
+        if is_builtin(name, ctx.builtins) or is_ecs_builtin(name) or contains(keys(ctx.fn_param_types), name) {
+            return emit_typed_call(c_fn_name(name, ctx.builtins), name, args, ctx)
+        }
+        return emit_dynamic_call(emit_var_ref(name, ctx), args, ctx)
+    }
+    return emit_dynamic_call(emit_expr(callee_eid, ctx), args, ctx)
+}
+
+fn emit_expr(eid: entity, ctx: EmitCtx) -> str {
+    let env_names = ctx.env_names
+    let closure_names = ctx.closure_names
+    let builtins = ctx.builtins
+    if has(eid, IntLiteral) {
+        let x = require(eid, IntLiteral)
+        return f"rad_make_int({x.val})"
+    } else if has(eid, FloatLiteral) {
+        let x = require(eid, FloatLiteral)
+        return f"rad_make_float({x.val})"
+    } else if has(eid, StringLiteral) {
+        let x = require(eid, StringLiteral)
+        let lit = c_escape(x.text)
+        return f"""({ RadValue __s; __s.tag = RV_STR; __s.as.str.len = (int64_t)(sizeof("${lit}") - 1); __s.as.str.data = (char *)rad_intern_string("${lit}", __s.as.str.len); __s; })"""
+    } else if has(eid, SystemRefExpr) {
+        let x = require(eid, SystemRefExpr)
+        return f"""rad_make_str("${c_escape(system_ref_emit_str(x.path))}")"""
+    } else if has(eid, BooleanLiteral) {
+        let x = require(eid, BooleanLiteral)
+        if x.val { return "rad_make_bool(1)" }
+        return "rad_make_bool(0)"
+    } else if has(eid, NilLiteral) {
+        return "rad_make_nil()"
+    } else if has(eid, AsyncExpr) {
+        let x = require(eid, AsyncExpr)
+        let inner = emit_expr(x.inner, ctx)
+        return f"""({ rad_task_context_push(); RadValue __task_v = ${inner}; rad_task_context_pop(); rad_task_from_value(__task_v); })"""
+    } else if has(eid, AwaitExpr) {
+        let x = require(eid, AwaitExpr)
+        return f"rad_await_task({emit_expr(x.inner, ctx)})"
+    } else if has(eid, IdentExpr) {
+        let x = require(eid, IdentExpr)
+        if contains(keys(ctx.fn_param_types), x.name) {
+            return f"rad_make_fn(__fnref_{sanitize_ident(c_fn_name(x.name, builtins))}, NULL)"
+        }
+        if x.name == "None" {
+            return "rad_make_none()"
+        }
+        if contains(x.name, "::") {
+            if x.name == "Option::None" { return "rad_make_none()" }
+            if x.name == "Option::Some" { return "rad_make_some(rad_make_nil())" }
+            if x.name == "Result::Ok" { return "rad_make_result_ok(rad_make_nil())" }
+            if x.name == "Result::Err" { return "rad_make_result_err(rad_make_nil())" }
+            let mut comp_name = ""
+            let mut i = 0
+            while i < byte_len(x.name) {
+                let ch = byte_at(x.name, i)
+                if ch == 58 {
+                    if byte_len(comp_name) == 0 or byte_at(comp_name, byte_len(comp_name) - 1) != 95 {
+                        comp_name = f"{comp_name}_"
+                    }
+                } else {
+                    comp_name = f"{comp_name}{chr(ch)}"
+                }
+                i = i + 1
+            }
+            return f"""({ RadValue __sv = rad_spawn(); rad_ecs_set(__sv, __comp_${comp_name}, rad_make_bool(1)); __sv; })"""
+        }
+        if list_contains(ctx.radcomp_locals, x.name) and contains(keys(ctx.value_vars), x.name) {
+            return emit_struct_var_as_value(x.name, ctx.value_vars[x.name], ctx)
+        }
+        return emit_var_ref(x.name, ctx)
+    } else if has(eid, UnaryOp) {
+        let x = require(eid, UnaryOp)
+        let inner = emit_expr(x.operand, ctx)
+        if x.op == "Minus" {
+            return f"rad_neg({inner})"
+        }
+        if x.op == "Not" {
+            return f"rad_make_bool(!rad_is_truthy({inner}))"
+        }
+        if x.op == "Ampersand" {
+            return f"&({inner})"
+        }
+        return "rad_make_nil()"
+    } else if has(eid, BinaryOp) {
+        let x = require(eid, BinaryOp)
+        if x.op == "Pipe" {
+            if has(x.rhs, CallExpr) {
+                let call = require(x.rhs, CallExpr)
+                let mut all_args: list<entity> = []
+                all_args << x.lhs
+                for a in call.args { all_args << a }
+                return emit_call_dispatch(call.callee, all_args, ctx)
+            } else {
+                let mut pipe_args: list<entity> = []
+                pipe_args << x.lhs
+                return emit_call_dispatch(x.rhs, pipe_args, ctx)
+            }
+        }
+        let lhs = emit_expr(x.lhs, ctx)
+        let rhs = emit_expr(x.rhs, ctx)
+        return emit_binary_expr(x.op, lhs, rhs)
+    } else if has(eid, CallExpr) {
+        let fname = get_callee_name(eid)
+        let x = require(eid, CallExpr)
+        if fname != "" and has_local_binding(fname, ctx) {
+            return emit_dynamic_call(emit_var_ref(fname, ctx), x.args, ctx)
+        }
+
+        if fname == "print" {
+            if len(x.args) == 0 {
+                return "rad_print_many(NULL, 0)"
+            }
+            let mut out = "rad_print_many((RadValue[]){"
+            let mut i = 0
+            for a in x.args {
+                if i > 0 { out = f"{out}, " }
+                out = f"{out}{emit_expr_as_value(a, ctx)}"
+                i = i + 1
+            }
+            out = f"""${out}}, ${len(x.args)})"""
+            return out
+        }
+        if fname == "eprint" {
+            if len(x.args) == 0 {
+                return "rad_eprint_many(NULL, 0)"
+            }
+            let mut out = "rad_eprint_many((RadValue[]){"
+            let mut i = 0
+            for a in x.args {
+                if i > 0 { out = f"{out}, " }
+                out = f"{out}{emit_expr_as_value(a, ctx)}"
+                i = i + 1
+            }
+            out = f"""${out}}, ${len(x.args)})"""
+            return out
+        }
+        if fname == "format" {
+            let mut fmt_code = "rad_make_str(\"\")"
+            if len(x.args) > 0 {
+                fmt_code = emit_expr(x.args[0], ctx)
+            }
+            let mut args_code = ""
+            let mut i = 1
+            while i < len(x.args) {
+                if i > 1 { args_code = f"{args_code}, " }
+                args_code = f"{args_code}{emit_expr(x.args[i], ctx)}"
+                i = i + 1
+            }
+            return f"""rad_format(${fmt_code}, (RadValue[]){${args_code}}, ${len(x.args) - 1})"""
+        }
+
+        if fname == "Some" and len(x.args) == 1 {
+            return f"rad_make_some({emit_expr(x.args[0], ctx)})"
+        }
+        if fname == "None" and len(x.args) == 0 {
+            return "rad_make_none()"
+        }
+        if fname == "Ok" and len(x.args) == 1 {
+            return f"rad_make_result_ok({emit_expr(x.args[0], ctx)})"
+        }
+        if fname == "Err" and len(x.args) == 1 {
+            return f"rad_make_result_err({emit_expr(x.args[0], ctx)})"
+        }
+
+        if fname == "spawn" {
+            if len(x.args) == 0 {
+                return "rad_spawn()"
+            }
+            let mut arg_start = 0
+            let mut ctor = "rad_spawn()"
+            if not has(x.args[0], StructLiteral) {
+                ctor = f"rad_spawn_named({emit_expr(x.args[0], ctx)})"
+                arg_start = 1
+            }
+            if arg_start >= len(x.args) {
+                return ctor
+            }
+            let mut out = f"""({ RadValue __ent = ${ctor}; """
+            let mut i = arg_start
+            while i < len(x.args) {
+                let carg = x.args[i]
+                if has(carg, StructLiteral) {
+                    let sl = require(carg, StructLiteral)
+                    let comp_name = join_path(sl.path)
+                    out = f"{out}rad_ecs_set(__ent, __comp_{comp_name}, {emit_expr(carg, ctx)}); "
+                }
+                i = i + 1
+            }
+            out = f"""${out}__ent; })"""
+            return out
+        }
+        if fname == "get_entity" {
+            return f"rad_get_entity({emit_expr(x.args[0], ctx)})"
+        }
+        if fname == "despawn" {
+            return f"rad_despawn({emit_expr(x.args[0], ctx)})"
+        }
+        if fname == "range" and len(x.args) == 1 {
+            return f"range(rad_make_int(0), {emit_expr(x.args[0], ctx)})"
+        }
+        if fname == "range" and len(x.args) == 3 {
+            return f"rad_range_step({emit_expr(x.args[0], ctx)}, {emit_expr(x.args[1], ctx)}, {emit_expr(x.args[2], ctx)})"
+        }
+        if fname == "has" {
+            let ent_code = emit_expr(x.args[0], ctx)
+            let comp_arg = x.args[1]
+            if has(comp_arg, IdentExpr) {
+                let cname = require(comp_arg, IdentExpr)
+                return f"rad_ecs_has({ent_code}, __comp_{cname.name})"
+            }
+            if has(comp_arg, StringLiteral) {
+                let cname = require(comp_arg, StringLiteral).text
+                if contains(keys(ctx.comp_fields), cname) {
+                    return f"rad_ecs_has({ent_code}, __comp_{cname})"
+                }
+                return f"""({ fprintf(stderr, "rad runtime: has() unknown component '${c_escape(cname)}'\\n"); exit(1); rad_make_bool(0); })"""
+            }
+            return f"""({ fprintf(stderr, "rad runtime: has() requires a static component name\\n"); exit(1); rad_make_bool(0); })"""
+        }
+        if fname == "remove" {
+            let ent_code = emit_expr(x.args[0], ctx)
+            let comp_arg = x.args[1]
+            if has(comp_arg, IdentExpr) {
+                let cname = require(comp_arg, IdentExpr)
+                return f"rad_ecs_remove({ent_code}, __comp_{cname.name})"
+            }
+            if has(comp_arg, StringLiteral) {
+                let cname = require(comp_arg, StringLiteral).text
+                if contains(keys(ctx.comp_fields), cname) {
+                    return f"rad_ecs_remove({ent_code}, __comp_{cname})"
+                }
+                return f"""({ fprintf(stderr, "rad runtime: remove() unknown component '${c_escape(cname)}'\\n"); exit(1); rad_make_nil(); })"""
+            }
+            return f"""({ fprintf(stderr, "rad runtime: remove() requires a static component name\\n"); exit(1); rad_make_nil(); })"""
+        }
+        if fname == "despawn" {
+            return f"rad_despawn({emit_expr(x.args[0], ctx)})"
+        }
+        if fname == "require" {
+            let ent_code = emit_expr(x.args[0], ctx)
+            let comp_arg = x.args[1]
+            if has(comp_arg, IdentExpr) {
+                let cname = require(comp_arg, IdentExpr)
+                return f"rad_ecs_require({ent_code}, __comp_{cname.name})"
+            }
+            if has(comp_arg, StringLiteral) {
+                let cname = require(comp_arg, StringLiteral).text
+                if contains(keys(ctx.comp_fields), cname) {
+                    return f"rad_ecs_require({ent_code}, __comp_{cname})"
+                }
+                return f"""({ fprintf(stderr, "rad runtime: require() missing component '${c_escape(cname)}' on entity\\n"); exit(1); rad_make_nil(); })"""
+            }
+            return f"""({ fprintf(stderr, "rad runtime: require() requires a static component name\\n"); exit(1); rad_make_nil(); })"""
+        }
+        if fname == "get" {
+            let ent_code = emit_expr(x.args[0], ctx)
+            let comp_arg = x.args[1]
+            if has(comp_arg, IdentExpr) {
+                let cname = require(comp_arg, IdentExpr)
+                return f"rad_ecs_get({ent_code}, __comp_{cname.name})"
+            }
+            if has(comp_arg, StringLiteral) {
+                let cname = require(comp_arg, StringLiteral).text
+                if contains(keys(ctx.comp_fields), cname) {
+                    return f"rad_ecs_get({ent_code}, __comp_{cname})"
+                }
+                return f"""({ fprintf(stderr, "rad runtime: get() unknown component '${c_escape(cname)}'\\n"); exit(1); rad_make_nil(); })"""
+            }
+            return f"""({ fprintf(stderr, "rad runtime: get() requires a static component name\\n"); exit(1); rad_make_nil(); })"""
+        }
+        if fname == "require_all" {
+            if len(x.args) <= 1 { return "rad_make_list()" }
+            let ent_code = emit_expr(x.args[0], ctx)
+            let mut out = "rad_list_literal((RadValue[]){"
+            let mut i = 1
+            while i < len(x.args) {
+                if i > 1 { out = f"{out}, " }
+                let comp_arg = x.args[i]
+                if has(comp_arg, IdentExpr) {
+                    let cname = require(comp_arg, IdentExpr)
+                    out = f"{out}rad_ecs_require({ent_code}, __comp_{cname.name})"
+                } else if has(comp_arg, StringLiteral) {
+                    let cname = require(comp_arg, StringLiteral).text
+                    if contains(keys(ctx.comp_fields), cname) {
+                        out = f"{out}rad_ecs_require({ent_code}, __comp_{cname})"
+                    } else {
+                        out = f"""${out}({ fprintf(stderr, "rad runtime: require() missing component '${c_escape(cname)}' on entity\\n"); exit(1); rad_make_nil(); })"""
+                    }
+                } else {
+                    out = f"""${out}({ fprintf(stderr, "rad runtime: require_all() requires static component names\\n"); exit(1); rad_make_nil(); })"""
+                }
+                i = i + 1
+            }
+            out = f"""${out}}, ${len(x.args) - 1})"""
+            return out
+        }
+        if fname == "simulate" {
+            let fork_code = emit_expr(x.args[0], ctx)
+            let sys_code = emit_expr(x.args[1], ctx)
+            let ticks_code = emit_expr(x.args[2], ctx)
+
+            let mut is_static_list = false
+            let mut static_systems: list<str> = []
+            if has(x.args[1], ListLiteral) {
+                let sys_list = require(x.args[1], ListLiteral)
+                is_static_list = true
+                for el in sys_list.elements {
+                    if has(el, SystemRefExpr) {
+                        static_systems << system_ref_emit_str(require(el, SystemRefExpr).path)
+                    } else {
+                        is_static_list = false
+                    }
+                }
+            }
+
+            if is_static_list {
+                let mut out = f"""({ RadValue __fv = ${fork_code}; """
+                out = f"""${out}RadValue __tv = ${ticks_code}; """
+                out = f"""${out}if (__fv.tag != RV_WORLD_FORK || !__fv.as.world_fork) { fprintf(stderr, "rad runtime: simulate() first argument must be a world_fork\\n"); exit(1); } """
+                out = f"""${out}if (__tv.tag != RV_INT) { fprintf(stderr, "rad runtime: simulate() third argument must be an integer\\n"); exit(1); } """
+                out = f"{out}int64_t __ticks = __tv.as.i; "
+                out = f"""${out}if (__ticks < 0) { fprintf(stderr, "rad runtime: simulate() tick count must be non-negative\\n"); exit(1); } """
+                out = f"{out}RadPendingEvent *__saved_q = rad_event_queue; "
+                out = f"{out}int64_t __saved_q_len = rad_event_queue_len; "
+                out = f"{out}int64_t __saved_q_cap = rad_event_queue_cap; "
+                out = f"{out}rad_event_queue = NULL; rad_event_queue_len = 0; rad_event_queue_cap = 0; "
+                out = f"{out}RadWorldFork *__saved = rad_world_fork_snapshot(); "
+                out = f"{out}rad_simulation_depth++; "
+                out = f"{out}rad_world_fork_restore(__fv.as.world_fork); "
+                out = f"""${out}for (int64_t __i = 0; __i < __ticks; __i++) { """
+                for sys in static_systems {
+                    out = f"{out}(void){c_fn_name(sys, ctx.builtins)}(); "
+                }
+                out = f"{out}(void)rad_flush_events(); "
+                out = f"""${out}} """
+                out = f"{out}RadWorldFork *__new_fork = rad_world_fork_snapshot(); "
+                out = f"{out}rad_world_fork_restore(__saved); "
+                out = f"{out}rad_simulation_depth--; "
+                out = f"{out}rad_event_queue = __saved_q; rad_event_queue_len = __saved_q_len; rad_event_queue_cap = __saved_q_cap; "
+                out = f"""${out}RadValue __rv; __rv.tag = RV_WORLD_FORK; __rv.as.world_fork = __new_fork; __rv; })"""
+                return out
+            }
+
+            return f"rad_simulate({fork_code}, {sys_code}, {ticks_code})"
+        }
+        if fname == "peek" and len(x.args) == 3 {
+            let fork_code = emit_expr(x.args[0], ctx)
+            let ent_code = emit_expr(x.args[1], ctx)
+            let comp_arg = x.args[2]
+            if has(comp_arg, IdentExpr) {
+                let cname = require(comp_arg, IdentExpr)
+                return f"rad_peek({fork_code}, {ent_code}, __comp_{cname.name})"
+            }
+            if has(comp_arg, StringLiteral) {
+                let cname = require(comp_arg, StringLiteral).text
+                if contains(keys(ctx.comp_fields), cname) {
+                    return f"rad_peek({fork_code}, {ent_code}, __comp_{cname})"
+                }
+                return f"""({ fprintf(stderr, "rad runtime: peek() unknown component '${c_escape(cname)}'\\n"); exit(1); rad_make_nil(); })"""
+            }
+            return f"""({ fprintf(stderr, "rad runtime: peek() requires a static component name\\n"); exit(1); rad_make_nil(); })"""
+        }
+        if fname == "entities" {
+            if len(x.args) == 0 { return "rad_make_list()" }
+            let mut ids = ""
+            let mut i = 0
+            for a in x.args {
+                if i > 0 { ids = f"{ids}, " }
+                if has(a, IdentExpr) {
+                    let cname = require(a, IdentExpr)
+                    ids = f"{ids}__comp_{cname.name}"
+                } else if has(a, StringLiteral) {
+                    let cname = require(a, StringLiteral).text
+                    ids = f"{ids}__comp_{cname}"
+                } else {
+                    ids = f"{ids}0"
+                }
+                i = i + 1
+            }
+            return f"""rad_query((int64_t[]){${ids}}, ${len(x.args)})"""
+        }
+
+        if list_contains(closure_names, fname) {
+            let callee_code = emit_var_ref(fname, ctx)
+            let mut args_code = ""
+            let nargs = len(x.args)
+            if nargs > 0 {
+                args_code = "(RadValue[]){"
+                let mut ai = 0
+                for a in x.args {
+                    if ai > 0 { args_code = f"{args_code}, " }
+                    args_code = f"{args_code}{emit_expr(a, ctx)}"
+                    ai = ai + 1
+                }
+                args_code = f"""${args_code}}"""
+            } else {
+                args_code = "NULL"
+            }
+            return f"rad_call({callee_code}, {args_code}, {nargs})"
+        }
+
+        return emit_call_dispatch(x.callee, x.args, ctx)
+    } else if has(eid, ListLiteral) {
+        let x = require(eid, ListLiteral)
+        if len(x.elements) == 0 {
+            return "rad_make_list()"
+        }
+        let mut out = "rad_list_literal((RadValue[]){"
+        let mut i = 0
+        for a in x.elements {
+            if i > 0 { out = f"{out}, " }
+            out = f"{out}{emit_expr(a, ctx)}"
+            i = i + 1
+        }
+        out = f"""${out}}, ${len(x.elements)})"""
+        return out
+    } else if has(eid, TupleLiteral) {
+        let x = require(eid, TupleLiteral)
+        if len(x.elements) == 0 {
+            return "rad_make_tuple(NULL, 0)"
+        }
+        let mut out = "rad_make_tuple((RadValue[]){"
+        let mut i = 0
+        for a in x.elements {
+            if i > 0 { out = f"{out}, " }
+            out = f"{out}{emit_expr(a, ctx)}"
+            i = i + 1
+        }
+        out = f"""${out}}, ${len(x.elements)})"""
+        return out
+    } else if has(eid, MapLiteral) {
+        let x = require(eid, MapLiteral)
+        if len(x.keys) == 0 {
+            return "rad_make_map()"
+        }
+        let n = len(x.keys)
+        let mut kout = "rad_map_literal((RadValue[]){"
+        let mut vout = "(RadValue[]){"
+        let mut i = 0
+        while i < n {
+            if i > 0 { kout = f"{kout}, " }
+            if i > 0 { vout = f"{vout}, " }
+            kout = f"{kout}{emit_expr(x.keys[i], ctx)}"
+            vout = f"{vout}{emit_expr(x.values[i], ctx)}"
+            i = i + 1
+        }
+        kout = f"""${kout}}, """
+        vout = f"""${vout}}, """
+        return f"{kout}{vout}{n})"
+    } else if has(eid, FStringExpr) {
+        let x = require(eid, FStringExpr)
+        let mut out = "rad_make_str(\"\")"
+        for part in x.parts {
+            if has(part, FStringLitPart) {
+                let lp = require(part, FStringLitPart)
+                out = f"""rad_add(${out}, rad_make_str("${c_escape(lp.text)}"))"""
+            }
+            if has(part, FStringExprPart) {
+                let ep = require(part, FStringExprPart)
+                if len(ep.spec) > 0 {
+                    out = f"""rad_add(${out}, rad_format_value(${emit_expr(ep.expr, ctx)}, rad_make_str("${c_escape(ep.spec)}")))"""
+                } else {
+                    out = f"rad_add({out}, str({emit_expr(ep.expr, ctx)}))"
+                }
+            }
+        }
+        return out
+    } else if has(eid, IndexExpr) {
+        let x = require(eid, IndexExpr)
+        let obj = emit_expr(x.object, ctx)
+        let idx = emit_expr(x.index, ctx)
+        return f"rad_index({obj}, {idx})"
+    } else if has(eid, FieldAccessExpr) {
+        let fa = require(eid, FieldAccessExpr)
+        let obj_vtype = infer_value_type(fa.object, ctx)
+        if is_comp_type(obj_vtype, ctx.comp_fields) {
+            let flds = ctx.comp_fields[obj_vtype]
+            let fidx = list_index_of(flds, fa.field)
+            if has(fa.object, IdentExpr) {
+                let fa_id = require(fa.object, IdentExpr)
+                if contains(keys(ctx.comp_params), fa_id.name) {
+                    return f"{mangle_ident(fa_id.name, ctx.builtins)}->{fa.field}"
+                }
+                if list_contains(ctx.radcomp_locals, fa_id.name) {
+                    return f"{mangle_ident(fa_id.name, ctx.builtins)}.{fa.field}"
+                }
+            }
+            let obj_code = emit_expr_as_value(fa.object, ctx)
+            if fidx >= 0 {
+                return f"rad_value_get_comp_field({obj_code}, {fidx}, __field_{fa.field})"
+            }
+        }
+        let obj_code = emit_expr(fa.object, ctx)
+        return f"rad_value_get_comp_field({obj_code}, 0, __field_{fa.field})"
+    } else if has(eid, StructLiteral) {
+        let sl = require(eid, StructLiteral)
+        let comp_name = join_path(sl.path)
+        if comp_name == "Option_Some" or comp_name == "Some" {
+            if len(sl.fields) > 0 {
+                return f"rad_make_some({emit_expr(sl.values[0], ctx)})"
+            }
+            return "rad_make_some(rad_make_nil())"
+        }
+        if comp_name == "Option_None" or comp_name == "None" {
+            return "rad_make_none()"
+        }
+        if comp_name == "Result_Ok" or comp_name == "Ok" {
+            if len(sl.fields) > 0 {
+                return f"rad_make_result_ok({emit_expr(sl.values[0], ctx)})"
+            }
+            return "rad_make_result_ok(rad_make_nil())"
+        }
+        if comp_name == "Result_Err" or comp_name == "Err" {
+            if len(sl.fields) > 0 {
+                return f"rad_make_result_err({emit_expr(sl.values[0], ctx)})"
+            }
+            return "rad_make_result_err(rad_make_nil())"
+        }
+        if is_comp_type(comp_name, ctx.comp_fields) {
+            let parts = emit_merged_struct_field_exprs(eid, comp_name, ctx)
+            let nf = len(ctx.comp_fields[comp_name])
+            return f"""rad_make_struct_literal((RadValue[]){${parts}}, ${nf}, __comp_${comp_name})"""
+        }
+        let mut out = f"""({ RadValue __sl_ent = rad_spawn(); """
+        if not contains(keys(ctx.comp_fields), comp_name) {
+            out = f"{out}rad_ecs_set(__sl_ent, __comp_{comp_name}, rad_make_bool(1)); "
+        }
+        let mut i = 0
+        while i < len(sl.fields) {
+            out = f"{out}rad_ecs_set(__sl_ent, __field_{sl.fields[i]}, {emit_expr(sl.values[i], ctx)}); "
+            i = i + 1
+        }
+        out = f"""${out}__sl_ent; })"""
+        return out
+    } else if has(eid, ClosureExpr) {
+        if has(eid, HoistedName) {
+            let hn = require(eid, HoistedName)
+            if len(env_names) > 0 {
+                return f"rad_make_fn({hn.name}, __env)"
+            }
+            return f"rad_make_fn({hn.name}, NULL)"
+        }
+        return "rad_make_nil()"
+    } else if has(eid, QueryExpr) {
+        let q = require(eid, QueryExpr)
+        if len(q.components) == 0 {
+            return "rad_make_list()"
+        }
+        let mut comp_ids = ""
+        let mut i = 0
+        for comp in q.components {
+            if i > 0 { comp_ids = f"{comp_ids}, " }
+            comp_ids = f"{comp_ids}__comp_{comp}"
+            i = i + 1
+        }
+        return f"""rad_query((int64_t[]){${comp_ids}}, ${len(q.components)})"""
+    } else if has(eid, EntityExpr) {
+        let ee = require(eid, EntityExpr)
+        let mut out = ""
+        let ee_name = ee.name
+        if ee_name != nil {
+            out = f"""({ RadValue __anon_e = rad_spawn_named(${emit_expr(ee_name, ctx)}); """
+        } else {
+            out = f"""({ RadValue __anon_e = rad_spawn(); """
+        }
+        for comp_expr in ee.components {
+            if has(comp_expr, StructLiteral) {
+                let sl = require(comp_expr, StructLiteral)
+                let comp_name = join_path(sl.path)
+                out = f"{out}rad_ecs_set(__anon_e, __comp_{comp_name}, {emit_expr(comp_expr, ctx)}); "
+            } else {
+                let inferred = infer_value_type(comp_expr, ctx)
+                if is_comp_type(inferred, ctx.comp_fields) {
+                    out = f"{out}rad_ecs_set(__anon_e, __comp_{inferred}, {emit_expr(comp_expr, ctx)}); "
+                } else {
+                    out = f"{out}rad_ecs_merge(__anon_e, {emit_expr(comp_expr, ctx)}); "
+                }
+            }
+        }
+        out = f"""${out}__anon_e; })"""
+        return out
+    } else if has(eid, TryExpr) {
+        let x = require(eid, TryExpr)
+        let inner_c = emit_expr(x.inner, ctx)
+        return f"""({ RadValue __rad_try_v = ${inner_c}; if (__rad_try_v.tag == RV_NIL) { return rad_make_nil(); } __rad_try_v; })"""
+    }
+    return "rad_make_nil()"
+}
+
+fn emit_block_value_assign(block_id: entity, target: str, level: int, ctx: EmitCtx) -> str {
+    if not has(block_id, BlockStmt) {
+        return f"{indent(level)}{target} = rad_make_nil();\n"
+    }
+    let b = require(block_id, BlockStmt)
+    let mut buf = buffer_new()
+    let n = len(b.stmts)
+    if n == 0 {
+        buf = buffer_append(buf, f"{indent(level)}{target} = rad_make_nil();\n")
+        return buffer_to_str(buf)
+    }
+    let mut i = 0
+    while i < n {
+        let st = b.stmts[i]
+        if i == n - 1 and has(st, ExprStmt) {
+            let es = require(st, ExprStmt)
+            buf = buffer_append(buf, f"{indent(level)}{target} = {emit_expr(es.expr, ctx)};\n")
+        } else {
+            buf = buffer_append(buf, emit_stmt(st, level, ctx))
+        }
+        i = i + 1
+    }
+    return buffer_to_str(buf)
+}
+
+fn emit_assign_lvalue(lvalue: entity, rhs_code: str, level: int, ctx: EmitCtx) -> str {
+    let pad = indent(level)
+    if has(lvalue, IdentExpr) {
+        let id = require(lvalue, IdentExpr)
+        let idx = list_index_of(ctx.env_names, id.name)
+        if idx >= 0 {
+            return f"{pad}__env->slots[{idx}] = {rhs_code};\n"
+        }
+        return f"{pad}{mangle_ident(id.name, ctx.builtins)} = {rhs_code};\n"
+    }
+    if has(lvalue, IndexExpr) {
+        let ie = require(lvalue, IndexExpr)
+        let obj_code = emit_expr(ie.object, ctx)
+        let idx_code = emit_expr(ie.index, ctx)
+        let wrapped = f"rad_index_set({obj_code}, {idx_code}, {rhs_code})"
+        return emit_assign_lvalue(ie.object, wrapped, level, ctx)
+    }
+    if has(lvalue, FieldAccessExpr) {
+        let fa = require(lvalue, FieldAccessExpr)
+        let obj_vtype = infer_value_type(fa.object, ctx)
+        if is_comp_type(obj_vtype, ctx.comp_fields) {
+            let flds = ctx.comp_fields[obj_vtype]
+            let fidx = list_index_of(flds, fa.field)
+            if has(fa.object, IdentExpr) {
+                let fa_id = require(fa.object, IdentExpr)
+                if contains(keys(ctx.comp_params), fa_id.name) {
+                    return f"{pad}{mangle_ident(fa_id.name, ctx.builtins)}->{fa.field} = {rhs_code};\n"
+                }
+                if list_contains(ctx.radcomp_locals, fa_id.name) {
+                    return f"{pad}{mangle_ident(fa_id.name, ctx.builtins)}.{fa.field} = {rhs_code};\n"
+                }
+                if contains(keys(ctx.value_vars), fa_id.name) {
+                    let mn = mangle_ident(fa_id.name, ctx.builtins)
+                    return f"{pad}{mn} = rad_value_comp_field_set({mn}, {fidx}, __field_{fa.field}, {rhs_code});\n"
+                }
+            }
+            let obj_code = emit_expr(fa.object, ctx)
+            if fidx >= 0 {
+                return f"{pad}rad_value_mut_set_field({obj_code}, {fidx}, __field_{fa.field}, {rhs_code});\n"
+            }
+        }
+        let obj_code = emit_expr(fa.object, ctx)
+        return f"{pad}rad_value_mut_set_field({obj_code}, 0, __field_{fa.field}, {rhs_code});\n"
+    }
+    return f"{pad}(void)({rhs_code});\n"
+}
+
+fn emit_stmt(stmt_id: entity, level: int, ctx: EmitCtx) -> str {
+    let env_names = ctx.env_names
+    let closure_names = ctx.closure_names
+    let builtins = ctx.builtins
+    let pad = indent(level)
+    if has(stmt_id, LetElseStmt) {
+        let s = require(stmt_id, LetElseStmt)
+        let mut buf = buffer_new()
+        let tmp_name = f"__let_else_tmp_{stmt_id}"
+        let bind_name = mangle_ident(s.bind_name, builtins)
+        buf = buffer_append(buf, f"{pad}RadValue {tmp_name} = {emit_expr(s.value, ctx)};\n")
+        buf = buffer_append(buf, f"{pad}RadValue {bind_name} = rad_make_nil();\n")
+        let mut let_else_cond = f"rad_is_truthy(rad_ecs_has({tmp_name}, __comp_{s.variant_name}))"
+        let mut let_else_inner = f"rad_ecs_require({tmp_name}, __field_{s.field_name})"
+        if s.variant_name == "Some" or s.variant_name == "Option_Some" {
+            let_else_cond = f"({tmp_name}).tag == RV_OPTION_SOME"
+            let_else_inner = f"*({tmp_name}).as.inner"
+        } else if s.variant_name == "None" or s.variant_name == "Option_None" {
+            let_else_cond = f"({tmp_name}).tag == RV_OPTION_NONE"
+            let_else_inner = "rad_make_nil()"
+        } else if s.variant_name == "Ok" or s.variant_name == "Result_Ok" {
+            let_else_cond = f"({tmp_name}).tag == RV_RESULT_OK"
+            let_else_inner = f"*({tmp_name}).as.inner"
+        } else if s.variant_name == "Err" or s.variant_name == "Result_Err" {
+            let_else_cond = f"({tmp_name}).tag == RV_RESULT_ERR"
+            let_else_inner = f"*({tmp_name}).as.inner"
+        }
+        buf = buffer_append(buf, f"""${pad}if (${let_else_cond}) {\n""")
+        buf = buffer_append(buf, f"{pad}    {bind_name} = {let_else_inner};\n")
+        buf = buffer_append(buf, f"""${pad}} else {\n""")
+        buf = buffer_append(buf, emit_block_value_assign(s.else_block, bind_name, level + 1, ctx))
+        buf = buffer_append(buf, f"""${pad}}\n""")
+        return buffer_to_str(buf)
+    } else if has(stmt_id, LetStmt) {
+        let s = require(stmt_id, LetStmt)
+        if has(s.value, ClosureExpr) {
+            return ""
+        }
+        let __let_cf = ctx.comp_fields
+        if len(s.names) == 1 and is_comp_type(s.type_ann, __let_cf) {
+            let name = s.names[0]
+            let c_ty = f"RadComp_{s.type_ann}"
+            if has(s.value, StructLiteral) {
+                return f"{pad}{c_ty} {mangle_ident(name, builtins)} = {emit_struct_value(s.value, ctx)};\n"
+            }
+            let src_ret_type = infer_value_type(s.value, ctx)
+            if src_ret_type == s.type_ann {
+                let src_code = emit_expr(s.value, ctx)
+                return f"{pad}{c_ty} {mangle_ident(name, builtins)} = {src_code};\n"
+            }
+            let fields = __let_cf[s.type_ann]
+            let src_code = emit_expr(s.value, ctx)
+            let cv = f"__cv_{stmt_id}"
+            let mn = mangle_ident(name, builtins)
+            let mut out = f"{pad}RadValue {cv} = {src_code};\n"
+            out = f"""${out}${pad}if (!((${cv}.tag == RV_STRUCT && ${cv}.as.rst) || (${cv}.tag == RV_ENTITY && rad_is_truthy(rad_ecs_has(${cv}, __comp_${s.type_ann}))))) { """
+            out = f"""${out}fprintf(stderr, "Runtime error: Type mismatch: '${c_escape(name)}' declared as ${c_escape(s.type_ann)}, got %s\\n", """
+            out = f"""${out}(rad_typeof(${cv}).tag == RV_STR) ? rad_typeof(${cv}).as.str.data : "unknown"); exit(1); }\n"""
+            out = f"""${out}${pad}${c_ty} ${mn} = { """
+            let mut i = 0
+            for f in fields {
+                if i > 0 { out = f"{out}, " }
+                out = f"{out}.{f} = rad_value_get_comp_field({cv}, {i}, __field_{f})"
+                i = i + 1
+            }
+            out = f"""${out} };\n"""
+            return out
+        }
+        let val_code = f"rad_value_deep_copy({emit_expr(s.value, ctx)})"
+        if len(s.names) == 1 {
+            let name = s.names[0]
+            let idx = list_index_of(env_names, name)
+            let mut var_ref = mangle_ident(name, builtins)
+            let mut buf = buffer_new()
+            if idx >= 0 {
+                var_ref = f"__env->slots[{idx}]"
+                buf = buffer_append(buf, f"{pad}{var_ref} = {val_code};\n")
+            } else {
+                buf = buffer_append(buf, f"{pad}RadValue {var_ref} = {val_code};\n")
+            }
+            if s.type_ann != "" {
+                let mut ann_text = s.type_ann
+                if contains(keys(ctx.type_aliases), ann_text) {
+                    ann_text = ctx.type_aliases[ann_text]
+                }
+                let ann = annotation_head(ann_text)
+                let mut check = ""
+                let ann_compact = remove_ascii_whitespace(ann_text)
+                if ann_compact == "entity|nil" or ann_compact == "nil|entity" or ann_compact == "entitynil" or ann_compact == "nilentity" {
+                    check = f"({var_ref}).tag == RV_ENTITY || ({var_ref}).tag == RV_NIL"
+                } else if ann == "any" {
+                    check = "1"
+                } else if ann == "int" {
+                    check = f"({var_ref}).tag == RV_INT"
+                } else if ann == "float" {
+                    check = f"({var_ref}).tag == RV_FLOAT || ({var_ref}).tag == RV_INT"
+                } else if ann == "bool" {
+                    check = f"({var_ref}).tag == RV_BOOL"
+                } else if ann == "str" {
+                    check = f"({var_ref}).tag == RV_STR"
+                } else if ann == "list" {
+                    check = f"({var_ref}).tag == RV_LIST || ({var_ref}).tag == RV_LIST_INT"
+                } else if ann == "map" {
+                    check = f"({var_ref}).tag == RV_MAP"
+                } else if ann == "tuple" {
+                    check = f"({var_ref}).tag == RV_TUPLE"
+                } else if ann == "fn" {
+                    check = f"({var_ref}).tag == RV_FN"
+                } else if ann == "nil" {
+                    check = f"({var_ref}).tag == RV_NIL"
+                } else if ann == "Option" {
+                    check = f"(({var_ref}).tag == RV_OPTION_SOME || ({var_ref}).tag == RV_OPTION_NONE)"
+                } else if ann == "Result" {
+                    check = f"(({var_ref}).tag == RV_RESULT_OK || ({var_ref}).tag == RV_RESULT_ERR)"
+                } else if is_comp_type(ann, __let_cf) {
+                    check = f"""((${var_ref}).tag == RV_STRUCT && (${var_ref}).as.rst) || ((${var_ref}).tag == RV_ENTITY && rad_is_truthy(rad_ecs_has(${var_ref}, __comp_${ann})))"""
+                } else if list_contains(ctx.state_names, ann) {
+                    check = f"({var_ref}).tag == RV_ENTITY"
+                } else if list_contains(ctx.type_names, ann) {
+                    check = f"({var_ref}).tag == RV_ENTITY"
+                } else {
+                    buf = buffer_append(buf, f"""${pad}fprintf(stderr, "Runtime error: Unknown type annotation '${c_escape(ann_text)}'\\n");\n""")
+                    buf = buffer_append(buf, f"{pad}exit(1);\n")
+                    return buffer_to_str(buf)
+                }
+                buf = buffer_append(buf, f"""${pad}if (!(${check})) {\n""")
+                buf = buffer_append(buf, f"""${pad}    RadValue __got = rad_typeof(${var_ref});\n""")
+                buf = buffer_append(buf, f"""${pad}    fprintf(stderr, "Runtime error: Type mismatch: '${c_escape(name)}' declared as ${c_escape(ann_text)}, got %s\\n", (__got.tag == RV_STR && __got.as.str.data) ? __got.as.str.data : "unknown");\n""")
+                buf = buffer_append(buf, f"{pad}    exit(1);\n")
+                buf = buffer_append(buf, f"""${pad}}\n""")
+            }
+            return buffer_to_str(buf)
+        } else {
+            let mut buf = buffer_new()
+            buf = buffer_append(buf, f"{pad}RadValue __tmp_{stmt_id} = {val_code};\n")
+            let mut i = 0
+            for name in s.names {
+                let idx = list_index_of(env_names, name)
+                let elem_code = f"rad_index(__tmp_{stmt_id}, rad_make_int({i}))"
+                if idx >= 0 {
+                    buf = buffer_append(buf, f"{pad}__env->slots[{idx}] = {elem_code};\n")
+                } else {
+                    buf = buffer_append(buf, f"{pad}RadValue {mangle_ident(name, builtins)} = {elem_code};\n")
+                }
+                i = i + 1
+            }
+            return buffer_to_str(buf)
+        }
+    } else if has(stmt_id, AssignStmt) {
+        let s = require(stmt_id, AssignStmt)
+        if s.name == "__field_assign__" and has(stmt_id, FieldAccessExpr) {
+            let fa = require(stmt_id, FieldAccessExpr)
+            let val_code = emit_expr(s.value, ctx)
+            let obj_vtype = infer_value_type(fa.object, ctx)
+            if is_comp_type(obj_vtype, ctx.comp_fields) {
+                let flds = ctx.comp_fields[obj_vtype]
+                let fidx = list_index_of(flds, fa.field)
+                if has(fa.object, IdentExpr) {
+                    let fa_id = require(fa.object, IdentExpr)
+                    if contains(keys(ctx.comp_params), fa_id.name) {
+                        return f"{pad}{mangle_ident(fa_id.name, ctx.builtins)}->{fa.field} = {val_code};\n"
+                    }
+                    if list_contains(ctx.radcomp_locals, fa_id.name) {
+                        return f"{pad}{mangle_ident(fa_id.name, ctx.builtins)}.{fa.field} = {val_code};\n"
+                    }
+                    if contains(keys(ctx.value_vars), fa_id.name) {
+                        let mn = mangle_ident(fa_id.name, ctx.builtins)
+                        return f"{pad}{mn} = rad_value_comp_field_set({mn}, {fidx}, __field_{fa.field}, {val_code});\n"
+                    }
+                }
+                let obj_code = emit_expr(fa.object, ctx)
+                if fidx >= 0 {
+                    return f"{pad}rad_value_mut_set_field({obj_code}, {fidx}, __field_{fa.field}, {val_code});\n"
+                }
+            }
+            let obj_code = emit_expr(fa.object, ctx)
+            return f"{pad}rad_value_mut_set_field({obj_code}, 0, __field_{fa.field}, {val_code});\n"
+        }
+        if s.name == "__index_assign__" and has(stmt_id, IndexExpr) {
+            let ie = require(stmt_id, IndexExpr)
+            let val_code = emit_expr(s.value, ctx)
+            let updated = f"rad_index_set({emit_expr(ie.object, ctx)}, {emit_expr(ie.index, ctx)}, {val_code})"
+            return emit_assign_lvalue(ie.object, updated, level, ctx)
+        }
+        if contains(keys(ctx.value_vars), s.name) {
+            let vt = ctx.value_vars[s.name]
+            if is_comp_type(vt, ctx.comp_fields) {
+                if has(s.value, StructLiteral) {
+                    return f"{pad}{mangle_ident(s.name, builtins)} = {emit_struct_value(s.value, ctx)};\n"
+                }
+                let assign_src_type = infer_value_type(s.value, ctx)
+                if assign_src_type == vt {
+                    let src_code = emit_expr(s.value, ctx)
+                    return f"{pad}{mangle_ident(s.name, builtins)} = {src_code};\n"
+                }
+                let fields = ctx.comp_fields[vt]
+                let src_code = emit_expr(s.value, ctx)
+                let c_ty = f"RadComp_{vt}"
+                let av = f"__av_{stmt_id}"
+                let mn = mangle_ident(s.name, builtins)
+                let mut out = f"""${pad}{ RadValue ${av} = ${src_code};\n"""
+                out = f"""${out}${pad}${mn} = (${c_ty}){ """
+                let mut i = 0
+                for f in fields {
+                    if i > 0 { out = f"{out}, " }
+                    out = f"{out}.{f} = rad_value_get_comp_field({av}, {i}, __field_{f})"
+                    i = i + 1
+                }
+                out = f"""${out} }; }\n"""
+                return out
+            }
+        }
+        let val_code = f"rad_value_deep_copy({emit_expr(s.value, ctx)})"
+        let idx = list_index_of(env_names, s.name)
+        if idx >= 0 {
+            return f"{pad}__env->slots[{idx}] = {val_code};\n"
+        }
+        return f"{pad}{mangle_ident(s.name, builtins)} = {val_code};\n"
+    } else if has(stmt_id, PushStmt) {
+        let s = require(stmt_id, PushStmt)
+        let target_code = emit_var_ref(s.target, ctx)
+        return f"{pad}{target_code} = rad_push({target_code}, {emit_expr(s.value, ctx)});\n"
+    } else if has(stmt_id, BreakStmt) {
+        return f"{pad}break;\n"
+    } else if has(stmt_id, ContinueStmt) {
+        return f"{pad}continue;\n"
+    } else if has(stmt_id, ExprStmt) {
+        let s = require(stmt_id, ExprStmt)
+        if has(s.expr, CallExpr) {
+            let fname = get_callee_name(s.expr)
+            if fname == "set" {
+                let call = require(s.expr, CallExpr)
+                let ent_code = emit_expr(call.args[0], ctx)
+                let comp_arg = call.args[1]
+                if has(comp_arg, StructLiteral) {
+                    let mut buf = buffer_new()
+                    let sl = require(comp_arg, StructLiteral)
+                    let comp_name = join_path(sl.path)
+                    buf = buffer_append(buf, f"{pad}rad_ecs_set({ent_code}, __comp_{comp_name}, {emit_expr(comp_arg, ctx)});\n")
+                    return buffer_to_str(buf)
+                } else {
+                    let inferred = infer_value_type(comp_arg, ctx)
+                    if is_comp_type(inferred, ctx.comp_fields) {
+                        if has(comp_arg, IdentExpr) {
+                            let id = require(comp_arg, IdentExpr)
+                            if contains(keys(ctx.value_vars), id.name) or contains(keys(ctx.comp_params), id.name) {
+                                return f"{pad}rad_ecs_set({ent_code}, __comp_{inferred}, {emit_struct_var_as_value(id.name, inferred, ctx)});\n"
+                            }
+                        }
+                        let src_code = emit_expr(comp_arg, ctx)
+                        return f"{pad}rad_ecs_set({ent_code}, __comp_{inferred}, {src_code});\n"
+                    }
+                    let src_code = emit_expr(comp_arg, ctx)
+                    return f"""${pad}{ RadValue __set_v = ${src_code}; if (__set_v.tag == RV_STRUCT && __set_v.as.rst) { rad_ecs_set(${ent_code}, __set_v.as.rst->layout_comp, __set_v); } else { rad_ecs_merge(${ent_code}, __set_v); } }\n"""
+                }
+            }
+        }
+        return f"{pad}(void)({emit_expr(s.expr, ctx)});\n"
+    } else if has(stmt_id, EntityStmt) {
+        let s = require(stmt_id, EntityStmt)
+        let mut buf = buffer_new()
+        let ent_name = mangle_ident(s.name, builtins)
+        buf = buffer_append(buf, f"""${pad}RadValue ${ent_name} = rad_spawn_named(rad_make_str("${c_escape(s.name)}"));\n""")
+        for comp_expr in s.components {
+            if has(comp_expr, StructLiteral) {
+                let sl = require(comp_expr, StructLiteral)
+                let comp_name = join_path(sl.path)
+                buf = buffer_append(buf, f"{pad}rad_ecs_set({ent_name}, __comp_{comp_name}, {emit_expr(comp_expr, ctx)});\n")
+            } else {
+                let inferred = infer_value_type(comp_expr, ctx)
+                if is_comp_type(inferred, ctx.comp_fields) {
+                    buf = buffer_append(buf, f"{pad}rad_ecs_set({ent_name}, __comp_{inferred}, {emit_expr(comp_expr, ctx)});\n")
+                } else {
+                    buf = buffer_append(buf, f"{pad}rad_ecs_merge({ent_name}, {emit_expr(comp_expr, ctx)});\n")
+                }
+            }
+        }
+        return buffer_to_str(buf)
+    } else if has(stmt_id, ScheduleStmt) {
+        let s = require(stmt_id, ScheduleStmt)
+        let mut buf = buffer_new()
+        for sys in s.systems {
+            buf = buffer_append(buf, f"{pad}(void)({c_fn_name(sys, builtins)}());\n")
+        }
+        return buffer_to_str(buf)
+    } else if has(stmt_id, EmitEventStmt) {
+        let s = require(stmt_id, EmitEventStmt)
+        let mut out = f"""({ RadValue __ev = rad_spawn(); """
+        let mut i = 0
+        while i < len(s.fields) {
+            out = f"{out}rad_ecs_set(__ev, __field_{s.fields[i]}, {emit_expr(s.values[i], ctx)}); "
+            i = i + 1
+        }
+        out = f"""${out}rad_event_emit("${c_escape(s.event_name)}", __ev); rad_make_nil(); })"""
+        return f"{pad}(void)({out});\n"
+    } else if has(stmt_id, ReturnStmt) {
+        let s = require(stmt_id, ReturnStmt)
+        if s.has_value {
+            if is_comp_type(ctx.fn_ret_type, ctx.comp_fields) {
+                let ret_comp = ctx.fn_ret_type
+                let ret_c = c_type_for(ret_comp, ctx.comp_fields)
+                if has(s.value, StructLiteral) {
+                    return f"""${pad}{ ${ret_c} __retv = ${emit_struct_value(s.value, ctx)}; g_rad_call_depth = __depth_saved; return __retv; }\n"""
+                }
+                let mut comp_expr = ""
+                if has(s.value, IdentExpr) {
+                    let rid = require(s.value, IdentExpr)
+                    if contains(keys(ctx.comp_params), rid.name) {
+                        comp_expr = emit_var_ref(rid.name, ctx)
+                    } else if list_contains(ctx.radcomp_locals, rid.name) {
+                        comp_expr = mangle_ident(rid.name, ctx.builtins)
+                    }
+                }
+                if comp_expr == "" and is_comp_type(infer_value_type(s.value, ctx), ctx.comp_fields) {
+                    comp_expr = emit_expr(s.value, ctx)
+                }
+                if comp_expr != "" {
+                    return f"""${pad}{ ${ret_c} __retv = ${comp_expr}; g_rad_call_depth = __depth_saved; return __retv; }\n"""
+                }
+                let fields = ctx.comp_fields[ret_comp]
+                let mut out = f"""${pad}{ RadValue __retv = ${emit_expr(s.value, ctx)}; ${ret_c} __retc = { """
+                let mut fi = 0
+                for fld in fields {
+                    if fi > 0 { out = f"{out}, " }
+                    out = f"{out}.{fld} = rad_value_get_comp_field(__retv, {fi}, __field_{fld})"
+                    fi = fi + 1
+                }
+                out = f"""${out} }; g_rad_call_depth = __depth_saved; return __retc; }\n"""
+                return out
+            }
+            return f"""${pad}{ RadValue __retv = ${emit_expr(s.value, ctx)}; g_rad_call_depth = __depth_saved; return __retv; }\n"""
+        }
+        return f"{pad}g_rad_call_depth = __depth_saved; return rad_make_nil();\n"
+    } else if has(stmt_id, IfStmt) {
+        let s = require(stmt_id, IfStmt)
+        let mut buf = buffer_new()
+        buf = buffer_append(buf, f"""${pad}if (rad_is_truthy(${emit_expr(s.cond, ctx)})) {\n""")
+        buf = buffer_append(buf, emit_block(s.then_block, level + 1, ctx))
+        buf = buffer_append(buf, f"""${pad}}""")
+        let eb = s.else_block
+        if eb != nil {
+            if has(eb, BlockStmt) {
+                buf = buffer_append(buf, " else {\n")
+                buf = buffer_append(buf, emit_block(eb, level + 1, ctx))
+                buf = buffer_append(buf, f"""${pad}}""")
+            }
+        }
+        buf = buffer_append(buf, "\n")
+        return buffer_to_str(buf)
+    } else if has(stmt_id, WhileStmt) {
+        let s = require(stmt_id, WhileStmt)
+        let mut buf = buffer_new()
+        buf = buffer_append(buf, f"""${pad}while (rad_is_truthy(${emit_expr(s.cond, ctx)})) {\n""")
+        buf = buffer_append(buf, emit_block(s.body, level + 1, ctx))
+        buf = buffer_append(buf, f"""${pad}}\n""")
+        return buffer_to_str(buf)
+    } else if has(stmt_id, ForStmt) {
+        let s = require(stmt_id, ForStmt)
+        let mut binding = "rad_u__it"
+        if len(s.bindings) > 0 {
+            binding = mangle_ident(s.bindings[0], builtins)
+        }
+        let iter_expr = emit_expr(s.iterable, ctx)
+        let mut buf = buffer_new()
+        buf = buffer_append(buf, f"""${pad}{\n""")
+        buf = buffer_append(buf, f"""${pad}    RadValue __for_iter = ${iter_expr};\n""")
+        buf = buffer_append(buf, f"""${pad}    if (__for_iter.tag == RV_LIST_INT && __for_iter.as.list_i) {\n""")
+        buf = buffer_append(buf, f"{pad}        RadIntList *__fl = __for_iter.as.list_i;\n")
+        buf = buffer_append(buf, f"""${pad}        for (int64_t __fi = 0; __fi < __fl->len; __fi++) {\n""")
+        buf = buffer_append(buf, f"{pad}            RadValue {binding} = rad_make_int(__fl->data[__fi]);\n")
+        buf = buffer_append(buf, emit_block(s.body, level + 3, ctx))
+        buf = buffer_append(buf, f"""${pad}        }\n""")
+        buf = buffer_append(buf, f"""${pad}    } else if (__for_iter.tag == RV_LIST && __for_iter.as.list) {\n""")
+        buf = buffer_append(buf, f"{pad}        RadList *__fl = __for_iter.as.list;\n")
+        buf = buffer_append(buf, f"""${pad}        for (int64_t __fi = 0; __fi < __fl->len; __fi++) {\n""")
+        buf = buffer_append(buf, f"{pad}            RadValue {binding} = __fl->data[__fi];\n")
+        buf = buffer_append(buf, emit_block(s.body, level + 3, ctx))
+        buf = buffer_append(buf, f"""${pad}        }\n""")
+        buf = buffer_append(buf, f"""${pad}    } else if (__for_iter.tag == RV_MAP && __for_iter.as.map) {\n""")
+        buf = buffer_append(buf, f"""${pad}        for (int64_t __fi = 0; __fi < __for_iter.as.map->len; __fi++) {\n""")
+        buf = buffer_append(buf, f"{pad}            RadValue {binding} = __for_iter.as.map->keys[__fi];\n")
+        if len(s.bindings) >= 2 {
+            buf = buffer_append(buf, f"{pad}            RadValue {mangle_ident(s.bindings[1], builtins)} = __for_iter.as.map->vals[__fi];\n")
+        }
+        buf = buffer_append(buf, emit_block(s.body, level + 3, ctx))
+        buf = buffer_append(buf, f"""${pad}        }\n""")
+        buf = buffer_append(buf, f"""${pad}    } else if (__for_iter.tag == RV_STR && __for_iter.as.str.data) {\n""")
+        buf = buffer_append(buf, f"""${pad}        for (int64_t __fi = 0; __fi < __for_iter.as.str.len; __fi++) {\n""")
+        buf = buffer_append(buf, f"{pad}            RadValue {binding} = rad_make_int((unsigned char)__for_iter.as.str.data[__fi]);\n")
+        buf = buffer_append(buf, emit_block(s.body, level + 3, ctx))
+        buf = buffer_append(buf, f"""${pad}        }\n""")
+        buf = buffer_append(buf, f"""${pad}    }\n""")
+        buf = buffer_append(buf, f"""${pad}}\n""")
+        return buffer_to_str(buf)
+    } else if has(stmt_id, MatchStmt) {
+        let ms = require(stmt_id, MatchStmt)
+        let subj_code = emit_expr(ms.subject, ctx)
+        let mut buf = buffer_new()
+        buf = buffer_append(buf, f"""${pad}{\n""")
+        buf = buffer_append(buf, f"""${pad}    RadValue __match_subj = ${subj_code};\n""")
+        let mut first_case = true
+        let mut has_wildcard = false
+        for c_eid in ms.cases {
+            let mc = require(c_eid, MatchCase)
+            if mc.is_wildcard {
+                has_wildcard = true
+                if not first_case {
+                    buf = buffer_append(buf, " else {\n")
+                } else {
+                    buf = buffer_append(buf, f"""${pad}    {\n""")
+                }
+                buf = buffer_append(buf, emit_block(mc.body, level + 2, ctx))
+                buf = buffer_append(buf, f"""${pad}    }""")
+            } else if mc.is_string {
+                let cond = f"""(__match_subj.tag == RV_STR && __match_subj.as.str.data != NULL && strcmp(__match_subj.as.str.data, "${c_escape(mc.pattern_str)}") == 0)"""
+                if first_case {
+                    buf = buffer_append(buf, f"""${pad}    if (${cond}) {\n""")
+                } else {
+                    buf = buffer_append(buf, f""" else if (${cond}) {\n""")
+                }
+                buf = buffer_append(buf, emit_block(mc.body, level + 2, ctx))
+                buf = buffer_append(buf, f"""${pad}    }""")
+            } else if mc.is_int {
+                let cond = f"(__match_subj.tag == RV_INT && __match_subj.as.i == {mc.pattern_int})"
+                if first_case {
+                    buf = buffer_append(buf, f"""${pad}    if (${cond}) {\n""")
+                } else {
+                    buf = buffer_append(buf, f""" else if (${cond}) {\n""")
+                }
+                buf = buffer_append(buf, emit_block(mc.body, level + 2, ctx))
+                buf = buffer_append(buf, f"""${pad}    }""")
+            } else if len(mc.has_component) > 0 {
+                let comp_name = mc.has_component
+                let cond = f"rad_is_truthy(rad_ecs_has(__match_subj, __comp_{comp_name}))"
+                if first_case {
+                    buf = buffer_append(buf, f"""${pad}    if (${cond}) {\n""")
+                } else {
+                    buf = buffer_append(buf, f""" else if (${cond}) {\n""")
+                }
+                if len(mc.has_binding) > 0 {
+                    buf = buffer_append(buf, f"{pad}        RadValue {mangle_ident(mc.has_binding, builtins)} = rad_ecs_require(__match_subj, __comp_{comp_name});\n")
+                }
+                buf = buffer_append(buf, emit_block(mc.body, level + 2, ctx))
+                buf = buffer_append(buf, f"""${pad}    }""")
+            } else {
+                let pattern_name = join_path(mc.pattern_path)
+                let mut match_cond = f"rad_is_truthy(rad_ecs_has(__match_subj, __comp_{pattern_name}))"
+                let mut is_opt_res = false
+                if pattern_name == "Some" or pattern_name == "Option_Some" {
+                    match_cond = "__match_subj.tag == RV_OPTION_SOME"
+                    is_opt_res = true
+                } else if pattern_name == "None" or pattern_name == "Option_None" {
+                    match_cond = "__match_subj.tag == RV_OPTION_NONE"
+                    is_opt_res = true
+                } else if pattern_name == "Ok" or pattern_name == "Result_Ok" {
+                    match_cond = "__match_subj.tag == RV_RESULT_OK"
+                    is_opt_res = true
+                } else if pattern_name == "Err" or pattern_name == "Result_Err" {
+                    match_cond = "__match_subj.tag == RV_RESULT_ERR"
+                    is_opt_res = true
+                }
+                if first_case {
+                    buf = buffer_append(buf, f"""${pad}    if (${match_cond}) {\n""")
+                } else {
+                    buf = buffer_append(buf, f""" else if (${match_cond}) {\n""")
+                }
+                if len(mc.bindings) > 0 {
+                    let mut bi = 0
+                    for bname in mc.bindings {
+                        let mut f_name = bname
+                        if bi < len(mc.binding_fields) {
+                            f_name = mc.binding_fields[bi]
+                        }
+                        if is_opt_res {
+                            buf = buffer_append(buf, f"{pad}        RadValue {mangle_ident(bname, builtins)} = *__match_subj.as.inner;\n")
+                        } else {
+                            buf = buffer_append(buf, f"{pad}        RadValue {mangle_ident(bname, builtins)} = rad_ecs_require(__match_subj, __field_{f_name});\n")
+                        }
+                        bi = bi + 1
+                    }
+                }
+                buf = buffer_append(buf, emit_block(mc.body, level + 2, ctx))
+                buf = buffer_append(buf, f"""${pad}    }""")
+            }
+            first_case = false
+        }
+        if not has_wildcard {
+            if first_case {
+                buf = buffer_append(buf, f"""${pad}    {\n""")
+            } else {
+                buf = buffer_append(buf, f""" else {\n""")
+            }
+            buf = buffer_append(buf, f"{pad}        RadValue __vn = rad_variant_of(__match_subj);\n")
+            buf = buffer_append(buf, f"""${pad}        const char *__vname = (__vn.tag == RV_STR && __vn.as.str.data) ? __vn.as.str.data : "?";\n""")
+            buf = buffer_append(buf, f"""${pad}        const char *__sep = strstr(__vname, "::");\n""")
+            buf = buffer_append(buf, f"{pad}        if (__sep) __vname = __sep + 2;\n")
+            buf = buffer_append(buf, f"""${pad}        fprintf(stderr, "Add a case: %s => { ... }\\n", __vname);\n""")
+            buf = buffer_append(buf, f"{pad}        exit(1);\n")
+            buf = buffer_append(buf, f"""${pad}    }""")
+        }
+        buf = buffer_append(buf, f"""\n${pad}}\n""")
+        return buffer_to_str(buf)
+    }
+    return f"{pad}/* unsupported stmt */\n"
+}
+
+fn emit_block(block_id: entity, level: int, ctx: EmitCtx) -> str {
+    if not has(block_id, BlockStmt) { return "" }
+    let b = require(block_id, BlockStmt)
+    let mut buf = buffer_new()
+    for st in b.stmts {
+        buf = buffer_append(buf, emit_stmt(st, level, ctx))
+    }
+    return buffer_to_str(buf)
+}
+
+fn block_ends_with_return(block_id: entity) -> bool {
+    if not has(block_id, BlockStmt) { return false }
+    let b = require(block_id, BlockStmt)
+    let n = len(b.stmts)
+    if n == 0 { return false }
+    let last = b.stmts[n - 1]
+    return has(last, ReturnStmt)
+}
+
+// Scan a block for LetStmt whose value is a ClosureExpr. Returns closure names.
+fn find_closures_in_block(block_id: entity) -> list<str> {
+    let mut names: list<str> = []
+    if not has(block_id, BlockStmt) { return names }
+    let b = require(block_id, BlockStmt)
+    for st in b.stmts {
+        if has(st, LetStmt) {
+            let s = require(st, LetStmt)
+            if has(s.value, ClosureExpr) {
+                names << s.names[0]
+            }
+        }
+    }
+    return names
+}
+
+fn tag_anon_closures_expr(eid: entity, counter: int) -> int {
+    let mut c = counter
+    if has(eid, ClosureExpr) and not has(eid, HoistedName) {
+        set(eid, HoistedName { name: f"__anon_{c}" })
+        c = c + 1
+    }
+    if has(eid, CallExpr) {
+        let call = require(eid, CallExpr)
+        c = tag_anon_closures_expr(call.callee, c)
+        for a in call.args { c = tag_anon_closures_expr(a, c) }
+    }
+    if has(eid, BinaryOp) {
+        let bin = require(eid, BinaryOp)
+        c = tag_anon_closures_expr(bin.lhs, c)
+        c = tag_anon_closures_expr(bin.rhs, c)
+    }
+    if has(eid, UnaryOp) {
+        let un = require(eid, UnaryOp)
+        c = tag_anon_closures_expr(un.operand, c)
+    }
+    if has(eid, IndexExpr) {
+        let ix = require(eid, IndexExpr)
+        c = tag_anon_closures_expr(ix.object, c)
+        c = tag_anon_closures_expr(ix.index, c)
+    }
+    if has(eid, ListLiteral) {
+        let ll = require(eid, ListLiteral)
+        for el in ll.elements { c = tag_anon_closures_expr(el, c) }
+    }
+    if has(eid, TupleLiteral) {
+        let tl = require(eid, TupleLiteral)
+        for el in tl.elements { c = tag_anon_closures_expr(el, c) }
+    }
+    if has(eid, MapLiteral) {
+        let ml = require(eid, MapLiteral)
+        let mut mi = 0
+        while mi < len(ml.keys) {
+            c = tag_anon_closures_expr(ml.keys[mi], c)
+            c = tag_anon_closures_expr(ml.values[mi], c)
+            mi = mi + 1
+        }
+    }
+    if has(eid, EntityExpr) {
+        let ee = require(eid, EntityExpr)
+        let ee_name = ee.name
+        if ee_name != nil { c = tag_anon_closures_expr(ee_name, c) }
+        for comp in ee.components { c = tag_anon_closures_expr(comp, c) }
+    }
+    return c
+}
+
+fn tag_anon_closures_program(root: entity) -> nil {
+    if not has(root, Program) { return }
+    let pr = require(root, Program)
+    let mut c = 0
+    for d in pr.decls {
+        if has(d, Stmt) {
+            c = tag_anon_closures_stmt(d, c)
+        }
+    }
+}
+
+fn tag_anon_closures_stmt(st: entity, counter: int) -> int {
+    let mut c = counter
+    if has(st, LetStmt) {
+        let s = require(st, LetStmt)
+        if not has(s.value, ClosureExpr) { c = tag_anon_closures_expr(s.value, c) }
+    }
+    if has(st, AssignStmt) { c = tag_anon_closures_expr(require(st, AssignStmt).value, c) }
+    if has(st, ExprStmt) { c = tag_anon_closures_expr(require(st, ExprStmt).expr, c) }
+    if has(st, ReturnStmt) { c = tag_anon_closures_expr(require(st, ReturnStmt).value, c) }
+    if has(st, PushStmt) { c = tag_anon_closures_expr(require(st, PushStmt).value, c) }
+    if has(st, IfStmt) {
+        let i = require(st, IfStmt)
+        c = tag_anon_closures_expr(i.cond, c)
+        c = tag_anon_closures_block(i.then_block, c)
+        let eb = i.else_block
+        if eb != nil {
+            if has(eb, BlockStmt) { c = tag_anon_closures_block(eb, c) }
+        }
+    }
+    if has(st, WhileStmt) {
+        let w = require(st, WhileStmt)
+        c = tag_anon_closures_expr(w.cond, c)
+        c = tag_anon_closures_block(w.body, c)
+    }
+    if has(st, ForStmt) {
+        let fr = require(st, ForStmt)
+        c = tag_anon_closures_expr(fr.iterable, c)
+        c = tag_anon_closures_block(fr.body, c)
+    }
+    if has(st, MatchStmt) {
+        let m = require(st, MatchStmt)
+        c = tag_anon_closures_expr(m.subject, c)
+        for case_eid in m.cases {
+            let mc = require(case_eid, MatchCase)
+            c = tag_anon_closures_block(mc.body, c)
+        }
+    }
+    return c
+}
+
+fn tag_anon_closures_block(block_id: entity, counter: int) -> int {
+    let mut c = counter
+    if not has(block_id, BlockStmt) { return c }
+    let b = require(block_id, BlockStmt)
+    for st in b.stmts { c = tag_anon_closures_stmt(st, c) }
+    return c
+}
+
+fn collect_hoisted_expr(eid: entity, mut result: list<entity>) -> list<entity> {
+    if has(eid, ClosureExpr) and has(eid, HoistedName) { result << eid }
+    if has(eid, CallExpr) {
+        let call = require(eid, CallExpr)
+        result = collect_hoisted_expr(call.callee, result)
+        for a in call.args { result = collect_hoisted_expr(a, result) }
+    }
+    if has(eid, BinaryOp) {
+        let bin = require(eid, BinaryOp)
+        result = collect_hoisted_expr(bin.lhs, result)
+        result = collect_hoisted_expr(bin.rhs, result)
+    }
+    if has(eid, UnaryOp) { result = collect_hoisted_expr(require(eid, UnaryOp).operand, result) }
+    if has(eid, IndexExpr) {
+        let ix = require(eid, IndexExpr)
+        result = collect_hoisted_expr(ix.object, result)
+        result = collect_hoisted_expr(ix.index, result)
+    }
+    if has(eid, ListLiteral) {
+        for el in require(eid, ListLiteral).elements { result = collect_hoisted_expr(el, result) }
+    }
+    if has(eid, TupleLiteral) {
+        for el in require(eid, TupleLiteral).elements { result = collect_hoisted_expr(el, result) }
+    }
+    if has(eid, MapLiteral) {
+        let ml = require(eid, MapLiteral)
+        let mut mi = 0
+        while mi < len(ml.keys) {
+            result = collect_hoisted_expr(ml.keys[mi], result)
+            result = collect_hoisted_expr(ml.values[mi], result)
+            mi = mi + 1
+        }
+    }
+    if has(eid, EntityExpr) {
+        let ee = require(eid, EntityExpr)
+        let ee_name = ee.name
+        if ee_name != nil { result = collect_hoisted_expr(ee_name, result) }
+        for comp in ee.components { result = collect_hoisted_expr(comp, result) }
+    }
+    return result
+}
+
+fn collect_hoisted_program_stmts(root: entity, mut result: list<entity>) -> list<entity> {
+    if not has(root, Program) { return result }
+    let pr = require(root, Program)
+    for d in pr.decls {
+        if has(d, Stmt) {
+            result = collect_hoisted_stmt(d, result)
+        }
+    }
+    return result
+}
+
+fn collect_hoisted_stmt(st: entity, mut result: list<entity>) -> list<entity> {
+    if has(st, LetStmt) {
+        let s = require(st, LetStmt)
+        if not has(s.value, ClosureExpr) { result = collect_hoisted_expr(s.value, result) }
+    }
+    if has(st, AssignStmt) { result = collect_hoisted_expr(require(st, AssignStmt).value, result) }
+    if has(st, ExprStmt) { result = collect_hoisted_expr(require(st, ExprStmt).expr, result) }
+    if has(st, ReturnStmt) { result = collect_hoisted_expr(require(st, ReturnStmt).value, result) }
+    if has(st, PushStmt) { result = collect_hoisted_expr(require(st, PushStmt).value, result) }
+    if has(st, IfStmt) {
+        let i = require(st, IfStmt)
+        result = collect_hoisted_expr(i.cond, result)
+        result = collect_hoisted_block(i.then_block, result)
+        let eb = i.else_block
+        if eb != nil {
+            if has(eb, BlockStmt) { result = collect_hoisted_block(eb, result) }
+        }
+    }
+    if has(st, WhileStmt) {
+        let w = require(st, WhileStmt)
+        result = collect_hoisted_expr(w.cond, result)
+        result = collect_hoisted_block(w.body, result)
+    }
+    if has(st, ForStmt) {
+        let fr = require(st, ForStmt)
+        result = collect_hoisted_expr(fr.iterable, result)
+        result = collect_hoisted_block(fr.body, result)
+    }
+    if has(st, MatchStmt) {
+        let m = require(st, MatchStmt)
+        result = collect_hoisted_expr(m.subject, result)
+        for case_eid in m.cases {
+            let mc = require(case_eid, MatchCase)
+            result = collect_hoisted_block(mc.body, result)
+        }
+    }
+    return result
+}
+
+fn collect_hoisted_block(block_id: entity, mut result: list<entity>) -> list<entity> {
+    if not has(block_id, BlockStmt) { return result }
+    let b = require(block_id, BlockStmt)
+    for st in b.stmts { result = collect_hoisted_stmt(st, result) }
+    return result
+}
+
+fn collect_env_vars(params: list<entity>, block_id: entity) -> list<str> {
+    let mut names: list<str> = []
+    for p_eid in params {
+        let p = require(p_eid, Param)
+        names << p.name
+    }
+    if not has(block_id, BlockStmt) { return names }
+    let b = require(block_id, BlockStmt)
+    for st in b.stmts {
+        if has(st, LetStmt) {
+            let s = require(st, LetStmt)
+            for name in s.names {
+                if not list_contains(names, name) {
+                    names << name
+                }
+            }
+        }
+    }
+    return names
+}
+
+fn emit_closure_fn(parent_name: str, closure_name: str, closure_eid: entity, ctx: EmitCtx) -> str {
+    let __cl_builtins = ctx.builtins
+    let cl = require(closure_eid, ClosureExpr)
+    let hoisted_name = f"__closure_{sanitize_ident(parent_name)}_{sanitize_ident(closure_name)}"
+    let mut buf = buffer_new()
+    buf = buffer_append(buf, f"""RadValue ${hoisted_name}(RadEnv *__env, RadValue *__args, int64_t __nargs) {\n""")
+    buf = buffer_append(buf, "    int __depth_saved = g_rad_call_depth++;\n")
+    buf = buffer_append(buf, "    if (g_rad_call_depth > RAD_MAX_CALL_DEPTH) { fprintf(stderr, \"Stack overflow: exceeded %d call frames\\n\", RAD_MAX_CALL_DEPTH); exit(1); }\n")
+    buf = buffer_append(buf, "    (void)__nargs;\n")
+    let mut pi = 0
+    for p_eid in cl.params {
+        let p = require(p_eid, Param)
+        buf = buffer_append(buf, f"    RadValue {mangle_ident(p.name, __cl_builtins)} = __args[{pi}];\n")
+        pi = pi + 1
+    }
+    let rcl = collect_radcomp_struct_lets(cl.body, ctx.comp_fields)
+    let mut cl_value_vars: map<str, str> = {}
+    for k in keys(ctx.value_vars) { cl_value_vars[k] = ctx.value_vars[k] }
+    let cl_vvs = collect_value_typed_lets(cl.body, ctx.comp_fields)
+    for k in keys(cl_vvs) { cl_value_vars[k] = cl_vvs[k] }
+    let closure_ctx: EmitCtx = make_emit_ctx(ctx.env_names, ctx.closure_names, ctx.builtins, ctx.comp_fields, cl_value_vars, rcl, ctx.fn_ret_type, ctx.fn_ret_types, ctx.fn_param_types, ctx.comp_params, ctx.type_aliases, ctx.state_names, ctx.type_names)
+    buf = buffer_append(buf, emit_block(cl.body, 1, closure_ctx))
+    if not block_ends_with_return(cl.body) {
+        buf = buffer_append(buf, "    g_rad_call_depth = __depth_saved; return rad_make_nil();\n")
+    }
+    buf = buffer_append(buf, "}\n\n")
+    return buffer_to_str(buf)
+}
+
+fn c_type_for(type_str: str, comp_fields: map<str, list<str>>) -> str {
+    if is_comp_type(type_str, comp_fields) {
+        return f"RadComp_{type_str}"
+    }
+    return "RadValue"
+}
+
+fn c_param_type_for(type_str: str, comp_fields: map<str, list<str>>) -> str {
+    if is_comp_type(type_str, comp_fields) {
+        return f"const RadComp_{type_str} *"
+    }
+    return "RadValue"
+}
+
+fn emit_fn_fwd_decl(decl_id: entity, builtins: map<str, str>, comp_fields: map<str, list<str>>) -> str {
+    let f = require(decl_id, FnDecl)
+    let ret_c = c_type_for(f.ret_type, comp_fields)
+    let mut out = f"{ret_c} {c_fn_name(f.name, builtins)}("
+    let mut i = 0
+    for p_eid in f.params {
+        let p = require(p_eid, Param)
+        if i > 0 { out = f"{out}, " }
+        out = f"{out}{c_param_type_for(p.type_str, comp_fields)} {mangle_ident(p.name, builtins)}"
+        i = i + 1
+    }
+    if len(f.params) == 0 {
+        out = f"{out}void"
+    }
+    out = f"{out});\n"
+    return out
+}
+
+fn emit_fn_ref_fwd_decl(decl_id: entity, builtins: map<str, str>) -> str {
+    let f = require(decl_id, FnDecl)
+    let wrap = f"__fnref_{sanitize_ident(c_fn_name(f.name, builtins))}"
+    return f"""static RadValue ${wrap}(RadEnv *__env, RadValue *__args, int64_t __nargs);\n"""
+}
+
+fn emit_fn_decl(decl_id: entity, builtins: map<str, str>, comp_fields: map<str, list<str>>, fn_ret_types: map<str, str>, fn_param_types: map<str, list<str>>, type_aliases: map<str, str>, state_names: list<str>, type_names: list<str>) -> str {
+    let f = require(decl_id, FnDecl)
+    let closure_names = find_closures_in_block(f.body)
+
+    let anon_count = tag_anon_closures_block(f.body, 0)
+    let anon_closures = collect_hoisted_block(f.body, [])
+    let has_closures = len(closure_names) > 0 or anon_count > 0
+
+    let mut buf = buffer_new()
+    let mut env_names: list<str> = []
+
+    if has_closures {
+        env_names = collect_env_vars(f.params, f.body)
+    }
+
+    let mut value_vars: map<str, str> = {}
+    let mut comp_params: map<str, str> = {}
+    for p_eid in f.params {
+        let p = require(p_eid, Param)
+        if is_comp_type(p.type_str, comp_fields) {
+            if list_index_of(env_names, p.name) < 0 {
+                value_vars[p.name] = p.type_str
+                comp_params[p.name] = p.type_str
+            }
+        }
+    }
+    let let_vvs = collect_value_typed_lets(f.body, comp_fields)
+    for vk in keys(let_vvs) {
+        value_vars[vk] = let_vvs[vk]
+    }
+
+    let radcomp_l = collect_radcomp_struct_lets(f.body, comp_fields)
+    let ctx: EmitCtx = make_emit_ctx(env_names, closure_names, builtins, comp_fields, value_vars, radcomp_l, f.ret_type, fn_ret_types, fn_param_types, comp_params, type_aliases, state_names, type_names)
+
+    if has_closures {
+        let b = require(f.body, BlockStmt)
+        for st in b.stmts {
+            if has(st, LetStmt) {
+                let s = require(st, LetStmt)
+                if has(s.value, ClosureExpr) {
+                    buf = buffer_append(buf, emit_closure_fn(f.name, s.names[0], s.value, ctx))
+                }
+            }
+        }
+    }
+
+    for anon_eid in anon_closures {
+        let hn = require(anon_eid, HoistedName)
+        let full_hoisted = f"__closure_{sanitize_ident(f.name)}_{sanitize_ident(hn.name)}"
+        set(anon_eid, HoistedName { name: full_hoisted })
+        buf = buffer_append(buf, emit_closure_fn(f.name, hn.name, anon_eid, ctx))
+    }
+
+    let ret_c = c_type_for(f.ret_type, comp_fields)
+    buf = buffer_append(buf, f"{ret_c} {c_fn_name(f.name, builtins)}(")
+    let mut i = 0
+    for p_eid in f.params {
+        let p = require(p_eid, Param)
+        if i > 0 { buf = buffer_append(buf, ", ") }
+        buf = buffer_append(buf, f"{c_param_type_for(p.type_str, comp_fields)} {mangle_ident(p.name, builtins)}")
+        i = i + 1
+    }
+    if len(f.params) == 0 {
+        buf = buffer_append(buf, "void")
+    }
+    buf = buffer_append(buf, ") {\n")
+    buf = buffer_append(buf, "    int __depth_saved = g_rad_call_depth++;\n")
+    buf = buffer_append(buf, "    if (g_rad_call_depth > RAD_MAX_CALL_DEPTH) { fprintf(stderr, \"Stack overflow: exceeded %d call frames\\n\", RAD_MAX_CALL_DEPTH); exit(1); }\n")
+
+    for p_eid in f.params {
+        let p = require(p_eid, Param)
+        if not is_comp_type(p.type_str, comp_fields) {
+            buf = buffer_append(buf, f"    {mangle_ident(p.name, builtins)} = rad_value_deep_copy({mangle_ident(p.name, builtins)});\n")
+        }
+    }
+
+    if has_closures {
+        buf = buffer_append(buf, f"    RadEnv *__env = rad_env_new({len(env_names)});\n")
+        let mut pi = 0
+        for p_eid in f.params {
+            let p = require(p_eid, Param)
+            let idx = list_index_of(env_names, p.name)
+            if idx >= 0 {
+                if is_comp_type(p.type_str, comp_fields) {
+                    let pref = mangle_ident(p.name, builtins)
+                    buf = buffer_append(buf, "    {\n")
+                    buf = buffer_append(buf, "        RadValue __box = rad_spawn();\n")
+                    buf = buffer_append(buf, f"        rad_ecs_set(__box, __comp_{p.type_str}, rad_make_bool(1));\n")
+                    if contains(keys(comp_fields), p.type_str) {
+                        let pfields = comp_fields[p.type_str]
+                        for pf in pfields {
+                            buf = buffer_append(buf, f"        rad_ecs_set(__box, __field_{pf}, {pref}->{pf});\n")
+                        }
+                    }
+                    buf = buffer_append(buf, f"        __env->slots[{idx}] = __box;\n")
+                    buf = buffer_append(buf, "    }\n")
+                } else {
+                    buf = buffer_append(buf, f"    __env->slots[{idx}] = {mangle_ident(p.name, builtins)};\n")
+                }
+            }
+            pi = pi + 1
+        }
+
+        let b = require(f.body, BlockStmt)
+        for st in b.stmts {
+            if has(st, LetStmt) {
+                let s = require(st, LetStmt)
+                if has(s.value, ClosureExpr) {
+                    let cname = s.names[0]
+                    let hoisted_name = f"__closure_{sanitize_ident(f.name)}_{sanitize_ident(cname)}"
+                    let idx = list_index_of(env_names, cname)
+                    if idx >= 0 {
+                        buf = buffer_append(buf, f"    __env->slots[{idx}] = rad_make_fn({hoisted_name}, __env);\n")
+                    }
+                }
+            }
+        }
+    }
+
+    buf = buffer_append(buf, emit_block(f.body, 1, ctx))
+    if not block_ends_with_return(f.body) {
+        if is_comp_type(f.ret_type, comp_fields) {
+            buf = buffer_append(buf, f"""    g_rad_call_depth = __depth_saved; ${ret_c} __zero = {0}; return __zero;\n""")
+        } else {
+            buf = buffer_append(buf, "    g_rad_call_depth = __depth_saved; return rad_make_nil();\n")
+        }
+    }
+    buf = buffer_append(buf, "}\n\n")
+    return buffer_to_str(buf)
+}
+
+fn emit_fn_ref_wrapper(decl_id: entity, builtins: map<str, str>, comp_fields: map<str, list<str>>) -> str {
+    let f = require(decl_id, FnDecl)
+    let wrap_name = f"__fnref_{sanitize_ident(c_fn_name(f.name, builtins))}"
+    let c_name = c_fn_name(f.name, builtins)
+    let bslash = chr(92)
+    let mut buf = buffer_new()
+    buf = buffer_append(buf, f"""static RadValue ${wrap_name}(RadEnv *__env, RadValue *__args, int64_t __nargs) {\n""")
+    buf = buffer_append(buf, "    (void)__env;\n")
+    buf = buffer_append(buf, f"""    if (__nargs != ${len(f.params)}) { fprintf(stderr, "Runtime error: arity mismatch in function value '${c_escape(f.name)}'${bslash}n"); exit(1); }\n""")
+    let mut i = 0
+    for p_eid in f.params {
+        let p = require(p_eid, Param)
+        if is_comp_type(p.type_str, comp_fields) {
+            let c_ty = f"RadComp_{p.type_str}"
+            let fields = comp_fields[p.type_str]
+            buf = buffer_append(buf, f"""    ${c_ty} __up_${i} = { """)
+            let mut fi = 0
+            for fld in fields {
+                if fi > 0 { buf = buffer_append(buf, ", ") }
+                buf = buffer_append(buf, f".{fld} = rad_value_get_comp_field(__args[{i}], {fi}, __field_{fld})")
+                fi = fi + 1
+            }
+            buf = buffer_append(buf, " };\n")
+        }
+        i = i + 1
+    }
+    let mut call = f"{c_name}("
+    if len(f.params) == 0 {
+        call = f"{call})"
+    } else {
+        i = 0
+        for p_eid in f.params {
+            let p = require(p_eid, Param)
+            if i > 0 { call = f"{call}, " }
+            if is_comp_type(p.type_str, comp_fields) {
+                call = f"{call}&__up_{i}"
+            } else {
+                call = f"{call}__args[{i}]"
+            }
+            i = i + 1
+        }
+        call = f"{call})"
+    }
+    if is_comp_type(f.ret_type, comp_fields) {
+        let ret_comp = f.ret_type
+        let fields = comp_fields[ret_comp]
+        buf = buffer_append(buf, f"""    ${c_type_for(ret_comp, comp_fields)} __wr = ${call};\n""")
+        buf = buffer_append(buf, "    return rad_make_struct_literal((RadValue[]){")
+        let mut fi = 0
+        for fld in fields {
+            if fi > 0 { buf = buffer_append(buf, ", ") }
+            buf = buffer_append(buf, f"__wr.{fld}")
+            fi = fi + 1
+        }
+        buf = buffer_append(buf, f"""}, ${len(fields)}, __comp_${ret_comp});\n""")
+    } else {
+        buf = buffer_append(buf, f"    return {call};\n")
+    }
+    buf = buffer_append(buf, "}\n\n")
+    return buffer_to_str(buf)
+}
+
+fn join_path(parts: list<str>) -> str {
+    let mut out = ""
+    let mut i = 0
+    for p in parts {
+        if i > 0 { out = f"{out}_" }
+        out = f"{out}{p}"
+        i = i + 1
+    }
+    return out
+}
+
+fn collect_variant_map_keys(root: entity) -> list<str> {
+    let mut keys: list<str> = []
+    if not has(root, Program) { return keys }
+    let p = require(root, Program)
+    for d in p.decls {
+        if has(d, TypeDecl) {
+            let td = require(d, TypeDecl)
+            for v_eid in td.variants {
+                let tv = require(v_eid, TypeVariant)
+                keys << f"{td.name}::{tv.name}"
+                keys << tv.name
+            }
+        }
+        if has(d, StateDecl) {
+            let sd = require(d, StateDecl)
+            for v_eid in sd.variants {
+                let sv = require(v_eid, StateVariant)
+                keys << f"{sd.name}::{sv.name}"
+                keys << sv.name
+            }
+        }
+    }
+    keys << "None"
+    keys << "Some"
+    keys << "Ok"
+    keys << "Err"
+    return keys
+}
+
+fn collect_variant_map_vals(root: entity) -> list<str> {
+    let mut vals: list<str> = []
+    if not has(root, Program) { return vals }
+    let p = require(root, Program)
+    for d in p.decls {
+        if has(d, TypeDecl) {
+            let td = require(d, TypeDecl)
+            for v_eid in td.variants {
+                let tv = require(v_eid, TypeVariant)
+                vals << f"{td.name}_{tv.name}"
+                vals << f"{td.name}_{tv.name}"
+            }
+        }
+        if has(d, StateDecl) {
+            let sd = require(d, StateDecl)
+            for v_eid in sd.variants {
+                let sv = require(v_eid, StateVariant)
+                vals << f"{sd.name}_{sv.name}"
+                vals << f"{sd.name}_{sv.name}"
+            }
+        }
+    }
+    vals << "Option_None"
+    vals << "Option_Some"
+    vals << "Result_Ok"
+    vals << "Result_Err"
+    return vals
+}
+
+fn resolve_pattern_name(pattern_path: list<str>, variant_keys: list<str>, variant_vals: list<str>) -> str {
+    let joined = join_path(pattern_path)
+    if len(pattern_path) == 1 {
+        let idx = list_index_of(variant_keys, pattern_path[0])
+        if idx >= 0 {
+            return variant_vals[idx]
+        }
+    }
+    return joined
+}
+
+fn collect_match_components_in_block(block_id: entity, acc: list<str>) -> list<str> {
+    let mut out = acc
+    if not has(block_id, BlockStmt) { return out }
+    let b = require(block_id, BlockStmt)
+    for st in b.stmts {
+        out = collect_match_components_in_stmt(st, out)
+    }
+    return out
+}
+
+fn collect_match_components_in_stmt(stmt_id: entity, acc: list<str>) -> list<str> {
+    let mut out = acc
+    if has(stmt_id, MatchStmt) {
+        let ms = require(stmt_id, MatchStmt)
+        for c_eid in ms.cases {
+            let mc = require(c_eid, MatchCase)
+            if not mc.is_wildcard and not mc.is_string and not mc.is_int and len(mc.pattern_path) > 0 {
+                let cname = join_path(mc.pattern_path)
+                if not list_contains(out, cname) {
+                    out << cname
+                }
+            }
+            out = collect_match_components_in_block(mc.body, out)
+        }
+    }
+    if has(stmt_id, IfStmt) {
+        let is = require(stmt_id, IfStmt)
+        out = collect_match_components_in_block(is.then_block, out)
+        let eb = is.else_block
+        if eb != nil {
+            out = collect_match_components_in_block(eb, out)
+        }
+    }
+    if has(stmt_id, WhileStmt) {
+        out = collect_match_components_in_block(require(stmt_id, WhileStmt).body, out)
+    }
+    if has(stmt_id, ForStmt) {
+        out = collect_match_components_in_block(require(stmt_id, ForStmt).body, out)
+    }
+    if has(stmt_id, LetElseStmt) {
+        out = collect_match_components_in_block(require(stmt_id, LetElseStmt).else_block, out)
+    }
+    return out
+}
+
+fn has_destructure_unknown_match_in_block(block_id: entity, untyped_params: list<str>, vkeys: list<str>) -> bool {
+    if not has(block_id, BlockStmt) { return false }
+    let b = require(block_id, BlockStmt)
+    for st in b.stmts {
+        if has_destructure_unknown_match_in_stmt(st, untyped_params, vkeys) {
+            return true
+        }
+    }
+    return false
+}
+
+fn has_destructure_unknown_match_in_stmt(stmt_id: entity, untyped_params: list<str>, vkeys: list<str>) -> bool {
+    if has(stmt_id, MatchStmt) {
+        let ms = require(stmt_id, MatchStmt)
+        if has(ms.subject, IdentExpr) {
+            let subj = require(ms.subject, IdentExpr)
+            if list_contains(untyped_params, subj.name) {
+                for c_eid in ms.cases {
+                    let mc = require(c_eid, MatchCase)
+                    if len(mc.bindings) > 0 or mc.has_rest {
+                        let pname = join_path(mc.pattern_path)
+                        if not list_contains(vkeys, pname) {
+                            return true
+                        }
+                    }
+                }
+            }
+        }
+        for c_eid in ms.cases {
+            let mc = require(c_eid, MatchCase)
+            if has_destructure_unknown_match_in_block(mc.body, untyped_params, vkeys) {
+                return true
+            }
+        }
+    }
+    if has(stmt_id, IfStmt) {
+        let is = require(stmt_id, IfStmt)
+        if has_destructure_unknown_match_in_block(is.then_block, untyped_params, vkeys) { return true }
+        let eb = is.else_block
+        if eb != nil {
+            if has_destructure_unknown_match_in_block(eb, untyped_params, vkeys) { return true }
+        }
+    }
+    if has(stmt_id, WhileStmt) {
+        if has_destructure_unknown_match_in_block(require(stmt_id, WhileStmt).body, untyped_params, vkeys) { return true }
+    }
+    if has(stmt_id, ForStmt) {
+        if has_destructure_unknown_match_in_block(require(stmt_id, ForStmt).body, untyped_params, vkeys) { return true }
+    }
+    if has(stmt_id, LetElseStmt) {
+        if has_destructure_unknown_match_in_block(require(stmt_id, LetElseStmt).else_block, untyped_params, vkeys) { return true }
+    }
+    return false
+}
+
+fn has_diag_match_destructure_unknown_subject(root: entity, vkeys: list<str>) -> bool {
+    if not has(root, Program) { return false }
+    let p = require(root, Program)
+    for d in p.decls {
+        if has(d, FnDecl) {
+            let fd = require(d, FnDecl)
+            let mut untyped_params: list<str> = []
+            for p_eid in fd.params {
+                let pm = require(p_eid, Param)
+                if pm.type_str == "" {
+                    untyped_params << pm.name
+                }
+            }
+            if len(untyped_params) > 0 and has_destructure_unknown_match_in_block(fd.body, untyped_params, vkeys) {
+                return true
+            }
+        }
+    }
+    return false
+}
+
+fn find_match_rest_in_block(block_id: entity) -> bool {
+    if not has(block_id, BlockStmt) { return false }
+    let b = require(block_id, BlockStmt)
+    for st in b.stmts {
+        if find_match_rest_in_stmt(st) { return true }
+    }
+    return false
+}
+
+fn find_match_rest_in_stmt(stmt_id: entity) -> bool {
+    if has(stmt_id, MatchStmt) {
+        let ms = require(stmt_id, MatchStmt)
+        for c_eid in ms.cases {
+            let mc = require(c_eid, MatchCase)
+            if mc.has_rest { return true }
+            if find_match_rest_in_block(mc.body) { return true }
+        }
+    }
+    if has(stmt_id, IfStmt) {
+        let is = require(stmt_id, IfStmt)
+        if find_match_rest_in_block(is.then_block) { return true }
+        let eb = is.else_block
+        if eb != nil {
+            if find_match_rest_in_block(eb) { return true }
+        }
+    }
+    if has(stmt_id, WhileStmt) {
+        if find_match_rest_in_block(require(stmt_id, WhileStmt).body) { return true }
+    }
+    if has(stmt_id, ForStmt) {
+        if find_match_rest_in_block(require(stmt_id, ForStmt).body) { return true }
+    }
+    return false
+}
+
+fn has_match_rest_anywhere(root: entity) -> bool {
+    if not has(root, Program) { return false }
+    let p = require(root, Program)
+    for d in p.decls {
+        if has(d, FnDecl) {
+            if find_match_rest_in_block(require(d, FnDecl).body) { return true }
+        }
+        if has(d, Stmt) {
+            if find_match_rest_in_stmt(d) { return true }
+        }
+    }
+    return false
+}
+
+fn find_unknown_match_binding(root: entity, comp_fields: map<str, list<str>>, vkeys: list<str>, vvals: list<str>) -> str {
+    if not has(root, Program) { return "" }
+    let p = require(root, Program)
+    for d in p.decls {
+        if has(d, FnDecl) {
+            let r = find_unknown_binding_in_block(require(d, FnDecl).body, comp_fields, vkeys, vvals)
+            if len(r) > 0 { return r }
+        }
+        if has(d, Stmt) {
+            let r = find_unknown_binding_in_stmt(d, comp_fields, vkeys, vvals)
+            if len(r) > 0 { return r }
+        }
+    }
+    return ""
+}
+
+fn find_unknown_binding_in_block(block_id: entity, comp_fields: map<str, list<str>>, vkeys: list<str>, vvals: list<str>) -> str {
+    if not has(block_id, BlockStmt) { return "" }
+    let b = require(block_id, BlockStmt)
+    for st in b.stmts {
+        let r = find_unknown_binding_in_stmt(st, comp_fields, vkeys, vvals)
+        if len(r) > 0 { return r }
+    }
+    return ""
+}
+
+fn find_unknown_binding_in_stmt(stmt_id: entity, comp_fields: map<str, list<str>>, vkeys: list<str>, vvals: list<str>) -> str {
+    if has(stmt_id, MatchStmt) {
+        let ms = require(stmt_id, MatchStmt)
+        for c_eid in ms.cases {
+            let mc = require(c_eid, MatchCase)
+            if mc.has_rest and len(mc.bindings) > 0 {
+                let pname = join_path(mc.pattern_path)
+                let resolved = resolve_pattern_name(mc.pattern_path, vkeys, vvals)
+                if contains(keys(comp_fields), resolved) {
+                    let known_fields = comp_fields[resolved]
+                    for bname in mc.bindings {
+                        let mut f_name = bname
+                        let bi = list_index_of(mc.bindings, bname)
+                        if bi < len(mc.binding_fields) {
+                            f_name = mc.binding_fields[bi]
+                        }
+                        if not list_contains(known_fields, f_name) {
+                            let mut full_path = pname
+                            let idx = list_index_of(vvals, resolved)
+                            if idx >= 0 {
+                                full_path = vkeys[idx]
+                            }
+                            return f"Error[E2504]: Unknown binding '{f_name}' for variant '{full_path}'"
+                        }
+                    }
+                }
+            }
+            let r = find_unknown_binding_in_block(mc.body, comp_fields, vkeys, vvals)
+            if len(r) > 0 { return r }
+        }
+    }
+    if has(stmt_id, IfStmt) {
+        let is = require(stmt_id, IfStmt)
+        let r = find_unknown_binding_in_block(is.then_block, comp_fields, vkeys, vvals)
+        if len(r) > 0 { return r }
+        let eb = is.else_block
+        if eb != nil {
+            let r2 = find_unknown_binding_in_block(eb, comp_fields, vkeys, vvals)
+            if len(r2) > 0 { return r2 }
+        }
+    }
+    return ""
+}
+
+fn collect_components(root: entity) -> list<str> {
+    let mut names: list<str> = []
+    if not has(root, Program) { return names }
+    let p = require(root, Program)
+    for d in p.decls {
+        if has(d, ComponentDecl) {
+            let cd = require(d, ComponentDecl)
+            if not list_contains(names, cd.name) {
+                names << cd.name
+            }
+        }
+        if has(d, TypeDecl) {
+            let td = require(d, TypeDecl)
+            if not list_contains(names, td.name) {
+                names << td.name
+            }
+            for v_eid in td.variants {
+                let tv = require(v_eid, TypeVariant)
+                let full = f"{td.name}_{tv.name}"
+                if not list_contains(names, full) {
+                    names << full
+                }
+                if not list_contains(names, tv.name) {
+                    names << tv.name
+                }
+            }
+        }
+        if has(d, StructDecl) {
+            let sd = require(d, StructDecl)
+            if not list_contains(names, sd.name) {
+                names << sd.name
+            }
+        }
+        if has(d, StateDecl) {
+            let sd = require(d, StateDecl)
+            if not list_contains(names, sd.name) {
+                names << sd.name
+            }
+            for v_eid in sd.variants {
+                let sv = require(v_eid, StateVariant)
+                let full = f"{sd.name}_{sv.name}"
+                if not list_contains(names, full) {
+                    names << full
+                }
+                if not list_contains(names, sv.name) {
+                    names << sv.name
+                }
+            }
+        }
+        if has(d, FnDecl) {
+            let fd = require(d, FnDecl)
+            names = collect_match_components_in_block(fd.body, names)
+        }
+        if has(d, Stmt) {
+            names = collect_match_components_in_stmt(d, names)
+        }
+    }
+    if not list_contains(names, "Option_None") { names << "Option_None" }
+    if not list_contains(names, "Option_Some") { names << "Option_Some" }
+    if not list_contains(names, "Result_Ok") { names << "Result_Ok" }
+    if not list_contains(names, "Result_Err") { names << "Result_Err" }
+    if not list_contains(names, "None") { names << "None" }
+    if not list_contains(names, "Some") { names << "Some" }
+    if not list_contains(names, "Ok") { names << "Ok" }
+    if not list_contains(names, "Err") { names << "Err" }
+    return names
+}
+
+fn collect_match_fields_in_stmt(stmt_id: entity, acc: list<str>) -> list<str> {
+    let mut out = acc
+    if has(stmt_id, MatchStmt) {
+        let ms = require(stmt_id, MatchStmt)
+        for c_eid in ms.cases {
+            let mc = require(c_eid, MatchCase)
+            for fname in mc.binding_fields {
+                if not list_contains(out, fname) {
+                    out << fname
+                }
+            }
+            out = collect_match_fields_in_stmt(mc.body, out)
+        }
+    }
+    if has(stmt_id, BlockStmt) {
+        let b = require(stmt_id, BlockStmt)
+        for st in b.stmts {
+            out = collect_match_fields_in_stmt(st, out)
+        }
+    }
+    if has(stmt_id, IfStmt) {
+        let i = require(stmt_id, IfStmt)
+        out = collect_match_fields_in_stmt(i.then_block, out)
+        let eb = i.else_block
+        if eb != nil {
+            out = collect_match_fields_in_stmt(eb, out)
+        }
+    }
+    if has(stmt_id, WhileStmt) {
+        out = collect_match_fields_in_stmt(require(stmt_id, WhileStmt).body, out)
+    }
+    if has(stmt_id, ForStmt) {
+        out = collect_match_fields_in_stmt(require(stmt_id, ForStmt).body, out)
+    }
+    return out
+}
+
+fn collect_fields(root: entity) -> list<str> {
+    let mut names: list<str> = []
+    if not has(root, Program) { return names }
+    let p = require(root, Program)
+    for d in p.decls {
+        if has(d, ComponentDecl) {
+            let cd = require(d, ComponentDecl)
+            for f_eid in cd.fields {
+                let cf = require(f_eid, ComponentField)
+                if not list_contains(names, cf.name) {
+                    names << cf.name
+                }
+            }
+        }
+        if has(d, TypeDecl) {
+            let td = require(d, TypeDecl)
+            for v_eid in td.variants {
+                let tv = require(v_eid, TypeVariant)
+                for f_eid in tv.fields {
+                    let vf = require(f_eid, VariantField)
+                    if not list_contains(names, vf.name) {
+                        names << vf.name
+                    }
+                }
+            }
+        }
+        if has(d, StructDecl) {
+            let sd = require(d, StructDecl)
+            for f_eid in sd.fields {
+                let cf = require(f_eid, ComponentField)
+                if not list_contains(names, cf.name) {
+                    names << cf.name
+                }
+            }
+        }
+        if has(d, EventDecl) {
+            let ed = require(d, EventDecl)
+            for fname in ed.fields {
+                if not list_contains(names, fname) {
+                    names << fname
+                }
+            }
+        }
+        if has(d, FnDecl) {
+            let fd = require(d, FnDecl)
+            names = collect_match_fields_in_stmt(fd.body, names)
+        }
+        if has(d, Stmt) {
+            names = collect_match_fields_in_stmt(d, names)
+        }
+    }
+    if not list_contains(names, "value") { names << "value" }
+    if not list_contains(names, "message") { names << "message" }
+    return names
+}
+
+fn mod_pos(a: int, m: int) -> int {
+    if m <= 0 { return 0 }
+    let mut r = a % m
+    if r < 0 { r = r + m }
+    return r
+}
+
+// Match C `unsigned` DJB2 in rad_sys_djb2: wrap to 32-bit after each byte (same as uint32_t).
+fn djb2_system(name: str) -> int {
+    let two32 = 4294967296
+    let mut h = 5381
+    let mut i = 0
+    while i < byte_len(name) {
+        let combined = (h * 33) + byte_at(name, i)
+        h = mod_pos(combined, two32)
+        i = i + 1
+    }
+    return h
+}
+
+fn fnv1a_system(name: str) -> int {
+    let two32 = 4294967296
+    let mut h = 2166136261
+    let mut i = 0
+    while i < byte_len(name) {
+        let c = byte_at(name, i)
+        h = mod_pos(h * 31 + c, two32)
+        i = i + 1
+    }
+    return h
+}
+
+fn collect_system_fn_names(root: entity) -> list<str> {
+    let mut names: list<str> = []
+    if not has(root, Program) { return names }
+    let pr = require(root, Program)
+    for d in pr.decls {
+        if has(d, FnDecl) {
+            let fd = require(d, FnDecl)
+            if len(fd.params) == 0 and fd.name != "main" {
+                if not list_contains(names, fd.name) {
+                    names << fd.name
+                }
+            }
+        }
+    }
+    return names
+}
+
+fn collect_system_fn_names_roots(all_roots: list<entity>) -> list<str> {
+    let mut names: list<str> = []
+    for r in all_roots {
+        if has(r, Program) {
+            let part = collect_system_fn_names(r)
+            for n in part {
+                if not list_contains(names, n) {
+                    names << n
+                }
+            }
+        }
+    }
+    return names
+}
+
+fn emit_rad_dispatch_system_block(names: list<str>, builtins: map<str, str>) -> str {
+    let mut buf = buffer_new()
+    let n = len(names)
+    let r = n
+    if n == 0 {
+        buf = buffer_append(buf, "RAD_DECL void rad_dispatch_system(RadValue sys_name) { (void)sys_name; }\n")
+
+        return buffer_to_str(buf)
+    }
+
+    // Deterministic linear dispatch for common small sets; CHD fallback for large sets.
+    if n <= 64 {
+        buf = buffer_append(buf, "RAD_DECL void rad_dispatch_system(RadValue sys_name) {\n")
+        buf = buffer_append(buf, "    if (sys_name.tag != RV_STR || !sys_name.as.str.data) {\n")
+        buf = buffer_append(buf, "        fprintf(stderr, \"rad runtime: unknown system '<non-string>' in simulate()\\n\");\n")
+        buf = buffer_append(buf, "        exit(1);\n")
+        buf = buffer_append(buf, "    }\n")
+        buf = buffer_append(buf, "    const char *s = sys_name.as.str.data;\n")
+        for k in names {
+            buf = buffer_append(buf, f"""    if (strcmp(s, "${c_escape(k)}") == 0) { (void)${c_fn_name(k, builtins)}(); return; }\n""")
+        }
+        buf = buffer_append(buf, "    fprintf(stderr, \"rad runtime: unknown system '%s' in simulate()\\n\", s);\n")
+        buf = buffer_append(buf, "    exit(1);\n")
+        buf = buffer_append(buf, "}\n")
+        return buffer_to_str(buf)
+    }
+
+    let mut buckets: map<str, list<str>> = {}
+    let mut i = 0
+    while i < r {
+        buckets[str(i)] = []
+        i = i + 1
+    }
+
+    for k in names {
+        let b = mod_pos(djb2_system(k), r)
+        let mut lst = buckets[str(b)]
+        lst << k
+        buckets[str(b)] = lst
+    }
+
+    let mut max_sz = 0
+    for b in buckets {
+        let sz = len(buckets[b])
+        if sz > max_sz { max_sz = sz }
+    }
+
+    let mut m = n
+    let max_m = n + 1000000
+    let mut G: map<str, int> = {}
+    let mut V: map<str, str> = {}
+    let mut built = false
+    while m <= max_m and not built {
+        G = {}
+        V = {}
+        let mut phase_ok = true
+        let mut sz = max_sz
+        while sz > 0 and phase_ok {
+            for b in buckets {
+                let b_keys = buckets[b]
+                if len(b_keys) == sz {
+                    let mut d = 0
+                    let mut found = false
+                    while not found and phase_ok {
+                        let mut ok = true
+                        let mut temp_slots: map<str, bool> = {}
+                        for k in b_keys {
+                            let h1 = djb2_system(k)
+                            let mut h2 = fnv1a_system(k)
+                            if h2 == 0 { h2 = 1 }
+                            let slot = mod_pos(h1 + d * h2, m)
+                            let slot_s = str(slot)
+                            if typeof(V[slot_s]) != "nil" or typeof(temp_slots[slot_s]) != "nil" {
+                                ok = false
+                            }
+                            temp_slots[slot_s] = true
+                        }
+                        if ok {
+                            found = true
+                            G[b] = d
+                            for k in b_keys {
+                                let h1 = djb2_system(k)
+                                let mut h2 = fnv1a_system(k)
+                                if h2 == 0 { h2 = 1 }
+                                let slot = mod_pos(h1 + d * h2, m)
+                                V[str(slot)] = k
+                            }
+                        } else {
+                            d = d + 1
+                            if d > 5000000 {
+                                phase_ok = false
+                            }
+                        }
+                    }
+                }
+            }
+            sz = sz - 1
+        }
+        if phase_ok {
+            let mut placed = 0
+            let mut vi = 0
+            while vi < m {
+                if typeof(V[str(vi)]) != "nil" {
+                    placed = placed + 1
+                }
+                vi = vi + 1
+            }
+            if placed == n {
+                built = true
+            }
+        }
+        if not built {
+            m = m + 1
+        }
+    }
+    if not built {
+        assert(false, "CHD system dispatch: could not find collision-free table (increase max_m)")
+    }
+
+    buf = buffer_append(buf, "static unsigned rad_sys_djb2(const char *s) {\n")
+
+    buf = buffer_append(buf, "    unsigned h = 5381U;\n")
+
+    buf = buffer_append(buf, "    while (*s) { h = h * 33U + (unsigned char)*s++; }\n")
+
+    buf = buffer_append(buf, "    return h;\n")
+
+    buf = buffer_append(buf, "}\n")
+
+
+
+    buf = buffer_append(buf, "static unsigned rad_sys_fnv1a(const char *s) {\n")
+
+    buf = buffer_append(buf, "    unsigned h = 2166136261U;\n")
+
+    buf = buffer_append(buf, "    while (*s) { h = h * 31U + (unsigned char)*s++; }\n")
+
+    buf = buffer_append(buf, "    return h;\n")
+
+    buf = buffer_append(buf, "}\n")
+
+
+
+    buf = buffer_append(buf, "#define RAD_SYS_DISPATCH_R ")
+    buf = buffer_append(buf, str(r))
+    buf = buffer_append(buf, "\n")
+    buf = buffer_append(buf, "#define RAD_SYS_DISPATCH_M ")
+    buf = buffer_append(buf, str(m))
+    buf = buffer_append(buf, "\n")
+
+
+    buf = buffer_append(buf, "typedef RadValue (*rad_sys_fn_t)(void);\n")
+
+    
+    buf = buffer_append(buf, "static const unsigned g_rad_sys_G[RAD_SYS_DISPATCH_R] = {")
+    let mut gi = 0
+    while gi < r {
+        if gi > 0 { buf = buffer_append(buf, ", ") }
+        let mut d = G[str(gi)]
+        if typeof(d) == "nil" { d = 0 }
+        buf = buffer_append(buf, str(d))
+        gi = gi + 1
+    }
+    buf = buffer_append(buf, "};\n")
+
+
+    buf = buffer_append(buf, "static rad_sys_fn_t g_rad_sys_dispatch[RAD_SYS_DISPATCH_M];\n")
+
+    buf = buffer_append(buf, "static const char *g_rad_sys_name_at[RAD_SYS_DISPATCH_M];\n")
+
+
+
+    buf = buffer_append(buf, "static void rad_dispatch_system_init(void) {\n")
+
+    buf = buffer_append(buf, "    for (size_t i = 0; i < RAD_SYS_DISPATCH_M; i++) {\n")
+
+    buf = buffer_append(buf, "        g_rad_sys_dispatch[i] = NULL;\n")
+
+    buf = buffer_append(buf, "        g_rad_sys_name_at[i] = NULL;\n")
+
+    buf = buffer_append(buf, "    }\n")
+
+
+    let mut vi = 0
+    while vi < m {
+        let k = V[str(vi)]
+        if typeof(k) != "nil" {
+            buf = buffer_append(buf, f"    g_rad_sys_dispatch[{vi}] = {c_fn_name(k, builtins)};\n")
+            buf = buffer_append(buf, f"""    g_rad_sys_name_at[${vi}] = "${c_escape(k)}";\n""")
+        }
+        vi = vi + 1
+    }
+    buf = buffer_append(buf, "}\n")
+
+
+
+    buf = buffer_append(buf, "RAD_DECL void rad_dispatch_system(RadValue sys_name) {\n")
+
+    buf = buffer_append(buf, "    static int _rad_dispatch_inited = 0;\n")
+
+    buf = buffer_append(buf, "    if (!_rad_dispatch_inited) { rad_dispatch_system_init(); _rad_dispatch_inited = 1; }\n")
+
+    buf = buffer_append(buf, "    if (sys_name.tag != RV_STR || !sys_name.as.str.data) return;\n")
+
+    buf = buffer_append(buf, "    const char *s = sys_name.as.str.data;\n")
+
+    buf = buffer_append(buf, "    unsigned h1 = rad_sys_djb2(s);\n")
+
+    buf = buffer_append(buf, "    unsigned h2 = rad_sys_fnv1a(s);\n")
+
+    buf = buffer_append(buf, "    if (h2 == 0) h2 = 1;\n")
+
+    buf = buffer_append(buf, "    unsigned b = h1 % (unsigned)RAD_SYS_DISPATCH_R;\n")
+
+    buf = buffer_append(buf, "    unsigned d = g_rad_sys_G[b];\n")
+
+    buf = buffer_append(buf, "    size_t idx = (size_t)((h1 + d * h2) % (unsigned)RAD_SYS_DISPATCH_M);\n")
+
+    buf = buffer_append(buf, "    rad_sys_fn_t fn = g_rad_sys_dispatch[idx];\n")
+
+    buf = buffer_append(buf, "    const char *exp = g_rad_sys_name_at[idx];\n")
+
+    buf = buffer_append(buf, "    if (fn && exp && strcmp(s, exp) == 0) { (void)fn(); return; }\n")
+    buf = buffer_append(buf, "    fprintf(stderr, \"rad runtime: unknown system '%s' in simulate()\\n\", s);\n")
+    buf = buffer_append(buf, "    exit(1);\n")
+
+    buf = buffer_append(buf, "}\n")
+
+
+    return buffer_to_str(buf)
+}
+
+fn emit_c_struct_def(name: str, fields: list<entity>) -> str {
+    let mut buf = buffer_new()
+    buf = buffer_append(buf, "typedef struct { ")
+    for f_eid in fields {
+        let cf = require(f_eid, ComponentField)
+        buf = buffer_append(buf, f"RadValue {cf.name}; ")
+    }
+    buf = buffer_append(buf, f"}} RadComp_{name};\n")
+    return buffer_to_str(buf)
+}
+
+fn emit_program(root: entity, compat_v05_dx: bool) -> str {
+    let builtins = make_builtin_map()
+    let mut buf = buffer_new()
+    buf = buffer_append(buf, "/* generated by emit_c.rad (v3 — buffer-backed) */\n")
+    buf = buffer_append(buf, "#include <stdint.h>\n")
+    buf = buffer_append(buf, "#include <stdio.h>\n")
+    buf = buffer_append(buf, "#include \"runtime.c\"\n\n")
+
+    if not has(root, Program) {
+        buf = buffer_append(buf, "int main(void) { return 0; }\n")
+        return buffer_to_str(buf)
+    }
+
+    let p = require(root, Program)
+    tag_anon_closures_program(root)
+
+    let comp_names = collect_components(root)
+    let field_names = collect_fields(root)
+    let comp_fields = collect_comp_fields(root)
+    let fn_ret_types = collect_fn_ret_types(root, comp_fields)
+    let fn_param_types = collect_fn_param_types(root)
+
+    let mut type_aliases: map<str, str> = {}
+    let mut state_names: list<str> = []
+    let mut type_names: list<str> = []
+    for d in p.decls {
+        if has(d, TypeDecl) {
+            let td = require(d, TypeDecl)
+            if td.alias_target != "" {
+                type_aliases[td.name] = td.alias_target
+            } else if not list_contains(type_names, td.name) {
+                type_names << td.name
+            }
+        }
+        if has(d, StateDecl) {
+            let sd = require(d, StateDecl)
+            if not list_contains(state_names, sd.name) {
+                state_names << sd.name
+            }
+        }
+    }
+
+    buf = buffer_append(buf, "/* ECS component IDs */\n")
+    for cn in comp_names {
+        buf = buffer_append(buf, f"static int64_t __comp_{cn};\n")
+    }
+    buf = buffer_append(buf, "\n/* ECS field IDs */\n")
+    for fn_name in field_names {
+        buf = buffer_append(buf, f"static int64_t __field_{fn_name};\n")
+    }
+    buf = buffer_append(buf, "\n")
+
+    buf = buffer_append(buf, "/* component value-type structs */\n")
+    for d in p.decls {
+        if has(d, ComponentDecl) {
+            let cd = require(d, ComponentDecl)
+            buf = buffer_append(buf, emit_c_struct_def(cd.name, cd.fields))
+        }
+        if has(d, StructDecl) {
+            let sd = require(d, StructDecl)
+            buf = buffer_append(buf, emit_c_struct_def(sd.name, sd.fields))
+        }
+    }
+    buf = buffer_append(buf, "\n")
+
+    buf = buffer_append(buf, "/* forward declarations */\n")
+    let mut fwd_seen: list<str> = []
+    for d in p.decls {
+        if has(d, FnDecl) {
+            let fd = require(d, FnDecl)
+            if not list_contains(fwd_seen, fd.name) {
+                fwd_seen << fd.name
+                buf = buffer_append(buf, emit_fn_fwd_decl(d, builtins, comp_fields))
+                buf = buffer_append(buf, emit_fn_ref_fwd_decl(d, builtins))
+            }
+        }
+    }
+    buf = buffer_append(buf, "\n")
+
+    let mut top_entity_names: list<str> = []
+    for d in p.decls {
+        if has(d, EntityStmt) {
+            let es = require(d, EntityStmt)
+            if not list_contains(top_entity_names, es.name) {
+                top_entity_names << es.name
+            }
+        }
+    }
+    if len(top_entity_names) > 0 {
+        buf = buffer_append(buf, "/* top-level entity bindings */\n")
+        for en in top_entity_names {
+            buf = buffer_append(buf, f"static RadValue {mangle_ident(en, builtins)};\n")
+        }
+        buf = buffer_append(buf, "\n")
+    }
+
+    let raw_vkeys = collect_variant_map_keys(root)
+    let raw_vvals = collect_variant_map_vals(root)
+    // Prefer short variant names (e.g. "Kw") over qualified aliases
+    // (e.g. "TokenKind::Kw") for the same component id. Parser/checker
+    // logic compares against short names.
+    let mut vkeys: list<str> = []
+    let mut vvals: list<str> = []
+    let mut rvi = 0
+    for rvk in raw_vkeys {
+        let rvv = raw_vvals[rvi]
+        let existing = list_index_of(vvals, rvv)
+        if existing < 0 {
+            vkeys << rvk
+            vvals << rvv
+        } else {
+            if contains(vkeys[existing], "::") and not contains(rvk, "::") {
+                vkeys[existing] = rvk
+            }
+        }
+        rvi = rvi + 1
+    }
+
+    buf = buffer_append(buf, "RadValue rad_variant_of(RadValue v) {\n")
+    buf = buffer_append(buf, "    if (v.tag == RV_OPTION_SOME) return rad_make_str(\"Option::Some\");\n")
+    buf = buffer_append(buf, "    if (v.tag == RV_OPTION_NONE) return rad_make_str(\"Option::None\");\n")
+    buf = buffer_append(buf, "    if (v.tag == RV_RESULT_OK) return rad_make_str(\"Result::Ok\");\n")
+    buf = buffer_append(buf, "    if (v.tag == RV_RESULT_ERR) return rad_make_str(\"Result::Err\");\n")
+    buf = buffer_append(buf, "    if (v.tag != RV_ENTITY) return rad_make_nil();\n")
+    let mut vi = 0
+    for vk in vkeys {
+        let vv = vvals[vi]
+        buf = buffer_append(buf, f"""    if (rad_is_truthy(rad_ecs_has(v, __comp_${vv}))) return rad_make_str("${vk}");\n""")
+        vi = vi + 1
+    }
+    buf = buffer_append(buf, "    return rad_make_nil();\n")
+    buf = buffer_append(buf, "}\n\n")
+
+    let mut fn_seen: list<str> = []
+    for d in p.decls {
+        if has(d, FnDecl) {
+            let fd = require(d, FnDecl)
+            if not list_contains(fn_seen, fd.name) {
+                fn_seen << fd.name
+                buf = buffer_append(buf, emit_fn_decl(d, builtins, comp_fields, fn_ret_types, fn_param_types, type_aliases, state_names, type_names))
+            }
+        }
+    }
+
+    let mut fnref_seen: list<str> = []
+    for d in p.decls {
+        if has(d, FnDecl) {
+            let fd_wr = require(d, FnDecl)
+            if list_contains(fnref_seen, fd_wr.name) { continue }
+            fnref_seen << fd_wr.name
+            buf = buffer_append(buf, emit_fn_ref_wrapper(d, builtins, comp_fields))
+        }
+    }
+
+    let mut has_main = false
+    for d in p.decls {
+        if has(d, FnDecl) {
+            let fd = require(d, FnDecl)
+            if fd.name == "main" {
+                has_main = true
+            }
+        }
+    }
+    let diag_match_destructure_unknown = has_diag_match_destructure_unknown_subject(root, vkeys)
+    let diag_match_rest = has_match_rest_anywhere(root)
+    let variant_fields = collect_variant_fields(root)
+    let diag_unknown_binding = find_unknown_match_binding(root, variant_fields, vkeys, vvals)
+
+    let tla = collect_hoisted_program_stmts(root, [])
+    if len(tla) > 0 {
+        let tl_ctx: EmitCtx = make_emit_ctx([], [], builtins, comp_fields, {}, [], "", fn_ret_types, fn_param_types, {}, type_aliases, state_names, type_names)
+        for anon_eid in tla {
+            let hn = require(anon_eid, HoistedName)
+            let old_nm = hn.name
+            let sn_top = sanitize_ident("top")
+            let full_hoisted = f"__closure_{sn_top}_{sanitize_ident(old_nm)}"
+            set(anon_eid, HoistedName { name: full_hoisted })
+            buf = buffer_append(buf, emit_closure_fn("top", old_nm, anon_eid, tl_ctx))
+        }
+    }
+
+    let sys_names = collect_system_fn_names(root)
+    buf = buffer_append(buf, emit_rad_dispatch_system_block(sys_names, builtins))
+    buf = buffer_append(buf, "\n")
+
+    buf = buffer_append(buf, "int main(int argc, char **argv) {\n")
+    buf = buffer_append(buf, "    g_argc = argc;\n")
+    buf = buffer_append(buf, "    g_argv = argv;\n")
+
+    buf = buffer_append(buf, "    /* register ECS component IDs */\n")
+    for cn in comp_names {
+        buf = buffer_append(buf, f"    __comp_{cn} = rad_register_component();\n")
+    }
+    vi = 0
+    for vk in vkeys {
+        let vv = vvals[vi]
+        if vk != vv and not contains(vk, "::") {
+            buf = buffer_append(buf, f"    __comp_{vk} = __comp_{vv};\n")
+        }
+        vi = vi + 1
+    }
+    for fn_name in field_names {
+        buf = buffer_append(buf, f"    __field_{fn_name} = rad_register_component();\n")
+        buf = buffer_append(buf, f"""    rad_register_field_name(__field_${fn_name}, "${c_escape(fn_name)}");\n""")
+    }
+    buf = buffer_append(buf, "    /* RV_STRUCT field slots per component */\n")
+    for cn in comp_names {
+        if not contains(keys(comp_fields), cn) {
+            continue
+        }
+        let flds_sp = comp_fields[cn]
+        let mut oi = 0
+        for fn_sp in flds_sp {
+            buf = buffer_append(buf, f"    rad_register_field_layout(__field_{fn_sp}, __comp_{cn}, {oi});\n")
+            oi = oi + 1
+        }
+    }
+    for d in p.decls {
+        if has(d, StateDecl) {
+            let sd = require(d, StateDecl)
+            for from_eid in sd.variants {
+                let from_sv = require(from_eid, StateVariant)
+                let from_comp = f"{sd.name}_{from_sv.name}"
+                buf = buffer_append(buf, f"    rad_register_state_variant(__comp_{from_comp});\n")
+                for tr_eid in from_sv.transitions {
+                    let tr = require(tr_eid, StateTransition)
+                    let to_comp = f"{sd.name}_{tr.target_state}"
+                    let mut guard_i = "1"
+                    if tr.has_guard and not tr.guard_value { guard_i = "0" }
+                    buf = buffer_append(buf, f"""    rad_register_transition(__comp_${from_comp}, "${c_escape(tr.evt)}", __comp_${to_comp}, ${guard_i});\n""")
+                }
+            }
+        }
+    }
+    buf = buffer_append(buf, "\n")
+    let empty_ctx: EmitCtx = make_emit_ctx([], [], builtins, comp_fields, {}, [], "", fn_ret_types, fn_param_types, {}, type_aliases, state_names, type_names)
+    for d in p.decls {
+        if has(d, FnDecl) and has(d, OnHandlerMeta) {
+            let fd = require(d, FnDecl)
+            let om = require(d, OnHandlerMeta)
+            let mut once_i = "0"
+            if om.is_once { once_i = "1" }
+            buf = buffer_append(buf, f"""    rad_event_on("${c_escape(om.event_name)}", ${c_fn_name(fd.name, builtins)}, ${once_i});\n""")
+        }
+    }
+    for miss_id in query { MissingModule } {
+        let mm = require(miss_id, MissingModule)
+        buf = buffer_append(buf, f"""    fprintf(stderr, "assertion failed: Module not found: ${c_escape(mm.path)}\\n");\n""")
+        buf = buffer_append(buf, "    return 1;\n")
+    }
+    buf = buffer_append(buf, "\n")
+    if diag_match_rest and not compat_v05_dx {
+        buf = buffer_append(buf, "    fprintf(stderr, \"Error[E2503]: Match rest binding '..' requires --compat-v0.5-dx\\n\");\n")
+        buf = buffer_append(buf, "    return 1;\n")
+    } else if len(diag_unknown_binding) > 0 {
+        buf = buffer_append(buf, f"""    fprintf(stderr, "${c_escape(diag_unknown_binding)}\\n");\n""")
+        buf = buffer_append(buf, "    return 1;\n")
+    } else if diag_match_destructure_unknown {
+        buf = buffer_append(buf, "    fprintf(stderr, \"Runtime error: Match arms use destructuring patterns but the subject type is unknown\\n\");\n")
+        buf = buffer_append(buf, "    return 1;\n")
+    } else if has_main {
+        for d in p.decls {
+            if has(d, EntityStmt) {
+                let es = require(d, EntityStmt)
+                let ent_name = mangle_ident(es.name, builtins)
+                buf = buffer_append(buf, f"""    ${ent_name} = rad_spawn_named(rad_make_str("${c_escape(es.name)}"));\n""")
+                for comp_expr in es.components {
+                    if has(comp_expr, StructLiteral) {
+                        let sl = require(comp_expr, StructLiteral)
+                        let comp_name = join_path(sl.path)
+                        buf = buffer_append(buf, f"    rad_ecs_set({ent_name}, __comp_{comp_name}, {emit_expr(comp_expr, empty_ctx)});\n")
+                    } else {
+                        let inferred = infer_value_type(comp_expr, empty_ctx)
+                        if is_comp_type(inferred, comp_fields) {
+                            buf = buffer_append(buf, f"    rad_ecs_set({ent_name}, __comp_{inferred}, {emit_expr(comp_expr, empty_ctx)});\n")
+                        } else {
+                            buf = buffer_append(buf, f"    rad_ecs_merge({ent_name}, {emit_expr(comp_expr, empty_ctx)});\n")
+                        }
+                    }
+                }
+            } else if has(d, Stmt) {
+                buf = buffer_append(buf, emit_stmt(d, 1, empty_ctx))
+            }
+        }
+        buf = buffer_append(buf, "    RadValue r = __rad_main();\n")
+        buf = buffer_append(buf, "    (void)r;\n")
+    } else {
+        for d in p.decls {
+            if has(d, Stmt) {
+                buf = buffer_append(buf, emit_stmt(d, 1, empty_ctx))
+            }
+        }
+    }
+    buf = buffer_append(buf, "    return 0;\n")
+    buf = buffer_append(buf, "}\n")
+    return buffer_to_str(buf)
+}
+
+pub fn emit_c(root: entity) -> str {
+    return emit_program(root, false)
+}
+
+pub fn emit_c_compat(root: entity, compat_v05_dx: bool) -> str {
+    return emit_program(root, compat_v05_dx)
+}
+
+pub fn emit_c_file(root: entity, out_path: str) -> nil {
+    let csrc = emit_c(root)
+    write_file(out_path, csrc)
+}
+
+pub fn emit_c_file_compat(root: entity, out_path: str, compat_v05_dx: bool) -> nil {
+    let csrc = emit_program(root, compat_v05_dx)
+    write_file(out_path, csrc)
+}
+
+fn str_less_than(a: str, b: str) -> bool {
+    let la = byte_len(a)
+    let lb = byte_len(b)
+    let mut lim = la
+    if lb < la { lim = lb }
+    let mut i = 0
+    while i < lim {
+        let ca = byte_at(a, i)
+        let cb = byte_at(b, i)
+        if ca != cb { return ca < cb }
+        i = i + 1
+    }
+    return la < lb
+}
+
+fn dirname(path: str) -> str {
+    let mut last_slash = -1
+    let mut i = 0
+    while i < byte_len(path) {
+        let c = byte_at(path, i)
+        if c == 47 or c == 92 {
+            last_slash = i
+        }
+        i = i + 1
+    }
+    if last_slash == -1 { return "" }
+    return substring_bytes(path, 0, last_slash + 1)
+}
+
+component FilePath { path: str = "", dir: str = "" }
+component Unparsed {}
+component ParsedAst { ast: entity = 0 }
+component BlockerCount { count: int = 0 }
+component Dependents { list: list<entity> = [] }
+component Dependency { from: entity = 0, to: entity = 0 }
+pub component MissingModule { path: str = "" }
+
+fn run_compiler_pipeline(entry_path: str) -> nil {
+    let entry_id = spawn(entry_path)
+    set(entry_id, FilePath { path: entry_path, dir: dirname(entry_path) })
+    set(entry_id, Unparsed {})
+    let mut done = false
+    while not done {
+        done = true
+        for id in query { FilePath, Unparsed } {
+            done = false
+            let fp = require(id, FilePath)
+            let src = read_file(fp.path)
+            let tokens = lex(src)
+            let ast = parse(tokens)
+            
+            remove(id, Unparsed)
+            set(id, ParsedAst { ast: ast })
+
+            if has(ast, Program) {
+                let p = require(ast, Program)
+                let mut seen_imports: map<str, bool> = {}
+                for d in p.decls {
+                    if has(d, UseDecl) {
+                        let u = require(d, UseDecl)
+                        let next_path = fp.dir + u.path
+                        
+                        if typeof(seen_imports[next_path]) == "nil" {
+                            seen_imports[next_path] = true
+                            if not file_exists(next_path) {
+                                let miss_key = f"__missing__:{next_path}"
+                                let existing_missing = get_entity(miss_key)
+                                if typeof(existing_missing) == "nil" {
+                                    let miss_id = spawn(miss_key)
+                                    set(miss_id, MissingModule { path: next_path })
+                                }
+                                continue
+                            }
+                            
+                            if typeof(get_entity(next_path)) == "nil" {
+                                let new_id = spawn(next_path)
+                                set(new_id, FilePath { path: next_path, dir: dirname(next_path) })
+                                set(new_id, Unparsed {})
+                            }
+                            let dep_id = require_entity(next_path)
+                            
+                            entity { Dependency { from: id, to: dep_id } }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn cleanup_compile_session() -> nil {
+    for id in query { CheckerNode } { despawn(id) }
+    for id in query { FilePath } { despawn(id) }
+    for id in query { AstNode } { despawn(id) }
+    for id in query { Dependency } { despawn(id) }
+    for id in query { MissingModule } { despawn(id) }
+}
+
+fn check_for_missing_modules() -> bool {
+    let mut has_missing = false
+    for id in query { MissingModule } {
+        let mm = require(id, MissingModule)
+        print(f"Module not found: {mm.path}")
+        has_missing = true
+    }
+    return has_missing
+}
+
+fn assemble_topological() -> list<entity> {
+    let mut ordered_files: list<entity> = []
+    
+    let mut total_files = 0
+    for id in query { FilePath, ParsedAst } {
+        total_files = total_files + 1
+        set(id, BlockerCount { count: 0 })
+        set(id, Dependents { list: [] })
+    }
+    
+    for edge_id in query { Dependency } {
+        let edge = require(edge_id, Dependency)
+        let a = edge.from
+        let b = edge.to
+        let bc_a = require(a, BlockerCount)
+        set(a, BlockerCount { count: bc_a.count + 1 })
+        let dep_b = require(b, Dependents)
+        set(b, Dependents { list: push(dep_b.list, a) })
+    }
+    
+    let mut worklist: list<entity> = []
+    for id in query { FilePath, ParsedAst } {
+        let bc = require(id, BlockerCount)
+        if bc.count == 0 {
+            worklist << id
+        }
+    }
+    
+    while len(worklist) > 0 {
+        let mut min_idx = 0
+        let mut min_path = require(worklist[0], FilePath).path
+        let mut i = 1
+        while i < len(worklist) {
+            let p = require(worklist[i], FilePath).path
+            if str_less_than(p, min_path) {
+                min_path = p
+                min_idx = i
+            }
+            i = i + 1
+        }
+
+        let curr = worklist[min_idx]
+        let mut new_worklist: list<entity> = []
+        i = 0
+        while i < len(worklist) {
+            if i != min_idx { new_worklist << worklist[i] }
+            i = i + 1
+        }
+        worklist = new_worklist
+
+        ordered_files << curr
+
+        let deps = require(curr, Dependents)
+        for d in deps.list {
+            let bc_d = require(d, BlockerCount)
+            let new_count = bc_d.count - 1
+            set(d, BlockerCount { count: new_count })
+            if new_count == 0 {
+                worklist << d
+            }
+        }
+    }
+    
+    if len(ordered_files) < total_files {
+        // Deterministic fallback for cyclic graphs: append unresolved nodes by path order.
+        let mut remaining: list<entity> = []
+        for id in query { FilePath, ParsedAst } {
+            if not entity_list_contains(ordered_files, id) {
+                remaining << id
+            }
+        }
+        remaining = sort_by(remaining, fn(id: entity) -> str { require(id, FilePath).path })
+        for id in remaining {
+            ordered_files << id
+        }
+    }
+    
+    return ordered_files
+}
+
+fn has_compat_v05_dx(path: str) -> bool {
+    let content = read_file(path)
+    return contains(content, "vm-args: --compat-v0.5-dx")
+}
+
+fn do_compile(src_path: str, out_path: str, run_checker: bool) -> nil {
+    run_compiler_pipeline(src_path)
+    if run_checker {
+        if check_for_missing_modules() {
+            assert(false, "Compilation aborted due to missing modules")
+        }
+    }
+    let ordered_files = assemble_topological()
+
+    let mut all_decls: list<entity> = []
+    for file_id in ordered_files {
+        let ast = require(file_id, ParsedAst).ast
+        if has(ast, Program) {
+            let p = require(ast, Program)
+            for d in p.decls {
+                if not has(d, UseDecl) {
+                    all_decls << d
+                }
+            }
+        }
+    }
+
+    let root = entity { AstNode {}, Program { decls: all_decls } }
+
+    let compat = has_compat_v05_dx(src_path)
+    if run_checker {
+        let errors = check_program_compat(root, compat)
+        if len(errors) > 0 {
+            print(f"COMPILE ERROR in {src_path}:")
+            print(format_errors(errors))
+            cleanup_compile_session()
+            assert(false, "Compilation aborted due to type errors")
+        }
+    }
+
+    for id in query { CheckerNode } { despawn(id) }
+    emit_c_file_compat(root, out_path, compat)
+
+    cleanup_compile_session()
+}
+
+pub fn compile_file_to_c(src_path: str, out_path: str) -> nil {
+    do_compile(src_path, out_path, true)
+}
+
+pub fn compile_file_to_c_unchecked(src_path: str, out_path: str) -> nil {
+    do_compile(src_path, out_path, false)
+}
+
+pub fn compile_file_to_c_checked_soft(src_path: str, out_path: str) -> bool {
+    run_compiler_pipeline(src_path)
+    if check_for_missing_modules() {
+        cleanup_compile_session()
+        return false
+    }
+    let ordered_files = assemble_topological()
+
+    let mut all_decls: list<entity> = []
+    for file_id in ordered_files {
+        let ast = require(file_id, ParsedAst).ast
+        if has(ast, Program) {
+            let p = require(ast, Program)
+            for d in p.decls {
+                if not has(d, UseDecl) {
+                    all_decls << d
+                }
+            }
+        }
+    }
+
+    let root = entity { AstNode {}, Program { decls: all_decls } }
+
+    let compat = has_compat_v05_dx(src_path)
+    let errors = check_program_compat(root, compat)
+    if len(errors) > 0 {
+        print(format_errors(errors))
+        cleanup_compile_session()
+        return false
+    }
+
+    for id in query { CheckerNode } { despawn(id) }
+    emit_c_file_compat(root, out_path, compat)
+
+    cleanup_compile_session()
+    return true
+}
+
+fn basename(path: str) -> str {
+    let mut last_slash = -1
+    let mut i = 0
+    while i < byte_len(path) {
+        let c = byte_at(path, i)
+        if c == 47 or c == 92 { last_slash = i }
+        i = i + 1
+    }
+    let start = last_slash + 1
+    let mut dot = -1
+    i = start
+    while i < byte_len(path) {
+        if byte_at(path, i) == 46 { dot = i }
+        i = i + 1
+    }
+    if dot > start { return substring_bytes(path, start, dot) }
+    return substring_bytes(path, start, byte_len(path))
+}
+
+fn parse_single_file(src_path: str) -> entity {
+    let src = read_file(src_path)
+    let tokens = lex(src)
+    return parse(tokens)
+}
+
+fn emit_module_header(root: entity, module_name: str, builtins: map<str, str>, comp_fields: map<str, list<str>>) -> str {
+    let guard = f"RAD_MODULE_{module_name}_H"
+    let mut buf = buffer_new()
+    buf = buffer_append(buf, f"#ifndef {guard}\n#define {guard}\n\n")
+    buf = buffer_append(buf, "#include \"runtime.h\"\n")
+    buf = buffer_append(buf, "#include \"rad_ids.h\"\n\n")
+    if not has(root, Program) {
+        buf = buffer_append(buf, "#endif\n")
+        return buffer_to_str(buf)
+    }
+    let p = require(root, Program)
+    for d in p.decls {
+        if has(d, FnDecl) {
+            buf = buffer_append(buf, emit_fn_fwd_decl(d, builtins, comp_fields))
+        }
+    }
+    buf = buffer_append(buf, "\n#endif\n")
+    return buffer_to_str(buf)
+}
+
+fn emit_module_c(root: entity, module_name: str, dep_headers: list<str>, builtins: map<str, str>, comp_fields: map<str, list<str>>, fn_ret_types: map<str, str>, fn_param_types: map<str, list<str>>, type_aliases: map<str, str>, state_names: list<str>, type_names: list<str>) -> str {
+    let mut buf = buffer_new()
+    buf = buffer_append(buf, f"/* generated module: {module_name} */\n")
+    buf = buffer_append(buf, "#define RAD_SEPARATE_COMPILATION\n")
+    buf = buffer_append(buf, "#include \"runtime.h\"\n")
+    buf = buffer_append(buf, "#include \"rad_ids.h\"\n")
+    for h in dep_headers {
+        buf = buffer_append(buf, f"""#include "${h}"\n""")
+    }
+    buf = buffer_append(buf, "\n")
+    if not has(root, Program) { return buffer_to_str(buf) }
+    let p = require(root, Program)
+
+    for d in p.decls {
+        if has(d, FnDecl) {
+            buf = buffer_append(buf, emit_fn_decl(d, builtins, comp_fields, fn_ret_types, fn_param_types, type_aliases, state_names, type_names))
+        }
+    }
+    return buffer_to_str(buf)
+}
+
+fn emit_ids_header(all_roots: list<entity>) -> str {
+    let mut buf = buffer_new()
+    buf = buffer_append(buf, "#ifndef RAD_IDS_H\n#define RAD_IDS_H\n\n")
+    buf = buffer_append(buf, "#include \"runtime.h\"\n\n")
+
+    let mut all_comp: list<str> = []
+    let mut all_fields: list<str> = []
+    for r in all_roots {
+        let cs = collect_components(r)
+        for c in cs {
+            if not list_contains(all_comp, c) { all_comp << c }
+        }
+        let fs = collect_fields(r)
+        for f in fs {
+            if not list_contains(all_fields, f) { all_fields << f }
+        }
+    }
+    buf = buffer_append(buf, "/* ECS component IDs */\n")
+    for cn in all_comp {
+        buf = buffer_append(buf, f"extern int64_t __comp_{cn};\n")
+    }
+    buf = buffer_append(buf, "\n/* ECS field IDs */\n")
+    for fn_name in all_fields {
+        buf = buffer_append(buf, f"extern int64_t __field_{fn_name};\n")
+    }
+    buf = buffer_append(buf, "\n/* component value-type structs */\n")
+    for r in all_roots {
+        if has(r, Program) {
+            let rp = require(r, Program)
+            for d in rp.decls {
+                if has(d, ComponentDecl) {
+                    let cd = require(d, ComponentDecl)
+                    buf = buffer_append(buf, emit_c_struct_def(cd.name, cd.fields))
+                }
+                if has(d, StructDecl) {
+                    let sd = require(d, StructDecl)
+                    buf = buffer_append(buf, emit_c_struct_def(sd.name, sd.fields))
+                }
+            }
+        }
+    }
+
+    buf = buffer_append(buf, "\nextern RadValue rad_variant_of(RadValue v);\n")
+    buf = buffer_append(buf, "extern void rad_init_ids(void);\n")
+    buf = buffer_append(buf, "\n#endif\n")
+    return buffer_to_str(buf)
+}
+
+fn emit_ids_c(all_roots: list<entity>, builtins: map<str, str>, all_comp_fields: map<str, list<str>>) -> str {
+    let mut buf = buffer_new()
+    buf = buffer_append(buf, "#define RAD_SEPARATE_COMPILATION\n")
+    buf = buffer_append(buf, "#include \"runtime.h\"\n")
+    buf = buffer_append(buf, "#include \"rad_ids.h\"\n\n")
+
+    let mut all_comp: list<str> = []
+    let mut all_fields: list<str> = []
+    let mut all_vkeys_raw: list<str> = []
+    let mut all_vvals_raw: list<str> = []
+    for r in all_roots {
+        let cs = collect_components(r)
+        for c in cs {
+            if not list_contains(all_comp, c) { all_comp << c }
+        }
+        let fs = collect_fields(r)
+        for f in fs {
+            if not list_contains(all_fields, f) { all_fields << f }
+        }
+        let vk = collect_variant_map_keys(r)
+        let vv = collect_variant_map_vals(r)
+        let mut i = 0
+        for k in vk {
+            if not list_contains(all_vkeys_raw, k) {
+                all_vkeys_raw << k
+                all_vvals_raw << vv[i]
+            }
+            i = i + 1
+        }
+    }
+    let mut all_vkeys: list<str> = []
+    let mut all_vvals: list<str> = []
+    let mut avri = 0
+    for k in all_vkeys_raw {
+        let comp = all_vvals_raw[avri]
+        let existing = list_index_of(all_vvals, comp)
+        if existing < 0 {
+            all_vkeys << k
+            all_vvals << comp
+        } else {
+            if contains(all_vkeys[existing], "::") and not contains(k, "::") {
+                all_vkeys[existing] = k
+            }
+        }
+        avri = avri + 1
+    }
+
+    for cn in all_comp {
+        buf = buffer_append(buf, f"int64_t __comp_{cn};\n")
+    }
+    for fn_name in all_fields {
+        buf = buffer_append(buf, f"int64_t __field_{fn_name};\n")
+    }
+
+    buf = buffer_append(buf, "\nRadValue rad_variant_of(RadValue v) {\n")
+    buf = buffer_append(buf, "    if (v.tag == RV_OPTION_SOME) return rad_make_str(\"Option::Some\");\n")
+    buf = buffer_append(buf, "    if (v.tag == RV_OPTION_NONE) return rad_make_str(\"Option::None\");\n")
+    buf = buffer_append(buf, "    if (v.tag == RV_RESULT_OK) return rad_make_str(\"Result::Ok\");\n")
+    buf = buffer_append(buf, "    if (v.tag == RV_RESULT_ERR) return rad_make_str(\"Result::Err\");\n")
+    buf = buffer_append(buf, "    if (v.tag != RV_ENTITY) return rad_make_nil();\n")
+    let mut voi = 0
+    for vk in all_vkeys {
+        let vv2 = all_vvals[voi]
+        buf = buffer_append(buf, f"""    if (rad_is_truthy(rad_ecs_has(v, __comp_${vv2}))) return rad_make_str("${vk}");\n""")
+        voi = voi + 1
+    }
+    buf = buffer_append(buf, "    return rad_make_nil();\n")
+    buf = buffer_append(buf, "}\n\n")
+
+    buf = buffer_append(buf, "void rad_init_ids(void) {\n")
+    for cn in all_comp {
+        buf = buffer_append(buf, f"    __comp_{cn} = rad_register_component();\n")
+    }
+    let mut vi = 0
+    for vk in all_vkeys {
+        let vv = all_vvals[vi]
+        if vk != vv and not contains(vk, "::") {
+            buf = buffer_append(buf, f"    __comp_{vk} = __comp_{vv};\n")
+        }
+        vi = vi + 1
+    }
+    for fn_name in all_fields {
+        buf = buffer_append(buf, f"    __field_{fn_name} = rad_register_component();\n")
+        buf = buffer_append(buf, f"""    rad_register_field_name(__field_${fn_name}, "${c_escape(fn_name)}");\n""")
+    }
+    buf = buffer_append(buf, "    /* RV_STRUCT field slots per component */\n")
+    for cn in all_comp {
+        if not contains(keys(all_comp_fields), cn) {
+            continue
+        }
+        let flds_sp = all_comp_fields[cn]
+        let mut oi = 0
+        for fn_sp in flds_sp {
+            buf = buffer_append(buf, f"    rad_register_field_layout(__field_{fn_sp}, __comp_{cn}, {oi});\n")
+            oi = oi + 1
+        }
+    }
+    for r in all_roots {
+        if has(r, Program) {
+            let rp = require(r, Program)
+            for d in rp.decls {
+                if has(d, StateDecl) {
+                    let sd = require(d, StateDecl)
+                    for from_eid in sd.variants {
+                        let from_sv = require(from_eid, StateVariant)
+                        let from_comp = f"{sd.name}_{from_sv.name}"
+                        buf = buffer_append(buf, f"    rad_register_state_variant(__comp_{from_comp});\n")
+                        for tr_eid in from_sv.transitions {
+                            let tr = require(tr_eid, StateTransition)
+                            let to_comp = f"{sd.name}_{tr.target_state}"
+                            let mut guard_i = "1"
+                            if tr.has_guard and not tr.guard_value { guard_i = "0" }
+                            buf = buffer_append(buf, f"""    rad_register_transition(__comp_${from_comp}, "${c_escape(tr.evt)}", __comp_${to_comp}, ${guard_i});\n""")
+                        }
+                    }
+                }
+            }
+        }
+    }
+    buf = buffer_append(buf, "}\n\n")
+
+    for r in all_roots {
+        if has(r, Program) {
+            let rp = require(r, Program)
+            for d in rp.decls {
+                if has(d, FnDecl) {
+                    let fd = require(d, FnDecl)
+                    if len(fd.params) == 0 {
+                        buf = buffer_append(buf, emit_fn_fwd_decl(d, builtins, all_comp_fields))
+                    }
+                }
+            }
+        }
+    }
+
+    let sys_names = collect_system_fn_names_roots(all_roots)
+    buf = buffer_append(buf, "\n")
+    buf = buffer_append(buf, emit_rad_dispatch_system_block(sys_names, builtins))
+
+    return buffer_to_str(buf)
+}
+
+fn emit_main_c(has_rad_main: bool, dep_headers: list<str>) -> str {
+    let mut buf = buffer_new()
+    buf = buffer_append(buf, "#define RAD_SEPARATE_COMPILATION\n")
+    buf = buffer_append(buf, "#include \"runtime.h\"\n")
+    buf = buffer_append(buf, "#include \"rad_ids.h\"\n")
+    for h in dep_headers {
+        buf = buffer_append(buf, f"""#include "${h}"\n""")
+    }
+    buf = buffer_append(buf, "\nextern void rad_init_ids(void);\n")
+    if has_rad_main {
+        buf = buffer_append(buf, "extern RadValue __rad_main(void);\n")
+    }
+    buf = buffer_append(buf, "\nint main(int argc, char **argv) {\n")
+    buf = buffer_append(buf, "    g_argc = argc;\n")
+    buf = buffer_append(buf, "    g_argv = argv;\n")
+    buf = buffer_append(buf, "    rad_init_ids();\n")
+    if has_rad_main {
+        buf = buffer_append(buf, "    RadValue r = __rad_main();\n")
+        buf = buffer_append(buf, "    (void)r;\n")
+    }
+    buf = buffer_append(buf, "    return 0;\n")
+    buf = buffer_append(buf, "}\n")
+    return buffer_to_str(buf)
+}
+
+pub fn compile_file_separate(src_path: str, out_dir: str) -> nil {
+    let builtins = make_builtin_map()
+    
+    run_compiler_pipeline(src_path)
+    let ordered_files = assemble_topological()
+
+    let mut module_paths: list<str> = []
+    let mut module_names: list<str> = []
+    let mut module_asts: list<entity> = []
+
+    for file_id in ordered_files {
+        let fp = require(file_id, FilePath)
+        let ast = require(file_id, ParsedAst).ast
+        let name = basename(fp.path)
+        module_paths << fp.path
+        module_names << name
+        module_asts << ast
+    }
+
+    let mut all_comp_fields: map<str, list<str>> = {}
+    for ast in module_asts {
+        let cf = collect_comp_fields(ast)
+        for k in keys(cf) {
+            all_comp_fields[k] = cf[k]
+        }
+    }
+
+    let mut all_fn_ret_types: map<str, str> = {}
+    for ast in module_asts {
+        let frt = collect_fn_ret_types(ast, all_comp_fields)
+        for k in keys(frt) {
+            all_fn_ret_types[k] = frt[k]
+        }
+    }
+    let mut all_fn_param_types: map<str, list<str>> = {}
+    for ast in module_asts {
+        let fpt = collect_fn_param_types(ast)
+        for k in keys(fpt) {
+            all_fn_param_types[k] = fpt[k]
+        }
+    }
+
+    let mut all_type_aliases: map<str, str> = {}
+    let mut all_state_names: list<str> = []
+    let mut all_type_names: list<str> = []
+    for ast in module_asts {
+        if has(ast, Program) {
+            let p = require(ast, Program)
+            for d in p.decls {
+                if has(d, TypeDecl) {
+                    let td = require(d, TypeDecl)
+                    if td.alias_target != "" {
+                        all_type_aliases[td.name] = td.alias_target
+                    } else if not list_contains(all_type_names, td.name) {
+                        all_type_names << td.name
+                    }
+                }
+                if has(d, StateDecl) {
+                    let sd = require(d, StateDecl)
+                    if not list_contains(all_state_names, sd.name) {
+                        all_state_names << sd.name
+                    }
+                }
+            }
+        }
+    }
+
+    write_file(f"{out_dir}/rad_ids.h", emit_ids_header(module_asts))
+    write_file(f"{out_dir}/rad_ids.c", emit_ids_c(module_asts, builtins, all_comp_fields))
+
+    let mut all_headers: list<str> = []
+    let mut mi = 0
+    for name in module_names {
+        let ast = module_asts[mi]
+        let h_name = f"{name}.h"
+        write_file(f"{out_dir}/{h_name}", emit_module_header(ast, name, builtins, all_comp_fields))
+        all_headers << h_name
+        mi = mi + 1
+    }
+
+    mi = 0
+    for name in module_names {
+        let ast = module_asts[mi]
+        write_file(f"{out_dir}/{name}.c", emit_module_c(ast, name, all_headers, builtins, all_comp_fields, all_fn_ret_types, all_fn_param_types, all_type_aliases, all_state_names, all_type_names))
+        mi = mi + 1
+    }
+
+    // Check if any module has a main function
+    let mut has_main = false
+    for ast in module_asts {
+        if has(ast, Program) {
+            let p = require(ast, Program)
+            for d in p.decls {
+                if has(d, FnDecl) {
+                    let fd = require(d, FnDecl)
+                    if fd.name == "main" { has_main = true }
+                }
+            }
+        }
+    }
+
+    write_file(f"{out_dir}/rad_main.c", emit_main_c(has_main, all_headers))
+    
+    cleanup_compile_session()
+}

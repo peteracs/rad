@@ -1,0 +1,51 @@
+// Test: Component data integrity across fork/commit
+// Verifies that ALL component fields are preserved, including multi-field components
+
+component Stats {
+    hp: 100,
+    mp: 50,
+    str_val: 10,
+    dex: 8,
+    int_val: 12
+}
+
+component Name { label: "unknown" }
+
+system LevelUp(s: mut Stats) {
+    s = Stats {
+        hp: s.hp + 10,
+        mp: s.mp + 5,
+        str_val: s.str_val + 1,
+        dex: s.dex + 1,
+        int_val: s.int_val + 1
+    }
+}
+
+let hero = spawn("hero",
+    Stats { hp: 100, mp: 50, str_val: 10, dex: 8, int_val: 12 },
+    Name { label: "Warrior" }
+)
+
+// Simulate 10 level-ups
+let f = fork()
+let f = simulate(f, [system::LevelUp], 10)
+
+// Main world untouched
+let s = get(hero, Stats) |> unwrap
+assert(s.hp == 100, "Pre-commit HP should be 100")
+assert(s.mp == 50, "Pre-commit MP should be 50")
+
+// Commit and check ALL fields
+commit(f)
+let s2 = get(hero, Stats) |> unwrap
+assert(s2.hp == 200, f"HP after 10 level-ups: expected 200, got {s2.hp}")
+assert(s2.mp == 100, f"MP after 10 level-ups: expected 100, got {s2.mp}")
+assert(s2.str_val == 20, f"STR after 10 level-ups: expected 20, got {s2.str_val}")
+assert(s2.dex == 18, f"DEX after 10 level-ups: expected 18, got {s2.dex}")
+assert(s2.int_val == 22, f"INT after 10 level-ups: expected 22, got {s2.int_val}")
+
+// Name component should be unchanged (LevelUp doesn't query it, but snapshot should preserve it)
+let n = get(hero, Name) |> unwrap
+assert(n.label == "Warrior", f"Name should survive fork/commit, got {n.label}")
+
+print("PASS: component integrity")

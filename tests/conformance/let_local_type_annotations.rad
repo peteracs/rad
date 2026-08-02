@@ -1,0 +1,12 @@
+// backend: both
+fn main() -> nil {
+    let x: int = 5
+    let y: float = 2
+    let z: str = "ok"
+    print(x + 1)
+    print(y + 0.5)
+    print(z)
+}
+// expect: 6
+// expect: 2.5
+// expect: ok

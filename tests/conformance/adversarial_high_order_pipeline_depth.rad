@@ -1,0 +1,25 @@
+// backend: both
+pure fn compose3(
+    f: pure fn(int) -> int,
+    g: pure fn(int) -> int,
+    h: pure fn(int) -> int,
+    x: int,
+) -> int {
+    return h(g(f(x)))
+}
+
+pure fn inc(x: int) -> int { return x + 1 }
+
+pure fn dbl(x: int) -> int { return x * 2 }
+
+pure fn sqr(x: int) -> int { return x * x }
+
+let base = range(1, 21)
+let transformed = base
+|> map(fn(v) { return compose3(inc, dbl, sqr, v) })
+|> filter(fn(v) { return v % 3 == 0 })
+
+print(len(transformed))
+// expect: 7
+print(reduce(transformed, 0, fn(a, b) { return a + b }))
+// expect: 5040

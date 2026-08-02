@@ -1,0 +1,7 @@
+// backend: both
+fn make_multiplier(k) {
+    return fn(x) { return x * k }
+}
+let mul7 = make_multiplier(7)
+print(f"CASE14:{mul7(9)}")
+// expect: CASE14:63

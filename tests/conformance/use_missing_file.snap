@@ -1,0 +1,7 @@
+---
+source: tests\conformance\use_missing_file.rad
+exit_code: 1
+---
+
+---stderr---
+Error: Module not found: modules/does_not_exist.rad

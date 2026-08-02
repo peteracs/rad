@@ -1,0 +1,31 @@
+// A closure inside a system body (query where-filters, callbacks) may
+// capture the system's `mut` param, promoting its slot to a capture
+// cell — the writeback must read through the cell. Found by sightwork's
+// fog system: `query { Unit } where Unit.team != tv.team`.
+
+component Unit { team: int }
+
+component Fog { team: int, seen: int = 0 }
+
+system count_enemies(fog: mut Fog) {
+    // the where-filter captures `fog` (a mut param) into a closure
+    let enemies = query { Unit } where Unit.team != fog.team
+    fog.seen = enemies |> len
+}
+
+fn main() -> nil {
+    let _a = entity "a" { Unit { team: 0 } }
+    let _b = entity "b" { Unit { team: 1 } }
+    let _c = entity "c" { Unit { team: 1 } }
+    let blue = entity "blue-fog" { Fog { team: 0 } }
+    let red = entity "red-fog" { Fog { team: 1 } }
+
+    schedule [count_enemies]
+    print(require(blue, Fog).seen)    // 2
+    print(require(red, Fog).seen)     // 1
+
+    // and again with name_of in a pipeline callback (readonly reads are
+    // pipeline-safe in literal closures, same as named readonly fns)
+    let names = entities(Unit) |> map(fn(u) { return name_of(u) }) |> sort
+    print(names)                      // ["a", "b", "c"]
+}

@@ -1,0 +1,6 @@
+---
+source: tests\conformance\match_statement_arm_values.rad
+exit_code: 0
+---
+one
+done

@@ -1,0 +1,34 @@
+// Test: Spawning entities inside a simulated system
+// New entities created during simulate should appear in the fork but not the main world
+
+component Marker { gen: 0 }
+component Spawner { active: true }
+
+system SpawnChild(s: Spawner) {
+    // Spawn a new entity during simulation
+    spawn("child", Marker { gen: 1 })
+}
+
+let spawner = spawn("spawner", Spawner { active: true }, Marker { gen: 0 })
+
+// Count entities with Marker before
+let before = entities(Marker)
+let before_count = len(before)
+assert(before_count == 1, f"Before simulate: expected 1 Marker entity, got {before_count}")
+
+// Simulate 3 ticks — should spawn 3 children, but only in the fork
+let f = fork()
+let f = simulate(f, [system::SpawnChild], 3)
+
+// Main world should still have just 1
+let after_sim = entities(Marker)
+let after_sim_count = len(after_sim)
+assert(after_sim_count == 1, f"After simulate (no commit): expected 1 Marker entity, got {after_sim_count}")
+
+// Commit the fork — now the children should exist
+commit(f)
+let after_commit = entities(Marker)
+let after_commit_count = len(after_commit)
+assert(after_commit_count == 4, f"After commit: expected 4 Marker entities (1 original + 3 spawned), got {after_commit_count}")
+
+print("PASS: spawn in simulation")

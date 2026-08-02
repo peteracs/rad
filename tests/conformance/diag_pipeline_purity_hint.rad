@@ -1,0 +1,8 @@
+// backend: both
+fn bump(x) {
+    return x + 1
+}
+
+let out = [1, 2, 3] |> map(fn(v) { return bump(v) })
+print(out)
+// expect: [2, 3, 4]

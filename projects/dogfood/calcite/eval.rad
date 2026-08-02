@@ -1,0 +1,225 @@
+// =====================================================================
+//  calcite / eval.rad
+//  Tree-walking evaluator. Values are a sum type; every failure path is
+//  a Result that callers propagate with postfix `?`.
+// =====================================================================
+
+use "ast.rad"
+
+pub type Value {
+    VNum { num: 0.0 }
+    VBool { flag: false }
+}
+
+pub fn value_str(v: Value) -> str {
+    match v {
+        VNum { num } => { return fmt_num(num) }
+        VBool { flag } => {
+            if flag {
+                return "true"
+            }
+            return "false"
+        }
+    }
+}
+
+pub fn type_name(v: Value) -> str {
+    match v {
+        VNum => { return "number" }
+        VBool => { return "boolean" }
+    }
+}
+
+fn as_num(v: Value) -> Result<float, str> {
+    match v {
+        VNum { num } => { return Ok(num) }
+        VBool => { return Err("expected a number, got a boolean") }
+    }
+}
+
+fn as_bool(v: Value) -> Result<bool, str> {
+    match v {
+        VBool { flag } => { return Ok(flag) }
+        VNum => { return Err("expected a boolean, got a number") }
+    }
+}
+
+pure fn pow_float(base: float, exponent: float) -> float {
+    let n = int(exponent)
+    let mut count = n
+    if n < 0 {
+        count = 0 - n
+    }
+    let mut acc = 1.0
+    let mut k = 0
+    while k < count {
+        acc = acc * base
+        k = k + 1
+    }
+    if n < 0 {
+        if acc == 0.0 {
+            return 0.0
+        }
+        return 1.0 / acc
+    }
+    return acc
+}
+
+pure fn sqrt_float(x: float) -> float {
+    if x <= 0.0 {
+        return 0.0
+    }
+    let mut guess = x
+    let mut k = 0
+    while k < 40 {
+        guess = 0.5 * (guess + x / guess)
+        k = k + 1
+    }
+    return guess
+}
+
+pure fn floor_float(x: float) -> float {
+    let truncated = float(int(x))
+    if truncated > x {
+        return truncated - 1.0
+    }
+    return truncated
+}
+
+fn num_binop(op: str, a: float, b: float) -> Result<Value, str> {
+    if op == "+" { return Ok(Value::VNum { num: a + b }) }
+    if op == "-" { return Ok(Value::VNum { num: a - b }) }
+    if op == "*" { return Ok(Value::VNum { num: a * b }) }
+    if op == "/" {
+        if b == 0.0 {
+            return Err("division by zero")
+        }
+        return Ok(Value::VNum { num: a / b })
+    }
+    if op == "%" {
+        if b == 0.0 {
+            return Err("modulo by zero")
+        }
+        return Ok(Value::VNum { num: a - b * floor_float(a / b) })
+    }
+    if op == "^" { return Ok(Value::VNum { num: pow_float(a, b) }) }
+    if op == "<" { return Ok(Value::VBool { flag: a < b }) }
+    if op == ">" { return Ok(Value::VBool { flag: a > b }) }
+    if op == "<=" { return Ok(Value::VBool { flag: a <= b }) }
+    if op == ">=" { return Ok(Value::VBool { flag: a >= b }) }
+    if op == "==" { return Ok(Value::VBool { flag: a == b }) }
+    if op == "!=" { return Ok(Value::VBool { flag: a != b }) }
+    return Err(f"unknown operator '{op}'")
+}
+
+fn call_builtin(name: str, argv: list) -> Result<Value, str> {
+    let n = len(argv)
+
+    if name == "abs" {
+        if n != 1 { return Err(f"abs expects 1 argument, got {n}") }
+        let x = as_num(argv[0])?
+        if x < 0.0 {
+            return Ok(Value::VNum { num: 0.0 - x })
+        }
+        return Ok(Value::VNum { num: x })
+    }
+    if name == "sqrt" {
+        if n != 1 { return Err(f"sqrt expects 1 argument, got {n}") }
+        let x = as_num(argv[0])?
+        if x < 0.0 {
+            return Err("sqrt of a negative number")
+        }
+        return Ok(Value::VNum { num: sqrt_float(x) })
+    }
+    if name == "floor" {
+        if n != 1 { return Err(f"floor expects 1 argument, got {n}") }
+        let x = as_num(argv[0])?
+        return Ok(Value::VNum { num: floor_float(x) })
+    }
+    if name == "min" {
+        if n != 2 { return Err(f"min expects 2 arguments, got {n}") }
+        let a = as_num(argv[0])?
+        let b = as_num(argv[1])?
+        if a < b {
+            return Ok(Value::VNum { num: a })
+        }
+        return Ok(Value::VNum { num: b })
+    }
+    if name == "max" {
+        if n != 2 { return Err(f"max expects 2 arguments, got {n}") }
+        let a = as_num(argv[0])?
+        let b = as_num(argv[1])?
+        if a > b {
+            return Ok(Value::VNum { num: a })
+        }
+        return Ok(Value::VNum { num: b })
+    }
+    return Err(f"unknown function '{name}'")
+}
+
+pub fn eval_expr(e: Expr, env: map) -> Result<Value, str> {
+    match e {
+        ENum { num } => {
+            return Ok(Value::VNum { num: num })
+        }
+        EVar { name } => {
+            let names = keys(env)
+            if contains(names, name) {
+                return Ok(env[name])
+            }
+            return Err(f"unbound variable '{name}'")
+        }
+        EUnary { op, rhs } => {
+            let v = eval_expr(rhs, env)?
+            if op == "-" {
+                let x = as_num(v)?
+                return Ok(Value::VNum { num: 0.0 - x })
+            }
+            let flag = as_bool(v)?
+            return Ok(Value::VBool { flag: not flag })
+        }
+        EBinary { op, lhs, rhs } => {
+            // `and` / `or` short-circuit, so the right side is only
+            // evaluated when the left side does not decide the result.
+            if op == "and" {
+                let left = as_bool(eval_expr(lhs, env)?)?
+                if not left {
+                    return Ok(Value::VBool { flag: false })
+                }
+                let right = as_bool(eval_expr(rhs, env)?)?
+                return Ok(Value::VBool { flag: right })
+            }
+            if op == "or" {
+                let left = as_bool(eval_expr(lhs, env)?)?
+                if left {
+                    return Ok(Value::VBool { flag: true })
+                }
+                let right = as_bool(eval_expr(rhs, env)?)?
+                return Ok(Value::VBool { flag: right })
+            }
+            let a = as_num(eval_expr(lhs, env)?)?
+            let b = as_num(eval_expr(rhs, env)?)?
+            return num_binop(op, a, b)
+        }
+        ECall { name, args } => {
+            let mut argv = []
+            for a in args {
+                let v = eval_expr(a, env)?
+                argv = push(argv, v)
+            }
+            return call_builtin(name, argv)
+        }
+        ELet { name, bound, body } => {
+            let v = eval_expr(bound, env)?
+            let extended = merge(env, { name: v })
+            return eval_expr(body, extended)
+        }
+        EIf { test, then_br, else_br } => {
+            let c = as_bool(eval_expr(test, env)?)?
+            if c {
+                return eval_expr(then_br, env)
+            }
+            return eval_expr(else_br, env)
+        }
+    }
+}

@@ -1,0 +1,18 @@
+// P02: hide the IO one call deep. The system itself contains no IO token.
+// EXPECT: compile-time rejection (the checker must be interprocedural).
+component C { v: int = 0 }
+
+fn sneak(n: int) -> int {
+    print("ESCAPED-P02 io ran inside simulate via helper")
+    return n + 1
+}
+
+system Leak(c: mut C) {
+    c.v = sneak(c.v)
+}
+
+let e = spawn("e", C { v: 0 })
+let f = fork()
+let r = simulate(f, [system::Leak], 2)
+let got = peek(r, e, C) |> unwrap
+print(f"COMPILED-AND-RAN v={got.v}")

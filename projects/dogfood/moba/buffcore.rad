@@ -1,0 +1,371 @@
+// BUFFCORE — the buffs + stat pipeline cluster of browser-moba, written
+// the way it WANTS to be written. This is a fake port: the code comes
+// first, the language catches up. Every construct here is the most
+// beautiful version we could imagine; whatever fails is a feature.
+//
+// Architecture (mirrors sim/buffs.ts + sim/stats.ts):
+//   - Buff DEFINITIONS are content: pure data incl. declarative StatMods
+//     and CC permission bits. No closures in data.
+//   - Buff INSTANCES live per-unit in a component (list of structs).
+//   - Buff BEHAVIOR (ignite's burn, stun's lockout) is guarded event
+//     handlers — content scripts live next to content data.
+//   - The stat pipeline folds base(level) + mods into CombatStats once
+//     per dirty unit:  final = (base + flat*(1+pctBonus)) * (1+pct) * Πmult
+//   - Hot systems read CombatStats fields; nobody walks buff lists twice.
+
+// ------------------------------------------------------------ content
+
+pub let TICK_RATE = 30
+pub let TICKS_PER_S = 30
+
+// permission bits (ActionFlags) — what a unit is allowed to do
+pub let CAN_MOVE = 1 << 0
+pub let CAN_ATTACK = 1 << 1
+pub let CAN_CAST = 1 << 2
+pub let ALL_ACTIONS = CAN_MOVE | CAN_ATTACK | CAN_CAST
+
+// re-application policy, straight from the era engine's BuffAddType
+pub type Stacking {
+    Renew {}                  // clock resets, instance survives
+    Replace {}                // full deactivate -> fresh activate
+    Extend {}                 // durations queue up (potions)
+    StackUpTo { max: 1 }      // independent stack count, capped
+}
+
+pub struct StatMod {
+    stat: str = "",
+    flat: float = 0.0,
+    pct: float = 0.0,
+    pct_mult: float = 0.0,
+    pct_bonus: float = 0.0,    // scales the flat-bonus pool only
+}
+
+pub struct BuffDef {
+    name: str = "",
+    duration_ticks: int = 0,
+    stacking: Stacking = Stacking::Renew {},
+    mods: list < StatMod > = [],
+    revokes: int = 0,          // permission bits removed while active
+    grants: int = 0,           // permission bits added while active
+    is_cc: bool = false,       // tenacity shortens it
+    dispellable: bool = true,  // cleanse can strip it
+    tick_every: int = 0,       // 0 = no periodic pulse
+}
+
+// the content table — in the real port this is generated from content/
+pub fn buff_defs() -> map < str, BuffDef > {
+    return {
+        "ghost": BuffDef {
+            name: "ghost",
+            duration_ticks: 10 * TICKS_PER_S,
+            mods: [StatMod { stat: "move_speed", pct: 0.27 }],
+        },
+        "stun": BuffDef {
+            name: "stun",
+            duration_ticks: 2 * TICKS_PER_S,
+            stacking: Stacking::Replace {},
+            revokes: ALL_ACTIONS,
+            is_cc: true,
+        },
+        "ignite": BuffDef {
+            name: "ignite",
+            duration_ticks: 5 * TICKS_PER_S,
+            stacking: Stacking::Replace {},
+            tick_every: TICKS_PER_S,
+            dispellable: false,
+        },
+        "rage": BuffDef {
+            name: "rage",
+            duration_ticks: 4 * TICKS_PER_S,
+            stacking: Stacking::StackUpTo { max: 5 },
+            mods: [
+                StatMod { stat: "ad", flat: 6.0 },
+                StatMod { stat: "attack_speed", pct: 0.04 },
+            ],
+        },
+        "elixir": BuffDef {
+            name: "elixir",
+            duration_ticks: 8 * TICKS_PER_S,
+            stacking: Stacking::Extend {},
+            mods: [StatMod { stat: "ap", flat: 25.0, pct_bonus: 0.10 }],
+        },
+    }
+}
+
+// ------------------------------------------------------------ sim state
+
+struct BuffInstance {
+    def: str = "",
+    source: entity = nil,      // who applied it (vamp/credit chains)
+    remaining: int = 0,        // ticks
+    stacks: int = 1,
+    next_pulse: int = 0,       // countdown to the next periodic tick
+}
+
+component Buffs { active: list < BuffInstance > = [] }
+
+component BaseStats {
+    hp: float = 580.0, hp_per_level: float = 78.0,
+    ad: float = 55.0, ad_per_level: float = 3.2,
+    ap: float = 0.0,
+    armor: float = 22.0, armor_per_level: float = 3.5,
+    move_speed: float = 325.0,
+    attack_speed: float = 0.658, as_per_level: float = 0.033,
+    tenacity: float = 0.0,
+}
+
+// the SoA component hot systems read — never recomputed mid-tick
+component CombatStats {
+    max_hp: float = 0.0, ad: float = 0.0, ap: float = 0.0,
+    armor: float = 0.0, move_speed: float = 0.0,
+    attack_speed: float = 0.0,
+}
+
+component Level { value: int = 1 }
+
+component Health { hp: float = 580.0 }
+
+component Actions { allowed: int = 7 }
+
+component StatsDirty {}
+
+resource Clock { tick: int = 0 }
+
+// lifecycle events — the hook surface. Content scripts attach here.
+pub event BuffActivated { unit: entity, buff: str, source: entity }
+pub event BuffExpired { unit: entity, buff: str }
+pub event BuffPulsed { unit: entity, buff: str, source: entity, stacks: int }
+
+// ------------------------------------------------------------ applying
+
+// tenacity shortens CC duration; everything else passes through
+fn effective_duration(def: BuffDef, unit: entity) -> int {
+    if not def.is_cc { return def.duration_ticks }
+    let ten = require(unit, BaseStats).tenacity
+    return int(float(def.duration_ticks) * (1.0 - ten))
+}
+
+pub fn apply_buff(unit: entity, name: str, source: entity) -> nil {
+    let def = buff_defs()[name]
+    let duration = effective_duration(def, unit)
+    let fresh = BuffInstance {
+        def: name, source: source, remaining: duration,
+        stacks: 1, next_pulse: def.tick_every,
+    }
+
+    let b = require(unit, Buffs)
+    let existing = b.active |> find(fn(i) { return i.def == name })
+
+    match existing {
+        None => {
+            update(unit, Buffs) { active = push(b.active, fresh) }
+            emit BuffActivated { unit: unit, buff: name, source: source }
+        }
+        Some { value: live } => {
+            match def.stacking {
+                Stacking::Renew {} => {
+                    replace_instance(unit, name, BuffInstance { remaining: duration, ..live })
+                }
+                Stacking::Replace {} => {
+                    // full deactivate -> activate cycle (era double-bombs)
+                    emit BuffExpired { unit: unit, buff: name }
+                    replace_instance(unit, name, fresh)
+                    emit BuffActivated { unit: unit, buff: name, source: source }
+                }
+                Stacking::Extend {} => {
+                    replace_instance(unit, name, BuffInstance {
+                        remaining: live.remaining + duration, ..live
+                    })
+                }
+                Stacking::StackUpTo { max: cap } => {
+                    replace_instance(unit, name, BuffInstance {
+                        remaining: duration,
+                        stacks: min(live.stacks + 1, cap),
+                        ..live
+                    })
+                }
+            }
+        }
+    }
+    mark_dirty(unit)
+}
+
+fn replace_instance(unit: entity, name: str, inst: BuffInstance) -> nil {
+    let b = require(unit, Buffs)
+    let swapped = b.active |> map(fn(i) {
+        if i.def == name { return inst }
+        return i
+    })
+    update(unit, Buffs) { active = swapped }
+}
+
+// cleanse: strip everything dispellable, one pass, events for each
+pub fn cleanse(unit: entity) -> nil {
+    let b = require(unit, Buffs)
+    for inst in b.active where buff_defs()[inst.def].dispellable {
+        emit BuffExpired { unit: unit, buff: inst.def }
+    }
+    let kept = b.active |> filter(fn(i) { return not buff_defs()[i.def].dispellable })
+    update(unit, Buffs) { active = kept }
+    mark_dirty(unit)
+}
+
+fn mark_dirty(unit: entity) -> nil {
+    set(unit, StatsDirty {})
+}
+
+// ------------------------------------------------------------ ticking
+
+system age_buffs(b: mut Buffs) {
+    let mut expired_any = false
+    let mut next = []
+    for inst in b.active {
+        let aged = BuffInstance { remaining: inst.remaining - 1, ..inst }
+        if aged.remaining <= 0 {
+            emit BuffExpired { unit: self, buff: aged.def }
+            expired_any = true
+            continue
+        }
+        let def = buff_defs()[aged.def]
+        if def.tick_every > 0 {
+            if aged.next_pulse <= 1 {
+                emit BuffPulsed {
+                    unit: self, buff: aged.def,
+                    source: aged.source, stacks: aged.stacks,
+                }
+                next << BuffInstance { next_pulse: def.tick_every, ..aged }
+                continue
+            }
+            next << BuffInstance { next_pulse: aged.next_pulse - 1, ..aged }
+            continue
+        }
+        next << aged
+    }
+    b.active = next
+    if expired_any { mark_dirty(self) }
+}
+
+// ------------------------------------------------------------ stat fold
+
+// one stat through the pipeline:
+//   final = (base + Σflat * (1 + Σpct_bonus)) * (1 + Σpct) * Π(1 + pct_mult)
+pure fn fold_stat(key: str, base: float, mods: list < StatMod > ) -> float {
+    let mine = mods |> filter(fn(m) { return m.stat == key })
+    let flat = mine |> map(.flat) |> sum
+    let pct_bonus = mine |> map(.pct_bonus) |> sum
+    let pct = mine |> map(.pct) |> sum
+    let mult = mine |> map(fn(m) { return 1.0 + m.pct_mult }) |> product
+    return (base + flat * (1.0 + pct_bonus)) * (1.0 + pct) * mult
+}
+
+// every mod a unit's live buffs contribute, stacks expanded
+fn active_mods(unit: entity) -> list < StatMod > {
+    let defs = buff_defs()
+    let mut out = []
+    for inst in require(unit, Buffs).active {
+        for m in defs[inst.def].mods {
+            for _ in range(0, inst.stacks) { out << m }
+        }
+    }
+    return out
+}
+
+system recompute_stats(StatsDirty, base: BaseStats, lvl: Level, cs: mut CombatStats, a: mut Actions) {
+    let g = float(lvl.value - 1)
+    let mods = active_mods(self)
+
+    cs.max_hp = fold_stat("max_hp", base.hp + base.hp_per_level * g, mods)
+    cs.ad = fold_stat("ad", base.ad + base.ad_per_level * g, mods)
+    cs.ap = fold_stat("ap", base.ap, mods)
+    cs.armor = fold_stat("armor", base.armor + base.armor_per_level * g, mods)
+    cs.move_speed = fold_stat("move_speed", base.move_speed, mods)
+    cs.attack_speed = fold_stat(
+        "attack_speed",
+        base.attack_speed * (1.0 + base.as_per_level * g),
+        mods,
+    )
+
+    // permission bits recompute exactly like stats: revoke, then grant
+    let defs = buff_defs()
+    let mut allowed = ALL_ACTIONS
+    for inst in require(self, Buffs).active {
+        allowed = allowed & ~defs[inst.def].revokes | defs[inst.def].grants
+    }
+    a.allowed = allowed
+
+    remove(self, StatsDirty)
+}
+
+// ------------------------------------------------------------ scripts
+// Content behavior as guarded handlers: the script lives next to the def.
+
+on BuffPulsed(e) when e.buff == "ignite" {
+    // true damage burn: 70 over 5s at this level band
+    let h = require(e.unit, Health)
+    update(e.unit, Health) { hp = h.hp - 14.0 }
+}
+
+on BuffActivated(e) when e.buff == "stun" {
+    print(f"  [script] {name_of(e.unit)} stunned")
+}
+
+on BuffExpired(e) when e.buff == "stun" {
+    print(f"  [script] {name_of(e.unit)} can act again")
+}
+
+// ------------------------------------------------------------ demo
+
+fn stat_line(u: entity) -> str {
+    let cs = require(u, CombatStats)
+    let a = require(u, Actions)
+    let hp = require(u, Health).hp
+    let n = require(u, Buffs).active |> len
+    return f"hp={hp:.1} ad={cs.ad:.1} ap={cs.ap:.1} ms={cs.move_speed:.1} as={cs.attack_speed:.3} act={a.allowed} buffs={n}"
+}
+
+fn step(n: int) -> nil {
+    for _ in range(0, n) {
+        update(Clock) { tick = res(Clock).tick + 1 }
+        schedule [age_buffs, recompute_stats]
+    }
+}
+
+fn main() -> nil {
+    let hero = entity "ez" {
+        BaseStats { tenacity: 0.35 },
+        CombatStats {}, Buffs {}, Level { value: 6 },
+        Health { hp: 968.0 }, Actions {}, StatsDirty {},
+    }
+    let enemy = entity "annie" { BaseStats {}, CombatStats {}, Buffs {}, Level { value: 6 }, Health {}, Actions {}, StatsDirty {} }
+
+    step(1)
+    print(f"t0    {stat_line(hero)}")
+
+    apply_buff(hero, "ghost", hero)
+    apply_buff(hero, "rage", hero)
+    apply_buff(hero, "rage", hero)
+    apply_buff(hero, "rage", hero)
+    step(1)
+    print(f"buffed {stat_line(hero)}")
+
+    apply_buff(hero, "stun", enemy)     // tenacity: 60 ticks -> 39
+    apply_buff(hero, "ignite", enemy)
+    step(1)
+    print(f"locked {stat_line(hero)}")
+
+    step(39)                            // stun (39 ticks effective) expires;
+    step(1)                             // +1: expiry marks dirty via deferred set()
+    print(f"freed  {stat_line(hero)}")
+
+    step(120)                           // ignite burns out, ghost too
+    print(f"burned {stat_line(hero)}")
+
+    apply_buff(hero, "elixir", hero)
+    apply_buff(hero, "elixir", hero)    // Extend: queues to 16s
+    step(1)
+    print(f"elixir {stat_line(hero)}")
+
+    cleanse(hero)
+    step(1)
+    print(f"clean  {stat_line(hero)}")
+}

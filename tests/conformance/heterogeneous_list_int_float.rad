@@ -1,0 +1,9 @@
+// backend: both
+// int and float in a list should widen to list<float> (not list<any>)
+let nums = [1, 2.5, 3]
+print(nums[0])
+// expect: 1
+print(nums[1])
+// expect: 2.5
+print(nums[2])
+// expect: 3

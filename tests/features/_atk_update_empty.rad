@@ -1,0 +1,11 @@
+// Attack: update with no field assignments
+component C { x: 0, y: 1 }
+
+fn main() -> nil {
+    let e = spawn(C { x: 10, y: 20 })
+    update(e, C) {}
+    let c = unwrap(get(e, C))
+    print(c.x, c.y)
+}
+
+// expect: 10 20

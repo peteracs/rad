@@ -1,0 +1,111 @@
+// Stage 4 — two timelines, one board. fork() snapshots full program state;
+// merge_forks() three-way merges two divergent futures. Conflicts come back
+// as DATA (a sum type), and the resolution policy is a `match` in this
+// file — not a .orig file, not a CRDT's silent pick.
+//
+// Run it:   ./target/release/rad projects/tutorial/task-board/04_merge.rad
+// (no stdin — alice's and bob's offline sessions are scripted below)
+
+component Task {
+    title: str = "",
+    indexed status: str = "open",
+    assignee: str = ""
+}
+
+resource Board { next_id: int = 1 }
+
+event Opened   { task: entity, title: str, by: str }
+event Closed   { task: entity, by: str }
+event Assigned { task: entity, to: str, by: str }
+
+on Closed(e)   { update(e.task, Task) { status = "closed" } }
+on Assigned(e) { update(e.task, Task) { assignee = e.to } }
+
+fn new_task(title: str, by: str) -> entity {
+    let b = get_resource(Board) |> unwrap
+    let id = f"T-{b.next_id}"
+    set_resource(Board, Board { next_id: b.next_id + 1 })
+    let t = spawn(id, Task { title: title })
+    emit Opened { task: t, title: title, by: by }
+    flush_events()
+    return t
+}
+
+fn assign(id: str, to: str, by: str) -> nil {
+    emit Assigned { task: get_entity(id), to: to, by: by }
+    flush_events()
+}
+
+fn close(id: str, by: str) -> nil {
+    emit Closed { task: get_entity(id), by: by }
+    flush_events()
+}
+
+fn list_all() -> nil {
+    for t in entities(Task) {
+        let tk = get(t, Task) |> unwrap
+        let mut who = tk.assignee
+        if who == "" { who = "-" }
+        let mut mark = " "
+        if tk.status == "closed" { mark = "x" }
+        print(f"[{mark}] {name_of(t)}  {tk.title}  ({who})")
+    }
+}
+
+fn main() -> nil {
+    // The shared starting point: the board both teammates pulled.
+    new_task("fix login page", "alice")
+    new_task("update docs", "alice")
+    let base = fork()
+
+    // --- alice's afternoon, offline ---------------------------------------
+    close("T-1", "alice")
+    assign("T-2", "bob", "alice")          // alice hands docs to bob
+    new_task("rotate api keys", "alice")   // mints T-3
+    let ours = fork()
+
+    // --- rewind to base; bob's afternoon, offline -------------------------
+    commit(base)
+    assign("T-2", "carol", "bob")          // bob hands docs to carol — CONFLICT
+    new_task("upgrade rust toolchain", "bob")  // also mints T-3 — NAME CONFLICT
+    let theirs = fork()
+
+    // --- reconnect: three-way merge ----------------------------------------
+    commit(base)
+    match merge_forks(base, ours, theirs) {
+        Ok(m) => {
+            commit(m)
+            print("clean merge (unexpected in this script)")
+        }
+        Err(conflicts) => {
+            print(f"merge refused: {len(conflicts)} conflict(s)\n")
+            let mut decisions = []
+            for c in conflicts {
+                match c {
+                    FieldConflict { ent: _e, name, comp, field, base, ours, theirs } => {
+                        print(f"  {name}: {comp}.{field}  base={base} ours={ours} theirs={theirs}")
+                        // The policy: the most recent human decision wins —
+                        // theirs (bob) synced last, so his assignment lands.
+                        decisions << (c, theirs)
+                    }
+                    NameConflict { name, entities } => {
+                        print(f"  name {name} claimed by {len(entities)} entities")
+                        // Names are identity: the machine never picks. "Keep
+                        // both" with disambiguated names is a complete answer.
+                        decisions << (c, [f"{name}/a", f"{name}/b"])
+                    }
+                    _ => { print("  (other structural conflict)") }
+                }
+            }
+            let m = merge_forks_with(base, ours, theirs, decisions) |> unwrap
+            commit(m)
+        }
+    }
+
+    print("\nthe merged board:")
+    list_all()
+
+    // Provenance survived the merge — ask who assigned T-2.
+    print("")
+    print(why(get_entity("T-2"), Task))
+}

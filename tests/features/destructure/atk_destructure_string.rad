@@ -1,0 +1,7 @@
+fn main() -> nil {
+    let items = ["hello", "world"]
+    for [a, b] in items {
+        print(a)
+        print(b)
+    }
+}

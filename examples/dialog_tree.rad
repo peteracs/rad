@@ -1,0 +1,105 @@
+// =====================================================================
+//  Dialog System — Conversation trees with state machines
+// =====================================================================
+
+state Conversation {
+    Greeting {
+        on ask_quest -> QuestOffer
+        on ask_shop -> ShopMenu
+        on farewell -> Done
+    }
+    QuestOffer {
+        on accept -> QuestAccepted
+        on decline -> Greeting
+    }
+    QuestAccepted {
+        on farewell -> Done
+        on ask_details -> QuestDetails
+    }
+    QuestDetails {
+        on farewell -> Done
+    }
+    ShopMenu {
+        on buy -> ShopBuy
+        on back -> Greeting
+    }
+    ShopBuy {
+        on back -> ShopMenu
+        on farewell -> Done
+    }
+    Done {}
+}
+
+event DialogLine { speaker, text }
+
+on DialogLine(e) {
+    print(f"  [{e.speaker}] {e.text}")
+}
+
+fn show_options(options) {
+    let mut i = 1
+    for opt in options {
+        print(f"    {i}. {opt}")
+        i = i + 1
+    }
+}
+
+fn main() -> any {
+    print("=== Dialog System ===\n")
+
+    let mut conv = Conversation::Greeting
+
+    // Scene: Player approaches an NPC
+    emit DialogLine { speaker: "NPC", text: "Well met, traveler! What brings you here?" }
+    show_options(["Ask about quests", "Visit the shop", "Goodbye"])
+    print("")
+
+    // Player chooses: Ask about quests
+    print("  > Player chooses: Ask about quests")
+    conv = transition(conv, "ask_quest") ?
+    print("")
+
+    emit DialogLine { speaker: "NPC", text: "I have a task for you." }
+    emit DialogLine { speaker: "NPC", text: "Dark creatures have been seen in the forest." }
+    emit DialogLine { speaker: "NPC", text: "Clear them out and I'll reward you handsomely." }
+    show_options(["Accept quest", "Decline"])
+    print("")
+
+    // Player accepts
+    print("  > Player chooses: Accept quest")
+    conv = transition(conv, "accept") ?
+    print("")
+
+    emit DialogLine { speaker: "NPC", text: "Excellent! You are brave indeed." }
+    emit DialogLine { speaker: "Player", text: "Tell me more about these creatures." }
+    show_options(["Ask for details", "Farewell"])
+    print("")
+
+    // Ask for details
+    print("  > Player chooses: Ask for details")
+    conv = transition(conv, "ask_details") ?
+    print("")
+
+    emit DialogLine { speaker: "NPC", text: "They appear at night near the old ruins." }
+    emit DialogLine { speaker: "NPC", text: "Take this torch - you'll need it." }
+    emit DialogLine { speaker: "NPC", text: "Return when the deed is done." }
+    show_options(["Farewell"])
+    print("")
+
+    print("  > Player chooses: Farewell")
+    conv = transition(conv, "farewell") ?
+    print("")
+
+    emit DialogLine { speaker: "Player", text: "I'll be back." }
+    emit DialogLine { speaker: "NPC", text: "Good luck, traveler." }
+
+    match conv {
+        Greeting => { print("(still talking)") }
+        QuestOffer => { print("(offering quest)") }
+        QuestAccepted => { print("(quest accepted)") }
+        QuestDetails => { print("(giving details)") }
+        ShopMenu => { print("(in shop)") }
+        ShopBuy => { print("(buying)") }
+        Done => { print("\n[Conversation ended]") }
+    }
+}

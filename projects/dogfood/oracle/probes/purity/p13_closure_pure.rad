@@ -1,0 +1,19 @@
+// P13 CONTROL for P11: the SAME closure shape with the print removed. If this
+// is accepted, purity is genuinely the discriminator in P11 and the checker is
+// right to reject -- the complaint there is only about the wording of the
+// diagnostic, which renders as "expects pure fn(entity) -> bool, got
+// fn(entity) -> bool" and never says which call made the closure impure.
+component C { v: int = 0 }
+
+system Work(c: mut C) {
+    let picked = query_where(C, fn(id: entity) -> bool {
+        return id_of(id) >= 0
+    })
+    c.v = c.v + len(picked)
+}
+
+let e = spawn("e", C { v: 0 })
+let f = fork()
+let r = simulate(f, [system::Work], 3)
+let got = peek(r, e, C) |> unwrap
+print(f"CONTROL-OK pure closure accepted v={got.v}")

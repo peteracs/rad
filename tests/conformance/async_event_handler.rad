@@ -1,0 +1,16 @@
+// expect: 42
+
+event Tick { value }
+
+async fn plus_one(x: int) -> int {
+    return x + 1
+}
+
+async on Tick(e) {
+    let out = await async plus_one(e.value)
+    print(out)
+}
+
+emit Tick { value: 41 }
+flush_events()
+flush_events()

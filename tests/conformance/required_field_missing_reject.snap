@@ -1,0 +1,7 @@
+---
+source: tests\conformance\required_field_missing_reject.rad
+exit_code: 1
+---
+
+---stderr---
+Error: Missing field 'source' in component 'Missile'

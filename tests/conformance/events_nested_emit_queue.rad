@@ -1,0 +1,25 @@
+// backend: both
+event A { step }
+
+event B { step }
+
+on A(e) {
+    print("a1")
+    if e.step == 1 {
+        emit B { step: 1 }
+    }
+    print("a2")
+}
+
+on B(e) {
+    print("b")
+}
+
+emit A { step: 1 }
+flush_events() // processes A, emits B
+flush_events() // processes B
+flush_events() // processes A, emits B
+flush_events() // processes B
+// expect: a1
+// expect: a2
+// expect: b

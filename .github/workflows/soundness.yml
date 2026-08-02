@@ -1,0 +1,94 @@
+name: Soundness
+
+# D2 — the soundness gate. Every decode path that accepts bytes from outside
+# the process (radpack envelopes, fork/delta/save codecs, merge of decoded
+# forks) is fuzzed structure-aware: mutants are re-sealed with correct
+# digests so they reach the parser and semantic layers behind the integrity
+# check. The contract: malformed input is an Err, never a panic, never UB.
+#
+# Two layers:
+#   - fuzz-gate: every push/PR, moderate budget (~100k cases, minutes).
+#   - asan-soak: nightly cron + manual, AddressSanitizer build with a deep
+#     budget. ASAN (not Miri) because the zstd envelope crosses a C FFI
+#     boundary that Miri cannot execute — ASAN watches exactly that seam.
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  schedule:
+    - cron: "17 3 * * *" # nightly soak
+  workflow_dispatch:
+    inputs:
+      iters:
+        description: "RAD_FUZZ_ITERS (mutants per corpus payload)"
+        default: "20000"
+
+permissions:
+  contents: read
+
+jobs:
+  fuzz-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+        with:
+          toolchain: stable
+      - name: Cache cargo
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-soundness-${{ hashFiles('Cargo.lock') }}
+      - name: Fuzz decode paths, tapes, merge, GC pressure
+        env:
+          RAD_FUZZ_ITERS: "2000"
+        run: cargo test -p rad-vm --release fuzz_ -- --nocapture
+      - name: Upload findings (if any)
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: fuzz-findings
+          path: /tmp/rad_fuzz_findings/
+          if-no-files-found: ignore
+
+  asan-soak:
+    # Sanitizers need nightly + -Z flags; soak budget only on cron/manual.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Install Rust nightly with rust-src
+        uses: dtolnay/rust-toolchain@4fd1da8b0805d2d2e936788875a7d65dbd677dc2 # nightly
+        with:
+          toolchain: nightly
+          components: rust-src
+      - name: Fuzz under AddressSanitizer
+        env:
+          RUSTFLAGS: "-Zsanitizer=address"
+          RUSTDOCFLAGS: "-Zsanitizer=address"
+          ASAN_OPTIONS: "detect_leaks=0" # the GC owns liveness; leaks are not UB
+          RAD_FUZZ_ITERS: ${{ github.event.inputs.iters || '20000' }}
+        run: |
+          cargo +nightly test -p rad-vm --release fuzz_ \
+            -Zbuild-std --target x86_64-unknown-linux-gnu -- --nocapture
+      - name: Codec + merge suites under ASAN
+        env:
+          RUSTFLAGS: "-Zsanitizer=address"
+          ASAN_OPTIONS: "detect_leaks=0"
+        run: |
+          cargo +nightly test -p rad-vm --release \
+            -Zbuild-std --target x86_64-unknown-linux-gnu \
+            composition radpack merge -- --nocapture
+      - name: Upload findings (if any)
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: asan-fuzz-findings
+          path: /tmp/rad_fuzz_findings/
+          if-no-files-found: ignore

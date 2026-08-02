@@ -1,0 +1,8 @@
+// backend: both
+// rust-mode: no-check
+let m = {"x": 1, "y": 2}
+for k in m {
+    print(k)
+}
+// expect: x
+// expect: y

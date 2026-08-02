@@ -1,0 +1,7 @@
+use "mid_left.rad"
+use "mid_right.rad"
+use "leaf_alpha.rad"
+
+pub fn hub() -> int {
+    return mid_left() + mid_right() + leaf_alpha()
+}

@@ -1,0 +1,5 @@
+---
+source: tests\conformance\test_fork_component_integrity.rad
+exit_code: 0
+---
+PASS: component integrity

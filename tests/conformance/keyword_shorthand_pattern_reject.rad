@@ -1,0 +1,13 @@
+// Shorthand pattern binding takes the field's own name as the variable
+// name — useless for keyword fields (`on` can't be referenced), so the
+// parser demands an explicit alias.
+type Mode {
+    Auto { on: false }
+}
+
+fn main() -> nil {
+    let m = Mode::Auto { on: true }
+    match m {
+        Mode::Auto { on } => { print("never") }
+    }
+}

@@ -1,0 +1,166 @@
+// Input-flood / DDoS resilience smoke test for the per-peer jitter buffer.
+//
+// UDP (and the chaos harness's jitter burst) can deliver a storm of packets at
+// once, and a malicious client can do it on purpose. The authority must absorb
+// that without overflowing the fixed-size PeerInputRing/PeerCastRing,
+// panicking, leaking entities, or lagging. This pins the two structural
+// guarantees that make the rings flood-proof:
+//   1. The accept window (max_input_lead_ticks) is smaller than the ring, so the
+//      number of live queued inputs is bounded no matter how many packets arrive.
+//   2. A same-tick packet storm collapses into one slot (latest intent wins)
+//      instead of consuming slots or rejecting valid play.
+
+use "../server/state.rad"
+use "../server/input_queue.rad"
+use "../sim/components.rad"
+use "../world/scene.rad"
+use "../world/avatars.rad"
+use "../sim/movement.rad"
+use "../sim/lag_compensation.rad"
+use "../sim/projectiles.rad"
+
+let _seed = seed_moba_world()
+
+fn conn_of(peer: entity) -> PeerConnection {
+    return get(peer, PeerConnection) |> unwrap
+}
+
+fn flood_peer(session_id: int, player_id: int) -> entity {
+    match remember_peer("127.0.0.1", 7100, session_id, player_id, 0, 0, 1) {
+        Some(p) => { return p }
+        None => {
+            assert(false, "flood test peer must be created")
+            return seed_moba_player(player_id)
+        }
+    }
+}
+
+fn main() -> nil {
+    let lead = res(ServerConfig).max_input_lead_ticks
+    let slots = input_queue_slots()
+    assert(lead < slots, "accept window must be smaller than the ring so it can never overflow")
+
+    // --- Same-tick packet storm ---------------------------------------------
+    // 64 packets aimed at one future tick with strictly increasing seq. The ring
+    // must collapse them into a single slot, never grow the entity table, and
+    // never index out of bounds (the test reaching the end proves no panic).
+    let storm_peer = flood_peer(7101, 1)
+    let current = 1000
+    let storm_tick = current + 5
+    let mut seq = 1
+    let mut accepted = 0
+    while seq <= 64 {
+        if queue_move_input(storm_peer, current, seq, storm_tick, 500 + seq, 1.0, 2.0) {
+            accepted = accepted + 1
+        }
+        record_peer_received_packet(storm_peer, seq)
+        seq = seq + 1
+    }
+    assert(accepted == 64, "a strictly-increasing same-tick storm overwrites in place, not rejected")
+    assert(peer_count() == 1, "an input storm must never spawn extra peer entities")
+    assert(conn_of(storm_peer).overwritten_inputs == 0, "same-tick updates are in-place, not cross-tick overwrites")
+    assert(conn_of(storm_peer).received_client_seq == 64, "storm receipt ack must advance to the latest packet")
+    assert(pending_move_input_count(storm_peer) == 1, "same-tick move storm must occupy one move slot")
+
+    // Exactly one MoveOrder comes out, carrying the LAST command in the storm.
+    apply_peer_move_for_tick(storm_peer, storm_tick)
+    assert(conn_of(storm_peer).last_status == "applied", "the storm slot must apply exactly once")
+    assert(conn_of(storm_peer).last_command_id == 500 + 64, "the latest same-tick intent must win")
+
+    // The slot is now clear: re-applying the same tick is a clean no-op, proving
+    // the input was consumed rather than left to replay forever.
+    apply_peer_move_for_tick(storm_peer, storm_tick)
+    assert(conn_of(storm_peer).last_applied_client_seq == 64, "draining a slot must not double-apply")
+
+    // --- Distinct-future-tick flood beyond the window -----------------------
+    // 50 packets across 50 distinct future ticks. Only the lead-window ticks may
+    // queue; everything past it is rejected as too-far. That rejection is what
+    // keeps the fixed ring overflow-proof under a jitter burst or malicious flood.
+    let burst_peer = flood_peer(7102, 2)
+    let _avatar = player_avatar(2)
+    let base = 2000
+    let mut offset = 1
+    let mut queued = 0
+    let mut rejected = 0
+    while offset <= 50 {
+        let ok = queue_move_input(burst_peer, base, 1000 + offset, base + offset, 700 + offset, 3.0, 4.0)
+        if ok { queued = queued + 1 } else { rejected = rejected + 1 }
+        record_peer_received_packet(burst_peer, 1000 + offset)
+        offset = offset + 1
+    }
+    assert(queued == lead, "only the lead-window ticks may queue")
+    assert(rejected == 50 - lead, "every tick past the lead window must be rejected")
+    assert(conn_of(burst_peer).future_inputs == 50 - lead, "rejected far-future inputs advance the diagnostic counter")
+    assert(queued <= slots, "live queued inputs can never exceed the ring size")
+
+    // Draining the whole window applies each queued tick exactly once and leaves
+    // the ring empty, proving no input leaked or got stuck under the flood.
+    let mut tick = base + 1
+    let mut applied = 0
+    while tick <= base + lead {
+        apply_peer_move_for_tick(burst_peer, tick)
+        if conn_of(burst_peer).last_status == "applied" { applied = applied + 1 }
+        tick = tick + 1
+    }
+    assert(applied == lead, "every queued window tick must drain exactly once")
+
+    // --- Cast storms use the same flood-proof target-tick contract ----------
+    // Ability packets are not allowed to be a fire-and-forget reliability gap.
+    // They share the same client sequence and lead-window rules while occupying
+    // their own fixed PeerCastRing on the RAD authority.
+    let cast_storm_peer = flood_peer(7103, 3)
+    let cast_current = 3000
+    let cast_tick = cast_current + 5
+    let mut cast_seq = 1
+    let mut cast_accepted = 0
+    while cast_seq <= 64 {
+        if queue_cast_input(cast_storm_peer, cast_current, cast_seq, cast_tick, 900 + cast_seq, 1.0, 0.0, cast_current) {
+            cast_accepted = cast_accepted + 1
+        }
+        record_peer_received_packet(cast_storm_peer, cast_seq)
+        cast_seq = cast_seq + 1
+    }
+    assert(cast_accepted == 64, "a strictly-increasing same-tick cast storm overwrites in place, not rejected")
+    assert(pending_cast_input_count(cast_storm_peer) == 1, "same-tick cast storm must occupy one cast slot")
+    apply_peer_cast_for_tick(cast_storm_peer, cast_tick)
+    assert(conn_of(cast_storm_peer).last_status == "cast", "the cast storm slot must apply exactly once")
+    assert(conn_of(cast_storm_peer).last_command_id == 900 + 64, "the latest same-tick cast intent must win")
+    apply_peer_cast_for_tick(cast_storm_peer, cast_tick)
+    assert(conn_of(cast_storm_peer).last_applied_client_seq == 64, "draining a cast slot must not double-apply")
+
+    let cast_burst_peer = flood_peer(7104, 4)
+    let cast_base = 4000
+    let mut cast_offset = 1
+    let mut cast_queued = 0
+    let mut cast_rejected = 0
+    while cast_offset <= 50 {
+        let ok = queue_cast_input(cast_burst_peer, cast_base, 2000 + cast_offset, cast_base + cast_offset, 1200 + cast_offset, 1.0, 0.0, cast_base)
+        if ok { cast_queued = cast_queued + 1 } else { cast_rejected = cast_rejected + 1 }
+        record_peer_received_packet(cast_burst_peer, 2000 + cast_offset)
+        cast_offset = cast_offset + 1
+    }
+    assert(cast_queued == lead, "only the lead-window cast ticks may queue")
+    assert(cast_rejected == 50 - lead, "every cast tick past the lead window must be rejected")
+    assert(conn_of(cast_burst_peer).future_inputs == 50 - lead, "far-future casts advance the diagnostic counter")
+    assert(pending_cast_input_count(cast_burst_peer) <= slots, "live queued casts can never exceed the ring size")
+
+    let mut cast_drain_tick = cast_base + 1
+    let mut cast_applied = 0
+    while cast_drain_tick <= cast_base + lead {
+        apply_peer_cast_for_tick(cast_burst_peer, cast_drain_tick)
+        if conn_of(cast_burst_peer).last_status == "cast" { cast_applied = cast_applied + 1 }
+        cast_drain_tick = cast_drain_tick + 1
+    }
+    assert(cast_applied == lead, "every queued cast window tick must drain exactly once")
+
+    // --- Ancient sequence replay guard --------------------------------------
+    // A hostile client must not be able to take an old, out-of-window client_seq
+    // and attach it to a fresh future target_tick to bypass receipt ACK dedupe.
+    let stale_peer = flood_peer(7105, 5)
+    record_peer_received_packet(stale_peer, 64)
+    assert(not queue_move_input(stale_peer, 5000, 1, 5005, 1500, 9.0, 9.0), "out-of-window old move seq must be rejected")
+    assert(conn_of(stale_peer).last_status == "duplicate", "stale old move seq is duplicate/noise telemetry")
+    assert(pending_move_input_count(stale_peer) == 0, "old move seq must not mutate the move ring")
+    assert(not queue_cast_input(stale_peer, 5000, 1, 5005, 1501, 1.0, 0.0, 4998), "out-of-window old cast seq must be rejected")
+    assert(pending_cast_input_count(stale_peer) == 0, "old cast seq must not mutate the cast ring")
+}

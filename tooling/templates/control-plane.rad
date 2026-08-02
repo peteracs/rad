@@ -1,0 +1,67 @@
+// __PROJECT_NAME__ — Control Plane template
+//
+// Customize services, health thresholds, and scaling rules
+// for your domain. Run immediately: rad run
+
+component Service  { name: "", tier: "" }
+component Health   { score: 100 }
+component Capacity { instances: 1, max_instances: 5 }
+component Load     { qps: 0, error_rate: 0 }
+
+entity api {
+  Service  { name: "api", tier: "critical" },
+  Health   { score: 95 },
+  Capacity { instances: 2, max_instances: 6 },
+  Load     { qps: 150, error_rate: 1 }
+}
+
+entity worker {
+  Service  { name: "worker", tier: "standard" },
+  Health   { score: 88 },
+  Capacity { instances: 1, max_instances: 4 },
+  Load     { qps: 80, error_rate: 2 }
+}
+
+event Scaled   { service, from_count, to_count }
+event PageSent { severity, message }
+
+on Scaled(e) {
+  print(f"  scale: {e.service} {e.from_count} -> {e.to_count}")
+}
+
+on PageSent(e) {
+  print(f"  page[{e.severity}]: {e.message}")
+}
+
+system AutoScale(s: Service, l: Load, c: mut Capacity) {
+  if l.qps > (c.instances * 100) and c.instances < c.max_instances {
+    let prev = c.instances
+    c.instances = c.instances + 1
+    emit Scaled { service: s.name, from_count: prev, to_count: c.instances }
+  }
+}
+
+system CheckHealth(s: Service, l: Load, h: mut Health) after AutoScale {
+  let mut score = 100 - (l.error_rate * 10)
+  if score < 0 {
+    score = 0
+  }
+  h.score = score
+  if score < 50 {
+    emit PageSent { severity: "P1", message: f"{s.name} critical: health={score}" }
+  }
+}
+
+fn main() -> nil {
+  print("=== __PROJECT_NAME__ ===")
+  print("--- control loop tick ---")
+  run [CheckHealth, AutoScale]
+
+  let scores = [
+    (get(api, Health) |> unwrap).score,
+    (get(worker, Health) |> unwrap).score
+  ]
+  let avg = (scores |> reduce(0, fn(a, b) { return a + b })) / len(scores)
+  print(f"fleet health: {scores}")
+  print(f"average: {avg}")
+}

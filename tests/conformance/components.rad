@@ -1,0 +1,25 @@
+// component, entity, get / set / has (component type as string)
+component Pos { x: 0, y: 0 }
+
+component Tag { name: "" }
+
+entity hero {
+    Pos { x: 2, y: 3 },
+    Tag { name: "z" }
+}
+let p = get(hero, "Pos") |> unwrap
+print(p.x + p.y)
+// expect: 5
+print(has(hero, "Tag"))
+// expect: true
+set(hero, Tag { name: "q" })
+let t = get(hero, "Tag") |> unwrap
+print(t.name)
+// expect: q
+print(has(hero, "Pos"))
+// expect: true
+let p2 = get(hero, "Pos") |> unwrap
+print(p2.x)
+// expect: 2
+print(p2.y)
+// expect: 3

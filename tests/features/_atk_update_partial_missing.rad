@@ -1,0 +1,10 @@
+// Attack: update partial fields on entity without the component
+// Only x is set, y should come from spread (which fails)
+component C { x: 0, y: 0 }
+
+fn main() -> nil {
+    let e = spawn()
+    print("before")
+    update(e, C) { x = 5 }
+    print("after")
+}

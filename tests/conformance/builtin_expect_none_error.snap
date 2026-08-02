@@ -1,0 +1,7 @@
+---
+source: tests\conformance\builtin_expect_none_error.rad
+exit_code: 1
+---
+
+---stderr---
+Error: [line 4] in main: expect() failed: conversion failed

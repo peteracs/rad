@@ -1,0 +1,7 @@
+---
+source: tests\conformance\test_fork_negative_ticks.rad
+exit_code: 1
+---
+
+---stderr---
+Error: [line 7] in main: simulate() tick count must be non-negative

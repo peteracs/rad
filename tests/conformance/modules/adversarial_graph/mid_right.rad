@@ -1,0 +1,6 @@
+use "leaf_beta.rad"
+use "leaf_gamma.rad"
+
+pub fn mid_right() -> int {
+    return leaf_beta() * 10 + leaf_gamma()
+}

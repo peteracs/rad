@@ -1,0 +1,10 @@
+fn main() -> nil {
+    let data = [[1, 10], [2, 20], [3, 30], [4, 40], [5, 50]]
+    let result = data
+        |> filter(fn([id, val]) { return id > 1 })
+        |> map(fn([id, val]) { return [id, val * 2] })
+        |> filter(fn([id, val]) { return val < 100 })
+        |> map(fn([id, val]) { return val + id })
+        |> reduce(0, fn(acc, x) { return acc + x })
+    print(result)
+}

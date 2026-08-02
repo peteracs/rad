@@ -1,0 +1,52 @@
+// BUG 01 — load_world() checks field NAMES but not field TYPES.
+//
+//   rad projects/dogfood/strongbox/bugs/01_load_type_confusion.rad
+//
+// The save envelope stores component values positionally against an embedded
+// schema of field NAMES only (no types):
+//
+//   RADWORLD2 {"entities":[["e",[["Incident",["DISK_FULL",3,false]]]]],
+//              "schema":[["Incident",["code","sev","open"]]]}
+//
+// Below, the field SET matches the declaration exactly, so this is NOT shape
+// drift and no `migrate` block is required or declared. Only the VALUE TYPES
+// are wrong: `sev` (declared int) carries the string "3", and `open`
+// (declared bool) carries the int 0.
+//
+// EXPECTED: a loud load error naming the type drift, consistent with the
+//   documented shape-drift guarantee "No silent nulls, no zero-filled
+//   fields, ever" (docs/src/reference/builtins.md, load_world).
+// ACTUAL: the load succeeds silently. The static type checker still believes
+//   `sev: int` and `open: bool`, so wrong-typed data is now reachable from
+//   statically-typed code. `if inc.open` takes the WRONG BRANCH with no
+//   diagnostic, and the delayed `inc.sev + 1` aborts far from the load site.
+
+component Incident { code: "", sev: 1, open: true }
+
+let poisoned = "RADWORLD2 {\"entities\":[[\"inc-1001\",[[\"Incident\",[\"DISK_FULL\",\"3\",0]]]]],\"resources\":[],\"schema\":[[\"Incident\",[\"code\",\"sev\",\"open\"]]]}"
+
+print("=== BUG 01: type confusion through load_world ===")
+
+let n = load_world(poisoned)
+print(f"load_world accepted the payload and returned {n}")
+
+let inc = get(get_entity("inc-1001"), Incident) |> unwrap
+
+print(f"declared sev: int   -> typeof(inc.sev)  = {typeof(inc.sev)}")
+print(f"declared open: bool -> typeof(inc.open) = {typeof(inc.open)}")
+
+// 1. SILENT LOGIC CORRUPTION: `open` is int 0, and the branch is taken as if
+//    the incident were still open. No error, no warning, wrong answer.
+if inc.open {
+    print("branch on inc.open: OPEN")
+} else {
+    print("branch on inc.open: RESOLVED   <-- branched on an int, no diagnostic")
+}
+
+// 2. The corrupt world digests happily: the receipt blesses bad data.
+print(f"world_digest of the poisoned world: {world_digest()}")
+
+// 3. DELAYED HARD FAILURE, far from the load that caused it.
+print("about to evaluate inc.sev + 1 (the checker types this as int + int)")
+let bumped = inc.sev + 1
+print(f"inc.sev + 1 = {bumped}")

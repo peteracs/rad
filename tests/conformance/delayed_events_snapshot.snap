@@ -1,0 +1,9 @@
+---
+source: tests\conformance\delayed_events_snapshot.rad
+exit_code: 0
+---
+fires live: 1
+after rewind: 0
+fires again post-commit: 1
+abandoned timer dropped: 1
+sim timer carried: 2

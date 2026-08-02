@@ -1,0 +1,75 @@
+// PROBE: do the fuel and memory budgets actually bound everything?
+//
+// sandbox.rs claims layer 3 is "physics": anything surviving the builtin
+// mask and the ACL "still dies of resource starvation". Budgets are
+// charged against GC allocation (mem_bytes) and loop back-edges + calls
+// (fuel). Things that live in Rust-side structures -- the ECS world, the
+// event queue -- may not be on either meter.
+
+component Blob { a: 0, b: 0, c: 0 }
+
+let seed_ent = spawn("seed", Blob { a: 1, b: 2, c: 3 })
+
+print("=== probe: budget coverage ===")
+
+// --- E1: ECS growth under a TINY memory budget --------------------------
+// 1 MiB of GC heap, but spawn as many entities as fuel allows. If ECS
+// storage is not on the mem_bytes meter, the guest allocates far more than
+// its stated ceiling.
+let ecs_bomb = f"""
+component Blob { a: 0, b: 0, c: 0 }
+let mut i = 0
+while i < 40000 {
+    spawn(f"e{i}", Blob { a: i, b: i, c: i })
+    i = i + 1
+}
+sandbox_output(i)
+"""
+let ecs_caps = f"""{ "write": ["Blob"], "fuel": 5000000, "mem_bytes": 1048576 }"""
+let t0 = clock()
+match sandbox_run(ecs_bomb, fork(), ecs_caps) {
+    Ok(f1) => {
+        let d = diff(fork(), f1)
+        print(f"E1: 40000 spawns SUCCEEDED under a 1 MiB budget. diff={d}")
+        print(f"E1: elapsed {clock() - t0} s")
+    }
+    Err(m) => { print(f"E1 starved (correct): {m}") }
+}
+
+// --- E2: event ping-pong ------------------------------------------------
+// run_sandbox_guest drains pending events in a `while !events_next
+// .is_empty()` loop and comments "Handler execution is fuel-bounded, so a
+// ping-pong loop starves out." Each handler emits TWO events, so the queue
+// grows geometrically. Does fuel actually stop it, and does the queue
+// itself count against mem_bytes?
+let pingpong = f"""
+component Blob { a: 0, b: 0, c: 0 }
+event Ping { n }
+on Ping(e) {
+    emit Ping { n: e.n + 1 }
+    emit Ping { n: e.n + 1 }
+}
+emit Ping { n: 0 }
+"""
+let ev_caps = f"""{ "write": [], "fuel": 300000, "mem_bytes": 4194304 }"""
+let t1 = clock()
+match sandbox_run(pingpong, fork(), ev_caps) {
+    Ok(_f2) => { print(f"E2: geometric event bomb COMPLETED in {clock() - t1} s") }
+    Err(m)  => { print(f"E2 stopped in {clock() - t1} s: {m}") }
+}
+
+// --- E3: is a single builtin call fuel-metered? -------------------------
+// Fuel is charged on loop back-edges and calls. One call that does O(huge)
+// work internally is one charge point.
+let onecall = f"""
+let s = repeat("A", 20000000)
+sandbox_output(len(s))
+"""
+let oc_caps = f"""{ "write": [], "fuel": 100, "mem_bytes": 268435456 }"""
+let t2 = clock()
+match sandbox_run(onecall, fork(), oc_caps) {
+    Ok(_f3) => { print(f"E3: 20M-char build on a 100-fuel budget SUCCEEDED in {clock() - t2} s") }
+    Err(m)  => { print(f"E3 stopped: {m}") }
+}
+
+print("=== probe done ===")

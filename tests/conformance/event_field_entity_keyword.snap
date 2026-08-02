@@ -1,0 +1,6 @@
+---
+source: tests\conformance\event_field_entity_keyword.rad
+exit_code: 0
+---
+hero
+2

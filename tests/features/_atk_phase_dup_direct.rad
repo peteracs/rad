@@ -1,0 +1,12 @@
+// Attack: same system listed twice directly (no phases)
+// This tests whether dedup is a phase issue or a schedule issue
+
+component Counter { n: 0 }
+system Inc(c: mut Counter) { c.n = c.n + 1 }
+
+fn main() -> nil {
+    let e = spawn(Counter { n: 0 })
+    schedule [Inc, Inc]
+    let c = unwrap(get(e, Counter))
+    print("n =", c.n)
+}

@@ -1,0 +1,20 @@
+// backend: both
+component Pos { x: 0, y: 0 }
+
+component Vel { dx: 0, dy: 0 }
+
+entity hero {
+    Pos { x: 2, y: 3 },
+    Vel { dx: 4, dy: 5 }
+}
+
+let p = require(hero, Pos)
+print(p.x + p.y)
+
+let both = require_all(hero, Pos, Vel)
+let p2 = both[0]
+let v2 = both[1]
+print(p2.x + v2.dx)
+
+// expect: 5
+// expect: 6

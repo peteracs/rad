@@ -1,0 +1,25 @@
+// The content module: composes core (vocabulary) + systems (machinery)
+// through a diamond import; behavior is guarded handlers on the
+// library's events; the library system runs from the app's schedule.
+
+use "kit_core.rad"
+use "kit_systems.rad"
+
+pub let BOLT_DAMAGE = 42.0
+
+// the app's script: library event in, core event out
+on BoltHit(e) {
+    emit Damage { target: e.target, amount: BOLT_DAMAGE }
+    print(f"hit {name_of(e.target)}")
+}
+
+fn main() -> nil {
+    let ez = entity "ez" { Pos {}, Vitals { team: 0 } }
+    let dummy = entity "dummy" { Pos { at: (5.0, 0.0) }, Vitals { team: 1 } }
+
+    let _b = entity "bolt" { Pos {}, Bolt { source: ez } }
+    for _ in range(0, 20) { schedule [fly_bolts] }
+
+    print(f"dummy hp: {require(dummy, Vitals).hp:.0}")   // 58
+    print(f"dist helper: {dist((0.0, 0.0), (3.0, 4.0))}") // 5.0
+}

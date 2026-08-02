@@ -1,0 +1,44 @@
+// Events inside simulate(): systems may emit, handlers dispatch INSIDE
+// the fork (flushed once per simulated tick), and nothing leaks — the
+// live world, the live event queue, and the live delayed queue are all
+// untouched by what happens in the simulation.
+
+component Tally { hits: int = 0 }
+
+event Strike { who: entity }
+
+event Echo { who: entity }
+
+system striker(Tally) {
+    emit Strike { who: self }
+}
+
+on Strike(e) {
+    update(e.who, Tally) { hits = require(e.who, Tally).hits + 1 }
+    // handlers may emit further events (also confined to the fork)
+    if require(e.who, Tally).hits == 2 { emit Echo { who: e.who } }
+}
+
+on Echo(e) {
+    update(e.who, Tally) { hits = require(e.who, Tally).hits + 10 }
+}
+
+fn main() -> nil {
+    let u = entity "u" { Tally {} }
+
+    // 3 ticks: striker emits per tick; handler increments per tick;
+    // the echo at hits==2 lands one flush later (+10)
+    let end = simulate(fork(), [system::striker], 3)
+    let inside = unwrap(peek(end, u, Tally))
+    print(f"inside the fork: {inside.hits}")        // 13
+
+    // the live world never saw any of it
+    print(f"live world: {require(u, Tally).hits}")  // 0
+
+    // delayed events scheduled in a sim die with the sim: the live
+    // queue stays clean across the simulate call
+    emit Strike { who: u } after 1
+    flush_events()
+    flush_events()
+    print(f"live delayed delivery still works: {require(u, Tally).hits}")  // 1
+}

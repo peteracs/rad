@@ -1,0 +1,17 @@
+// Attack: once + when keyword should behave like once + where.
+event Ping { val }
+
+on Ping once (e) when e.val > 1 {
+    print("once-when:", e.val)
+}
+
+fn main() -> nil {
+    emit Ping { val: 0 }
+    flush_events()
+    emit Ping { val: 2 }
+    flush_events()
+    emit Ping { val: 3 }
+    flush_events()
+}
+
+// expect: once-when: 2

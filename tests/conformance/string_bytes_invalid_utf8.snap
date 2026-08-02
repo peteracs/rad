@@ -1,0 +1,7 @@
+---
+source: tests\conformance\string_bytes_invalid_utf8.rad
+exit_code: 1
+---
+
+---stderr---
+Error: [line 3] in main: substring_bytes() range 0..2 does not form valid UTF-8

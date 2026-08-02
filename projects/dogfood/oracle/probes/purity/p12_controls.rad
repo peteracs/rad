@@ -1,0 +1,40 @@
+// P12 CONTROL: everything here is legal inside simulate() and must be ACCEPTED.
+// If any of this is rejected, the checker is over-strict, which is its own bug.
+//   - pure arithmetic and a pure helper fn call
+//   - emit to a PURE handler (docs: "emit statements are allowed")
+//   - set_resource (a world write; forks capture the world, so it stays speculative)
+//   - spawn (structural world change inside the fork)
+component C { v: int = 0 }
+resource R { total: int = 0 }
+
+event Tick { n: int }
+
+on Tick(ev) {
+    let _echo = ev.n * 2
+}
+
+fn double(n: int) -> int {
+    return n * 2
+}
+
+system Work(c: mut C) {
+    c.v = double(c.v) + 1
+    emit Tick { n: c.v }
+}
+
+system Bank(c: C, r: mut R) after Work {
+    r.total = r.total + c.v
+}
+
+system Structural(c: C) after Bank {
+    if c.v > 5 {
+        spawn("child", C { v: 1 })
+    }
+}
+
+let e = spawn("e", C { v: 1 })
+let f = fork()
+let r = simulate(f, [system::Work, system::Bank, system::Structural], 3)
+let got = peek(r, e, C) |> unwrap
+let res = peek_resource(r, R) |> unwrap
+print(f"CONTROL-OK v={got.v} total={res.total}")

@@ -1,0 +1,133 @@
+// RECAPWORK — browser-moba's death recap + kill economy, written the way
+// it wants to be written (fake-port round 9). The code comes first;
+// whatever the language can't run becomes a feature.
+//
+// Architecture (mirrors game/deathRecap/model.ts + sim/progression.ts):
+//   - The recap is a QUERY OVER THE PAST: window the victim's damage
+//     history, group per source, rank, mark KILLER + two ASSISTs. The
+//     event system already remembers every dispatch deterministically —
+//     the recap just asks it: `recent_events("Damage", WINDOW)`.
+//   - Bounties: first blood premium, spree-priced kills, shutdowns for
+//     ending a 3+ streak. Streaks move on every death.
+
+pub let RECAP_WINDOW = 450        // 15s — DeathRecapMinimumTimeWindow
+pub let MAX_MARKERS = 3           // KILLER + two ASSISTs
+pub let BASE_KILL_GOLD = 300.0
+pub let FIRST_BLOOD_BONUS = 100.0
+pub let SPREE_STEP = 100.0        // each spree rung prices higher
+pub let SHUTDOWN_AT = 3
+
+component Vitals { hp: float = 1000.0, team: int }
+
+component Score { spree: int = 0, gold: float = 0.0 }
+
+pub event Damage { source: entity, target: entity, amount: float, kind: str }
+pub event Died { who: entity, killer: entity }
+
+resource Match { first_blood_paid: bool = false }
+
+// ------------------------------------------------------------ damage
+
+on Damage(e) {
+    let v = require(e.target, Vitals)
+    let hp = v.hp - e.amount
+    update(e.target, Vitals) { hp = hp }
+    if hp <= 0.0 and v.hp > 0.0 {
+        emit Died { who: e.target, killer: e.source }
+    }
+}
+
+// ------------------------------------------------------------ economy
+
+fn bounty_for(victim: entity) -> float {
+    let mut gold = BASE_KILL_GOLD + float(require(victim, Score).spree) * SPREE_STEP
+    if not res(Match).first_blood_paid {
+        update(Match) { first_blood_paid = true }
+        gold = gold + FIRST_BLOOD_BONUS
+    }
+    return gold
+}
+
+on Died(e) {
+    let victim_spree = require(e.who, Score).spree
+    let gold = bounty_for(e.who)
+    let k = require(e.killer, Score)
+    update(e.killer, Score) { spree = k.spree + 1, gold = k.gold + gold }
+    update(e.who, Score) { spree = 0 }
+    if victim_spree >= SHUTDOWN_AT {
+        print(f"  SHUTDOWN! {name_of(e.killer)} ends {name_of(e.who)}'s {victim_spree}-spree (+{gold:.0}g)")
+    } else {
+        print(f"  {name_of(e.killer)} slays {name_of(e.who)} (+{gold:.0}g)")
+    }
+}
+
+// ------------------------------------------------------- death recap
+
+// the original's FillFormatedData: window, group per source, rank,
+// emit the top markers
+on Died(e) {
+    let hits = recent_events("Damage", RECAP_WINDOW)
+    |> filter(fn(d) { return d.target == e.who })
+    let by_source = hits |> group_by(fn(d) { return name_of(d.source) })
+
+    let mut rows = []
+    for [src, src_hits] in entries(by_source) {
+        let total = src_hits |> map(.amount) |> sum
+        rows << (src, total, src_hits |> len)
+    }
+    let ranked = rows |> sort_by(fn(r) {
+        let (_, total, _) = r
+        return -total
+    })
+
+    print(f"  -- death recap: {name_of(e.who)} --")
+    let mut marker = 0
+    for row in ranked where marker < MAX_MARKERS {
+        let (src, total, n) = row
+        let tag = match marker {
+            0 => "KILLER"
+            _ => "ASSIST"
+        }
+        print(f"    {tag}  {src}: {total:.0} over {n} hits")
+        marker = marker + 1
+    }
+}
+
+// -------------------------------------------------------------- demo
+
+fn tick(n: int) -> nil {
+    for _ in range(0, n) { schedule [noop] }
+}
+
+component Clockwork {}
+
+system noop(Clockwork) {}
+
+fn main() -> nil {
+    let _c = entity "clock" { Clockwork {} }
+    let ez = entity "ez" { Vitals { team: 0 }, Score { spree: 4 } }
+    let annie = entity "annie" { Vitals { team: 1 }, Score {} }
+    let brand = entity "brand" { Vitals { team: 1 }, Score {} }
+    let tower = entity "tower" { Vitals { team: 1, hp: 4000.0 }, Score {} }
+
+    // a skirmish unfolds: poke, burn, tower shots, the kill
+    emit Damage { source: annie, target: ez, amount: 250.0, kind: "magic" }
+    tick(30)
+    emit Damage { source: brand, target: ez, amount: 180.0, kind: "magic" }
+    tick(30)
+    emit Damage { source: tower, target: ez, amount: 190.0, kind: "physical" }
+    tick(30)
+    emit Damage { source: brand, target: ez, amount: 120.0, kind: "magic" }
+    tick(2)
+    emit Damage { source: annie, target: ez, amount: 300.0, kind: "magic" }
+    tick(2)
+
+    // ez (on a 4-spree) falls: shutdown + recap ranked by contribution
+    print(f"annie gold: {require(annie, Score).gold:.0}")
+    print(f"annie spree: {require(annie, Score).spree}")
+
+    // a second kill prices normally (first blood spent, no spree)
+    emit Damage { source: annie, target: brand, amount: 1200.0, kind: "magic" }
+    tick(2)
+    print(f"annie gold: {require(annie, Score).gold:.0}")
+}

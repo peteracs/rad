@@ -1,0 +1,63 @@
+// Smoke test: resource injection into systems, peek_resource, world_digest.
+
+resource Ledger {
+    credits: int = 100,
+    food: int = 50,
+    tick: int = 0
+}
+
+resource Policy {
+    tax: int = 10,
+    ration: int = 10
+}
+
+component Sector {
+    name: str = "",
+    workers: int = 10
+}
+
+component Output {
+    food: int = 0,
+    goods: int = 0
+}
+
+// Mixed system: iterates entities, injects the same resource instance.
+system Produce(s: Sector, o: mut Output, p: Policy) {
+    o = Output { food: s.workers * p.ration / 10, goods: s.workers }
+}
+
+// Resource-only system: runs exactly once per schedule invocation.
+system Clock(l: mut Ledger) {
+    l = Ledger { tick: l.tick + 1, ..l }
+}
+
+// Accumulator across entities: does a mut resource write persist per iteration?
+system Collect(o: Output, l: mut Ledger, p: Policy) {
+    l = Ledger { credits: l.credits + o.goods * p.tax / 10, food: l.food + o.food, tick: l.tick }
+}
+
+let a = spawn("alpha", Sector { name: "alpha", workers: 10 }, Output { food: 0, goods: 0 })
+let b = spawn("beta", Sector { name: "beta", workers: 20 }, Output { food: 0, goods: 0 })
+
+print(f"entities: {a} {b}")
+
+let l0 = get_resource(Ledger) |> unwrap
+print(f"start: credits={l0.credits} food={l0.food} tick={l0.tick}")
+
+let base = fork()
+print(f"digest(base) = {world_digest(base)}")
+print(f"digest(live) = {world_digest()}")
+
+let sim = simulate(base, [system::Produce, system::Collect, system::Clock], 3)
+let ls = peek_resource(sim, Ledger) |> unwrap
+print(f"after 3 simulated ticks: credits={ls.credits} food={ls.food} tick={ls.tick}")
+
+let live = get_resource(Ledger) |> unwrap
+print(f"live untouched: credits={live.credits} food={live.food} tick={live.tick}")
+
+let oa = peek(sim, a, Output) |> unwrap
+print(f"peek alpha output: food={oa.food} goods={oa.goods}")
+
+print(f"digest(sim)  = {world_digest(sim)}")
+let d = diff(base, sim)
+print(f"diff(base, sim) = {d}")

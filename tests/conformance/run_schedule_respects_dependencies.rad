@@ -1,0 +1,21 @@
+// backend: both
+component Marker { id: 0 }
+
+entity e { Marker { id: 1 } }
+
+system First(m: Marker) before Second {
+    print("first")
+}
+
+system Second(m: Marker) before Third {
+    print("second")
+}
+
+system Third(m: Marker) {
+    print("third")
+}
+
+schedule [Third, Second, First]
+// expect: first
+// expect: second
+// expect: third

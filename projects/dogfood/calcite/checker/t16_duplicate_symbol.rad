@@ -1,0 +1,12 @@
+// ILLEGAL: a bare import merges into the flat namespace, so `public_api`
+// collides with the local definition below. Spec 3.10 says duplicate
+// top-level symbols are rejected with BOTH definition sites named.
+use "helper_private_lib.rad"
+
+fn public_api(x: int) -> int {
+    return x + 1
+}
+
+fn main() -> nil {
+    print(f"{public_api(5)}")
+}

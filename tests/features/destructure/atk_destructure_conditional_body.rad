@@ -1,0 +1,13 @@
+fn main() -> nil {
+    let rows = [[1, "small"], [50, "big"], [3, "small"], [100, "big"]]
+    let out = rows |> map(fn([val, label]) {
+        if val > 10 {
+            return f"{label}({val})"
+        } else {
+            return f"tiny({val})"
+        }
+    })
+    for item in out {
+        print(item)
+    }
+}

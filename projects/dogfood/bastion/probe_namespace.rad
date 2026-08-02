@@ -1,0 +1,68 @@
+// PROBE: two confused-deputy hypotheses about what a grant actually names.
+//
+// H1: entity-name squatting. Entity names are an attacker-controlled string
+//     registry. Can a guest spawn a decoy that hijacks the host's
+//     get_entity() lookups after commit?
+// H2: resource/component namespace collision ACROSS the sandbox boundary.
+//     The compiler rejects a resource and a component sharing a name -- but
+//     only WITHIN one program. The guest is a separate program, so the host
+//     can declare `component Audit` while the guest declares `resource
+//     Audit`. sandbox_check_write() consults ONE allowlist for both, so a
+//     grant meant for the component may authorize the resource.
+
+component Decoy { tag: 0 }
+
+component Audit { entries: 0 }
+
+let real = spawn("audit_log", Audit { entries: 5 })
+
+print("=== probe: what does a grant actually name? ===")
+print(f"host entity audit_log id={real}")
+
+// --- H1: guest spawns a second entity with the host's reserved name -----
+let squat = f"""
+component Decoy { tag: 0 }
+let d = spawn("audit_log", Decoy { tag: 666 })
+print(f"guest spawned decoy id={d} named audit_log")
+"""
+
+match sandbox_run(squat, fork(), f"""{ "write": ["Decoy"], "fuel": 200000 }""") {
+    Ok(f1) => {
+        print("H1: guest spawn of a duplicate entity name ACCEPTED")
+        match peek(f1, real, Audit) {
+            Some(a) => { print(f"H1 real entity still: {a}") }
+            None    => { print("H1 real entity LOST its Audit component") }
+        }
+        commit(f1)
+        let resolved = get_entity("audit_log")
+        print(f"H1 after commit, get_entity(audit_log) -> {resolved} (real was {real})")
+        match get(resolved, Decoy) {
+            Some(d) => { print(f"H1 HIJACKED: name now resolves to the decoy {d}") }
+            None    => { print("H1 name still resolves to the real entity") }
+        }
+    }
+    Err(m) => { print(f"H1 denied: {m}") }
+}
+
+// --- H2: grant names the COMPONENT Audit; guest writes a RESOURCE -------
+let cross = f"""
+resource Audit { entries: 0 }
+set_resource(Audit, Audit { entries: 999999 })
+print("guest wrote a RESOURCE named Audit")
+"""
+
+match sandbox_run(cross, fork(), f"""{ "write": ["Audit"], "fuel": 200000 }""") {
+    Ok(f2) => {
+        print("H2: resource write ACCEPTED under a component-named grant")
+        print(f"H2 diff = {diff(fork(), f2)}")
+    }
+    Err(m) => { print(f"H2 denied: {m}") }
+}
+
+// --- H2b: no grant at all -- resource write must be denied --------------
+match sandbox_run(cross, fork(), f"""{ "write": [], "fuel": 200000 }""") {
+    Ok(_f3) => { print("H2b: LEAK -- resource written with an EMPTY grant") }
+    Err(m)  => { print(f"H2b denied (correct): {m}") }
+}
+
+print("=== probe done ===")

@@ -1,0 +1,16 @@
+// P10: filesystem write from inside a simulated system. Unlike print, this
+// leaves a durable artifact -- if it escapes, speculation has touched the disk.
+// EXPECT: compile-time rejection.
+// WATCH: existence of D:\Temp\ESCAPED-P10.txt after the run.
+component C { v: int = 0 }
+
+system Leak(c: mut C) {
+    c.v = c.v + 1
+    write_file("D:\\Temp\\ESCAPED-P10.txt", "speculation escaped to disk")
+}
+
+let e = spawn("e", C { v: 0 })
+let f = fork()
+let r = simulate(f, [system::Leak], 2)
+let got = peek(r, e, C) |> unwrap
+print(f"COMPILED-AND-RAN v={got.v}")

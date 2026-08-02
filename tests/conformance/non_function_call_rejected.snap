@@ -1,0 +1,7 @@
+---
+source: tests\conformance\non_function_call_rejected.rad
+exit_code: 1
+---
+
+---stderr---
+Error: Cannot call non-function 'x' of type int (not callable)

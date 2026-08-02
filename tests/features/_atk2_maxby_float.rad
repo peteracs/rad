@@ -1,0 +1,11 @@
+// Attack: max_by with float keys
+fn main() -> nil {
+    let data = [1.5, 3.7, 2.1, 3.7, 0.5]
+    let result = max_by(data, fn(x) { return x })
+    match result {
+        Some(v) => { print("max:", v) }
+        None => { print("none") }
+    }
+}
+
+// expect: max: 3.7

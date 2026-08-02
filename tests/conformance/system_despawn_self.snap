@@ -1,0 +1,7 @@
+---
+source: tests\conformance\system_despawn_self.rad
+exit_code: 0
+---
+boom alpha
+boom beta
+survivors=0

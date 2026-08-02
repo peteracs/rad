@@ -1,0 +1,87 @@
+// KIT/ANNIE — the second kit over the shared libraries. Annie is the
+// TARGETED-caster shape (no missiles): casts resolve instantly through
+// the core Damage event, and the kit's identity is Pyromania — every
+// 4th cast stuns. Numbers from content/champions/annie/abilities.ts.
+
+use "core.rad"
+
+// ── Q: Disintegrate ─────────────────────────────────────────────
+pub let DISINTEGRATE_DAMAGE = [85.0, 125.0, 165.0, 205.0, 245.0]
+pub let DISINTEGRATE_AP_RATIO = 0.7
+pub let DISINTEGRATE_MANA = [60.0, 70.0, 80.0, 90.0, 100.0]
+
+// ── W: Incinerate ───────────────────────────────────────────────
+pub let INCINERATE_DAMAGE = [80.0, 130.0, 180.0, 230.0, 280.0]
+pub let INCINERATE_AP_RATIO = 0.75
+pub let INCINERATE_ARC = 12.0           // demo cone: anything this close
+
+// ── passive: Pyromania ──────────────────────────────────────────
+pub let PYRO_EVERY = 4
+pub let STUN_TICKS = 52                  // 1.75 s
+
+pub component AnnieKit { mana: float = 400.0, pyro: int = 0, last_q_cost: float = 0.0 }
+pub component Stunned { left: int = 0 }
+
+pub event AnnieKill { victim: entity }
+
+// every cast charges the passive; the 4th consumes it on the spot
+fn charge_pyro(annie: entity) -> bool {
+    let k = require(annie, AnnieKit)
+    let next = k.pyro + 1
+    if next >= PYRO_EVERY {
+        update(annie, AnnieKit) { pyro = 0 }
+        return true
+    }
+    update(annie, AnnieKit) { pyro = next }
+    return false
+}
+
+fn stun(target: entity) -> nil {
+    set(target, Stunned { left: STUN_TICKS })
+    print(f"    {name_of(target)} STUNNED")
+}
+
+// Q: targeted nuke; the era signature — mana REFUNDED on a kill.
+// Death is decided when the Damage event APPLIES, not at the cast
+// site, so the refund is an on-kill listener (the BBOnKill shape).
+pub fn annie_q(annie: entity, rank: int, target: entity) -> nil {
+    let k = require(annie, AnnieKit)
+    let cost = DISINTEGRATE_MANA[rank - 1]
+    if k.mana < cost { return }
+    update(annie, AnnieKit) { mana = k.mana - cost, last_q_cost = cost }
+
+    let v = require(annie, Vitals)
+    let dmg = DISINTEGRATE_DAMAGE[rank - 1] + DISINTEGRATE_AP_RATIO * v.ap
+    if charge_pyro(annie) { stun(target) }
+    emit Damage { source: annie, target: target, amount: dmg, kind: "magic" }
+}
+
+on Felled(e) when has(e.killer, AnnieKit) {
+    let k = require(e.killer, AnnieKit)
+    update(e.killer, AnnieKit) { mana = k.mana + k.last_q_cost, last_q_cost = 0.0 }
+    emit AnnieKill { victim: e.victim }
+    print(f"    {name_of(e.killer)} refunds {k.last_q_cost:.0} mana")
+}
+
+// W: the cone — everything near the aim point burns
+pub fn annie_w(annie: entity, rank: int, at: (float, float)) -> nil {
+    let v = require(annie, Vitals)
+    let dmg = INCINERATE_DAMAGE[rank - 1] + INCINERATE_AP_RATIO * v.ap
+    let popped = charge_pyro(annie)
+    let victims = query { Vitals } |> filter(fn(e) {
+        return require(e, Vitals).team != v.team
+        and has(e, Pos)
+        and dist(require(e, Pos).at, at) <= INCINERATE_ARC
+    })
+    for victim in victims {
+        if popped { stun(victim) }
+        emit Damage { source: annie, target: victim, amount: dmg, kind: "magic" }
+    }
+}
+
+pub system age_stuns(s: mut Stunned) {
+    s.left = s.left - 1
+    if s.left <= 0 {
+        remove(self, Stunned)
+    }
+}

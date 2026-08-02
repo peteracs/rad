@@ -1,0 +1,52 @@
+// Dogfood: List item #3 — blast-radius assertions.
+//
+// Testing's dirty secret: we assert what changed, never what DIDN'T.
+// Because RAD owns 100% of program state and forks are CoW snapshots,
+// "this event touched Health and NOTHING ELSE in the universe" is a
+// checkable sentence — and checking it is O(archetypes), not O(world).
+
+component Health { hp: 100 }
+
+component Gold { amount: 1000 }
+
+component Position { x: 0 }
+
+system Damage(h: mut Health) {
+    h = Health { hp: h.hp - 10 }
+}
+
+event Hit { amount }
+
+let hero = spawn("hero", Health { hp: 100 }, Gold { amount: 1000 }, Position { x: 0 })
+let goblin = spawn("goblin", Health { hp: 30 }, Position { x: 5 })
+
+on Hit(e) {
+    let h = get(goblin, Health) |> unwrap
+    set(goblin, Health { hp: h.hp - e.amount })
+}
+
+print("=== Blast-Radius Assertions ===")
+
+// --- 1. diff(): see exactly what a simulation touched -----------------
+let before = fork()
+let after = simulate(before, [system::Damage], 3)
+let d = diff(before, after)
+print(f"diff after 3 Damage ticks: {d}")
+
+// --- 2. The council's one-liner: assert the negative space ------------
+let snap = fork()
+emit Hit { amount: 25 }
+flush_events()
+assert_only_changed(snap, fork(), [Health])
+let g = get(goblin, Health) |> unwrap
+print(f"Hit handler touched only Health (goblin hp: {g.hp})")
+
+// --- 3. Regression tripwire: a 'fix' that broke something unrelated ---
+let before_fix = fork()
+let h = get(hero, Health) |> unwrap
+set(hero, Health { hp: h.hp + 5 })
+set(hero, Gold { amount: 0 })   // <- the sneaky unrelated write
+let after_fix = fork()
+print(f"diff of the 'fix': {diff(before_fix, after_fix)}")
+print("assert_only_changed(before, after, [Health]) would fail here:")
+print("  -> unexpected changes to [Gold (1 rows)]")

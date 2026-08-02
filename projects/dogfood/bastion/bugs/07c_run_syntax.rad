@@ -1,0 +1,15 @@
+// BUG 07c: does the `run SystemName` form that RAD-L009's hint recommends
+// actually exist?
+
+component Cell { n: 0 }
+
+system Bump(c: mut Cell) {
+    c.n = c.n + 1
+}
+
+let e = spawn("cell", Cell { n: 0 })
+
+run Bump
+
+let after = get(e, Cell) |> unwrap
+print(f"n={after.n}")

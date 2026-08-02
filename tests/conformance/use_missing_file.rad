@@ -1,0 +1,4 @@
+// backend: both
+use "modules/does_not_exist.rad"
+print("never")
+// expect-runtime-error: Module not found

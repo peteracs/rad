@@ -1,0 +1,7 @@
+add Fix login redirect bug
+sync
+yes
+digest
+list all
+swhy T-3/b
+quit

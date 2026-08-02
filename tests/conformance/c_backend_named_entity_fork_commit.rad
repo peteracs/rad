@@ -1,0 +1,18 @@
+// backend: both
+component Marker { v: 0 }
+
+fn main() -> nil {
+    let e = spawn("hero", Marker { v: 1 })
+    print(int(get_entity("hero") == e))
+
+    let f = fork()
+    commit(f)
+
+    let e2 = get_entity("hero")
+    print(int(e2 == e))
+    let m = unwrap(get(e2, Marker))
+    print(m.v)
+}
+// expect: 1
+// expect: 1
+// expect: 1

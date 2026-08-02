@@ -1,0 +1,35 @@
+// Cross: update() inside a guarded once handler — both fire counting correct
+component HP { value: 100 }
+event Hit { target, damage: int }
+
+on Hit once (e) where e.damage >= 50 {
+    print(f"critical hit! damage={e.damage}")
+    update(e.target, HP) { value = 0 }
+}
+
+on Hit(e) where e.damage < 50 {
+    let hp = unwrap(get(e.target, HP))
+    let new_hp = hp.value - e.damage
+    update(e.target, HP) { value = new_hp }
+    print(f"hit for {e.damage}, hp now {new_hp}")
+}
+
+fn main() -> nil {
+    let hero = spawn(HP { value: 100 })
+
+    emit Hit { target: hero, damage: 10 }
+    flush_events()
+
+    emit Hit { target: hero, damage: 20 }
+    flush_events()
+
+    emit Hit { target: hero, damage: 50 }
+    flush_events()
+
+    // once handler consumed; this big hit should NOT trigger once handler again
+    emit Hit { target: hero, damage: 60 }
+    flush_events()
+
+    let final_hp = unwrap(get(hero, HP))
+    print(f"final hp: {final_hp.value}")
+}

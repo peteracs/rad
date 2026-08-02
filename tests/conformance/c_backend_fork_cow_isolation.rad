@@ -1,0 +1,29 @@
+// backend: both
+component Pos { x: 0 }
+
+component Vel { v: 0 }
+
+system IncPos(p: mut Pos, _v: Vel) {
+    p = Pos { x: p.x + 1 }
+}
+
+fn main() -> nil {
+    let e = spawn(Pos { x: 10 }, Vel { v: 7 })
+
+    let f = fork()
+    let f2 = simulate(f, [system::IncPos], 1)
+
+    let fp = unwrap(peek(f2, e, Pos))
+    let fv = unwrap(peek(f2, e, Vel))
+    let lp = unwrap(get(e, Pos))
+    let lv = unwrap(get(e, Vel))
+
+    print(fp.x)
+    print(fv.v)
+    print(lp.x)
+    print(lv.v)
+}
+// expect: 11
+// expect: 7
+// expect: 10
+// expect: 7

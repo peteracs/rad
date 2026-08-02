@@ -1,0 +1,156 @@
+// strongbox — the round-trip contracts as a test suite.
+//
+//   rad test projects/dogfood/strongbox
+//
+// !! DO NOT TRUST THE RESULT OF THAT COMMAND. !!
+//
+// Every block below is currently DEAD CODE. `rad test` executes each file's
+// top level and never enters a `test` block, so this file reports PASS no
+// matter what it asserts — see bugs/08_rad_test_never_runs_tests.rad, which
+// asserts 1 == 2 twice and still passes. These blocks are written to be
+// correct for the day the runner works; until then the real, executed
+// verification of these same properties lives in roundtrip.rad,
+// tamper_wire.rad and run_tamper_saves.ps1, which check their own results
+// and print explicit failure counts.
+
+component Incident { code: "", severity: 1, status: "open", age: 0, sla_mins: 60 }
+
+component Assignee { name: "", team: "unassigned" }
+
+resource Ledger { count: 0, region: "", revision: 3 }
+
+fn reset() -> nil {
+    for e in entities() {
+        despawn(e)
+    }
+    return nil
+}
+
+fn seed(n: int) -> nil {
+    reset()
+    for i in range(0, n) {
+        spawn(
+            f"inc-{4000 + i}",
+            Incident { code: f"CODE_{i % 7}", severity: 1 + i % 5, status: "open", age: i, sla_mins: 30 },
+            Assignee { name: f"eng-{i % 3}", team: "platform" },
+        )
+    }
+    set_resource(Ledger, Ledger { count: n, region: "us-east", revision: 3 })
+    return nil
+}
+
+test save_load_preserves_digest {
+    seed(20)
+    let before = world_digest()
+    let saved = save_world()
+    let n = load_world(saved)
+    assert_eq(n, 20)
+    assert_eq(world_digest(), before)
+}
+
+test save_is_canonical {
+    seed(20)
+    let a = save_world()
+    load_world(a)
+    let b = save_world()
+    assert_eq(a, b)
+    load_world(b)
+    assert_eq(save_world(), b)
+}
+
+test fork_digest_matches_world {
+    seed(8)
+    assert_eq(world_digest(fork()), world_digest())
+}
+
+test wire_roundtrip_is_identity {
+    seed(8)
+    let want = world_digest()
+    let bytes = fork_to_bytes(fork())
+    let decoded = fork_from_bytes(bytes) |> unwrap
+    assert_eq(world_digest(decoded), want)
+    assert_eq(fork_to_bytes(decoded), bytes)
+}
+
+test wire_roundtrip_is_identity_when_packed {
+    // Past ~4 KB the codec switches to RADPACK1; identity must survive it.
+    seed(400)
+    let want = world_digest()
+    let bytes = fork_to_bytes(fork())
+    assert(slice(bytes, 0, 9) == "RADPACK1:", "expected the large payload to take the RADPACK path")
+    let decoded = fork_from_bytes(bytes) |> unwrap
+    assert_eq(world_digest(decoded), want)
+    assert_eq(fork_to_bytes(decoded), bytes)
+}
+
+test wire_digest_token_is_second_field {
+    // builtins.md: the blake3 digest is "always the second space-separated
+    // token", in RADPACK and legacy-JSON payloads alike.
+    seed(4)
+    let small = fork_to_bytes(fork())
+    assert_eq(len(split(small, " ")[1]), 64)
+
+    seed(400)
+    let big = fork_to_bytes(fork())
+    assert_eq(len(split(big, " ")[1]), 64)
+}
+
+test tampered_wire_bytes_are_rejected {
+    seed(400)
+    let bytes = fork_to_bytes(fork())
+    let parts = split(bytes, " ")
+
+    // Same length, one byte different, inside the compressed body.
+    let head = substring_bytes(bytes, 0, 400)
+    let tail = substring_bytes(bytes, 401, len(bytes))
+    let mut ch = "A"
+    if substring_bytes(bytes, 400, 401) == "A" {
+        ch = "B"
+    }
+
+    match fork_from_bytes(head + ch + tail) {
+        Ok(_f) => { assert(false, "tampered payload was accepted") }
+        Err(_m) => { assert(true, "tampered payload rejected") }
+    }
+
+    // A genuine digest, but of a different world.
+    seed(12)
+    let other = split(fork_to_bytes(fork()), " ")[1]
+    match fork_from_bytes(parts[0] + " " + other + " " + parts[2]) {
+        Ok(_f) => { assert(false, "grafted foreign digest was accepted") }
+        Err(_m) => { assert(true, "grafted foreign digest rejected") }
+    }
+}
+
+test garbage_wire_bytes_are_an_err_not_a_crash {
+    match fork_from_bytes("") {
+        Ok(_f) => { assert(false, "empty payload accepted") }
+        Err(_m) => { assert(true, "empty payload rejected") }
+    }
+    match fork_from_bytes("definitely not a fork") {
+        Ok(_f) => { assert(false, "garbage accepted") }
+        Err(_m) => { assert(true, "garbage rejected") }
+    }
+}
+
+test numeric_edges_survive_the_round_trip {
+    reset()
+    spawn("n", Incident { code: "N", severity: 9223372036854775807, status: "s", age: -9223372036854775807, sla_mins: 0 })
+    let before = world_digest()
+    load_world(save_world())
+    let got = get(get_entity("n"), Incident) |> unwrap
+    assert_eq(got.severity, 9223372036854775807)
+    assert_eq(got.age, -9223372036854775807)
+    assert_eq(world_digest(), before)
+}
+
+test resources_survive_the_round_trip {
+    seed(5)
+    set_resource(Ledger, Ledger { count: 5, region: "eu-west", revision: 3 })
+    let before = world_digest()
+    load_world(save_world())
+    let l = res(Ledger)
+    assert_eq(l.count, 5)
+    assert_eq(l.region, "eu-west")
+    assert_eq(world_digest(), before)
+}

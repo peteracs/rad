@@ -1,0 +1,9 @@
+// Attack: ? on a plain int inside main() -> nil
+// Expected: runtime error — can't unwrap a non-Option/Result
+
+fn plain() -> int { return 42 }
+
+fn main() -> nil {
+    let x = plain()?
+    print(x)
+}

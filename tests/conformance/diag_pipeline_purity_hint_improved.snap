@@ -1,0 +1,5 @@
+---
+source: tests\conformance\diag_pipeline_purity_hint_improved.rad
+exit_code: 0
+---
+[2, 4, 6]

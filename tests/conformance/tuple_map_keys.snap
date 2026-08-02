@@ -1,0 +1,13 @@
+---
+source: tests\conformance\tuple_map_keys.rad
+exit_code: 0
+---
+6
+-1
+true
+3
+60
+2
+deep
+[(1, 2), (1, 9), (2, 1)]
+{"(0, 0)":0,"(4, 2)":60,"(4, 3)":7}

@@ -1,0 +1,106 @@
+// Probe 2: state architecture options for the interpreter.
+
+// Option A: top-level mut globals accessed from named fns
+let mut G_COUNT = 0
+
+fn bump() -> nil {
+    G_COUNT = G_COUNT + 1
+}
+
+// Option B: resource singleton with map<str, any> field
+resource Interp {
+    envs: map<str, any> = {},
+    tick: int = 0,
+}
+
+// Option C: component with map field on entities
+component Env {
+    vars: map<str, any> = {},
+    parent: int = -1,
+}
+
+struct Token {
+    kind: str = "",
+    text: str = "",
+    line: int = 0,
+}
+
+fn main() -> nil {
+    // A: named fn mutating a global
+    bump()
+    bump()
+    print(f"A global after bumps: {G_COUNT}")
+
+    // B: resource with nested map values
+    let r = unwrap(get_resource(Interp))
+    let mut envs = r.envs
+    envs["0"] = { "vars": { "x": 42 }, "parent": -1 }
+    set_resource(Interp, Interp { envs: envs, tick: r.tick + 1 })
+    let r2 = unwrap(get_resource(Interp))
+    let e0 = r2.envs["0"]
+    let v0 = e0["vars"]
+    print(f"B resource env x: {v0["x"]}")
+
+    // C: entity as env
+    let scope = entity { Env { vars: { "y": 7 }, parent: -1 } }
+    let ec = require(scope, Env)
+    print(f"C entity env y: {ec.vars["y"]}")
+    // mutate through update sugar
+    let mut nv = ec.vars
+    nv["y"] = 8
+    update(scope, Env) { vars = nv }
+    print(f"C updated y: {require(scope, Env).vars["y"]}")
+
+    // D: nested write into list of maps
+    let mut arena: list<any> = []
+    arena << { "vars": { "z": 1 }, "parent": -1 }
+    arena[0]["vars"]["z"] = 99
+    let a0 = arena[0]
+    let av = a0["vars"]
+    print(f"D arena z: {av["z"]}")
+
+    // E: map equality
+    let m1 = { "__e": 3 }
+    let m2 = { "__e": 3 }
+    let m3 = { "__e": 4 }
+    print(f"E map eq: {m1 == m2} {m1 == m3}")
+
+    // F: match on string kinds
+    let kind = "binop"
+    let out = match kind {
+        "int" => "was int"
+        "binop" => "was binop"
+        _ => "other"
+    }
+    print(f"F match str: {out}")
+
+    // G: struct token
+    let t = Token { kind: "ident", text: "foo", line: 3 }
+    print(f"G token: {t.kind} {t.text} {t.line}")
+
+    // H: for k, v over map (deterministic order?)
+    let m = { "b": 2, "a": 1, "c": 3 }
+    let mut acc = ""
+    for k, v in m {
+        acc = acc + k + str(v)
+    }
+    print(f"H map iter: {acc}")
+
+    // I: while with continue
+    let mut i = 0
+    let mut evens = 0
+    while i < 10 {
+        i = i + 1
+        if i % 2 == 1 { continue }
+        evens = evens + 1
+    }
+    print(f"I evens: {evens}")
+
+    // J: list of any holding heterogeneous node maps, len/index
+    let prog: list<any> = [
+        { "k": "let", "name": "x" },
+        { "k": "print" }
+    ]
+    let n0 = prog[0]
+    print(f"J first kind: {n0["k"]}")
+}

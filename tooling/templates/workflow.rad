@@ -1,0 +1,75 @@
+// __PROJECT_NAME__ — Workflow Orchestrator template
+//
+// Customize the approval states, reviewer logic, and SLA thresholds
+// for your domain. Run immediately: rad run
+
+component Task       { title: "", author: "", priority: 0 }
+component Assignment { reviewer: "", sla_hours: 24 }
+
+entity task_1 {
+  Task       { title: "Design Review", author: "alice", priority: 3 },
+  Assignment { reviewer: "", sla_hours: 24 }
+}
+
+entity task_2 {
+  Task       { title: "Security Audit", author: "bob", priority: 5 },
+  Assignment { reviewer: "", sla_hours: 12 }
+}
+
+state Status {
+  Open {
+    on assign -> InProgress
+    on cancel -> Cancelled
+  }
+  InProgress {
+    on complete -> Done
+    on block -> Blocked
+  }
+  Blocked {
+    on unblock -> InProgress
+  }
+  Done {}
+  Cancelled {}
+}
+
+event TaskAssigned  { title, reviewer }
+event TaskCompleted { title }
+
+on TaskAssigned(e) {
+  print(f"  assigned: {e.title} -> {e.reviewer}")
+}
+
+on TaskCompleted(e) {
+  print(f"  completed: {e.title}")
+}
+
+fn status_name(s: Status) -> str {
+  match s {
+    Open       => { return "open" }
+    InProgress => { return "in_progress" }
+    Blocked    => { return "blocked" }
+    Done       => { return "done" }
+    Cancelled  => { return "cancelled" }
+  }
+}
+
+fn process_task(task_entity, reviewer: str) -> int {
+  let t = get(task_entity, Task) |> unwrap
+  let mut s = Status::Open
+
+  s = transition(s, "assign") |> unwrap
+  set(task_entity, Assignment { reviewer: reviewer, sla_hours: (get(task_entity, Assignment) |> unwrap).sla_hours })
+  emit TaskAssigned { title: t.title, reviewer: reviewer }
+
+  s = transition(s, "complete") |> unwrap
+  emit TaskCompleted { title: t.title }
+  return 1
+}
+
+fn main() -> nil {
+  print("=== __PROJECT_NAME__ ===")
+  let r1 = process_task(task_1, "carol")
+  let r2 = process_task(task_2, "dave")
+  let total = [r1, r2] |> reduce(0, fn(a, b) { return a + b })
+  print(f"completed: {total} tasks")
+}

@@ -1,0 +1,49 @@
+// BUG 05 - a `::` path inside an f-string interpolation is a parse error.
+//
+// Run:  target\debug\rad.exe projects\dogfood\calcite\bugs\05_fstring_double_colon.rad
+//
+// The f-string format-spec splitter cuts the interpolation at the FIRST
+// `:` it sees, so `Door::Locked` is read as expression `Door` followed by
+// format spec `:Locked)`. It correctly handles `:` nested inside braces
+// (map literals are fine), so this is specifically about `::`.
+//
+// MINIMAL CASE - this single line is enough:
+//     print(f"{variant_of(Door::Locked)}")
+
+state Door {
+    Locked { on unlock -> Open }
+    Open { on lock -> Locked }
+}
+
+type Color {
+    Red { v: 0 }
+}
+
+fn val(c: Color) -> int {
+    match c {
+        Red { v } => { return v }
+    }
+}
+
+fn main() -> nil {
+    // WORKS: a `:` nested inside braces (map literal) is handled correctly.
+    print(f"ok map     {len(keys({ \"z\": 9 }))}")
+
+    // WORKS: bind the value first, then interpolate. This is the workaround.
+    let d = Door::Locked
+    let c = Color::Red { v: 7 }
+    print(f"ok binding  {variant_of(d)} {val(c)}")
+
+    // FAILS: state reference path.
+    print(f"bad state   {variant_of(Door::Locked)}")
+
+    // FAILS: sum-type variant construction.
+    print(f"bad variant {val(Color::Red { v: 1 })}")
+
+    // FAILS: same thing with the ${...} interpolation form.
+    print(f"bad dollar  ${variant_of(Door::Locked)}")
+
+    // FAILS: and when a real format spec follows, the message is worse
+    // because the spec and the path run together.
+    print(f"bad spec    {val(Color::Red { v: 1 }):>6}")
+}

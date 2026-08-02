@@ -1,0 +1,14 @@
+// ISO D: CONTROL -- the same geometric bomb in TRUSTED host code, no
+// sandbox. If this hangs too, unbounded event recursion is a general
+// language issue; the sandbox case is then additionally a budget escape.
+event Ping { n }
+
+on Ping(e) {
+    emit Ping { n: e.n + 1 }
+    emit Ping { n: e.n + 1 }
+}
+
+print("D: emitting")
+emit Ping { n: 0 }
+flush_events()
+print("D: survived")

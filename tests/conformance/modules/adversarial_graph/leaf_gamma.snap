@@ -1,0 +1,4 @@
+---
+source: tests\conformance\modules\adversarial_graph\leaf_gamma.rad
+exit_code: 0
+---

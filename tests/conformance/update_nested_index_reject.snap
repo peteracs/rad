@@ -1,0 +1,8 @@
+---
+source: tests\conformance\update_nested_index_reject.rad
+exit_code: 1
+---
+
+---stderr---
+Error: Nested indexed update on 'rows' is not supported — read the component first, then assign the whole element: `rows[i] = set_at(c.rows[i], j, v)`
+Error: Unexpected token RBrace ('')

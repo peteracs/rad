@@ -1,0 +1,43 @@
+// verify_cow_fork.rad
+// A custom script to verify the 7 microsecond fork claim
+
+component Position { x: 0.0, y: 0.0 }
+component Velocity { dx: 1.0, dy: 1.0 }
+component Health { hp: 100, max_hp: 100 }
+component AIState { state: 0, target: 0 }
+
+fn main() {
+    print("Spawning 10,000 entities with 4 components each...")
+    let mut i = 0
+    while i < 10000 {
+        spawn(
+            Position { x: float(i), y: 0.0 },
+            Velocity { dx: 1.0, dy: 1.0 },
+            Health { hp: 100, max_hp: 100 },
+            AIState { state: 1, target: 0 }
+        )
+        i = i + 1
+    }
+
+    let num_forks = 10000
+    print(f"Running {num_forks} consecutive forks...")
+    
+    let start = clock()
+    
+    let mut j = 0
+    while j < num_forks {
+        let _f = fork()
+        j = j + 1
+    }
+    
+    let end = clock()
+    
+    let total_s = end - start
+    let total_ms = total_s * 1000.0
+    let per_fork_us = (total_s * 1000000.0) / float(num_forks)
+    
+    print("--------------------------------------------------")
+    print(f"Total time for {num_forks} forks: {total_ms} ms")
+    print(f"Average time per fork: {per_fork_us} microseconds")
+    print("--------------------------------------------------")
+}

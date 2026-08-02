@@ -1,0 +1,44 @@
+// system with params, run (read-only; avoid mutating via systems across VMs)
+component A { v: 0 }
+
+component B { v: 0 }
+
+entity e1 { A { v: 1 } }
+
+entity e2 { B { v: 2 } }
+
+system ShowA(x: A) {
+    print(x.v)
+}
+
+system ShowB(x: B) {
+    print(x.v)
+}
+ShowA()
+// expect: 1
+ShowB()
+// expect: 2
+system SumTag(t: A) {
+    let doubled = t.v + t.v
+    print(doubled)
+}
+SumTag()
+// expect: 2
+component Only { z: 0 }
+
+entity solo { Only { z: 5 } }
+
+system Zap(o: Only) {
+    print(o.z)
+}
+Zap()
+// expect: 5
+component TagN { n: 0 }
+
+entity tn { TagN { n: 8 } }
+
+system ShowN(t: TagN) {
+    print(t.n)
+}
+ShowN()
+// expect: 8

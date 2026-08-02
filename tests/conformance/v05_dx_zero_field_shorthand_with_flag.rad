@@ -1,0 +1,15 @@
+// backend: both
+// vm-args: --compat-v0.5-dx
+// expect: ok
+
+type AccessSignal {
+    MfaDisabled { }
+    LoginBurst { extra: 0 }
+}
+
+let sig = AccessSignal::MfaDisabled
+
+match sig {
+    MfaDisabled => { print("ok") }
+    LoginBurst { extra } => { print(extra) }
+}

@@ -1,0 +1,66 @@
+// Benchmark: Fork / Simulate / Commit at varying entity counts
+//
+// Measures wall-clock time (ms) for fork(), simulate(1 tick), and commit()
+// at 100, 1000, and 10000 entities with 3 components each.
+// Run with: rad benches/bench_fork.rad
+
+component Pos   { x: 0, y: 0 }
+component Vel   { dx: 1, dy: 1 }
+component Stats { hp: 100, mp: 50, str_val: 10 }
+
+system Physics(pos: mut Pos, vel: Vel) {
+    pos = Pos { x: pos.x + vel.dx, y: pos.y + vel.dy }
+}
+
+print("=== Fork/Simulate/Commit Benchmark (AFTER CoW) ===")
+print("(3 components per entity: Pos, Vel, Stats)")
+print("")
+print("| Entities | Spawn ms | Fork ms | Sim1 ms | Sim10 ms | Peek100 ms | Commit ms |")
+print("|----------|----------|---------|---------|----------|------------|-----------|")
+
+let scales = [100, 1000, 10000]
+let mut si = 0
+while si < len(scales) {
+    let n = scales[si]
+
+    let t0 = now_unix_ms()
+    let first = spawn(f"e0_{n}", Pos { x: 0, y: 0 }, Vel { dx: 1, dy: 2 }, Stats { hp: 100, mp: 50, str_val: 10 })
+    let mut i = 1
+    while i < n {
+        spawn(f"e{n}_{i}", Pos { x: i, y: 0 }, Vel { dx: 1, dy: 2 }, Stats { hp: 100, mp: 50, str_val: 10 })
+        i = i + 1
+    }
+    let spawn_ms = now_unix_ms() - t0
+
+    let t1 = now_unix_ms()
+    let f = fork()
+    let fork_ms = now_unix_ms() - t1
+
+    let t2 = now_unix_ms()
+    let simulated = simulate(f, [system::Physics], 1)
+    let sim1_ms = now_unix_ms() - t2
+
+    let f2 = fork()
+    let t3 = now_unix_ms()
+    let _sim10 = simulate(f2, [system::Physics], 10)
+    let sim10_ms = now_unix_ms() - t3
+
+    let t4 = now_unix_ms()
+    let mut pi = 0
+    while pi < 100 {
+        let _p = peek(simulated, first, Pos)
+        pi = pi + 1
+    }
+    let peek_100_ms = now_unix_ms() - t4
+
+    let t5 = now_unix_ms()
+    commit(simulated)
+    let commit_ms = now_unix_ms() - t5
+
+    print(f"| {n} | {spawn_ms} | {fork_ms} | {sim1_ms} | {sim10_ms} | {peek_100_ms} | {commit_ms} |")
+
+    si = si + 1
+}
+
+print("")
+print("Benchmark complete.")

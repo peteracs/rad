@@ -1,0 +1,10 @@
+// backend: both
+fn main() -> nil {
+    let xs = [1, 2, 3]
+    let mut xs2 = xs
+    xs2[0] = 99
+    print(xs[0])
+    print(xs2[0])
+}
+// expect: 1
+// expect: 99

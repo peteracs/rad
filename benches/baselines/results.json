@@ -1,0 +1,53 @@
+{
+  "micro": [
+    {
+      "bench": "fib",
+      "rad": 282.0,
+      "lua": 46.0,
+      "qjs": 87.0,
+      "node": 8.0
+    },
+    {
+      "bench": "loop_sum",
+      "rad": 1139.0,
+      "lua": 105.0,
+      "qjs": 339.0,
+      "node": 14.0
+    },
+    {
+      "bench": "str_build",
+      "rad": 3011.0,
+      "lua": 497.0,
+      "qjs": 363.0,
+      "node": 10.0
+    },
+    {
+      "bench": "sort",
+      "rad": 20.0,
+      "lua": 66.0,
+      "qjs": 113.0,
+      "node": 62.0
+    }
+  ],
+  "collab": {
+    "rad (fork_delta/apply/merge)": {
+      "CHECK": "1006879727",
+      "APPLY_MS": "30",
+      "DELTA_BYTES": "45251",
+      "INGEST_MS": "8",
+      "MERGE_MS": "8"
+    },
+    "Yjs": {
+      "CHECK": "1006879727",
+      "APPLY_MS": "99",
+      "DELTA_BYTES": "100864",
+      "INGEST_MS": "50"
+    },
+    "Automerge": {
+      "CHECK": "1006879727",
+      "APPLY_MS": "10874",
+      "DELTA_BYTES": "1214749",
+      "INGEST_MS": "244"
+    }
+  }
+}

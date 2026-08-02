@@ -1,0 +1,7 @@
+---
+source: tests\conformance\io_file_bytes.rad
+exit_code: 0
+---
+[72, 101, 108, 108, 111]
+Hello
+file bytes ok

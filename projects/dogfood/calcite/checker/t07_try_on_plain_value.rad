@@ -1,0 +1,6 @@
+// ILLEGAL: `?` applies to Option/Result, not to a plain int. Spec 2.5.
+fn main() -> nil {
+    let n = 5
+    let m = n?
+    print(f"{m}")
+}

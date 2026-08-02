@@ -1,0 +1,14 @@
+---
+source: tests\conformance\if_expr.rad
+exit_code: 0
+---
+yes
+1
+-1
+0
+10
+[1, 3]
+101
+1.5
+["pos", "neg", "pos"]
+b

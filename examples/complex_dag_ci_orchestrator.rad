@@ -1,0 +1,333 @@
+// =====================================================================
+//  Complex example: multi-worker DAG build / CI orchestrator
+//
+//  Demonstrates language features:
+//    1.  main() -> nil   tolerates ?
+//    2.  enumerate()     indexed iteration
+//    3.  Named phases    grouped schedule blocks
+//    4.  Typed events    field-level type annotations
+//    5.  max_by/min_by   candidate selection without manual loops
+//    6.  update() sugar  shorthand component patching
+//    7.  on ... where    guarded event handlers
+//    8.  indexed + lookup()  O(1) entity lookup by name
+//    9.  query select    direct component projection (no manual require)
+//   10.  pure fn         side-effect-free analytics functions
+//   11.  list destructuring in callbacks (fn([_, pri]))
+//
+//  DAG:
+//      fetch_deps ─┬─> compile_core ─┐
+//                  └─> compile_ui ───┴─> link_all -> test_integration -> package_release
+//
+//  Run: rad examples/complex_dag_ci_orchestrator.rad
+// =====================================================================
+
+// --- Data (Law 1: separate data from logic) ---
+
+component Task {
+    indexed name: str = "",
+    duration: int = 1,
+    left: int = 0,
+    phase: int = 0,
+    pri: int = 0,
+    pred1: str = "",
+    pred2: str = "",
+    p1_done: bool = false,
+    p2_done: bool = false
+}
+
+resource ClusterPool {
+    free_workers: int = 2,
+    finished: int = 0,
+    last_finished: str = ""
+}
+
+state ReleasePhase {
+    Open {
+
+        on freeze -> Frozen
+    }
+    Frozen {
+
+        on ship -> Shipped
+    }
+    Shipped {}
+}
+
+type AutoOutcome {
+    Passed { detail: "" }
+    Degraded { code: 0, detail: "" }
+    Stuck { reason: "" }
+}
+
+// Task.phase values (see AdvanceRunning, PromoteReady, AssignWorkers, CompleteTasks)
+pure fn task_blocked() -> int { return 0 }
+
+pure fn task_ready() -> int { return 1 }
+
+pure fn task_running() -> int { return 2 }
+
+pure fn task_done() -> int { return 3 }
+
+pure fn policy_too_many_running() -> int { return 701 }
+
+pure fn policy_ready_backlog() -> int { return 702 }
+
+// --- [Extension 4] Typed event fields ---
+
+event TaskDone { task_name: str }
+
+event PolicyHook { hook_kind: str, summary: str }
+
+// --- Event handlers (Law 3: communicate via events) ---
+
+// [Extension 7] Guarded handler — only propagate meaningful task names
+on TaskDone(e) where e.task_name != "" {
+    for id in query { Task } {
+        let t = require(id, Task)
+        if t.phase >= task_done() {
+            continue
+        }
+        let mut n1 = t.p1_done
+        let mut n2 = t.p2_done
+        if t.pred1 == e.task_name {
+            n1 = true
+        }
+        if t.pred2 == e.task_name {
+            n2 = true
+        }
+        if n1 != t.p1_done or n2 != t.p2_done {
+            // [Extension 6] update sugar — patch only the changed flags
+            update(id, Task) {
+                p1_done = n1,
+                p2_done = n2
+            }
+        }
+    }
+    // [Extension 6] update sugar — record last finished task
+    update(ClusterPool) {
+        last_finished = e.task_name
+    }
+}
+
+on PolicyHook(e) {
+    print(f"  [policy] {e.hook_kind}: {e.summary}")
+}
+
+// --- Systems (Law 1) ---
+
+system AdvanceRunning(t: mut Task) {
+    if t.phase != task_running() {
+        return
+    }
+    if t.left > 0 {
+        t.left = t.left - 1
+    }
+}
+
+system CompleteTasks(t: mut Task) {
+    if t.phase != task_running() {
+        return
+    }
+    if t.left > 0 {
+        return
+    }
+    t.phase = task_done()
+    emit TaskDone { task_name: t.name }
+    let p = get_resource(ClusterPool) ?
+    // [Extension 6] update sugar — bump counters
+    update(ClusterPool) {
+        free_workers = p.free_workers + 1,
+        finished = p.finished + 1
+    }
+}
+
+system PromoteReady(t: mut Task) {
+    if t.phase != task_blocked() {
+        return
+    }
+    let ok1 = t.pred1 == "" or t.p1_done
+    let ok2 = t.pred2 == "" or t.p2_done
+    if ok1 and ok2 {
+        t.phase = task_ready()
+    }
+}
+
+system AssignWorkers(pool: mut ClusterPool) {
+    while pool.free_workers > 0 {
+        let mut cands = []
+        for id in query { Task } {
+            let t = require(id, Task)
+            if t.phase == task_ready() {
+                cands << [id, t.pri]
+            }
+        }
+
+        if len(cands) == 0 {
+            return
+        }
+
+        let best_pair = expect(max_by(cands, fn([_, pri]) { return pri }), "max_by on non-empty cands")
+        let best = best_pair[0]
+        let t2 = require(best, Task)
+        pool.free_workers = pool.free_workers - 1
+        // [Extension 6] update sugar — set running state
+        update(best, Task) {
+            left = t2.duration,
+            phase = task_running()
+        }
+    }
+}
+
+// --- [Extension 3] Named system phases ---
+
+phase Tick { AdvanceRunning, CompleteTasks }
+phase Unblock { PromoteReady, AssignWorkers }
+
+// [Extension 9] query select — direct component projection
+readonly fn task_rows_snapshot() -> list {
+    return query { Task } select Task
+}
+
+// [Extension 10] pure fn — no ECS access, only local data
+pure fn avg_running_left(rows: list) -> float {
+    let running = rows |> filter(fn(r) { return r.phase == task_running() })
+    if len(running) == 0 { return 0.0 }
+    let total = running |> reduce(0.0, fn(acc, r) { return acc + float(r.left) })
+    return total / float(len(running))
+}
+
+pure fn classify_load(rows: list) -> AutoOutcome {
+    let run = rows |> filter(fn(r) { return r.phase == task_running() })
+    let ready = rows |> filter(fn(r) { return r.phase == task_ready() })
+    let blk = rows |> filter(fn(r) { return r.phase == task_blocked() })
+    if len(run) > 3 {
+        return AutoOutcome::Degraded { code: policy_too_many_running(), detail: "too many parallel running tasks for pool policy" }
+    }
+    if len(ready) > 4 {
+        return AutoOutcome::Degraded { code: policy_ready_backlog(), detail: "ready queue backing up" }
+    }
+    if len(blk) > 0 and len(run) == 0 and len(ready) == 0 {
+        return AutoOutcome::Stuck { reason: "deadlocked schedule — no runnable work but blocked tasks remain" }
+    }
+    return AutoOutcome::Passed { detail: "within normal backlog envelope" }
+}
+
+fn apply_outcome(o: AutoOutcome) -> nil {
+    match o {
+        Passed { detail } => {
+            emit PolicyHook { hook_kind: "ok", summary: detail }
+        }
+        Degraded { code, detail } => {
+            emit PolicyHook { hook_kind: f"warn:{code}", summary: detail }
+        }
+        Stuck { reason } => {
+            emit PolicyHook { hook_kind: "blocked", summary: reason }
+        }
+    }
+}
+
+pure fn expected_dag_tasks() -> int { return 6 }
+
+// Safety cap — if the DAG never finishes, bail instead of looping forever
+pure fn max_scheduler_ticks() -> int { return 120 }
+
+fn spawn_dag_task(name: str, duration: int, pri: int, pred1: str, pred2: str) -> nil {
+    spawn(Task { name: name, duration: duration, left: 0, phase: task_blocked(), pri: pri, pred1: pred1, pred2: pred2, p1_done: false, p2_done: false })
+}
+
+fn spawn_dag_tasks() -> nil {
+    spawn_dag_task("fetch_deps", 1, 10, "", "")
+    spawn_dag_task("compile_core", 3, 30, "fetch_deps", "")
+    spawn_dag_task("compile_ui", 2, 25, "fetch_deps", "")
+    spawn_dag_task("link_all", 2, 40, "compile_core", "compile_ui")
+    spawn_dag_task("test_integration", 2, 35, "link_all", "")
+    spawn_dag_task("package_release", 1, 20, "test_integration", "")
+}
+
+// --- Entry (Extension 1: main() -> nil tolerates ?) ---
+
+fn main() -> nil {
+    print("============================================================")
+    print(" DAG CI orchestrator — multi-worker build simulation")
+    print("============================================================")
+
+    spawn_dag_tasks()
+
+    let mut phase = ReleasePhase::Open
+    let mut tick = 0
+    let done_goal = expected_dag_tasks()
+
+    while tick < max_scheduler_ticks() {
+        // [Extension 3] Named phases instead of bare system lists
+        schedule [Tick]
+        flush_events()
+        schedule [Unblock]
+        flush_events()
+
+        let rows = task_rows_snapshot()
+        let avg = avg_running_left(rows)
+        apply_outcome(classify_load(rows))
+        flush_events()
+
+        let p = get_resource(ClusterPool) ?
+        print(f"\n[tick {tick}] free_workers={p.free_workers} finished={p.finished}/{done_goal} avg_run_left={avg}")
+
+        // [Extension 2] enumerate — indexed iteration over active tasks
+        let active = rows |> filter(fn(r) { return r.phase < task_done() })
+        for [idx, r] in enumerate(active) {
+            print(f"    [{idx}] {r.name} phase={r.phase} left={r.left} pri={r.pri}")
+        }
+
+        if p.finished >= done_goal {
+            print("\n*** pipeline complete — all tasks terminal ***")
+            phase = transition(phase, "freeze") ?
+            print(f"release gate -> {phase}")
+            phase = transition(phase, "ship") ?
+            print(f"release gate -> {phase}")
+            break
+        }
+
+        tick = tick + 1
+    }
+
+    if tick >= max_scheduler_ticks() {
+        print("\n[abort] hit max ticks (unexpected schedule bug)")
+    }
+
+    // --- Final analytics using new builtins ---
+
+    print("\n--- snapshot: pipeline analytics (final task rows) ---")
+    let final_rows = task_rows_snapshot()
+    let names = final_rows |> map(fn(r) { return r.name })
+    print(f"  task count: {len(final_rows)}")
+    print(f"  order keys: {names}")
+
+    // [Extension 8] indexed + lookup() — O(1) entity lookup by name
+    match lookup(Task, "name", "link_all") {
+        Some(id) => {
+            let r = require(id, Task)
+            print(f"  link_all final state: phase={r.phase} left={r.left}")
+        }
+        None => { print("  link_all not found (unexpected)") }
+    }
+
+    match max_by(final_rows, fn(r) { return r.pri }) {
+        Some(r) => { print(f"  highest priority task: {r.name} (pri={r.pri})") }
+        None => { print("  no tasks") }
+    }
+    match min_by(final_rows, fn(r) { return r.pri }) {
+        Some(r) => { print(f"  lowest priority task:  {r.name} (pri={r.pri})") }
+        None => { print("  no tasks") }
+    }
+
+    print("\n  final task summary:")
+    for [i, r] in enumerate(final_rows) {
+        let mut status = "PENDING"
+        if r.phase == task_done() {
+            status = "DONE"
+        }
+        print(f"    {i + 1}. {r.name}: {status}")
+    }
+
+    print("============================================================")
+}

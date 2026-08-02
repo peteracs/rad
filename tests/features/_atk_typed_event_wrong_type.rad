@@ -1,0 +1,11 @@
+// Attack: emit with wrong field type
+event Score { points: int, name: str }
+
+on Score(e) {
+    print(e.points, e.name)
+}
+
+fn main() -> nil {
+    emit Score { points: "not_an_int", name: 42 }
+    flush_events()
+}

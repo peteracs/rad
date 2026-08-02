@@ -1,0 +1,17 @@
+// P05: call commit() from inside a simulated system -- speculation escaping
+// into the live world, the single most dangerous effect.
+// EXPECT: compile-time rejection.
+component C { v: int = 0 }
+resource Snap { taken: int = 0 }
+
+system Leak(c: mut C) {
+    c.v = c.v + 1
+    let f = fork()
+    commit(f)
+}
+
+let e = spawn("e", C { v: 0 })
+let base = fork()
+let r = simulate(base, [system::Leak], 2)
+let got = peek(r, e, C) |> unwrap
+print(f"COMPILED-AND-RAN v={got.v}")

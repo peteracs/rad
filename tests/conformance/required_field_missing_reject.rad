@@ -1,0 +1,11 @@
+// Omitting a required field is a compile error — there is no default
+// to silently fill it with.
+component Missile {
+    source: entity,
+    speed: float = 40.0,
+}
+
+fn main() -> nil {
+    let m = entity "bolt" { Missile { speed: 50.0 } }
+    print(require(m, Missile).speed)
+}

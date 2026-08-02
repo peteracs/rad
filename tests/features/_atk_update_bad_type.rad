@@ -1,0 +1,7 @@
+// Attack: update with wrong type
+component C { x: 0 }
+
+fn main() -> nil {
+    let e = spawn(C { x: 1 })
+    update(e, C) { x = "string" }
+}

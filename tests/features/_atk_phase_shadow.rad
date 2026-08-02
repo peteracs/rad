@@ -1,0 +1,14 @@
+// Attack: phase with same name as a system
+component V { x: 0 }
+system Tick(v: mut V) { v.x = v.x + 1 }
+
+phase Tick { Tick }
+
+fn main() -> nil {
+    let e = spawn(V { x: 0 })
+    schedule [Tick]
+    let v = unwrap(get(e, V))
+    print("x =", v.x)
+}
+
+// expect: x = 1

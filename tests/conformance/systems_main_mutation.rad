@@ -1,0 +1,26 @@
+// backend: both
+component Position { x: 0.0, y: 0.0 }
+
+component Velocity { dx: 2.0, dy: 0.0 }
+
+entity player {
+    Position { x: 0.0, y: 0.0 },
+    Velocity { dx: 2.0, dy: 0.0 }
+}
+
+system Physics(pos: mut Position, vel: Velocity) {
+    pos.x = pos.x + vel.dx
+}
+
+fn over_one(xs) {
+    return filter(xs, fn(x) { return x > 1 })
+}
+
+fn main() -> nil {
+    Physics()
+    print((get(player, Position) |> unwrap).x)
+    let ys = over_one([1, 2, 3])
+    print(len(ys))
+}
+// expect: 2.0
+// expect: 2

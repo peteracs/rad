@@ -1,0 +1,35 @@
+// Test: During simulation, systems must read the FORKED state, not the main world
+// This is subtle — if the world swap is wrong, systems will read stale data
+
+component Balance { gold: 0 }
+
+system Tax(b: mut Balance) {
+    // Take 10% tax (integer division)
+    let tax = b.gold / 10
+    b = Balance { gold: b.gold - tax }
+}
+
+let merchant = spawn("merchant", Balance { gold: 1000 })
+
+// Fork and simulate 1 tick of Tax
+let f = fork()
+let f1 = simulate(f, [system::Tax], 1)
+// After 1 tick: 1000 - 100 = 900
+
+// Now simulate the RESULT for another tick
+let f2 = simulate(f1, [system::Tax], 1)
+// After tick 2: 900 - 90 = 810
+
+let f3 = simulate(f2, [system::Tax], 1)
+// After tick 3: 810 - 81 = 729
+
+// Main world untouched
+let main = get(merchant, Balance) |> unwrap
+assert(main.gold == 1000, f"Main should be 1000, got {main.gold}")
+
+// Commit the triple-simulated fork
+commit(f3)
+let final_val = get(merchant, Balance) |> unwrap
+assert(final_val.gold == 729, f"After 3 tax rounds: expected 729, got {final_val.gold}")
+
+print("PASS: system reads correct forked state")

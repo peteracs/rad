@@ -1,0 +1,9 @@
+fn apply(f, list) {
+    return list |> map(f)
+}
+fn main() -> nil {
+    let rows = [[10, 20], [30, 40]]
+    let out = apply(fn([a, b]) { return a - b }, rows)
+    print(out[0])
+    print(out[1])
+}

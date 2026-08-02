@@ -1,0 +1,168 @@
+// SHOPWORK — browser-moba's shop economy, written the way it wants to be
+// written (fake-port round 4). The code comes first; whatever the
+// language can't run becomes a feature.
+//
+// Architecture (mirrors ui/hud/shop/model.ts + content/items):
+//   - The catalog is a CONSTANT: `pub let ITEMS = {...}`, not a function
+//     that rebuilds the table per call. Costs are TOTAL costs; the
+//     combine price is derived by recursion over the build tree.
+//   - Buying is era-accurate: pay total minus the value of owned
+//     components, consume them (duplicates need two copies — Mana
+//     Manipulator builds from [faerie, faerie]).
+//   - Purchases are TRANSACTIONS: `fork()` before, `commit()` to undo.
+//     The undo stack is rad's own speculative-execution machinery —
+//     no inverse-operation bookkeeping, ever.
+
+pub let SELL_PCT = 0.70
+pub let SLOTS = 6
+
+pub struct ItemDef {
+    name: str = "",
+    cost: int = 0,                   // TOTAL cost, like the original
+    builds_from: list = [],          // component ids, duplicates allowed
+}
+
+// the catalog — a real slice of the era tree
+pub let ITEMS = {
+    "dagger": ItemDef { name: "Dagger", cost: 420 },
+    "cloak": ItemDef { name: "Cloak of Agility", cost: 880 },
+    "pickaxe": ItemDef { name: "Pickaxe", cost: 975 },
+    "bf_sword": ItemDef { name: "B.F. Sword", cost: 1850 },
+    "zeal": ItemDef {
+        name: "Zeal", cost: 1195,
+        builds_from: ["dagger", "cloak"],
+    },
+    "infinity_edge": ItemDef {
+        name: "Infinity Edge", cost: 3830,
+        builds_from: ["bf_sword", "pickaxe", "cloak"],
+    },
+    "phantom_dancer": ItemDef {
+        name: "Phantom Dancer", cost: 2845,
+        builds_from: ["zeal", "dagger", "dagger"],
+    },
+}
+
+// combine price: what the anvil itself costs once components are owned
+pub fn combine_cost(id: str) -> int {
+    let def = ITEMS[id]
+    let parts = def.builds_from |> map(fn(p) { return ITEMS[p].cost }) |> sum
+    return def.cost - parts
+}
+
+// ---------------------------------------------------------- sim state
+
+component Wallet { gold: int = 0 }
+
+component Bag { slots: list = [nil, nil, nil, nil, nil, nil] }
+
+pub event Bought { who: entity, item: str, paid: int }
+pub event Sold { who: entity, item: str, refund: int }
+
+fn bag_of(u: entity) -> list {
+    return require(u, Bag).slots
+}
+
+// ------------------------------------------------------------- buying
+
+// era purchase: consume owned components (one copy per recipe ref),
+// pay total minus their value, place the result in the freed space
+pub fn buy(u: entity, id: str) -> Result < int, str > {
+    let def = ITEMS[id]
+    let mut slots = bag_of(u)
+    let mut price = def.cost
+
+    // consume components — each recipe ref eats ONE owned copy
+    for part in def.builds_from {
+        let at = index_of(slots, part)
+        if at >= 0 {
+            slots = set_at(slots, at, nil)
+            price = price - ITEMS[part].cost
+        }
+    }
+
+    let w = require(u, Wallet)
+    if w.gold < price {
+        return Err(f"need {price}g, have {w.gold}g")
+    }
+    let free = index_of(slots, nil)
+    if free < 0 {
+        return Err("inventory full")
+    }
+
+    update(u, Wallet) { gold = w.gold - price }
+    update(u, Bag) { slots = set_at(slots, free, id) }
+    emit Bought { who: u, item: id, paid: price }
+    return Ok(price)
+}
+
+pub fn sell(u: entity, slot: int) -> Result < int, str > {
+    let slots = bag_of(u)
+    let id = slots[slot]
+    if id == nil {
+        return Err("empty slot")
+    }
+    let refund = int(float(ITEMS[id].cost) * SELL_PCT)
+    update(u, Wallet) { gold = require(u, Wallet).gold + refund }
+    update(u, Bag) { slots = set_at(slots, slot, nil) }
+    emit Sold { who: u, item: id, refund: refund }
+    return Ok(refund)
+}
+
+// -------------------------------------------------------------- demo
+
+fn describe(u: entity) -> str {
+    let names = bag_of(u)
+    |> filter(fn(s) { return s != nil })
+    |> map(fn(s) { return ITEMS[s].name })
+    return f"{require(u, Wallet).gold}g {names}"
+}
+
+fn report(label: str, r: Result < int, str > ) -> nil {
+    match r {
+        Ok { value: paid } => { print(f"{label}: paid {paid}g") }
+        Err { message: m } => { print(f"{label}: REFUSED — {m}") }
+    }
+}
+
+fn main() -> nil {
+    let ez = entity "ez" { Wallet { gold: 4000 }, Bag {} }
+
+    // the anvil math: IE total 3830, components 1850+975+880
+    print(f"IE combine cost: {combine_cost(\"infinity_edge\")}")     // 125
+
+    // build toward Infinity Edge piece by piece
+    report("buy bf", buy(ez, "bf_sword"))           // 1850
+    report("buy pickaxe", buy(ez, "pickaxe"))       // 975
+    print(describe(ez))                              // 1175g [B.F. Sword, Pickaxe]
+
+    // the upgrade consumes both owned components + buys the missing cloak
+    report("buy IE", buy(ez, "infinity_edge"))      // 3830-1850-975 = 1005
+    print(describe(ez))                              // 170g [Infinity Edge]
+
+    // a purchase as a TRANSACTION: snapshot, act, regret, roll back
+    update(ez, Wallet) { gold = 1000 }
+    let mut undo = []
+    undo << fork()
+    report("buy dagger", buy(ez, "dagger"))
+    print(describe(ez))                              // 580g [..., Dagger]
+    commit(pop(undo))
+    undo = drop_last(undo)                           // pop() is pure; shrink explicitly
+    print(f"undone: {describe(ez)}")                 // 1000g, dagger gone
+
+    // duplicate components: Phantom Dancer eats zeal + dagger + dagger
+    update(ez, Wallet) { gold = 3000 }
+    report("buy zeal", buy(ez, "zeal"))
+    report("buy dagger", buy(ez, "dagger"))
+    report("buy dagger", buy(ez, "dagger"))
+    print(describe(ez))
+    report("buy PD", buy(ez, "phantom_dancer"))     // 2845-1195-420-420 = 810
+    print(describe(ez))
+
+    // sell-back at 70%
+    report("sell PD", sell(ez, index_of(bag_of(ez), "phantom_dancer")))
+    print(describe(ez))
+
+    // gates
+    update(ez, Wallet) { gold = 10 }
+    report("broke", buy(ez, "bf_sword"))
+}

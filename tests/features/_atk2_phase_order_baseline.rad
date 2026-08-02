@@ -1,0 +1,13 @@
+// Baseline: does schedule [First, Second, Third] preserve order WITHOUT phases?
+component C { v: 0 }
+
+system First(c: C) { print("1") }
+system Second(c: C) { print("2") }
+system Third(c: C) { print("3") }
+
+fn main() -> nil {
+    spawn(C { v: 0 })
+    schedule [First, Second, Third]
+}
+
+// expected if order-preserving: 1, 2, 3

@@ -1,0 +1,5 @@
+// backend: both
+let merged = merge( {"a": 1, "x": 9}, {"b": 2, "a": 3})
+let merged_sum = merged["a"] + merged["b"] + merged["x"]
+print(f"CASE08:{merged_sum}")
+// expect: CASE08:14

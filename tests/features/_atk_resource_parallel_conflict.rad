@@ -1,0 +1,25 @@
+component HP { value: 100 }
+
+resource Score {
+  total: 0
+}
+
+system DamageAll(h: mut HP) {
+  h.value = h.value - 10
+}
+
+system Tally(h: HP, s: mut Score) {
+  s.total = s.total + h.value
+}
+
+fn main() -> nil {
+  let a = spawn(HP { value: 100 })
+  let b = spawn(HP { value: 50 })
+  schedule [DamageAll, Tally]
+  let sa = get(a, HP) ?
+  let sb = get(b, HP) ?
+  let sc = get_resource(Score) ?
+  print(f"hp_a={sa.value},hp_b={sb.value},score={sc.total}")
+}
+
+// expect: hp_a=90,hp_b=40,score=130

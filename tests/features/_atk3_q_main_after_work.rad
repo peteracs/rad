@@ -1,0 +1,17 @@
+// Attack: ? in main after substantial work — should early-exit cleanly
+component C { v: 0 }
+
+fn main() -> nil {
+    let e = spawn(C { v: 1 })
+    for i in range(0, 5) {
+        update(e, C) { v = i }
+    }
+    let c = unwrap(get(e, C))
+    print("before ?:", c.v)
+
+    // Now trigger early exit via None
+    let x = find([1, 2, 3], fn(v) { return v > 100 }) ?
+    print("BUG:", x)
+}
+
+// expect: before ?: 4

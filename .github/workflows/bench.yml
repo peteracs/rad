@@ -1,0 +1,85 @@
+name: Benchmarks
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'Cargo.toml'
+      - 'core/vm/src/**'
+      - 'core/vm/benches/**'
+      - 'core/vm/Cargo.toml'
+      - 'benches/**'
+  pull_request:
+    branches: [main, master]
+    paths:
+      - 'Cargo.toml'
+      - 'core/vm/src/**'
+      - 'core/vm/benches/**'
+      - 'core/vm/Cargo.toml'
+      - 'benches/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  criterion-bench:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+        with:
+          toolchain: stable
+
+      - name: Cache cargo
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-bench-${{ hashFiles('Cargo.lock') }}
+
+      - name: Run Criterion benchmarks
+        run: cargo bench -p rad-vm --bench rad_benchmarks -- --output-format bencher 2>&1 | tee core/vm/bench-output.txt
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: criterion-report
+          path: |
+            target/criterion/
+            core/vm/bench-output.txt
+          retention-days: 30
+
+  profile-comparison:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+        with:
+          toolchain: stable
+
+      - name: Build Rust VM (debug + release)
+        run: |
+          cargo build -p rad-vm --quiet
+          cargo build -p rad-vm --release --quiet
+
+      - name: Run debug vs release comparison
+        run: python benches/compare.py --runs 5 | tee bench-compare.txt
+
+      - name: Upload comparison results
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: profile-comparison
+          path: bench-compare.txt
+          retention-days: 30

@@ -1,0 +1,13 @@
+fn main() -> nil {
+    let rows = [[0, "skip"], [1, "keep"], [0, "skip2"], [2, "also_keep"]]
+    let mut kept: list = []
+    for [flag, name] in rows {
+        if flag == 0 {
+            continue
+        }
+        kept = kept + [name]
+    }
+    print(len(kept))
+    print(kept[0])
+    print(kept[1])
+}

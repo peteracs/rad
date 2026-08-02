@@ -1,0 +1,26 @@
+// BUG 04 MINIMAL REPRO: the tightest possible budget does not bound an
+// event-driven guest. fuel:1 and mem_bytes:1024 -- one charge point and one
+// kilobyte -- and this still runs forever.
+//
+// EXPECTED: Err("Budget exhausted: ...") almost immediately.
+// ACTUAL:   never returns. Host hangs; RSS climbs into the hundreds of MB.
+//
+// Run under a timeout, it WILL hang:
+//   .\run_timed.ps1 bugs\04_event_fuel_escape.rad 20
+
+let bomb = f"""
+event P { n }
+on P(e) {
+    emit P { n: e.n + 1 }
+}
+emit P { n: 0 }
+"""
+
+print("host: calling sandbox_run with fuel=1 mem_bytes=1024")
+
+match sandbox_run(bomb, fork(), f"""{ "write": [], "fuel": 1, "mem_bytes": 1024 }""") {
+    Ok(_f) => { print("BREAKOUT: guest completed, no budget ever charged") }
+    Err(m) => { print(f"contained (correct): {m}") }
+}
+
+print("host: still alive")

@@ -1,0 +1,5 @@
+// expect-runtime-error: expects int start, got float
+let s: any = "abc"
+let start: any = 0.0
+let end: any = 1.0
+print(substring_bytes(s, start, end))

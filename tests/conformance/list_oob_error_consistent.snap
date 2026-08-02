@@ -1,0 +1,7 @@
+---
+source: tests\conformance\list_oob_error_consistent.rad
+exit_code: 1
+---
+
+---stderr---
+Error: [line 3] in main: List index 5 out of bounds

@@ -1,0 +1,11 @@
+fn main() -> nil {
+    let a = 999
+    let b = 888
+    let rows = [[1, 2], [3, 4]]
+    for [a, b] in rows {
+        print(a)
+        print(b)
+    }
+    print(a)
+    print(b)
+}

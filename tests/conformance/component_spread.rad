@@ -1,0 +1,38 @@
+// Component spread syntax: ..base copies unchanged fields
+component Stats { hp: 100, max_hp: 100, attack: 10, defense: 5 }
+
+entity hero {
+    Stats { hp: 80, max_hp: 100, attack: 15, defense: 8 }
+}
+
+// Spread: override one field, copy the rest
+let s = get(hero, Stats) |> unwrap
+set(hero, Stats { hp: 50, ..s })
+let s2 = get(hero, Stats) |> unwrap
+print(s2.hp)
+// expect: 50
+print(s2.max_hp)
+// expect: 100
+print(s2.attack)
+// expect: 15
+print(s2.defense)
+// expect: 8
+
+// Spread: override multiple fields
+set(hero, Stats { hp: 99, attack: 20, ..s2 })
+let s3 = get(hero, Stats) |> unwrap
+print(s3.hp)
+// expect: 99
+print(s3.max_hp)
+// expect: 100
+print(s3.attack)
+// expect: 20
+print(s3.defense)
+// expect: 8
+
+// Spread: use in a local binding (not just set)
+let healed = Stats { hp: s3.max_hp, ..s3 }
+print(healed.hp)
+// expect: 100
+print(healed.attack)
+// expect: 20

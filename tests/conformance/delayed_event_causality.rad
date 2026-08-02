@@ -1,0 +1,20 @@
+component Gold { amount: int = 0 }
+
+event Start { who: entity }
+event Later { who: entity }
+
+on Start(e) {
+    emit Later { who: e.who } after 1
+}
+
+on Later(e) {
+    update(e.who, Gold) { amount = 7 }
+}
+
+let hero = entity "hero" { Gold {} }
+
+emit Start { who: hero }
+flush_events()
+flush_events()
+
+print(why(hero, Gold))

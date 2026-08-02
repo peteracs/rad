@@ -1,0 +1,130 @@
+// =====================================================================
+//  Vending Machine — Pure state machine with event-driven I/O
+// =====================================================================
+
+state VendingState {
+    Idle {
+        on insert_coin -> HasMoney
+    }
+    HasMoney {
+        on insert_coin -> HasMoney
+        on select_item -> Dispensing
+        on refund -> Idle
+    }
+    Dispensing {
+        on dispensed -> Idle
+        on insufficient -> HasMoney
+    }
+}
+
+event CoinInserted { amount }
+
+event ItemSelected { name, price }
+
+event ItemDispensed { name }
+
+event RefundGiven { amount }
+
+event Display { text }
+
+on CoinInserted(e) {
+    print(f"  [COIN] ${e.amount} inserted")
+}
+
+on ItemSelected(e) {
+    print(f"  [SELECT] {e.name} (${e.price})")
+}
+
+on ItemDispensed(e) {
+    print(f"  [VEND] {e.name} dispensed! Enjoy!")
+}
+
+on RefundGiven(e) {
+    print(f"  [REFUND] ${e.amount} returned")
+}
+
+on Display(e) {
+    print(f"  [DISPLAY] {e.text}")
+}
+
+fn main() -> any {
+    print("=== Vending Machine ===\n")
+
+    let items = ["Cola", "Chips", "Candy", "Water", "Juice"]
+    let prices = [125, 150, 75, 100, 175]
+
+    print("Menu:")
+    for i in range(len(items)) {
+        let dollars = prices[i] / 100
+        let cents = prices[i] % 100
+        let mut cstr = str(cents)
+        if cents < 10 { cstr = f"0{cstr}" }
+        print(f"  {i + 1}. {items[i]} - ${dollars}.{cstr}")
+    }
+    print("")
+
+    let mut vs = VendingState::Idle
+    let mut balance = 0
+
+    // Customer inserts coins
+    emit Display { text: "Insert coins..." }
+    vs = transition(vs, "insert_coin") ?
+    balance = balance + 100
+    emit CoinInserted { amount: 100 }
+    emit Display { text: f"Balance: ${balance}" }
+
+    vs = transition(vs, "insert_coin") ?
+    balance = balance + 50
+    emit CoinInserted { amount: 50 }
+    emit Display { text: f"Balance: ${balance}" }
+
+    print("")
+
+    // Select cola ($1.25)
+    let item_idx = 0
+    emit ItemSelected { name: items[item_idx], price: prices[item_idx] }
+    vs = transition(vs, "select_item") ?
+
+    if balance >= prices[item_idx] {
+        balance = balance - prices[item_idx]
+        emit ItemDispensed { name: items[item_idx] }
+        vs = transition(vs, "dispensed") ?
+        if balance > 0 {
+            emit RefundGiven { amount: balance }
+            balance = 0
+        }
+    } else {
+        emit Display { text: "Not enough money!" }
+        vs = transition(vs, "insufficient") ?
+    }
+
+    print("")
+
+    // Second transaction: not enough money
+    emit Display { text: "Insert coins..." }
+    vs = transition(vs, "insert_coin") ?
+    balance = balance + 50
+    emit CoinInserted { amount: 50 }
+
+    emit ItemSelected { name: items[1], price: prices[1] }
+    vs = transition(vs, "select_item") ?
+
+    if balance >= prices[1] {
+        emit ItemDispensed { name: items[1] }
+        vs = transition(vs, "dispensed") ?
+    } else {
+        emit Display { text: f"Need ${prices[1] - balance} more for {items[1]}" }
+        vs = transition(vs, "insufficient") ?
+    }
+
+    // Refund
+    vs = transition(vs, "refund") ?
+    emit RefundGiven { amount: balance }
+
+    print("")
+    match vs {
+        Idle => { print("Machine idle. Ready for next customer.") }
+        HasMoney => { print("Machine has money.") }
+        Dispensing => { print("Dispensing...") }
+    }
+}

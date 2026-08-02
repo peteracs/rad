@@ -1,0 +1,5 @@
+---
+source: tests\conformance\push_limits_case_03.rad
+exit_code: 0
+---
+CASE03:168

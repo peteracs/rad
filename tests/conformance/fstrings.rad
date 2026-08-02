@@ -1,0 +1,7 @@
+// backend: both
+let name = "Rad"
+let n = 7
+print(f"hello {name}")
+print(f"{name} #{n + 1}")
+// expect: hello Rad
+// expect: Rad #8

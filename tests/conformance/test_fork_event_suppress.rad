@@ -1,0 +1,24 @@
+// Test 6: Event queue is properly saved/restored around simulate
+
+component HP { hp: 100 }
+
+system Tick(hp: mut HP) {
+    hp = HP { hp: hp.hp - 1 }
+}
+
+let e = spawn("unit", HP { hp: 100 })
+
+// Fork and simulate — event_queue should be saved/restored
+let f = fork()
+let f = simulate(f, [system::Tick], 5)
+
+// Main world should be untouched
+let hp = get(e, HP) |> unwrap
+assert(hp.hp == 100, f"Main world should be untouched after simulate, got {hp.hp}")
+
+// Commit should work
+commit(f)
+let hp2 = get(e, HP) |> unwrap
+assert(hp2.hp == 95, f"After commit, expected 95, got {hp2.hp}")
+
+print("PASS: event queue isolation")

@@ -1,0 +1,24 @@
+// let, let mut, assignment, block scope
+let x = 10
+print(x)
+// expect: 10
+let mut n = 1
+n = n + 4
+print(n)
+// expect: 5
+if true {
+    let x = 99
+    print(x)
+    // expect: 99
+}
+print(x)
+// expect: 10
+let mut a = 0
+a = a + 1
+a = a + 2
+print(a)
+// expect: 3
+let p = 2
+let q = 3
+print(p * q)
+// expect: 6

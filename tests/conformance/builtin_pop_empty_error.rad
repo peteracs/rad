@@ -1,0 +1,4 @@
+// pop() on empty list must produce a runtime error
+// rust-mode: no-check
+pop([])
+// expect-runtime-error: pop() on empty list

@@ -1,0 +1,9 @@
+// caps case 4: not JSON at all.
+component Reactor { temp: 0 }
+let _s = spawn("site", Reactor { temp: 1 })
+print("before")
+match sandbox_run("print(\"hi\")", fork(), "definitely not json") {
+    Ok(_f) => { print("Ok") }
+    Err(m) => { print(f"Err: {m}") }
+}
+print("after")

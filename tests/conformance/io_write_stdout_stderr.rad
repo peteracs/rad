@@ -1,0 +1,9 @@
+// Test: write_stdout writes without trailing newline, write_stderr runs without error
+write_stdout("part1")
+write_stdout("-part2")
+print("")
+// expect: part1-part2
+
+write_stderr("err-text")
+print("write ok")
+// expect: write ok

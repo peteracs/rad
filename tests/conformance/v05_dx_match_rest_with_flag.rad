@@ -1,0 +1,10 @@
+// backend: both
+// vm-args: --compat-v0.5-dx
+// expect: 7
+
+let x = Option::Some { value: 7 }
+
+match x {
+    Some { value, .. } => { print(value) }
+    None => { print("none") }
+}

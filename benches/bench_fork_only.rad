@@ -1,0 +1,44 @@
+// Benchmark: Fork-only cost (isolates CoW benefit)
+// Measures repeated fork() calls to amplify snapshot overhead
+
+component Pos   { x: 0, y: 0 }
+component Vel   { dx: 1, dy: 1 }
+component Stats { hp: 100, mp: 50, str_val: 10 }
+component Flags { a: 0, b: 0, c: 0, d: 0, e: 0 }
+
+let scales = [1000, 5000, 10000]
+let fork_count = 1000
+
+print("=== Fork-Only Benchmark (CoW) ===")
+print(f"({fork_count} consecutive forks per scale, 4 components/entity)")
+print("(Arc-wrapped CoW: fork = pointer bumps only)")
+print("")
+print("| Entities | total forks (ms) | avg per fork (us) |")
+print("|----------|--------------|-------------------|")
+
+let mut si = 0
+while si < len(scales) {
+    let n = scales[si]
+
+    let mut i = 0
+    while i < n {
+        spawn(f"f{n}_{i}", Pos { x: i, y: 0 }, Vel { dx: 1, dy: 2 }, Stats { hp: 100, mp: 50, str_val: 10 }, Flags { a: 1, b: 2, c: 3, d: 4, e: 5 })
+        i = i + 1
+    }
+
+    let t0 = now_unix_ms()
+    let mut fi = 0
+    while fi < fork_count {
+        let _f = fork()
+        fi = fi + 1
+    }
+    let total_ms = now_unix_ms() - t0
+    let avg_us = (total_ms * 1000) / fork_count
+
+    print(f"| {n} | {total_ms} | {avg_us} |")
+
+    si = si + 1
+}
+
+print("")
+print("Done.")

@@ -1,0 +1,10 @@
+// backend: both
+type UserId = int
+
+fn inc(id: UserId) -> UserId {
+    return id + 1
+}
+
+let id: UserId = 41
+print(inc(id))
+// expect: 42

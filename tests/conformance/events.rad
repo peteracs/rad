@@ -1,0 +1,26 @@
+// event, on handler, emit
+event Ping { k }
+
+on Ping(e) {
+    print(e.k)
+}
+emit Ping { k: 10 }
+flush_events()
+// expect: 10
+emit Ping { k: 20 }
+flush_events()
+// expect: 20
+emit Ping { k: 30 }
+flush_events()
+// expect: 30
+event Note { text }
+
+on Note(n) {
+    print(n.text)
+}
+emit Note { text: "a" }
+flush_events()
+// expect: a
+emit Note { text: "b" }
+flush_events()
+// expect: b

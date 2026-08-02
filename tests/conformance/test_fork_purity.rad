@@ -1,0 +1,14 @@
+// Test 3: Purity enforcement — IO systems must be REJECTED at compile time
+// This file should FAIL to compile.
+
+component Dummy { x: 0 }
+
+system BadIO(d: mut Dummy) {
+    print("side effect!")
+    d = Dummy { x: d.x + 1 }
+}
+
+let e = spawn("bad", Dummy { x: 0 })
+let f = fork()
+let f = simulate(f, [system::BadIO], 1)
+print("FAIL: should not reach here — BadIO has IO side effects")

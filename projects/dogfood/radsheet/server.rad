@@ -1,0 +1,258 @@
+// RADSHEET sync server — the shared timeline for a spreadsheet.
+//
+//   rad projects/dogfood/radsheet/server.rad [-- <savefile>]
+//   rad --record sheet.radr projects/dogfood/radsheet/server.rad -- <savefile>
+//
+// Same offline-first protocol as RADTRACK (PULL full bytes once, SYNC a
+// fork_delta, three-way merge, RESOLVE with picks), with a spreadsheet
+// merge policy:
+//
+//   - Cell.raw is HUMAN TRUTH: both sides editing the same cell's source
+//     is a real conflict, shipped to the human as json.
+//   - Cell.val / Cell.kind are DERIVED: conflicts auto-resolve to either
+//     side, because after every merge the server reflows all formulas
+//     (recalc_after_merge) — the derived fields are recomputed from the
+//     merged raw values, deterministically, before the down-delta ships.
+//   - Sheet.passes is bookkeeping: max wins.
+//
+// Protocol (one request per connection, "\n"-terminated):
+//   PULL <user>                        -> fork bytes
+//   SYNC <user> <base_digest>\t<delta> -> MERGED <digest>\t<down_delta>
+//                                       | CONFLICTS\t<json RS json ...>
+//   RESOLVE <user> <i:server|yours,...>\t<delta>
+//                                      -> MERGED <digest>\t<down_delta> | ERROR
+//   WHY <cell>                         -> provenance, newlines as " | "
+//   GRID                               -> rendered grid, newlines as " | "
+//   DIGEST                             -> world_digest
+//   SHUTDOWN                           -> BYE (persists first)
+
+use "lib_sheet.rad"
+
+let PORT = 7981
+
+fn persist(save_path: str) -> nil {
+    write_file(save_path, save_world())
+}
+
+fn auto_resolutions(conflicts: list < Conflict > ) -> list < (Conflict, any) > {
+    let mut picks = []
+    for c in conflicts {
+        match c {
+            FieldConflict { ent, name, comp, field, base, ours, theirs } => {
+                // derived fields reflow after merge; pick ours arbitrarily
+                if comp == "Cell" and (field == "val" or field == "kind") {
+                    picks << (c, ours)
+                }
+            }
+            ResourceFieldConflict { res, field, base, ours, theirs } => {
+                if res == "Sheet" and field == "passes" {
+                    picks << (c, max(ours, theirs))
+                }
+            }
+            _ => {}
+        }
+    }
+    return picks
+}
+
+fn human_conflicts(conflicts: list < Conflict > ) -> list < Conflict > {
+    let mut out = []
+    for c in conflicts {
+        match c {
+            FieldConflict { ent, name, comp, field, base, ours, theirs } => {
+                if comp == "Cell" and (field == "val" or field == "kind") { continue }
+                out << c
+            }
+            ResourceFieldConflict { res, field, base, ours, theirs } => {
+                if res == "Sheet" and field == "passes" { continue }
+                out << c
+            }
+            _ => { out << c }
+        }
+    }
+    return out
+}
+
+fn conflict_json(c: Conflict) -> str {
+    match c {
+        FieldConflict { ent, name, comp, field, base, ours, theirs } => {
+            return json_stringify( {
+                "kind": "field", "name": name, "comp": comp, "field": field,
+                "base": f"{base}", "ours": f"{ours}", "theirs": f"{theirs}"
+            })
+        }
+        _ => {
+            return json_stringify( { "kind": "structural", "detail": "see server log" })
+        }
+    }
+}
+
+fn main() -> nil {
+    let argv = sys_args()
+    let mut save_path = "projects/dogfood/radsheet/server_world.radw"
+    if len(argv) >= 1 { save_path = argv[0] }
+
+    if file_exists(save_path) {
+        let n = load_world(read_file(save_path))
+        print(f"radsheet server: restored {n} entities from {save_path}")
+    } else {
+        init_grid()
+        // a seeded budget sheet every demo starts from
+        let _ = set_cell("A1", "rent", "founder", 1)
+        let _ = set_cell("B1", "1200", "founder", 2)
+        let _ = set_cell("A2", "food", "founder", 3)
+        let _ = set_cell("B2", "450", "founder", 4)
+        let _ = set_cell("A3", "total:", "founder", 5)
+        let _ = set_cell("B3", "=SUM(B1:B2)", "founder", 6)
+        print("radsheet server: fresh world, seeded budget (B3 = SUM)")
+    }
+
+    let listener = tcp_listen("127.0.0.1", PORT)
+    print(f"listening on 127.0.0.1:{PORT}")
+
+    let mut bases = {}
+    let mut pending = {}
+
+    let mut running = true
+    while running {
+        let conn = tcp_accept(listener)
+        let msg = read_msg(conn)
+        let parts = split(msg, " ")
+        let cmd = parts[0]
+
+        if cmd == "PULL" {
+            if len(keys(bases)) > 32 { bases = {} }
+            let base = fork()
+            let bytes = fork_to_bytes(base)
+            bases[digest_of(base)] = base
+            send_msg(conn, bytes)
+            let user = parts[1]
+            print(f"PULL {user}: served {digest_of(base)} ({len(bytes)} B)")
+        }
+        if cmd == "SYNC" or cmd == "RESOLVE" {
+            let user = parts[1]
+            let rest = join(slice(parts, 2, len(parts)), " ")
+            let dparts = split(rest, "\t")
+            let mut reply = "ERROR malformed request"
+
+            let mut base = fork()
+            let mut have_base = false
+            let mut picks_spec = ""
+            if cmd == "SYNC" and len(dparts) == 2 and contains(keys(bases), dparts[0]) {
+                base = bases[dparts[0]]
+                have_base = true
+            }
+            if cmd == "RESOLVE" and len(dparts) == 2 and contains(keys(pending), user) {
+                base = pending[user]
+                have_base = true
+                picks_spec = dparts[0]
+            }
+
+            if !have_base {
+                reply = "ERROR unknown base (pull again)"
+            } else {
+                match fork_apply(base, dparts[1]) {
+                    Ok(theirs) => {
+                        let ours = fork()
+                        let mut auto = []
+                        let mut merged_ok = false
+                        let mut merged = ours
+                        match merge_forks(base, ours, theirs) {
+                            Ok(m) => {
+                                merged = m
+                                merged_ok = true
+                            }
+                            Err(conflicts) => {
+                                auto = auto_resolutions(conflicts)
+                                let humans = human_conflicts(conflicts)
+                                if cmd == "RESOLVE" {
+                                    let mut chosen = auto
+                                    for spec in split(picks_spec, ",") {
+                                        let kv = split(spec, ":")
+                                        let idx = int(kv[0])
+                                        let c = humans[idx]
+                                        match c {
+                                            FieldConflict { ent, name, comp, field, base, ours, theirs } => {
+                                                let mut v = theirs
+                                                if kv[1] == "server" { v = ours }
+                                                chosen << (c, v)
+                                            }
+                                            _ => {}
+                                        }
+                                    }
+                                    match merge_forks_with(base, ours, theirs, chosen) {
+                                        Ok(m) => {
+                                            merged = m
+                                            merged_ok = true
+                                        }
+                                        Err(remaining) => {
+                                            reply = f"ERROR {len(remaining)} conflicts survived resolution"
+                                        }
+                                    }
+                                } else if len(humans) == 0 {
+                                    match merge_forks_with(base, ours, theirs, auto) {
+                                        Ok(m) => {
+                                            merged = m
+                                            merged_ok = true
+                                        }
+                                        Err(remaining) => {
+                                            reply = f"ERROR {len(remaining)} conflicts survived policy"
+                                        }
+                                    }
+                                } else {
+                                    let mut blobs = []
+                                    for c in humans { blobs << conflict_json(c) }
+                                    pending[user] = base
+                                    reply = "CONFLICTS\t" + join(blobs, chr(30))
+                                    print(f"SYNC {user}: {len(humans)} conflicts for the human, {len(auto)} auto-resolved pending")
+                                }
+                            }
+                        }
+                        if merged_ok {
+                            commit(merged)
+                            flush_events()
+                            // THE sheet-specific move: derived values reflow
+                            // from merged raw, deterministically, before the
+                            // down-delta is cut. Clients apply the delta and
+                            // get correct formulas without recomputing.
+                            recalc_after_merge(now_unix_s())
+                            persist(save_path)
+                            let new_base = fork()
+                            let nd = digest_of(new_base)
+                            bases[nd] = new_base
+                            pending = remove_key(pending, user)
+                            let down = fork_delta(theirs, new_base)
+                            reply = f"MERGED {nd}\t" + down
+                            let upb = len(dparts[1])
+                            print(f"{cmd} {user}: merged -> {nd} ({upb} B up, {len(down)} B down)")
+                        }
+                    }
+                    Err(m) => { reply = f"ERROR delta: {m}" }
+                }
+            }
+            send_msg(conn, reply)
+        }
+        if cmd == "WHY" {
+            let ent = get_entity(to_upper(parts[1]))
+            if ent == nil {
+                send_msg(conn, f"no cell {parts[1]}")
+            } else {
+                send_msg(conn, replace(why(ent, Cell), "\n", " | "))
+            }
+        }
+        if cmd == "GRID" {
+            send_msg(conn, replace(render_grid(), "\n", " | "))
+        }
+        if cmd == "DIGEST" {
+            send_msg(conn, world_digest())
+        }
+        if cmd == "SHUTDOWN" {
+            persist(save_path)
+            send_msg(conn, "BYE")
+            running = false
+        }
+        tcp_close(conn)
+    }
+    tcp_close(listener)
+    print("server down, world persisted")
+}

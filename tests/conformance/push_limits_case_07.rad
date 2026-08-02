@@ -1,0 +1,5 @@
+// backend: both
+let c07_ent = contains("enterprise", "rise")
+let c07_lst = contains([1, 2, 3], 4)
+print(f"CASE07:{c07_ent}:{c07_lst}")
+// expect: CASE07:true:false

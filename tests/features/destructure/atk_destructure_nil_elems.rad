@@ -1,0 +1,8 @@
+fn main() -> nil {
+    let rows = [[1, nil], [nil, 2], [nil, nil]]
+    for [a, b] in rows {
+        print(a)
+        print(b)
+    }
+    print("done_nil_elems")
+}

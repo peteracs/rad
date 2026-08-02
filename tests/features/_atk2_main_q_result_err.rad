@@ -1,0 +1,16 @@
+// Attack: ? on Err in main() -> nil should exit cleanly (not crash)
+fn fallible(x: int) -> any {
+    if x > 0 {
+        return Ok(x)
+    }
+    return Err("negative")
+}
+
+fn main() -> nil {
+    let a = fallible(10) ?
+    print("a:", a)
+    let b = fallible(-1) ?
+    print("BUG:", b)
+}
+
+// expect: a: 10

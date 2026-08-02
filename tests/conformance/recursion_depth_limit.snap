@@ -1,0 +1,18 @@
+---
+source: tests\conformance\recursion_depth_limit.rad
+exit_code: 1
+---
+
+---stderr---
+Error: [line 3] in recurse: Stack overflow: exceeded 512 call frames
+  called from [line 3] in recurse
+  called from [line 3] in recurse
+  called from [line 3] in recurse
+  called from [line 3] in recurse
+  called from [line 3] in recurse
+  called from [line 3] in recurse
+  called from [line 3] in recurse
+  called from [line 3] in recurse
+  called from [line 3] in recurse
+  called from [line 3] in recurse
+  ... 501 more frames

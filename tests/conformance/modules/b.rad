@@ -1,0 +1,5 @@
+use "a.rad"
+
+pub fn b_label() -> str {
+    return "B"
+}

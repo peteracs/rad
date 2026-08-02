@@ -1,0 +1,9 @@
+fn fallible() -> any {
+    return try_int("42")
+}
+
+fn main() -> nil {
+    let val = fallible() ?
+    print(val)
+}
+// expect: 42

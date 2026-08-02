@@ -1,0 +1,8 @@
+// Attack: max_by with incomparable key types (int vs string)
+// Expected: runtime error
+
+fn main() -> nil {
+    let data = [1, "hello", 3]
+    let result = max_by(data, fn(x) { return x })
+    print(result)
+}

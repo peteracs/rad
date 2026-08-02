@@ -1,0 +1,8 @@
+---
+source: tests\conformance\tuple_ordering_arity_reject.rad
+exit_code: 1
+---
+
+---stderr---
+Error: [line 4] in main: sort_by() key function returned incomparable keys: Cannot order tuples of different arity: (3) vs (2) elements
+  called from [line 0] in main

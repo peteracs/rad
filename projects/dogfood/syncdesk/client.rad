@@ -1,0 +1,141 @@
+// syncdesk client — the second machine.
+//
+// Pulls the server's world over TCP as fork bytes, commits it as the local
+// world, works **offline** (edits, spawns, even unflushed events), then
+// pushes back a **delta** — fork_delta(base, current) names the pulled base
+// by its digest and ships only the divergence (state and provenance both);
+// the server applies it to its own copy and three-way merges.
+//
+// Session script on stdin, one command per line:
+//   pull                     fetch the world, make it ours
+//   list                     show local tickets
+//   close <name>             set a ticket's status to closed
+//   escalate <name>          set a ticket's status to escalated
+//   assign <name> <who>      set a ticket's assignee
+//   new <name> <title...>    spawn a ticket (defaults fill the rest)
+//   note <name> <text...>    emit NoteAdded — left in flight on purpose:
+//                            it rides the wire and fires on the server
+//   push                     send the delta against the pulled base, print
+//                            the merge verdict
+//   why <name>               ask the server for cross-machine provenance
+//   shutdown                 stop the server
+//
+//   Get-Content session.txt | rad projects/dogfood/syncdesk/client.rad
+
+component Ticket { title: "", status: "open", assignee: "" }
+resource Audit { log: "" }
+
+event NoteAdded { ticket, note }
+
+on NoteAdded(e) {
+    let t = get(e.ticket, Ticket)
+    match t {
+        Some(tv) => {
+            let a = get_resource(Audit) |> unwrap
+            set_resource(Audit, Audit { log: a.log + f"[{tv.title}: {e.note}] " })
+        }
+        None => {}
+    }
+}
+
+fn rpc(request: str) -> str {
+    let conn = tcp_connect("127.0.0.1", 7777)
+    tcp_write(conn, request + "\n")
+    let mut buf = ""
+    while true {
+        let chunk = tcp_read(conn, 65536)
+        if len(chunk) == 0 { break }
+        buf = buf + chunk
+        if ends_with(buf, "\n") { break }
+    }
+    tcp_close(conn)
+    return trim(buf)
+}
+
+fn main() {
+    let mut base_fork = fork()
+    let mut base_digest = ""
+    let script = read_stdin_all()
+    for line in split(script, "\n") {
+        let trimmed = trim(line)
+        if len(trimmed) == 0 { continue }
+        let parts = split(trimmed, " ")
+        let cmd = parts[0]
+
+        if cmd == "pull" {
+            let base_bytes = rpc("PULL")
+            match fork_from_bytes(base_bytes) {
+                Ok(f) => {
+                    commit(f)
+                    base_fork = f
+                    base_digest = split(base_bytes, " ")[1]
+                    print("pulled world from server")
+                }
+                Err(msg) => { print(f"pull failed: {msg}") }
+            }
+        }
+        if cmd == "list" {
+            for ent in entities(Ticket) {
+                let t = get(ent, Ticket) |> unwrap
+                print(f"  {t.title} [{t.status}] ({t.assignee})")
+            }
+        }
+        if cmd == "close" {
+            let name = parts[1]
+            let t = get_entity(name)
+            update(t, Ticket) { status = "closed" }
+            print(f"closed {name}")
+        }
+        if cmd == "escalate" {
+            let name = parts[1]
+            let t = get_entity(name)
+            update(t, Ticket) { status = "escalated" }
+            print(f"escalated {name}")
+        }
+        if cmd == "assign" {
+            let name = parts[1]
+            let who = parts[2]
+            let t = get_entity(name)
+            update(t, Ticket) { assignee = who }
+            print(f"assigned {name} to {who}")
+        }
+        if cmd == "new" {
+            let name = parts[1]
+            let title = join(slice(parts, 2, len(parts)), " ")
+            let _e = spawn(name, Ticket { title: title })
+            print(f"spawned {name}")
+        }
+        if cmd == "note" {
+            let name = parts[1]
+            let text = join(slice(parts, 2, len(parts)), " ")
+            emit NoteAdded { ticket: get_entity(name), note: text }
+            print(f"note queued on {name} (in flight, not flushed)")
+        }
+        if cmd == "await_file" {
+            // Deterministic cross-process barrier for scripted demos.
+            let path = parts[1]
+            while !file_exists(path) {
+                let _spin = 0
+            }
+            print(f"barrier passed: {path}")
+        }
+        if cmd == "slist" {
+            let reply = rpc("LIST")
+            print(f"server: {reply}")
+        }
+        if cmd == "push" {
+            let delta = fork_delta(base_fork, fork())
+            print(f"delta is {len(delta)} bytes")
+            let reply = rpc("DPUSH " + base_digest + "\t" + delta)
+            print(f"server: {reply}")
+        }
+        if cmd == "why" {
+            let reply = rpc("WHY " + parts[1])
+            print(f"server: {reply}")
+        }
+        if cmd == "shutdown" {
+            let reply = rpc("SHUTDOWN")
+            print(f"server: {reply}")
+        }
+    }
+}

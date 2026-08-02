@@ -1,0 +1,38 @@
+// fn, calls, recursion, higher-order
+fn add1(x) {
+    return x + 1
+}
+print(add1(41))
+// expect: 42
+fn fib(n) {
+    if n <= 1 {
+        return n
+    }
+    return fib(n - 1) + fib(n - 2)
+}
+print(fib(6))
+// expect: 8
+fn twice(f, x) {
+    return f(f(x))
+}
+
+fn bump(n) {
+    return n + 1
+}
+print(twice(bump, 4))
+// expect: 6
+fn sum3(a, b, c) {
+    return a + b + c
+}
+print(sum3(1, 2, 3))
+// expect: 6
+fn early(n) {
+    if n == 0 {
+        return 0
+    }
+    return 100
+}
+print(early(0))
+// expect: 0
+print(early(5))
+// expect: 100

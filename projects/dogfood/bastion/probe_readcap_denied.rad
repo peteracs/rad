@@ -1,0 +1,45 @@
+// PROBE (companion to probe_readcap.rad): with the read dimension added to
+// capability grants (feature seq 61), a host can now CLOSE the exfiltration
+// hole that probe_readcap demonstrated.
+//
+// Same nosy guest, same narrow write grant -- the only change is an explicit
+// "read": ["Reactor"]. The guest may still write Reactor (integrity grant
+// unchanged), but its attempt to read Vault/ApiToken is now denied at the
+// boundary and comes back as Err, so nothing is exfiltrated.
+//
+// The contrast with probe_readcap.rad is the whole point:
+//   - probe_readcap.rad     : no "read" key -> reads everything (back-compat)
+//   - probe_readcap_denied  : "read":["Reactor"] -> secret reads DENIED
+
+component Vault { gold: 0 }
+component ApiToken { secret: "" }
+component Reactor { temp: 0 }
+
+let site = spawn("site", Vault { gold: 5000 }, ApiToken { secret: "sk-live-DEADBEEF" }, Reactor { temp: 20 })
+
+print("=== probe: read capability CLOSED ===")
+print("grant is read:[Reactor] write:[Reactor] -- confidentiality boundary set")
+
+let nosy = f"""
+component Vault { gold: 0 }
+component Reactor { temp: 0 }
+let site = get_entity("site")
+let v = get(site, Vault) |> unwrap
+print("exfil: vault gold = " + str(v.gold))
+set(site, Reactor { temp: 21 })
+"""
+
+let caps = f"""{ "read": ["Reactor"], "write": ["Reactor"], "fuel": 200000, "mem_bytes": 4194304 }"""
+
+let before = fork()
+match sandbox_run(nosy, before, caps) {
+    Ok(after) => {
+        print("LEAK: guest read the vault under a read:[Reactor] grant -- fix regressed")
+    }
+    Err(m) => {
+        print(f"denied: {m}")
+        print("PASSED: the secret read was refused; nothing was exfiltrated.")
+    }
+}
+
+print("=== probe done ===")

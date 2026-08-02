@@ -1,0 +1,11 @@
+use "../core/c-backend/src/lexer.rad"
+use "../core/c-backend/src/parser.rad"
+use "../core/c-backend/src/emit_c.rad"
+
+fn main() -> nil {
+    let t0 = clock()
+    compile_file_to_c_unchecked("core/c-backend/src/emit_c.rad", "core/c-backend/target/diamond_output.c")
+    let t1 = clock()
+    let elapsed = t1 - t0
+    print(f"ELAPSED:{elapsed}")
+}

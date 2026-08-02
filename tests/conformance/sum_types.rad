@@ -1,0 +1,54 @@
+// Sum types: variant match without field patterns (Rust VM matches variant name only)
+type Shape {
+    Circle { radius: 0.0 }
+    Rect { w: 0.0, h: 0.0 }
+}
+let c = Shape::Circle { radius: 1.0 }
+match c {
+    Circle => { print("circle") }
+    Rect => { print("rect") }
+}
+// expect: circle
+let r = Shape::Rect { w: 2.0, h: 3.0 }
+match r {
+    Circle => { print("circle") }
+    Rect => { print("rect") }
+}
+// expect: rect
+type Mode {
+    On {}
+    Off {}
+}
+let m = Mode::On {}
+match m {
+    On => { print("on") }
+    Off => { print("off") }
+}
+// expect: on
+let m2 = Mode::Off {}
+match m2 {
+    On => { print("on") }
+    Off => { print("off") }
+}
+// expect: off
+type ABC { A {} B {} C {} }
+let x = ABC::B {}
+match x {
+    A => { print("a") }
+    B => { print("b") }
+    C => { print("c") }
+}
+// expect: b
+type Tier { Free {} Pro {} }
+let f = Tier::Free {}
+match f {
+    Free => { print("free") }
+    Pro => { print("pro") }
+}
+// expect: free
+let pr = Tier::Pro {}
+match pr {
+    Free => { print("free") }
+    Pro => { print("pro") }
+}
+// expect: pro

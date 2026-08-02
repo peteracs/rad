@@ -1,0 +1,43 @@
+fn make_counter(start: int) -> int {
+    let mut count = start
+
+    let inc = fn() -> int {
+        count = count + 1
+        return count
+    }
+
+    let get = fn() -> int {
+        return count
+    }
+
+    print(get())
+    print(inc())
+    print(inc())
+    print(inc())
+    print(get())
+    return count
+}
+
+fn test_capture() -> nil {
+    let mut x = 10
+    let mut y = 20
+
+    let add_xy = fn() -> int {
+        return x + y
+    }
+
+    let set_x = fn(val: int) -> nil {
+        x = val
+    }
+
+    print(add_xy())
+    set_x(100)
+    print(add_xy())
+    print(x)
+}
+
+fn main() -> nil {
+    let result = make_counter(0)
+    print(result)
+    test_capture()
+}

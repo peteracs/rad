@@ -1,0 +1,11 @@
+// Attack: max_by with string keys — lexicographic comparison
+fn main() -> nil {
+    let data = ["banana", "apple", "cherry"]
+    let result = max_by(data, fn(s) { return s })
+    match result {
+        Some(v) => { print("max:", v) }
+        None => { print("none") }
+    }
+}
+
+// expect: max: cherry

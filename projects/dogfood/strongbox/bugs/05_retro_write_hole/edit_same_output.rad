@@ -1,0 +1,14 @@
+// BUG 05 — CONTROL edit: changes the program, but NOT what it writes.
+// The write_file call receives byte-identical arguments to the recording.
+//
+//   rad replay .../base.radr --with .../edit_same_output.rad
+//
+// Expected and observed: replays cleanly to completion.
+
+component Counter { n: 0 }
+
+let _c = spawn("c", Counter { n: 1 })
+let c = get(get_entity("c"), Counter) |> unwrap
+
+write_file("D:/Temp/strongbox_retro_probe.txt", f"value {c.n}")
+print(f"wrote value {c.n} (edited build, same output)")

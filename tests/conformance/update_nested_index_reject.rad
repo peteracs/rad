@@ -1,0 +1,8 @@
+// One index level per update entry; nested element writes go through
+// set_at on a fetched component.
+component Grid { rows: list = [[0, 0], [0, 0]] }
+
+fn main() -> nil {
+    let e = entity "g" { Grid {} }
+    update(e, Grid) { rows[1][0] = 7 }
+}

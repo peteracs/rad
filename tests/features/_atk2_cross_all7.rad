@@ -1,0 +1,64 @@
+// CROSS-EXTENSION STRESS TEST: Uses all 7 language extensions together
+
+// Extension 3: Named phases
+component Score { value: 0, label: "" }
+component Bonus { amount: 0 }
+
+// Extension 4: Typed event fields
+event Award { target: str, points: int }
+
+system ComputeBonus(s: Score) {
+    if s.value > 50 {
+        emit Award { target: s.label, points: s.value / 10 }
+    }
+}
+
+system ApplyDecay(s: Score) {
+    // no-op placeholder
+}
+
+phase Tick { ComputeBonus, ApplyDecay }
+
+// Extension 7: Guarded event handlers
+on Award(e) where e.points > 3 {
+    print(f"big award: {e.target} gets {e.points}")
+}
+
+on Award(e) when e.points <= 3 {
+    print(f"small award: {e.target} gets {e.points}")
+}
+
+// Extension 1: main() -> nil tolerates ?
+fn main() -> nil {
+    let a = spawn(Score { value: 80, label: "alice" })
+    let b = spawn(Score { value: 20, label: "bob" })
+    let c = spawn(Score { value: 60, label: "carol" })
+
+    // Extension 3: schedule with phase
+    schedule [Tick]
+
+    // Extension 2: enumerate
+    let scores = [80, 20, 60]
+    for pair in enumerate(scores) {
+        print(f"idx={pair[0]} score={pair[1]}")
+    }
+
+    // Extension 5: find/max_by/min_by
+    let best = max_by(scores, fn(x) { return x })
+    let worst = min_by(scores, fn(x) { return x })
+    let over50 = find(scores, fn(x) { return x > 50 })
+
+    print(f"best={unwrap(best)} worst={unwrap(worst)} first_over50={unwrap(over50)}")
+
+    // Extension 6: update sugar
+    update(a, Score) { value = 100 }
+    let sa = unwrap(get(a, Score))
+    print(f"alice updated: {sa.value}")
+
+    // Extension 1: ? on Option
+    let maybe = get(b, Bonus)
+    // get returns Option-like — but in rad ECS it returns the component or errors
+    // so let's use find which returns Option
+    let found = find([1, 2, 3], fn(x) { return x == 2 }) ?
+    print(f"found via ?: {found}")
+}

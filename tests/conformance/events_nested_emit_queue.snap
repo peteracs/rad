@@ -1,0 +1,7 @@
+---
+source: tests\conformance\events_nested_emit_queue.rad
+exit_code: 0
+---
+a1
+a2
+b

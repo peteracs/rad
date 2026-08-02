@@ -1,0 +1,27 @@
+// backend: both
+let mut i = 0
+while i < 5 {
+    i = i + 1
+    if i == 2 {
+        continue
+    }
+    if i == 5 {
+        break
+    }
+    print(i)
+}
+// expect: 1
+// expect: 3
+// expect: 4
+
+for n in [1, 2, 3, 4] {
+    if n == 2 {
+        continue
+    }
+    if n == 4 {
+        break
+    }
+    print(n)
+}
+// expect: 1
+// expect: 3

@@ -1,0 +1,15 @@
+system Bump(c: mut Counter) {
+  c.n = c.n + 10
+}
+
+resource Counter {
+  n: 0
+}
+
+fn main() -> nil {
+  schedule [Bump]
+  let c = get_resource(Counter) ?
+  print(f"n={c.n}")
+}
+
+// expect: n=10

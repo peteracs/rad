@@ -1,0 +1,13 @@
+// Attack: mix typed and untyped fields
+event Mixed { typed_f: int, untyped_f }
+
+on Mixed(e) {
+    print(e.typed_f, e.untyped_f)
+}
+
+fn main() -> nil {
+    emit Mixed { typed_f: 10, untyped_f: "anything" }
+    flush_events()
+}
+
+// expect: 10 anything

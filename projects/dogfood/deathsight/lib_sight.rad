@@ -1,0 +1,542 @@
+// lib_sight — the shared brain of DEATHSIGHT.
+//
+// Imported with `use "lib_sight.rad"` by main.rad (the terminal game) and
+// web_deathsight.rad (the browser game, run by projects/playground/deathsight.html
+// through the wasm VM). One brain, two hosts — the RADTACTICS pattern.
+//
+// Contents: the schema, the evented live combat path, the simulated futures
+// (including the player-model), the sight, the policies, and the necromancy
+// search that finds the timeline where you live.
+
+pub component Pos { x: int = 0, y: int = 0 }
+
+pub component Vital { hp: int = 0, max_hp: int = 0 }
+
+pub component Monster { kind: str = "", atk: int = 0, rng: int = 1, mov: int = 1 }
+
+pub component Intent { kind: str = "wait", tx: int = 0, ty: int = 0 }
+
+pub component Will { brave: int = 0 } // marker: the imagined player-model
+
+pub resource Run { turn: int = 0, futures: int = 0, log: str = "" }
+
+pub event Clawed { monster: entity, dmg: int }
+
+pub event Smote { target: entity, dmg: int }
+
+pub event Slain { victim: entity, by: str }
+
+// The dungeon. @ you, > the way out, g ghoul, h hound, s spitter, # wall.
+// The straight corridor IS the shortest path — that's the trap.
+let MAP = [
+    "#############",
+    "#...........#",
+    "#.#.#####.#.#",
+    "#...#####.s.#",
+    "#@..g.g.g..>#",
+    "#...#####...#",
+    "#.#.#####.#.#",
+    "#.....h.....#",
+    "#############",
+]
+let W = 13
+let H = 9
+let EXIT_X = 11
+let EXIT_Y = 4
+
+let DEPTH = 6 // how many turns deep the sight looks
+let SAMPLES = 8 // jittered monster futures sampled per candidate move
+let PLAYER_ATK = 4
+let MAX_TURNS = 60
+let MAX_REWIND = 20 // how far necromancy will dig (forks are CoW: ~free)
+
+pub pure fn dist(ax: int, ay: int, bx: int, by: int) -> int {
+    return abs(ax - bx) + abs(ay - by)
+}
+
+pub fn wall_at(x: int, y: int) -> bool {
+    if x < 0 or y < 0 or x >= W or y >= H { return true }
+    return chars(MAP[y])[x] == "#"
+}
+
+// BFS flow-field to the exit. Manhattan distance walks heroes into wall
+// pockets and leaves them doing `stay` forever in a cleared dungeon.
+pub fn bfs_exit() -> list < int > {
+    let mut field = []
+    for _i in range(0, W * H) { field << 9999 }
+    let mut queue = [(EXIT_X, EXIT_Y)]
+    field[EXIT_Y * W + EXIT_X] = 0
+    let mut head = 0
+    while head < len(queue) {
+        let cur = queue[head]
+        head = head + 1
+        let d = field[cur[1] * W + cur[0]]
+        for dd in [(0, - 1), (0, 1), ( - 1, 0), (1, 0)] {
+            let nx = cur[0] + dd[0]
+            let ny = cur[1] + dd[1]
+            if wall_at(nx, ny) { continue }
+            if field[ny * W + nx] <= d + 1 { continue }
+            field[ny * W + nx] = d + 1
+            queue << (nx, ny)
+        }
+    }
+    return field
+}
+
+let EXIT_FIELD = bfs_exit()
+
+// ---------------------------------------------------------------------------
+// The live combat path: every hp write is an event, so why() has a chain.
+// ---------------------------------------------------------------------------
+
+on Clawed(e) {
+    let you = get_entity("you")
+    let v = get(you, Vital) ?
+    let mut hp = v.hp - e.dmg
+    if hp < 0 { hp = 0 }
+    update(you, Vital) { hp = hp }
+    let n = name_of(e.monster)
+    let r = get_resource(Run) |> unwrap
+    set_resource(Run, Run {
+        turn: r.turn, futures: r.futures,
+        log: r.log + f"t{r.turn}: {n} hits you for {e.dmg} ({hp} hp left)\n",
+    })
+    if hp <= 0 { emit Slain { victim: you, by: n } }
+}
+
+on Smote(e) {
+    let v = get(e.target, Vital) ?
+    let mut hp = v.hp - e.dmg
+    if hp < 0 { hp = 0 }
+    update(e.target, Vital) { hp = hp }
+    let n = name_of(e.target)
+    let r = get_resource(Run) |> unwrap
+    let mut line = f"t{r.turn}: you smite {n} for {e.dmg} ({hp} hp left)\n"
+    if hp <= 0 { line = f"t{r.turn}: you smite {n} for {e.dmg} — it dies\n" }
+    set_resource(Run, Run { turn: r.turn, futures: r.futures, log: r.log + line })
+}
+
+on Slain(e) {
+    let r = get_resource(Run) |> unwrap
+    set_resource(Run, Run {
+        turn: r.turn, futures: r.futures,
+        log: r.log + f"t{r.turn}: {e.by} kills you\n",
+    })
+}
+
+// ---------------------------------------------------------------------------
+// The sight's imagination: systems that run ONLY inside simulate_par.
+// ---------------------------------------------------------------------------
+
+// The futures model YOU as well — a player who smites what's adjacent and
+// otherwise flees the pack while drifting toward the exit. Without this the
+// forecast freezes you in place, every deep future ends in death, and the
+// sight goes blind. Runs LAST in each simulated frame: a frame is "the
+// monsters answer your staged move, then imagined-you takes the next turn"
+// — the same order as the live loop.
+pub system FleeOrFight(_w: Will, p: mut Pos, v: Vital) after Pounce {
+    if v.hp <= 0 { return }
+    let mut target = ""
+    let mut weakest = 9999
+    for m in entities(Monster) {
+        let mv = get(m, Vital) |> unwrap
+        if mv.hp <= 0 { continue }
+        let mp = get(m, Pos) |> unwrap
+        if dist(p.x, p.y, mp.x, mp.y) <= 1 and mv.hp < weakest {
+            weakest = mv.hp
+            target = name_of(m)
+        }
+    }
+    if target != "" {
+        let m = get_entity(target)
+        let mut hp = weakest - PLAYER_ATK
+        if hp < 0 { hp = 0 }
+        update(m, Vital) { hp = hp }
+        return
+    }
+    let mut bx = p.x
+    let mut by = p.y
+    let mut best = - 9999
+    for d in [(0, 0), (0, - 1), (0, 1), ( - 1, 0), (1, 0)] {
+        let nx = p.x + d[0]
+        let ny = p.y + d[1]
+        if wall_at(nx, ny) { continue }
+        let mut nearest = 999
+        for m in entities(Monster) {
+            let mv = get(m, Vital) |> unwrap
+            if mv.hp <= 0 { continue }
+            let mp = get(m, Pos) |> unwrap
+            let dd = dist(nx, ny, mp.x, mp.y)
+            if dd < nearest { nearest = dd }
+        }
+        let mut score = nearest * 10 - EXIT_FIELD[ny * W + nx]
+        if score == best and rand_int(0, 1) == 0 { score = score + 1 }
+        if score > best {
+            best = score
+            bx = nx
+            by = ny
+        }
+    }
+    p = Pos { x: bx, y: by }
+}
+
+pub system Stalk(i: mut Intent, p: Pos, m: Monster, v: Vital) {
+    if v.hp <= 0 { return }
+    let you = get_entity("you")
+    let yv = get(you, Vital) |> unwrap
+    if yv.hp <= 0 { return }
+    let yp = get(you, Pos) |> unwrap
+    if dist(p.x, p.y, yp.x, yp.y) <= m.rng {
+        i = Intent { kind: "attack", tx: p.x, ty: p.y }
+        return
+    }
+    let mut nx = p.x
+    let mut ny = p.y
+    for _step in range(0, m.mov) {
+        if dist(nx, ny, yp.x, yp.y) <= m.rng { break }
+        if rand_int(0, 1) == 0 {
+            if yp.x > nx { nx = nx + 1 } else { if yp.x < nx { nx = nx - 1 } else {
+                if yp.y > ny { ny = ny + 1 } else { if yp.y < ny { ny = ny - 1 } }
+            } }
+        } else {
+            if yp.y > ny { ny = ny + 1 } else { if yp.y < ny { ny = ny - 1 } else {
+                if yp.x > nx { nx = nx + 1 } else { if yp.x < nx { nx = nx - 1 } }
+            } }
+        }
+    }
+    i = Intent { kind: "move", tx: nx, ty: ny }
+}
+
+pub system Pounce(i: mut Intent, p: mut Pos, m: Monster, v: Vital) after Stalk {
+    if v.hp <= 0 { return }
+    if i.kind == "move" {
+        if !wall_at(i.tx, i.ty) { p = Pos { x: i.tx, y: i.ty } }
+    }
+    if i.kind == "attack" {
+        let you = get_entity("you")
+        let yv = get(you, Vital) |> unwrap
+        if yv.hp > 0 {
+            let mut hp = yv.hp - m.atk
+            if hp < 0 { hp = 0 }
+            update(you, Vital) { hp = hp }
+        }
+    }
+    i = Intent { kind: "wait", tx: 0, ty: 0 }
+}
+
+// ---------------------------------------------------------------------------
+// Live-world queries and the deterministic live monster turn.
+// ---------------------------------------------------------------------------
+
+pub fn monster_at(x: int, y: int) -> str {
+    for m in entities(Monster) {
+        let v = get(m, Vital) |> unwrap
+        if v.hp <= 0 { continue }
+        let p = get(m, Pos) |> unwrap
+        if p.x == x and p.y == y { return name_of(m) }
+    }
+    return ""
+}
+
+pub fn blocked_for_monster(x: int, y: int) -> bool {
+    if wall_at(x, y) { return true }
+    if monster_at(x, y) != "" { return true }
+    let yp = get(get_entity("you"), Pos) |> unwrap
+    if yp.x == x and yp.y == y { return true }
+    return false
+}
+
+// Deterministic (x-axis first) so a rewound timeline replays honestly:
+// the only randomness in this whole program lives inside simulate_par.
+pub fn monsters_act() -> nil {
+    let you = get_entity("you")
+    for m in entities(Monster) {
+        let v = get(m, Vital) |> unwrap
+        if v.hp <= 0 { continue }
+        let yv = get(you, Vital) |> unwrap
+        if yv.hp <= 0 { return }
+        let mc = get(m, Monster) |> unwrap
+        let p0 = get(m, Pos) |> unwrap
+        let yp = get(you, Pos) |> unwrap
+        if dist(p0.x, p0.y, yp.x, yp.y) <= mc.rng {
+            emit Clawed { monster: m, dmg: mc.atk }
+            flush_events()
+            continue
+        }
+        let mut px = p0.x
+        let mut py = p0.y
+        for _step in range(0, mc.mov) {
+            if dist(px, py, yp.x, yp.y) <= mc.rng { break }
+            let mut nx = px
+            let mut ny = py
+            if yp.x > px { nx = px + 1 } else { if yp.x < px { nx = px - 1 } }
+            if nx == px {
+                if yp.y > py { ny = py + 1 } else { if yp.y < py { ny = py - 1 } }
+            }
+            if blocked_for_monster(nx, ny) {
+                nx = px
+                ny = py
+                if yp.y > py { ny = py + 1 } else { if yp.y < py { ny = py - 1 } }
+                if ny == py or blocked_for_monster(nx, ny) { break }
+            }
+            update(m, Pos) { x = nx, y = ny }
+            px = nx
+            py = ny
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Candidate moves + the sight: fork per candidate, sample jittered futures
+// in parallel, count the ones where you are dead, roll the universe back.
+// ---------------------------------------------------------------------------
+
+pub struct Cand { label: str = "", dir: str = "stay", kind: str = "stay", tx: int = 0, ty: int = 0, target: str = "" }
+
+pub fn candidates() -> list < Cand > {
+    let you = get_entity("you")
+    let p = get(you, Pos) |> unwrap
+    let mut out = [Cand { label: "stay", dir: "stay", kind: "stay", tx: p.x, ty: p.y, target: "" }]
+    for d in [("N", 0, - 1), ("S", 0, 1), ("W", - 1, 0), ("E", 1, 0)] {
+        let nx = p.x + d[1]
+        let ny = p.y + d[2]
+        if wall_at(nx, ny) { continue }
+        let tname = monster_at(nx, ny)
+        if tname != "" {
+            out << Cand { label: f"{d[0]}:smite {tname}", dir: d[0], kind: "attack", tx: nx, ty: ny, target: tname }
+        } else {
+            out << Cand { label: d[0], dir: d[0], kind: "move", tx: nx, ty: ny, target: "" }
+        }
+    }
+    return out
+}
+
+pub fn stage(c: Cand) -> nil {
+    let you = get_entity("you")
+    if c.kind == "move" {
+        update(you, Pos) { x = c.tx, y = c.ty }
+    }
+    if c.kind == "attack" {
+        let m = get_entity(c.target)
+        let v = get(m, Vital) |> unwrap
+        let mut hp = v.hp - PLAYER_ATK
+        if hp < 0 { hp = 0 }
+        update(m, Vital) { hp = hp }
+    }
+}
+
+// Returns a list of (Cand, deaths-out-of-SAMPLES, hp-sum-across-futures).
+pub fn deathsight() -> list {
+    let checkpoint = fork()
+    let you = get_entity("you")
+    let cands = candidates()
+    let mut report = []
+    let mut explored = 0
+    for c in cands {
+        // Live RNG is VM state, not world state: commit() never rewinds it,
+        // so this salt is deterministic under rand_seed() yet still diverges
+        // across necromancy's rewound timelines.
+        let salt = rand_int(0, 999999999)
+        stage(c)
+        let futs = simulate_par(fork(), [system::Stalk, system::Pounce, system::FleeOrFight], DEPTH, SAMPLES, salt)
+        let mut deaths = 0
+        let mut hp_sum = 0
+        for f in futs {
+            match peek(f, you, Vital) {
+                Some(v) => {
+                    if v.hp <= 0 { deaths = deaths + 1 } else { hp_sum = hp_sum + v.hp }
+                }
+                None => {}
+            }
+            explored = explored + 1
+        }
+        commit(checkpoint)
+        report << (c, deaths, hp_sum)
+    }
+    let r = get_resource(Run) |> unwrap
+    set_resource(Run, Run { turn: r.turn, futures: r.futures + explored, log: r.log })
+    return report
+}
+
+// ---------------------------------------------------------------------------
+// Policies. The doomed hero minimizes distance to the exit and nothing else.
+// The oracle: survival dominates, expected hp breaks near-ties, distance
+// applies steady pressure toward the exit so it never kites forever.
+// ---------------------------------------------------------------------------
+
+pub fn eff_dist(c: Cand) -> int {
+    if c.kind == "move" { return EXIT_FIELD[c.ty * W + c.tx] }
+    let p = get(get_entity("you"), Pos) |> unwrap
+    return EXIT_FIELD[p.y * W + p.x]
+}
+
+pub fn choose_doomed(report: list) -> Cand {
+    let mut best = report[0][0]
+    let mut best_d = 999999
+    for entry in report {
+        let c = entry[0]
+        let d = eff_dist(c)
+        let mut better = d < best_d
+        if d == best_d and c.kind == "attack" and best.kind != "attack" { better = true }
+        if better {
+            best = c
+            best_d = d
+        }
+    }
+    return best
+}
+
+pub fn choose_oracle(report: list) -> Cand {
+    let mut best = report[0][0]
+    let mut best_score = - 999999999
+    for entry in report {
+        let c = entry[0]
+        let deaths = entry[1]
+        let hp_sum = entry[2]
+        let score = (SAMPLES - deaths) * 10000 + hp_sum * 8 - eff_dist(c) * 60
+        if score > best_score {
+            best_score = score
+            best = c
+        }
+    }
+    return best
+}
+
+pub fn apply_live(c: Cand) -> nil {
+    let you = get_entity("you")
+    if c.kind == "move" {
+        update(you, Pos) { x = c.tx, y = c.ty }
+    }
+    if c.kind == "attack" {
+        emit Smote { target: get_entity(c.target), dmg: PLAYER_ATK }
+        flush_events()
+    }
+}
+
+// ---------------------------------------------------------------------------
+// World setup and a host-agnostic snapshot ("name kind x y hp max;...",
+// player first). Hosts render it however they like — ASCII or pixels.
+// ---------------------------------------------------------------------------
+
+pub fn spawn_dungeon() -> nil {
+    let mut g = 0
+    let mut h = 0
+    let mut s = 0
+    for y in range(0, H) {
+        let row = chars(MAP[y])
+        for x in range(0, W) {
+            let ch = row[x]
+            if ch == "@" {
+                let _you = spawn("you", Pos { x: x, y: y }, Vital { hp: 18, max_hp: 18 }, Will {})
+            }
+            if ch == "g" {
+                g = g + 1
+                let _m = spawn(f"ghoul-{g}", Pos { x: x, y: y }, Vital { hp: 6, max_hp: 6 },
+                    Monster { kind: "ghoul", atk: 3, rng: 1, mov: 1 }, Intent {})
+            }
+            if ch == "h" {
+                h = h + 1
+                let _m = spawn(f"hound-{h}", Pos { x: x, y: y }, Vital { hp: 4, max_hp: 4 },
+                    Monster { kind: "hound", atk: 2, rng: 1, mov: 2 }, Intent {})
+            }
+            if ch == "s" {
+                s = s + 1
+                let _m = spawn(f"spitter-{s}", Pos { x: x, y: y }, Vital { hp: 4, max_hp: 4 },
+                    Monster { kind: "spitter", atk: 2, rng: 4, mov: 1 }, Intent {})
+            }
+        }
+    }
+}
+
+pub fn dump_units() -> str {
+    let you = get_entity("you")
+    let yp = get(you, Pos) |> unwrap
+    let yv = get(you, Vital) |> unwrap
+    let mut parts = [f"you you {yp.x} {yp.y} {yv.hp} {yv.max_hp}"]
+    for m in entities(Monster) {
+        let v = get(m, Vital) |> unwrap
+        if v.hp <= 0 { continue }
+        let p = get(m, Pos) |> unwrap
+        let mc = get(m, Monster) |> unwrap
+        parts << f"{name_of(m)} {mc.kind} {p.x} {p.y} {v.hp} {v.max_hp}"
+    }
+    return join(parts, ";")
+}
+
+// ---------------------------------------------------------------------------
+// The ghost: replay an oracle line from a rewound universe, silently.
+// Returns (outcome, steps) where each step is (turn, label, units-dump
+// taken AFTER the ghost's move and the monsters' answer).
+// ---------------------------------------------------------------------------
+
+pub fn ghost_loop(start_turn: int, forced_first: str) -> (str, list) {
+    let you = get_entity("you")
+    let mut steps = []
+    let mut t = start_turn
+    let mut outcome = "timeout"
+    while t <= MAX_TURNS {
+        let r = get_resource(Run) |> unwrap
+        set_resource(Run, Run { turn: t, futures: r.futures, log: r.log })
+        let rep = deathsight()
+        let mut c = choose_oracle(rep)
+        if t == start_turn and forced_first != "" {
+            for entry in rep {
+                let cc = entry[0]
+                if cc.label == forced_first { c = cc }
+            }
+        }
+        apply_live(c)
+        let yp = get(you, Pos) |> unwrap
+        if yp.x == EXIT_X and yp.y == EXIT_Y {
+            steps << (t, c.label, dump_units())
+            outcome = "escaped"
+            break
+        }
+        monsters_act()
+        steps << (t, c.label, dump_units())
+        let yv = get(you, Vital) |> unwrap
+        if yv.hp <= 0 {
+            outcome = "died"
+            break
+        }
+        t = t + 1
+    }
+    return (outcome, steps)
+}
+
+// ---------------------------------------------------------------------------
+// Necromancy: rewind 1, 2, 3... turns; at each rewind point branch across
+// EVERY possible first move, each followed by oracle play. The smallest
+// rewind that escapes brackets the point of no return.
+//
+// Returns (found_back, first_label, ghost_steps, probes, search_cost):
+//   found_back  -1 if no surviving timeline within MAX_REWIND
+//   probes      list of (back, first_moves_tried) for rewinds that failed
+//
+// commit() rewinds the world — including Run.futures — so the search's true
+// cost accumulates in locals (which survive every commit) and is returned.
+// ---------------------------------------------------------------------------
+
+pub fn necromancy_search(checkpoints: list, death_turn: int) -> (int, str, list, list, int) {
+    let mut search_cost = 0
+    let mut probes = []
+    let mut back = 1
+    while back <= MAX_REWIND and back <= len(checkpoints) {
+        let rewind = checkpoints[len(checkpoints) - back]
+        let start_turn = death_turn - back + 1
+        commit(rewind)
+        let opts = candidates()
+        for c in opts {
+            commit(rewind)
+            let base = (get_resource(Run) |> unwrap).futures
+            let res = ghost_loop(start_turn, c.label)
+            search_cost = search_cost + (get_resource(Run) |> unwrap).futures - base
+            if res[0] == "escaped" {
+                return (back, c.label, res[1], probes, search_cost)
+            }
+        }
+        probes << (back, len(opts))
+        back = back + 1
+    }
+    return ( - 1, "", [], probes, search_cost)
+}

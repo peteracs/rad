@@ -1,0 +1,17 @@
+alice A1 widgets
+alice B1 1200
+alice C1 1350
+bob A2 gadgets
+bob B2 880
+bob C2 940
+alice A3 gizmos
+alice B3 410
+alice C3 505
+bob A4 doodads
+bob B4 75
+bob C4 60
+alice A5 TOTALS
+alice B5 =SUM(B1:B4)
+alice C5 =SUM(C1:C4)
+bob D5 =B5+C5
+done

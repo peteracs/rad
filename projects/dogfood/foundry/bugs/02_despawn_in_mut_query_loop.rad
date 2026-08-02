@@ -1,0 +1,37 @@
+// BUG 02: `despawn(id)` inside a mutable query loop crashes on writeback.
+//
+// This is the EXACT idiom documented in docs/src/guide/ecs.md ("Mutable Query
+// Loops", the second example):
+//
+//     for (id, pos, vel) in query { mut Position, Velocity } {
+//         pos.x = pos.x + vel.dx
+//         pos.y = pos.y + vel.dy
+//         if pos.y < 0.0 {
+//             despawn(id)
+//         }
+//     }
+//
+// Expected: entities below y=0 are despawned; the loop completes.
+// Actual:   Runtime error: Cannot set component on non-existent entity N
+//
+// Cause: the mut-query loop writes the `mut` binding back at the end of every
+// iteration, unconditionally, even when the body despawned that entity.
+
+component Position { x: 0.0, y: 0.0 }
+component Velocity { dx: 0.0, dy: 0.0 }
+
+for i in range(0, 4) {
+    spawn(Position { x: 0.0, y: 1.0 - float(i) }, Velocity { dx: 1.0, dy: -1.0 })
+}
+
+print(f"before: {len(query { Position })} entities")
+
+for (id, pos, vel) in query { mut Position, Velocity } {
+    pos.x = pos.x + vel.dx
+    pos.y = pos.y + vel.dy
+    if pos.y < 0.0 {
+        despawn(id)
+    }
+}
+
+print(f"after: {len(query { Position })} entities")

@@ -1,0 +1,284 @@
+// Comprehensive builtin contract tests
+// Each section tests one builtin's complete contract:
+//   argument types, return types, edge cases, error conditions
+
+// ── print ──────────────────────────────────────────────
+print("hello")
+// expect: hello
+print(1, "two", true)
+// expect: 1 two true
+print()
+// expect:
+
+// ── typeof ─────────────────────────────────────────────
+print(typeof(42))
+// expect: int
+print(typeof(3.14))
+// expect: float
+print(typeof("s"))
+// expect: str
+print(typeof(true))
+// expect: bool
+print(typeof([1]))
+// expect: list
+print(typeof(nil))
+// expect: nil
+
+// ── str ────────────────────────────────────────────────
+print(str(42))
+// expect: 42
+print(str(3.14))
+// expect: 3.14
+print(str(true))
+// expect: true
+print(str(nil))
+// expect: nil
+print(str([1, 2]))
+// expect: [1, 2]
+
+// ── int ────────────────────────────────────────────────
+print(int(42))
+// expect: 42
+print(int(3.9))
+// expect: 3
+print(int("7"))
+// expect: 7
+print(int(true))
+// expect: 1
+print(int(false))
+// expect: 0
+
+// ── float ──────────────────────────────────────────────
+print(float(2))
+// expect: 2.0
+print(float(3.5))
+// expect: 3.5
+print(float("1.5"))
+// expect: 1.5
+
+// ── abs (returns same type as input) ───────────────────
+print(abs(-9))
+// expect: 9
+print(abs(5))
+// expect: 5
+print(abs(-2.5))
+// expect: 2.5
+print(abs(0))
+// expect: 0
+
+// ── min / max ──────────────────────────────────────────
+print(min(3, 7))
+// expect: 3
+print(max(3, 7))
+// expect: 7
+print(min(1.5, 2.5))
+// expect: 1.5
+print(max(1.5, 2.5))
+// expect: 2.5
+print(min(1, 2.5))
+// expect: 1.0
+print(max(1, 2.5))
+// expect: 2.5
+
+// ── len ────────────────────────────────────────────────
+print(len([1, 2, 3]))
+// expect: 3
+print(len([]))
+// expect: 0
+print(len("hello"))
+// expect: 5
+print(len(""))
+// expect: 0
+print(len( {"a": 1, "b": 2}))
+// expect: 2
+
+// ── range (1-arg, 2-arg, 3-arg) ───────────────────────
+print(range(4))
+// expect: [0, 1, 2, 3]
+print(range(0))
+// expect: []
+print(range(2, 5))
+// expect: [2, 3, 4]
+print(range(0, 10, 3))
+// expect: [0, 3, 6, 9]
+print(range(5, 0, -1))
+// expect: [5, 4, 3, 2, 1]
+
+// ── contains (list / string / map) ─────────────────────
+print(contains([1, 2, 3], 2))
+// expect: true
+print(contains([1, 2, 3], 9))
+// expect: false
+print(contains("hello", "ell"))
+// expect: true
+print(contains("hello", "xyz"))
+// expect: false
+print(contains( {"a": 1}, "a"))
+// expect: true
+print(contains( {"a": 1}, "b"))
+// expect: false
+
+// ── keys (map / component) ────────────────────────────
+print(keys( {"x": 1, "y": 2}))
+// expect: ["x", "y"]
+component Pt { a: 0, b: 0 }
+let pt = Pt { a: 1, b: 2 }
+print(str(keys(pt)))
+// expect: ["a", "b"]
+
+// ── push (returns new list) ────────────────────────────
+let xs = [1, 2]
+let ys = push(xs, 3)
+print(xs)
+// expect: [1, 2]
+print(ys)
+// expect: [1, 2, 3]
+
+// ── pop (returns last element, like pop_last) ──────────
+print(pop([1, 2, 3]))
+// expect: 3
+
+// ── pop_last / drop_last (single-purpose pop helpers) ──
+print(pop_last([1, 2, 3]))
+// expect: 3
+print(drop_last([1, 2, 3]))
+// expect: [1, 2]
+
+// ── sort ───────────────────────────────────────────────
+print(sort([3, 1, 2]))
+// expect: [1, 2, 3]
+print(sort(["c", "a", "b"]))
+// expect: ["a", "b", "c"]
+print(sort([]))
+// expect: []
+
+// ── reverse (list and string) ──────────────────────────
+print(reverse([1, 2, 3]))
+// expect: [3, 2, 1]
+print(reverse("abc"))
+// expect: cba
+print(reverse([]))
+// expect: []
+
+// ── slice (list and string) ────────────────────────────
+print(slice([0, 1, 2, 3], 1, 3))
+// expect: [1, 2]
+print(slice("abcdef", 2, 5))
+// expect: cde
+print(slice([1, 2, 3], 0, 0))
+// expect: []
+
+// ── map ────────────────────────────────────────────────
+print(map([1, 2, 3], fn(x) { return x * 10 }))
+// expect: [10, 20, 30]
+print(map([], fn(x) { return x }))
+// expect: []
+
+// ── filter ─────────────────────────────────────────────
+print(filter([1, 2, 3, 4], fn(x) { return x > 2 }))
+// expect: [3, 4]
+print(filter([], fn(x) { return true }))
+// expect: []
+
+// ── reduce (list, init, fn) ───────────────────────────
+print(reduce([1, 2, 3], 0, fn(a, b) { return a + b }))
+// expect: 6
+print(reduce([], 42, fn(a, b) { return a + b }))
+// expect: 42
+
+// ── format ─────────────────────────────────────────────
+print(format("hello {} and {}", "world", 42))
+// expect: hello world and 42
+print(format("no placeholders"))
+// expect: no placeholders
+
+// ── entries ────────────────────────────────────────────
+let m = {"a": 1, "b": 2}
+let e = entries(m)
+print(len(e))
+// expect: 2
+
+// ── merge ──────────────────────────────────────────────
+print(merge( {"x": 1}, {"x": 3, "y": 2}))
+// expect: {"x": 3, "y": 2}
+print(merge( {}, {"a": 1}))
+// expect: {"a": 1}
+
+// ── group_by ───────────────────────────────────────────
+fn parity(n) {
+    if n % 2 == 0 { return "even" }
+    return "odd"
+}
+let g = group_by([1, 2, 3, 4], parity)
+print(g["even"])
+// expect: [2, 4]
+print(g["odd"])
+// expect: [1, 3]
+
+// ── split ──────────────────────────────────────────────
+print(split("a,b,c", ","))
+// expect: ["a", "b", "c"]
+print(split("hello", "x"))
+// expect: ["hello"]
+
+// ── join ───────────────────────────────────────────────
+print(join(["a", "b", "c"], "-"))
+// expect: a-b-c
+print(join([], ","))
+// expect:
+
+// ── trim ───────────────────────────────────────────────
+print(trim("  hi  "))
+// expect: hi
+print(trim("no_space"))
+// expect: no_space
+
+// ── replace ────────────────────────────────────────────
+print(replace("hello world", "world", "rad"))
+// expect: hello rad
+print(replace("aaa", "a", "b"))
+// expect: bbb
+
+// ── starts_with / ends_with ────────────────────────────
+print(starts_with("hello", "hel"))
+// expect: true
+print(starts_with("hello", "xyz"))
+// expect: false
+print(ends_with("hello", "llo"))
+// expect: true
+print(ends_with("hello", "xyz"))
+// expect: false
+
+// ── append / extend (concatenate lists) ────────────────
+print(append([1, 2], [3, 4]))
+// expect: [1, 2, 3, 4]
+print(extend([1], [2, 3]))
+// expect: [1, 2, 3]
+
+// ── zip ────────────────────────────────────────────────
+print(zip([1, 2, 3], ["a", "b", "c"]))
+// expect: [[1, "a"], [2, "b"], [3, "c"]]
+print(zip([1, 2], [10, 20, 30]))
+// expect: [[1, 10], [2, 20]]
+
+// ── flat_map ───────────────────────────────────────────
+print(flat_map([1, 2, 3], fn(x) { return [x, x * 10] }))
+// expect: [1, 10, 2, 20, 3, 30]
+print(flat_map([], fn(x) { return [x] }))
+// expect: []
+
+// ── try_int / try_float (return Option) ────────────────
+let ok_int = try_int("42")
+print(unwrap(ok_int))
+// expect: 42
+let bad_int = try_int("nope")
+print(typeof(bad_int))
+// expect: Option
+
+// ── try_float ──────────────────────────────────────────
+let ok_float = try_float("3.14")
+print(unwrap(ok_float))
+// expect: 3.14
+let bad_float = try_float("nope")
+print(typeof(bad_float))
+// expect: Option

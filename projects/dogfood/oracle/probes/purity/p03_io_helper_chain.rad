@@ -1,0 +1,26 @@
+// P03: three levels of indirection between the system and the IO.
+// EXPECT: compile-time rejection (transitive effect inference).
+component C { v: int = 0 }
+
+fn level3(n: int) -> int {
+    print("ESCAPED-P03 io ran three calls deep inside simulate")
+    return n + 1
+}
+
+fn level2(n: int) -> int {
+    return level3(n)
+}
+
+fn level1(n: int) -> int {
+    return level2(n)
+}
+
+system Leak(c: mut C) {
+    c.v = level1(c.v)
+}
+
+let e = spawn("e", C { v: 0 })
+let f = fork()
+let r = simulate(f, [system::Leak], 2)
+let got = peek(r, e, C) |> unwrap
+print(f"COMPILED-AND-RAN v={got.v}")

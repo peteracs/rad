@@ -1,0 +1,41 @@
+// index_of() — first index or -1 (slot arithmetic composes with -1) —
+// and the shopwork transaction pattern: world forks as an undo stack.
+
+component Wallet { gold: int = 100 }
+
+component Bag { slots: list = [nil, nil, nil] }
+
+fn main() -> nil {
+    // index_of basics
+    let xs = ["a", "b", "c", "b"]
+    print(index_of(xs, "b"))         // 1 (first match)
+    print(index_of(xs, "z"))         // -1
+    print(index_of([], 5))           // -1
+    let slots: list < any > = [nil, "x"]
+    print(index_of(slots, nil))      // 0 (nil is findable — free slots)
+    print(index_of([1, 2, 3], 3))    // 2
+    print(index_of([(1, 2), (3, 4)], (3, 4)))   // 1 (structural equality)
+
+    // the undo stack: snapshot before acting, commit to roll back
+    let hero = entity "hero" { Wallet {}, Bag {} }
+    let mut undo = []
+
+    undo << fork()
+    update(hero, Wallet) { gold = 40 }
+    update(hero, Bag) { slots[0] = "sword" }
+    print(f"acted:  {require(hero, Wallet).gold}g {require(hero, Bag).slots}")
+
+    undo << fork()
+    update(hero, Wallet) { gold = 0 }
+    update(hero, Bag) { slots[1] = "shield" }
+    print(f"acted:  {require(hero, Wallet).gold}g {require(hero, Bag).slots}")
+
+    // undo twice, newest first — each commit restores a whole world.
+    // pop() is pure (value semantics): read the top, then shrink.
+    commit(pop(undo))
+    undo = drop_last(undo)
+    print(f"undo 1: {require(hero, Wallet).gold}g {require(hero, Bag).slots}")
+    commit(pop(undo))
+    undo = drop_last(undo)
+    print(f"undo 2: {require(hero, Wallet).gold}g {require(hero, Bag).slots}")
+}

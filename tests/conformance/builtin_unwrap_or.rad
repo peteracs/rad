@@ -1,0 +1,17 @@
+// backend: both
+let some_val = Option::Some { value: 42 }
+let none_val = Option::None {}
+
+print(unwrap_or(some_val, 0))
+print(unwrap_or(none_val, 99))
+
+let ok_val = Result::Ok { value: "hello" }
+let err_val = Result::Err { message: "fail" }
+
+print(unwrap_or(ok_val, "default"))
+print(unwrap_or(err_val, "default"))
+
+// expect: 42
+// expect: 99
+// expect: hello
+// expect: default

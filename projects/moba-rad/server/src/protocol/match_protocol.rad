@@ -1,0 +1,528 @@
+use "../sim/components.rad"
+use "../world/scene.rad"
+use "../world/avatars.rad"
+use "../server/state.rad"
+use "../server/input_queue.rad"
+use "../sim/projectiles.rad"
+
+// Single binary packet grammar for native UDP and the browser WebTransport
+// gateway. The edge proxy forwards these bytes without parsing or branching,
+// so this module and client/src/transport/matchProtocol.ts are the only owners
+// of the wire format and must evolve together.
+//
+// Header: [0] magic 0x4d, [1] version 10, [2] kind.
+// Numeric fields are little-endian u32/i32. Coordinates are signed fixed-point
+// integers with 1000 units per world unit.
+
+pub fn match_protocol_name() -> str {
+    return "moba-rad/udp-v10-peer-snapshot"
+}
+
+pub fn protocol_magic() -> int { return 77 }
+pub fn protocol_version() -> int { return 10 }
+pub fn packet_kind_sync() -> int { return 1 }
+pub fn packet_kind_move() -> int { return 2 }
+pub fn packet_kind_disconnect() -> int { return 3 }
+pub fn packet_kind_state() -> int { return 4 }
+pub fn packet_kind_error() -> int { return 5 }
+pub fn packet_kind_cast() -> int { return 6 }
+pub fn sync_packet_len() -> int { return 15 }
+pub fn move_packet_len() -> int { return 31 }
+pub fn disconnect_packet_len() -> int { return 15 }
+pub fn cast_packet_len() -> int { return 35 }
+pub fn state_packet_header_len() -> int { return 92 }
+pub fn state_peer_record_len() -> int { return 44 }
+pub fn state_avatar_record_len() -> int { return 26 }
+pub fn state_projectile_record_len() -> int { return 36 }
+pub fn state_projectile_impact_record_len() -> int { return 25 }
+pub fn state_packet_len() -> int { return state_packet_header_len() + state_avatar_record_len() }
+pub fn error_packet_len() -> int { return 4 }
+pub fn coord_scale() -> float { return 1000.0 }
+
+pub fn byte_at(packet: any, index: int) -> int {
+    if index < 0 or index >= len(packet) { return -1 }
+    return bytebuf_get(packet, index)
+}
+
+pub fn u32_at(packet: any, offset: int) -> int {
+    if offset < 0 or offset + 4 > len(packet) { return -1 }
+    return bytebuf_get_u32_le(packet, offset)
+}
+
+pub fn i32_at(packet: any, offset: int) -> int {
+    if offset < 0 or offset + 4 > len(packet) { return 0 }
+    return bytebuf_get_i32_le(packet, offset)
+}
+
+pub fn coord_to_wire(value: float) -> int {
+    return round(clamp(value, -1000000.0, 1000000.0) * coord_scale())
+}
+
+pub fn coord_from_wire(value: int) -> float {
+    return float(value) / coord_scale()
+}
+
+pub fn has_header(packet: any, kind: int, expected_len: int) -> bool {
+    return len(packet) == expected_len and
+        byte_at(packet, 0) == protocol_magic() and
+        byte_at(packet, 1) == protocol_version() and
+        byte_at(packet, 2) == kind
+}
+
+pub fn positive_u32_at(packet: any, offset: int) -> bool {
+    return u32_at(packet, offset) > 0
+}
+
+pub fn encode_sync_packet(client_seq: int, session_id: int, player_id: int) -> any {
+    let mut packet = bytebuf_new(sync_packet_len())
+    packet = bytebuf_set_u8(packet, 0, protocol_magic())
+    packet = bytebuf_set_u8(packet, 1, protocol_version())
+    packet = bytebuf_set_u8(packet, 2, packet_kind_sync())
+    packet = bytebuf_set_u32_le(packet, 3, client_seq)
+    packet = bytebuf_set_u32_le(packet, 7, session_id)
+    packet = bytebuf_set_u32_le(packet, 11, player_id)
+    return packet
+}
+
+pub fn encode_disconnect_packet(client_seq: int, session_id: int, player_id: int) -> any {
+    let mut packet = bytebuf_new(disconnect_packet_len())
+    packet = bytebuf_set_u8(packet, 0, protocol_magic())
+    packet = bytebuf_set_u8(packet, 1, protocol_version())
+    packet = bytebuf_set_u8(packet, 2, packet_kind_disconnect())
+    packet = bytebuf_set_u32_le(packet, 3, client_seq)
+    packet = bytebuf_set_u32_le(packet, 7, session_id)
+    packet = bytebuf_set_u32_le(packet, 11, player_id)
+    return packet
+}
+
+pub fn encode_move_order_packet(client_seq: int, session_id: int, player_id: int, target_tick: int, command_id: int, target_x: float, target_y: float) -> any {
+    let mut packet = bytebuf_new(move_packet_len())
+    packet = bytebuf_set_u8(packet, 0, protocol_magic())
+    packet = bytebuf_set_u8(packet, 1, protocol_version())
+    packet = bytebuf_set_u8(packet, 2, packet_kind_move())
+    packet = bytebuf_set_u32_le(packet, 3, client_seq)
+    packet = bytebuf_set_u32_le(packet, 7, session_id)
+    packet = bytebuf_set_u32_le(packet, 11, player_id)
+    packet = bytebuf_set_u32_le(packet, 15, target_tick)
+    packet = bytebuf_set_u32_le(packet, 19, command_id)
+    packet = bytebuf_set_i32_le(packet, 23, coord_to_wire(target_x))
+    packet = bytebuf_set_i32_le(packet, 27, coord_to_wire(target_y))
+    return packet
+}
+
+pub fn encode_cast_packet(client_seq: int, session_id: int, player_id: int, target_tick: int, command_id: int, dir_x: float, dir_y: float, fire_view_tick: int) -> any {
+    let mut packet = bytebuf_new(cast_packet_len())
+    packet = bytebuf_set_u8(packet, 0, protocol_magic())
+    packet = bytebuf_set_u8(packet, 1, protocol_version())
+    packet = bytebuf_set_u8(packet, 2, packet_kind_cast())
+    packet = bytebuf_set_u32_le(packet, 3, client_seq)
+    packet = bytebuf_set_u32_le(packet, 7, session_id)
+    packet = bytebuf_set_u32_le(packet, 11, player_id)
+    packet = bytebuf_set_u32_le(packet, 15, target_tick)
+    packet = bytebuf_set_u32_le(packet, 19, command_id)
+    packet = bytebuf_set_i32_le(packet, 23, coord_to_wire(dir_x))
+    packet = bytebuf_set_i32_le(packet, 27, coord_to_wire(dir_y))
+    packet = bytebuf_set_u32_le(packet, 31, fire_view_tick)
+    return packet
+}
+
+pub fn is_sync_packet(packet: any) -> bool {
+    return has_header(packet, packet_kind_sync(), sync_packet_len()) and
+        positive_u32_at(packet, 3) and
+        positive_u32_at(packet, 7) and
+        positive_u32_at(packet, 11)
+}
+
+pub fn is_disconnect_packet(packet: any) -> bool {
+    return has_header(packet, packet_kind_disconnect(), disconnect_packet_len()) and
+        positive_u32_at(packet, 3) and
+        positive_u32_at(packet, 7) and
+        positive_u32_at(packet, 11)
+}
+
+pub fn is_move_order_packet(packet: any) -> bool {
+    return has_header(packet, packet_kind_move(), move_packet_len()) and
+        positive_u32_at(packet, 3) and
+        positive_u32_at(packet, 7) and
+        positive_u32_at(packet, 11) and
+        positive_u32_at(packet, 15) and
+        positive_u32_at(packet, 19)
+}
+
+pub fn is_cast_packet(packet: any) -> bool {
+    return has_header(packet, packet_kind_cast(), cast_packet_len()) and
+        positive_u32_at(packet, 3) and
+        positive_u32_at(packet, 7) and
+        positive_u32_at(packet, 11) and
+        positive_u32_at(packet, 15) and
+        positive_u32_at(packet, 19)
+}
+
+pub fn sync_packet_client_seq(packet: any) -> int { return u32_at(packet, 3) }
+pub fn sync_packet_session_id(packet: any) -> int { return u32_at(packet, 7) }
+pub fn sync_packet_player_id(packet: any) -> int { return u32_at(packet, 11) }
+pub fn disconnect_packet_client_seq(packet: any) -> int { return u32_at(packet, 3) }
+pub fn disconnect_packet_session_id(packet: any) -> int { return u32_at(packet, 7) }
+pub fn disconnect_packet_player_id(packet: any) -> int { return u32_at(packet, 11) }
+pub fn move_packet_client_seq(packet: any) -> int { return u32_at(packet, 3) }
+pub fn move_packet_session_id(packet: any) -> int { return u32_at(packet, 7) }
+pub fn move_packet_player_id(packet: any) -> int { return u32_at(packet, 11) }
+pub fn move_packet_target_tick(packet: any) -> int { return u32_at(packet, 15) }
+pub fn move_packet_command_id(packet: any) -> int { return u32_at(packet, 19) }
+pub fn move_packet_target_x(packet: any) -> float { return coord_from_wire(i32_at(packet, 23)) }
+pub fn move_packet_target_y(packet: any) -> float { return coord_from_wire(i32_at(packet, 27)) }
+pub fn cast_packet_client_seq(packet: any) -> int { return u32_at(packet, 3) }
+pub fn cast_packet_session_id(packet: any) -> int { return u32_at(packet, 7) }
+pub fn cast_packet_player_id(packet: any) -> int { return u32_at(packet, 11) }
+pub fn cast_packet_target_tick(packet: any) -> int { return u32_at(packet, 15) }
+pub fn cast_packet_command_id(packet: any) -> int { return u32_at(packet, 19) }
+pub fn cast_packet_dir_x(packet: any) -> float { return coord_from_wire(i32_at(packet, 23)) }
+pub fn cast_packet_dir_y(packet: any) -> float { return coord_from_wire(i32_at(packet, 27)) }
+pub fn cast_packet_fire_view_tick(packet: any) -> int { return u32_at(packet, 31) }
+
+pub fn status_code(status: str) -> int {
+    if status == "sync" { return 1 }
+    if status == "queued" { return 2 }
+    if status == "duplicate" { return 3 }
+    if status == "late" { return 4 }
+    if status == "too-far-ahead" { return 5 }
+    if status == "applied" { return 6 }
+    if status == "snapshot" { return 7 }
+    if status == "player-conflict" or status == "player already connected" { return 8 }
+    if status == "peer-table-full" or status == "peer table full" { return 9 }
+    if status == "rejected" { return 10 }
+    if status == "expired" { return 11 }
+    if status == "bye" { return 12 }
+    if status == "bye-miss" { return 13 }
+    if status == "full-sync" { return 14 }
+    if status == "cast-queued" { return 15 }
+    if status == "cast" { return 16 }
+    return 0
+}
+
+pub fn correction_reason_code(status: str) -> int {
+    if status == "applied" { return 1 }
+    if status == "late" { return 2 }
+    if status == "too-far-ahead" { return 3 }
+    if status == "duplicate" { return 4 }
+    if status == "expired" { return 5 }
+    if status == "queued" or status == "cast-queued" { return 6 }
+    if status == "sync" or status == "full-sync" { return 7 }
+    if status == "snapshot" { return 8 }
+    if status == "player-conflict" or status == "player already connected" { return 9 }
+    if status == "peer-table-full" or status == "peer table full" { return 10 }
+    if status == "rejected" { return 11 }
+    if status == "cast" { return 12 }
+    return 0
+}
+
+pub fn avatar_model_code(model: str) -> int {
+    if model == "clockwork_mage" { return 1 }
+    return 0
+}
+
+pub fn max_state_peer_records() -> int {
+    let cfg = res(ServerConfig)
+    let budget = cfg.snapshot_mtu_bytes - state_packet_header_len() - state_avatar_record_len()
+    if budget < state_peer_record_len() { return 0 }
+    let max_records = budget / state_peer_record_len()
+    return min(max_records, max_peers())
+}
+
+pub fn peer_record_count_for_packet() -> int {
+    let max_records = max_state_peer_records()
+    let mut count = 0
+    for peer in entities(PeerConnection) {
+        let conn = get(peer, PeerConnection) |> unwrap
+        if conn.connected {
+            count = count + 1
+            if count >= max_records { return count }
+        }
+    }
+    return count
+}
+
+pub fn max_state_avatar_records_for_peer_count(peer_record_count: int) -> int {
+    let cfg = res(ServerConfig)
+    let peer_bytes = max(peer_record_count, 0) * state_peer_record_len()
+    let budget = cfg.snapshot_mtu_bytes - state_packet_header_len() - peer_bytes
+    if budget < state_avatar_record_len() { return 1 }
+    return budget / state_avatar_record_len()
+}
+
+pub fn max_state_avatar_records() -> int {
+    return max_state_avatar_records_for_peer_count(0)
+}
+
+pub fn avatar_interesting_to(avatar: entity, viewer_player_id: int, viewer_x: float, viewer_y: float) -> bool {
+    let owner = get(avatar, PlayerControlled) |> unwrap
+    if owner.player_id == viewer_player_id { return true }
+
+    let pos = get(avatar, Position) |> unwrap
+    let radius = res(ServerConfig).snapshot_interest_radius
+    let dx = pos.x - viewer_x
+    let dy = pos.y - viewer_y
+    return dx * dx + dy * dy <= radius * radius
+}
+
+pub fn interested_avatar_count(viewer_player_id: int, viewer_x: float, viewer_y: float) -> int {
+    let max_records = max_state_avatar_records()
+    let mut count = 0
+    for avatar in entities(PlayerControlled) {
+        if avatar_interesting_to(avatar, viewer_player_id, viewer_x, viewer_y) {
+            count = count + 1
+            if count >= max_records { return count }
+        }
+    }
+    return count
+}
+
+pub fn avatar_count_for_packet(viewer_player_id: int, viewer_x: float, viewer_y: float, full_sync: bool, peer_record_count: int) -> int {
+    let max_records = max_state_avatar_records_for_peer_count(peer_record_count)
+    let mut count = 0
+    for avatar in entities(PlayerControlled) {
+        if full_sync or avatar_interesting_to(avatar, viewer_player_id, viewer_x, viewer_y) {
+            count = count + 1
+            if count >= max_records { return count }
+        }
+    }
+    return count
+}
+
+pub fn max_projectile_records_for_counts(peer_record_count: int, avatar_count: int) -> int {
+    let cfg = res(ServerConfig)
+    let budget = cfg.snapshot_mtu_bytes -
+        state_packet_header_len() -
+        peer_record_count * state_peer_record_len() -
+        avatar_count * state_avatar_record_len()
+    if budget < state_projectile_record_len() { return 0 }
+    return budget / state_projectile_record_len()
+}
+
+pub fn max_impact_records_for_counts(peer_record_count: int, avatar_count: int, projectile_count: int) -> int {
+    let cfg = res(ServerConfig)
+    let budget = cfg.snapshot_mtu_bytes -
+        state_packet_header_len() -
+        peer_record_count * state_peer_record_len() -
+        avatar_count * state_avatar_record_len() -
+        projectile_count * state_projectile_record_len()
+    if budget < state_projectile_impact_record_len() { return 0 }
+    return budget / state_projectile_impact_record_len()
+}
+
+pub fn projectile_interesting_to(projectile: entity, viewer_player_id: int, viewer_x: float, viewer_y: float, full_sync: bool) -> bool {
+    if full_sync { return true }
+    let shot = get(projectile, Projectile) |> unwrap
+    if shot.owner_id == viewer_player_id { return true }
+
+    let pos = get(projectile, Position) |> unwrap
+    let radius = res(ServerConfig).snapshot_interest_radius
+    let dx = pos.x - viewer_x
+    let dy = pos.y - viewer_y
+    return dx * dx + dy * dy <= radius * radius
+}
+
+pub fn projectile_count_for_packet(viewer_player_id: int, viewer_x: float, viewer_y: float, full_sync: bool, peer_record_count: int, avatar_count: int) -> int {
+    let max_records = max_projectile_records_for_counts(peer_record_count, avatar_count)
+    let mut count = 0
+    for projectile in entities(Projectile) {
+        if projectile_interesting_to(projectile, viewer_player_id, viewer_x, viewer_y, full_sync) {
+            count = count + 1
+            if count >= max_records { return count }
+        }
+    }
+    return count
+}
+
+pub fn projectile_impact_interesting_to(slot: int, viewer_player_id: int, viewer_x: float, viewer_y: float, full_sync: bool) -> bool {
+    let log = res(ProjectileImpactLog)
+    if log.event_ids[slot] <= 0 { return false }
+    if full_sync { return true }
+    if log.owner_ids[slot] == viewer_player_id or log.target_ids[slot] == viewer_player_id { return true }
+
+    let radius = res(ServerConfig).snapshot_interest_radius
+    let dx = log.xs[slot] - viewer_x
+    let dy = log.ys[slot] - viewer_y
+    return dx * dx + dy * dy <= radius * radius
+}
+
+pub fn projectile_impact_count_for_packet(viewer_player_id: int, viewer_x: float, viewer_y: float, full_sync: bool, peer_record_count: int, avatar_count: int, projectile_count: int) -> int {
+    let max_records = max_impact_records_for_counts(peer_record_count, avatar_count, projectile_count)
+    let mut count = 0
+    let mut slot = 0
+    while slot < projectile_impact_log_capacity() {
+        if projectile_impact_interesting_to(slot, viewer_player_id, viewer_x, viewer_y, full_sync) {
+            count = count + 1
+            if count >= max_records { return count }
+        }
+        slot = slot + 1
+    }
+    return count
+}
+
+pub fn encode_state_packet(status: str, server_ms: int, server_tick: int, server_seq: int, session_id: int, player_id: int, ack_client_seq: int, ack_bits: int) -> any {
+    return encode_state_packet_for_interest(status, server_ms, server_tick, server_seq, session_id, player_id, ack_client_seq, ack_bits, 0, 0, 0, 0, 0, false, 0, 0, 0, 0, 0, 0, 0, false)
+}
+
+pub fn encode_full_state_packet(status: str, server_ms: int, server_tick: int, server_seq: int, session_id: int, player_id: int, ack_client_seq: int, ack_bits: int) -> any {
+    return encode_state_packet_for_interest(status, server_ms, server_tick, server_seq, session_id, player_id, ack_client_seq, ack_bits, 0, 0, 0, 0, 0, false, 0, 0, 0, 0, 0, 0, 0, true)
+}
+
+pub fn encode_state_packet_with_telemetry(status: str, server_ms: int, server_tick: int, server_seq: int, session_id: int, player_id: int, ack_client_seq: int, ack_bits: int, peer_count_value: int, max_peers_value: int, input_slots_value: int, pending_move_count: int, pending_cast_count: int, peer_connected: bool, late_input_count: int, future_input_count: int, duplicate_input_count: int, overwritten_input_count: int, last_client_seq: int, last_applied_client_seq: int, applied_ack_bits: int) -> any {
+    return encode_state_packet_for_interest(status, server_ms, server_tick, server_seq, session_id, player_id, ack_client_seq, ack_bits, peer_count_value, max_peers_value, input_slots_value, pending_move_count, pending_cast_count, peer_connected, late_input_count, future_input_count, duplicate_input_count, overwritten_input_count, last_client_seq, last_applied_client_seq, applied_ack_bits, false)
+}
+
+pub fn encode_full_state_packet_with_telemetry(status: str, server_ms: int, server_tick: int, server_seq: int, session_id: int, player_id: int, ack_client_seq: int, ack_bits: int, peer_count_value: int, max_peers_value: int, input_slots_value: int, pending_move_count: int, pending_cast_count: int, peer_connected: bool, late_input_count: int, future_input_count: int, duplicate_input_count: int, overwritten_input_count: int, last_client_seq: int, last_applied_client_seq: int, applied_ack_bits: int) -> any {
+    return encode_state_packet_for_interest(status, server_ms, server_tick, server_seq, session_id, player_id, ack_client_seq, ack_bits, peer_count_value, max_peers_value, input_slots_value, pending_move_count, pending_cast_count, peer_connected, late_input_count, future_input_count, duplicate_input_count, overwritten_input_count, last_client_seq, last_applied_client_seq, applied_ack_bits, true)
+}
+
+pub fn encode_state_packet_for_interest(status: str, server_ms: int, server_tick: int, server_seq: int, session_id: int, player_id: int, ack_client_seq: int, ack_bits: int, peer_count_value: int, max_peers_value: int, input_slots_value: int, pending_move_count: int, pending_cast_count: int, peer_connected: bool, late_input_count: int, future_input_count: int, duplicate_input_count: int, overwritten_input_count: int, last_client_seq: int, last_applied_client_seq: int, applied_ack_bits: int, full_sync: bool) -> any {
+    let avatar = player_avatar(player_id)
+    let pos = get(avatar, Position) |> unwrap
+    let target = get(avatar, MoveTarget) |> unwrap
+    let code = status_code(status)
+    let peer_record_count = peer_record_count_for_packet()
+    let max_records = max_state_avatar_records_for_peer_count(peer_record_count)
+    let avatar_count = avatar_count_for_packet(player_id, pos.x, pos.y, full_sync, peer_record_count)
+    let projectile_count = projectile_count_for_packet(player_id, pos.x, pos.y, full_sync, peer_record_count, avatar_count)
+    let impact_count = projectile_impact_count_for_packet(player_id, pos.x, pos.y, full_sync, peer_record_count, avatar_count, projectile_count)
+    let mut packet = bytebuf_new(
+        state_packet_header_len() +
+        state_peer_record_len() * peer_record_count +
+        state_avatar_record_len() * avatar_count +
+        state_projectile_record_len() * projectile_count +
+        state_projectile_impact_record_len() * impact_count
+    )
+    packet = bytebuf_set_u8(packet, 0, protocol_magic())
+    packet = bytebuf_set_u8(packet, 1, protocol_version())
+    packet = bytebuf_set_u8(packet, 2, packet_kind_state())
+    packet = bytebuf_set_u32_le(packet, 3, server_ms)
+    packet = bytebuf_set_u32_le(packet, 7, server_tick)
+    packet = bytebuf_set_u32_le(packet, 11, server_seq)
+    packet = bytebuf_set_u32_le(packet, 15, session_id)
+    packet = bytebuf_set_u32_le(packet, 19, player_id)
+    packet = bytebuf_set_u32_le(packet, 23, ack_client_seq)
+    packet = bytebuf_set_u32_le(packet, 27, ack_bits)
+    packet = bytebuf_set_u32_le(packet, 31, target.command_id)
+    packet = bytebuf_set_i32_le(packet, 35, coord_to_wire(pos.x))
+    packet = bytebuf_set_i32_le(packet, 39, coord_to_wire(pos.y))
+    packet = bytebuf_set_i32_le(packet, 43, coord_to_wire(target.x))
+    packet = bytebuf_set_i32_le(packet, 47, coord_to_wire(target.y))
+    packet = bytebuf_set_u8(packet, 51, if target.active { 1 } else { 0 })
+    packet = bytebuf_set_u8(packet, 52, code)
+    packet = bytebuf_set_u8(packet, 53, correction_reason_code(status))
+    packet = bytebuf_set_u8(packet, 54, avatar_count)
+    packet = bytebuf_set_u8(packet, 55, projectile_count)
+    packet = bytebuf_set_u8(packet, 56, min(max(peer_count_value, 0), 255))
+    packet = bytebuf_set_u8(packet, 57, min(max(max_peers_value, 0), 255))
+    packet = bytebuf_set_u8(packet, 58, min(max(input_slots_value, 0), 255))
+    packet = bytebuf_set_u8(packet, 59, min(max(pending_move_count, 0), 255))
+    packet = bytebuf_set_u8(packet, 60, min(max(pending_cast_count, 0), 255))
+    packet = bytebuf_set_u8(packet, 61, if peer_connected { 1 } else { 0 })
+    packet = bytebuf_set_u8(packet, 62, impact_count)
+    packet = bytebuf_set_u8(packet, 63, peer_record_count)
+    packet = bytebuf_set_u32_le(packet, 64, late_input_count)
+    packet = bytebuf_set_u32_le(packet, 68, future_input_count)
+    packet = bytebuf_set_u32_le(packet, 72, duplicate_input_count)
+    packet = bytebuf_set_u32_le(packet, 76, overwritten_input_count)
+    packet = bytebuf_set_u32_le(packet, 80, last_client_seq)
+    packet = bytebuf_set_u32_le(packet, 84, last_applied_client_seq)
+    packet = bytebuf_set_u32_le(packet, 88, applied_ack_bits)
+
+    let mut peer_packed = 0
+    for peer in entities(PeerConnection) {
+        let conn = get(peer, PeerConnection) |> unwrap
+        if conn.connected and peer_packed < peer_record_count {
+            let base = state_packet_header_len() + peer_packed * state_peer_record_len()
+            packet = bytebuf_set_u32_le(packet, base, conn.player_id)
+            packet = bytebuf_set_u32_le(packet, base + 4, conn.session_id)
+            packet = bytebuf_set_u32_le(packet, base + 8, conn.last_client_seq)
+            packet = bytebuf_set_u32_le(packet, base + 12, conn.received_client_seq)
+            packet = bytebuf_set_u32_le(packet, base + 16, conn.last_applied_client_seq)
+            packet = bytebuf_set_u32_le(packet, base + 20, conn.applied_ack_bits)
+            packet = bytebuf_set_u8(packet, base + 24, min(max(pending_move_input_count(peer), 0), 255))
+            packet = bytebuf_set_u8(packet, base + 25, min(max(pending_cast_input_count(peer), 0), 255))
+            packet = bytebuf_set_u8(packet, base + 26, if conn.connected { 1 } else { 0 })
+            packet = bytebuf_set_u8(packet, base + 27, 0)
+            packet = bytebuf_set_u32_le(packet, base + 28, conn.late_inputs)
+            packet = bytebuf_set_u32_le(packet, base + 32, conn.future_inputs)
+            packet = bytebuf_set_u32_le(packet, base + 36, conn.duplicate_inputs)
+            packet = bytebuf_set_u32_le(packet, base + 40, conn.overwritten_inputs)
+            peer_packed = peer_packed + 1
+        }
+    }
+
+    let mut packed = 0
+    for roster_avatar in entities(PlayerControlled) {
+        if (full_sync or avatar_interesting_to(roster_avatar, player_id, pos.x, pos.y)) and packed < max_records {
+            let owner = get(roster_avatar, PlayerControlled) |> unwrap
+            let roster_pos = get(roster_avatar, Position) |> unwrap
+            let roster_target = get(roster_avatar, MoveTarget) |> unwrap
+            let render = get(roster_avatar, RenderAvatar) |> unwrap
+            let base = state_packet_header_len() + peer_record_count * state_peer_record_len() + packed * state_avatar_record_len()
+            packet = bytebuf_set_u32_le(packet, base, owner.player_id)
+            packet = bytebuf_set_u32_le(packet, base + 4, roster_target.command_id)
+            packet = bytebuf_set_i32_le(packet, base + 8, coord_to_wire(roster_pos.x))
+            packet = bytebuf_set_i32_le(packet, base + 12, coord_to_wire(roster_pos.y))
+            packet = bytebuf_set_i32_le(packet, base + 16, coord_to_wire(roster_target.x))
+            packet = bytebuf_set_i32_le(packet, base + 20, coord_to_wire(roster_target.y))
+            packet = bytebuf_set_u8(packet, base + 24, if roster_target.active { 1 } else { 0 })
+            packet = bytebuf_set_u8(packet, base + 25, avatar_model_code(render.model))
+            packed = packed + 1
+        }
+    }
+    let mut projectile_packed = 0
+    for projectile in entities(Projectile) {
+        if projectile_interesting_to(projectile, player_id, pos.x, pos.y, full_sync) and projectile_packed < projectile_count {
+            let shot = get(projectile, Projectile) |> unwrap
+            let shot_pos = get(projectile, Position) |> unwrap
+            let base =
+                state_packet_header_len() +
+                peer_record_count * state_peer_record_len() +
+                avatar_count * state_avatar_record_len() +
+                projectile_packed * state_projectile_record_len()
+            packet = bytebuf_set_u32_le(packet, base, projectile_id(shot.owner_id, shot.command_id, shot.spawn_tick))
+            packet = bytebuf_set_u32_le(packet, base + 4, shot.owner_id)
+            packet = bytebuf_set_u32_le(packet, base + 8, shot.command_id)
+            packet = bytebuf_set_i32_le(packet, base + 12, coord_to_wire(shot_pos.x))
+            packet = bytebuf_set_i32_le(packet, base + 16, coord_to_wire(shot_pos.y))
+            packet = bytebuf_set_i32_le(packet, base + 20, coord_to_wire(shot.x_velocity))
+            packet = bytebuf_set_i32_le(packet, base + 24, coord_to_wire(shot.y_velocity))
+            packet = bytebuf_set_u32_le(packet, base + 28, shot.spawn_tick)
+            packet = bytebuf_set_u32_le(packet, base + 32, shot.fire_view_tick)
+            projectile_packed = projectile_packed + 1
+        }
+    }
+    let mut impact_packed = 0
+    let mut slot = 0
+    let log = res(ProjectileImpactLog)
+    while slot < projectile_impact_log_capacity() {
+        if projectile_impact_interesting_to(slot, player_id, pos.x, pos.y, full_sync) and impact_packed < impact_count {
+            let base =
+                state_packet_header_len() +
+                peer_record_count * state_peer_record_len() +
+                avatar_count * state_avatar_record_len() +
+                projectile_count * state_projectile_record_len() +
+                impact_packed * state_projectile_impact_record_len()
+            packet = bytebuf_set_u32_le(packet, base, log.event_ids[slot])
+            packet = bytebuf_set_u32_le(packet, base + 4, log.projectile_ids[slot])
+            packet = bytebuf_set_u32_le(packet, base + 8, log.owner_ids[slot])
+            packet = bytebuf_set_u32_le(packet, base + 12, log.target_ids[slot])
+            packet = bytebuf_set_i32_le(packet, base + 16, coord_to_wire(log.xs[slot]))
+            packet = bytebuf_set_i32_le(packet, base + 20, coord_to_wire(log.ys[slot]))
+            packet = bytebuf_set_u8(packet, base + 24, log.reasons[slot])
+            impact_packed = impact_packed + 1
+        }
+        slot = slot + 1
+    }
+    return packet
+}
+
+pub fn encode_error_packet(message: str) -> any {
+    let mut packet = bytebuf_new(error_packet_len())
+    packet = bytebuf_set_u8(packet, 0, protocol_magic())
+    packet = bytebuf_set_u8(packet, 1, protocol_version())
+    packet = bytebuf_set_u8(packet, 2, packet_kind_error())
+    packet = bytebuf_set_u8(packet, 3, status_code(message))
+    return packet
+}

@@ -1,0 +1,3 @@
+// One half of the duplicate `pub let` pair — exported constants join the
+// loader's duplicate-symbol detection like pub fns do.
+pub let LIMIT = 10

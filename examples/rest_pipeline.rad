@@ -1,0 +1,128 @@
+// =====================================================================
+//  REST API Pipeline — Request/Response simulation
+// =====================================================================
+
+component Request { method: "", path: "", body: "", auth_token: "" }
+
+component Response { status: 0, body: "" }
+
+event RequestLog { method, path, status }
+
+on RequestLog(e) {
+    print(f"  {e.method} {e.path} -> {e.status}")
+}
+
+fn validate_method(req) {
+    let valid = ["GET", "POST", "PUT", "DELETE"]
+    let is_valid = valid |> filter(fn(m) { return m == req.method })
+    if len(is_valid) == 0 {
+        return Response { status: 405, body: "Method Not Allowed" }
+    }
+    return Response { status: 0, body: "" }
+}
+
+fn authenticate(req) {
+    if req.auth_token == "" {
+        return Response { status: 401, body: "Unauthorized" }
+    }
+    if req.auth_token != "secret-token-123" {
+        return Response { status: 403, body: "Forbidden" }
+    }
+    return Response { status: 0, body: "" }
+}
+
+fn route(req) {
+    if req.method == "GET" and req.path == "/users" {
+        return Response { status: 200, body: "[{\"id\":1,\"name\":\"Alice\"},{\"id\":2,\"name\":\"Bob\"}]" }
+    }
+    if req.method == "GET" and req.path == "/health" {
+        return Response { status: 200, body: "{\"status\":\"ok\"}" }
+    }
+    if req.method == "POST" and req.path == "/users" {
+        return Response { status: 201, body: f"\{\"id\":3,\"name\":\"{req.body}\"\}" }
+    }
+    if req.method == "DELETE" and req.path == "/users" {
+        return Response { status: 204, body: "" }
+    }
+    return Response { status: 404, body: "Not Found" }
+}
+
+fn handle_request(req) {
+    // Middleware pipeline
+    let err1 = validate_method(req)
+    if err1.status != 0 {
+        emit RequestLog { method: req.method, path: req.path, status: err1.status }
+        return err1
+    }
+
+    // Skip auth for health check
+    if req.path != "/health" {
+        let err2 = authenticate(req)
+        if err2.status != 0 {
+            emit RequestLog { method: req.method, path: req.path, status: err2.status }
+            return err2
+        }
+    }
+
+    let resp = route(req)
+    emit RequestLog { method: req.method, path: req.path, status: resp.status }
+    return resp
+}
+
+fn print_response(label, resp) {
+    let status_text = "OK"
+    if resp.status == 201 { print(f"    {label} => {resp.status} Created: {resp.body}") }
+    if resp.status == 200 { print(f"    {label} => {resp.status} OK: {resp.body}") }
+    if resp.status == 204 { print(f"    {label} => {resp.status} No Content") }
+    if resp.status == 401 { print(f"    {label} => {resp.status} {resp.body}") }
+    if resp.status == 403 { print(f"    {label} => {resp.status} {resp.body}") }
+    if resp.status == 404 { print(f"    {label} => {resp.status} {resp.body}") }
+    if resp.status == 405 { print(f"    {label} => {resp.status} {resp.body}") }
+}
+
+fn main() -> any {
+    print("=== REST API Pipeline ===\n")
+
+    print("--- Request Log ---")
+
+    // Health check (no auth needed)
+    let r1 = handle_request(Request { method: "GET", path: "/health", body: "", auth_token: "" })
+    print_response("health", r1)
+
+    // Authenticated GET
+    let r2 = handle_request(Request { method: "GET", path: "/users", body: "", auth_token: "secret-token-123" })
+    print_response("list users", r2)
+
+    // POST
+    let r3 = handle_request(Request { method: "POST", path: "/users", body: "Charlie", auth_token: "secret-token-123" })
+    print_response("create user", r3)
+
+    // No auth
+    let r4 = handle_request(Request { method: "GET", path: "/users", body: "", auth_token: "" })
+    print_response("no auth", r4)
+
+    // Bad token
+    let r5 = handle_request(Request { method: "GET", path: "/users", body: "", auth_token: "wrong" })
+    print_response("bad token", r5)
+
+    // 404
+    let r6 = handle_request(Request { method: "GET", path: "/missing", body: "", auth_token: "secret-token-123" })
+    print_response("not found", r6)
+
+    // Method not allowed
+    let r7 = handle_request(Request { method: "PATCH", path: "/users", body: "", auth_token: "secret-token-123" })
+    print_response("bad method", r7)
+
+    // Delete
+    let r8 = handle_request(Request { method: "DELETE", path: "/users", body: "", auth_token: "secret-token-123" })
+    print_response("delete", r8)
+
+    // Stats
+    print("\n--- API Stats ---")
+    let statuses = [r1.status, r2.status, r3.status, r4.status, r5.status, r6.status, r7.status, r8.status]
+    let success = statuses |> filter(fn(s) { return s >= 200 and s < 300 })
+    let errors = statuses |> filter(fn(s) { return s >= 400 })
+    print(f"  Total requests: {len(statuses)}")
+    print(f"  Successful: {len(success)}")
+    print(f"  Errors: {len(errors)}")
+}

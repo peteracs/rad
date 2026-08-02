@@ -1,0 +1,27 @@
+// try_int, try_float
+print(try_int("42"))
+// expect: Option::Some {value: 42 }
+print(try_int("not a number"))
+// expect: Option::None {}
+print(try_int(3.9))
+// expect: Option::Some {value: 3 }
+print(try_int(true))
+// expect: Option::Some {value: 1 }
+
+print(try_float("3.14"))
+// expect: Option::Some {value: 3.14 }
+print(try_float("bad"))
+// expect: Option::None {}
+print(try_float(42))
+// expect: Option::Some {value: 42.0 }
+
+let result = try_int("123")
+print(unwrap(result))
+// expect: 123
+
+let bad = try_int("oops")
+match bad {
+    Some { value } => { print(value) }
+    None => { print("safe") }
+}
+// expect: safe

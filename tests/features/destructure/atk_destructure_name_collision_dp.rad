@@ -1,0 +1,8 @@
+fn main() -> nil {
+    let __dp_0 = "I am the real __dp_0"
+    let rows = [[1, 2], [3, 4]]
+    let out = rows |> map(fn([a, b]) { return a + b })
+    print(__dp_0)
+    print(out[0])
+    print(out[1])
+}

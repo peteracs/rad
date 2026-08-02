@@ -1,0 +1,20 @@
+component Tick {
+  value: 0
+}
+
+resource Settings {
+  delta: 3
+}
+
+system Apply(t: mut Tick, s: Settings) {
+  t.value = t.value + s.delta
+}
+
+fn main() -> nil {
+  let e = spawn(Tick { value: 1 })
+  schedule [Apply]
+  let t = get(e, Tick) ?
+  print(f"tick={t.value}")
+}
+
+// expect: tick=4

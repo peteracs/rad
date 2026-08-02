@@ -1,0 +1,14 @@
+// Cross: ? operator on find result in main -> nil
+fn main() -> nil {
+    let data = [10, 20, 30]
+
+    // Should succeed — find returns Some(20)
+    let x = find(data, fn(v) { return v == 20 }) ?
+    print("found:", x)
+
+    // Should early-exit — find returns None
+    let y = find(data, fn(v) { return v == 99 }) ?
+    print("BUG: should not reach:", y)
+}
+
+// expect: found: 20

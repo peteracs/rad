@@ -1,0 +1,32 @@
+// peek_resource(fork, R): read a fork's resource without committing —
+// the resource dual of peek. Plus sign(): int-preserving Math.sign.
+
+resource Tally { score: float = 100.0 }
+
+component Marker { v: int = 0 }
+
+system drain(Marker) {
+    update(Tally) { score = res(Tally).score - 2.5 }
+}
+
+fn main() -> nil {
+    // sign: int-preserving, zero maps to zero
+    print(sign(42))        // 1
+    print(sign(-7))        // -1
+    print(sign(0))         // 0
+    print(sign(3.5))       // 1.0
+    print(sign(-0.25))     // -1.0
+    print(sign(0.0))       // 0.0
+
+    let _ = entity { Marker {} }
+
+    // a simulated drain is visible through peek_resource, uncommitted
+    let end = simulate(fork(), [system::drain], 4)
+    let t = unwrap(peek_resource(end, Tally))
+    print(f"in the fork: {t.score}")          // 90.0
+    print(f"live: {res(Tally).score}")        // 100.0
+
+    // unknown-in-fork resources answer None, not an error
+    let blank = fork_from_bytes(fork_to_bytes(fork())) |> unwrap
+    print(is_some(peek_resource(blank, Tally)))   // true (auto-initialized)
+}

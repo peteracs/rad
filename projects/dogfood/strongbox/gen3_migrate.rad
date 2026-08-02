@@ -1,0 +1,95 @@
+// strongbox — generation 3. Reads a gen1 OR a gen2 save with one set of
+// migrate blocks, by sniffing the persisted shape.
+//
+//   rad projects/dogfood/strongbox/gen3_migrate.rad -- gen1
+//   rad projects/dogfood/strongbox/gen3_migrate.rad -- gen2
+//
+// Drift from gen2:
+//   Incident  open: bool -> status: str, + sla_mins
+//   Ledger    site -> region (rename), revision 2 -> 3
+//   Assignee  UNCHANGED from gen2 — the migrate block below must therefore
+//             run for a gen1 save and be skipped for a gen2 save.
+//   Source    unchanged in both.
+//
+// The real-world claim under test: a long-lived product cannot re-migrate
+// its whole archive every release, so generation N must read every older
+// generation directly. `old` is a plain map, so that is ordinary code.
+
+component Incident { code: "", severity: 1, status: "open", opened_at: 0, sla_mins: 60 }
+
+component Assignee { name: "", team: "unassigned" }
+
+component Source { origin: "" }
+
+resource Ledger { count: 0, region: "", revision: 3 }
+
+migrate Incident(old) {
+    // gen1 called it `sev`; gen2 renamed it to `severity`.
+    let mut sev = 1
+    if contains(old, "sev") {
+        sev = old["sev"]
+    } else {
+        sev = old["severity"]
+    }
+
+    // gen1/gen2 stored a bool; gen3 stores a lifecycle string.
+    let mut status = "open"
+    if old["open"] == false {
+        status = "resolved"
+    }
+
+    // Severity drives the SLA in gen3. Older saves never had one.
+    let mut sla = 60
+    if sev >= 5 { sla = 15 } else if sev >= 3 { sla = 30 }
+
+    return Incident {
+        code: old["code"],
+        severity: sev,
+        status: status,
+        opened_at: get_or(old, "opened_at", 0),
+        sla_mins: sla,
+    }
+}
+
+migrate Assignee(old) {
+    // Only reachable from gen1 (`who`); gen2's shape already matches gen3.
+    let mut team = "platform"
+    if old["who"] == "chen" {
+        team = "data"
+    }
+    return Assignee { name: old["who"], team: team }
+}
+
+migrate Ledger(old) {
+    let mut region = get_or(old, "site", "")
+    if contains(old, "region") {
+        region = old["region"]
+    }
+    return Ledger { count: old["count"], region: region, revision: 3 }
+}
+
+let argv = sys_args()
+let mut which = "gen1"
+if len(argv) > 0 {
+    which = argv[0]
+}
+
+print(f"=== strongbox gen3: migrate {which} -> gen3 ===")
+
+let n = load_world(read_file(f"projects/dogfood/strongbox/saves/{which}.radw"))
+print(f"loaded {n} entities from a {which} save")
+
+for name in ["inc-1001", "inc-1002", "inc-1003", "inc-1004"] {
+    let e = get_entity(name)
+    let inc = get(e, Incident) |> unwrap
+    let who = get(e, Assignee) |> unwrap
+    let src = get(e, Source) |> unwrap
+    print(f"  {name} {inc.code} sev={inc.severity} {inc.status} sla={inc.sla_mins}m -> {who.name}/{who.team} via {src.origin}")
+}
+
+let led = get_resource(Ledger) |> unwrap
+print(f"ledger: count={led.count} region={led.region} revision={led.revision}")
+
+write_file(f"projects/dogfood/strongbox/saves/gen3_from_{which}.radw", save_world())
+print(f"schema_digest: {schema_digest()}")
+print(f"world_digest:  {world_digest()}")

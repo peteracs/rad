@@ -1,0 +1,70 @@
+// Probe 1: idioms the interpreter will lean on.
+
+// Maps with mixed values as AST nodes
+fn make_node(kind: str) -> map<str, any> {
+    let m: map<str, any> = { "kind": kind, "line": 1 }
+    return m
+}
+
+fn main() -> nil {
+    // 1. map mutation via index assignment
+    let mut node = make_node("binary")
+    node["op"] = "+"
+    node["left"] = make_node("int")
+    node["right"] = make_node("int")
+    print(node["op"])
+    let l = node["left"]
+    print(l["kind"])
+
+    // 2. nested map write-back
+    node["left"]["value"] = 42
+    let l2 = node["left"]
+    print(l2["value"])
+
+    // 3. missing keys -> nil
+    print(node["nope"] == nil)
+
+    // 4. list of maps
+    let mut nodes: list<any> = []
+    nodes = push(nodes, make_node("a"))
+    nodes << make_node("b")
+    print(len(nodes))
+
+    // 5. closures with shared mut state (lexer/parser cursor pattern)
+    let mut pos = 0
+    let advance = fn() -> int {
+        pos = pos + 1
+        return pos
+    }
+    advance()
+    advance()
+    print(pos)
+
+    // 6. recursion through mut closure ref (parser pattern from c-backend)
+    let mut eval_ref: fn(int) -> int = fn(_n: int) -> int { return 0 }
+    let eval_impl = fn(n: int) -> int {
+        if n <= 1 { return 1 }
+        return n * eval_ref(n - 1)
+    }
+    eval_ref = eval_impl
+    print(eval_ref(5))
+
+    // 7. plain named fn recursion
+    print(fact(6))
+
+    // 8. string ops
+    let src = "let x = 1"
+    print(byte_len(src))
+    print(byte_at(src, 0))
+    print(substring_bytes(src, 4, 5))
+
+    // 9. while loop with map-based env chain
+    let mut env: map<str, any> = { "vars": { "x": 10 }, "parent": nil }
+    let vars = env["vars"]
+    print(vars["x"])
+}
+
+fn fact(n: int) -> int {
+    if n <= 1 { return 1 }
+    return n * fact(n - 1)
+}

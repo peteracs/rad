@@ -1,0 +1,9 @@
+---
+source: tests\conformance\state_machines.rad
+exit_code: 0
+---
+on
+off
+on
+err
+off

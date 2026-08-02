@@ -1,0 +1,77 @@
+// BUG 07 - guarded match arms satisfy the exhaustiveness check but not
+// totality, so a function with a declared return type silently returns nil.
+//
+// Run:  target\debug\rad.exe projects\dogfood\calcite\bugs\07_guarded_arms_defeat_exhaustiveness.rad
+//
+// `classify` declares `-> str`. Every variant of Light has an arm, so the
+// exhaustiveness check passes. But every arm is GUARDED, so when the guards
+// are all false no arm runs and the match evaluates to nil. The declared
+// return type is violated with no compile error and no runtime error.
+//
+// Spec 4.6: "If a function declares a return type other than `any` or
+// `nil`, the compiler verifies that all control flow paths return a value."
+// The all-guards-false path returns no value and is not diagnosed.
+
+// PROOF THAT THIS IS AN OMISSION, NOT A DESIGN CHOICE: the checker is
+// already guard-aware for PRIMITIVE matches. Uncomment `label` below and
+// it is correctly rejected -- a guarded `_ when open` does NOT satisfy the
+// wildcard requirement:
+//
+//     fn label(n: int, open: bool) -> str {
+//         match n {
+//             1 => { return "one" }
+//             _ when open => { return "other" }
+//         }
+//     }
+//     Error: Non-exhaustive match: matching on int requires a wildcard `_` arm
+//     hint: Add a case: _ => { ... }
+//
+// Same compiler, same question, two different answers: guarded arms are
+// discounted for primitive wildcards but counted for sum-type variants.
+
+type Light {
+    Red {}
+    Amber {}
+    Green {}
+}
+
+// Declared to return str. Returns nil whenever `open` is false.
+fn classify(l: Light, open: bool) -> str {
+    match l {
+        Red when open => { return "stop" }
+        Amber when open => { return "wait" }
+        Green when open => { return "go" }
+    }
+}
+
+// The same hole in expression position: no arm matches, so `label` is nil.
+fn describe(l: Light, open: bool) -> str {
+    let label = match l {
+        Red when open => "stop"
+        Amber when open => "wait"
+        Green when open => "go"
+    }
+    return label
+}
+
+fn main() -> nil {
+    let r = Light::Red {}
+
+    print("--- statement position ---")
+    let good = classify(r, true)
+    print(f"guards true : value=[{good}] typeof={typeof(good)}")
+
+    let bad = classify(r, false)
+    print(f"guards false: value=[{bad}] typeof={typeof(bad)}")
+    print(f"  but classify is declared -> str, so typeof should be str")
+
+    print("--- expression position ---")
+    let bad2 = describe(r, false)
+    print(f"guards false: value=[{bad2}] typeof={typeof(bad2)}")
+
+    print("--- the damage travels ---")
+    // A caller that trusts the `-> str` contract. This is where a real
+    // program notices, far away from the function that lied.
+    print(f"to_upper on the nil: [{to_upper(bad)}]")
+    print(f"len of the nil     : {len(bad)}")
+}

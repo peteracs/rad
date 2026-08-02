@@ -1,0 +1,46 @@
+// KIT/CORE — the shared vocabulary every kit module speaks: positions,
+// vitals, the damage event, and the vector helpers. One source of truth;
+// systems and content alike `use` it.
+
+pub let DT = 1.0 / 30.0
+
+pub component Pos { at: (float, float) = (0.0, 0.0) }
+pub component Vitals {
+    hp: float = 600.0,
+    team: int,
+    ad: float = 60.0,
+    ap: float = 0.0,
+}
+
+pub event Damage { source: entity, target: entity, amount: float, kind: str }
+
+// the era's SetMinimumHealth seam: damage never takes hp below the
+// floor while one is attached (Undying Rage, Guardian Angel windows)
+pub component HpFloor { at: float = 1.0 }
+
+// kills are LIBRARY vocabulary: on-kill scripts (mana refunds, gold,
+// resets) listen here instead of re-deriving death at cast sites
+pub event Felled { victim: entity, killer: entity }
+
+pub pure fn dist(a: (float, float), b: (float, float)) -> float {
+    let (dx, dy) = a - b
+    return sqrt(dx * dx + dy * dy)
+}
+
+pub pure fn normalize(v: (float, float)) -> (float, float) {
+    let (x, y) = v
+    let n = sqrt(x * x + y * y)
+    if n == 0.0 { return (0.0, 0.0) }
+    return (x / n, y / n)
+}
+
+on Damage(e) {
+    let v = require(e.target, Vitals)
+    let lowest = if has(e.target, HpFloor) { require(e.target, HpFloor).at } else { -999999.0 }
+    let after = max(v.hp - e.amount, lowest)
+    update(e.target, Vitals) { hp = after }
+    print(f"    {name_of(e.target)} takes {e.amount:.0} {e.kind} -> {after:.0}")
+    if v.hp > 0.0 and after <= 0.0 {
+        emit Felled { victim: e.target, killer: e.source }
+    }
+}

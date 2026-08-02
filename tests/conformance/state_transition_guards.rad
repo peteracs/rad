@@ -1,0 +1,24 @@
+// backend: both
+state Door {
+    Closed {
+        on unlock -> Open when false
+        on force -> Open when true
+    }
+    Open {
+        on lock -> Closed
+    }
+}
+
+let d = Door::Closed
+match transition(d, "unlock") {
+    Ok { value } => { print("bad") }
+    Err { message } => { print("guarded") }
+}
+// expect: guarded
+
+let opened = transition(d, "force") |> unwrap
+match opened {
+    Closed => { print("closed") }
+    Open => { print("open") }
+}
+// expect: open

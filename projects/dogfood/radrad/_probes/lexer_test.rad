@@ -1,0 +1,24 @@
+use "../lexer.rad"
+
+fn show(toks: list<Token>) -> nil {
+    let mut parts: list<str> = []
+    for t in toks {
+        if t.kind == "int" { parts << f"int({t.ival})" }
+        else if t.kind == "float" { parts << f"float({t.fval})" }
+        else if t.kind == "str" { parts << f"str({t.text})" }
+        else if t.kind == "eof" { parts << "eof" }
+        else { parts << f"{t.kind}({t.text})" }
+    }
+    print(join(parts, " "))
+}
+
+fn main() -> nil {
+    show(lex("let x = 1 + 2.5"))
+    show(lex("if x >= 10 { print(\"big\") } // comment"))
+    show(lex("a |> map(fn(v) { return v * 2 })"))
+    show(lex("emit Hit { amount: 3 }"))
+    show(lex("let s = \"tab\\there\""))
+    show(lex("let msg = f\"hp={h.hp} of {h.max}\""))
+    show(lex("Door::Open"))
+    show(lex("xs << 42"))
+}

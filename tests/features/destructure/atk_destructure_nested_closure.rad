@@ -1,0 +1,8 @@
+fn main() -> nil {
+    let rows = [[1, 2], [3, 4]]
+    let fns = rows |> map(fn([a, b]) {
+        return fn() { return a + b }
+    })
+    print(fns[0]())
+    print(fns[1]())
+}

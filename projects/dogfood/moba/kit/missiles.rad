@@ -1,0 +1,54 @@
+// KIT/MISSILES — straight-line skillshots with pierce + per-hit index
+// (the falloff input). Flight is a system; hits are events the KIT
+// scripts handle — the missile layer knows nothing about any champion.
+
+use "core.rad"
+
+pub component Skillshot {
+    source: entity,
+    slot: str,                    // which spell fired it (the script key)
+    rank: int = 1,
+    dir: (float, float) = (1.0, 0.0),
+    speed: float = 24.0,
+    max_range: float = 23.0,
+    radius: float = 1.2,
+    pierce: bool = false,
+    hits_allies: bool = false,    // the ini's AffectFriends flag
+    flown: float = 0.0,
+    hits: int = 0,                // per-victim index, drives R's falloff
+    struck: list = [],            // pierced victims never re-hit
+}
+
+pub event SkillshotHit {
+    source: entity, target: entity,
+    slot: str, rank: int, hit_index: int,
+}
+
+pub system fly_skillshots(m: mut Skillshot, p: mut Pos) {
+    let step = m.speed * DT
+    p.at = p.at + m.dir * step
+    m.flown = m.flown + step
+    if m.flown >= m.max_range {
+        despawn(self)
+        return
+    }
+    let my_team = require(m.source, Vitals).team
+    for (u, v, up) in query { Vitals, Pos } {
+        if v.hp <= 0.0 { continue }
+        if u == m.source { continue }
+        if v.team == my_team and not m.hits_allies { continue }
+        if contains(m.struck, u) { continue }
+        if dist(up.at, p.at) <= m.radius {
+            emit SkillshotHit {
+                source: m.source, target: u,
+                slot: m.slot, rank: m.rank, hit_index: m.hits,
+            }
+            m.struck = push(m.struck, u)
+            m.hits = m.hits + 1
+            if not m.pierce {
+                despawn(self)
+                return
+            }
+        }
+    }
+}

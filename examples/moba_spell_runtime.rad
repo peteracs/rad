@@ -1,0 +1,533 @@
+// Clean-room MOBA spell runtime sketch.
+//
+// This is not a port of any client code. It is a Rad-shaped rewrite target:
+// spell data, target validation, costs/cooldowns, cast frames, missiles, buffs,
+// and render/audio intent are all modeled as ECS data plus events.
+
+resource MatchClock {
+    tick: int = 0,
+    dt: float = 0.033
+}
+
+resource Ids {
+    next_cast: int = 1,
+    next_missile: int = 1,
+    next_vfx: int = 1
+}
+
+component Unit {
+    indexed id: str = "",
+    champion: str = "",
+    team: str = "blue",
+    kind: str = "hero",
+    alive: bool = true,
+    targetable: bool = true,
+    visible: bool = true
+}
+
+component Position {
+    x: float = 0.0,
+    y: float = 0.0
+}
+
+component Health {
+    hp: int = 1000,
+    max: int = 1000
+}
+
+component SpellBook {
+    mana: float = 100.0,
+    sealed: bool = false
+}
+
+component Cooldowns {
+    q: int = 0,
+    w: int = 0,
+    e: int = 0,
+    r: int = 0
+}
+
+component SpellDef {
+    indexed key: str = "",
+    name: str = "",
+    slot: str = "q",
+    target_mode: str = "target",
+    target_flags: str = "enemy",
+    range: float = 600.0,
+    cast_ticks: int = 1,
+    cooldown_ticks: int = 30,
+    mana_cost: float = 0.0,
+    payload: str = "damage",
+    damage: int = 0,
+    radius: float = 0.0,
+    missile_speed: float = 0.0,
+    buff_name: str = "",
+    buff_ticks: int = 0
+}
+
+component ActiveCast {
+    indexed id: str = "",
+    caster_id: str = "",
+    target_id: str = "",
+    spell_key: str = "",
+    slot: str = "",
+    x: float = 0.0,
+    y: float = 0.0
+}
+
+component Missile {
+    source_id: str = "",
+    target_id: str = "",
+    spell_key: str = "",
+    speed: float = 0.0,
+    damage: int = 0,
+    radius: float = 16.0
+}
+
+component Buff {
+    owner_id: str = "",
+    name: str = "",
+    kind: str = "",
+    ticks_left: int = 0
+}
+
+component RenderIntent {
+    kind: str = "",
+    asset: str = "",
+    frame: int = 0
+}
+
+component Lifetime {
+    ticks_left: int = 0
+}
+
+event CastRequest {
+    caster_id: str,
+    slot: str,
+    target_id: str,
+    x: float,
+    y: float,
+    issued_by: str
+}
+
+event CastAccepted {
+    cast_id: str,
+    caster_id: str,
+    spell_key: str,
+    cast_ticks: int
+}
+
+event CastRejected {
+    caster_id: str,
+    slot: str,
+    reason: str
+}
+
+event CastFrame {
+    cast_id: str
+}
+
+event DamageApplied {
+    source_id: str,
+    target_id: str,
+    amount: int,
+    tag: str
+}
+
+event BuffApplied {
+    owner_id: str,
+    source_id: str,
+    name: str,
+    kind: str,
+    ticks: int
+}
+
+event VfxRequested {
+    kind: str,
+    asset: str,
+    x: float,
+    y: float,
+    ticks: int
+}
+
+event SpellResolved {
+    caster_id: str,
+    target_id: str,
+    spell_key: str
+}
+
+fn distance(a: Position, b: Position) -> float {
+    let dx = a.x - b.x
+    let dy = a.y - b.y
+    return sqrt(dx * dx + dy * dy)
+}
+
+fn slot_cd(cd: Cooldowns, slot: str) -> int {
+    if slot == "q" { return cd.q }
+    if slot == "w" { return cd.w }
+    if slot == "e" { return cd.e }
+    if slot == "r" { return cd.r }
+    return 999999
+}
+
+fn put_cd(unit: entity, slot: str, ticks: int) -> nil {
+    let cd = require(unit, Cooldowns)
+    if slot == "q" { set(unit, Cooldowns { q: ticks, ..cd }) }
+    if slot == "w" { set(unit, Cooldowns { w: ticks, ..cd }) }
+    if slot == "e" { set(unit, Cooldowns { e: ticks, ..cd }) }
+    if slot == "r" { set(unit, Cooldowns { r: ticks, ..cd }) }
+}
+
+fn is_valid_target(caster: entity, target: entity, def: SpellDef) -> bool {
+    let cu = require(caster, Unit)
+    let tu = require(target, Unit)
+
+    if !tu.alive { return false }
+    if !tu.targetable { return false }
+    if !tu.visible { return false }
+    if def.target_flags == "enemy" { return cu.team != tu.team }
+    if def.target_flags == "ally" { return cu.team == tu.team }
+    if def.target_flags == "self" { return cu.id == tu.id }
+    return true
+}
+
+fn make_cast_id() -> str {
+    let ids = res(Ids)
+    let id = f"cast:{ids.next_cast}"
+    update(Ids) { next_cast = ids.next_cast + 1 }
+    return id
+}
+
+fn make_missile_id() -> str {
+    let ids = res(Ids)
+    let id = f"missile:{ids.next_missile}"
+    update(Ids) { next_missile = ids.next_missile + 1 }
+    return id
+}
+
+fn spawn_vfx(kind: str, asset: str, x: float, y: float, ticks: int) -> nil {
+    let ids = res(Ids)
+    let id = f"vfx:{ids.next_vfx}"
+    update(Ids) { next_vfx = ids.next_vfx + 1 }
+    spawn(id,
+        Position { x: x, y: y },
+        RenderIntent { kind: kind, asset: asset },
+        Lifetime { ticks_left: ticks }
+    )
+}
+
+on CastRejected(e) {
+    print(f"reject {e.caster_id}.{e.slot}: {e.reason}")
+}
+
+on CastAccepted(e) {
+    print(f"accepted {e.spell_key} as {e.cast_id}; cast frame in {e.cast_ticks} ticks")
+}
+
+on VfxRequested(e) {
+    spawn_vfx(e.kind, e.asset, e.x, e.y, e.ticks)
+}
+
+on CastRequest(e) {
+    let caster = lookup(Unit, "id", e.caster_id)?
+    let caster_unit = require(caster, Unit)
+    let spell_key = f"{caster_unit.champion}:{e.slot}"
+    let spell = lookup(SpellDef, "key", spell_key)?
+    let def = require(spell, SpellDef)
+
+    if !caster_unit.alive {
+        emit CastRejected { caster_id: e.caster_id, slot: e.slot, reason: "caster dead" }
+        return nil
+    }
+
+    let book = require(caster, SpellBook)
+    if book.sealed {
+        emit CastRejected { caster_id: e.caster_id, slot: e.slot, reason: "spellbook sealed" }
+        return nil
+    }
+
+    if book.mana < def.mana_cost {
+        emit CastRejected { caster_id: e.caster_id, slot: e.slot, reason: "not enough mana" }
+        return nil
+    }
+
+    let cds = require(caster, Cooldowns)
+    if slot_cd(cds, e.slot) > 0 {
+        emit CastRejected { caster_id: e.caster_id, slot: e.slot, reason: "cooldown" }
+        return nil
+    }
+
+    let caster_pos = require(caster, Position)
+    let mut target_id = e.target_id
+    let mut target_pos = Position { x: e.x, y: e.y }
+
+    if def.target_mode == "self" {
+        target_id = e.caster_id
+        target_pos = caster_pos
+    } else if def.target_mode == "target" {
+        let target = lookup(Unit, "id", e.target_id)?
+        target_pos = require(target, Position)
+        if !is_valid_target(caster, target, def) {
+            emit CastRejected { caster_id: e.caster_id, slot: e.slot, reason: "invalid target" }
+            return nil
+        }
+    }
+
+    if distance(caster_pos, target_pos) > def.range {
+        emit CastRejected { caster_id: e.caster_id, slot: e.slot, reason: "out of range" }
+        return nil
+    }
+
+    set(caster, SpellBook { mana: book.mana - def.mana_cost, ..book })
+    put_cd(caster, e.slot, def.cooldown_ticks)
+
+    let cast_id = make_cast_id()
+    spawn(cast_id,
+        ActiveCast {
+            id: cast_id,
+            caster_id: e.caster_id,
+            target_id: target_id,
+            spell_key: spell_key,
+            slot: e.slot,
+            x: target_pos.x,
+            y: target_pos.y
+        }
+    )
+
+    emit CastAccepted { cast_id: cast_id, caster_id: e.caster_id, spell_key: spell_key, cast_ticks: def.cast_ticks }
+    emit VfxRequested { kind: "cast_start", asset: f"{def.name}:cast", x: caster_pos.x, y: caster_pos.y, ticks: def.cast_ticks + 2 }
+    emit CastFrame { cast_id: cast_id } after def.cast_ticks
+}
+
+on CastFrame(e) {
+    let cast = lookup(ActiveCast, "id", e.cast_id)?
+    let c = require(cast, ActiveCast)
+    let spell = lookup(SpellDef, "key", c.spell_key)?
+    let def = require(spell, SpellDef)
+    let caster = lookup(Unit, "id", c.caster_id)?
+    let caster_pos = require(caster, Position)
+
+    if def.payload == "missile" {
+        let missile_id = make_missile_id()
+        spawn(missile_id,
+            Missile {
+                source_id: c.caster_id,
+                target_id: c.target_id,
+                spell_key: c.spell_key,
+                speed: def.missile_speed,
+                damage: def.damage,
+                radius: def.radius
+            },
+            Position { x: caster_pos.x, y: caster_pos.y },
+            RenderIntent { kind: "missile", asset: f"{def.name}:missile" }
+        )
+        emit VfxRequested { kind: "cast_fire", asset: f"{def.name}:fire", x: caster_pos.x, y: caster_pos.y, ticks: 6 }
+    } else if def.payload == "area_damage" {
+        let victims = query { Unit, Position, Health }
+        for victim in victims {
+            let vu = require(victim, Unit)
+            if is_valid_target(caster, victim, def) {
+                let vp = require(victim, Position)
+                if distance(Position { x: c.x, y: c.y }, vp) <= def.radius {
+                    emit DamageApplied { source_id: c.caster_id, target_id: vu.id, amount: def.damage, tag: def.name }
+                    if def.buff_ticks > 0 {
+                        emit BuffApplied {
+                            owner_id: vu.id,
+                            source_id: c.caster_id,
+                            name: def.buff_name,
+                            kind: "control",
+                            ticks: def.buff_ticks
+                        }
+                    }
+                }
+            }
+        }
+        emit VfxRequested { kind: "area_impact", asset: f"{def.name}:impact", x: c.x, y: c.y, ticks: 10 }
+    } else if def.payload == "damage" {
+        emit DamageApplied { source_id: c.caster_id, target_id: c.target_id, amount: def.damage, tag: def.name }
+    }
+
+    emit SpellResolved { caster_id: c.caster_id, target_id: c.target_id, spell_key: c.spell_key }
+    despawn(cast)
+}
+
+on DamageApplied(e) {
+    let target = lookup(Unit, "id", e.target_id)?
+    let h = require(target, Health)
+    let mut next_hp = h.hp - e.amount
+    if next_hp < 0 { next_hp = 0 }
+    set(target, Health { hp: next_hp, ..h })
+    print(f"{e.tag}: {e.source_id} -> {e.target_id} for {e.amount}; hp={next_hp}")
+    if next_hp == 0 {
+        update(target, Unit) { alive = false }
+    }
+}
+
+on BuffApplied(e) {
+    let owner = lookup(Unit, "id", e.owner_id)?
+    let p = require(owner, Position)
+    spawn(f"buff:{e.owner_id}:{e.name}:{res(MatchClock).tick}",
+        Buff { owner_id: e.owner_id, name: e.name, kind: e.kind, ticks_left: e.ticks },
+        Position { x: p.x, y: p.y },
+        RenderIntent { kind: "buff", asset: f"{e.name}:icon" }
+    )
+    print(f"buff {e.name} on {e.owner_id} for {e.ticks} ticks")
+}
+
+on SpellResolved(e) {
+    print(f"resolved {e.spell_key} from {e.caster_id}")
+}
+
+system CooldownTick(cd: mut Cooldowns) {
+    cd.q = max(0, cd.q - 1)
+    cd.w = max(0, cd.w - 1)
+    cd.e = max(0, cd.e - 1)
+    cd.r = max(0, cd.r - 1)
+}
+
+system MissileMove(m: Missile, pos: mut Position) {
+    let target = lookup(Unit, "id", m.target_id)?
+    let tp = require(target, Position)
+    let dx = tp.x - pos.x
+    let dy = tp.y - pos.y
+    let d = sqrt(dx * dx + dy * dy)
+
+    if d <= m.radius {
+        emit DamageApplied { source_id: m.source_id, target_id: m.target_id, amount: m.damage, tag: m.spell_key }
+        emit VfxRequested { kind: "missile_hit", asset: f"{m.spell_key}:hit", x: pos.x, y: pos.y, ticks: 8 }
+        despawn(self)
+        return nil
+    }
+
+    let step = m.speed * res(MatchClock).dt
+    pos.x = pos.x + (dx / d) * step
+    pos.y = pos.y + (dy / d) * step
+}
+
+system BuffTick(b: mut Buff) {
+    b.ticks_left = b.ticks_left - 1
+    if b.ticks_left <= 0 {
+        print(f"buff expired {b.name} on {b.owner_id}")
+        despawn(self)
+    }
+}
+
+system LifetimeTick(l: mut Lifetime) {
+    l.ticks_left = l.ticks_left - 1
+    if l.ticks_left <= 0 {
+        despawn(self)
+    }
+}
+
+fn tick() -> nil {
+    update(MatchClock) { tick = res(MatchClock).tick + 1 }
+    schedule [CooldownTick, MissileMove, BuffTick, LifetimeTick]
+}
+
+fn print_state(label: str, unit_id: str) -> nil {
+    let u = lookup(Unit, "id", unit_id) |> unwrap
+    let h = require(u, Health)
+    let b = require(u, SpellBook)
+    let cd = require(u, Cooldowns)
+    print(f"{label}: {unit_id} hp={h.hp}/{h.max} mana={b.mana} cd.q={cd.q} cd.w={cd.w}")
+}
+
+fn seed_world() -> nil {
+    spawn("blue_caster",
+        Unit { id: "blue_caster", champion: "Titan", team: "blue" },
+        Position { x: 100.0, y: 100.0 },
+        Health { hp: 1200, max: 1200 },
+        SpellBook { mana: 100.0 },
+        Cooldowns {}
+    )
+
+    spawn("red_target",
+        Unit { id: "red_target", champion: "Archer", team: "red" },
+        Position { x: 220.0, y: 100.0 },
+        Health { hp: 900, max: 900 },
+        SpellBook { mana: 80.0 },
+        Cooldowns {}
+    )
+
+    spawn("red_far",
+        Unit { id: "red_far", champion: "Archer", team: "red" },
+        Position { x: 900.0, y: 100.0 },
+        Health { hp: 900, max: 900 },
+        SpellBook { mana: 80.0 },
+        Cooldowns {}
+    )
+
+    spawn("spell_titan_q",
+        SpellDef {
+            key: "Titan:q",
+            name: "GroundSlam",
+            slot: "q",
+            target_mode: "self",
+            target_flags: "enemy",
+            range: 260.0,
+            cast_ticks: 3,
+            cooldown_ticks: 12,
+            mana_cost: 35.0,
+            payload: "area_damage",
+            damage: 110,
+            radius: 180.0,
+            buff_name: "Airborne",
+            buff_ticks: 6
+        }
+    )
+
+    spawn("spell_titan_w",
+        SpellDef {
+            key: "Titan:w",
+            name: "ArcBolt",
+            slot: "w",
+            target_mode: "target",
+            target_flags: "enemy",
+            range: 700.0,
+            cast_ticks: 2,
+            cooldown_ticks: 8,
+            mana_cost: 20.0,
+            payload: "missile",
+            damage: 80,
+            radius: 20.0,
+            missile_speed: 1200.0
+        }
+    )
+}
+
+fn main() -> nil {
+    seed_world()
+    print_state("before", "blue_caster")
+    print_state("before", "red_target")
+
+    emit CastRequest {
+        caster_id: "blue_caster",
+        slot: "q",
+        target_id: "",
+        x: 0.0,
+        y: 0.0,
+        issued_by: "player:blue"
+    }
+    flush_events()
+
+    for _ in range(0, 5) { tick() }
+    print_state("after q", "blue_caster")
+    print_state("after q", "red_target")
+
+    emit CastRequest {
+        caster_id: "blue_caster",
+        slot: "w",
+        target_id: "red_target",
+        x: 0.0,
+        y: 0.0,
+        issued_by: "player:blue"
+    }
+    flush_events()
+
+    for _ in range(0, 10) { tick() }
+    print_state("after w", "red_target")
+
+    let target = lookup(Unit, "id", "red_target")?
+    print("why red_target health:")
+    print(why(target, Health))
+}

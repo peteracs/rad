@@ -1,0 +1,376 @@
+// lib_sheet — the shared brain of RADSHEET (D5), a collaborative
+// spreadsheet built on rad's distributed half.
+//
+// Design decisions that matter:
+//
+// - The grid is PRE-SPAWNED (A1..F12 exist from frame zero). Cell names are
+//   entity names, so two offline clients editing "A1" produce a FIELD
+//   conflict on Cell.raw — mechanically pickable — instead of a structural
+//   name claim. The grid is the namespace.
+// - Cells carry both the SOURCE (raw text) and the DERIVED value (val,
+//   kind). Only raw is human truth; val/kind reflow from raw. Merge policy
+//   therefore ships raw conflicts to the human and auto-resolves derived
+//   fields, then a recalc pass reflows everything deterministically.
+// - Dependencies are EVENTS, not a dependency graph: CellSet parses and
+//   stores one cell, then emits Dirty; the Dirty handler recomputes every
+//   formula cell (sorted order, deterministic) and re-emits Dirty while
+//   values keep changing, fuel-capped. why(cell, Cell) on a formula cell
+//   therefore chains: val write <- Dirty <- CellSet { by: "alice" } — the
+//   PASS criterion ("names the human who changed the input") falls out of
+//   provenance instead of being implemented.
+
+pub component Cell {
+    raw: str = "",         // what the human typed ("", "42", "=SUM(A1:B2)")
+    val: float = 0.0,      // derived
+    kind: str = "empty"   // derived: empty | num | formula | err
+}
+
+pub resource Sheet { cols: int = 6, rows: int = 12, passes: int = 0 }
+
+pub event CellSet { cell: entity, raw: str, by: str, at: int }
+pub event Dirty { depth: int, by: str, at: int }
+
+// ---------------------------------------------------------------------------
+// Grid addressing
+// ---------------------------------------------------------------------------
+
+pub fn col_letter(i: int) -> str {
+    let letters = ["A", "B", "C", "D", "E", "F", "G", "H"]
+    return letters[i]
+}
+
+pub fn cell_name(c: int, r: int) -> str {
+    return f"{col_letter(c)}{r + 1}"
+}
+
+// "B3" -> (1, 2); (-1, -1) when not a valid in-grid reference.
+pub fn parse_ref(s: str) -> (int, int) {
+    let sh = get_resource(Sheet) |> unwrap
+    if len(s) < 2 { return (-1, -1) }
+    let head = to_upper(slice(s, 0, 1))
+    let mut col = -1
+    for i in range(0, sh.cols) {
+        if col_letter(i) == head { col = i }
+    }
+    if col < 0 { return (-1, -1) }
+    match try_int(slice(s, 1, len(s))) {
+        Some(n) => {
+            if n >= 1 and n <= sh.rows { return (col, n - 1) }
+            return (-1, -1)
+        }
+        None => { return (-1, -1) }
+    }
+}
+
+pub fn init_grid() -> nil {
+    let sh = get_resource(Sheet) |> unwrap
+    for c in range(0, sh.cols) {
+        for r in range(0, sh.rows) {
+            let _ = spawn(cell_name(c, r), Cell { raw: "", val: 0.0, kind: "empty" })
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Formula engine. Grammar (deliberately small, honestly documented):
+//   formula  := "=" term (op term)*        op := + - * /
+//   term     := FUNC "(" ref ":" ref ")" | ref | number
+//   FUNC     := SUM | AVG | MIN | MAX | COUNT
+// Evaluation is LEFT-TO-RIGHT, no precedence (like a pocket calculator).
+// Empty referenced cells contribute 0. Any parse failure -> "#ERR".
+// ---------------------------------------------------------------------------
+
+fn is_digit(c: str) -> bool {
+    let o = ord(c)
+    return o >= 48 and o <= 57
+}
+
+fn is_alpha(c: str) -> bool {
+    let o = ord(to_upper(c))
+    return o >= 65 and o <= 90
+}
+
+fn cell_value(name: str) -> float {
+    let ent = get_entity(name)
+    if ent == nil { return 0.0 }
+    let cl = get(ent, Cell) |> unwrap
+    return cl.val
+}
+
+// SUM/AVG/MIN/MAX/COUNT over the rectangle spanned by two refs.
+// Returns (value, ok).
+fn eval_func(fname: str, a: str, b: str) -> (float, bool) {
+    let pa = parse_ref(a)
+    let pb = parse_ref(b)
+    if pa[0] < 0 or pb[0] < 0 { return (0.0, false) }
+    let c0 = min(pa[0], pb[0])
+    let c1 = max(pa[0], pb[0])
+    let r0 = min(pa[1], pb[1])
+    let r1 = max(pa[1], pb[1])
+    let mut total = 0.0
+    let mut count = 0
+    let mut lo = 0.0
+    let mut hi = 0.0
+    let mut first = true
+    for c in range(c0, c1 + 1) {
+        for r in range(r0, r1 + 1) {
+            let ent = get_entity(cell_name(c, r))
+            if ent == nil { continue }
+            let cl = get(ent, Cell) |> unwrap
+            if cl.kind == "empty" or cl.kind == "err" { continue }
+            total = total + cl.val
+            count = count + 1
+            if first {
+                lo = cl.val
+                hi = cl.val
+                first = false
+            }
+            if cl.val < lo { lo = cl.val }
+            if cl.val > hi { hi = cl.val }
+        }
+    }
+    if fname == "SUM" { return (total, true) }
+    if fname == "COUNT" { return (float(count), true) }
+    if fname == "MIN" { return (lo, true) }
+    if fname == "MAX" { return (hi, true) }
+    if fname == "AVG" {
+        if count == 0 { return (0.0, true) }
+        return (total / float(count), true)
+    }
+    return (0.0, false)
+}
+
+// One term starting at position i. Returns (value, next_i, ok).
+fn eval_term(src: str, i: int) -> (float, int, bool) {
+    let n = len(src)
+    if i >= n { return (0.0, i, false) }
+    let c = slice(src, i, i + 1)
+
+    // number literal (digits, optional dot)
+    if is_digit(c) or c == "." {
+        let mut j = i
+        while j < n {
+            let cj = slice(src, j, j + 1)
+            if is_digit(cj) or cj == "." { j = j + 1 } else { break }
+        }
+        match try_float(slice(src, i, j)) {
+            Some(x) => { return (x, j, true) }
+            None => { return (0.0, j, false) }
+        }
+    }
+
+    if !is_alpha(c) { return (0.0, i, false) }
+
+    // word: either FUNC(ref:ref) or a cell ref like B3
+    let mut j = i
+    while j < n {
+        let cj = slice(src, j, j + 1)
+        if is_alpha(cj) or is_digit(cj) { j = j + 1 } else { break }
+    }
+    let word = to_upper(slice(src, i, j))
+
+    if j < n and slice(src, j, j + 1) == "(" {
+        // FUNC(ref:ref)
+        let mut k = j + 1
+        let mut close = -1
+        while k < n and close < 0 {
+            if slice(src, k, k + 1) == ")" { close = k }
+            k = k + 1
+        }
+        if close < 0 { return (0.0, j, false) }
+        let inner = slice(src, j + 1, close)
+        let parts = split(inner, ":")
+        if len(parts) != 2 { return (0.0, close + 1, false) }
+        let fr = eval_func(word, trim(parts[0]), trim(parts[1]))
+        return (fr[0], close + 1, fr[1])
+    }
+
+    // cell ref
+    let pr = parse_ref(word)
+    if pr[0] < 0 { return (0.0, j, false) }
+    return (cell_value(word), j, true)
+}
+
+// Full formula body (after the "="). Returns (value, ok).
+pub fn eval_formula(body: str) -> (float, bool) {
+    let src = replace(body, " ", "")
+    let n = len(src)
+    if n == 0 { return (0.0, false) }
+    let first = eval_term(src, 0)
+    if !first[2] { return (0.0, false) }
+    let mut acc = first[0]
+    let mut i = first[1]
+    while i < n {
+        let op = slice(src, i, i + 1)
+        if op != "+" and op != "-" and op != "*" and op != "/" {
+            return (0.0, false)
+        }
+        let t = eval_term(src, i + 1)
+        if !t[2] { return (0.0, false) }
+        if op == "+" { acc = acc + t[0] }
+        if op == "-" { acc = acc - t[0] }
+        if op == "*" { acc = acc * t[0] }
+        if op == "/" {
+            if t[0] == 0.0 { return (0.0, false) }
+            acc = acc / t[0]
+        }
+        i = t[1]
+    }
+    return (acc, true)
+}
+
+// ---------------------------------------------------------------------------
+// The evented mutation path. Handlers are the only writers after spawn, so
+// provenance names the event — and the event names the human.
+// ---------------------------------------------------------------------------
+
+// (val, kind) derived from raw — the ONE normalization, used by the edit
+// path and the reflow path alike. val/kind must never be authored any
+// other way: the merge auto-resolves them arbitrarily precisely because
+// this function re-derives them from the merged raw.
+fn derive(raw: str) -> (float, str) {
+    let r = trim(raw)
+    if r == "" { return (0.0, "empty") }
+    if starts_with(r, "=") {
+        let fr = eval_formula(slice(r, 1, len(r)))
+        if !fr[1] { return (fr[0], "err") }
+        return (fr[0], "formula")
+    }
+    match try_float(r) {
+        Some(x) => { return (x, "num") }
+        None => { return (0.0, "text") }   // a label, not data
+    }
+}
+
+on CellSet(e) {
+    let raw = trim(e.raw)
+    let d = derive(raw)
+    set(e.cell, Cell { raw: raw, val: d[0], kind: d[1] })
+    emit Dirty { depth: 0, by: e.by, at: e.at }
+}
+
+// Re-derive EVERY cell from its raw (sorted names, deterministic) to
+// FIXPOINT inside one handler invocation: a chain like B1=SUM(A1:A3),
+// B2=B1*2 settles in one Dirty, and a true cycle (=A1 in B1, =B1 in A1)
+// burns the 16-pass fuel and stops instead of spinning.
+//
+// Every kind reflows, not just formulas — a merge can hand us a NUMBER
+// cell whose raw was picked from one side while val auto-resolved to the
+// other (the first demo run shipped raw="1250", val=1300.0 and three
+// machines happily converged on the wrong total: consistency is not
+// correctness). Re-deriving from raw is what makes val honest.
+on Dirty(e) {
+    let mut names = []
+    for ent in entities(Cell) { names << name_of(ent) }
+    let sorted_names = sort(names)
+    let mut passes = 0
+    let mut changed = true
+    while changed and passes < 16 {
+        changed = false
+        for nm in sorted_names {
+            let ent = get_entity(nm)
+            let cl = get(ent, Cell) |> unwrap
+            let d = derive(cl.raw)
+            if d[0] != cl.val or d[1] != cl.kind {
+                set(ent, Cell { raw: cl.raw, val: d[0], kind: d[1] })
+                changed = true
+            }
+        }
+        passes = passes + 1
+    }
+    let sh = get_resource(Sheet) |> unwrap
+    set_resource(Sheet, Sheet { cols: sh.cols, rows: sh.rows, passes: sh.passes + passes })
+}
+
+// ---------------------------------------------------------------------------
+// Commands
+// ---------------------------------------------------------------------------
+
+pub fn set_cell(name: str, raw: str, by: str, at: int) -> bool {
+    let pr = parse_ref(name)
+    if pr[0] < 0 { return false }
+    let ent = get_entity(to_upper(name))
+    if ent == nil { return false }
+    emit CellSet { cell: ent, raw: raw, by: by, at: at }
+    flush_events()   // frame k:   CellSet stores the cell, emits Dirty
+    flush_events()   // frame k+1: Dirty reflows formulas to fixpoint
+    return true
+}
+
+// Post-merge reflow: raw values may have changed under us (picked sides,
+// remote edits) — run the same Dirty cascade the editors use, so the
+// provenance honestly says a merge caused the reflow.
+pub fn recalc_after_merge(at: int) -> nil {
+    emit Dirty { depth: 0, by: "merge", at: at }
+    flush_events()
+}
+
+// ---------------------------------------------------------------------------
+// Rendering
+// ---------------------------------------------------------------------------
+
+pub fn fmt_val(kind: str, val: float, raw: str) -> str {
+    if kind == "empty" { return "" }
+    if kind == "err" { return "#ERR" }
+    if kind == "text" { return raw }
+    let iv = int(val)
+    if float(iv) == val { return f"{iv}" }
+    return f"{val}"
+}
+
+fn pad(s: str, w: int) -> str {
+    let mut out = s
+    while len(out) < w { out = out + " " }
+    return out
+}
+
+pub fn render_grid() -> str {
+    let sh = get_resource(Sheet) |> unwrap
+    let w = 8
+    let mut out = pad("", 4)
+    for c in range(0, sh.cols) { out = out + pad(col_letter(c), w) }
+    out = out + "\n"
+    for r in range(0, sh.rows) {
+        let mut line = pad(f"{r + 1}", 4)
+        let mut any = false
+        for c in range(0, sh.cols) {
+            let ent = get_entity(cell_name(c, r))
+            let cl = get(ent, Cell) |> unwrap
+            if cl.kind != "empty" { any = true }
+            line = line + pad(fmt_val(cl.kind, cl.val, cl.raw), w)
+        }
+        if any { out = out + line + "\n" }
+    }
+    return out
+}
+
+pub fn fmt_cell(name: str) -> str {
+    let ent = get_entity(to_upper(name))
+    if ent == nil { return f"no cell {name}" }
+    let cl = get(ent, Cell) |> unwrap
+    let v = fmt_val(cl.kind, cl.val, cl.raw)
+    return f"{to_upper(name)}: raw={cl.raw} val={v} kind={cl.kind}"
+}
+
+// ---------------------------------------------------------------------------
+// Wire helpers (same line protocol as RADTRACK)
+// ---------------------------------------------------------------------------
+
+pub fn digest_of(f: world_fork) -> str {
+    return split(fork_to_bytes(f), " ")[1]
+}
+
+pub fn read_msg(conn: int) -> str {
+    let mut buf = ""
+    while true {
+        let chunk = tcp_read(conn, 262144)
+        if len(chunk) == 0 { break }
+        buf = buf + chunk
+        if ends_with(buf, "\n") { break }
+    }
+    return trim(buf)
+}
+
+pub fn send_msg(conn: int, line: str) -> nil {
+    tcp_write(conn, line + "\n")
+}

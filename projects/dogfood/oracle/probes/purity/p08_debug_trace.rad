@@ -1,0 +1,19 @@
+// P08: debug_trace() inside a simulated system.
+// Docs (builtins.md) call debug_trace a "ghost effect": it "Log[s] `value` to
+// stderr and return[s] it unchanged. Treated as pure for pipeline analysis."
+// But writing to stderr IS observable IO. If the purity checker honours the
+// "treated as pure" classification, a simulated system can write to the
+// terminal -- speculation producing real-world output.
+// EXPECT (per the purity rule): rejection, OR at minimum no stderr output.
+// WATCH: stderr for the marker.
+component C { v: int = 0 }
+
+system Leak(c: mut C) {
+    c.v = debug_trace(c.v + 1)
+}
+
+let e = spawn("e", C { v: 0 })
+let f = fork()
+let r = simulate(f, [system::Leak], 3)
+let got = peek(r, e, C) |> unwrap
+print(f"COMPILED-AND-RAN v={got.v}")

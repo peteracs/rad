@@ -1,0 +1,374 @@
+// RADOKU v1 — a bitboard sudoku solver in rad, ported from tdoku_basic_heuristic
+// (https://t-dillon.github.io/tdoku/), the project this language is chasing.
+//
+// State = 27 ints used as 9-bit candidate masks (rows/cols/boxes), exactly
+// like tdoku: `rows[r] & cols[c] & boxes[b]` is the candidate set of a cell.
+// Search = iterative DFS with most-constrained-cell selection (MRV) and
+// 3-XOR undo on backtrack. The whole hot path is `&`, `^`, `popcount`,
+// `ctz`, and low-bit tricks `c & (0-c)` / `c & (c-1)` — the bitwise layer
+// this app just added to the language.
+//
+// Run:   rad projects/dogfood/sudoku/solver.rad            (self-test + famous puzzles)
+//        rad projects/dogfood/sudoku/solver.rad <file> [n] (benchmark a puzzle file)
+
+// box index of each cell, precomputed once.
+fn build_box() -> list < int > {
+    let mut bx = []
+    for i in range(0, 81) {
+        let r = i / 9
+        let c = i % 9
+        bx << (r / 3) * 3 + c / 3
+    }
+    return bx
+}
+
+let BOX = build_box()
+
+fn build_row() -> list < int > {
+    let mut t = []
+    for i in range(0, 81) { t << i / 9 }
+    return t
+}
+
+fn build_col() -> list < int > {
+    let mut t = []
+    for i in range(0, 81) { t << i % 9 }
+    return t
+}
+
+let ROW = build_row()
+let COL = build_col()
+
+// the 27 groups (9 rows, 9 cols, 9 boxes) as flat cell-index lists.
+fn build_groups() -> list {
+    let mut gs = []
+    for r in range(0, 9) {
+        let mut g = []
+        for c in range(0, 9) { g << r * 9 + c }
+        gs << g
+    }
+    for c in range(0, 9) {
+        let mut g = []
+        for r in range(0, 9) { g << r * 9 + c }
+        gs << g
+    }
+    for bb in range(0, 9) {
+        let mut g = []
+        let r0 = (bb / 3) * 3
+        let c0 = (bb % 3) * 3
+        for dr in range(0, 3) {
+            for dc in range(0, 3) { g << (r0 + dr) * 9 + (c0 + dc) }
+        }
+        gs << g
+    }
+    return gs
+}
+
+let GROUPS = build_groups()
+
+// Solve up to `want` solutions. Returns (solutions, guesses, first_solution).
+fn solve(puzzle: str, want: int) -> (int, int, str) {
+    // local aliases of the global tables: indexed reads on locals fuse into
+    // a single ListGetLocal dispatch (reads never copy — CoW aliasing).
+    let box_t = BOX
+    let row_t = ROW
+    let col_t = COL
+    let groups_t = GROUPS
+
+    let unique mut rows = [511, 511, 511, 511, 511, 511, 511, 511, 511]
+    let unique mut cols = [511, 511, 511, 511, 511, 511, 511, 511, 511]
+    let unique mut boxes = [511, 511, 511, 511, 511, 511, 511, 511, 511]
+    let unique mut grid = []
+    let unique mut open = []   // 1 = cell still unassigned (undo-safe, unlike grid)
+    let unique mut todo = []
+
+    // -- clues --
+    let mut n = 0   // len() on a unique binding counts as aliasing; count by hand
+    let cells = chars(puzzle)
+    for i in range(0, 81) {
+        let ch = cells[i]
+        let d = ord(ch) - 48
+        if d >= 1 and d <= 9 {
+            let bit = shl(1, d - 1)
+            let r = i / 9
+            let c = i % 9
+            let b = box_t[i]
+            if (rows[r] & bit) == 0 or (cols[c] & bit) == 0 or (boxes[b] & bit) == 0 {
+                return (0, 0, "")   // clue conflict: no solutions
+            }
+            rows[r] = rows[r] ^ bit
+            cols[c] = cols[c] ^ bit
+            boxes[b] = boxes[b] ^ bit
+            grid << d
+            open << 0
+        } else {
+            grid << 0
+            open << 1
+            todo << i
+            n = n + 1
+        }
+    }
+
+    let unique mut cand_left = []
+    let unique mut placed = []
+    for _i in range(0, n + 1) {
+        cand_left << 0
+        placed << 0
+    }
+    // per-node scratch: candidate mask per open cell, computed once per node
+    // instead of once per group-membership (each cell sits in 3 groups).
+    let unique mut scratch = []
+    for _i in range(0, 81) { scratch << 0 }
+
+    let mut found = 0
+    let mut guesses = 0
+    let mut solution = ""
+    let mut depth = 0
+    let mut entering = true
+
+    let mut running = true
+    while running {
+        if depth == n {
+            // all todo cells assigned: a full solution
+            found = found + 1
+            if solution == "" {
+                let mut out = ""
+                for i in range(0, 81) { out = out + str(grid[i]) }
+                solution = out
+            }
+            if found >= want {
+                running = false
+                continue
+            }
+            // keep searching: unwind into the last decision
+            depth = depth - 1
+            entering = false
+            continue
+        }
+
+        if entering {
+            // one cands computation per open cell per node, into the scratch
+            // table; MRV and the hidden-single scan both read from it.
+            let mut best = depth
+            let mut best_n = 10
+            for k in range(depth, n) {
+                let i = todo[k]
+                let m = rows[row_t[i]] & cols[col_t[i]] & boxes[box_t[i]]
+                scratch[i] = m
+                let pc = popcount(m)
+                if pc < best_n {
+                    best_n = pc
+                    best = k
+                    if pc <= 1 { break }   // forced or dead: hidden scan skipped
+                }
+            }
+
+            // DPLL upgrade: when no cell is trivially forced, look for a
+            // hidden single (a digit with exactly one home in some group)
+            // before guessing — tdoku's "+h" tier. The same scan detects
+            // groups where a digit has NO home, pruning whole subtrees the
+            // basic solver would enumerate.
+            if best_n > 1 {
+                let mut found_cell = -1
+                let mut found_bit = 0
+                let mut dead = false
+                let mut g = 0
+                while g < 27 and found_cell < 0 and !dead {
+                    let cells_g = groups_t[g]
+                    let mut remaining = 0
+                    if g < 9 { remaining = rows[g] } else { if g < 18 { remaining = cols[g - 9] } else { remaining = boxes[g - 18] } }
+                    if remaining != 0 {
+                        let mut seen1 = 0
+                        let mut seen2 = 0
+                        for j in range(0, 9) {
+                            let i = cells_g[j]
+                            if open[i] == 1 {
+                                let m = scratch[i]
+                                seen2 = seen2 | (seen1 & m)
+                                seen1 = seen1 | m
+                            }
+                        }
+                        if (remaining & seen1) != remaining {
+                            dead = true   // some digit has no home in this group
+                        } else {
+                            let singles = remaining & seen1 & (511 ^ seen2)
+                            if singles != 0 {
+                                let bit = singles & (0 - singles)
+                                for j in range(0, 9) {
+                                    let i = cells_g[j]
+                                    if open[i] == 1 and found_cell < 0 {
+                                        if (scratch[i] & bit) != 0 {
+                                            found_cell = i
+                                            found_bit = bit
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    g = g + 1
+                }
+                if dead {
+                    // contradiction: force an immediate backtrack
+                    cand_left[depth] = 0
+                    placed[depth] = 0
+                    entering = false
+                    continue
+                }
+                if found_cell >= 0 {
+                    let mut k = depth
+                    while todo[k] != found_cell { k = k + 1 }
+                    let tmp = todo[depth]
+                    todo[depth] = todo[k]
+                    todo[k] = tmp
+                    cand_left[depth] = found_bit
+                    placed[depth] = 0
+                    // fall through: the forced digit is placed below, and it
+                    // never counts as a guess (cand_left becomes 0 after it)
+                } else {
+                    let tmp = todo[depth]
+                    todo[depth] = todo[best]
+                    todo[best] = tmp
+                    cand_left[depth] = scratch[todo[depth]]
+                    placed[depth] = 0
+                }
+            } else {
+                let tmp = todo[depth]
+                todo[depth] = todo[best]
+                todo[best] = tmp
+                cand_left[depth] = scratch[todo[depth]]
+                placed[depth] = 0
+            }
+        }
+
+        let cell = todo[depth]
+        let r = cell / 9
+        let c = cell % 9
+        let b = box_t[cell]
+
+        // undo the previous attempt at this depth (3 XORs — the backtrack)
+        if placed[depth] != 0 {
+            let bit = placed[depth]
+            rows[r] = rows[r] | bit
+            cols[c] = cols[c] | bit
+            boxes[b] = boxes[b] | bit
+            open[cell] = 1
+            placed[depth] = 0
+        }
+
+        if cand_left[depth] == 0 {
+            // exhausted: backtrack
+            if depth == 0 {
+                running = false
+                continue
+            }
+            depth = depth - 1
+            entering = false
+            continue
+        }
+
+        // take the lowest candidate bit; count a guess if others remain
+        let bit = cand_left[depth] & (0 - cand_left[depth])
+        cand_left[depth] = cand_left[depth] ^ bit
+        if cand_left[depth] != 0 { guesses = guesses + 1 }
+
+        rows[r] = rows[r] ^ bit
+        cols[c] = cols[c] ^ bit
+        boxes[b] = boxes[b] ^ bit
+        open[cell] = 0
+        placed[depth] = bit
+        grid[cell] = ctz(bit) + 1
+
+        depth = depth + 1
+        entering = true
+    }
+
+    return (found, guesses, solution)
+}
+
+fn check_solution(puzzle: str, sol: str) -> bool {
+    if len(sol) != 81 { return false }
+    let p = chars(puzzle)
+    let s = chars(sol)
+    let mut ok = true
+    for i in range(0, 81) {
+        let d = ord(p[i]) - 48
+        if d >= 1 and d <= 9 and ord(s[i]) - 48 != d { ok = false }
+    }
+    let mut rs = [0, 0, 0, 0, 0, 0, 0, 0, 0]
+    let mut cs = [0, 0, 0, 0, 0, 0, 0, 0, 0]
+    let mut bs = [0, 0, 0, 0, 0, 0, 0, 0, 0]
+    for i in range(0, 81) {
+        let bit = shl(1, ord(s[i]) - 49)
+        rs[i / 9] = rs[i / 9] | bit
+        cs[i % 9] = cs[i % 9] | bit
+        bs[BOX[i]] = bs[BOX[i]] | bit
+    }
+    for g in range(0, 9) {
+        if rs[g] != 511 or cs[g] != 511 or bs[g] != 511 { ok = false }
+    }
+    return ok
+}
+
+fn bench_file(path: str, limit: int) -> nil {
+    let raw = read_file(path)
+    let mut puzzles = []
+    for line in split(raw, "\n") {
+        let t = trim(line)
+        if len(t) >= 81 and !starts_with(t, "#") {
+            puzzles << slice(t, 0, 81)
+        }
+        if limit > 0 and len(puzzles) >= limit { break }
+    }
+    print(f"{path}: {len(puzzles)} puzzles")
+
+    let t0 = clock()
+    let mut total_guesses = 0
+    let mut no_guess = 0
+    let mut solved = 0
+    // tdoku's benchmarks search for up to 2 solutions (solve + prove
+    // uniqueness) — match that so the numbers are comparable.
+    for p in puzzles {
+        let res = solve(p, 2)
+        if res[0] == 1 { solved = solved + 1 }
+        total_guesses = total_guesses + res[1]
+        if res[1] == 0 { no_guess = no_guess + 1 }
+    }
+    let elapsed = clock() - t0
+
+    let per = elapsed * 1000000.0 / float(len(puzzles))
+    let rate = float(len(puzzles)) / elapsed
+    let gp = float(total_guesses) / float(len(puzzles))
+    let ng = float(no_guess) * 100.0 / float(len(puzzles))
+    print(f"solved {solved}/{len(puzzles)} | {to_fixed(rate, 1)} puzzles/sec | {to_fixed(per, 1)} usec/puzzle | {to_fixed(ng, 1)}% no_guess | {to_fixed(gp, 2)} guesses/puzzle")
+}
+
+fn main() -> nil {
+    let args = sys_args()
+
+    // famous hardest puzzles as smoke tests (solution + uniqueness proof)
+    let escargot = "1....7.9..3..2...8..96..5....53..9...1..8...26....4...3......1..4......7..7...3.."
+    let inkala2012 = "8..........36......7..9.2...5...7.......457.....1...3...1....68..85...1..9....4.."
+
+    print("=== RADOKU v1: tdoku_basic_heuristic, ported to rad bitboards ===")
+    for entry in [("AI Escargot (2006)", escargot), ("Inkala 'world's hardest' (2012)", inkala2012)] {
+        let t0 = clock()
+        let res = solve(entry[1], 2)
+        let ms = (clock() - t0) * 1000.0
+        let mut unique_str = "UNIQUE"
+        if res[0] != 1 { unique_str = f"NOT UNIQUE ({res[0]})" }
+        let valid = check_solution(entry[1], res[2])
+        print(f"{entry[0]}: solved={valid} {unique_str} guesses={res[1]} {to_fixed(ms, 2)} ms")
+    }
+
+    if len(args) >= 1 {
+        let mut limit = 0
+        if len(args) >= 2 {
+            match try_int(args[1]) {
+                Some(v) => { limit = v }
+                None => {}
+            }
+        }
+        bench_file(args[0], limit)
+    }
+}

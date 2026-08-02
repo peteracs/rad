@@ -1,0 +1,8 @@
+---
+source: tests\conformance\keyword_shorthand_pattern_reject.rad
+exit_code: 1
+---
+
+---stderr---
+Error: Pattern field 'on' is a reserved word and cannot bind by shorthand — use `on: some_name` to bind it
+Error: Unexpected token FatArrow ('')

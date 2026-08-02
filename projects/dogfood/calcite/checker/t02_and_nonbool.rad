@@ -1,0 +1,5 @@
+// ILLEGAL: `and` requires both operands to be bool. Spec 2.3.7.
+fn main() -> nil {
+    let b = true and 42
+    print(f"{b}")
+}

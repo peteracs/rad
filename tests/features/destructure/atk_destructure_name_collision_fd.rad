@@ -1,0 +1,8 @@
+fn main() -> nil {
+    let __fd_0 = "I am the real __fd_0"
+    let rows = [[10, 20], [30, 40]]
+    for [a, b] in rows {
+        print(a + b)
+    }
+    print(__fd_0)
+}

@@ -1,0 +1,8 @@
+---
+source: tests\conformance\state_machine_component.rad
+exit_code: 0
+---
+true
+true
+true
+No transition on 'fire' from state 'Flow::Ready'

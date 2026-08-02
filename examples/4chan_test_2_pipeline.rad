@@ -1,0 +1,63 @@
+struct Log { level: str = "", msg: str = "" }
+
+// Explicit parse outcome: no silent “UNKNOWN” swallowing of malformed lines.
+type ParseResult {
+    Ok { log: Log }
+    Err { raw: str }
+}
+
+pure fn parse_log(line: str) -> ParseResult {
+    let parts = split(line, "|")
+    if len(parts) < 2 {
+        return ParseResult::Err { raw: line }
+    }
+    return ParseResult::Ok { log: Log { level: parts[0], msg: parts[1] } }
+}
+
+pure fn is_ok_parse(r: ParseResult) -> bool {
+    return r is Ok
+}
+
+// After `filter(is_ok_parse)`, only `Ok` remains semantically; both arms required for exhaustiveness.
+pure fn parsed_log(r: ParseResult) -> Log {
+    match r {
+        Ok { log } => { return log }
+        Err { raw } => { return Log { level: "UNREACHABLE", msg: raw } }
+    }
+}
+
+pure fn is_error(l: Log) -> bool {
+    return l.level == "ERROR"
+}
+
+pure fn extract_msg(l: Log) -> str {
+    return l.msg
+}
+
+fn main() -> nil {
+    let raw_logs = [
+        "ERROR|db timeout",
+        "INFO|user login",
+        "ERROR|null pointer exception",
+        "bad-line-no-pipe",
+        "WARN|high memory usage",
+        "INFO|user logout",
+        "ERROR|db timeout",
+        "ERROR|db timeout"
+    ]
+
+    print("Processing logs through pure pipeline (explicit parse errors)...")
+
+    let parsed = raw_logs |> map(parse_log)
+    let oks_only = parsed |> filter(is_ok_parse)
+    let logs = oks_only |> map(parsed_log)
+    let error_msgs = logs |> filter(is_error) |> map(extract_msg)
+
+    print("Extracted Error Messages:", error_msgs)
+
+    let bad = parsed[3]
+    match bad {
+        Err { raw } => { print("Recorded malformed line:", raw) }
+        Ok { log } => { print("unexpected", log.msg) }
+    }
+}

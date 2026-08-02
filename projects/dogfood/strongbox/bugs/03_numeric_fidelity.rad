@@ -1,0 +1,76 @@
+// PROBE / BUG 03 — numeric fidelity across save_world() -> load_world().
+//
+//   rad projects/dogfood/strongbox/bugs/03_numeric_fidelity.rad
+//
+// The round-trip contract: a value that is saved must come back identical.
+// No tampering here — every value below is produced by Rad itself and
+// persisted with save_world(). We compare value AND typeof() before/after.
+//
+// The case that matters most is `whole`: a float-declared field holding an
+// integral value (3.0). JSON has one number type, so a serializer that emits
+// `3` instead of `3.0` cannot distinguish it from an int on the way back in.
+
+component Nums {
+    i_max: 0,
+    i_min: 0,
+    i_small: 0,
+    f_whole: 0.0,
+    f_frac: 0.0,
+    f_tiny: 0.0,
+    f_neg_zero: 0.0,
+}
+// NB: f64::MAX is deliberately absent — it makes the save unloadable
+// outright. That is a separate defect; see bugs/04_unloadable_save.rad.
+
+fn show(tag: str) -> nil {
+    let n = get(get_entity("nums"), Nums) |> unwrap
+    print(f"  {tag}")
+    print(f"    i_max      {n.i_max} ({typeof(n.i_max)})")
+    print(f"    i_min      {n.i_min} ({typeof(n.i_min)})")
+    print(f"    i_small    {n.i_small} ({typeof(n.i_small)})")
+    print(f"    f_whole    {n.f_whole} ({typeof(n.f_whole)})")
+    print(f"    f_frac     {n.f_frac} ({typeof(n.f_frac)})")
+    print(f"    f_tiny     {n.f_tiny} ({typeof(n.f_tiny)})")
+    print(f"    f_neg_zero {n.f_neg_zero} ({typeof(n.f_neg_zero)})")
+    return nil
+}
+
+print("=== numeric fidelity across save_world/load_world ===")
+
+spawn("nums", Nums {
+    i_max: 9223372036854775807,
+    i_min: -9223372036854775807,
+    i_small: 42,
+    f_whole: 3.0,
+    f_frac: 0.1,
+    f_tiny: 0.000000000000000000001,
+    f_neg_zero: -0.0,
+})
+
+let before = get(get_entity("nums"), Nums) |> unwrap
+show("BEFORE save")
+
+let saved = save_world()
+print(f"  raw save: {saved}")
+
+let d_before = world_digest()
+let _n = load_world(saved)
+let d_after = world_digest()
+
+show("AFTER load")
+
+let after = get(get_entity("nums"), Nums) |> unwrap
+
+print("=== verdict ===")
+print(f"  world_digest stable:      {d_before == d_after}")
+print(f"  i_max identical:          {before.i_max == after.i_max} (types {typeof(before.i_max)} -> {typeof(after.i_max)})")
+print(f"  i_min identical:          {before.i_min == after.i_min} (types {typeof(before.i_min)} -> {typeof(after.i_min)})")
+print(f"  f_whole identical:        {before.f_whole == after.f_whole} (types {typeof(before.f_whole)} -> {typeof(after.f_whole)})")
+print(f"  f_frac identical:         {before.f_frac == after.f_frac} (types {typeof(before.f_frac)} -> {typeof(after.f_frac)})")
+print(f"  f_tiny identical:         {before.f_tiny == after.f_tiny} (types {typeof(before.f_tiny)} -> {typeof(after.f_tiny)})")
+print(f"  f_neg_zero identical:     {before.f_neg_zero == after.f_neg_zero} (types {typeof(before.f_neg_zero)} -> {typeof(after.f_neg_zero)})")
+
+// A float-declared field that came back as int is not merely cosmetic: it
+// changes how downstream arithmetic behaves, because int/int truncates.
+print("=== downstream consequence of f_whole's type ===")
+print(f"  f_whole / 2 = {after.f_whole / 2}   (3.0/2 is 1.5; 3/2 truncates to 1)")

@@ -1,0 +1,10 @@
+fn main() -> nil {
+    let tuples = [(1, 2), (3, 4)]
+    let lists = [[1, 2], [3, 4]]
+    let t_sum = tuples |> map(fn([a, b]) { return a + b })
+    let l_sum = lists |> map(fn([a, b]) { return a + b })
+    print(t_sum[0])
+    print(t_sum[1])
+    print(l_sum[0])
+    print(l_sum[1])
+}

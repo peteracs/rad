@@ -1,0 +1,21 @@
+// Attack: guarded handler that emits further events in its body
+event Step { n }
+event Done { msg }
+
+on Step(e) where e.n >= 3 {
+    emit Done { msg: f"reached {e.n}" }
+    flush_events()
+}
+
+on Done(e) {
+    print("done:", e.msg)
+}
+
+fn main() -> nil {
+    emit Step { n: 1 }
+    flush_events()
+    emit Step { n: 3 }
+    flush_events()
+}
+
+// expect: done: reached 3

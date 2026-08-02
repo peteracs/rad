@@ -1,0 +1,13 @@
+// Attack: find in a pipeline
+fn main() -> nil {
+    let result = [1, 2, 3, 4, 5]
+        |> filter(fn(x) { return x > 2 })
+        |> find(fn(x) { return x % 2 == 0 })
+
+    match result {
+        Some(v) => { print("found:", v) }
+        None => { print("none") }
+    }
+}
+
+// expect: found: 4

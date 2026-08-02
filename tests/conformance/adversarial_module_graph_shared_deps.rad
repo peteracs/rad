@@ -1,0 +1,11 @@
+// backend: both
+use "modules/adversarial_graph/tail.rad"
+use "modules/adversarial_graph/hub.rad"
+use "modules/adversarial_graph/leaf_beta.rad"
+
+print(tail())
+// expect: 125
+print(hub())
+// expect: 60
+print(tail() + hub() + leaf_beta())
+// expect: 188

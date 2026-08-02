@@ -1,0 +1,8 @@
+// rust-mode: check
+// expect-runtime-error: Variant 'Some' not found in type 'Result'
+let ok = Result::Ok { value: 1 }
+let Some { value: x } = ok else {
+    print("fail")
+    0
+}
+// expect-runtime-error: Variant 'Some' not found in type 'Result'

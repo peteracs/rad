@@ -1,0 +1,8 @@
+---
+source: tests\conformance\diag_match_destructure_needs_type.rad
+exit_code: 1
+---
+
+---stderr---
+Error: Match arms use destructuring patterns but the subject type is unknown
+Error: Undefined variable 'bar'

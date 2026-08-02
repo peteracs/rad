@@ -1,0 +1,4 @@
+// backend: both
+use "modules/common.rad"
+print(shared_value())
+// expect: 42

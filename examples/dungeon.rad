@@ -1,0 +1,105 @@
+// =====================================================================
+//  Dungeon Generator — Procedural rooms with ECS
+// =====================================================================
+
+component RoomInfo { id: 0, width: 0, height: 0, room_type: "" }
+
+component RoomPos { x: 0, y: 0 }
+
+component RoomLinks { north: -1, south: -1, east: -1, west: -1 }
+
+event RoomCreated { id, room_type, x, y }
+
+event RoomLinked { from_id, to_id, direction }
+
+event PlayerMoved { from_room, to_room, direction }
+
+on RoomCreated(e) {
+    print(f"  [+] Room {e.id} ({e.room_type}) at ({e.x}, {e.y})")
+}
+
+on RoomLinked(e) {
+    print(f"  [~] Room {e.from_id} <-> Room {e.to_id} ({e.direction})")
+}
+
+on PlayerMoved(e) {
+    print(f"  >> Moved {e.direction}: Room {e.from_room} -> Room {e.to_room}")
+}
+
+pure fn room_type_for(index) {
+    let types = ["entrance", "corridor", "treasure", "monster", "boss",
+        "trap", "corridor", "rest", "puzzle", "exit"]
+    return types[index % len(types)]
+}
+
+fn create_room(id, x, y, rtype) {
+    let eid = spawn(f"room{id}",
+        RoomInfo { id: id, width: 10 + id * 2, height: 8 + id, room_type: rtype },
+        RoomPos { x: x, y: y },
+        RoomLinks { north: -1, south: -1, east: -1, west: -1 }
+    )
+    emit RoomCreated { id: id, room_type: rtype, x: x, y: y }
+    return eid
+}
+
+fn main() -> any {
+    print("=== Dungeon Generator ===\n")
+
+    // Generate a linear dungeon with branches
+    let mut rooms = []
+    let mut room_count = 0
+    let positions_x = [0, 1, 2, 3, 4, 4, 3, 2, 1, 0]
+    let positions_y = [0, 0, 0, 0, 0, 1, 1, 1, 1, 1]
+
+    print("Generating rooms...")
+    for i in range(10) {
+        let rtype = room_type_for(i)
+        let eid = create_room(i, positions_x[i], positions_y[i], rtype)
+        rooms = push(rooms, eid)
+        room_count = room_count + 1
+    }
+
+    print("\nLinking rooms...")
+    // Link sequential rooms
+    for i in range(room_count - 1) {
+        let px = positions_x[i]
+        let py = positions_y[i]
+        let nx = positions_x[i + 1]
+        let ny = positions_y[i + 1]
+        let mut dir = "east"
+        if nx < px { dir = "west" }
+        if ny > py { dir = "south" }
+        if ny < py { dir = "north" }
+        emit RoomLinked { from_id: i, to_id: i + 1, direction: dir }
+    }
+
+    // Dungeon stats
+    print("\n--- Dungeon Statistics ---")
+    print(f"  Total rooms: {room_count}")
+
+    let room_types = range(room_count) |> map(fn(i) { return room_type_for(i) })
+    let monster_rooms = range(room_count)
+    |> filter(fn(i) { return room_type_for(i) == "monster" })
+    let treasure_rooms = range(room_count)
+    |> filter(fn(i) { return room_type_for(i) == "treasure" })
+    print(f"  Monster rooms: {len(monster_rooms)}")
+    print(f"  Treasure rooms: {len(treasure_rooms)}")
+
+    // Simulate player walking through
+    print("\n--- Player Exploration ---")
+    let mut current_room = 0
+    let path = [1, 2, 3, 4, 5, 6, 7]
+
+    for next_room in path {
+        let rinfo = get(rooms[next_room], RoomInfo) ?
+        emit PlayerMoved { from_room: current_room, to_room: next_room, direction: "forward" }
+        print(f"    Room {next_room}: {rinfo.room_type} ({rinfo.width}x{rinfo.height})")
+        current_room = next_room
+    }
+
+    for eid in rooms {
+        despawn(eid)
+    }
+
+    print("\nDungeon exploration complete!")
+}

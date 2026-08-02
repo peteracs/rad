@@ -1,0 +1,6 @@
+---
+source: tests\conformance\index_assign_writeback.rad
+exit_code: 0
+---
+99
+42

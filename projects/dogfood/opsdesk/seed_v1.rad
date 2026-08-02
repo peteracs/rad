@@ -1,0 +1,17 @@
+// OpsDesk, day zero — the v1 schema. Run once to produce world.json:
+//
+//   rad projects/dogfood/opsdesk/seed_v1.rad
+//
+// main.rad then loads this save through a `migrate` block: the schema
+// evolved overnight (sev -> priority, status added) and the data follows.
+
+component Incident { title: "", sev: 0, age: 0 }
+resource Board { open: 0 }
+
+let _a = spawn("INC-1", Incident { title: "db latency", sev: 2, age: 4 })
+let _b = spawn("INC-2", Incident { title: "login 500s", sev: 1, age: 1 })
+let _c = spawn("INC-3", Incident { title: "disk full on ci-7", sev: 3, age: 9 })
+set_resource(Board, Board { open: 3 })
+
+write_file("projects/dogfood/opsdesk/world.json", save_world())
+print("v1 world saved: 3 open incidents")

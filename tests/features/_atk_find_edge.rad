@@ -1,0 +1,50 @@
+// Attack find with edge cases
+
+fn main() -> nil {
+    // 1. Empty list
+    let r1 = find([], fn(x) { return x > 0 })
+    print("empty:", r1)
+
+    // 2. No match
+    let r2 = find([1, 2, 3], fn(x) { return x > 10 })
+    print("no match:", r2)
+
+    // 3. First element matches
+    let r3 = find([99, 1, 2], fn(x) { return x > 50 })
+    match r3 {
+        Some(v) => { print("first:", v) }
+        None => { print("bug") }
+    }
+
+    // 4. Last element matches
+    let r4 = find([1, 2, 99], fn(x) { return x > 50 })
+    match r4 {
+        Some(v) => { print("last:", v) }
+        None => { print("bug") }
+    }
+
+    // 5. Multiple matches — should return first
+    let r5 = find([10, 20, 30], fn(x) { return x >= 20 })
+    match r5 {
+        Some(v) => { print("first of many:", v) }
+        None => { print("bug") }
+    }
+
+    // 6. Single element list, matches
+    let r6 = find([42], fn(x) { return x == 42 })
+    match r6 {
+        Some(v) => { print("single:", v) }
+        None => { print("bug") }
+    }
+
+    // 7. Single element list, no match
+    let r7 = find([42], fn(x) { return x == 99 })
+    print("single no match:", r7)
+
+    // 8. find with strings
+    let r8 = find(["apple", "banana", "cherry"], fn(s) { return len(s) > 5 })
+    match r8 {
+        Some(v) => { print("string:", v) }
+        None => { print("bug") }
+    }
+}

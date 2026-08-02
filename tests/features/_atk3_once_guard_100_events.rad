@@ -1,0 +1,19 @@
+// Attack: 100 events, once+guard fires exactly once on the right one
+event Pulse { n: int }
+let mut fired = 0
+
+on Pulse once (e) where e.n == 50 {
+    fired = fired + 1
+    print("fired on:", e.n)
+}
+
+fn main() -> nil {
+    for i in range(0, 100) {
+        emit Pulse { n: i }
+    }
+    flush_events()
+    print("fired count:", fired)
+}
+
+// expect: fired on: 50
+// expect: fired count: 1

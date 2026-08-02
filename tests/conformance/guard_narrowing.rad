@@ -1,0 +1,32 @@
+// Guard-clause narrowing: an early exit on nil IS the else branch, so
+// everything after sees the binding as non-nil — missilework's
+// `if target == nil { return }` then `require(target, Pos)` pattern.
+
+component Pos { at: (float, float) = (0.0, 0.0) }
+
+component Lock { target: entity | nil = nil }
+
+fn chase_distance(hunter: entity) -> float {
+    let target = require(hunter, Lock).target
+    if target == nil { return -1.0 }
+    // target is `entity` from here on — require() accepts it
+    let (hx, hy) = require(hunter, Pos).at
+    let (tx, ty) = require(target, Pos).at
+    return sqrt((tx - hx) * (tx - hx) + (ty - hy) * (ty - hy))
+}
+
+fn first_word(s: str | nil) -> str {
+    if s == nil { return "(none)" }
+    return split(s, " ")[0]
+}
+
+fn main() -> nil {
+    let prey = entity "prey" { Pos { at: (3.0, 4.0) } }
+    let wolf = entity "wolf" { Pos {}, Lock { target: prey } }
+    let lost = entity "lost" { Pos {}, Lock {} }
+
+    print(chase_distance(wolf))     // 5.0
+    print(chase_distance(lost))     // -1.0
+    print(first_word("rad lang"))   // rad
+    print(first_word(nil))          // (none)
+}

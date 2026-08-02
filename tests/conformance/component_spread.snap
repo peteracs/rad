@@ -1,0 +1,14 @@
+---
+source: tests\conformance\component_spread.rad
+exit_code: 0
+---
+50
+100
+15
+8
+99
+100
+20
+8
+100
+20

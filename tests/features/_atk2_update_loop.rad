@@ -1,0 +1,13 @@
+// Attack: update inside a for loop — multiple updates to same entity
+component Score { value: 0 }
+
+fn main() -> nil {
+    let e = spawn(Score { value: 0 })
+    for i in range(1, 6) {
+        update(e, Score) { value = i }
+    }
+    let s = unwrap(get(e, Score))
+    print("final:", s.value)
+}
+
+// expect: final: 5

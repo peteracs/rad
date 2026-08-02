@@ -1,0 +1,50 @@
+// Dogfood: List item #2, Phase 1 — trace recording.
+//
+// Run with:   rad projects/dogfood/timetravel/main.rad --record projects/dogfood/timetravel/trace.radr
+//
+// The trace logs only what crosses the determinism boundary: the RNG seed
+// (header), clock reads, and file io results. rand_int calls and prints are
+// NOT logged — they replay for free because the interpreter is deterministic.
+
+component Health { hp: 100 }
+
+component Gold { amount: 0 }
+
+event Loot { amount }
+
+system Decay(h: mut Health) {
+    h = Health { hp: h.hp - 3 }
+}
+
+on Loot(e) {
+    let g = get_resource(Treasury) |> unwrap
+    set_resource(Treasury, Treasury { gold: g.gold + e.amount })
+}
+
+resource Treasury { gold: 0 }
+
+let hero = spawn("hero", Health { hp: 100 }, Gold { amount: 10 })
+
+print("=== Time-Travel Phase 1: Recording ===")
+
+// Boundary crossing #1: the clock.
+let started = clock()
+
+// Boundary crossing #2: file io.
+let config = read_file("projects/dogfood/timetravel/loot_table.txt")
+print(f"loot table: {config}")
+
+// Deterministic interior: RNG, events, systems. None of this is recorded.
+for _i in range(0, 3) {
+    emit Loot { amount: rand_int(10, 50) }
+    flush_events()
+}
+
+let before = fork()
+let after = simulate(before, [system::Decay], 5)
+print(f"decay diff: {diff(before, after)}")
+
+let t = get_resource(Treasury) |> unwrap
+let h = get(hero, Health) |> unwrap
+print(f"treasury: {t.gold}, hero hp: {h.hp}")
+print(f"elapsed: {clock() - started >= 0.0}")

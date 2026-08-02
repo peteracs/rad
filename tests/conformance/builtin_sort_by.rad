@@ -1,0 +1,26 @@
+// backend: both
+type Priority {
+    High {}
+    Medium {}
+    Low {}
+}
+
+let items = [
+    {"name": "c", "score": 3},
+    {"name": "a", "score": 1},
+    {"name": "b", "score": 2}
+]
+
+let sorted = sort_by(items, fn(item) { return item["score"] })
+print(sorted[0]["name"])
+print(sorted[1]["name"])
+print(sorted[2]["name"])
+
+let words = ["banana", "fig", "apple", "date"]
+let by_len = words |> sort_by(fn(w) { return len(w) })
+print(by_len)
+
+// expect: a
+// expect: b
+// expect: c
+// expect: ["fig", "date", "apple", "banana"]

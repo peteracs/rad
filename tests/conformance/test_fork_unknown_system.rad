@@ -1,0 +1,10 @@
+// Unknown system names in simulate() are rejected at compile time.
+
+component X { v: 0 }
+
+fn main() -> nil {
+    let _e = spawn("e", X { v: 0 })
+    let f = fork()
+    let _ = simulate(f, [system::NonExistentSystem], 1)
+    return nil
+}

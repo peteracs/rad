@@ -1,0 +1,83 @@
+// PROBE 14: delayed `emit ... after N` (the timer idiom) combined with a
+// parallel system batch.
+//
+// bugs/13 showed that parallel systems with shared reads, per-entity component
+// writes and an event-handler feedback loop are perfectly deterministic. The
+// one ingredient bugs/11 has that bugs/13 does not is a DELAYED emit: its
+// repair timer is `emit Broke { code: "" } after 2` issued from inside a
+// handler.
+//
+// Same structure as bugs/13, but the handler arms a delayed event instead of
+// acting immediately. Everything is still deterministic by construction, so
+// all three totals must be identical on every run.
+
+component Machine { indexed code: "", speed: 1 }
+component Gate { open: true }
+component Job { n: 0 }
+component Wear { n: 0 }
+
+resource GA { n: 0 }
+resource GB { n: 0 }
+resource Flips { n: 0 }
+resource Timers { armed: 0, fired: 0 }
+
+event Toggle { code: str }
+event Rearm { code: str }
+
+system BumpJob(_m: Machine, g: Gate, j: mut Job) {
+    if g.open {
+        j.n = j.n + 1
+    }
+}
+
+system BumpWear(m: Machine, g: Gate, w: mut Wear) {
+    if g.open {
+        w.n = w.n + 1
+        if w.n % 7 == 0 {
+            emit Toggle { code: m.code }
+        }
+    }
+}
+
+// close the gate now, and arm a DELAYED event to reopen it later
+on Toggle(e) {
+    match lookup(Machine, "code", e.code) {
+        Some(id) => {
+            update(id, Gate) { open = false }
+            update(Flips) { n = res(Flips).n + 1 }
+            update(Timers) { armed = res(Timers).armed + 1 }
+            emit Rearm { code: e.code } after 3
+        }
+        None => { }
+    }
+}
+
+on Rearm(e) {
+    match lookup(Machine, "code", e.code) {
+        Some(id) => {
+            update(id, Gate) { open = true }
+            update(Timers) { fired = res(Timers).fired + 1 }
+        }
+        None => { }
+    }
+}
+
+for i in range(0, 20) {
+    spawn(
+        Machine { code: f"m-{i}", speed: 1 },
+        Gate { open: true },
+        Job { n: 0 },
+        Wear { n: 0 },
+    )
+}
+
+for _t in range(0, 40) {
+    schedule [BumpJob, BumpWear]
+    flush_events()
+}
+
+let jt = query { Job } select Job |> reduce(0, fn(acc, j) { return acc + j.n })
+let wt = query { Wear } select Wear |> reduce(0, fn(acc, w) { return acc + w.n })
+let tm = res(Timers)
+
+print(f"job_total={jt} wear_total={wt} armed={tm.armed} fired={tm.fired} flips={res(Flips).n}")

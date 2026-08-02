@@ -1,0 +1,114 @@
+use "../sim/components.rad"
+use "../world/scene.rad"
+use "../world/avatars.rad"
+use "../sim/movement.rad"
+use "../protocol/match_protocol.rad"
+use "../server/state.rad"
+use "../server/input_queue.rad"
+
+let _local_avatar = seed_moba_world()
+
+fn main() -> nil {
+    let avatar = player_avatar(1)
+    let pos = get(avatar, Position) |> unwrap
+    let render = get(avatar, RenderAvatar) |> unwrap
+
+    assert(player_avatar_name(1) == "player_1", "player avatar must be role-named")
+    assert(render.model == "clockwork_mage", "avatar model must come from RenderAvatar metadata")
+    assert(pos.x == 0.0 and pos.y == 0.0, "avatar must spawn at scene origin")
+
+    issue_move_order(1, 7, 10.0, 0.0)
+    tick_movement(0.1)
+
+    let moved = get(avatar, Position) |> unwrap
+    let target = get(avatar, MoveTarget) |> unwrap
+
+    assert(moved.x > 0.0, "avatar should move toward issued target")
+    assert(target.command_id == 7, "move target must keep the command id")
+    let state_packet = encode_state_packet("smoke", 1000, 1, 2, 9001, 1, 3, 1)
+    assert(len(state_packet) == state_packet_len(), "state packet must use the binary v10 header plus one avatar record")
+    assert(byte_at(state_packet, 0) == protocol_magic() and byte_at(state_packet, 1) == protocol_version(), "state packet must carry the binary protocol header")
+    assert(byte_at(state_packet, 2) == packet_kind_state(), "state packet must encode avatar movement state")
+    assert(byte_at(state_packet, 53) == correction_reason_code("smoke"), "state packet must encode the server-authored correction reason")
+    assert(byte_at(state_packet, 54) == 1, "state packet must include one roster avatar")
+    assert(byte_at(state_packet, 55) == 0, "state packet must include zero projectiles in the movement smoke")
+    assert(max_state_avatar_records() == 42, "default snapshot MTU budget must cap avatar records below the safe UDP payload")
+
+    // Anti-teleport invariant: the wire carries a *target*, never a position.
+    // The authority advances Position toward that target by at most
+    // MoveSpeed * dt per tick, so a client can never snap itself across the map.
+    let speed = get(avatar, MoveSpeed) |> unwrap
+    let max_step = speed.units_per_sec * 0.1
+    assert(moved.x <= max_step + 0.0001, "one tick must move at most MoveSpeed * dt")
+    assert(moved.x < 10.0, "one tick must not snap the avatar onto a distant target")
+
+    // Hostile out-of-bounds coordinates are clamped into the map plane and
+    // still resolve to a bounded, server-simulated step rather than a teleport.
+    issue_move_order(1, 8, 999999.0, 999999.0)
+    let clamped = get(avatar, MoveTarget) |> unwrap
+    assert(clamped.x <= res(MobaScene).plane_w / 2.0, "out-of-bounds target x must clamp into the map plane")
+    assert(clamped.y <= res(MobaScene).plane_h / 2.0, "out-of-bounds target y must clamp into the map plane")
+
+    let before_far = get(avatar, Position) |> unwrap
+    tick_movement(0.1)
+    let after_far = get(avatar, Position) |> unwrap
+    let ddx = after_far.x - before_far.x
+    let ddy = after_far.y - before_far.y
+    assert(sqrt(ddx * ddx + ddy * ddy) <= max_step + 0.0001, "a clamped far target must still move at most MoveSpeed * dt per tick")
+
+    // Static terrain is authoritative and shared with the browser predictor.
+    // A target inside an expanded wall is snapped to the nearest free edge, and
+    // diagonal movement into a wall preserves the free axis so avatars slide.
+    issue_move_order(1, 9, 22.0, 0.0)
+    let blocked_target = get(avatar, MoveTarget) |> unwrap
+    assert(not overlaps_static_collider(blocked_target.x, blocked_target.y, render.radius), "blocked targets must resolve outside terrain")
+
+    update(avatar, Position) {
+        x = 0.0,
+        y = 30.0
+    }
+    issue_move_order(1, 10, 40.0, 0.0)
+    tick_movement(0.5)
+    let slid = get(avatar, Position) |> unwrap
+    assert(slid.x == 0.0, "wall collision must block the colliding x axis")
+    assert(slid.y < 30.0, "wall collision must preserve the free y-axis slide")
+    assert(not overlaps_static_collider(slid.x, slid.y, render.radius), "slide resolution must not place the avatar inside terrain")
+
+    match remember_peer("127.0.0.1", 9000, 9001, 2, 1000, 0, 1) {
+        Some(_peer) => {
+            let peer_two_avatar = player_avatar(2)
+            assert(not is_none(get(peer_two_avatar, PlayerControlled)), "remembered peer should own an avatar")
+            let roster_packet = encode_state_packet("snapshot", 1100, 2, 3, 9001, 1, 4, 1)
+            assert(byte_at(roster_packet, 63) == 1, "state packet must include one peer telemetry record")
+            assert(len(roster_packet) == state_packet_header_len() + state_peer_record_len() + state_avatar_record_len() * 2, "state packet must append fixed-stride peer and avatar records")
+            assert(byte_at(roster_packet, 53) == correction_reason_code("snapshot"), "state packet must explain the snapshot reason")
+            assert(byte_at(roster_packet, 54) == 2, "state packet roster count must include remote avatars")
+            assert(len(roster_packet) <= res(ServerConfig).snapshot_mtu_bytes, "interest-managed roster packet must stay under the configured MTU budget")
+
+            match remember_peer("127.0.0.1", 9001, 9001, 3, 1000, 0, 1) {
+                Some(_far_peer) => {
+                    let far_avatar = player_avatar(3)
+                    update(far_avatar, Position) {
+                        x = res(MobaScene).plane_w / 2.0,
+                        y = res(MobaScene).plane_h / 2.0
+                    }
+                    let interested_packet = encode_state_packet("snapshot", 1200, 3, 4, 9001, 1, 5, 1)
+                    assert(byte_at(interested_packet, 54) == 2, "interest management must omit avatars outside the viewer radius")
+                    let full_packet = encode_full_state_packet("full-sync", 1210, 3, 5, 9001, 1, 5, 1)
+                    assert(byte_at(full_packet, 52) == status_code("full-sync"), "cold join must carry full-sync status")
+                    assert(byte_at(full_packet, 54) == 3, "cold join full sync must include uncullled avatar records")
+                }
+                None => {
+                    assert(false, "peer table should accept far smoke peer")
+                }
+            }
+
+            let expired = expire_idle_peers(12000)
+            assert(expired == 2, "idle peers should expire")
+            assert(is_none(get(peer_two_avatar, PlayerControlled)), "expiring a peer should despawn its avatar")
+        }
+        None => {
+            assert(false, "peer table should accept smoke peer")
+        }
+    }
+}

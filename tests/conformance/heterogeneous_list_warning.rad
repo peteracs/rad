@@ -1,0 +1,13 @@
+// backend: both
+// Mixed-type list literals widen to list<any> with a warning
+fn get_pair() {
+    return [42, "hello"]
+}
+
+let pair = get_pair()
+print(pair[0])
+// expect: 42
+print(pair[1])
+// expect: hello
+print(len(pair))
+// expect: 2

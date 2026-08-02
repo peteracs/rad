@@ -1,0 +1,16 @@
+// P01 baseline: IO directly in a system used by simulate().
+// Docs: "The type checker statically prevents systems that perform IO ... from
+// being used inside simulate()."
+// EXPECT: compile-time rejection.
+component C { v: int = 0 }
+
+system Leak(c: mut C) {
+    print("ESCAPED-P01 io ran inside simulate")
+    c.v = c.v + 1
+}
+
+let e = spawn("e", C { v: 0 })
+let f = fork()
+let r = simulate(f, [system::Leak], 2)
+let got = peek(r, e, C) |> unwrap
+print(f"COMPILED-AND-RAN v={got.v}")

@@ -1,0 +1,14 @@
+---
+source: tests\conformance\strings.rad
+exit_code: 0
+---
+ab
+hello rad
+3
+0
+97
+99
+dar
+true
+false
+bcd

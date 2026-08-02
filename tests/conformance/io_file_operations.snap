@@ -1,0 +1,10 @@
+---
+source: tests\conformance\io_file_operations.rad
+exit_code: 0
+---
+false
+true
+hello
+hello world
+false
+file ops ok

@@ -1,0 +1,86 @@
+// Indexed field assignment in update blocks (RAD_GAPS #1: list fields in
+// components were already legal — the missing piece was `vals[i] = x`).
+// Also covers set_at(), the expression-position dual.
+
+component Shields { slots: list = [0, 0, 0], count: int = 0 }
+
+component Inventory { items: map < str, int > = {}, slots_used: int = 0 }
+resource Board { rows: list = [[0, 0], [0, 0]], turn: int = 0 }
+
+fn main() -> nil {
+    // component: single indexed write
+    let e = entity "tank" { Shields {} }
+    update(e, Shields) { slots[1] = 250 }
+    let s = get(e, Shields) |> unwrap
+    print(s.slots)                    // [0, 250, 0]
+
+    // multiple indexed writes to the same field apply in order
+    update(e, Shields) { slots[0] = 100, slots[2] = 300 }
+    let s2 = get(e, Shields) |> unwrap
+    print(s2.slots)                   // [100, 250, 300]
+
+    // last write wins on the same slot
+    update(e, Shields) { slots[1] = 1, slots[1] = 2 }
+    let s3 = get(e, Shields) |> unwrap
+    print(s3.slots[1])                // 2
+
+    // mixed: plain assignment seeds the base, indexed write patches it
+    update(e, Shields) { slots = [9, 9, 9], slots[1] = 0 }
+    let s4 = get(e, Shields) |> unwrap
+    print(s4.slots)                   // [9, 0, 9]
+
+    // indexed write next to a plain write on another field
+    update(e, Shields) { slots[0] = 7, count = 3 }
+    let s5 = get(e, Shields) |> unwrap
+    print(s5.slots[0])                // 7
+    print(s5.count)                   // 3
+
+    // index can be a computed expression
+    let mut i = 0
+    i = i + 2
+    update(e, Shields) { slots[i] = 42 }
+    let s6 = get(e, Shields) |> unwrap
+    print(s6.slots[2])                // 42
+
+    // value can read the pre-update component (rhs evaluates first)
+    update(e, Shields) { slots[0] = s6.slots[2] + 8 }
+    let s7 = get(e, Shields) |> unwrap
+    print(s7.slots[0])                // 50
+
+    // resources take indexed updates too (nested list element)
+    update(Board) { rows[1] = [3, 4], turn = 1 }
+    let b = get_resource(Board) |> unwrap
+    print(b.rows)                     // [[0, 0], [3, 4]]
+    print(b.turn)                     // 1
+
+    // map fields take keyed updates: insert-or-replace, like m[k] = v
+    let inv = entity "carry" { Inventory {} }
+    update(inv, Inventory) { items["sword"] = 1, slots_used = 1 }
+    update(inv, Inventory) { items["potion"] = 3 }
+    update(inv, Inventory) { items["sword"] = 2 }      // replace
+    let bag = get(inv, Inventory) |> unwrap
+    print(bag.items["sword"])         // 2
+    print(bag.items["potion"])        // 3
+    print(bag.slots_used)             // 1
+    print(len(bag.items))             // 2
+
+    // set_at(): pure expression form, original untouched (value semantics)
+    let base = [1, 2, 3]
+    let patched = set_at(base, 1, 99)
+    print(base)                       // [1, 2, 3]
+    print(patched)                    // [1, 99, 3]
+
+    // set_at chains
+    print(set_at(set_at([0, 0], 0, 5), 1, 6))   // [5, 6]
+
+    // set_at on maps: insert and replace, original untouched
+    let m0 = {"a": 1}
+    let m1 = set_at(m0, "b", 2)
+    let m2 = set_at(m1, "a", 9)
+    print(m0)                         // {"a": 1}
+    print(m1["b"])                    // 2
+    print(m2["a"])                    // 9
+
+    // set_at is pipeline-friendly like every pure builtin
+    print([7, 8] |> set_at(1, 0))     // [7, 0]
+}

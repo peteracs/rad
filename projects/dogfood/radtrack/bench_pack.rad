@@ -1,0 +1,68 @@
+// RADPACK (D1) measurement harness — run BEFORE and AFTER the codec change
+// with the same seed and diff the byte counts. Grows a realistic tracker
+// world (400 tickets, organic edits), then measures every wire surface:
+//
+//   rad projects/dogfood/radtrack/bench_pack.rad
+//
+// Also round-trips everything, so this doubles as an end-to-end codec
+// smoke test from user space.
+
+use "lib_track.rad"
+
+fn main() -> nil {
+    let t0 = 1700000000
+    let mut i = 0
+    while i < 400 {
+        let m7 = i % 7
+        let t = new_ticket(f"Ticket {i}: intermittent failure in subsystem {m7} under load", "loadgen", t0 + i * 37)
+        if i % 3 == 0 {
+            let m11 = i % 11
+            set_field(t, "assignee", f"dev{m11}", "loadgen", t0 + i * 41)
+        }
+        if i % 4 == 0 {
+            let m13 = i % 13
+            set_field(t, "body", f"Steps to reproduce issue {i}: start the worker pool, replay the staging tape, observe the divergence report in module {m13}. Logs attached in the run directory.", "loadgen", t0 + i * 43)
+        }
+        if i % 5 == 0 { close_ticket(t, "loadgen", t0 + i * 47) }
+        i = i + 1
+    }
+
+    let save = save_world()
+    print(f"save_world bytes: {len(save)}")
+
+    let base = fork()
+    let full = fork_to_bytes(base)
+    print(f"fork_to_bytes bytes: {len(full)}")
+
+    // an offline session's worth of edits -> the delta surface
+    let mut j = 0
+    while j < 40 {
+        let id = j * 9 + 1
+        let ent = get_entity(f"T-{id}")
+        if ent == nil { continue }
+        set_field(ent, "priority", "1", "loadgen", t0 + 99999 + j)
+        j = j + 1
+    }
+    let delta = fork_delta(base, fork())
+    print(f"fork_delta bytes: {len(delta)}")
+
+    // receipts: every surface must round-trip
+    match fork_from_bytes(full) {
+        Ok(f2) => {
+            let d = digest_of(f2)
+            print(f"fork bytes round-trip ok ({d})")
+        }
+        Err(m) => { print(f"FORK ROUND-TRIP ERR: {m}") }
+    }
+    match fork_apply(base, delta) {
+        Ok(m2) => {
+            commit(m2)
+            print("delta apply ok")
+        }
+        Err(m) => { print(f"DELTA APPLY ERR: {m}") }
+    }
+    let n = load_world(save)
+    print(f"save round-trip ok ({n} entities)")
+    let wd = world_digest()
+    print(f"world digest {wd}")
+}

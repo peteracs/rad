@@ -1,0 +1,18 @@
+// M2 Test: peek returns None for missing entity/component
+
+component HP { hp: 100 }
+component Mana { mp: 50 }
+
+let hero = spawn("hero", HP { hp: 100 })
+
+let f = fork()
+
+// peek at existing entity + existing component
+let hp = peek(f, hero, HP) |> unwrap
+assert(hp.hp == 100, f"Should find HP, got {hp.hp}")
+
+// peek at existing entity + MISSING component
+let mana = peek(f, hero, Mana)
+assert(is_none(mana), "Hero has no Mana, peek should return None")
+
+print("PASS: peek missing entity/component")

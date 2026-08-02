@@ -1,0 +1,7 @@
+---
+source: tests\conformance\let_else_variant_mismatch.rad
+exit_code: 1
+---
+
+---stderr---
+Error: Variant 'Some' not found in type 'Result'

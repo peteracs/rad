@@ -1,0 +1,58 @@
+// BUG 04b — where exactly does float serialization stop round-tripping?
+//
+//   rad projects/dogfood/strongbox/bugs/04b_float_threshold.rad
+//
+// fork_from_bytes() returns a Result and shares the canonical body writer
+// with save_world(), so it is a non-aborting oracle for the same defect:
+// every value that fails here also produces an unloadable .radw save.
+
+component Big { x: 0.0 }
+
+fn survives(v: float) -> bool {
+    for e in entities() {
+        despawn(e)
+    }
+    spawn("e", Big { x: v })
+    match fork_from_bytes(fork_to_bytes(fork())) {
+        Ok(_f) => { return true }
+        Err(_m) => { return false }
+    }
+}
+
+fn report(label: str, v: float) -> nil {
+    for e in entities() {
+        despawn(e)
+    }
+    spawn("e", Big { x: v })
+    let body = fork_to_bytes(fork())
+    let ok = survives(v)
+    let mut verdict = "BROKEN — save would be unloadable"
+    if ok {
+        verdict = "ok"
+    }
+    print(f"  {label}  payload {len(body)} bytes  {verdict}")
+    return nil
+}
+
+print("=== BUG 04b: float round-trip threshold ===")
+print("(every value below is a finite f64 the VM holds and prints happily)")
+
+report("1.0e307              ", 1.0e307)
+report("1.0e308              ", 1.0e308)
+report("1.1e308              ", 1.1e308)
+report("1.5e308              ", 1.5e308)
+report("1.7e308              ", 1.7e308)
+report("1.79e308             ", 1.79e308)
+report("1.797e308            ", 1.797e308)
+report("1.7976e308           ", 1.7976e308)
+report("1.79769e308          ", 1.79769e308)
+report("1.7976931348623157e308", 1.7976931348623157e308)
+
+print("-- and the negative side --")
+report("-1.7e308             ", -1.7e308)
+report("-1.7976931348623157e308", -1.7976931348623157e308)
+
+print("-- subnormals, the other extreme --")
+report("5.0e-324             ", 5.0e-324)
+report("1.0e-320             ", 1.0e-320)
+report("2.2250738585072014e-308", 2.2250738585072014e-308)

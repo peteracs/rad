@@ -1,0 +1,10 @@
+// Attack: phase referencing unknown system
+component C { x: 0 }
+system A(c: mut C) { c.x = 1 }
+
+phase Bad { A, NonExistentSystem }
+
+fn main() -> nil {
+    spawn(C { x: 0 })
+    schedule [Bad]
+}

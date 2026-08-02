@@ -1,0 +1,13 @@
+// Attack: event with some typed fields and some untyped
+event Mixed { x: int, y }
+
+on Mixed(e) {
+    print(f"x={e.x} y={e.y}")
+}
+
+fn main() -> nil {
+    emit Mixed { x: 10, y: "anything" }
+    flush_events()
+}
+
+// expect: x=10 y=anything

@@ -1,0 +1,14 @@
+// Attack: phase referencing another phase name — should error or expand?
+component Counter { value: 0 }
+
+system A(c: Counter) { print("A:", c.value) }
+system B(c: Counter) { print("B:", c.value) }
+system C(c: Counter) { print("C:", c.value) }
+
+phase Inner { A, B }
+phase Outer { Inner, C }
+
+fn main() -> nil {
+    spawn(Counter { value: 1 })
+    schedule [Outer]
+}

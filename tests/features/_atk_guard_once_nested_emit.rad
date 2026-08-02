@@ -1,0 +1,22 @@
+// Attack: nested dispatch must not clobber outer once+guard bookkeeping.
+event Outer { val }
+event Inner { val }
+
+on Inner(e) where e.val > 100 {
+    print("inner:", e.val)
+}
+
+on Outer once (e) where e.val > 0 {
+    emit Inner { val: 1 } // Inner guard false; should not unset outer guard pass.
+    flush_events()
+    print("outer:", e.val)
+}
+
+fn main() -> nil {
+    emit Outer { val: 5 }
+    flush_events()
+    emit Outer { val: 6 } // once handler should already be consumed.
+    flush_events()
+}
+
+// expect: outer: 5

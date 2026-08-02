@@ -1,0 +1,14 @@
+// Attack: guard expression that errors at runtime (division by zero)
+event Ping { val }
+
+on Ping(e) where 1 / e.val > 0 {
+    print("ok:", e.val)
+}
+
+fn main() -> nil {
+    emit Ping { val: 2 }
+    flush_events()
+    emit Ping { val: 0 }
+    flush_events()
+    print("done")
+}

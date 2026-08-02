@@ -1,0 +1,10 @@
+fn main() -> nil {
+    let rows = [[1, 2], [3, 4]]
+    let out = rows |> map(fn(mut [a, b]) {
+        a = a * 10
+        b = b * 10
+        return a + b
+    })
+    print(out[0])
+    print(out[1])
+}

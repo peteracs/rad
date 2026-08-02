@@ -1,0 +1,512 @@
+/* =============================================================================
+   Rad Docs — Custom Theme
+   Inspired by createlang.rs, recolored with the Rad Blue palette.
+   Uses ONLY the Rust theme. All other themes are disabled.
+   ============================================================================= */
+
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&display=swap');
+
+html {
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-font-smoothing: antialiased;
+  scroll-padding-top: 60px;
+  scroll-behavior: smooth;
+}
+
+/* =============================================================================
+   HIDE THEME PICKER — Only Rust theme allowed
+   ============================================================================= */
+
+#theme-toggle,
+.theme-popup {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+/* =============================================================================
+   ROOT VARIABLES — Rad Blue Palette
+   ============================================================================= */
+
+:root,
+.rust {
+  --content-max-width: 900px;
+  --page-padding: 20px;
+  --theme-hover: rgba(37, 99, 235, 0.08);
+
+  --accent-color: #2563eb;
+  --accent-hover: #3b82f6;
+  --accent-light: #93c5fd;
+  --accent-subtle: rgba(37, 99, 235, 0.12);
+
+  --complement-dark: #1e293b;
+  --complement-mid: #334155;
+
+  /* Sidebar — override Rust theme brown/orange */
+  --sidebar-resize-indicator-width: 0px;
+  --sidebar-resize-indicator-space: 0px;
+  --sidebar-bg: #1e293b;
+  --sidebar-fg: #cbd5e1;
+  --sidebar-non-existant: #475569;
+  --sidebar-active: #60a5fa;
+  --sidebar-spacer: #334155;
+
+  /* Links */
+  --links: #2563eb;
+
+  --code-bg: #f8fafc;
+  --code-border: #e2e8f0;
+  --code-text: #334155;
+
+  --success-color: #16a34a;
+  --warning-color: #d97706;
+  --error-color: #dc2626;
+  --info-color: #2563eb;
+
+  --text-primary: #1e293b;
+  --text-secondary: #475569;
+  --text-muted: #94a3b8;
+}
+
+/* =============================================================================
+   TYPOGRAPHY
+   ============================================================================= */
+
+.content,
+.rust .content {
+  font-family: 'Source Serif 4', Georgia, 'Times New Roman', serif !important;
+  font-size: 18px !important;
+  line-height: 1.75 !important;
+  letter-spacing: 0.01em;
+}
+
+code,
+pre,
+.hljs,
+.rust code,
+.rust pre {
+  font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', Monaco, 'Courier New', monospace !important;
+  font-size: 16px !important;
+  font-feature-settings: "liga" 1, "calt" 1;
+  line-height: 1.7 !important;
+}
+
+pre,
+.rust pre {
+  font-size: 16px !important;
+  padding: 1.2em 1.4em !important;
+  line-height: 1.7 !important;
+  tab-size: 4;
+}
+
+pre code {
+  font-size: inherit;
+  line-height: inherit;
+}
+
+/* =============================================================================
+   HEADINGS
+   ============================================================================= */
+
+.content h1,
+.content h2,
+.content h3,
+.content h4 {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin-top: 1.6em;
+  position: relative;
+}
+
+.content h1 {
+  font-size: 2.2em;
+  border-bottom: 3px solid var(--accent-color);
+  padding-bottom: 0.35em;
+  margin-bottom: 0.8em;
+}
+
+.content h2 {
+  font-size: 1.6em;
+  padding-left: 0.7em;
+  border-left: 4px solid var(--accent-color);
+  margin-left: -0.7em;
+}
+
+.content h3 {
+  font-size: 1.3em;
+  color: var(--text-secondary);
+}
+
+/* =============================================================================
+   INLINE CODE
+   ============================================================================= */
+
+:not(pre)>code,
+.rust :not(pre)>code {
+  display: inline !important;
+  font-family: 'JetBrains Mono', monospace !important;
+  font-size: 0.88em !important;
+  padding: 0.15em 0.4em;
+  border-radius: 4px;
+  white-space: nowrap;
+  vertical-align: baseline;
+  background: #eef2ff !important;
+  border: 1px solid #dbeafe;
+  color: #1e40af;
+}
+
+/* =============================================================================
+   CODE BLOCKS
+   ============================================================================= */
+
+pre {
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  position: relative;
+  margin: 1.5em 0;
+}
+
+pre:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transition: box-shadow 0.2s ease;
+}
+
+/* =============================================================================
+   TABLES
+   ============================================================================= */
+
+table {
+  border-collapse: separate;
+  border-spacing: 0;
+  width: 100%;
+  margin: 1.5em 0;
+  font-size: 0.95em;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+}
+
+table th {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.8em;
+  letter-spacing: 0.05em;
+  padding: 0.9em 1em;
+  text-align: left;
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  color: white;
+}
+
+table td {
+  padding: 0.75em 1em;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+table tr:last-child td {
+  border-bottom: none;
+}
+
+table tr:nth-child(even) {
+  background: rgba(37, 99, 235, 0.04);
+}
+
+/* =============================================================================
+   BLOCKQUOTES
+   ============================================================================= */
+
+blockquote {
+  margin: 1.5em 0;
+  padding: 1em 1.5em;
+  border-left: 4px solid var(--accent-color);
+  background: linear-gradient(90deg, rgba(37, 99, 235, 0.06) 0%, transparent 100%);
+  border-radius: 0 8px 8px 0;
+  font-style: italic;
+}
+
+blockquote p {
+  margin: 0;
+}
+
+/* =============================================================================
+   SIDEBAR
+   ============================================================================= */
+
+.sidebar {
+  background: var(--sidebar-bg) !important;
+}
+
+.sidebar .active {
+  color: var(--sidebar-active) !important;
+  font-weight: 600;
+}
+
+.sidebar a {
+  color: var(--sidebar-fg) !important;
+}
+
+.sidebar a:hover {
+  color: var(--sidebar-active) !important;
+}
+
+.sidebar .part-title {
+  color: #f1f5f9 !important;
+}
+
+.sidebar-scrollbox {
+  font-size: 0.95em;
+}
+
+/* Hide in-page subheadings from the sidebar TOC */
+.sidebar .section li > ol {
+  display: none !important;
+}
+
+/* =============================================================================
+   NAVIGATION
+   ============================================================================= */
+
+.nav-wide-wrapper {
+  pointer-events: none;
+}
+
+.nav-wide-wrapper .nav-chapters {
+  pointer-events: auto;
+  min-width: 40px !important;
+  max-width: 40px !important;
+  width: 40px !important;
+  background: transparent !important;
+  top: 50% !important;
+  bottom: auto !important;
+  height: 60px !important;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.nav-wide-wrapper .nav-chapters.previous { left: var(--sidebar-width) !important; }
+.nav-wide-wrapper .nav-chapters.next { right: 0 !important; }
+
+.nav-wide-wrapper .nav-chapters:hover {
+  background: rgba(250, 248, 245, 0.95) !important;
+  border-radius: 8px;
+}
+
+.mobile-nav-chapters { background-color: transparent !important; }
+.mobile-nav-chapters:hover { background-color: rgba(250, 248, 245, 0.9) !important; }
+
+#mdbook-sidebar-resize-handle {
+  width: 0 !important;
+  right: 0 !important;
+}
+
+.sidebar-resize-indicator,
+.sidebar-resize-indicator::before,
+.sidebar-resize-indicator::after {
+  display: none !important;
+  width: 0 !important;
+}
+
+/* Hide the » anchor-target indicator on headings */
+h1:target::before,
+h2:target::before,
+h3:target::before,
+h4:target::before,
+h5:target::before,
+h6:target::before,
+dt:target::before {
+  content: none !important;
+  display: none !important;
+}
+
+/* =============================================================================
+   MENU BAR
+   ============================================================================= */
+
+.menu-bar {
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.menu-bar .icon-button {
+  transition: transform 0.2s ease, color 0.2s ease;
+}
+
+.menu-bar .icon-button:hover {
+  transform: scale(1.15);
+  color: var(--accent-color) !important;
+}
+
+.menu-title {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+}
+
+/* =============================================================================
+   LISTS
+   ============================================================================= */
+
+.content ul,
+.content ol {
+  margin: 0.8em 0;
+  padding-left: 1.5em;
+}
+
+.content li {
+  margin: 0.4em 0;
+  line-height: 1.6;
+}
+
+.content ul li::marker {
+  color: var(--accent-color);
+}
+
+/* =============================================================================
+   EMPHASIS
+   ============================================================================= */
+
+.content strong {
+  color: inherit;
+  font-weight: 700;
+  background: linear-gradient(180deg, transparent 60%, var(--accent-subtle) 60%);
+}
+
+.content em {
+  font-style: italic;
+  color: inherit;
+  opacity: 0.9;
+}
+
+/* =============================================================================
+   PLAIN CODE / DIAGRAMS
+   ============================================================================= */
+
+pre:has(code:not([class])) {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+}
+
+/* =============================================================================
+   DETAILS / COLLAPSIBLES
+   ============================================================================= */
+
+details {
+  margin: 1.5em 0;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 0.5em 1em;
+  background: rgba(37, 99, 235, 0.02);
+}
+
+details summary {
+  cursor: pointer;
+  font-weight: 600;
+  padding: 0.5em 0;
+  list-style: none;
+  position: relative;
+  padding-left: 1.5em;
+}
+
+details summary::before {
+  content: "▶";
+  position: absolute;
+  left: 0;
+  color: var(--accent-color);
+  transition: transform 0.2s ease;
+  font-size: 0.8em;
+}
+
+details[open] summary::before {
+  transform: rotate(90deg);
+}
+
+details summary::-webkit-details-marker {
+  display: none;
+}
+
+/* =============================================================================
+   COPY BUTTON
+   ============================================================================= */
+
+.clip-button {
+  background-color: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 0.75em;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.2s ease, background-color 0.2s ease;
+}
+
+pre:hover .clip-button {
+  opacity: 0.8;
+}
+
+.clip-button:hover {
+  opacity: 1 !important;
+  background-color: var(--accent-color);
+  color: white;
+}
+
+/* =============================================================================
+   SELECTION
+   ============================================================================= */
+
+::selection {
+  background: rgba(37, 99, 235, 0.25);
+  color: inherit;
+}
+
+::-moz-selection {
+  background: rgba(37, 99, 235, 0.25);
+  color: inherit;
+}
+
+/* =============================================================================
+   ANIMATION
+   ============================================================================= */
+
+.content {
+  animation: fadeIn 0.3s ease-in;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* =============================================================================
+   LAST CONTENT SPACING
+   ============================================================================= */
+
+.content > :last-child {
+  margin-bottom: 48px;
+}
+
+/* =============================================================================
+   PRINT
+   ============================================================================= */
+
+@media print {
+  .content h1, .content h2, .content h3 { page-break-after: avoid; }
+  pre, blockquote, table { page-break-inside: avoid; }
+  .sidebar, .menu-bar, .nav-chapters, .clip-button { display: none !important; }
+  .content { max-width: 100% !important; }
+  a[href]::after { content: " (" attr(href) ")"; font-size: 0.8em; color: #666; }
+  a[href^="#"]::after, a[href^="javascript:"]::after { content: ""; }
+}
+
+/* =============================================================================
+   RESPONSIVE
+   ============================================================================= */
+
+@media (max-width: 768px) {
+  .content { font-size: 16px !important; }
+  .content h1 { font-size: 1.8em; }
+  .content h2 { font-size: 1.4em; }
+  pre { font-size: 14px !important; padding: 1em !important; }
+  :not(pre)>code { font-size: 0.85em !important; }
+}

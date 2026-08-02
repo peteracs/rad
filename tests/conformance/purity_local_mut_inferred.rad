@@ -1,0 +1,13 @@
+// backend: both
+fn accumulate(items) {
+    let mut total = 0
+    for item in items {
+        total = total + item
+    }
+    return total
+}
+
+let result = [[1, 2], [3, 4], [5, 6]] |> map(fn(group) { return accumulate(group) })
+print(result)
+
+// expect: [3, 7, 11]

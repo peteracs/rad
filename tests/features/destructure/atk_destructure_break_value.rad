@@ -1,0 +1,11 @@
+fn main() -> nil {
+    let rows = [[1, "a"], [2, "b"], [3, "c"], [4, "d"]]
+    let mut found = ""
+    for [id, name] in rows {
+        if id == 3 {
+            found = name
+            break
+        }
+    }
+    print(found)
+}

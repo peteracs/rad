@@ -1,0 +1,6 @@
+---
+source: tests\conformance\generic_fn_pair.rad
+exit_code: 0
+---
+a
+7

@@ -1,0 +1,243 @@
+// lib_track — the shared brain of RADTRACK, an offline-first issue tracker.
+//
+// Imported by track.rad (the offline CLI client), server.rad (the sync
+// server), and the migration/demo harnesses. Where RADTACTICS stressed
+// frames, speculation, and adversaries, RADTRACK stresses the other half of
+// the language: long-lived persistent state, concurrent *legitimate* edits,
+// three-way merge with human-visible conflicts, schema migration against
+// organically grown saves, and time measured in days.
+//
+// Every mutation flows through an event carrying WHO and WHEN — so
+// why(ticket, Ticket) answers "who closed my ticket?" with a name, even for
+// edits that arrived over the wire from another machine.
+
+// Ticket fields that merge field-by-field live in Ticket. The body is its
+// own component so a title edit never drags kilobytes of description into a
+// delta (ent_patch keeps them apart), and Tags is separate for the same
+// reason.
+pub component Ticket {
+    title: str = "",
+    indexed status: str = "open",    // open | closed — indexed: list views are
+    // one hash probe, not an O(world) scan
+    priority: int = 3,               // P1 (urgent) .. P4 (someday)
+    indexed assignee: str = "",      // indexed: "my tickets" without a scan
+    created: int = 0,                // unix seconds
+    updated: int = 0
+}
+pub component Body { text: str = "" }
+pub component Tags { csv: str = "" }
+
+pub resource Tracker { next_id: int = 1, site: str = "radtrack" }
+
+pub event Opened { ticket: entity, title: str, by: str, at: int }
+pub event Changed { ticket: entity, field: str, to: str, by: str, at: int }
+pub event Closed { ticket: entity, by: str, at: int }
+pub event Reopened { ticket: entity, by: str, at: int }
+
+// ---------------------------------------------------------------------------
+// The evented mutation path. Handlers are the ONLY writers of ticket state
+// after spawn — provenance therefore names the event (and the event names
+// the human) for every field a ticket ever had.
+// ---------------------------------------------------------------------------
+
+on Changed(e) {
+    if e.field == "title" { update(e.ticket, Ticket) { title = e.to } }
+    if e.field == "assignee" { update(e.ticket, Ticket) { assignee = e.to } }
+    if e.field == "priority" {
+        match try_int(e.to) {
+            Some(p) => {
+                if p >= 1 and p <= 4 { update(e.ticket, Ticket) { priority = p } }
+            }
+            None => {}
+        }
+    }
+    if e.field == "body" { set(e.ticket, Body { text: e.to }) }
+    if e.field == "tags" { set(e.ticket, Tags { csv: e.to }) }
+    update(e.ticket, Ticket) { updated = e.at }
+}
+
+on Closed(e) {
+    update(e.ticket, Ticket) { status = "closed", updated = e.at }
+}
+
+on Reopened(e) {
+    update(e.ticket, Ticket) { status = "open", updated = e.at }
+}
+
+// ---------------------------------------------------------------------------
+// Commands (called by client and server alike)
+// ---------------------------------------------------------------------------
+
+pub fn new_ticket(title: str, by: str, at: int) -> entity {
+    let tr = get_resource(Tracker) |> unwrap
+    let id = f"T-{tr.next_id}"
+    set_resource(Tracker, Tracker { next_id: tr.next_id + 1, site: tr.site })
+    let t = spawn(id,
+        Ticket { title: title, status: "open", priority: 3, assignee: "", created: at, updated: at },
+        Body { text: "" },
+        Tags { csv: "" })
+    emit Opened { ticket: t, title: title, by: by, at: at }
+    flush_events()
+    return t
+}
+
+pub fn set_field(t: entity, field: str, to: str, by: str, at: int) -> nil {
+    emit Changed { ticket: t, field: field, to: to, by: by, at: at }
+    flush_events()
+}
+
+pub fn close_ticket(t: entity, by: str, at: int) -> nil {
+    emit Closed { ticket: t, by: by, at: at }
+    flush_events()
+}
+
+pub fn reopen_ticket(t: entity, by: str, at: int) -> nil {
+    emit Reopened { ticket: t, by: by, at: at }
+    flush_events()
+}
+
+pub fn add_tag(t: entity, tag: str, by: str, at: int) -> nil {
+    let cur = (get(t, Tags) |> unwrap).csv
+    let mut tags = []
+    if cur != "" { tags = split(cur, ",") }
+    if contains(tags, tag) { return }
+    tags << tag
+    set_field(t, "tags", join(sort(tags), ","), by, at)
+}
+
+pub fn remove_tag(t: entity, tag: str, by: str, at: int) -> nil {
+    let cur = (get(t, Tags) |> unwrap).csv
+    if cur == "" { return }
+    let tags = filter(split(cur, ","), fn(x) { return x != tag })
+    set_field(t, "tags", join(tags, ","), by, at)
+}
+
+// ---------------------------------------------------------------------------
+// Queries. Status views are INDEXED since Tier-1 #1: `lookup_all` is one
+// hash probe returning ids ascending, instead of an O(world) scan. Sorting
+// by priority is still by hand — indexes are hash, not ordered (the
+// remaining half of the original gap, now honestly scoped).
+// ---------------------------------------------------------------------------
+
+// NB: there is no typed "find a ticket" wrapper here. `get_entity` returns
+// an untyped value compared against nil at call sites — a `-> entity`
+// return type cannot be nil-checked (GAP: no Option<entity>).
+
+// status filter: "open" | "closed" | "all"; returns ids sorted by priority
+// then ticket number.
+pub fn ticket_ids(status: str) -> list < str > {
+    let mut ents = []
+    if status == "all" {
+        ents = entities(Ticket)
+    } else {
+        ents = lookup_all(Ticket, "status", status)
+    }
+    let mut rows = []
+    for t in ents {
+        let tk = get(t, Ticket) |> unwrap
+        let n = name_of(t)
+        // sortable key: priority * 100000 + numeric id
+        match try_int(slice(n, 2, len(n))) {
+            Some(num) => { rows << (tk.priority * 100000 + num, n) }
+            None => { rows << (999999999, n) }
+        }
+    }
+    let mut out = []
+    for r in sort_by(rows, fn(r) { return r[0] }) { out << r[1] }
+    return out
+}
+
+// every open ticket assigned to `who` — two indexed probes, no scan.
+pub fn assigned_to(who: str) -> list < str > {
+    let mut out = []
+    for t in lookup_all(Ticket, "assignee", who) {
+        let tk = get(t, Ticket) |> unwrap
+        if tk.status == "open" { out << name_of(t) }
+    }
+    return sort(out)
+}
+
+pub fn search(needle: str) -> list < str > {
+    let q = to_lower(needle)
+    let mut out = []
+    for t in entities(Ticket) {
+        let tk = get(t, Ticket) |> unwrap
+        let body = (get(t, Body) |> unwrap).text
+        let tags = (get(t, Tags) |> unwrap).csv
+        let hay = to_lower(tk.title + " " + body + " " + tags + " " + tk.assignee)
+        if contains(hay, q) { out << name_of(t) }
+    }
+    return sort(out)
+}
+
+// ---------------------------------------------------------------------------
+// Rendering. No date type, no strftime: ages are humanized by hand.
+// ---------------------------------------------------------------------------
+
+pub fn fmt_age(now: int, ts: int) -> str {
+    let d = now - ts
+    if d < 60 { return "just now" }
+    if d < 3600 { return f"{d / 60}m ago" }
+    if d < 86400 { return f"{d / 3600}h ago" }
+    return f"{d / 86400}d ago"
+}
+
+pub fn fmt_row(id: str, now: int) -> str {
+    let t = get_entity(id)
+    let tk = get(t, Ticket) |> unwrap
+    let mut mark = " "
+    if tk.status == "closed" { mark = "x" }
+    let mut who = tk.assignee
+    if who == "" { who = "-" }
+    let tags = (get(t, Tags) |> unwrap).csv
+    let mut tagstr = ""
+    if tags != "" { tagstr = f" [{tags}]" }
+    return f"[{mark}] {id}  P{tk.priority}  {tk.title}{tagstr}  ({who}, {fmt_age(now, tk.updated)})"
+}
+
+pub fn fmt_ticket(id: str, now: int) -> str {
+    let t = get_entity(id)
+    let tk = get(t, Ticket) |> unwrap
+    let body = (get(t, Body) |> unwrap).text
+    let tags = (get(t, Tags) |> unwrap).csv
+    let mut who = tk.assignee
+    if who == "" { who = "(unassigned)" }
+    let mut out = f"{id}: {tk.title}\n"
+    out = out + f"  status   {tk.status}\n"
+    out = out + f"  priority P{tk.priority}\n"
+    out = out + f"  assignee {who}\n"
+    out = out + f"  tags     {tags}\n"
+    out = out + f"  created  {fmt_age(now, tk.created)}, updated {fmt_age(now, tk.updated)}\n"
+    if body != "" {
+        let ind = replace(body, "\n", "\n  ")
+        out = out + f"  ---\n  {ind}\n"
+    }
+    return out
+}
+
+// ---------------------------------------------------------------------------
+// Wire helpers shared by client and server
+// ---------------------------------------------------------------------------
+
+pub fn digest_of(f: world_fork) -> str {
+    return split(fork_to_bytes(f), " ")[1]
+}
+
+pub fn read_msg(conn: int) -> str {
+    let mut buf = ""
+    while true {
+        let chunk = tcp_read(conn, 262144)
+        if len(chunk) == 0 { break }
+        buf = buf + chunk
+        if ends_with(buf, "\n") { break }
+    }
+    return trim(buf)
+}
+
+pub fn send_msg(conn: int, line: str) -> nil {
+    tcp_write(conn, line + "\n")
+}
+
+// NB: conflict serialization lives in server.rad, not here — the built-in
+// `Conflict` sum type may not appear in a pub fn signature (GAP: checker
+// flags it as a private-type leak).

@@ -1,0 +1,5 @@
+---
+source: tests\conformance\push_limits_case_05.rad
+exit_code: 0
+---
+CASE05:finance|security|platform

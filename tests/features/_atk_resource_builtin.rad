@@ -1,0 +1,21 @@
+resource PipelineState {
+  stage: "init",
+  retries: 0
+}
+
+event Advance {
+  next: str
+}
+
+on Advance(e) {
+  set_resource(PipelineState, PipelineState { stage: e.next, retries: 1 })
+}
+
+fn main() -> nil {
+  emit Advance { next: "deploy" }
+  flush_events()
+  let s = get_resource(PipelineState) ?
+  print(f"stage={s.stage},retries={s.retries}")
+}
+
+// expect: stage=deploy,retries=1

@@ -1,0 +1,34 @@
+// strongbox — generation 1 of the incident ledger (the "legacy" release).
+//
+// This is the schema an on-call team shipped first. Its saves are the
+// artifacts every later generation has to keep readable, forever.
+//
+//   rad projects/dogfood/strongbox/gen1_seed.rad
+//
+// Writes saves/gen1.radw and prints the receipt pair (schema, world) that
+// the migration programs re-derive after loading.
+
+component Incident { code: "", sev: 1, open: true }
+
+component Assignee { who: "" }
+// Source never drifts across all three generations: it is the control group
+// that proves load_world migrates selectively, not wholesale.
+component Source { origin: "" }
+
+resource Ledger { count: 0, site: "" }
+
+let _i1 = spawn("inc-1001", Incident { code: "DISK_FULL", sev: 3, open: false }, Assignee { who: "rivera" }, Source { origin: "pager" })
+let _i2 = spawn("inc-1002", Incident { code: "CERT_EXPIRY", sev: 2, open: true }, Assignee { who: "okafor" }, Source { origin: "monitor" })
+let _i3 = spawn("inc-1003", Incident { code: "OOM_KILL", sev: 5, open: true }, Assignee { who: "rivera" }, Source { origin: "pager" })
+let _i4 = spawn("inc-1004", Incident { code: "SLOW_QUERY", sev: 1, open: true }, Assignee { who: "chen" }, Source { origin: "customer" })
+
+set_resource(Ledger, Ledger { count: 4, site: "us-east" })
+
+let save = save_world()
+write_file("projects/dogfood/strongbox/saves/gen1.radw", save)
+
+print("=== strongbox gen1: seed ===")
+print(f"entities:      4")
+print(f"save bytes:    {len(save)}")
+print(f"schema_digest: {schema_digest()}")
+print(f"world_digest:  {world_digest()}")

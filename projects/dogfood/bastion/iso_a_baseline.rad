@@ -1,0 +1,12 @@
+// ISO A: baseline -- guest emits one event, handler does NOT re-emit.
+let src = f"""
+event Ping { n }
+on Ping(e) {
+    print(f"handled {e.n}")
+}
+emit Ping { n: 0 }
+"""
+match sandbox_run(src, fork(), f"""{ "write": [], "fuel": 100000 }""") {
+    Ok(_f) => { print("A: ok") }
+    Err(m) => { print(f"A: err {m}") }
+}

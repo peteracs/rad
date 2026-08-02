@@ -1,0 +1,128 @@
+// =====================================================================
+//  Data Pipeline — Idiomatic RAD string/list/map processing
+//  Demonstrates: split, join, trim, chr, ord, chars, to_upper,
+//                to_lower, replace, starts_with, ends_with,
+//                flat_map, group_by, zip, append, values, pop,
+//                try_int, try_float
+// =====================================================================
+
+pure fn parse_csv_line(line) {
+    return split(line, ",") |> map(trim)
+}
+
+pure fn parse_csv(text) {
+    let lines = split(text, "\n")
+    |> map(trim)
+    |> filter(fn(line) { return len(line) > 0 })
+    if len(lines) < 2 { return [] }
+
+    let headers = parse_csv_line(lines[0])
+    let mut records = []
+    let data_lines = slice(lines, 1, len(lines))
+    for line in data_lines {
+        let fields = parse_csv_line(line)
+        let mut record = {}
+        let pairs = zip(headers, fields)
+        for pair in pairs {
+            record[pair[0]] = pair[1]
+        }
+        records = push(records, record)
+    }
+    return records
+}
+
+fn main() -> any {
+    print("=== Data Pipeline ===\n")
+
+    // --- CSV Parsing ---
+    let csv_text = "name, age, city\nAlice, 30, NYC\nBob, 25, LA\nCharlie, 35, NYC"
+    let records = parse_csv(csv_text)
+    print(f"Parsed {len(records)} records:")
+    for r in records {
+        print(f"  {r["name"]} (age {r["age"]}) from {r["city"]}")
+    }
+
+    // --- Grouping ---
+    print("\nGrouped by city:")
+    let by_city = records |> group_by(fn(r) { return r["city"] })
+    for city in keys(by_city) {
+        let names = by_city[city] |> map(fn(r) { return r["name"] })
+        print(f"  {city}: {join(names, ", ")}")
+    }
+
+    // --- String processing ---
+    print("\n--- String utilities ---")
+    let sentence = "  Hello, World!  "
+    print(f"trim:       '{trim(sentence)}'")
+    print(f"upper:      {to_upper("hello")}")
+    print(f"lower:      {to_lower("WORLD")}")
+    print(f"replace:    {replace("foo bar foo", "foo", "baz")}")
+    print(f"starts:     {starts_with("hello", "hel")}")
+    print(f"ends:       {ends_with("hello.rad", ".rad")}")
+
+    // --- Character utilities ---
+    print("\n--- Character utilities ---")
+    let alphabet = range(65, 91) |> map(chr) |> join("")
+    print(f"A-Z: {alphabet}")
+    print(f"chars('RAD'): {chars("RAD")}")
+    print(f"ord('A'): {ord("A")}")
+
+    // --- Safe conversions ---
+    print("\n--- Safe conversions ---")
+    let inputs = ["42", "hello", "3.14", "true"]
+    for input in inputs {
+        let result = try_int(input)
+        let label = f"try_int('{input}')"
+        match result {
+            Some { value } => { print(f"  {label} = {value}") }
+            None {} => { print(f"  {label} = None") }
+        }
+    }
+
+    // --- Functional pipelines ---
+    print("\n--- Functional pipeline ---")
+    let words = "the quick brown fox jumps over the lazy dog"
+    let title_cased = split(words, " ")
+    |> map(fn(w) {
+        let ch = chars(w)
+        let first = to_upper(ch[0])
+        let rest = slice(ch, 1, len(ch))
+        return first + join(rest, "")
+    })
+    print(f"Title case: {join(title_cased, " ")}")
+
+    let unique_chars = chars("banana")
+    |> sort
+    |> reduce([], fn(acc, c) {
+        if len(acc) == 0 or acc[len(acc) - 1] != c {
+            return push(acc, c)
+        }
+        return acc
+    })
+    print(f"Unique chars in 'banana': {join(unique_chars, "")}")
+
+    // --- Pop for stack operations ---
+    print("\n--- Stack with pop ---")
+    let mut stack = []
+    stack = push(stack, "first")
+    stack = push(stack, "second")
+    stack = push(stack, "third")
+    print(f"Stack: {stack}")
+
+    let top = pop(stack)
+    print(f"Popped: {top}")
+    stack = drop_last(stack)
+    print(f"Remaining: {stack}")
+
+    // --- Flat map ---
+    print("\n--- Flat map ---")
+    let nested = [[1, 2], [3, 4], [5]]
+    let flat = nested |> flat_map(fn(xs) { return xs })
+    print(f"Flattened: {flat}")
+
+    // --- Append / zip ---
+    let all = append([1, 2, 3], [4, 5, 6])
+    print(f"Appended: {all}")
+    let paired = zip(["a", "b", "c"], [1, 2, 3])
+    print(f"Zipped: {paired}")
+}

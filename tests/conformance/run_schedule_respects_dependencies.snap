@@ -1,0 +1,4 @@
+---
+source: tests\conformance\run_schedule_respects_dependencies.rad
+exit_code: 0
+---

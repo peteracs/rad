@@ -1,0 +1,246 @@
+// =====================================================================
+//  ORACLE determinism harness.
+//
+//  simulate_par() claims: "each fork's RNG seed is derived from `seed` and
+//  its index, so runs are bit-identical for the same inputs at any thread
+//  count" (builtins.md). This file tries to falsify that, plus the weaker
+//  determinism claims around world_digest, chained simulate, and commit.
+//
+//  Every check prints a digest, so the whole file's output can be diffed
+//  across processes and across RAYON_NUM_THREADS settings:
+//
+//    $env:RAYON_NUM_THREADS=1;  rad.exe determinism.rad > a.txt
+//    $env:RAYON_NUM_THREADS=16; rad.exe determinism.rad > b.txt
+//    fc a.txt b.txt
+//
+//  Run: target\debug\rad.exe projects\dogfood\oracle\determinism.rad
+// =====================================================================
+
+resource Pot {
+    gold: int = 100,
+    spins: int = 0
+}
+
+component Coin {
+    v: int = 0
+}
+
+component Anchor {
+    v: int = 7
+}
+
+// Deterministic: no RNG at all.
+system Grind(c: mut Coin) {
+    c.v = c.v * 2 + 1
+}
+
+system Count(p: mut Pot) {
+    p.spins = p.spins + 1
+}
+
+// Stochastic: legal only under simulate_par, where the fork is seeded.
+system Gamble(c: mut Coin, p: mut Pot) {
+    let roll = rand_int(1, 6)
+    c.v = c.v + roll
+    p.gold = p.gold + roll
+}
+
+fn digest_list(fs: list<world_fork>) -> list<str> {
+    let mut out = []
+    for f in fs {
+        out = push(out, world_digest(f))
+    }
+    return out
+}
+
+fn same_lists(a: list<str>, b: list<str>) -> bool {
+    if len(a) != len(b) {
+        return false
+    }
+    for i in range(len(a)) {
+        if a[i] != b[i] {
+            return false
+        }
+    }
+    return true
+}
+
+fn short(s: str) -> str {
+    return slice(s, 0, 12)
+}
+
+fn join_short(ds: list<str>) -> str {
+    let mut out = ""
+    for d in ds {
+        out = f"{out}{short(d)} "
+    }
+    return out
+}
+
+fn count_distinct(ds: list<str>) -> int {
+    let mut seen = []
+    for d in ds {
+        if not contains(seen, d) {
+            seen = push(seen, d)
+        }
+    }
+    return len(seen)
+}
+
+let a = spawn("a", Coin { v: 1 }, Anchor { v: 7 })
+let b = spawn("b", Coin { v: 2 }, Anchor { v: 7 })
+let c = spawn("c", Coin { v: 3 }, Anchor { v: 7 })
+
+print("=== ORACLE determinism harness ===")
+
+let base = fork()
+let mut failures = 0
+
+// --- 1. world_digest is stable for the same fork ---------------------
+let d1 = world_digest(base)
+let d2 = world_digest(base)
+print(f"1 digest stable for one fork: {d1 == d2} ({short(d1)})")
+if d1 != d2 {
+    failures = failures + 1
+}
+
+// --- 2. digest(fork()) == digest(live) -------------------------------
+print(f"2 digest(fork()) == digest(live): {world_digest(fork()) == world_digest()}")
+if world_digest(fork()) != world_digest() {
+    failures = failures + 1
+}
+
+// --- 3. simulate_par repeat-stability inside one process -------------
+// Same fork, same systems, same seed, called three times.
+let r1 = simulate_par(base, [system::Gamble, system::Count], 5, 8, 4242)
+let r2 = simulate_par(base, [system::Gamble, system::Count], 5, 8, 4242)
+let r3 = simulate_par(base, [system::Gamble, system::Count], 5, 8, 4242)
+let g1 = digest_list(r1)
+let g2 = digest_list(r2)
+let g3 = digest_list(r3)
+let stable = same_lists(g1, g2) and same_lists(g2, g3)
+print(f"3 simulate_par repeat-stable over 3 calls (n=8): {stable}")
+print(f"  digests: {join_short(g1)}")
+if not stable {
+    failures = failures + 1
+    print(f"  run2:    {join_short(g2)}")
+    print(f"  run3:    {join_short(g3)}")
+}
+
+// --- 4. the 8 rollouts actually diverge ------------------------------
+// If they were all identical the seeding would be doing nothing and check 3
+// would be vacuous.
+let distinct = count_distinct(g1)
+print(f"4 distinct outcomes among 8 seeded rollouts: {distinct} (want > 1)")
+if distinct <= 1 {
+    failures = failures + 1
+}
+
+// --- 5. per-index seed derivation is independent of n ----------------
+// Docs: "each fork's RNG seed is derived from `seed` and its index". So
+// rollout i of an n=8 run must equal rollout i of an n=3 run, same seed.
+let small = simulate_par(base, [system::Gamble, system::Count], 5, 3, 4242)
+let gs = digest_list(small)
+let mut prefix_ok = true
+for i in range(len(gs)) {
+    if gs[i] != g1[i] {
+        prefix_ok = false
+    }
+}
+print(f"5 n=3 run is a prefix of the n=8 run (same seed): {prefix_ok}")
+print(f"  n=3: {join_short(gs)}")
+print(f"  n=8: {short(g1[0])} {short(g1[1])} {short(g1[2])} ...")
+if not prefix_ok {
+    failures = failures + 1
+}
+
+// --- 6. a different seed gives a different world ---------------------
+let other = simulate_par(base, [system::Gamble, system::Count], 5, 8, 99)
+let go = digest_list(other)
+print(f"6 seed 99 differs from seed 4242: {not same_lists(go, g1)}")
+if same_lists(go, g1) {
+    failures = failures + 1
+}
+
+// --- 7. with NO rng, every rollout must equal the sequential simulate --
+// Grind/Count never call rand_*, so all n rollouts must be identical to
+// each other AND to a plain simulate() of the same fork and tick count.
+let seq = simulate(base, [system::Grind, system::Count], 6)
+let par = simulate_par(base, [system::Grind, system::Count], 6, 5, 777)
+let seq_d = world_digest(seq)
+let par_d = digest_list(par)
+let mut all_match = true
+for d in par_d {
+    if d != seq_d {
+        all_match = false
+    }
+}
+print(f"7 rng-free simulate_par == simulate for all 5 rollouts: {all_match}")
+print(f"  simulate: {short(seq_d)}   simulate_par: {join_short(par_d)}")
+if not all_match {
+    failures = failures + 1
+}
+
+// --- 8. chained simulate is associative in tick count ----------------
+// simulate(simulate(f, S, 3), S, 3) must equal simulate(f, S, 6) for a
+// deterministic system set.
+let chained = simulate(simulate(base, [system::Grind, system::Count], 3), [system::Grind, system::Count], 3)
+let chained_d = world_digest(chained)
+print(f"8 simulate(simulate(f,3),3) == simulate(f,6): {chained_d == seq_d}")
+print(f"  chained {short(chained_d)} vs direct {short(seq_d)}")
+if chained_d != seq_d {
+    failures = failures + 1
+}
+
+// --- 9. deep chain: 40 legs of 1 tick == 1 leg of 40 ticks -----------
+let mut deep = base
+for _i in range(40) {
+    deep = simulate(deep, [system::Grind, system::Count], 1)
+}
+let flat = simulate(base, [system::Grind, system::Count], 40)
+print(f"9 40 chained 1-tick legs == one 40-tick leg: {world_digest(deep) == world_digest(flat)}")
+if world_digest(deep) != world_digest(flat) {
+    failures = failures + 1
+    print(f"  deep {short(world_digest(deep))} flat {short(world_digest(flat))}")
+}
+
+// --- 10. commit round-trip is exact ----------------------------------
+let before = world_digest()
+commit(r1[3])
+let dirty = world_digest()
+commit(base)
+let after = world_digest()
+print(f"10 commit(deep fork) then commit(base) restores exactly: {before == after}")
+print(f"  before {short(before)} dirty {short(dirty)} after {short(after)}")
+if before != after {
+    failures = failures + 1
+}
+
+// --- 11. simulating from a committed fork == simulating from the fork --
+// Path A: simulate directly off the stored fork.
+// Path B: commit that fork to the live world, fork it back, then simulate.
+// Both must land on the same world.
+let pathA = simulate_par(r1[2], [system::Gamble, system::Count], 3, 4, 31337)
+commit(r1[2])
+let pathB = simulate_par(fork(), [system::Gamble, system::Count], 3, 4, 31337)
+commit(base)
+print(f"11 simulate(fork) == simulate(fork(commit(fork))): {same_lists(digest_list(pathA), digest_list(pathB))}")
+if not same_lists(digest_list(pathA), digest_list(pathB)) {
+    failures = failures + 1
+    print(f"  A {join_short(digest_list(pathA))}")
+    print(f"  B {join_short(digest_list(pathB))}")
+}
+
+// --- 12. digests are order-independent w.r.t. unrelated live work ----
+// Anchor is never touched by any system, so it must appear identically in
+// every fork; the digest must not depend on when the fork was taken.
+let late = fork()
+print(f"12 fork taken later == root fork (nothing changed since): {world_digest(late) == world_digest(base)}")
+if world_digest(late) != world_digest(base) {
+    failures = failures + 1
+}
+
+print("=== END ===")
+print(f"failures: {failures}")
+print(f"FINAL-DIGEST {world_digest()}")
+assert(failures == 0, "determinism harness found a violation")

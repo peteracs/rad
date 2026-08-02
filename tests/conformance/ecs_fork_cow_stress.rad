@@ -1,0 +1,77 @@
+// backend: both
+component Data {
+    id: 0,
+    text: "",
+    tags: []
+}
+
+system UpdateData(d: mut Data) {
+    d = Data { id: d.id, text: d.text + "_updated", tags: push(d.tags, "sys") }
+}
+
+fn main() -> nil {
+    let e1 = spawn(Data { id: 1, text: "alpha", tags: ["a"] })
+    let e2 = spawn(Data { id: 2, text: "beta", tags: ["b"] })
+
+    let mut i = 0
+    while i < 10 {
+        // Fork the world
+        let f = fork()
+
+        // Simulate a system that mutates the string and list
+        let f2 = simulate(f, [system::UpdateData], 1)
+
+        // Read the simulated state without committing
+        let peek1 = peek(f2, e1, Data) |> unwrap
+        print(f"Peek {i} e1: {peek1.text} {peek1.tags}")
+
+        // Live world should be untouched
+        let live1 = get(e1, Data) |> unwrap
+        print(f"Live {i} e1: {live1.text} {live1.tags}")
+
+        // Commit on the last iteration
+        if i == 9 {
+            commit(f2)
+            print("Committed.")
+        } else {
+            // Otherwise, mutate the live world directly to test copy-on-write separation
+            let live2 = get(e2, Data) |> unwrap
+            set(e2, Data {
+                id: live2.id,
+                text: live2.text + "_live",
+                tags: push(live2.tags, "live")
+            })
+        }
+
+        i = i + 1
+    }
+
+    // Final state
+    let final1 = get(e1, Data) |> unwrap
+    let final2 = get(e2, Data) |> unwrap
+    print(f"Final e1: {final1.text} {final1.tags}")
+    print(f"Final e2: {final2.text} {final2.tags}")
+}
+// expect: Peek 0 e1: alpha_updated ["a", "sys"]
+// expect: Live 0 e1: alpha ["a"]
+// expect: Peek 1 e1: alpha_updated ["a", "sys"]
+// expect: Live 1 e1: alpha ["a"]
+// expect: Peek 2 e1: alpha_updated ["a", "sys"]
+// expect: Live 2 e1: alpha ["a"]
+// expect: Peek 3 e1: alpha_updated ["a", "sys"]
+// expect: Live 3 e1: alpha ["a"]
+// expect: Peek 4 e1: alpha_updated ["a", "sys"]
+// expect: Live 4 e1: alpha ["a"]
+// expect: Peek 5 e1: alpha_updated ["a", "sys"]
+// expect: Live 5 e1: alpha ["a"]
+// expect: Peek 6 e1: alpha_updated ["a", "sys"]
+// expect: Live 6 e1: alpha ["a"]
+// expect: Peek 7 e1: alpha_updated ["a", "sys"]
+// expect: Live 7 e1: alpha ["a"]
+// expect: Peek 8 e1: alpha_updated ["a", "sys"]
+// expect: Live 8 e1: alpha ["a"]
+// expect: Peek 9 e1: alpha_updated ["a", "sys"]
+// expect: Live 9 e1: alpha ["a"]
+// expect: Committed.
+// expect: Final e1: alpha_updated ["a", "sys"]
+// expect: Final e2: beta_live_live_live_live_live_live_live_live_live_updated ["b", "live", "live", "live", "live", "live", "live", "live", "live", "live", "sys"]

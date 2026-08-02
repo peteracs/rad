@@ -1,0 +1,4 @@
+// backend: both
+let m = {"a": 1}
+print(m["b"])
+// expect: nil

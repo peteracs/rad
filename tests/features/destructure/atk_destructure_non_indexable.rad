@@ -1,0 +1,5 @@
+fn main() -> nil {
+    let items = [1, 2, 3]
+    let out = items |> map(fn([a, b]) { return a + b })
+    print(out)
+}

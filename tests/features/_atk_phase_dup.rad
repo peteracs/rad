@@ -1,0 +1,16 @@
+// Attack: same system in two phases, both scheduled
+component Counter { n: 0 }
+system Inc(c: mut Counter) { c.n = c.n + 1 }
+
+phase A { Inc }
+phase B { Inc }
+
+fn main() -> nil {
+    let e = spawn(Counter { n: 0 })
+    schedule [A, B]
+    flush_events()
+    let c = unwrap(get(e, Counter))
+    print("n =", c.n)
+}
+
+// expect: n = 2

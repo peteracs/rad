@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>rad collab — streaming VM sessions (D4)</title>
+<style>
+  :root { color-scheme: dark; }
+  body {
+    margin: 0; padding: 24px; background: #0d1117; color: #e6edf3;
+    font: 15px/1.5 "Segoe UI", system-ui, sans-serif;
+    max-width: 880px; margin-inline: auto;
+  }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h1 .role { color: #7ee787; font-weight: 600; }
+  .sub { color: #8b949e; margin: 0 0 16px; font-size: 13px; }
+  .bar { display: flex; gap: 8px; margin-bottom: 16px; }
+  input[type=text] {
+    flex: 1; padding: 10px 12px; border-radius: 8px; border: 1px solid #30363d;
+    background: #161b22; color: #e6edf3; font-size: 15px;
+  }
+  button {
+    padding: 10px 16px; border-radius: 8px; border: 1px solid #30363d;
+    background: #21262d; color: #e6edf3; cursor: pointer; font-size: 14px;
+  }
+  button:hover { background: #30363d; }
+  #notes { display: flex; flex-wrap: wrap; gap: 10px; min-height: 120px; }
+  .note {
+    background: #161b22; border: 1px solid #30363d; border-radius: 10px;
+    padding: 12px 14px; max-width: 240px; animation: pop .15s ease-out;
+  }
+  .note .by { color: #58a6ff; font-size: 12px; margin-top: 6px; }
+  @keyframes pop { from { transform: scale(.92); opacity: 0; } }
+  footer {
+    margin-top: 24px; padding-top: 12px; border-top: 1px solid #21262d;
+    font-size: 12px; color: #8b949e; display: flex; gap: 24px; flex-wrap: wrap;
+  }
+  footer b { color: #e6edf3; font-weight: 600; }
+  #digest { font-family: ui-monospace, monospace; }
+  #latency { color: #7ee787; }
+</style>
+</head>
+<body>
+<h1>rad collab <span class="role" id="role">…</span></h1>
+<p class="sub">
+  Every tab runs the full rad VM (WASM) as a <b>streaming session</b>: compile once,
+  then events in, frames pumped, <code>fork_delta</code> out — one delta per flush,
+  broadcast on a <code>BroadcastChannel</code>. Open this page in 3 tabs.
+</p>
+<div class="bar">
+  <input id="text" type="text" placeholder="write a note and press Enter…" autofocus>
+  <button id="add">Add</button>
+  <button id="clear">Clear board</button>
+</div>
+<div id="notes"></div>
+<footer>
+  <span>digest <b id="digest">—</b></span>
+  <span>last edit→applied <b id="latency">—</b></span>
+  <span>deltas <b id="ndeltas">0</b></span>
+  <span>bytes <b id="nbytes">0</b></span>
+</footer>
+<script type="module">
+const me = "tab-" + Math.random().toString(36).slice(2, 7);
+// Rooms: tabs only collaborate within the same ?room=... — and a stale page
+// from an old session can never hijack a new room's host election.
+const params = new URLSearchParams(location.search);
+const room = params.get("room") || "default";
+
+// Transport: BroadcastChannel by default (same-browser tabs), or a real
+// WebSocket relay with ?relay=ws://host:8378 — same protocol, so peers on
+// other MACHINES join the same session (Tier-2: a network claim, not an
+// IPC claim). The relay is dumb fan-out; all semantics stay client-side.
+function makeTransport() {
+    const relayUrl = params.get("relay");
+    if (!relayUrl) {
+        const bc = new BroadcastChannel("rad-collab-" + room);
+        return {
+            post: (m) => bc.postMessage(m),
+            set onmessage(fn) { bc.onmessage = (ev) => fn(ev.data); },
+            ready: Promise.resolve(),
+            label: "BroadcastChannel",
+        };
+    }
+    const ws = new WebSocket(`${relayUrl}?room=${encodeURIComponent(room)}`);
+    let handler = null;
+    const queue = [];
+    ws.onmessage = async (ev) => {
+        const text = typeof ev.data === "string" ? ev.data : await ev.data.text();
+        const m = JSON.parse(text);
+        if (handler) handler(m);
+    };
+    const ready = new Promise((resolve, reject) => {
+        ws.onopen = () => {
+            for (const m of queue.splice(0)) ws.send(JSON.stringify(m));
+            resolve();
+        };
+        ws.onerror = () => reject(new Error("relay connection failed"));
+    });
+    return {
+        post: (m) => {
+            if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(m));
+            else queue.push(m);
+        },
+        set onmessage(fn) { handler = fn; },
+        ready,
+        label: `relay ${relayUrl}`,
+    };
+}
+const chan = makeTransport();
+const worker = new Worker("./collab_worker.js", { type: "module" });
+
+let nextId = 1;
+const pending = new Map();
+function call(cmd, args = {}) {
+    return new Promise((resolve, reject) => {
+        const id = nextId++;
+        pending.set(id, { resolve, reject });
+        worker.postMessage({ id, cmd, args });
+    });
+}
+worker.onmessage = (ev) => {
+    const { id, ok, ...rest } = ev.data;
+    const p = pending.get(id);
+    if (!p) return;
+    pending.delete(id);
+    ok ? p.resolve(rest) : p.reject(new Error(rest.error));
+};
+
+// --- host election state. The channel handler must be installed BEFORE the
+// (slow) WASM init awaits below, or a host's reply to our "who-is-host"
+// would arrive into a void; and the election itself must run AFTER init,
+// or the timer decides while we cannot yet act on the answer.
+let isHost = false;
+let ready = false;
+let roleDecided = false;
+let pendingState = null;
+
+let ndeltas = 0, nbytes = 0;
+const $ = (id) => document.getElementById(id);
+
+function render(snapshot, digest) {
+    const data = JSON.parse(snapshot);
+    const box = $("notes");
+    box.innerHTML = "";
+    for (const ent of data.entities) {
+        const note = (ent.components || []).find(c => c.type === "Note");
+        if (!note) continue;
+        const div = document.createElement("div");
+        div.className = "note";
+        const t = document.createElement("div");
+        t.textContent = note.fields.text;
+        const by = document.createElement("div");
+        by.className = "by";
+        by.textContent = "— " + note.fields.by;
+        div.append(t, by);
+        box.append(div);
+    }
+    $("digest").textContent = digest.slice(0, 16) + "…";
+}
+
+// --- host: serve elections, ingest edit requests, flush + broadcast deltas.
+// --- replica: send edits to host, apply deltas in order.
+const editQueue = [];
+let flushScheduled = false;
+
+async function hostFlush() {
+    flushScheduled = false;
+    if (editQueue.length === 0) return;
+    const edits = editQueue.splice(0);
+    for (const e of edits) await call("emit", e.payload);
+    const { delta, digest, snapshot } = await call("pump_and_delta");
+    render(snapshot, digest);
+    chan.post({ kind: "delta", delta, digest, stamps: edits.map(e => e.stamp) });
+    ndeltas++; nbytes += delta.length;
+    $("ndeltas").textContent = ndeltas;
+    $("nbytes").textContent = nbytes.toLocaleString();
+    const oldest = Math.min(...edits.map(e => e.stamp.t));
+    $("latency").textContent = (Date.now() - oldest) + " ms (host)";
+}
+
+function scheduleFlush() {
+    if (!flushScheduled) {
+        flushScheduled = true;
+        setTimeout(hostFlush, 16); // one frame per ~16ms tick, edits batched
+    }
+}
+
+chan.onmessage = async (m) => {
+    if (m.kind === "who-is-host") {
+        if (isHost && ready) {
+            const { state } = await call("state");
+            chan.post({ kind: "host-here", state, to: m.from });
+        }
+        return;
+    }
+    if (m.kind === "host-here") {
+        // Only stash: the boot sequence below is the single place that
+        // adopts, so the role decision cannot race itself.
+        if (m.to === me && !isHost) pendingState = m.state;
+        return;
+    }
+    if (m.kind === "edit" && isHost && ready) {
+        editQueue.push(m);
+        scheduleFlush();
+        return;
+    }
+    if (m.kind === "delta" && !isHost && roleDecided) {
+        const t0 = m.stamps.length ? Math.min(...m.stamps.map(s => s.t)) : null;
+        try {
+            const { snapshot, digest } = await call("apply", { delta: m.delta });
+            render(snapshot, digest);
+            ndeltas++; nbytes += m.delta.length;
+            $("ndeltas").textContent = ndeltas;
+            $("nbytes").textContent = nbytes.toLocaleString();
+            if (t0 !== null) {
+                // Date.now(): performance.now() origins differ per tab.
+                $("latency").textContent = (Date.now() - t0) + " ms";
+            }
+        } catch (e) {
+            // Wrong-lineage delta (e.g. we joined mid-flush): refused by the
+            // base fingerprint, never applied wrong. Reload to re-join.
+            console.warn("delta refused:", e);
+        }
+    }
+};
+
+// --- boot: init the VM first, then run the election with a live handler.
+// The relay transport must be CONNECTED before the election broadcast, or
+// the who-is-host question dissolves into an unopened socket.
+await call("start");
+await chan.ready;
+ready = true;
+const first = await call("snapshot");
+render(first.snapshot, first.digest);
+document.title = `rad collab [${chan.label}]`;
+
+if (pendingState === null) {
+    chan.post({ kind: "who-is-host", from: me });
+    await new Promise(r => setTimeout(r, 400));
+}
+if (pendingState !== null) {
+    // A host answered (possibly while WASM was still initializing).
+    const { snapshot, digest } = await call("load", { state: pendingState });
+    render(snapshot, digest);
+    isHost = false;
+    $("role").textContent = "(replica)";
+} else {
+    isHost = true;
+    $("role").textContent = "(host)";
+}
+roleDecided = true;
+
+function submitEdit(payload) {
+    const msg = { kind: "edit", payload, stamp: { by: me, t: Date.now() } };
+    if (isHost) {
+        editQueue.push(msg);
+        scheduleFlush();
+    } else {
+        chan.post(msg);
+    }
+}
+
+$("add").onclick = () => {
+    const text = $("text").value.trim();
+    if (!text) return;
+    $("text").value = "";
+    submitEdit({ event: "AddNote", fields: { text, by: me } });
+};
+$("text").onkeydown = (e) => { if (e.key === "Enter") $("add").click(); };
+$("clear").onclick = () => submitEdit({ event: "ClearNotes", fields: { by: me } });
+</script>
+</body>
+</html>

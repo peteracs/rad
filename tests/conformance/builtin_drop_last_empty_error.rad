@@ -1,0 +1,4 @@
+// drop_last() on empty list must produce a runtime error
+// rust-mode: no-check
+drop_last([])
+// expect-runtime-error: drop_last() on empty list

@@ -1,0 +1,5 @@
+---
+source: tests\conformance\state_transitions_optional_commas.rad
+exit_code: 0
+---
+approved

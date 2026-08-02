@@ -1,0 +1,7 @@
+---
+source: tests\conformance\generic_fn_identity.rad
+exit_code: 0
+---
+42
+rad
+2

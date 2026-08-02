@@ -1,0 +1,71 @@
+// PROBE 13: two parallel systems that SHARE non-mut read components while
+// each writing its own mut component - the exact shape of Advance/Wearing in
+// bugs/11, where divergence begins.
+//
+//   Advance(m: Machine, f: Fsm, j: mut Job)
+//   Wearing(m: Machine, f: Fsm, w: mut Wear)
+//
+// Probe 10 already showed component writes survive a parallel batch, but
+// there the two systems shared NO read components. This adds the shared
+// reads, plus a multi-tick feedback loop where an event handler writes a
+// component that both systems read on the following tick.
+//
+// 20 entities x 30 ticks, +1 per entity per tick. Both totals must be 600,
+// and must be the same on every run.
+
+component Machine { indexed code: "", speed: 1 }
+component Gate { open: true }
+component Job { n: 0 }
+component Wear { n: 0 }
+
+resource GA { n: 0 }
+resource GB { n: 0 }
+resource Flips { n: 0 }
+
+event Toggle { code: str }
+
+system BumpJob(_m: Machine, g: Gate, j: mut Job) {
+    if g.open {
+        j.n = j.n + 1
+    }
+}
+
+system BumpWear(m: Machine, g: Gate, w: mut Wear) {
+    if g.open {
+        w.n = w.n + 1
+        if w.n % 7 == 0 {
+            emit Toggle { code: m.code }
+        }
+    }
+}
+
+// feedback: the handler writes Gate, which both systems read next tick
+on Toggle(e) {
+    match lookup(Machine, "code", e.code) {
+        Some(id) => {
+            let g = require(id, Gate)
+            update(id, Gate) { open = !g.open }
+            update(Flips) { n = res(Flips).n + 1 }
+        }
+        None => { }
+    }
+}
+
+for i in range(0, 20) {
+    spawn(
+        Machine { code: f"m-{i}", speed: 1 },
+        Gate { open: true },
+        Job { n: 0 },
+        Wear { n: 0 },
+    )
+}
+
+for _t in range(0, 30) {
+    schedule [BumpJob, BumpWear]
+    flush_events()
+}
+
+let jt = query { Job } select Job |> reduce(0, fn(acc, j) { return acc + j.n })
+let wt = query { Wear } select Wear |> reduce(0, fn(acc, w) { return acc + w.n })
+
+print(f"job_total={jt} wear_total={wt} flips={res(Flips).n}   (job_total must equal wear_total)")

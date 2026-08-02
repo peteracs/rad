@@ -1,0 +1,13 @@
+event Score { player: str, points: int }
+
+on Score(e) {
+    print(f"{e.player} scored {e.points}")
+}
+
+fn main() -> nil {
+    emit Score { player: "Alice", points: 100 }
+    emit Score { player: "Bob", points: 250 }
+    flush_events()
+}
+// expect: Alice scored 100
+// expect: Bob scored 250

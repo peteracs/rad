@@ -1,0 +1,15 @@
+// backend: both
+let districts = [
+    {"name": "Downtown", "score": 38},
+    {"name": "Westside", "score": 55},
+    {"name": "Old Town", "score": 1}
+]
+
+let ranked = districts |> sort_by(fn(d) { return d["score"] })
+let best = ranked[len(ranked) - 1]
+let worst = ranked[0]
+print(best["name"])
+print(worst["name"])
+
+// expect: Westside
+// expect: Old Town

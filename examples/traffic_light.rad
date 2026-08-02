@@ -1,0 +1,69 @@
+// =====================================================================
+//  Traffic Light Controller — Pure State Machine Demo
+// =====================================================================
+
+state TrafficLight {
+    Red {
+        on timer -> Green
+    }
+    Green {
+        on timer -> Yellow
+    }
+    Yellow {
+        on timer -> Red
+    }
+}
+
+state PedestrianSignal {
+    Walk {
+        on change -> DontWalk
+    }
+    DontWalk {
+        on change -> Walk
+    }
+}
+
+event Tick { time }
+
+on Tick(e) {
+    print(f"  [tick {e.time}]")
+}
+
+fn display_light(light) {
+    match light {
+        Red => { print("    [RED]    STOP") }
+        Green => { print("    [GREEN]  GO") }
+        Yellow => { print("    [YELLOW] CAUTION") }
+    }
+}
+
+fn display_pedestrian(signal) {
+    match signal {
+        Walk => { print("    WALK") }
+        DontWalk => { print("    DON'T WALK") }
+    }
+}
+
+fn main() -> any {
+    print("=== Traffic Light Controller ===\n")
+
+    let mut light = TrafficLight::Red
+    let mut ped = PedestrianSignal::Walk
+    let mut time = 0
+
+    while time < 9 {
+        emit Tick { time: time }
+        print("  Traffic:")
+        display_light(light)
+        print("  Pedestrian:")
+        display_pedestrian(ped)
+        print("")
+
+        light = transition(light, "timer") ?
+        if light == TrafficLight::Red {
+            ped = transition(ped, "change") ?
+        }
+        time = time + 1
+    }
+    print("Simulation complete.")
+}

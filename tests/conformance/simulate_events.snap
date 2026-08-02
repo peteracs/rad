@@ -1,0 +1,7 @@
+---
+source: tests\conformance\simulate_events.rad
+exit_code: 0
+---
+inside the fork: 13
+live world: 0
+live delayed delivery still works: 1

@@ -1,0 +1,12 @@
+// backend: both
+// rust-mode: no-check
+let x = true and 42
+let y = false or "hello"
+print(x)
+print(typeof(x))
+print(y)
+print(typeof(y))
+// expect: true
+// expect: bool
+// expect: true
+// expect: bool

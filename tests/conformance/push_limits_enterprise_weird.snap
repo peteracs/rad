@@ -1,0 +1,33 @@
+---
+source: tests\conformance\push_limits_enterprise_weird.rad
+exit_code: 0
+---
+CASE01:100
+CASE02:2
+CASE03:168
+CASE04:14:91
+CASE05:finance|security|platform
+CASE06:pci_audit_2026
+CASE07:true:false
+CASE08:14
+CASE09:3:20
+CASE10:[2, 1, 4, 2, 6, 3]
+CASE11:124
+CASE12:none
+CASE13:35
+CASE14:63
+CASE15:720
+CASE16:yellow
+CASE17:red
+CASE18:err
+EVENT:1001:policy_violation
+EVENT:2002:manual_override
+CASE19:100
+CASE20:145
+CASE21:true
+CASE22:true:false
+CASE23:true
+CASE24:2:2:1
+CASE25:99
+CASE26:5:999
+CASE27:4

@@ -1,0 +1,20 @@
+// Attack: two once guarded handlers should each track their own once state.
+event Ping { val }
+
+on Ping once (e) where e.val > 0 {
+    print("A:", e.val)
+}
+
+on Ping once (e) where e.val > 10 {
+    print("B:", e.val)
+}
+
+fn main() -> nil {
+    emit Ping { val: 1 }
+    flush_events()
+    emit Ping { val: 20 }
+    flush_events()
+}
+
+// expect: A: 1
+// expect: B: 20

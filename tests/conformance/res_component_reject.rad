@@ -1,0 +1,7 @@
+// res() reads resources; pointing it at a component gets the targeted
+// diagnostic instead of a runtime surprise.
+component Foo { x: int = 1 }
+
+fn main() -> nil {
+    print(res(Foo))
+}

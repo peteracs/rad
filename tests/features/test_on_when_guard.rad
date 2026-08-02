@@ -1,0 +1,22 @@
+component Counter { value: 0 }
+event Hit { target, amount: int }
+
+on Hit(e) when e.amount >= 10 {
+    let c = unwrap(get(e.target, Counter))
+    update(e.target, Counter) {
+        value = c.value + e.amount
+    }
+}
+
+fn main() -> nil {
+    let player = spawn(Counter { value: 0 })
+    emit Hit { target: player, amount: 1 }
+    emit Hit { target: player, amount: 10 }
+    emit Hit { target: player, amount: 2 }
+    emit Hit { target: player, amount: 20 }
+    flush_events()
+    let c = unwrap(get(player, Counter))
+    print(c.value)
+}
+
+// expect: 30

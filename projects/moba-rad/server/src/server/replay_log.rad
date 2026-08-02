@@ -1,0 +1,94 @@
+// Deterministic match replay logging.
+//
+// The authority simulation is deterministic and all player actions are applied
+// by fixed target tick, so a replay only needs the initial world plus the input
+// stream that actually executed. This module records that stream as a compact
+// native-server file. It is intentionally server-only: the WebTransport edge
+// still forwards opaque bytes, and the browser never owns replay authority.
+
+transient resource MatchReplayLog {
+    enabled: bool = false,
+    started: bool = false,
+    finalized: bool = false,
+    path: str = "",
+    input_count: int = 0,
+    started_ms: int = 0,
+    finalized_ms: int = 0
+}
+
+pub fn default_match_replay_path() -> str {
+    return "moba-rad-match.replay"
+}
+
+pub fn replay_input_count() -> int {
+    return res(MatchReplayLog).input_count
+}
+
+pub fn replay_path() -> str {
+    return res(MatchReplayLog).path
+}
+
+pub fn start_match_replay(path: str, started_ms: int) -> nil {
+    let header =
+        "MOBARAD_REPLAY v1\n" +
+        f"started_ms {started_ms}\n" +
+        f"schema_digest {schema_digest()}\n" +
+        f"initial_digest {world_digest()}\n" +
+        "initial_world_begin\n" +
+        save_world() +
+        "\ninitial_world_end\n" +
+        "inputs_begin\n"
+    write_file(path, header)
+    update(MatchReplayLog) {
+        enabled = true,
+        started = true,
+        finalized = false,
+        path = path,
+        input_count = 0,
+        started_ms = started_ms,
+        finalized_ms = 0
+    }
+}
+
+pub fn finish_match_replay(finalized_ms: int) -> nil {
+    let log = res(MatchReplayLog)
+    if not log.enabled or not log.started or log.finalized { return nil }
+
+    append_file(
+        log.path,
+        "inputs_end\n" +
+        f"finalized_ms {finalized_ms}\n" +
+        f"input_count {log.input_count}\n" +
+        f"final_digest {world_digest()}\n"
+    )
+    update(MatchReplayLog) {
+        finalized = true,
+        finalized_ms = finalized_ms
+    }
+}
+
+pub fn record_replay_move(server_tick: int, session_id: int, player_id: int, client_seq: int, command_id: int, target_x: float, target_y: float) -> nil {
+    let log = res(MatchReplayLog)
+    if not log.enabled or not log.started or log.finalized { return nil }
+
+    append_file(
+        log.path,
+        f"M {server_tick} {session_id} {player_id} {client_seq} {command_id} {target_x} {target_y}\n"
+    )
+    update(MatchReplayLog) {
+        input_count = log.input_count + 1
+    }
+}
+
+pub fn record_replay_cast(server_tick: int, session_id: int, player_id: int, client_seq: int, command_id: int, dir_x: float, dir_y: float, fire_view_tick: int) -> nil {
+    let log = res(MatchReplayLog)
+    if not log.enabled or not log.started or log.finalized { return nil }
+
+    append_file(
+        log.path,
+        f"C {server_tick} {session_id} {player_id} {client_seq} {command_id} {dir_x} {dir_y} {fire_view_tick}\n"
+    )
+    update(MatchReplayLog) {
+        input_count = log.input_count + 1
+    }
+}

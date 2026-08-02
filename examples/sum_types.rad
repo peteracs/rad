@@ -1,0 +1,73 @@
+// =====================================================================
+//  Rad — Sum types & exhaustive match
+//  type Name { Variant { fields with defaults } } defines a tagged union.
+//  Type::Variant { ... } builds a value; match destructures every variant.
+// =====================================================================
+
+type Shape {
+    Circle { radius: 1.0 }
+    Rect { w: 1.0, h: 1.0 }
+    Point {}
+}
+
+// Custom Result-style outcomes without using the built-in Result type.
+type ParseInt {
+    Num { value: 0 }
+    Bad { reason: "" }
+}
+
+// Recursive sum type: a self-referential field has no natural default, so it
+// is written with the bare TYPE NAME in the default slot (`left: Expr`), not
+// `left: Expr = <default>`. This is the canonical spelling for tree-shaped
+// data — ASTs, JSON, linked lists. See spec §2.4.
+type Expr {
+    Lit { value: 0 }
+    Add { left: Expr, right: Expr }
+    Mul { left: Expr, right: Expr }
+}
+
+fn eval(e: Expr) -> int {
+    match e {
+        Lit { value } => { return value }
+        Add { left, right } => { return eval(left) + eval(right) }
+        Mul { left, right } => { return eval(left) * eval(right) }
+    }
+}
+
+fn area(s: Shape) -> float {
+    match s {
+        Circle { radius } => { return 3.1415926535 * radius * radius }
+        Rect { w, h } => { return w * h }
+        Point => { return 0.0 }
+    }
+}
+
+fn describe(p: ParseInt) -> str {
+    match p {
+        Num { value } => { return f"ok: {value}" }
+        Bad { reason } => { return f"bad: {reason}" }
+    }
+}
+
+fn main() -> any {
+    print("=== Sum types: Shape areas ===")
+    let c = Shape::Circle { radius: 2.0 }
+    let r = Shape::Rect { w: 3.0, h: 4.0 }
+    let p = Shape::Point {}
+    print(f"  circle: {area(c)}")
+    print(f"  rect:   {area(r)}")
+    print(f"  point:  {area(p)}")
+
+    print("\n=== ParseInt (Result-style) ===")
+    let parse_ok = ParseInt::Num { value: 7 }
+    let parse_bad = ParseInt::Bad { reason: "not a number" }
+    print(f"  {describe(parse_ok)}")
+    print(f"  {describe(parse_bad)}")
+
+    print("\n=== Recursive sum type: (2 + 40) * 3 ===")
+    let tree = Expr::Mul {
+        left: Expr::Add { left: Expr::Lit { value: 2 }, right: Expr::Lit { value: 40 } },
+        right: Expr::Lit { value: 3 },
+    }
+    print(f"  evaluates to {eval(tree)}")
+}

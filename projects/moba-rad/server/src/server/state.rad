@@ -1,0 +1,147 @@
+pub resource ServerConfig {
+    host: str = "127.0.0.1",
+    udp_port: int = 8788,
+    service: str = "moba-rad-server",
+    phase: str = "rad-udp-authority",
+    tick_hz: int = 128,
+    max_catchup_ticks: int = 8,
+    input_delay_ticks: int = 2,
+    max_input_lead_ticks: int = 24,
+    peer_timeout_ms: int = 10000,
+    udp_receive_budget: int = 64,
+    udp_packet_bytes: int = 2048,
+    udp_idle_timeout_ms: int = 1,
+    snapshot_mtu_bytes: int = 1200,
+    snapshot_interest_radius: float = 96.0
+}
+
+pub resource ServerStats {
+    udp_packets: int = 0,
+    udp_snapshots: int = 0,
+    peer_expirations: int = 0,
+    peer_disconnects: int = 0,
+    last_udp_status: str = ""
+}
+
+pub resource ServerControl {
+    running: bool = true,
+    started_ms: int = 0,
+    shutdown_requested_ms: int = 0,
+    shutdown_reason: str = ""
+}
+
+pub resource ServerClock {
+    last_ms: int = 0,
+    accumulator_us: int = 0,
+    tick_count: int = 0,
+    server_seq: int = 0
+}
+
+pub fn next_server_seq() -> int {
+    let clock_state = res(ServerClock)
+    let seq = clock_state.server_seq + 1
+    update(ServerClock) { server_seq = seq }
+    return seq
+}
+
+pub fn start_authority(now_ms: int) -> nil {
+    set_resource(ServerControl, ServerControl {
+        running: true,
+        started_ms: now_ms,
+        shutdown_requested_ms: 0,
+        shutdown_reason: ""
+    })
+}
+
+pub fn authority_should_run() -> bool {
+    return res(ServerControl).running
+}
+
+pub fn shutdown_reason() -> str {
+    return res(ServerControl).shutdown_reason
+}
+
+pub fn request_authority_shutdown(reason: str, now_ms: int) -> nil {
+    emit AuthorityShutdownRequested {
+        reason: reason,
+        now_ms: now_ms
+    }
+    flush_events()
+}
+
+pub event UdpPacketServed {
+    status: str
+}
+
+pub event UdpSnapshotSent {
+    status: str
+}
+
+pub event UdpPeerExpired {
+    count: int,
+    status: str
+}
+
+pub event UdpPeerDisconnected {
+    count: int,
+    status: str
+}
+
+pub event AuthorityShutdownRequested {
+    reason: str,
+    now_ms: int
+}
+
+on AuthorityShutdownRequested(e) {
+    let control = res(ServerControl)
+    set_resource(ServerControl, ServerControl {
+        running: false,
+        started_ms: control.started_ms,
+        shutdown_requested_ms: e.now_ms,
+        shutdown_reason: e.reason
+    })
+}
+
+on UdpPacketServed(e) {
+    let stats = res(ServerStats)
+    set_resource(ServerStats, ServerStats {
+        udp_packets: stats.udp_packets + 1,
+        udp_snapshots: stats.udp_snapshots,
+        peer_expirations: stats.peer_expirations,
+        peer_disconnects: stats.peer_disconnects,
+        last_udp_status: e.status
+    })
+}
+
+on UdpSnapshotSent(e) {
+    let stats = res(ServerStats)
+    set_resource(ServerStats, ServerStats {
+        udp_packets: stats.udp_packets,
+        udp_snapshots: stats.udp_snapshots + 1,
+        peer_expirations: stats.peer_expirations,
+        peer_disconnects: stats.peer_disconnects,
+        last_udp_status: e.status
+    })
+}
+
+on UdpPeerExpired(e) {
+    let stats = res(ServerStats)
+    set_resource(ServerStats, ServerStats {
+        udp_packets: stats.udp_packets,
+        udp_snapshots: stats.udp_snapshots,
+        peer_expirations: stats.peer_expirations + e.count,
+        peer_disconnects: stats.peer_disconnects,
+        last_udp_status: e.status
+    })
+}
+
+on UdpPeerDisconnected(e) {
+    let stats = res(ServerStats)
+    set_resource(ServerStats, ServerStats {
+        udp_packets: stats.udp_packets,
+        udp_snapshots: stats.udp_snapshots,
+        peer_expirations: stats.peer_expirations,
+        peer_disconnects: stats.peer_disconnects + e.count,
+        last_udp_status: e.status
+    })
+}

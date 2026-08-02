@@ -1,0 +1,55 @@
+// The stat-pipeline trio from the buffcore dogfood: `for ... where`
+// filtered loops, `.field` accessor shorthand, and sum()/product() folds.
+
+struct Mod { stat: str = "", flat: float = 0.0, pct: float = 0.0 }
+
+fn main() -> nil {
+    let mods = [
+        Mod { stat: "ad", flat: 10.0 },
+        Mod { stat: "ad", flat: 5.0, pct: 0.10 },
+        Mod { stat: "ap", flat: 40.0 },
+        Mod { stat: "ad", pct: 0.05 },
+    ]
+
+    // for-where: filtered iteration that reads like the query it is
+    let mut ad_count = 0
+    for m in mods where m.stat == "ad" {
+        ad_count = ad_count + 1
+    }
+    print(ad_count)                       // 3
+
+    // where composes with destructuring iterables and continues/breaks
+    let mut names = []
+    for m in mods where m.flat > 0.0 {
+        names << m.stat
+    }
+    print(names)                          // ["ad", "ad", "ap"]
+
+    // .field shorthand: one-argument projection closures
+    print(mods |> map(.stat))             // ["ad", "ad", "ap", "ad"]
+    print(mods |> map(.flat) |> sum)      // 55.0
+
+    // chains project through nesting
+    let wrapped = [[Mod { stat: "hp", flat: 1.5 }], [Mod { stat: "mp", flat: 2.5 }]]
+    let firsts = wrapped |> map(fn(xs) { return xs[0] })
+    print(firsts |> map(.flat) |> sum)    // 4.0
+
+    // .field works anywhere a closure does
+    let flats = filter(map(mods, .flat), fn(f) { return f > 0.0 })
+    print(flats)                          // [10.0, 5.0, 40.0]
+
+    // sum/product: ints stay int, floats promote, empties are identities
+    print(sum([1, 2, 3]))                 // 6
+    print(sum([1, 2.5]))                  // 3.5
+    print(sum([]))                        // 0
+    print(product([2, 3, 4]))             // 24
+    print(product([2, 0.5]))              // 1.0
+    print(product([]))                    // 1
+
+    // the full stat fold, exactly as buffcore writes it
+    let ad_mods = mods |> filter(fn(m) { return m.stat == "ad" })
+    let flat = ad_mods |> map(.flat) |> sum
+    let pct = ad_mods |> map(.pct) |> sum
+    let base = 55.0
+    print((base + flat) * (1.0 + pct))    // 80.5
+}

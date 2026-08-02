@@ -1,0 +1,27 @@
+// BUG 04 DIFFERENTIAL: same infinite handler chain, but the handler body
+// makes a FUNCTION CALL. Op::Call is a fuel charge point; `emit` is not, and
+// a handler body carries no loop back-edge.
+//
+// If this one STARVES while 04 hangs, the root cause is exact: handler
+// dispatch itself is unmetered, and only incidental bytecode inside the
+// handler body can charge fuel.
+
+let bomb = f"""
+event P { n }
+fn bump(x: int) -> int {
+    return x + 1
+}
+on P(e) {
+    emit P { n: bump(e.n) }
+}
+emit P { n: 0 }
+"""
+
+print("host: same chain, but handler body calls bump()")
+
+match sandbox_run(bomb, fork(), f"""{ "write": [], "fuel": 2000, "mem_bytes": 1048576 }""") {
+    Ok(_f) => { print("guest completed (still unbounded)") }
+    Err(m) => { print(f"contained: {m}") }
+}
+
+print("host: still alive")

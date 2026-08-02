@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>RADTACTICS — the browser arena</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --bg: #0d1117; --panel: #161b22; --line: #21262d;
+    --text: #e6edf3; --dim: #8b949e;
+    --red: #ff6b6b; --red-dk: #b33; --blue: #58a6ff; --blue-dk: #1f6feb;
+    --gold: #e3b341; --green: #3fb950;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.5 "Segoe UI", system-ui, sans-serif;
+  }
+  header {
+    padding: 18px 24px 10px; border-bottom: 1px solid var(--line);
+    display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;
+  }
+  header h1 { margin: 0; font-size: 20px; letter-spacing: 1px; }
+  header h1 .red { color: var(--red); } header h1 .blue { color: var(--blue); }
+  header .sub { color: var(--dim); font-size: 12.5px; }
+  .controls { padding: 14px 24px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .controls label { color: var(--dim); font-size: 13px; }
+  input[type=number] {
+    width: 90px; background: var(--panel); color: var(--text);
+    border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; font: inherit;
+  }
+  button {
+    background: var(--blue-dk); border: 0; color: #fff; font: 600 14px/1 inherit;
+    padding: 10px 22px; border-radius: 6px; cursor: pointer;
+  }
+  button:disabled { background: #30363d; color: var(--dim); cursor: wait; }
+  #status { color: var(--gold); font-size: 13px; min-height: 18px; }
+  main {
+    display: flex; flex-wrap: wrap;
+    gap: 18px; padding: 8px 24px 30px; align-items: flex-start;
+  }
+  #board-wrap { flex: 0 0 auto; }
+  .right { flex: 1 1 320px; min-width: 300px; max-width: 560px; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
+  /* board */
+  #board-wrap { position: relative; }
+  #board {
+    position: relative; background: #10151c;
+    border: 1px solid var(--line); border-radius: 8px;
+    background-image:
+      linear-gradient(var(--line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--line) 1px, transparent 1px);
+  }
+  .unit {
+    position: absolute; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    border-radius: 8px; transition: left .55s ease, top .55s ease, opacity .4s;
+    font-weight: 800; font-size: 20px; color: #fff;
+    text-shadow: 0 1px 2px rgba(0,0,0,.6);
+  }
+  .unit.red  { background: linear-gradient(160deg, #d44, #912); }
+  .unit.blue { background: linear-gradient(160deg, #2e7de0, #1a4a9e); }
+  .unit .hp {
+    width: 78%; height: 5px; border-radius: 3px; background: #0008; margin-top: 2px; overflow: hidden;
+  }
+  .unit .hp i { display: block; height: 100%; background: var(--green); transition: width .4s; }
+  .unit.hurt .hp i { background: var(--gold); }
+  .unit.critical .hp i { background: var(--red); }
+  .unit.dead { opacity: 0; transform: scale(.6); }
+  #round-banner {
+    text-align: center; font-size: 15px; letter-spacing: 2px;
+    color: var(--gold); margin: 0 0 10px; min-height: 22px; font-weight: 600;
+  }
+  #ticker { margin-top: 10px; min-height: 64px; font-size: 12.5px; color: var(--dim); }
+  #ticker div { animation: fadein .3s; }
+  #ticker .actor-red  { color: var(--red); font-weight: 600; }
+  #ticker .actor-blue { color: var(--blue); font-weight: 600; }
+  @keyframes fadein { from { opacity: 0; transform: translateY(3px);} to { opacity: 1; } }
+  /* right column */
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--dim); margin: 0 0 8px; }
+  #log {
+    font: 12px/1.55 ui-monospace, Consolas, monospace; white-space: pre-wrap;
+    max-height: 300px; overflow-y: auto; color: var(--text);
+  }
+  #log .fall { color: var(--gold); font-weight: 700; }
+  #verdict { font-size: 17px; font-weight: 700; min-height: 24px; }
+  #verdict.red  { color: var(--red); } #verdict.blue { color: var(--blue); }
+  #stats { color: var(--dim); font-size: 12.5px; margin-top: 4px; }
+  #autopsy { font: 11.5px/1.5 ui-monospace, Consolas, monospace; white-space: pre-wrap; color: var(--dim); max-height: 260px; overflow-y: auto; }
+  #autopsy b { color: var(--text); }
+  .right > .panel { margin-bottom: 14px; }
+  footer { padding: 0 24px 24px; color: var(--dim); font-size: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>RAD<span class="red">TAC</span><span class="blue">TICS</span> — browser arena</h1>
+  <span class="sub">the rad VM compiled to WebAssembly · the oracle forks the universe per move, in your tab</span>
+</header>
+
+<div class="controls">
+  <label>seed <input id="seed" type="number" value="2026"></label>
+  <button id="fight">FIGHT</button>
+  <span id="status"></span>
+</div>
+
+<main>
+  <div class="panel" id="board-wrap">
+    <p id="round-banner">press FIGHT</p>
+    <div id="board"></div>
+    <div id="ticker"></div>
+  </div>
+  <div class="right">
+    <div class="panel">
+      <h2>verdict</h2>
+      <div id="verdict"></div>
+      <div id="stats"></div>
+    </div>
+    <div class="panel">
+      <h2>battle journal</h2>
+      <div id="log"></div>
+    </div>
+    <div class="panel">
+      <h2>autopsy — why() on every fallen unit</h2>
+      <div id="autopsy">causal chains appear after the battle</div>
+    </div>
+  </div>
+</main>
+
+<footer>
+  Same brain as the terminal game: <code>lib_combat.rad</code> + <code>web_arena.rad</code>, merged
+  and handed to <code>RadRuntime.compile_and_run</code> inside a Web Worker. Every move =
+  fork() per candidate × jittered futures × depth-4 lookahead, scored worst-case.
+</footer>
+
+<script type="module">
+const TILE = 52, GAP = 0;
+const boardEl = document.getElementById("board");
+const banner = document.getElementById("round-banner");
+const ticker = document.getElementById("ticker");
+const logEl = document.getElementById("log");
+const verdictEl = document.getElementById("verdict");
+const statsEl = document.getElementById("stats");
+const autopsyEl = document.getElementById("autopsy");
+const statusEl = document.getElementById("status");
+const fightBtn = document.getElementById("fight");
+
+const worker = new Worker("./arena_worker.js", { type: "module" });
+let sources = null;
+
+async function loadSources() {
+  if (sources) return sources;
+  const [lib, main] = await Promise.all([
+    fetch("../../projects/dogfood/tactics/lib_combat.rad").then(r => r.text()),
+    fetch("../../projects/dogfood/tactics/web_arena.rad").then(r => r.text()),
+  ]);
+  // the browser is the module loader here: strip the `use`, prepend the lib
+  sources = lib + "\n" + main.replace(/^use "lib_combat.rad"\s*$/m, "");
+  return sources;
+}
+
+// ---- @-protocol parser ------------------------------------------------
+function parseBattle(text) {
+  const frames = [];   // { round, units: Map(name -> {side,cls,x,y,hp,max}), acts: [], logs: [] }
+  let meta = null, winner = null, futures = null, elapsed = null;
+  const autopsies = [];
+  let cur = null, why = null;
+  for (const line of text.split("\n")) {
+    if (why !== null) {
+      if (line === "@endwhy") { autopsies.push(why); why = null; }
+      else why.text += line + "\n";
+      continue;
+    }
+    if (line.startsWith("@meta ")) {
+      const [w, h, maxr, depth, par, seed] = line.slice(6).split(" ").map(Number);
+      meta = { w, h, maxr, depth, par, seed };
+    } else if (line.startsWith("@round ")) {
+      cur = { round: +line.slice(7), units: new Map(), acts: [], logs: [] };
+    } else if (line.startsWith("@unit ")) {
+      const [name, side, cls, x, y, hp, max] = line.slice(6).split(" ");
+      cur.units.set(name, { side, cls, x: +x, y: +y, hp: +hp, max: +max });
+    } else if (line.startsWith("@act ")) {
+      const sp = line.indexOf(" ", 5);
+      cur.acts.push({ name: line.slice(5, sp), what: line.slice(sp + 1) });
+    } else if (line.startsWith("@log ")) {
+      cur.logs.push(line.slice(5));
+    } else if (line === "@endround") {
+      frames.push(cur);
+    } else if (line.startsWith("@winner ")) {
+      winner = line.slice(8);
+    } else if (line.startsWith("@futures ")) {
+      [futures, elapsed] = line.slice(9).split(" ").map(Number);
+    } else if (line.startsWith("@why ")) {
+      why = { unit: line.slice(5), text: "" };
+    }
+  }
+  return { meta, frames, winner, futures, elapsed, autopsies };
+}
+
+// ---- renderer -----------------------------------------------------------
+const unitEls = new Map();
+function setupBoard(meta) {
+  boardEl.style.width = meta.w * TILE + 1 + "px";
+  boardEl.style.height = meta.h * TILE + 1 + "px";
+  boardEl.style.backgroundSize = `${TILE}px ${TILE}px`;
+  boardEl.innerHTML = "";
+  unitEls.clear();
+}
+function glyph(cls) { return { knight: "K", archer: "A", mage: "M", cleric: "C" }[cls] || "?"; }
+function renderFrame(f) {
+  for (const [name, u] of f.units) {
+    let el = unitEls.get(name);
+    if (!el) {
+      el = document.createElement("div");
+      el.innerHTML = `<span>${glyph(u.cls)}</span><span class="hp"><i></i></span>`;
+      el.title = name;
+      el.style.width = TILE - 8 + "px";
+      el.style.height = TILE - 8 + "px";
+      boardEl.appendChild(el);
+      unitEls.set(name, el);
+    }
+    const pct = Math.max(0, u.hp / u.max);
+    el.className = `unit ${u.side}` +
+      (u.hp <= 0 ? " dead" : pct < 0.34 ? " critical" : pct < 0.67 ? " hurt" : "");
+    el.style.left = u.x * TILE + 4 + "px";
+    el.style.top = u.y * TILE + 4 + "px";
+    el.querySelector(".hp i").style.width = pct * 100 + "%";
+  }
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+async function playback(battle) {
+  setupBoard(battle.meta);
+  logEl.textContent = ""; ticker.innerHTML = "";
+  verdictEl.textContent = ""; verdictEl.className = "";
+  autopsyEl.textContent = "";
+  renderFrame(battle.frames[0]);
+  banner.textContent = "DEPLOYMENT";
+  await sleep(900);
+  for (const f of battle.frames.slice(1)) {
+    banner.textContent = `ROUND ${f.round}`;
+    ticker.innerHTML = "";
+    for (const a of f.acts) {
+      const side = a.name.startsWith("red") ? "red" : "blue";
+      const div = document.createElement("div");
+      div.innerHTML = `<span class="actor-${side}">${a.name}</span>: ${a.what}`;
+      ticker.appendChild(div);
+      while (ticker.children.length > 5) ticker.removeChild(ticker.firstChild);
+      await sleep(140);
+    }
+    renderFrame(f);
+    for (const l of f.logs) {
+      const d = document.createElement("div");
+      d.textContent = l;
+      if (l.includes("falls!")) d.className = "fall";
+      logEl.appendChild(d);
+    }
+    logEl.scrollTop = logEl.scrollHeight;
+    await sleep(620);
+  }
+  const w = battle.winner;
+  banner.textContent = "BATTLE OVER";
+  verdictEl.textContent = w === "draw" ? "DRAW" : `${w.toUpperCase()} WINS`;
+  verdictEl.className = w;
+  const ups = battle.elapsed > 0 ? Math.round(battle.futures / (battle.elapsed / 1000)) : 0;
+  statsEl.textContent =
+    `${battle.frames.length - 1} rounds · oracle explored ${battle.futures.toLocaleString()} ` +
+    `forked futures in ${(battle.elapsed / 1000).toFixed(1)} s (${ups.toLocaleString()} universes/sec, in wasm)`;
+  autopsyEl.innerHTML = battle.autopsies.length
+    ? battle.autopsies.map(a => `<b>why ${a.unit}</b>\n${a.text}`).join("\n")
+    : "no units fell";
+}
+
+// ---- driver ---------------------------------------------------------------
+let thinkTimer = null;
+fightBtn.onclick = async () => {
+  fightBtn.disabled = true;
+  try {
+    const src = await loadSources();
+    const seed = +document.getElementById("seed").value || 2026;
+    const t0 = performance.now();
+    statusEl.textContent = "the oracle is forking universes…";
+    thinkTimer = setInterval(() => {
+      statusEl.textContent =
+        `the oracle is forking universes… ${((performance.now() - t0) / 1000).toFixed(0)}s`;
+    }, 1000);
+    worker.postMessage({ source: src, seed });
+  } catch (e) {
+    statusEl.textContent = "failed to load sources: " + e;
+    fightBtn.disabled = false;
+  }
+};
+
+worker.onmessage = async (ev) => {
+  clearInterval(thinkTimer);
+  if (!ev.data.ok) {
+    statusEl.textContent = "VM error: " + ev.data.error;
+    fightBtn.disabled = false;
+    return;
+  }
+  statusEl.textContent = `battle computed in ${(ev.data.ms / 1000).toFixed(1)} s — replaying`;
+  const battle = parseBattle(ev.data.output);
+  if (!battle.meta || !battle.frames.length) {
+    statusEl.textContent = "unexpected VM output";
+    console.log(ev.data.output);
+    fightBtn.disabled = false;
+    return;
+  }
+  await playback(battle);
+  statusEl.textContent = "";
+  fightBtn.disabled = false;
+};
+</script>
+</body>
+</html>

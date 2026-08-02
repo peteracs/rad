@@ -1,0 +1,11 @@
+// update all fields on entity that has a DIFFERENT component — should error or create?
+component A { x: 0 }
+component B { y: 0 }
+
+fn main() -> nil {
+    let e = spawn(A { x: 1 })
+    // Entity has A but not B — update B on it
+    update(e, B) { y = 99 }
+    let b = unwrap(get(e, B))
+    print("b.y:", b.y)
+}

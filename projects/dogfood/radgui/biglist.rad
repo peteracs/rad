@@ -1,0 +1,93 @@
+// RADGUI dogfood: 10,000 rows, ~30 entities. The virtualization answer —
+// the app owns the window: a Scrollable container reports scrollTop, the
+// handler recycles a fixed set of row widgets and resizes two spacers.
+// The DOM never holds more than WINDOW rows; a scroll step's render delta
+// is exactly the rows whose text changed.
+
+use "lib_gui.rad"
+
+component ListBox { z: int = 0 }
+
+component Row { slot: int = 0 }
+
+component TopPad { z: int = 0 }
+
+component BotPad { z: int = 0 }
+
+component HeadLine { z: int = 0 }
+
+resource ListView { first: int = 0 }
+
+let N = 10000
+let ROW = 24
+let WINDOW = 26
+let VIEW_H = 480
+
+fn item_text(i: int) -> str {
+    let mood = i % 4
+    if mood == 0 { return f"row {i} — steady" }
+    if mood == 1 { return f"row {i} — rising" }
+    if mood == 2 { return f"row {i} — falling" }
+    return f"row {i} — chaotic"
+}
+
+fn show_from(first: int) -> nil {
+    let mut f = first
+    if f < 0 { f = 0 }
+    if f > N - WINDOW { f = N - WINDOW }
+    let v = get_resource(ListView) |> unwrap
+    if v.first == f { return }
+    set_resource(ListView, ListView { first: f })
+    for r in entities(Row) {
+        let slot = (get(r, Row) |> unwrap).slot
+        ui_set_text(r, item_text(f + slot))
+    }
+    for t in entities(TopPad) {
+        update(t, Style) { height = f * ROW }
+    }
+    for b in entities(BotPad) {
+        update(b, Style) { height = (N - f - WINDOW) * ROW }
+    }
+    for h in entities(HeadLine) {
+        ui_set_text(h, f"showing {f}..{f + WINDOW - 1} of {N} — widgets alive: {WINDOW + 2}")
+    }
+}
+
+on Scroll(e) {
+    if has(e.target, ListBox) {
+        show_from(e.top / ROW)
+    }
+}
+
+fn main() -> nil {
+    ui_title("RADGUI biglist — 10k rows, 30 entities")
+
+    let root = ui_root()
+    update(root, Style) { pad = 12, gap = 8 }
+
+    let head = ui_label(root, "")
+    set(head, HeadLine { z: 0 })
+    update(head, Style) { fg = "#8a87a0", size = 12 }
+
+    let box = ui_col(root)
+    set(box, ListBox { z: 0 })
+    set(box, Scrollable { z: 0 })
+    update(box, Style) { height = VIEW_H, scroll = 1, border = "1px solid #262636" }
+
+    let top = ui_col(box)
+    set(top, TopPad { z: 0 })
+
+    for slot in range(0, WINDOW) {
+        let r = ui_label(box, item_text(slot))
+        set(r, Row { slot: slot })
+        update(r, Style) { height = ROW, mono = 1, size = 13, pad = 2 }
+    }
+
+    let bot = ui_col(box)
+    set(bot, BotPad { z: 0 })
+    update(bot, Style) { height = (N - WINDOW) * ROW }
+
+    for h in entities(HeadLine) {
+        ui_set_text(h, f"showing 0..{WINDOW - 1} of {N} — widgets alive: {WINDOW + 2}")
+    }
+}

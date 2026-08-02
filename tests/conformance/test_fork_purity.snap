@@ -1,0 +1,7 @@
+---
+source: tests\conformance\test_fork_purity.rad
+exit_code: 1
+---
+
+---stderr---
+Error: System 'BadIO' cannot be used in simulate(): calls IO builtin 'print' (forbidden in simulation)

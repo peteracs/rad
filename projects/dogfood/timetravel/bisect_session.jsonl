@@ -1,0 +1,9 @@
+{"jsonrpc":"2.0","id":1,"method":"info"}
+{"jsonrpc":"2.0","id":2,"method":"diff_frames","params":{"a":0,"b":5}}
+{"jsonrpc":"2.0","id":3,"method":"diff_frames","params":{"a":2,"b":3}}
+{"jsonrpc":"2.0","id":4,"method":"diff_frames","params":{"a":3,"b":4}}
+{"jsonrpc":"2.0","id":5,"method":"peek","params":{"frame":3,"entity":"hero","component":"Gold"}}
+{"jsonrpc":"2.0","id":6,"method":"peek","params":{"frame":4,"entity":"hero","component":"Gold"}}
+{"jsonrpc":"2.0","id":7,"method":"goto_frame","params":{"frame":3}}
+{"jsonrpc":"2.0","id":8,"method":"peek","params":{"entity":"hero","component":"Health"}}
+{"jsonrpc":"2.0","id":9,"method":"shutdown"}

@@ -1,0 +1,146 @@
+// ============================================================
+// Dogfood App #1 — Todo List CLI
+// Commands on stdin, one per line:
+//   add <priority> <text...>     add a task
+//   done <id>                    mark complete
+//   rm <id>                      delete
+//   list                         show tasks
+//   save / load                  persist to todo.db
+//   quit                         exit
+// ============================================================
+
+component Task { id: 0, text: "", done: false, pri: 1 }
+resource Counter { next_id: 1 }
+
+event AddTask { text: str, pri: int }
+
+event CompleteTask { id: int }
+
+event RemoveTask { id: int }
+
+let DB_PATH = "projects/dogfood/todo/todo.db"
+
+on AddTask(e) {
+    let c = get_resource(Counter) ?
+    spawn(Task { id: c.next_id, text: e.text, done: false, pri: e.pri })
+    set_resource(Counter, Counter { next_id: c.next_id + 1 })
+    print(f"added #{c.next_id}: {e.text}")
+}
+
+on CompleteTask(e) {
+    let found = find_task(e.id)
+    match found {
+        Some(ent) => {
+            let t = get(ent, Task) |> unwrap
+            set(ent, Task { id: t.id, text: t.text, done: true, pri: t.pri })
+            print(f"completed #{e.id}")
+        }
+        None => { print(f"no task #{e.id}") }
+    }
+}
+
+on RemoveTask(e) {
+    let found = find_task(e.id)
+    match found {
+        Some(ent) => {
+            despawn(ent)
+            print(f"removed #{e.id}")
+        }
+        None => { print(f"no task #{e.id}") }
+    }
+}
+
+readonly fn find_task(id: int) -> any {
+    for ent in entities(Task) {
+        let t = get(ent, Task) |> unwrap
+        if t.id == id {
+            return Some(ent)
+        }
+    }
+    return None
+}
+
+readonly fn task_line(ent: entity) -> str {
+    let t = get(ent, Task) |> unwrap
+    let mut box = "[ ]"
+    if t.done { box = "[x]" }
+    return f"{box} #{t.id} (p{t.pri}) {t.text}"
+}
+
+fn list_tasks() {
+    let all = entities(Task)
+    if len(all) == 0 {
+        print("(no tasks)")
+        return nil
+    }
+    for ent in all {
+        print(task_line(ent))
+    }
+}
+
+fn save_tasks() {
+    let mut lines = []
+    for ent in entities(Task) {
+        let t = get(ent, Task) |> unwrap
+        lines << json_stringify(t)
+    }
+    write_file(DB_PATH, join(lines, "\n"))
+    print(f"saved {len(lines)} tasks")
+}
+
+fn load_tasks() {
+    if !file_exists(DB_PATH) {
+        print("no db file")
+        return nil
+    }
+    // clear current tasks
+    for ent in entities(Task) {
+        despawn(ent)
+    }
+    let body = read_file(DB_PATH)
+    let mut count = 0
+    let mut max_id = 0
+    for line in split(body, "\n") {
+        if len(trim(line)) == 0 { continue }
+        let row = json_parse(line) |> unwrap
+        let id = row["id"]
+        spawn(Task { id: id, text: row["text"], done: row["done"], pri: row["pri"] })
+        if id > max_id { max_id = id }
+        count = count + 1
+    }
+    set_resource(Counter, Counter { next_id: max_id + 1 })
+    print(f"loaded {count} tasks")
+}
+
+fn handle(line: str) -> bool {
+    let trimmed = trim(line)
+    if len(trimmed) == 0 { return true }
+    let parts = split(trimmed, " ")
+    let cmd = parts[0]
+    if cmd == "quit" { return false }
+    if cmd == "list" { list_tasks() }
+    if cmd == "save" { save_tasks() }
+    if cmd == "load" { load_tasks() }
+    if cmd == "add" {
+        let pri = try_int(parts[1]) |> unwrap
+        let text = join(slice(parts, 2, len(parts)), " ")
+        emit AddTask { text: text, pri: pri }
+        flush_events()
+    }
+    if cmd == "done" {
+        emit CompleteTask { id: try_int(parts[1]) |> unwrap }
+        flush_events()
+    }
+    if cmd == "rm" {
+        emit RemoveTask { id: try_int(parts[1]) |> unwrap }
+        flush_events()
+    }
+    return true
+}
+
+fn main() {
+    let input_text = read_stdin_all()
+    for line in split(input_text, "\n") {
+        if !handle(line) { break }
+    }
+}

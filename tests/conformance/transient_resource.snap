@@ -1,0 +1,8 @@
+---
+source: tests\conformance\transient_resource.rad
+exit_code: 0
+---
+transient write keeps digest: true
+real write moves digest: true
+restored: score=1 tape=2
+fork digest stable: true

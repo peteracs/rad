@@ -1,0 +1,35 @@
+// Dogfood: List item #2, Phase 3 — time-travel bug bisection.
+//
+// The bug: the Hit handler silently drains Gold once hp drops below 80.
+// Nobody noticed for four frames. Record it, then let the debugger (or an
+// agent) find the exact frame where Gold changed — without re-running io.
+//
+//   rad projects/dogfood/timetravel/buggy.rad --record projects/dogfood/timetravel/buggy.radr
+//   Get-Content projects/dogfood/timetravel/bisect_session.jsonl |
+//       rad replay projects/dogfood/timetravel/buggy.radr --serve
+
+component Health { hp: 100 }
+
+component Gold { amount: 50 }
+
+event Hit { amount }
+
+let hero = spawn("hero", Health { hp: 100 }, Gold { amount: 50 })
+
+on Hit(e) {
+    let h = get(hero, Health) |> unwrap
+    set(hero, Health { hp: h.hp - e.amount })
+    if h.hp - e.amount < 80 {
+        set(hero, Gold { amount: 0 })   // <- the bug ships in this line
+    }
+}
+
+print("=== Buggy run (the recording) ===")
+for _i in range(0, 4) {
+    emit Hit { amount: 10 }
+    flush_events()
+}
+
+let h = get(hero, Health) |> unwrap
+let g = get(hero, Gold) |> unwrap
+print(f"hero ends with hp={h.hp}, gold={g.amount}  (where did the gold go?)")

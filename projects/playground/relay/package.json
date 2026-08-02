@@ -1,0 +1,18 @@
+{
+  "name": "relay",
+  "version": "1.0.0",
+  "description": "WebSocket relay for Rad playground collaboration sessions",
+  "private": true,
+  "main": "relay.mjs",
+  "scripts": {
+    "test": "node --check relay.mjs",
+    "start": "node relay.mjs"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "type": "commonjs",
+  "dependencies": {
+    "ws": "^8.21.0"
+  }
+}

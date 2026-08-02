@@ -1,0 +1,13 @@
+// Attack: event with no fields
+event Ping {}
+
+on Ping(e) {
+    print("ping received")
+}
+
+fn main() -> nil {
+    emit Ping {}
+    flush_events()
+}
+
+// expect: ping received

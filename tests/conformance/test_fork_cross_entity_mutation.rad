@@ -1,0 +1,46 @@
+// Test: Cross-entity mutation inside simulated systems
+// A system that queries and mutates other entities
+
+component HP    { hp: 100 }
+component Healer { power: 10 }
+
+system HealAll(h: Healer) {
+    // Find all entities with HP and heal them
+    let targets = query { HP }
+    let mut idx = 0
+    while idx < len(targets) {
+        let eid = targets[idx]
+        let target_hp = require(eid, HP)
+        set(eid, HP { hp: target_hp.hp + h.power })
+        idx = idx + 1
+    }
+}
+
+let patient1 = spawn("patient1", HP { hp: 50 })
+let patient2 = spawn("patient2", HP { hp: 30 })
+let healer = spawn("healer", Healer { power: 10 }, HP { hp: 80 })
+
+// Simulate 3 ticks of healing (healer also heals itself since it has HP)
+let f = fork()
+let f = simulate(f, [system::HealAll], 3)
+
+// Main world should be untouched
+let main_hp1 = get(patient1, HP) |> unwrap
+assert(main_hp1.hp == 50, f"Patient1 HP should be 50 in main world, got {main_hp1.hp}")
+
+let main_hp2 = get(patient2, HP) |> unwrap
+assert(main_hp2.hp == 30, f"Patient2 HP should be 30 in main world, got {main_hp2.hp}")
+
+// Commit the healed timeline
+commit(f)
+// Each tick: healer heals all 3 HP entities by 10. After 3 ticks: +30
+let healed_hp1 = get(patient1, HP) |> unwrap
+assert(healed_hp1.hp == 80, f"Patient1 HP after 3 heals: expected 80, got {healed_hp1.hp}")
+
+let healed_hp2 = get(patient2, HP) |> unwrap
+assert(healed_hp2.hp == 60, f"Patient2 HP after 3 heals: expected 60, got {healed_hp2.hp}")
+
+let healed_healer = get(healer, HP) |> unwrap
+assert(healed_healer.hp == 110, f"Healer HP after 3 self-heals: expected 110, got {healed_healer.hp}")
+
+print("PASS: cross-entity mutation in simulation")

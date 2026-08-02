@@ -1,0 +1,7 @@
+---
+source: tests\conformance\negative_type_mismatch.rad
+exit_code: 1
+---
+
+---stderr---
+Error: Type mismatch: 'x' declared as int, got str

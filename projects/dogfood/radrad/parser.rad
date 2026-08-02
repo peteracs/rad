@@ -1,0 +1,860 @@
+// =====================================================================
+// radrad stage 2: parser
+//
+// Recursive descent over the token list. AST nodes are maps with a
+// "k" discriminator key. Pipelines are desugared into calls here.
+// =====================================================================
+
+use "lexer.rad"
+
+pub fn parse(tokens: list<Token>) -> map<str, any> {
+    let tlen = len(tokens)
+    let mut cur = 0
+    let mut errors: list<str> = []
+
+    // --- cursor helpers ---
+
+    let peek = fn() -> Token {
+        if cur >= tlen { return tokens[tlen - 1] }
+        return tokens[cur]
+    }
+
+    let peek2 = fn() -> Token {
+        if cur + 1 >= tlen { return tokens[tlen - 1] }
+        return tokens[cur + 1]
+    }
+
+    let advance = fn() -> Token {
+        let t = peek()
+        if cur < tlen { cur = cur + 1 }
+        return t
+    }
+
+    let at_op = fn(text: str) -> bool {
+        let t = peek()
+        return t.kind == "op" and t.text == text
+    }
+
+    let at_kw = fn(text: str) -> bool {
+        let t = peek()
+        return t.kind == "kw" and t.text == text
+    }
+
+    let at_kind = fn(kind: str) -> bool {
+        return peek().kind == kind
+    }
+
+    let eat_op = fn(text: str) -> bool {
+        if at_op(text) {
+            advance()
+            return true
+        }
+        return false
+    }
+
+    let eat_kw = fn(text: str) -> bool {
+        if at_kw(text) {
+            advance()
+            return true
+        }
+        return false
+    }
+
+    let err = fn(msg: str) -> nil {
+        let t = peek()
+        errors << f"[line {t.line}] parse error: {msg} (found {t.kind} '{t.text}')"
+    }
+
+    let expect_op = fn(text: str, why: str) -> nil {
+        if not eat_op(text) {
+            err(f"expected '{text}' {why}")
+        }
+    }
+
+    let expect_ident = fn(why: str) -> str {
+        if at_kind("ident") {
+            return advance().text
+        }
+        err(f"expected identifier {why}")
+        return "?"
+    }
+
+    // --- forward refs (closure recursion pattern) ---
+
+    let mut parse_expr_ref: fn() -> map<str, any> = fn() -> map<str, any> { return { "k": "nil" } }
+    let mut parse_block_ref: fn() -> map<str, any> = fn() -> map<str, any> { return { "k": "block" } }
+    let mut parse_stmt_ref: fn() -> map<str, any> = fn() -> map<str, any> { return { "k": "nop" } }
+
+    // --- type annotations: consumed and discarded (radrad is dynamic) ---
+
+    let mut skip_type_ref: fn() -> nil = fn() -> nil { return nil }
+    let skip_type = fn() -> nil {
+        // ident, possibly generic <...>, list<...>, map<k,v>, fn(..) -> T, unions with |
+        if at_kind("ident") or at_kw("fn") or at_kw("nil") or at_kw("entity") {
+            let t = advance()
+            if t.kind == "kw" and t.text == "fn" {
+                if eat_op("(") {
+                    while not at_op(")") and not at_kind("eof") {
+                        skip_type_ref()
+                        if not eat_op(",") { break }
+                    }
+                    expect_op(")", "in fn type")
+                }
+                if eat_op("->") { skip_type_ref() }
+                return nil
+            }
+            if eat_op("<") {
+                let mut depth = 1
+                while depth > 0 and not at_kind("eof") {
+                    if at_op("<") { depth = depth + 1 }
+                    if at_op(">") { depth = depth - 1 }
+                    if at_op(">>") { depth = depth - 2 }
+                    advance()
+                }
+            }
+        } else if at_op("(") {
+            advance()
+            while not at_op(")") and not at_kind("eof") {
+                skip_type_ref()
+                if not eat_op(",") { break }
+            }
+            expect_op(")", "in tuple type")
+        }
+        return nil
+    }
+    skip_type_ref = skip_type
+
+    // --- expressions ---
+
+    // component/struct literal or map-payload after `Name {`
+    let parse_braced_fields = fn() -> map<str, any> {
+        // assumes '{' already consumed; returns { fields, vals }
+        let mut fields: list<str> = []
+        let mut vals: list<any> = []
+        while not at_op("}") and not at_kind("eof") {
+            let fname = expect_ident("as field name")
+            expect_op(":", "after field name")
+            vals << parse_expr_ref()
+            fields << fname
+            if not eat_op(",") { break }
+        }
+        expect_op("}", "to close field list")
+        return { "fields": fields, "vals": vals }
+    }
+
+    let parse_match_cases = fn() -> list<any> {
+        let mut cases: list<any> = []
+        expect_op("{", "after match subject")
+        while not at_op("}") and not at_kind("eof") {
+            // pattern
+            let mut pat: map<str, any> = { "pk": "wild" }
+            let pt = peek()
+            if pt.kind == "ident" and pt.text == "_" {
+                advance()
+                pat = { "pk": "wild" }
+            } else if pt.kind == "int" {
+                advance()
+                pat = { "pk": "int", "v": pt.ival }
+            } else if pt.kind == "str" {
+                advance()
+                pat = { "pk": "str", "v": pt.text }
+            } else if pt.kind == "kw" and (pt.text == "true" or pt.text == "false") {
+                advance()
+                pat = { "pk": "bool", "v": pt.text == "true" }
+            } else if pt.kind == "ident" {
+                let vname = advance().text
+                if eat_op("(") {
+                    let bind = expect_ident("as variant binding")
+                    expect_op(")", "after variant binding")
+                    pat = { "pk": "variant", "name": vname, "bind": bind }
+                } else if at_op("{") {
+                    advance()
+                    let mut binds: list<str> = []
+                    while not at_op("}") and not at_kind("eof") {
+                        binds << expect_ident("as destructured field")
+                        if not eat_op(",") { break }
+                    }
+                    expect_op("}", "after destructuring")
+                    pat = { "pk": "destructure", "name": vname, "binds": binds }
+                } else {
+                    pat = { "pk": "name", "name": vname }
+                }
+            } else {
+                err("unsupported match pattern")
+                advance()
+            }
+            expect_op("=>", "after match pattern")
+            let mut body: map<str, any> = { "k": "block", "stmts": [] }
+            if at_op("{") {
+                body = parse_block_ref()
+            } else {
+                let e = parse_expr_ref()
+                body = { "k": "block", "stmts": [{ "k": "exprstmt", "e": e, "tail": true }] }
+            }
+            cases << { "pat": pat, "body": body }
+        }
+        expect_op("}", "to close match")
+        return cases
+    }
+
+    let parse_primary = fn() -> map<str, any> {
+        let t = peek()
+
+        if t.kind == "int" {
+            advance()
+            return { "k": "int", "v": t.ival }
+        }
+        if t.kind == "float" {
+            advance()
+            return { "k": "float", "v": t.fval }
+        }
+        if t.kind == "str" {
+            advance()
+            return { "k": "str", "v": t.text }
+        }
+        if t.kind == "kw" {
+            if t.text == "true" {
+                advance()
+                return { "k": "bool", "v": true }
+            }
+            if t.text == "false" {
+                advance()
+                return { "k": "bool", "v": false }
+            }
+            if t.text == "nil" {
+                advance()
+                return { "k": "nil" }
+            }
+            if t.text == "fn" {
+                advance()
+                expect_op("(", "after fn")
+                let mut params: list<str> = []
+                while not at_op(")") and not at_kind("eof") {
+                    eat_kw("mut")
+                    let pname = expect_ident("as parameter")
+                    if eat_op(":") { skip_type() }
+                    params << pname
+                    if not eat_op(",") { break }
+                }
+                expect_op(")", "after parameters")
+                if eat_op("->") { skip_type() }
+                let body = parse_block_ref()
+                return { "k": "closure", "params": params, "body": body }
+            }
+            if t.text == "match" {
+                advance()
+                let subject = parse_expr_ref()
+                let cases = parse_match_cases()
+                return { "k": "match", "subject": subject, "cases": cases, "isexpr": true }
+            }
+            if t.text == "if" {
+                // if-expression: if c { e } else { e }
+                advance()
+                let cond = parse_expr_ref()
+                expect_op("{", "after if condition")
+                let thenv = parse_expr_ref()
+                expect_op("}", "after if expression value")
+                let mut elsev: map<str, any> = { "k": "nil" }
+                if eat_kw("else") {
+                    if at_kw("if") {
+                        elsev = parse_expr_ref()
+                    } else {
+                        expect_op("{", "after else")
+                        elsev = parse_expr_ref()
+                        expect_op("}", "after else expression value")
+                    }
+                }
+                return { "k": "ifexpr", "cond": cond, "then": thenv, "else": elsev }
+            }
+            if t.text == "entity" {
+                advance()
+                let mut name_expr: map<str, any> = { "k": "nil" }
+                if not at_op("{") {
+                    name_expr = parse_expr_ref()
+                }
+                expect_op("{", "after entity")
+                let mut comps: list<any> = []
+                while not at_op("}") and not at_kind("eof") {
+                    comps << parse_expr_ref()
+                    if not eat_op(",") { break }
+                }
+                expect_op("}", "to close entity literal")
+                return { "k": "entitylit", "name": name_expr, "comps": comps }
+            }
+        }
+        if t.kind == "fs_start" {
+            advance()
+            let mut parts: list<any> = []
+            while not at_kind("fs_end") and not at_kind("eof") {
+                if at_kind("fs_lit") {
+                    let lt = advance()
+                    parts << { "k": "str", "v": lt.text }
+                } else if at_kind("fs_open") {
+                    advance()
+                    parts << parse_expr_ref()
+                    if not at_kind("fs_close") {
+                        err("expected end of interpolation")
+                    } else {
+                        advance()
+                    }
+                } else {
+                    err("unexpected token in f-string")
+                    advance()
+                }
+            }
+            if at_kind("fs_end") { advance() }
+            return { "k": "fstr", "parts": parts }
+        }
+        if t.kind == "ident" {
+            advance()
+            let name = t.text
+            // Machine::State or Type::Variant [{ fields }]
+            if at_op("::") {
+                advance()
+                let sub = expect_ident("after ::")
+                if at_op("{") {
+                    advance()
+                    let fv = parse_braced_fields()
+                    return { "k": "variantlit", "tname": name, "vname": sub, "fields": fv["fields"], "vals": fv["vals"] }
+                }
+                return { "k": "stateref", "machine": name, "state": sub }
+            }
+            // Component literal: starts with uppercase ident + '{'
+            if at_op("{") {
+                let c0 = byte_at(name, 0)
+                if c0 >= 65 and c0 <= 90 {
+                    advance()
+                    let fv = parse_braced_fields()
+                    return { "k": "complit", "cname": name, "fields": fv["fields"], "vals": fv["vals"] }
+                }
+            }
+            return { "k": "ident", "name": name }
+        }
+        if t.kind == "op" {
+            if t.text == "(" {
+                advance()
+                let inner = parse_expr_ref()
+                expect_op(")", "to close group")
+                return inner
+            }
+            if t.text == "[" {
+                advance()
+                let mut items: list<any> = []
+                while not at_op("]") and not at_kind("eof") {
+                    items << parse_expr_ref()
+                    if not eat_op(",") { break }
+                }
+                expect_op("]", "to close list")
+                return { "k": "list", "items": items }
+            }
+            if t.text == "{" {
+                advance()
+                let mut mkeys: list<any> = []
+                let mut mvals: list<any> = []
+                while not at_op("}") and not at_kind("eof") {
+                    mkeys << parse_expr_ref()
+                    expect_op(":", "after map key")
+                    mvals << parse_expr_ref()
+                    if not eat_op(",") { break }
+                }
+                expect_op("}", "to close map")
+                return { "k": "map", "keys": mkeys, "vals": mvals }
+            }
+        }
+        err("unexpected token in expression")
+        advance()
+        return { "k": "nil" }
+    }
+
+    let parse_postfix = fn() -> map<str, any> {
+        let mut node = parse_primary()
+        while true {
+            if at_op("(") {
+                advance()
+                let mut args: list<any> = []
+                while not at_op(")") and not at_kind("eof") {
+                    args << parse_expr_ref()
+                    if not eat_op(",") { break }
+                }
+                expect_op(")", "to close call")
+                node = { "k": "call", "callee": node, "args": args }
+                continue
+            }
+            if at_op("[") {
+                advance()
+                let idx = parse_expr_ref()
+                expect_op("]", "to close index")
+                node = { "k": "index", "obj": node, "idx": idx }
+                continue
+            }
+            if at_op(".") {
+                advance()
+                let fname = expect_ident("after '.'")
+                node = { "k": "field", "obj": node, "name": fname }
+                continue
+            }
+            if at_op("?") {
+                advance()
+                node = { "k": "try", "e": node }
+                continue
+            }
+            break
+        }
+        return node
+    }
+
+    let parse_unary_impl = fn(self_ref: fn() -> map<str, any>) -> map<str, any> {
+        if at_op("-") {
+            advance()
+            return { "k": "unary", "op": "-", "e": self_ref() }
+        }
+        if at_kw("not") or at_op("!") {
+            advance()
+            return { "k": "unary", "op": "not", "e": self_ref() }
+        }
+        return parse_postfix()
+    }
+    let mut parse_unary_ref: fn() -> map<str, any> = fn() -> map<str, any> { return { "k": "nil" } }
+    let parse_unary = fn() -> map<str, any> {
+        return parse_unary_impl(parse_unary_ref)
+    }
+    parse_unary_ref = parse_unary
+
+    let parse_mul = fn() -> map<str, any> {
+        let mut node = parse_unary()
+        while at_op("*") or at_op("/") or at_op("%") {
+            let op = advance().text
+            let rhs = parse_unary()
+            node = { "k": "binary", "op": op, "l": node, "r": rhs }
+        }
+        return node
+    }
+
+    let parse_add = fn() -> map<str, any> {
+        let mut node = parse_mul()
+        while at_op("+") or at_op("-") {
+            let op = advance().text
+            let rhs = parse_mul()
+            node = { "k": "binary", "op": op, "l": node, "r": rhs }
+        }
+        return node
+    }
+
+    let parse_cmp = fn() -> map<str, any> {
+        let mut node = parse_add()
+        while at_op("<") or at_op(">") or at_op("<=") or at_op(">=") {
+            let op = advance().text
+            let rhs = parse_add()
+            node = { "k": "binary", "op": op, "l": node, "r": rhs }
+        }
+        return node
+    }
+
+    let parse_eq = fn() -> map<str, any> {
+        let mut node = parse_cmp()
+        while at_op("==") or at_op("!=") or at_kw("is") {
+            if at_kw("is") {
+                advance()
+                let vname = expect_ident("after 'is'")
+                node = { "k": "isvariant", "e": node, "name": vname }
+            } else {
+                let op = advance().text
+                let rhs = parse_cmp()
+                node = { "k": "binary", "op": op, "l": node, "r": rhs }
+            }
+        }
+        return node
+    }
+
+    let parse_and = fn() -> map<str, any> {
+        let mut node = parse_eq()
+        while at_kw("and") {
+            advance()
+            let rhs = parse_eq()
+            node = { "k": "logic", "op": "and", "l": node, "r": rhs }
+        }
+        return node
+    }
+
+    let parse_or = fn() -> map<str, any> {
+        let mut node = parse_and()
+        while at_kw("or") {
+            advance()
+            let rhs = parse_and()
+            node = { "k": "logic", "op": "or", "l": node, "r": rhs }
+        }
+        return node
+    }
+
+    let parse_pipe = fn() -> map<str, any> {
+        let mut node = parse_or()
+        while at_op("|>") {
+            advance()
+            let rhs = parse_or()
+            // desugar: x |> f(a, b)  =>  f(x, a, b);  x |> f  =>  f(x)
+            if rhs["k"] == "call" {
+                let mut args: list<any> = [node]
+                for a in rhs["args"] {
+                    args << a
+                }
+                node = { "k": "call", "callee": rhs["callee"], "args": args }
+            } else {
+                node = { "k": "call", "callee": rhs, "args": [node] }
+            }
+        }
+        return node
+    }
+
+    parse_expr_ref = parse_pipe
+
+    // --- statements ---
+
+    let parse_let = fn() -> map<str, any> {
+        advance() // let
+        eat_kw("mut")
+        // tuple destructuring: let (a, b) = expr
+        if at_op("(") {
+            advance()
+            let mut names: list<str> = []
+            while not at_op(")") and not at_kind("eof") {
+                names << expect_ident("in tuple binding")
+                if not eat_op(",") { break }
+            }
+            expect_op(")", "after tuple binding")
+            if eat_op(":") { skip_type() }
+            expect_op("=", "in let statement")
+            let value = parse_expr_ref()
+            return { "k": "lettuple", "names": names, "value": value }
+        }
+        let name = expect_ident("after let")
+        if eat_op(":") { skip_type() }
+        expect_op("=", "in let statement")
+        let value = parse_expr_ref()
+        return { "k": "let", "name": name, "value": value }
+    }
+
+    let parse_if_stmt_impl = fn(self_ref: fn() -> map<str, any>) -> map<str, any> {
+        advance() // if
+        let cond = parse_expr_ref()
+        let then_blk = parse_block_ref()
+        let mut else_blk: map<str, any> = { "k": "block", "stmts": [] }
+        if eat_kw("else") {
+            if at_kw("if") {
+                let nested = self_ref()
+                else_blk = { "k": "block", "stmts": [nested] }
+            } else {
+                else_blk = parse_block_ref()
+            }
+        }
+        return { "k": "if", "cond": cond, "then": then_blk, "else": else_blk }
+    }
+    let mut parse_if_ref: fn() -> map<str, any> = fn() -> map<str, any> { return { "k": "nop" } }
+    let parse_if_stmt = fn() -> map<str, any> {
+        return parse_if_stmt_impl(parse_if_ref)
+    }
+    parse_if_ref = parse_if_stmt
+
+    let parse_stmt = fn() -> map<str, any> {
+        let t = peek()
+
+        if t.kind == "kw" {
+            if t.text == "let" { return parse_let() }
+            if t.text == "if" { return parse_if_stmt() }
+            if t.text == "while" {
+                advance()
+                let cond = parse_expr_ref()
+                let body = parse_block_ref()
+                return { "k": "while", "cond": cond, "body": body }
+            }
+            if t.text == "for" {
+                advance()
+                let mut names: list<str> = []
+                names << expect_ident("after for")
+                while eat_op(",") {
+                    names << expect_ident("in for bindings")
+                }
+                if not eat_kw("in") {
+                    err("expected 'in' after for bindings")
+                }
+                let iter = parse_expr_ref()
+                let body = parse_block_ref()
+                return { "k": "for", "names": names, "iter": iter, "body": body }
+            }
+            if t.text == "return" {
+                advance()
+                // return with no value: next token closes a block
+                if at_op("}") or at_kind("eof") {
+                    return { "k": "return", "value": { "k": "nil" } }
+                }
+                let value = parse_expr_ref()
+                return { "k": "return", "value": value }
+            }
+            if t.text == "break" {
+                advance()
+                return { "k": "break" }
+            }
+            if t.text == "continue" {
+                advance()
+                return { "k": "continue" }
+            }
+            if t.text == "emit" {
+                advance()
+                let ename = expect_ident("after emit")
+                expect_op("{", "after event name")
+                let fv = parse_braced_fields()
+                return { "k": "emit", "ename": ename, "fields": fv["fields"], "vals": fv["vals"] }
+            }
+            if t.text == "schedule" {
+                advance()
+                expect_op("[", "after schedule")
+                let mut names: list<str> = []
+                while not at_op("]") and not at_kind("eof") {
+                    names << expect_ident("in schedule list")
+                    if not eat_op(",") { break }
+                }
+                expect_op("]", "to close schedule")
+                return { "k": "schedule", "names": names }
+            }
+            if t.text == "match" {
+                advance()
+                let subject = parse_expr_ref()
+                let cases = parse_match_cases()
+                return { "k": "match", "subject": subject, "cases": cases, "isexpr": false }
+            }
+            if t.text == "entity" {
+                // entity declaration: entity name { ... }
+                if peek2().kind == "ident" {
+                    advance()
+                    let name = expect_ident("after entity")
+                    expect_op("{", "after entity name")
+                    let mut comps: list<any> = []
+                    while not at_op("}") and not at_kind("eof") {
+                        comps << parse_expr_ref()
+                        if not eat_op(",") { break }
+                    }
+                    expect_op("}", "to close entity declaration")
+                    return { "k": "entitydecl", "name": name, "comps": comps }
+                }
+            }
+        }
+
+        // expression statement or assignment / push
+        let e = parse_expr_ref()
+        if at_op("=") {
+            advance()
+            let value = parse_expr_ref()
+            return { "k": "assign", "target": e, "value": value }
+        }
+        if at_op("<<") {
+            advance()
+            let value = parse_expr_ref()
+            return { "k": "push", "target": e, "value": value }
+        }
+        return { "k": "exprstmt", "e": e, "tail": false }
+    }
+    parse_stmt_ref = parse_stmt
+
+    let parse_block = fn() -> map<str, any> {
+        expect_op("{", "to open block")
+        let mut stmts: list<any> = []
+        while not at_op("}") and not at_kind("eof") {
+            stmts << parse_stmt_ref()
+        }
+        expect_op("}", "to close block")
+        return { "k": "block", "stmts": stmts }
+    }
+    parse_block_ref = parse_block
+
+    // --- declarations ---
+
+    let parse_field_defs = fn() -> map<str, any> {
+        // component/resource/struct/event bodies: name [: type] [= default] | name: default
+        expect_op("{", "to open field list")
+        let mut fields: list<str> = []
+        let mut defaults: list<any> = []
+        while not at_op("}") and not at_kind("eof") {
+            let fname = expect_ident("as field name")
+            let mut dflt: map<str, any> = { "k": "nil" }
+            if eat_op(":") {
+                // could be `: default_expr` or `: Type = default`
+                // Heuristic matching host grammar: field_def = IDENT ":" [type "="] expr
+                // Try: parse expr; if next is '=', what we parsed was a type -> discard.
+                let save = cur
+                let maybe = parse_expr_ref()
+                if at_op("=") {
+                    advance()
+                    dflt = parse_expr_ref()
+                } else {
+                    dflt = maybe
+                }
+                if save == cur {
+                    // no progress; bail to avoid infinite loop
+                    advance()
+                }
+            }
+            fields << fname
+            defaults << dflt
+            if not eat_op(",") { break }
+        }
+        expect_op("}", "to close field list")
+        return { "fields": fields, "defaults": defaults }
+    }
+
+    let parse_decl = fn() -> map<str, any> {
+        eat_kw("pub")
+        let t = peek()
+
+        if t.kind == "kw" {
+            if t.text == "component" or t.text == "resource" or t.text == "struct" {
+                let dkind = advance().text
+                let name = expect_ident(f"after {dkind}")
+                let fd = parse_field_defs()
+                return { "k": "componentdecl", "ckind": dkind, "name": name, "fields": fd["fields"], "defaults": fd["defaults"] }
+            }
+            if t.text == "event" {
+                advance()
+                let name = expect_ident("after event")
+                expect_op("{", "after event name")
+                let mut fields: list<str> = []
+                while not at_op("}") and not at_kind("eof") {
+                    fields << expect_ident("as event field")
+                    if eat_op(":") { skip_type() }
+                    if not eat_op(",") { break }
+                }
+                expect_op("}", "to close event")
+                return { "k": "eventdecl", "name": name, "fields": fields }
+            }
+            if t.text == "state" {
+                advance()
+                let name = expect_ident("after state")
+                expect_op("{", "after state machine name")
+                let mut states: list<any> = []
+                while not at_op("}") and not at_kind("eof") {
+                    let sname = expect_ident("as state name")
+                    expect_op("{", "after state name")
+                    let mut evts: list<str> = []
+                    let mut targets: list<str> = []
+                    while not at_op("}") and not at_kind("eof") {
+                        if not eat_kw("on") {
+                            err("expected 'on' in state body")
+                            advance()
+                            continue
+                        }
+                        evts << expect_ident("as transition event")
+                        expect_op("->", "in transition")
+                        targets << expect_ident("as transition target")
+                        eat_op(",")
+                    }
+                    expect_op("}", "to close state body")
+                    states << { "name": sname, "evts": evts, "targets": targets }
+                }
+                expect_op("}", "to close state machine")
+                return { "k": "statedecl", "name": name, "states": states }
+            }
+            if t.text == "system" {
+                advance()
+                let name = expect_ident("after system")
+                expect_op("(", "after system name")
+                let mut pnames: list<str> = []
+                let mut pcomps: list<str> = []
+                let mut pmuts: list<bool> = []
+                while not at_op(")") and not at_kind("eof") {
+                    let pname = expect_ident("as system parameter")
+                    expect_op(":", "after system parameter")
+                    let is_mut = eat_kw("mut")
+                    let cname = expect_ident("as component type")
+                    pnames << pname
+                    pcomps << cname
+                    pmuts << is_mut
+                    if not eat_op(",") { break }
+                }
+                expect_op(")", "after system parameters")
+                // ordering constraints: consumed, recorded
+                let mut afters: list<str> = []
+                let mut befores: list<str> = []
+                while true {
+                    if at_kind("ident") and peek().text == "after" {
+                        advance()
+                        afters << expect_ident("after 'after'")
+                        while eat_op(",") {
+                            afters << expect_ident("in after list")
+                        }
+                        continue
+                    }
+                    if at_kind("ident") and peek().text == "before" {
+                        advance()
+                        befores << expect_ident("after 'before'")
+                        while eat_op(",") {
+                            befores << expect_ident("in before list")
+                        }
+                        continue
+                    }
+                    break
+                }
+                let body = parse_block_ref()
+                return { "k": "systemdecl", "name": name, "pnames": pnames, "pcomps": pcomps, "pmuts": pmuts, "afters": afters, "befores": befores, "body": body }
+            }
+            if t.text == "on" {
+                advance()
+                let ename = expect_ident("after on")
+                expect_op("(", "after event name")
+                let pname = expect_ident("as handler parameter")
+                expect_op(")", "after handler parameter")
+                let mut guard: map<str, any> = { "k": "bool", "v": true }
+                if at_kw("when") or at_kw("where") {
+                    advance()
+                    guard = parse_expr_ref()
+                }
+                let body = parse_block_ref()
+                return { "k": "onhandler", "ename": ename, "pname": pname, "guard": guard, "body": body }
+            }
+            if t.text == "fn" or t.text == "pure" or t.text == "readonly" {
+                eat_kw("pure")
+                eat_kw("readonly")
+                if not eat_kw("fn") {
+                    err("expected fn after purity keyword")
+                }
+                let name = expect_ident("as function name")
+                expect_op("(", "after function name")
+                let mut params: list<str> = []
+                while not at_op(")") and not at_kind("eof") {
+                    eat_kw("mut")
+                    let pname = expect_ident("as parameter")
+                    if eat_op(":") { skip_type() }
+                    params << pname
+                    if not eat_op(",") { break }
+                }
+                expect_op(")", "after parameters")
+                if eat_op("->") { skip_type() }
+                let body = parse_block_ref()
+                return { "k": "fndecl", "name": name, "params": params, "body": body }
+            }
+            if t.text == "use" {
+                advance()
+                let mut path = ""
+                if at_kind("str") {
+                    path = advance().text
+                } else {
+                    err("expected string path after use")
+                }
+                return { "k": "use", "path": path }
+            }
+        }
+
+        return parse_stmt_ref()
+    }
+
+    // --- program ---
+
+    let mut decls: list<any> = []
+    while not at_kind("eof") {
+        let before = cur
+        decls << parse_decl()
+        if cur == before {
+            // safety: never loop forever on unexpected input
+            advance()
+        }
+    }
+
+    return { "k": "program", "decls": decls, "errors": errors }
+}

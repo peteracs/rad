@@ -1,0 +1,51 @@
+// PROBE: is guest-injected type confusion a TIME BOMB for the host?
+//
+// sandbox_run promises "any guest failure returns Err instead of aborting the
+// host". But a guest that SUCCEEDS while poisoning the type of a granted
+// field can abort the host later, in trusted code, far from the sandbox.
+
+component Vault { gold: 1000 }
+
+system Interest(v: mut Vault) {
+    v = Vault { gold: v.gold + 100 }
+}
+
+let v = spawn("vault", Vault { gold: 1000 })
+
+print("=== probe: type-confusion time bomb ===")
+
+let caps = f"""{ "write": ["Vault"], "fuel": 500000 }"""
+
+// The guest stays entirely inside its grant: it only writes Vault.
+let poison = f"""
+component Vault { gold: "not_a_number" }
+set(get_entity("vault"), Vault { gold: "not_a_number" })
+"""
+
+let result = sandbox_run(poison, fork(), caps)
+
+match result {
+    Ok(f1) => {
+        print("guest returned Ok (stayed inside its grant)")
+
+        // Defense in depth: does the blast-radius check catch it?
+        let before = fork()
+        print(f"diff(before, poisoned) = {diff(before, f1)}")
+        print("blast radius is exactly [Vault] -- the granted component.")
+        print("Every host-side check passes. Committing.")
+
+        commit(f1)
+
+        let got = get(v, Vault) |> unwrap
+        print(f"live world after commit: {got}")
+
+        // Trusted host code now runs against a poisoned int field.
+        print("host about to run trusted system Interest on the poisoned field")
+        schedule [system::Interest]
+        let after = get(v, Vault) |> unwrap
+        print(f"host survived, Vault = {after}")
+    }
+    Err(m) => { print(f"guest rejected: {m}") }
+}
+
+print("=== probe done ===")

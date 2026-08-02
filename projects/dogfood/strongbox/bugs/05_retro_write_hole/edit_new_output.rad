@@ -1,0 +1,21 @@
+// BUG 05 — the failing edit: one changed constant, so the program writes
+// DIFFERENT CONTENT to the SAME path it wrote during the recording.
+//
+//   rad replay .../base.radr --with .../edit_new_output.rad
+//
+// Expected: replays to completion. A write needs no oracle from the recorded
+//   world — it produces output, it does not consume an answer. Changing what
+//   the program outputs is the entire point of a retroactive edit.
+// Actual: the edited run HALTS with
+//   "retroactive replay hole at frame N: the edited program calls
+//    write_file(args ...) but the recorded session never performed that io"
+//   — which is not true. The recorded session performed exactly that
+//   write_file, to exactly that path, with different content.
+
+component Counter { n: 0 }
+
+let _c = spawn("c", Counter { n: 2 })
+let c = get(get_entity("c"), Counter) |> unwrap
+
+write_file("D:/Temp/strongbox_retro_probe.txt", f"value {c.n}")
+print(f"wrote value {c.n} (edited build, new output)")

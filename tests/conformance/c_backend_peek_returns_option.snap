@@ -1,0 +1,6 @@
+---
+source: tests\conformance\c_backend_peek_returns_option.rad
+exit_code: 0
+---
+1
+1

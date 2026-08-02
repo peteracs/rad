@@ -1,0 +1,10 @@
+---
+source: tests\conformance\let_else_option_result.rad
+exit_code: 0
+---
+7
+none
+42
+99
+caught
+100

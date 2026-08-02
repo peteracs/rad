@@ -1,0 +1,56 @@
+// strongbox — the adversary. Produces plausibly-edited archives.
+//
+//   rad projects/dogfood/strongbox/forge.rad -- <mode>
+//
+// Modes model what someone actually does to an incident archive they want to
+// look better than it was. Each edit is a small, well-formed, schema-valid
+// change to `RADWORLD2 {json}` — nothing load_world() could object to on
+// structural grounds, because nothing here is structurally wrong.
+//
+//   downgrade  a sev-5 incident becomes sev-1 (and the SLA is fixed up to match)
+//   whitewash  an open incident is recorded as resolved
+//   erase      an incident is deleted outright and the Ledger count adjusted
+//   backdate   an incident's age is reset to 0
+//   none       byte-for-byte copy, the control
+//
+// Run main.rad first to produce saves/archive.radw.
+
+let argv = sys_args()
+let mut mode = "downgrade"
+if len(argv) > 0 {
+    mode = argv[0]
+}
+
+let archive = read_file("projects/dogfood/strongbox/saves/archive.radw")
+let mut forged = archive
+let mut note = ""
+
+if mode == "downgrade" {
+    // OOM_KILL was filed sev 5 with a 15-minute SLA; make it look routine.
+    forged = replace(archive, "[\"OOM_KILL\",5,\"resolved\",0,15]", "[\"OOM_KILL\",1,\"resolved\",0,60]")
+    note = "OOM_KILL severity 5 -> 1, sla 15 -> 60"
+} else if mode == "whitewash" {
+    forged = replace(archive, "[\"LB_5XX\",5,\"open\",0,15]", "[\"LB_5XX\",5,\"resolved\",0,15]")
+    note = "LB_5XX open -> resolved"
+} else if mode == "erase" {
+    let victim = "[\"SLOW_QUERY\",[[\"Assignee\",[\"chen\",\"data\"]],[\"Incident\",[\"SLOW_QUERY\",2,\"open\",0,60]],[\"Source\",[\"customer\"]]]],"
+    forged = replace(archive, victim, "")
+    forged = replace(forged, "[\"Ledger\",[5,", "[\"Ledger\",[4,")
+    note = "SLOW_QUERY deleted, Ledger count 5 -> 4 to stay consistent"
+} else if mode == "backdate" {
+    forged = replace(archive, "\"open\",0,60]", "\"open\",0,600]")
+    note = "open incidents given a 600-minute SLA so nothing looks breached"
+} else if mode == "none" {
+    forged = archive
+    note = "unmodified control copy"
+} else {
+    print(f"unknown mode {mode}")
+}
+
+let changed = forged != archive
+write_file(f"projects/dogfood/strongbox/saves/forged_{mode}.radw", forged)
+
+print(f"=== forge: {mode} ===")
+print(f"  edit: {note}")
+print(f"  archive changed: {changed}  ({len(archive)} -> {len(forged)} bytes)")
+print(f"  wrote saves/forged_{mode}.radw")

@@ -1,0 +1,9 @@
+// Resources auto-initialize from defaults, so a required field has no
+// construction site to demand it at — rejected at declaration.
+resource Config {
+    owner: entity,
+}
+
+fn main() -> nil {
+    print(res(Config))
+}

@@ -1,0 +1,15 @@
+fn main() -> nil {
+    let data = [[[1, 2], [3, 4]], [[5, 6], [7, 8]]]
+    let mut results: list = []
+    for [row_a, row_b] in data {
+        let combined = [row_a, row_b]
+        let sums = combined |> map(fn([x, y]) { return x + y })
+        for s in sums {
+            results = results + [s]
+        }
+    }
+    print(len(results))
+    for r in results {
+        print(r)
+    }
+}

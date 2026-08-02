@@ -1,0 +1,22 @@
+component Counter { value: 0 }
+
+system Increment(c: mut Counter) {
+    c.value = c.value + 1
+}
+
+system DoubleUp(c: mut Counter) {
+    c.value = c.value * 2
+}
+
+phase update_phase {
+    Increment,
+    DoubleUp
+}
+
+fn main() -> nil {
+    let e = spawn(Counter { value: 0 })
+    schedule [update_phase]
+    let c = unwrap(get(e, Counter))
+    print(c.value)
+}
+// expect: 2

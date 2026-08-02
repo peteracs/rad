@@ -1,0 +1,35 @@
+// Native state machines as per-entity component fields — spellwork's
+// cast flow. Transitions are declared, illegal ones are Err values, and
+// the state value compares/stores like any other value.
+
+state Flow {
+    Ready { on begin -> Winding }
+    Winding {
+        on fire -> Ready
+        on interrupt -> Ready
+    }
+}
+
+component Caster { flow: Flow = Flow::Ready, casts: int = 0 }
+
+fn main() -> nil {
+    let a = entity "a" { Caster {} }
+    let b = entity "b" { Caster {} }
+
+    // each entity carries its own machine instance
+    let ca = require(a, Caster)
+    update(a, Caster) { flow = transition(ca.flow, "begin") |> unwrap, casts = 1 }
+    print(require(a, Caster).flow == Flow::Winding)   // true
+    print(require(b, Caster).flow == Flow::Ready)     // true
+
+    // declared transition completes the cycle
+    let ca2 = require(a, Caster)
+    update(a, Caster) { flow = transition(ca2.flow, "fire") |> unwrap }
+    print(require(a, Caster).flow == Flow::Ready)     // true
+
+    // illegal transitions are values, not crashes
+    match transition(require(b, Caster).flow, "fire") {
+        Ok { value: _ } => { print("unexpected") }
+        Err { message: m } => { print(m) }
+    }
+}

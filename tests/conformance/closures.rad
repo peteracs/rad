@@ -1,0 +1,13 @@
+fn make_adder(base) {
+    let add = fn(n) {
+        return base + n
+    }
+    return add
+}
+
+let add10 = make_adder(10)
+let add20 = make_adder(20)
+print(add10(5))
+print(add20(5))
+// expect: 15
+// expect: 25

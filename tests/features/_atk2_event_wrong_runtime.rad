@@ -1,0 +1,7 @@
+// Attack: emit typed event with wrong type at compile time
+event Score { points: int, name: str }
+
+fn main() -> nil {
+    emit Score { points: "not-an-int", name: 42 }
+    flush_events()
+}

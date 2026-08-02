@@ -1,0 +1,1873 @@
+// TREELINE — 1v1 Ezreal on the real Twisted Treeline (map4).
+//
+// Grows duel.rad into the full laning rung: the actual map's 1m
+// walkability grid (slide-on-block movement, the POLICY is the
+// pathfinder), both lanes' minion waves under the era wave rules,
+// lane towers with era aggro priority, XP/levels/CS gold, fountain
+// regen, and the classic 1v1 win conditions: first blood, first
+// (front) tower, or 100 CS. Tick cap 6 minutes.
+//
+// Every constant arrives through the bridge (gen_content.rad +
+// map4_data.rad — generated from browser-moba's own data); hand-pinned
+// script numbers are marked TRACE-VERIFIED. Integer fixed-point
+// everywhere; same conformance ladder as the duel: this file is the
+// spec, the Rust/CUDA arena must reproduce it bit-for-bit.
+
+use "gen_content.rad"
+use "map4_data.rad"
+
+// ---------------------------------------------------------- pools/caps
+
+let MIS_POOL = 16
+let MIN_POOL = 64
+let N_TOWERS = 10
+let EPISODE_CAP = 10800    // 6 min @ 30 Hz
+let CS_TO_WIN = 100
+
+// ------------------------------------------------- bridged stat tables
+
+let hp_tbl = ez_hp()
+let mp_tbl = ez_mp()
+let ad_tbl = ez_ad()
+let armor_tbl = ez_armor()
+let mr_tbl = ez_mr()
+let hpreg_tbl = ez_hp_regen()
+let mpreg_tbl = ez_mp_regen()
+let period_tbl = ez_atk_period()
+let windup_tbl = ez_atk_windup()
+let xp_next_tbl = xp_to_next()
+let rankq_tbl = rank_q_at()
+let rankw_tbl = rank_w_at()
+let ranke_tbl = rank_e_at()
+let rankr_tbl = rank_r_at()
+let q_cost_tbl = ez_q_cost()
+let q_cd_tbl = ez_q_cd()
+let w_cost_tbl = ez_w_cost()
+let w_cd_tbl = ez_w_cd()
+let e_cost_tbl = ez_e_cost()
+let e_cd_tbl = ez_e_cd()
+let r_cost_tbl = ez_r_cost()
+let r_cd_tbl = ez_r_cd()
+let grid = map_grid()
+let MAP_COLS = map_cols()
+let MAP_ROWS = map_rows()
+let MAP_X0 = map_x0()
+let MAP_Z0 = map_z0()
+let MAP_CELL = map_cell()
+let MAP_WORDS_PER_ROW = map_words_per_row()
+let lane_top = lane_top_pts()
+let lane_bot = lane_bot_pts()
+let towers_xy = turret_pts()
+let mm_melee = min_melee()
+let mm_caster = min_caster()
+let mm_siege = min_siege()
+
+let MS_MM_TICK = ez_ms_mm_tick()
+let ATK_RANGE = ez_atk_range()
+let ATK_MIS_SPEED = ez_atk_mis_speed()
+let AP_M = 0
+
+// Q/W/E/R hand-pinned script numbers — TRACE-VERIFIED (arena conform)
+let Q_DMG_R = [35000, 55000, 75000, 95000, 115000]
+let Q_AD_PM = 1000
+let Q_AP_PM = 200
+let Q_SPEED = 800
+let Q_HALF_W = 600
+let Q_CDR_TICKS = 30
+let W_DMG_R = [80000, 130000, 180000, 230000, 280000]
+let W_AP_PM = 700
+let W_SPEED = 1067
+let W_HALF_W = 1200
+let W_AS_SLOW_PM = 200
+let W_SLOW_TICKS = 150
+let E_DMG_R = [75000, 125000, 175000, 225000, 275000]
+let E_AP_PM = 750
+let E_SEEK = 15000
+let R_DMG_R = [350000, 500000, 650000]
+let R_AP_PM = 900
+let R_SPEED = 1333
+let R_HALF_W = 1600
+
+// era engagement numbers — TRACE-VERIFIED class
+let MINION_ACQ = 16000     // AcquisitionRange 800 units
+let HERO_DIST_PENALTY = 3000  // ai_MinionTargetingHeroBoost 150 units
+let CHAMP_RADIUS = 1300
+let MINION_RADIUS = 650
+
+// ------------------------------------------- economy/jungle (HAND-PINNED)
+// Era-flavored values, marked hand-pinned (not trace-verified): the
+// item set is stat-only (no actives), the jungle is the camp ESSENCE —
+// last-hit gold/xp, retaliation, respawn — without patience/leash AI.
+
+let RECALL_TICKS = 240         // 8 s channel; any damage or order cancels
+let POT_HEAL_TOTAL = 200000    // Health Potion: 200 hp over 15 s
+let POT_TICKS = 450
+let MAX_POTS = 5
+let ITEM_SLOTS = 4
+
+// items 0..5: pot, doran's blade, boots, long sword, ruby crystal, BF sword
+let ITEM_COST = [35000, 475000, 350000, 415000, 475000, 1850000]
+let ITEM_AD = [0, 10000, 0, 10000, 0, 45000]
+let ITEM_HP = [0, 100000, 0, 0, 180000, 0]
+let ITEM_MS = [0, 0, 50, 0, 0, 0]      // boots: +50 mm/tick (~+14%)
+
+let N_CAMPS = 4                 // 2 per side, mirrored
+let CAMP_HP = 1600000
+let CAMP_AD = 40000
+let CAMP_RANGE = 2500
+let CAMP_PERIOD = 40            // ticks per monster swing
+let CAMP_GOLD = 35000
+let CAMP_XP = 150000
+let CAMP_RESPAWN = 1500         // 50 s
+let TOWER_RADIUS = 1770
+let TOWER_WINDUP = 8
+let MINION_WINDUP = 6
+let TOWER_AGGRO_TICKS = 30 // champ-attacks-champ tower grudge window
+
+// ------------------------------------------------------------ world
+
+pub component Champ { team: int = 0, lvl: int = 1, xp: int = 0, gold: int = 0, cs: int = 0 }
+
+// the bag: item stat bonuses fold into the champ tables; potions are a
+// stack; pot_left > 0 = a heal-over-time is running; recall > 0 = the
+// channel is up (ticks remaining)
+pub component Bag {
+    ad: int = 0, maxhp: int = 0, ms: int = 0,
+    items: int = 0, potions: int = 0, pot_left: int = 0, recall: int = 0,
+}
+
+// CHOSEN skill ranks (the policy's build, not a level table) + unspent
+// points; era gates: basics cap at ceil(lvl/2) max 5, ult at 6/11/16
+pub component SkillRanks { q: int = 0, w: int = 0, e: int = 0, r: int = 0, points: int = 1 }
+
+// jungle camp slot: alive = hp > 0; respawn_at = tick the camp returns;
+// tgt_team >= 0 while retaliating against that champ
+pub component CampState {
+    x: int = 0, z: int = 0, hp: int = 0, respawn_at: int = 0,
+    atk_cd: int = 0, tgt_team: int = -1,
+}
+
+pub component Pos { x: int = 0, z: int = 0 }
+
+pub component Vitals { hp: int = 0, mp: int = 0, alive: int = 1, last_dmg: int = -999 }
+
+pub component Intent { mx: int = 0, mz: int = 0, moving: int = 0 }
+
+pub component Cds { q: int = 0, w: int = 0, e: int = 0, r: int = 0, atk: int = 0 }
+
+// windup kind 0=none 1=auto 2=Q 3=W 4=R; tkind/tix = auto's stored target
+pub component Windup { kind: int = 0, left: int = 0, tx: int = 0, tz: int = 0, tkind: int = 0, tix: int = 0 }
+
+pub component AsSlow { pm: int = 0, left: int = 0 }
+
+pub component Score { dmg_dealt: int = 0, dmg_taken: int = 0, tower_dmg: int = 0 }
+
+// minion pool slot. kind 0=free 1=melee 2=caster 3=siege.
+// lane 0=top 1=bot; wp = next waypoint index (west ascends, east descends)
+// tgt_kind 0=none 1=champ 2=minion 3=tower; windup counts down when >0
+pub component MinState {
+    kind: int = 0, team: int = 0, lane: int = 0, wp: int = 0,
+    x: int = 0, z: int = 0, hp: int = 0,
+    atk_cd: int = 0, windup: int = 0, tgt_kind: int = 0, tgt_ix: int = 0,
+}
+
+// tower slot: alive towers from the real layout; front = damageable
+pub component TwrState {
+    team: int = 0, x: int = 0, z: int = 0, hp: int = 0, front: int = 0,
+    atk_cd: int = 0, windup: int = 0, tgt_kind: int = 0, tgt_ix: int = 0,
+    grudge: int = -999,
+}
+
+pub component Missile {
+    kind: int = 0, x: int = 0, z: int = 0, dx_pm: int = 0, dz_pm: int = 0,
+    speed: int = 0, half_w: int = 0, left_mm: int = 0, src: int = 0,
+    rank: int = 0, hit0: int = 0, hit1: int = 0,
+}
+
+pub resource Clock { tick: int = 0, over: int = 0, winner: int = -1, why: str = "" }
+
+pub event Cmd { team: int, op: int, x: int, z: int }
+// op: 0=move 1=stop 2=attack TARGET SLOT (x = slot index into the
+//     K-nearest enemy list — the policy picks WHICH unit, the env only
+//     enforces range/cooldown) 3=Q 4=W 5=E 6=R
+//     7=recall 8=buy item x 9=drink potion 10=rank skill slot x
+// No macro actions: target selection is the agent's job.
+
+pub event Damage { src_team: int, dst_team: int, amount: int, via: int }
+
+pub event Kill { killer_team: int, victim_team: int, tick: int }
+
+pub event CsGained { team: int, cs: int, gold: int }
+
+pub event TowerDown { team: int, tick: int }
+
+// --------------------------------------------------------- helpers
+
+fn champ_of(team: int) -> entity {
+    if team == 0 { return require_entity("blue") }
+    return require_entity("red")
+}
+
+fn isqrt(n: int) -> int {
+    if n <= 0 { return 0 }
+    let mut x = n
+    let mut y = (x + 1) / 2
+    let mut guard = 0
+    while y < x and guard < 64 {
+        x = y
+        y = (x + n / x) / 2
+        guard = guard + 1
+    }
+    return x
+}
+
+fn dist_mm(ax: int, az: int, bx: int, bz: int) -> int {
+    let dx = (bx - ax) / 10
+    let dz = (bz - az) / 10
+    return isqrt(dx * dx + dz * dz) * 10
+}
+
+fn dist2_cm(ax: int, az: int, bx: int, bz: int) -> int {
+    let dx = (bx - ax) / 10
+    let dz = (bz - az) / 10
+    return dx * dx + dz * dz
+}
+
+fn mitigate(amount: int, resist_m: int) -> int {
+    let mut r = resist_m
+    if r < 0 { r = 0 }
+    return amount * 100000 / (100000 + r)
+}
+
+// 1m walkability grid: bit 1 = walkable (64 cells/word, row-major)
+fn walkable(x: int, z: int) -> int {
+    let c = (x - MAP_X0) / MAP_CELL
+    let r = (z - MAP_Z0) / MAP_CELL
+    if c < 0 or r < 0 or c >= MAP_COLS or r >= MAP_ROWS { return 0 }
+    let word = grid[r * MAP_WORDS_PER_ROW + c / 32]
+    return shr(word, c % 32) & 1
+}
+
+// nearest walkable point to (x,z): expanding square ring scan in grid
+// cells, row-major within each ring — deterministic in every backend
+fn snap_walkable(x: int, z: int) -> list {
+    if walkable(x, z) == 1 { return [x, z] }
+    let mut ring = 1
+    while ring < 40 {
+        let mut dz = 0 - ring
+        while dz <= ring {
+            let mut dx = 0 - ring
+            while dx <= ring {
+                if dx == 0 - ring or dx == ring or dz == 0 - ring or dz == ring {
+                    let nx = x + dx * MAP_CELL
+                    let nz = z + dz * MAP_CELL
+                    if walkable(nx, nz) == 1 { return [nx, nz] }
+                }
+                dx = dx + 1
+            }
+            dz = dz + 1
+        }
+        ring = ring + 1
+    }
+    return [x, z]
+}
+
+// step toward (tx,tz) at most `speed`, sliding along blocked axes
+fn slide_move(x: int, z: int, tx: int, tz: int, speed: int) -> list {
+    let d = dist_mm(x, z, tx, tz)
+    let mut nx = tx
+    let mut nz = tz
+    if d > speed {
+        nx = x + (tx - x) * speed / d
+        nz = z + (tz - z) * speed / d
+    }
+    if walkable(nx, nz) == 1 { return [nx, nz] }
+    if walkable(nx, z) == 1 { return [nx, z] }
+    if walkable(x, nz) == 1 { return [x, nz] }
+    return [x, z]
+}
+
+fn min_stat(kind: int, ix: int) -> int {
+    if kind == 1 { return mm_melee[ix] }
+    if kind == 2 { return mm_caster[ix] }
+    return mm_siege[ix]
+}
+
+// --------------------------------------------------------- damage
+
+fn champ_armor(team: int) -> int {
+    let c = get(champ_of(team), Champ) |> unwrap
+    return armor_tbl[c.lvl - 1]
+}
+
+fn champ_mr(team: int) -> int {
+    let c = get(champ_of(team), Champ) |> unwrap
+    return mr_tbl[c.lvl - 1]
+}
+
+fn champ_ad(team: int) -> int {
+    let c = get(champ_of(team), Champ) |> unwrap
+    let b = get(champ_of(team), Bag) |> unwrap
+    return ad_tbl[c.lvl - 1] + b.ad
+}
+
+fn champ_maxhp(team: int) -> int {
+    let c = get(champ_of(team), Champ) |> unwrap
+    let b = get(champ_of(team), Bag) |> unwrap
+    return hp_tbl[c.lvl - 1] + b.maxhp
+}
+
+fn champ_ms(team: int) -> int {
+    let b = get(champ_of(team), Bag) |> unwrap
+    return MS_MM_TICK + b.ms
+}
+
+// src_kind/dst_kind: 1=champ 2=minion 3=tower (the era dr_* ratio table)
+fn dr_pm(src_kind: int, dst_kind: int) -> int {
+    if src_kind == 1 and dst_kind == 1 { return 1000 }
+    if src_kind == 1 and dst_kind == 2 { return dr_hero_to_unit_pm() }
+    if src_kind == 1 and dst_kind == 3 { return dr_hero_to_building_pm() }
+    if src_kind == 2 and dst_kind == 1 { return dr_unit_to_hero_pm() }
+    if src_kind == 2 and dst_kind == 3 { return dr_unit_to_building_pm() }
+    if src_kind == 3 and dst_kind == 1 { return dr_building_to_hero_pm() }
+    if src_kind == 3 and dst_kind == 2 { return dr_building_to_unit_pm() }
+    return 1000
+}
+
+fn damage_champ(src_team: int, dst_team: int, raw: int, physical: int, src_kind: int) -> nil {
+    let victim = champ_of(dst_team)
+    let v = get(victim, Vitals) |> unwrap
+    if v.alive == 0 { return }
+    let mut resist = champ_mr(dst_team)
+    if physical == 1 { resist = champ_armor(dst_team) }
+    let clk = get_resource(Clock) |> unwrap
+    let dealt = mitigate(raw * dr_pm(src_kind, 1) / 1000, resist)
+    update(victim, Vitals) { hp = v.hp - dealt, last_dmg = clk.tick }
+    if src_kind == 1 {
+        let ss = get(champ_of(src_team), Score) |> unwrap
+        update(champ_of(src_team), Score) { dmg_dealt = ss.dmg_dealt + dealt }
+    }
+    let vs = get(victim, Score) |> unwrap
+    update(victim, Score) { dmg_taken = vs.dmg_taken + dealt }
+    emit Damage { src_team: src_team, dst_team: dst_team, amount: dealt, via: physical }
+}
+
+// champ damages a minion; last hit -> CS + gold + XP credit at death
+fn damage_minion(src_team: int, ix: int, raw: int, src_kind: int) -> nil {
+    let m = require_entity(f"min-{ix}")
+    let ms = get(m, MinState) |> unwrap
+    if ms.kind == 0 { return }
+    let dealt = mitigate(raw * dr_pm(src_kind, 2) / 1000, min_stat(ms.kind, 2))
+    let mut hp = ms.hp - dealt
+    if hp <= 0 {
+        if src_kind == 1 {
+            award_cs(src_team, ms.kind)
+        }
+        award_xp_nearby(ms.team, ms.x, ms.z, min_stat(ms.kind, 8))
+        set(m, MinState { kind: 0, team: 0, lane: 0, wp: 0, x: 0, z: 0, hp: 0, atk_cd: 0, windup: 0, tgt_kind: 0, tgt_ix: 0 })
+    } else {
+        update(m, MinState) { hp = hp }
+    }
+}
+
+fn damage_tower(src_team: int, ix: int, raw: int, src_kind: int) -> nil {
+    let t = require_entity(f"twr-{ix}")
+    let ts = get(t, TwrState) |> unwrap
+    if ts.hp <= 0 or ts.front == 0 { return }
+    let dealt = mitigate(raw * dr_pm(src_kind, 3) / 1000, 0)
+    let mut hp = ts.hp - dealt
+    if src_kind == 1 {
+        let ss = get(champ_of(src_team), Score) |> unwrap
+        update(champ_of(src_team), Score) { tower_dmg = ss.tower_dmg + dealt }
+    }
+    if hp <= 0 {
+        hp = 0
+        let clk = get_resource(Clock) |> unwrap
+        set_resource(Clock, Clock { tick: clk.tick, over: 1, winner: 1 - ts.team, why: "tower" })
+        emit TowerDown { team: ts.team, tick: clk.tick }
+    }
+    update(t, TwrState) { hp = hp }
+}
+
+fn award_cs(team: int, kind: int) -> nil {
+    let me = champ_of(team)
+    let c = get(me, Champ) |> unwrap
+    let gold = min_stat(kind, 7)
+    update(me, Champ) { gold = c.gold + gold, cs = c.cs + 1 }
+    emit CsGained { team: team, cs: c.cs + 1, gold: gold }
+    if c.cs + 1 >= CS_TO_WIN {
+        let clk = get_resource(Clock) |> unwrap
+        set_resource(Clock, Clock { tick: clk.tick, over: 1, winner: team, why: "cs100" })
+    }
+}
+
+// the dying minion's XP to the ENEMY champ when in exp radius —
+// scaled by the era's PlayerMinionSplitXP solo share (92%, truth-pinned)
+fn award_xp_nearby(minion_team: int, x: int, z: int, xp: int) -> nil {
+    let me = champ_of(1 - minion_team)
+    let p = get(me, Pos) |> unwrap
+    let v = get(me, Vitals) |> unwrap
+    if v.alive == 0 { return }
+    let r = exp_radius()
+    if dist2_cm(p.x, p.z, x, z) <= (r / 10) * (r / 10) {
+        gain_xp(1 - minion_team, xp * minion_xp_solo_pm() / 1000)
+    }
+}
+
+fn gain_xp(team: int, amount: int) -> nil {
+    let me = champ_of(team)
+    let c = get(me, Champ) |> unwrap
+    if c.lvl >= 18 { return }
+    let mut xp = c.xp + amount
+    let mut lvl = c.lvl
+    let mut guard = 0
+    while lvl < 18 and xp >= xp_next_tbl[lvl - 1] and guard < 18 {
+        xp = xp - xp_next_tbl[lvl - 1]
+        lvl = lvl + 1
+        guard = guard + 1
+    }
+    if lvl != c.lvl {
+        // level up: max pools grow, current grows by the delta (era),
+        // and each level mints a skill point THE POLICY spends (op 10)
+        let v = get(me, Vitals) |> unwrap
+        let dhp = hp_tbl[lvl - 1] - hp_tbl[c.lvl - 1]
+        let dmp = mp_tbl[lvl - 1] - mp_tbl[c.lvl - 1]
+        update(me, Vitals) { hp = v.hp + dhp, mp = v.mp + dmp }
+        let sk = get(me, SkillRanks) |> unwrap
+        update(me, SkillRanks) { points = sk.points + (lvl - c.lvl) }
+    }
+    update(me, Champ) { lvl = lvl, xp = xp }
+}
+
+// ranks are CHOSEN (op 10), gated by the era rules at spend time
+fn rank_of(team: int, slot: int) -> int {
+    let sk = get(champ_of(team), SkillRanks) |> unwrap
+    if slot == 0 { return sk.q }
+    if slot == 1 { return sk.w }
+    if slot == 2 { return sk.e }
+    return sk.r
+}
+
+// era rank gates: basics cap at ceil(lvl/2) (max 5), ult at 6/11/16
+fn rank_cap(team: int, slot: int) -> int {
+    let c = get(champ_of(team), Champ) |> unwrap
+    if slot == 3 {
+        let mut cap = 0
+        if c.lvl >= 6 { cap = 1 }
+        if c.lvl >= 11 { cap = 2 }
+        if c.lvl >= 16 { cap = 3 }
+        return cap
+    }
+    let cap = (c.lvl + 1) / 2
+    if cap > 5 { return 5 }
+    return cap
+}
+
+fn spawn_missile(kind: int, src_team: int, rank: int, x: int, z: int, tx: int, tz: int, speed: int, half_w: int, max_range: int) -> nil {
+    let len = dist_mm(x, z, tx, tz)
+    if len == 0 { return }
+    for i in range(0, MIS_POOL) {
+        let m = require_entity(f"mis-{i}")
+        let mm = get(m, Missile) |> unwrap
+        if mm.kind == 0 {
+            set(m, Missile {
+                kind: kind, x: x, z: z,
+                dx_pm: (tx - x) * 1000 / len, dz_pm: (tz - z) * 1000 / len,
+                speed: speed, half_w: half_w, left_mm: max_range, src: src_team,
+                rank: rank, hit0: 0, hit1: 0,
+            })
+            return
+        }
+    }
+}
+
+// ---------------------------------------------------- command intake
+
+// ----------------------------------------------------- target slots
+// The OBSERVATION-ORDERED attackable list: enemy champ, enemy minions,
+// front enemy towers, sorted by (dist2, kind, index) — strictly
+// deterministic, identical in every implementation and in the policy's
+// observation encoder. Slot k of this list is what `attack slot k`
+// targets. Returns packed kind*1000+ix, or -1 when the slot is empty.
+
+let K_SLOTS = 8
+
+fn slot_target(team: int, x: int, z: int, k: int) -> int {
+    // selection without sorting: k+1 passes of "smallest tuple greater
+    // than the previous best" over (d2, kind, ix) lexicographic order
+    let mut prev_d2 = -1
+    let mut prev_kind = -1
+    let mut prev_ix = -1
+    let mut found = -1
+    let mut r = 0
+    while r <= k {
+        let mut best_d2 = 99999999999
+        let mut best_kind = 99
+        let mut best_ix = 99999
+        let mut have = 0
+        // enemy champ (kind 1)
+        let foe = champ_of(1 - team)
+        let fv = get(foe, Vitals) |> unwrap
+        if fv.alive == 1 {
+            let fp = get(foe, Pos) |> unwrap
+            let d2 = dist2_cm(x, z, fp.x, fp.z)
+            if tuple_gt(d2, 1, 1 - team, prev_d2, prev_kind, prev_ix) == 1 {
+                best_d2 = d2
+                best_kind = 1
+                best_ix = 1 - team
+                have = 1
+            }
+        }
+        // enemy minions (kind 2)
+        for i in range(0, MIN_POOL) {
+            let ms = get(require_entity(f"min-{i}"), MinState) |> unwrap
+            if ms.kind != 0 and ms.team != team {
+                let d2 = dist2_cm(x, z, ms.x, ms.z)
+                if tuple_gt(d2, 2, i, prev_d2, prev_kind, prev_ix) == 1 {
+                    if tuple_lt(d2, 2, i, best_d2, best_kind, best_ix) == 1 {
+                        best_d2 = d2
+                        best_kind = 2
+                        best_ix = i
+                        have = 1
+                    }
+                }
+            }
+        }
+        // live jungle camps (kind 4) — neutral: both teams may attack
+        for i in range(0, N_CAMPS) {
+            let cs = get(require_entity(f"camp-{i}"), CampState) |> unwrap
+            if cs.hp > 0 {
+                let d2c = dist2_cm(x, z, cs.x, cs.z)
+                if tuple_gt(d2c, 4, i, prev_d2, prev_kind, prev_ix) == 1 {
+                    if tuple_lt(d2c, 4, i, best_d2, best_kind, best_ix) == 1 {
+                        best_d2 = d2c
+                        best_kind = 4
+                        best_ix = i
+                        have = 1
+                    }
+                }
+            }
+        }
+        // front enemy towers (kind 3)
+        for i in range(0, N_TOWERS) {
+            let ts = get(require_entity(f"twr-{i}"), TwrState) |> unwrap
+            if ts.team != team and ts.hp > 0 and ts.front == 1 {
+                let d2 = dist2_cm(x, z, ts.x, ts.z)
+                if tuple_gt(d2, 3, i, prev_d2, prev_kind, prev_ix) == 1 {
+                    if tuple_lt(d2, 3, i, best_d2, best_kind, best_ix) == 1 {
+                        best_d2 = d2
+                        best_kind = 3
+                        best_ix = i
+                        have = 1
+                    }
+                }
+            }
+        }
+        if have == 0 { return -1 }
+        prev_d2 = best_d2
+        prev_kind = best_kind
+        prev_ix = best_ix
+        found = best_kind * 1000 + best_ix
+        r = r + 1
+    }
+    return found
+}
+
+fn tuple_lt(a1: int, a2: int, a3: int, b1: int, b2: int, b3: int) -> int {
+    if a1 < b1 { return 1 }
+    if a1 > b1 { return 0 }
+    if a2 < b2 { return 1 }
+    if a2 > b2 { return 0 }
+    if a3 < b3 { return 1 }
+    return 0
+}
+
+fn tuple_gt(a1: int, a2: int, a3: int, b1: int, b2: int, b3: int) -> int {
+    return tuple_lt(b1, b2, b3, a1, a2, a3)
+}
+
+on Cmd(c) {
+    let me = champ_of(c.team)
+    let v = get(me, Vitals) |> unwrap
+    if v.alive == 0 { return }
+    let cd = get(me, Cds) |> unwrap
+    let wu = get(me, Windup) |> unwrap
+    let p = get(me, Pos) |> unwrap
+    // any order breaks a recall channel (the era rule)
+    let bag0 = get(me, Bag) |> unwrap
+    if bag0.recall > 0 and c.op != 7 {
+        update(me, Bag) { recall = 0 }
+    }
+    // op 7: recall — 8 s stationary channel, completed in step()
+    if c.op == 7 and wu.kind == 0 {
+        update(me, Bag) { recall = RECALL_TICKS }
+        set(me, Intent { mx: 0, mz: 0, moving: 0 })
+    }
+    // op 8: buy item c.x — only on the fountain platform; potions stack,
+    // stat items take a slot and fold into the champ tables immediately
+    if c.op == 8 {
+        let item = c.x
+        if item >= 0 and item < 6 {
+            let mut fx = gen_spawn_west_x()
+            let mut fz = gen_spawn_west_z()
+            if c.team == 1 {
+                fx = gen_spawn_east_x()
+                fz = gen_spawn_east_z()
+            }
+            let fr = fountain_radius() / 10
+            let ch = get(me, Champ) |> unwrap
+            if dist2_cm(p.x, p.z, fx, fz) <= fr * fr and ch.gold >= ITEM_COST[item] {
+                let b = get(me, Bag) |> unwrap
+                if item == 0 {
+                    if b.potions < MAX_POTS {
+                        update(me, Champ) { gold = ch.gold - ITEM_COST[item] }
+                        update(me, Bag) { potions = b.potions + 1 }
+                    }
+                } else {
+                    if b.items < ITEM_SLOTS {
+                        update(me, Champ) { gold = ch.gold - ITEM_COST[item] }
+                        update(me, Bag) {
+                            items = b.items + 1,
+                            ad = b.ad + ITEM_AD[item],
+                            maxhp = b.maxhp + ITEM_HP[item],
+                            ms = b.ms + ITEM_MS[item],
+                        }
+                        if ITEM_HP[item] > 0 {
+                            // era: bonus max hp arrives filled
+                            let v2 = get(me, Vitals) |> unwrap
+                            update(me, Vitals) { hp = v2.hp + ITEM_HP[item] }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    // op 9: drink a potion — one at a time, 200 hp over 15 s
+    if c.op == 9 {
+        let b = get(me, Bag) |> unwrap
+        if b.potions > 0 and b.pot_left == 0 {
+            update(me, Bag) { potions = b.potions - 1, pot_left = POT_TICKS }
+        }
+    }
+    // op 10: spend a skill point on slot c.x — the policy's build
+    if c.op == 10 {
+        let slot = c.x
+        if slot >= 0 and slot < 4 {
+            let sk = get(me, SkillRanks) |> unwrap
+            let mut cur = sk.q
+            if slot == 1 { cur = sk.w }
+            if slot == 2 { cur = sk.e }
+            if slot == 3 { cur = sk.r }
+            if sk.points > 0 and cur < rank_cap(c.team, slot) {
+                if slot == 0 { update(me, SkillRanks) { q = sk.q + 1, points = sk.points - 1 } }
+                if slot == 1 { update(me, SkillRanks) { w = sk.w + 1, points = sk.points - 1 } }
+                if slot == 2 { update(me, SkillRanks) { e = sk.e + 1, points = sk.points - 1 } }
+                if slot == 3 { update(me, SkillRanks) { r = sk.r + 1, points = sk.points - 1 } }
+            }
+        }
+    }
+    if c.op == 0 {
+        set(me, Intent { mx: c.x, mz: c.z, moving: 1 })
+        if wu.kind == 1 { set(me, Windup { kind: 0, left: 0, tx: 0, tz: 0, tkind: 0, tix: 0 }) }
+    }
+    if c.op == 1 {
+        set(me, Intent { mx: 0, mz: 0, moving: 0 })
+        set(me, Windup { kind: 0, left: 0, tx: 0, tz: 0, tkind: 0, tix: 0 })
+    }
+    if c.op == 2 and cd.atk == 0 and wu.kind == 0 {
+        // attack TARGET SLOT c.x — the env validates range only; which
+        // unit to hit (and when) is entirely the agent's decision
+        let packed = slot_target(c.team, p.x, p.z, c.x)
+        if packed >= 0 {
+            let tk = packed / 1000
+            let tix = packed % 1000
+            let mut tx = 0
+            let mut tz = 0
+            let mut trad = 0
+            if tk == 1 {
+                let fp2 = get(champ_of(tix), Pos) |> unwrap
+                tx = fp2.x
+                tz = fp2.z
+                trad = CHAMP_RADIUS
+            }
+            if tk == 2 {
+                let ms = get(require_entity(f"min-{tix}"), MinState) |> unwrap
+                tx = ms.x
+                tz = ms.z
+                trad = MINION_RADIUS
+            }
+            if tk == 3 {
+                let ts = get(require_entity(f"twr-{tix}"), TwrState) |> unwrap
+                tx = ts.x
+                tz = ts.z
+                trad = TOWER_RADIUS
+            }
+            if tk == 4 {
+                let cs2 = get(require_entity(f"camp-{tix}"), CampState) |> unwrap
+                tx = cs2.x
+                tz = cs2.z
+                trad = MINION_RADIUS
+            }
+            if dist2_cm(p.x, p.z, tx, tz) <= ((ATK_RANGE + trad) / 10) * ((ATK_RANGE + trad) / 10) {
+                let c2 = get(me, Champ) |> unwrap
+                set(me, Windup { kind: 1, left: windup_tbl[c2.lvl - 1], tx: 0, tz: 0, tkind: tk, tix: tix })
+                set(me, Intent { mx: 0, mz: 0, moving: 0 })
+            }
+        }
+    }
+    if c.op == 3 and wu.kind == 0 {
+        let rk = rank_of(c.team, 0)
+        if rk > 0 and cd.q == 0 and v.mp >= q_cost_tbl[rk - 1] {
+            update(me, Vitals) { mp = v.mp - q_cost_tbl[rk - 1] }
+            update(me, Cds) { q = q_cd_tbl[rk - 1] }
+            set(me, Windup { kind: 2, left: ez_q_windup(), tx: c.x, tz: c.z, tkind: 0, tix: 0 })
+            set(me, Intent { mx: 0, mz: 0, moving: 0 })
+        }
+    }
+    if c.op == 4 and wu.kind == 0 {
+        let rk = rank_of(c.team, 1)
+        if rk > 0 and cd.w == 0 and v.mp >= w_cost_tbl[rk - 1] {
+            update(me, Vitals) { mp = v.mp - w_cost_tbl[rk - 1] }
+            update(me, Cds) { w = w_cd_tbl[rk - 1] }
+            set(me, Windup { kind: 3, left: ez_w_windup(), tx: c.x, tz: c.z, tkind: 0, tix: 0 })
+            set(me, Intent { mx: 0, mz: 0, moving: 0 })
+        }
+    }
+    if c.op == 5 and wu.kind == 0 {
+        let rk = rank_of(c.team, 2)
+        if rk > 0 and cd.e == 0 and v.mp >= e_cost_tbl[rk - 1] {
+            update(me, Vitals) { mp = v.mp - e_cost_tbl[rk - 1] }
+            update(me, Cds) { e = e_cd_tbl[rk - 1] }
+            blink_and_bolt(c.team, rk, c.x, c.z)
+        }
+    }
+    if c.op == 6 and wu.kind == 0 {
+        let rk = rank_of(c.team, 3)
+        if rk > 0 and cd.r == 0 and v.mp >= r_cost_tbl[rk - 1] {
+            update(me, Vitals) { mp = v.mp - r_cost_tbl[rk - 1] }
+            update(me, Cds) { r = r_cd_tbl[rk - 1] }
+            set(me, Windup { kind: 4, left: ez_r_windup(), tx: c.x, tz: c.z, tkind: 0, tix: 0 })
+            set(me, Intent { mx: 0, mz: 0, moving: 0 })
+        }
+    }
+}
+
+fn blink_and_bolt(team: int, rk: int, tx: int, tz: int) -> nil {
+    let me = champ_of(team)
+    let p = get(me, Pos) |> unwrap
+    let d = dist_mm(p.x, p.z, tx, tz)
+    let mut nx = tx
+    let mut nz = tz
+    if d > ez_e_range() {
+        nx = p.x + (tx - p.x) * ez_e_range() / d
+        nz = p.z + (tz - p.z) * ez_e_range() / d
+    }
+    if walkable(nx, nz) == 0 { return }
+    set(me, Pos { x: nx, z: nz })
+    // landing bolt: nearest enemy (champ beats minion on tie order:
+    // champ checked first) within E_SEEK
+    let dmg = E_DMG_R[rk - 1] + AP_M * E_AP_PM / 1000
+    let foe = champ_of(1 - team)
+    let fp = get(foe, Pos) |> unwrap
+    let fv = get(foe, Vitals) |> unwrap
+    let mut best_kind = 0
+    let mut best_ix = 0
+    let mut best_d2 = (E_SEEK / 10) * (E_SEEK / 10) + 1
+    if fv.alive == 1 {
+        let d2 = dist2_cm(nx, nz, fp.x, fp.z)
+        if d2 < best_d2 {
+            best_kind = 1
+            best_ix = 1 - team
+            best_d2 = d2
+        }
+    }
+    for i in range(0, MIN_POOL) {
+        let ms = get(require_entity(f"min-{i}"), MinState) |> unwrap
+        if ms.kind != 0 and ms.team != team {
+            let d2 = dist2_cm(nx, nz, ms.x, ms.z)
+            if d2 < best_d2 {
+                best_kind = 2
+                best_ix = i
+                best_d2 = d2
+            }
+        }
+    }
+    if best_kind == 1 { damage_champ(team, best_ix, dmg, 0, 1) }
+    if best_kind == 2 { damage_minion(team, best_ix, dmg, 1) }
+}
+
+// ------------------------------------------------------- wave director
+
+fn spawn_minion(kind: int, team: int, lane: int) -> nil {
+    let mut sx = 0
+    let mut sz = 0
+    if lane == 0 {
+        if team == 0 { sx = lane_top[0] } else { sx = lane_top[len(lane_top) - 2] }
+        if team == 0 { sz = lane_top[1] } else { sz = lane_top[len(lane_top) - 1] }
+    } else {
+        if team == 0 { sx = lane_bot[0] } else { sx = lane_bot[len(lane_bot) - 2] }
+        if team == 0 { sz = lane_bot[1] } else { sz = lane_bot[len(lane_bot) - 1] }
+    }
+    let mut wp0 = 1
+    if team == 1 {
+        if lane == 0 { wp0 = len(lane_top) / 2 - 2 } else { wp0 = len(lane_bot) / 2 - 2 }
+    }
+    for i in range(0, MIN_POOL) {
+        let m = require_entity(f"min-{i}")
+        let ms = get(m, MinState) |> unwrap
+        if ms.kind == 0 {
+            set(m, MinState {
+                kind: kind, team: team, lane: lane, wp: wp0,
+                x: sx, z: sz, hp: min_stat(kind, 0),
+                atk_cd: 0, windup: 0, tgt_kind: 0, tgt_ix: 0,
+            })
+            return
+        }
+    }
+}
+
+fn sys_waves() -> nil {
+    let clk = get_resource(Clock) |> unwrap
+    let t = clk.tick
+    if t < wave_first_tick() { return }
+    let since = t - wave_first_tick()
+    if since % wave_every() != 0 { return }
+    let wave_n = since / wave_every() + 1
+    for team in range(0, 2) {
+        for lane in range(0, 2) {
+            for _i in range(0, 3) { spawn_minion(1, team, lane) }
+            for _i in range(0, 3) { spawn_minion(2, team, lane) }
+            if wave_n % cannon_every_nth() == 0 { spawn_minion(3, team, lane) }
+        }
+    }
+}
+
+// ------------------------------------------------------- champ systems
+
+fn sys_timers(team: int) -> nil {
+    let me = champ_of(team)
+    let c = get(me, Champ) |> unwrap
+    let cd = get(me, Cds) |> unwrap
+    let mut q = cd.q - 1
+    let mut w = cd.w - 1
+    let mut e = cd.e - 1
+    let mut r = cd.r - 1
+    let mut a = cd.atk - 1
+    if q < 0 { q = 0 }
+    if w < 0 { w = 0 }
+    if e < 0 { e = 0 }
+    if r < 0 { r = 0 }
+    if a < 0 { a = 0 }
+    set(me, Cds { q: q, w: w, e: e, r: r, atk: a })
+    let v = get(me, Vitals) |> unwrap
+    if v.alive == 1 {
+        let lvl_ix = c.lvl - 1
+        let mut hp = v.hp + hpreg_tbl[lvl_ix]
+        let mut mp = v.mp + mpreg_tbl[lvl_ix]
+        // fountain: 8.5%/s of max inside the platform, paused 1 s after damage
+        let clk = get_resource(Clock) |> unwrap
+        if clk.tick % fountain_interval() == 0 and clk.tick - v.last_dmg >= 30 {
+            let mut fx = gen_spawn_west_x()
+            let mut fz = gen_spawn_west_z()
+            if team == 1 {
+                fx = gen_spawn_east_x()
+                fz = gen_spawn_east_z()
+            }
+            let fr = fountain_radius() / 10
+            let p = get(me, Pos) |> unwrap
+            if dist2_cm(p.x, p.z, fx, fz) <= fr * fr {
+                hp = hp + hp_tbl[lvl_ix] * fountain_pm() / 1000
+                mp = mp + mp_tbl[lvl_ix] * fountain_pm() / 1000
+            }
+        }
+        // potion heal-over-time: linear share per remaining tick
+        let bag = get(me, Bag) |> unwrap
+        if bag.pot_left > 0 {
+            hp = hp + POT_HEAL_TOTAL / POT_TICKS
+            update(me, Bag) { pot_left = bag.pot_left - 1 }
+        }
+        let cap_hp = hp_tbl[lvl_ix] + bag.maxhp
+        if hp > cap_hp { hp = cap_hp }
+        if mp > mp_tbl[lvl_ix] { mp = mp_tbl[lvl_ix] }
+        update(me, Vitals) { hp = hp, mp = mp }
+        // recall channel: damage cancels, completion teleports home
+        let bag2 = get(me, Bag) |> unwrap
+        if bag2.recall > 0 {
+            if v.last_dmg == clk.tick or v.last_dmg == clk.tick - 1 {
+                update(me, Bag) { recall = 0 }
+            } else {
+                let left = bag2.recall - 1
+                if left == 0 {
+                    let mut hx = gen_spawn_west_x()
+                    let mut hz = gen_spawn_west_z()
+                    if team == 1 {
+                        hx = gen_spawn_east_x()
+                        hz = gen_spawn_east_z()
+                    }
+                    set(me, Pos { x: hx, z: hz })
+                    set(me, Intent { mx: 0, mz: 0, moving: 0 })
+                }
+                update(me, Bag) { recall = left }
+            }
+        }
+        // ambient gold: 6.5 / 5 s after 90 s
+        if clk.tick >= ambient_delay() and (clk.tick - ambient_delay()) % ambient_every() == 0 {
+            update(me, Champ) { gold = c.gold + ambient_gold() }
+        }
+    }
+    let sl = get(me, AsSlow) |> unwrap
+    if sl.left > 0 {
+        let mut left = sl.left - 1
+        let mut pm = sl.pm
+        if left == 0 { pm = 0 }
+        set(me, AsSlow { pm: pm, left: left })
+    }
+}
+
+// ------------------------------------------------------------ jungle
+// The camp essence: stand-and-fight monsters that hit back, pay gold
+// and xp on the kill, and respawn on a fixed clock. tgt_team locks on
+// whoever last struck the camp; it drops when they leave reach.
+fn sys_camps() -> nil {
+    let clk = get_resource(Clock) |> unwrap
+    for i in range(0, N_CAMPS) {
+        let cs = get(require_entity(f"camp-{i}"), CampState) |> unwrap
+        if cs.hp <= 0 {
+            if cs.respawn_at > 0 and clk.tick >= cs.respawn_at {
+                set(require_entity(f"camp-{i}"), CampState {
+                    x: cs.x, z: cs.z, hp: CAMP_HP, respawn_at: 0,
+                    atk_cd: 0, tgt_team: -1,
+                })
+            }
+        } else {
+            if cs.tgt_team >= 0 {
+                let foe = champ_of(cs.tgt_team)
+                let fv = get(foe, Vitals) |> unwrap
+                let fp = get(foe, Pos) |> unwrap
+                let reach = (CAMP_RANGE + CHAMP_RADIUS) / 10
+                if fv.alive == 0 or dist2_cm(cs.x, cs.z, fp.x, fp.z) > reach * reach {
+                    update(require_entity(f"camp-{i}"), CampState) { tgt_team = -1, atk_cd = 0 }
+                } else {
+                    if cs.atk_cd > 0 {
+                        update(require_entity(f"camp-{i}"), CampState) { atk_cd = cs.atk_cd - 1 }
+                    } else {
+                        damage_champ(2, cs.tgt_team, CAMP_AD, 1, 2)
+                        update(require_entity(f"camp-{i}"), CampState) { atk_cd = CAMP_PERIOD }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// champ damages a camp; the kill pays gold + xp directly (jungle xp is
+// unshared), and the camp starts its respawn clock
+fn damage_camp(src_team: int, ix: int, raw: int) -> nil {
+    let cmp = require_entity(f"camp-{ix}")
+    let cs = get(cmp, CampState) |> unwrap
+    if cs.hp <= 0 { return }
+    let dealt = mitigate(raw, 0)
+    let mut hp = cs.hp - dealt
+    if hp <= 0 {
+        let clk = get_resource(Clock) |> unwrap
+        update(cmp, CampState) { hp = 0, respawn_at = clk.tick + CAMP_RESPAWN, tgt_team = -1 }
+        let me = champ_of(src_team)
+        let c = get(me, Champ) |> unwrap
+        update(me, Champ) { gold = c.gold + CAMP_GOLD }
+        gain_xp(src_team, CAMP_XP)
+    } else {
+        update(cmp, CampState) { hp = hp, tgt_team = src_team }
+    }
+}
+
+fn sys_move(team: int) -> nil {
+    let me = champ_of(team)
+    let it = get(me, Intent) |> unwrap
+    let v = get(me, Vitals) |> unwrap
+    if it.moving == 0 or v.alive == 0 { return }
+    let ms = champ_ms(team)            // boots fold in here
+    let p = get(me, Pos) |> unwrap
+    let d = dist_mm(p.x, p.z, it.mx, it.mz)
+    if d <= ms {
+        let np = slide_move(p.x, p.z, it.mx, it.mz, ms)
+        set(me, Pos { x: np[0], z: np[1] })
+        update(me, Intent) { moving = 0 }
+        return
+    }
+    let np = slide_move(p.x, p.z, it.mx, it.mz, ms)
+    if np[0] == p.x and np[1] == p.z {
+        update(me, Intent) { moving = 0 }
+    } else {
+        set(me, Pos { x: np[0], z: np[1] })
+    }
+}
+
+fn sys_windup(team: int) -> nil {
+    let me = champ_of(team)
+    let wu = get(me, Windup) |> unwrap
+    if wu.kind == 0 { return }
+    let v = get(me, Vitals) |> unwrap
+    if v.alive == 0 {
+        set(me, Windup { kind: 0, left: 0, tx: 0, tz: 0, tkind: 0, tix: 0 })
+        return
+    }
+    if wu.left > 1 {
+        update(me, Windup) { left = wu.left - 1 }
+        return
+    }
+    let p = get(me, Pos) |> unwrap
+    let c = get(me, Champ) |> unwrap
+    if wu.kind == 1 {
+        // auto fires at the stored target (fizzles if it died/freed)
+        if wu.tkind == 1 {
+            let foe = champ_of(wu.tix)
+            let fv = get(foe, Vitals) |> unwrap
+            if fv.alive == 1 {
+                let fp = get(foe, Pos) |> unwrap
+                spawn_missile(1, team, 0, p.x, p.z, fp.x, fp.z, ATK_MIS_SPEED, 900, ATK_RANGE * 2)
+            }
+        }
+        if wu.tkind == 2 {
+            let ms = get(require_entity(f"min-{wu.tix}"), MinState) |> unwrap
+            if ms.kind != 0 and ms.team != team {
+                // champ-on-minion autos land instantly (era missiles are
+                // fast and minions are ghosted; spec rule)
+                damage_minion(team, wu.tix, champ_ad(team), 1)
+            }
+        }
+        if wu.tkind == 3 {
+            let ts = get(require_entity(f"twr-{wu.tix}"), TwrState) |> unwrap
+            if ts.hp > 0 {
+                damage_tower(team, wu.tix, champ_ad(team), 1)
+            }
+        }
+        if wu.tkind == 4 {
+            damage_camp(team, wu.tix, champ_ad(team))
+        }
+        let sl = get(me, AsSlow) |> unwrap
+        update(me, Cds) { atk = period_tbl[c.lvl - 1] * 1000 / (1000 - sl.pm) }
+    }
+    if wu.kind == 2 {
+        let rk = rank_of(team, 0)
+        spawn_missile(2, team, rk, p.x, p.z, wu.tx, wu.tz, Q_SPEED, Q_HALF_W, ez_q_range())
+    }
+    if wu.kind == 3 {
+        let rk = rank_of(team, 1)
+        spawn_missile(3, team, rk, p.x, p.z, wu.tx, wu.tz, W_SPEED, W_HALF_W, ez_w_range())
+    }
+    if wu.kind == 4 {
+        let rk = rank_of(team, 3)
+        spawn_missile(4, team, rk, p.x, p.z, wu.tx, wu.tz, R_SPEED, R_HALF_W, 400000)
+    }
+    set(me, Windup { kind: 0, left: 0, tx: 0, tz: 0, tkind: 0, tix: 0 })
+}
+
+// ------------------------------------------------------ minion systems
+
+fn lane_pt_x(lane: int, ix: int) -> int {
+    if lane == 0 { return lane_top[ix * 2] }
+    return lane_bot[ix * 2]
+}
+
+fn lane_pt_z(lane: int, ix: int) -> int {
+    if lane == 0 { return lane_top[ix * 2 + 1] }
+    return lane_bot[ix * 2 + 1]
+}
+
+fn lane_len(lane: int) -> int {
+    if lane == 0 { return len(lane_top) / 2 }
+    return len(lane_bot) / 2
+}
+
+// nearest enemy thing for a minion: enemy champ (distance-penalized),
+// enemy minions, FRONT enemy towers. Returns packed kind*1000+ix.
+fn minion_acquire(team: int, x: int, z: int) -> int {
+    let acq2 = (MINION_ACQ / 10) * (MINION_ACQ / 10)
+    let mut best = 0
+    let mut best_d2 = acq2 + 1
+    for i in range(0, MIN_POOL) {
+        let ms = get(require_entity(f"min-{i}"), MinState) |> unwrap
+        if ms.kind != 0 and ms.team != team {
+            let d2 = dist2_cm(x, z, ms.x, ms.z)
+            if d2 < best_d2 {
+                best = 2000 + i
+                best_d2 = d2
+            }
+        }
+    }
+    let foe = champ_of(1 - team)
+    let fv = get(foe, Vitals) |> unwrap
+    if fv.alive == 1 {
+        let fp = get(foe, Pos) |> unwrap
+        let pen = HERO_DIST_PENALTY / 10
+        let dx = (fp.x - x) / 10
+        let dz = (fp.z - z) / 10
+        let d2 = dx * dx + dz * dz + 2 * pen * isqrt(dx * dx + dz * dz) + pen * pen
+        if d2 < best_d2 {
+            best = 1000 + (1 - team)
+            best_d2 = d2
+        }
+    }
+    for i in range(0, N_TOWERS) {
+        let ts = get(require_entity(f"twr-{i}"), TwrState) |> unwrap
+        if ts.team != team and ts.hp > 0 and ts.front == 1 {
+            let d2 = dist2_cm(x, z, ts.x, ts.z)
+            if d2 < best_d2 {
+                best = 3000 + i
+                best_d2 = d2
+            }
+        }
+    }
+    return best
+}
+
+fn sys_minions() -> nil {
+    for i in range(0, MIN_POOL) {
+        let m = require_entity(f"min-{i}")
+        let ms = get(m, MinState) |> unwrap
+        if ms.kind == 0 { continue }
+        // windup resolving?
+        if ms.windup > 1 {
+            update(m, MinState) { windup = ms.windup - 1 }
+            continue
+        }
+        if ms.windup == 1 {
+            // fire at stored target if still valid + in range
+            let rng = min_stat(ms.kind, 4) + MINION_RADIUS
+            let ad = min_stat(ms.kind, 1)
+            if ms.tgt_kind == 1 {
+                let fv = get(champ_of(ms.tgt_ix), Vitals) |> unwrap
+                let fp = get(champ_of(ms.tgt_ix), Pos) |> unwrap
+                if fv.alive == 1 and dist2_cm(ms.x, ms.z, fp.x, fp.z) <= ((rng + CHAMP_RADIUS) / 10) * ((rng + CHAMP_RADIUS) / 10) {
+                    damage_champ(ms.team, ms.tgt_ix, ad, 1, 2)
+                }
+            }
+            if ms.tgt_kind == 2 {
+                let ts = get(require_entity(f"min-{ms.tgt_ix}"), MinState) |> unwrap
+                if ts.kind != 0 and dist2_cm(ms.x, ms.z, ts.x, ts.z) <= ((rng + MINION_RADIUS) / 10) * ((rng + MINION_RADIUS) / 10) {
+                    damage_minion_by_minion(ms.team, ms.tgt_ix, ad)
+                }
+            }
+            if ms.tgt_kind == 3 {
+                let ts = get(require_entity(f"twr-{ms.tgt_ix}"), TwrState) |> unwrap
+                if ts.hp > 0 and dist2_cm(ms.x, ms.z, ts.x, ts.z) <= ((rng + TOWER_RADIUS) / 10) * ((rng + TOWER_RADIUS) / 10) {
+                    damage_tower(ms.team, ms.tgt_ix, ad, 2)
+                }
+            }
+            update(m, MinState) { windup = 0, atk_cd = min_stat(ms.kind, 5) }
+            continue
+        }
+        let mut cd2 = ms.atk_cd - 1
+        if cd2 < 0 { cd2 = 0 }
+        // acquire / engage
+        let packed = minion_acquire(ms.team, ms.x, ms.z)
+        if packed > 0 {
+            let tk = packed / 1000
+            let tix = packed % 1000
+            let rng = min_stat(ms.kind, 4)
+            let mut tx = 0
+            let mut tz = 0
+            let mut trad = 0
+            if tk == 1 {
+                let fp = get(champ_of(tix), Pos) |> unwrap
+                tx = fp.x
+                tz = fp.z
+                trad = CHAMP_RADIUS
+            }
+            if tk == 2 {
+                let ts = get(require_entity(f"min-{tix}"), MinState) |> unwrap
+                tx = ts.x
+                tz = ts.z
+                trad = MINION_RADIUS
+            }
+            if tk == 3 {
+                let ts = get(require_entity(f"twr-{tix}"), TwrState) |> unwrap
+                tx = ts.x
+                tz = ts.z
+                trad = TOWER_RADIUS
+            }
+            let reach = rng + MINION_RADIUS + trad
+            if dist2_cm(ms.x, ms.z, tx, tz) <= (reach / 10) * (reach / 10) {
+                if cd2 == 0 {
+                    update(m, MinState) { windup = MINION_WINDUP, tgt_kind = tk, tgt_ix = tix, atk_cd = 0 }
+                } else {
+                    update(m, MinState) { atk_cd = cd2 }
+                }
+                continue
+            }
+            // chase
+            let np = slide_move(ms.x, ms.z, tx, tz, min_stat(ms.kind, 6))
+            update(m, MinState) { x = np[0], z = np[1], atk_cd = cd2 }
+            continue
+        }
+        // march waypoints
+        let mut wp = ms.wp
+        let ll = lane_len(ms.lane)
+        if wp < 0 { wp = 0 }
+        if wp >= ll { wp = ll - 1 }
+        let wx = lane_pt_x(ms.lane, wp)
+        let wz = lane_pt_z(ms.lane, wp)
+        if dist2_cm(ms.x, ms.z, wx, wz) <= 200 * 200 {
+            if ms.team == 0 and wp < ll - 1 { wp = wp + 1 }
+            if ms.team == 1 and wp > 0 { wp = wp - 1 }
+        }
+        let np = slide_move(ms.x, ms.z, lane_pt_x(ms.lane, wp), lane_pt_z(ms.lane, wp), min_stat(ms.kind, 6))
+        update(m, MinState) { x = np[0], z = np[1], wp = wp, atk_cd = cd2 }
+    }
+}
+
+fn damage_minion_by_minion(src_team: int, ix: int, raw: int) -> nil {
+    let m = require_entity(f"min-{ix}")
+    let ms = get(m, MinState) |> unwrap
+    if ms.kind == 0 { return }
+    let dealt = mitigate(raw, min_stat(ms.kind, 2))
+    let mut hp = ms.hp - dealt
+    if hp <= 0 {
+        award_xp_nearby(ms.team, ms.x, ms.z, min_stat(ms.kind, 8))
+        set(m, MinState { kind: 0, team: 0, lane: 0, wp: 0, x: 0, z: 0, hp: 0, atk_cd: 0, windup: 0, tgt_kind: 0, tgt_ix: 0 })
+    } else {
+        update(m, MinState) { hp = hp }
+    }
+}
+
+// ------------------------------------------------------- tower system
+
+fn sys_towers() -> nil {
+    let clk = get_resource(Clock) |> unwrap
+    for i in range(0, N_TOWERS) {
+        let t = require_entity(f"twr-{i}")
+        let ts = get(t, TwrState) |> unwrap
+        if ts.hp <= 0 { continue }
+        if ts.windup > 1 {
+            update(t, TwrState) { windup = ts.windup - 1 }
+            continue
+        }
+        if ts.windup == 1 {
+            let rng = turret_range() + TOWER_RADIUS
+            if ts.tgt_kind == 1 {
+                let fv = get(champ_of(ts.tgt_ix), Vitals) |> unwrap
+                let fp = get(champ_of(ts.tgt_ix), Pos) |> unwrap
+                if fv.alive == 1 and dist2_cm(ts.x, ts.z, fp.x, fp.z) <= ((rng + CHAMP_RADIUS) / 10) * ((rng + CHAMP_RADIUS) / 10) {
+                    damage_champ(ts.team, ts.tgt_ix, turret_ad(), 1, 3)
+                }
+            }
+            if ts.tgt_kind == 2 {
+                let ms = get(require_entity(f"min-{ts.tgt_ix}"), MinState) |> unwrap
+                if ms.kind != 0 and dist2_cm(ts.x, ts.z, ms.x, ms.z) <= ((rng + MINION_RADIUS) / 10) * ((rng + MINION_RADIUS) / 10) {
+                    damage_minion_by_tower(ts.tgt_ix)
+                }
+            }
+            update(t, TwrState) { windup = 0, atk_cd = turret_period() }
+            continue
+        }
+        let mut cd2 = ts.atk_cd - 1
+        if cd2 < 0 { cd2 = 0 }
+        if cd2 > 0 {
+            update(t, TwrState) { atk_cd = cd2 }
+            continue
+        }
+        // era priority: champ with a fresh grudge > nearest minion > champ
+        let rng2 = ((turret_range() + TOWER_RADIUS) / 10) * ((turret_range() + TOWER_RADIUS) / 10)
+        let foe_team = 1 - ts.team
+        let fp = get(champ_of(foe_team), Pos) |> unwrap
+        let fv = get(champ_of(foe_team), Vitals) |> unwrap
+        let champ_in = fv.alive == 1 and dist2_cm(ts.x, ts.z, fp.x, fp.z) <= rng2
+        if champ_in and clk.tick - ts.grudge <= TOWER_AGGRO_TICKS {
+            update(t, TwrState) { windup = TOWER_WINDUP, tgt_kind = 1, tgt_ix = foe_team }
+            continue
+        }
+        let mut best = -1
+        let mut best_d2 = rng2 + 1
+        for j in range(0, MIN_POOL) {
+            let ms = get(require_entity(f"min-{j}"), MinState) |> unwrap
+            if ms.kind != 0 and ms.team == foe_team {
+                let d2 = dist2_cm(ts.x, ts.z, ms.x, ms.z)
+                if d2 < best_d2 {
+                    best = j
+                    best_d2 = d2
+                }
+            }
+        }
+        if best >= 0 {
+            update(t, TwrState) { windup = TOWER_WINDUP, tgt_kind = 2, tgt_ix = best }
+            continue
+        }
+        if champ_in {
+            update(t, TwrState) { windup = TOWER_WINDUP, tgt_kind = 1, tgt_ix = foe_team }
+        }
+    }
+}
+
+fn damage_minion_by_tower(ix: int) -> nil {
+    let m = require_entity(f"min-{ix}")
+    let ms = get(m, MinState) |> unwrap
+    if ms.kind == 0 { return }
+    let dealt = mitigate(turret_ad() * dr_building_to_unit_pm() / 1000, min_stat(ms.kind, 2))
+    let mut hp = ms.hp - dealt
+    if hp <= 0 {
+        set(m, MinState { kind: 0, team: 0, lane: 0, wp: 0, x: 0, z: 0, hp: 0, atk_cd: 0, windup: 0, tgt_kind: 0, tgt_ix: 0 })
+    } else {
+        update(m, MinState) { hp = hp }
+    }
+}
+
+// tower grudge: champ damaging the enemy champ near a tower draws aggro
+fn stamp_grudges(src_team: int) -> nil {
+    let clk = get_resource(Clock) |> unwrap
+    let me = champ_of(src_team)
+    let p = get(me, Pos) |> unwrap
+    for i in range(0, N_TOWERS) {
+        let t = require_entity(f"twr-{i}")
+        let ts = get(t, TwrState) |> unwrap
+        if ts.team != src_team and ts.hp > 0 {
+            let rng2 = ((turret_range() + TOWER_RADIUS + CHAMP_RADIUS) / 10) * ((turret_range() + TOWER_RADIUS + CHAMP_RADIUS) / 10)
+            if dist2_cm(ts.x, ts.z, p.x, p.z) <= rng2 {
+                update(t, TwrState) { grudge = clk.tick }
+            }
+        }
+    }
+}
+
+// ------------------------------------------------------ missiles/death
+
+fn missile_try_champ(mi: int, foe_team: int) -> int {
+    let m = require_entity(f"mis-{mi}")
+    let mm = get(m, Missile) |> unwrap
+    let mut step = mm.speed
+    if step > mm.left_mm { step = mm.left_mm }
+    let nx = mm.x + mm.dx_pm * step / 1000
+    let nz = mm.z + mm.dz_pm * step / 1000
+    let foe = champ_of(foe_team)
+    let fv = get(foe, Vitals) |> unwrap
+    let mut already = mm.hit0
+    if foe_team == 1 { already = mm.hit1 }
+    if fv.alive == 1 and already == 0 {
+        let fp = get(foe, Pos) |> unwrap
+        if seg_hits(mm.x, mm.z, nx, nz, fp.x, fp.z, mm.half_w + CHAMP_RADIUS) == 1 { return 1 }
+    }
+    return 0
+}
+
+fn seg_hits(ax: int, az: int, bx: int, bz: int, px: int, pz: int, rad: int) -> int {
+    let abx = (bx - ax) / 10
+    let abz = (bz - az) / 10
+    let apx = (px - ax) / 10
+    let apz = (pz - az) / 10
+    let ab2 = abx * abx + abz * abz
+    let mut t_pm = 0
+    if ab2 > 0 {
+        t_pm = (apx * abx + apz * abz) * 1000 / ab2
+        if t_pm < 0 { t_pm = 0 }
+        if t_pm > 1000 { t_pm = 1000 }
+    }
+    let cx = ax / 10 + abx * t_pm / 1000
+    let cz = az / 10 + abz * t_pm / 1000
+    let dx = px / 10 - cx
+    let dz = pz / 10 - cz
+    let r = rad / 10
+    if dx * dx + dz * dz <= r * r { return 1 }
+    return 0
+}
+
+fn free_missile(mi: int) -> nil {
+    set(require_entity(f"mis-{mi}"), Missile { kind: 0, x: 0, z: 0, dx_pm: 0, dz_pm: 0, speed: 0, half_w: 0, left_mm: 0, src: 0, rank: 0, hit0: 0, hit1: 0 })
+}
+
+fn sys_missiles() -> nil {
+    for i in range(0, MIS_POOL) {
+        let m = require_entity(f"mis-{i}")
+        let mm = get(m, Missile) |> unwrap
+        if mm.kind == 0 { continue }
+        let mut step = mm.speed
+        if step > mm.left_mm { step = mm.left_mm }
+        let nx = mm.x + mm.dx_pm * step / 1000
+        let nz = mm.z + mm.dz_pm * step / 1000
+        let foe_team = 1 - mm.src
+        // Q and autos collide with MINIONS too (lowest pool index first —
+        // spec order); W hits champs only; R pierces everything
+        let mut consumed = 0
+        if mm.kind == 1 or mm.kind == 2 or mm.kind == 4 {
+            for j in range(0, MIN_POOL) {
+                if consumed == 0 {
+                    let ms = get(require_entity(f"min-{j}"), MinState) |> unwrap
+                    if ms.kind != 0 and ms.team == foe_team {
+                        if seg_hits(mm.x, mm.z, nx, nz, ms.x, ms.z, mm.half_w + MINION_RADIUS) == 1 {
+                            on_missile_hit_minion(mm.kind, mm.src, mm.rank, j)
+                            if mm.kind != 4 {
+                                free_missile(i)
+                                consumed = 1
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if consumed == 1 { continue }
+        if missile_try_champ(i, foe_team) == 1 {
+            on_missile_hit_champ(mm.kind, mm.src, mm.rank, foe_team)
+            if mm.kind == 1 or mm.kind == 2 or mm.kind == 3 {
+                free_missile(i)
+                continue
+            }
+            if foe_team == 0 {
+                update(m, Missile) { hit0 = 1 }
+            } else {
+                update(m, Missile) { hit1 = 1 }
+            }
+        }
+        let mm2 = get(m, Missile) |> unwrap
+        if mm2.kind == 0 { continue }
+        let left = mm2.left_mm - step
+        if left <= 0 {
+            free_missile(i)
+        } else {
+            update(m, Missile) { x = nx, z = nz, left_mm = left }
+        }
+    }
+}
+
+fn q_cdr(team: int) -> nil {
+    let me = champ_of(team)
+    let cd = get(me, Cds) |> unwrap
+    let mut q = cd.q - Q_CDR_TICKS
+    let mut w = cd.w - Q_CDR_TICKS
+    let mut e = cd.e - Q_CDR_TICKS
+    let mut r = cd.r - Q_CDR_TICKS
+    if q < 0 { q = 0 }
+    if w < 0 { w = 0 }
+    if e < 0 { e = 0 }
+    if r < 0 { r = 0 }
+    set(me, Cds { q: q, w: w, e: e, r: r, atk: cd.atk })
+}
+
+fn on_missile_hit_champ(kind: int, src_team: int, rank: int, dst_team: int) -> nil {
+    if kind == 1 {
+        damage_champ(src_team, dst_team, champ_ad(src_team), 1, 1)
+        stamp_grudges(src_team)
+    }
+    if kind == 2 {
+        damage_champ(src_team, dst_team, Q_DMG_R[rank - 1] + champ_ad(src_team) * Q_AD_PM / 1000 + AP_M * Q_AP_PM / 1000, 1, 1)
+        q_cdr(src_team)
+        stamp_grudges(src_team)
+    }
+    if kind == 3 {
+        damage_champ(src_team, dst_team, W_DMG_R[rank - 1] + AP_M * W_AP_PM / 1000, 0, 1)
+        set(champ_of(dst_team), AsSlow { pm: W_AS_SLOW_PM, left: W_SLOW_TICKS })
+        stamp_grudges(src_team)
+    }
+    if kind == 4 {
+        damage_champ(src_team, dst_team, R_DMG_R[rank - 1] + AP_M * R_AP_PM / 1000, 0, 1)
+        stamp_grudges(src_team)
+    }
+}
+
+fn on_missile_hit_minion(kind: int, src_team: int, rank: int, ix: int) -> nil {
+    if kind == 1 {
+        damage_minion(src_team, ix, champ_ad(src_team), 1)
+    }
+    if kind == 2 {
+        damage_minion(src_team, ix, Q_DMG_R[rank - 1] + champ_ad(src_team) * Q_AD_PM / 1000 + AP_M * Q_AP_PM / 1000, 1)
+        q_cdr(src_team)
+    }
+    if kind == 4 {
+        damage_minion(src_team, ix, R_DMG_R[rank - 1] + AP_M * R_AP_PM / 1000, 1)
+    }
+}
+
+fn sys_deaths() -> nil {
+    for t in range(0, 2) {
+        let me = champ_of(t)
+        let v = get(me, Vitals) |> unwrap
+        if v.alive == 1 and v.hp <= 0 {
+            update(me, Vitals) { alive = 0, hp = 0 }
+            let clk = get_resource(Clock) |> unwrap
+            set_resource(Clock, Clock { tick: clk.tick, over: 1, winner: 1 - t, why: "blood" })
+            emit Kill { killer_team: 1 - t, victim_team: t, tick: clk.tick }
+        }
+    }
+}
+
+pub fn step() -> nil {
+    let clk = get_resource(Clock) |> unwrap
+    set_resource(Clock, Clock { tick: clk.tick + 1, over: clk.over, winner: clk.winner, why: clk.why })
+    sys_waves()
+    sys_timers(0)
+    sys_timers(1)
+    sys_move(0)
+    sys_move(1)
+    sys_windup(0)
+    sys_windup(1)
+    sys_minions()
+    sys_towers()
+    sys_missiles()
+    sys_camps()
+    sys_deaths()
+    let clk2 = get_resource(Clock) |> unwrap
+    if clk2.tick >= EPISODE_CAP and clk2.over == 0 {
+        // timeout: winner by cs, then gold
+        let cb = get(require_entity("blue"), Champ) |> unwrap
+        let cr = get(require_entity("red"), Champ) |> unwrap
+        let mut wnr = -1
+        if cb.cs > cr.cs { wnr = 0 }
+        if cr.cs > cb.cs { wnr = 1 }
+        if wnr == -1 and cb.gold > cr.gold { wnr = 0 }
+        if wnr == -1 and cr.gold > cb.gold { wnr = 1 }
+        set_resource(Clock, Clock { tick: clk2.tick, over: 1, winner: wnr, why: "time" })
+    }
+}
+
+pub fn build_world() -> nil {
+    set_resource(Clock, Clock { tick: 0, over: 0, winner: -1, why: "" })
+    let _b = entity "blue" {
+        Champ { team: 0, lvl: 1, xp: 0, gold: start_gold(), cs: 0 },
+        Pos { x: gen_spawn_west_x(), z: gen_spawn_west_z() },
+        Vitals { hp: hp_tbl[0], mp: mp_tbl[0], alive: 1, last_dmg: -999 },
+        Intent {}, Cds {}, Windup {}, AsSlow {}, Score {}, Bag {}, SkillRanks {},
+    }
+    let _r = entity "red" {
+        Champ { team: 1, lvl: 1, xp: 0, gold: start_gold(), cs: 0 },
+        Pos { x: gen_spawn_east_x(), z: gen_spawn_east_z() },
+        Vitals { hp: hp_tbl[0], mp: mp_tbl[0], alive: 1, last_dmg: -999 },
+        Intent {}, Cds {}, Windup {}, AsSlow {}, Score {}, Bag {}, SkillRanks {},
+    }
+    // jungle camps: mirrored pairs between the lanes, snapped to the
+    // nearest walkable cell from between-lane midpoints (HAND-PINNED
+    // placement rule, deterministic from the map data)
+    for i in range(0, N_CAMPS) {
+        let side = i / 2                 // 0 = west pair, 1 = east pair
+        let lane_ix = 4 + (i % 2) * 3    // along-lane anchor: wp 4 / wp 7
+        let mut ax0 = lane_ix
+        let mut ax1 = lane_ix
+        if side == 1 {
+            ax0 = lane_len(0) - 1 - lane_ix
+            ax1 = lane_len(1) - 1 - lane_ix
+        }
+        let cx = (lane_pt_x(0, ax0) + lane_pt_x(1, ax1)) / 2
+        let cz = (lane_pt_z(0, ax0) + lane_pt_z(1, ax1)) / 2
+        let snapped = snap_walkable(cx, cz)
+        let _c = entity f"camp-{i}" {
+            CampState { x: snapped[0], z: snapped[1], hp: CAMP_HP, respawn_at: 0, atk_cd: 0, tgt_team: -1 },
+        }
+    }
+    for i in range(0, MIS_POOL) {
+        let _m = entity f"mis-{i}" { Missile {} }
+    }
+    for i in range(0, MIN_POOL) {
+        let _m = entity f"min-{i}" { MinState {} }
+    }
+    // towers from the real layout; team 1 in map data = west = our team 0.
+    // Front (damageable) towers: the outermost lane turret of each side
+    // per lane — west l2/r2, east l2/r2 (tags from map4: the x furthest
+    // from each base). Hand-pinned from the layout dump; the rest are
+    // gate-invulnerable until the rung adds inhibitors.
+    let mut k = 0
+    while k < N_TOWERS {
+        let team_raw = towers_xy[k * 3]
+        let tx = towers_xy[k * 3 + 1]
+        let tz = towers_xy[k * 3 + 2]
+        let mut team = 0
+        if team_raw == 2 { team = 1 }
+        // front = |x| smallest among that team's towers (closest to mid)
+        let mut front = 0
+        let mut ax = tx
+        if ax < 0 { ax = -ax }
+        if ax < 70000 { front = 1 }
+        let _t = entity f"twr-{k}" {
+            TwrState {
+                team: team, x: tx, z: tz, hp: turret_hp(), front: front,
+                atk_cd: 0, windup: 0, tgt_kind: 0, tgt_ix: 0, grudge: -999,
+            },
+        }
+        k = k + 1
+    }
+}
+
+// ------------------------------------------------- golden scripted duel
+// Deterministic laning bots: walk top lane, last-hit, poke with Q when
+// the enemy champ is exposed, fall back on low hp. Integer decisions
+// only — the cross-implementation conformance fixture.
+
+// nearest top-lane waypoint to a position (bots navigate BY waypoints —
+// there is no pathfinder; the lane chain is the road)
+fn nearest_wp(x: int, z: int) -> int {
+    let mut best = 0
+    let mut best_d2 = 99999999999
+    for i in range(0, lane_len(0)) {
+        let d2 = dist2_cm(x, z, lane_pt_x(0, i), lane_pt_z(0, i))
+        if d2 < best_d2 {
+            best = i
+            best_d2 = d2
+        }
+    }
+    return best
+}
+
+// walk the lane toward waypoint index `goal`: always aim at the NEXT
+// waypoint along the chain (adjacent waypoints see each other through
+// open lane — corners between them can't deadlock the slide)
+fn nav_lane(team: int, x: int, z: int, goal: int) -> nil {
+    let cur = nearest_wp(x, z)
+    let mut step = cur
+    if goal > cur { step = cur + 1 }
+    if goal < cur { step = cur - 1 }
+    emit Cmd { team: team, op: 0, x: lane_pt_x(0, step), z: lane_pt_z(0, step) }
+}
+
+fn bot(team: int, tick: int) -> nil {
+    let me = champ_of(team)
+    let foe = champ_of(1 - team)
+    let p = get(me, Pos) |> unwrap
+    let fp = get(foe, Pos) |> unwrap
+    let v = get(me, Vitals) |> unwrap
+    let c = get(me, Champ) |> unwrap
+    let cd = get(me, Cds) |> unwrap
+    let lvl_ix = c.lvl - 1
+    let bag = get(me, Bag) |> unwrap
+    let sk = get(me, SkillRanks) |> unwrap
+    // opening shop: a doran's blade and a potion before leaving base
+    if tick == 0 {
+        emit Cmd { team: team, op: 8, x: 1, z: 0 }
+        return
+    }
+    if tick == 6 {
+        emit Cmd { team: team, op: 8, x: 0, z: 0 }
+        return
+    }
+    // spend skill points along the era ladder (the fixture's fixed build)
+    if sk.points > 0 {
+        let mut slot = -1
+        if sk.q < rankq_tbl[lvl_ix] { slot = 0 }
+        if slot == -1 and sk.w < rankw_tbl[lvl_ix] { slot = 1 }
+        if slot == -1 and sk.e < ranke_tbl[lvl_ix] { slot = 2 }
+        if slot == -1 and sk.r < rankr_tbl[lvl_ix] { slot = 3 }
+        if slot >= 0 {
+            emit Cmd { team: team, op: 10, x: slot, z: 0 }
+            return
+        }
+    }
+    // drink when hurt (and not already drinking)
+    if bag.potions > 0 and bag.pot_left == 0 and v.hp < champ_maxhp(team) * 1 / 2 {
+        emit Cmd { team: team, op: 9, x: 0, z: 0 }
+        return
+    }
+    // recall when rich enough for a B.F. Sword and the lane is quiet,
+    // then buy it on the platform; the channel must not be interrupted
+    if bag.recall > 0 { return }
+    let dfoe = dist_mm(p.x, p.z, fp.x, fp.z)
+    if c.gold >= ITEM_COST[5] and bag.items < ITEM_SLOTS and dfoe > 30000 {
+        let mut hx = gen_spawn_west_x()
+        let mut hz = gen_spawn_west_z()
+        if team == 1 {
+            hx = gen_spawn_east_x()
+            hz = gen_spawn_east_z()
+        }
+        let fr = fountain_radius() / 10
+        if dist2_cm(p.x, p.z, hx, hz) <= fr * fr {
+            emit Cmd { team: team, op: 8, x: 5, z: 0 }
+        } else {
+            emit Cmd { team: team, op: 7, x: 0, z: 0 }
+        }
+        return
+    }
+    // the red fixture jungles once: clear camp-2 in a bounded window
+    // (puts camp combat, retaliation, and the kill payout on the trace)
+    if team == 1 and tick >= 1800 and tick < 3600 {
+        let cj = get(require_entity("camp-2"), CampState) |> unwrap
+        if cj.hp > 0 {
+            let reach = (ATK_RANGE + MINION_RADIUS) / 10
+            if dist2_cm(p.x, p.z, cj.x, cj.z) <= reach * reach {
+                if cd.atk == 0 {
+                    let mut k = 0
+                    while k < K_SLOTS {
+                        let packed = slot_target(team, p.x, p.z, k)
+                        if packed == 4002 {
+                            emit Cmd { team: team, op: 2, x: k, z: 0 }
+                            k = K_SLOTS
+                        } else {
+                            if packed < 0 { k = K_SLOTS } else { k = k + 1 }
+                        }
+                    }
+                }
+            } else {
+                emit Cmd { team: team, op: 0, x: cj.x, z: cj.z }
+            }
+            return
+        }
+    }
+    // retreat toward our end of the lane below 30%
+    if v.hp < hp_tbl[lvl_ix] * 3 / 10 {
+        let mut home = 1
+        if team == 1 { home = lane_len(0) - 2 }
+        nav_lane(team, p.x, p.z, home)
+        return
+    }
+    // dumb-but-deterministic: attack the first slot holding an enemy
+    // unit within attack range (no last-hit smarts — fixtures don't
+    // need to be good, they need to be reproducible)
+    if cd.atk == 0 {
+        let mut k = 0
+        while k < K_SLOTS {
+            let packed = slot_target(team, p.x, p.z, k)
+            if packed >= 0 {
+                let tk = packed / 1000
+                let tix = packed % 1000
+                let mut tx = 0
+                let mut tz = 0
+                let mut trad = 0
+                if tk == 1 {
+                    let fp2 = get(champ_of(tix), Pos) |> unwrap
+                    tx = fp2.x
+                    tz = fp2.z
+                    trad = CHAMP_RADIUS
+                }
+                if tk == 2 {
+                    let ms = get(require_entity(f"min-{tix}"), MinState) |> unwrap
+                    tx = ms.x
+                    tz = ms.z
+                    trad = MINION_RADIUS
+                }
+                if tk == 3 {
+                    let ts = get(require_entity(f"twr-{tix}"), TwrState) |> unwrap
+                    tx = ts.x
+                    tz = ts.z
+                    trad = TOWER_RADIUS
+                }
+                if dist2_cm(p.x, p.z, tx, tz) <= ((ATK_RANGE + trad) / 10) * ((ATK_RANGE + trad) / 10) {
+                    emit Cmd { team: team, op: 2, x: k, z: 0 }
+                    return
+                }
+                k = k + 1
+            } else {
+                k = K_SLOTS
+            }
+        }
+    }
+    // poke: Q at the enemy champ inside Q range
+    let d = dist_mm(p.x, p.z, fp.x, fp.z)
+    if d <= ez_q_range() and cd.q == 0 {
+        emit Cmd { team: team, op: 3, x: fp.x, z: fp.z }
+        return
+    }
+    // play with OUR wave: follow the most advanced friendly minion on
+    // the top lane (like a laner shadowing the push), stand at its back
+    let mut bx = 0
+    let mut bz = 0
+    let mut found = 0
+    let mut best_prog = -999
+    for i in range(0, MIN_POOL) {
+        let ms = get(require_entity(f"min-{i}"), MinState) |> unwrap
+        if ms.kind != 0 and ms.team == team and ms.lane == 0 {
+            let mut prog = ms.wp
+            if team == 1 { prog = lane_len(0) - ms.wp }
+            if prog > best_prog {
+                best_prog = prog
+                bx = ms.x
+                bz = ms.z
+                found = 1
+            }
+        }
+    }
+    if found == 1 {
+        let d2 = dist2_cm(p.x, p.z, bx, bz)
+        if d2 > 600 * 600 {
+            if d2 <= 2500 * 2500 {
+                emit Cmd { team: team, op: 0, x: bx, z: bz }
+            } else {
+                nav_lane(team, p.x, p.z, nearest_wp(bx, bz))
+            }
+        }
+        return
+    }
+    // no minions yet: hold two waypoints to our side of mid
+    let mid = lane_len(0) / 2
+    let mut hold = mid - 2
+    if team == 1 { hold = mid + 2 }
+    nav_lane(team, p.x, p.z, hold)
+}
+
+fn champ_state(team: int) -> str {
+    let me = champ_of(team)
+    let p = get(me, Pos) |> unwrap
+    let v = get(me, Vitals) |> unwrap
+    let c = get(me, Champ) |> unwrap
+    let cd = get(me, Cds) |> unwrap
+    return f"{p.x},{p.z},{v.hp},{v.mp},{v.alive},{c.lvl},{c.xp},{c.gold},{c.cs},{cd.q},{cd.atk}"
+}
+
+// the economy/jungle additions ride the wide contract as G/J lines
+fn econ_dump() -> nil {
+    for t in range(0, 2) {
+        let b = get(champ_of(t), Bag) |> unwrap
+        let sk = get(champ_of(t), SkillRanks) |> unwrap
+        print(f"G {t} {b.ad},{b.maxhp},{b.ms},{b.items},{b.potions},{b.pot_left},{b.recall},{sk.q},{sk.w},{sk.e},{sk.r},{sk.points}")
+    }
+    for i in range(0, N_CAMPS) {
+        let cs = get(require_entity(f"camp-{i}"), CampState) |> unwrap
+        print(f"J {i} {cs.x},{cs.z},{cs.hp},{cs.respawn_at},{cs.atk_cd},{cs.tgt_team}")
+    }
+}
+
+fn world_counts() -> str {
+    let mut nm = 0
+    let mut mh = 0
+    for i in range(0, MIN_POOL) {
+        let ms = get(require_entity(f"min-{i}"), MinState) |> unwrap
+        if ms.kind != 0 {
+            nm = nm + 1
+            mh = mh + ms.hp
+        }
+    }
+    let mut th = 0
+    for i in range(0, N_TOWERS) {
+        let ts = get(require_entity(f"twr-{i}"), TwrState) |> unwrap
+        th = th + ts.hp
+    }
+    return f"{nm},{mh},{th}"
+}
+
+// the WIDE contract: every live unit, every checkpoint — aggregates
+// can hide compensating drift, per-unit lines cannot
+fn deep_dump() -> nil {
+    for i in range(0, MIN_POOL) {
+        let ms = get(require_entity(f"min-{i}"), MinState) |> unwrap
+        if ms.kind != 0 {
+            print(f"M {i} {ms.kind},{ms.team},{ms.lane},{ms.wp},{ms.x},{ms.z},{ms.hp},{ms.atk_cd},{ms.windup},{ms.tgt_kind},{ms.tgt_ix}")
+        }
+    }
+    for i in range(0, N_TOWERS) {
+        let ts = get(require_entity(f"twr-{i}"), TwrState) |> unwrap
+        print(f"T {i} {ts.team},{ts.hp},{ts.front},{ts.atk_cd},{ts.windup},{ts.tgt_kind},{ts.tgt_ix},{ts.grudge}")
+    }
+    for i in range(0, MIS_POOL) {
+        let mm = get(require_entity(f"mis-{i}"), Missile) |> unwrap
+        if mm.kind != 0 {
+            print(f"X {i} {mm.kind},{mm.x},{mm.z},{mm.dx_pm},{mm.dz_pm},{mm.left_mm},{mm.src},{mm.rank},{mm.hit0},{mm.hit1}")
+        }
+    }
+    econ_dump()
+}
+
+fn main() -> nil {
+    build_world()
+    let mut t = 0
+    let mut running = 1
+    while t < 6000 and running == 1 {
+        if t % 6 == 0 {
+            bot(0, t)
+            bot(1, t)
+        }
+        flush_events()
+        step()
+        if t % 300 == 0 {
+            print(f"S {t} B[{champ_state(0)}] R[{champ_state(1)}] W[{world_counts()}]")
+            deep_dump()
+        }
+        let clk = get_resource(Clock) |> unwrap
+        if clk.over == 1 { running = 0 }
+        t = t + 1
+    }
+    let clk = get_resource(Clock) |> unwrap
+    print(f"S {clk.tick} B[{champ_state(0)}] R[{champ_state(1)}] W[{world_counts()}]")
+    deep_dump()
+    print(f"END tick={clk.tick} winner={clk.winner} why={clk.why}")
+}

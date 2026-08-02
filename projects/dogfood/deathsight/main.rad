@@ -1,0 +1,246 @@
+// DEATHSIGHT — the roguelike that shows you your death before you take it.
+// Terminal host. The brain lives in lib_sight.rad (shared with the browser
+// version: projects/playground/deathsight.html + web_deathsight.rad).
+//
+//   1. THE SIGHT   — every turn, every legal move is staged on the live world
+//                    and simulate_par() samples jittered monster futures in
+//                    parallel. The HUD shows the probability you die within
+//                    DEPTH turns for each move. commit(checkpoint) puts the
+//                    universe back, byte for byte.
+//   2. NECROMANCY  — the game keeps one fork() per turn. When you die it
+//                    rewinds 1, 2, 3... turns, branching across every first
+//                    move, until it finds the timeline where you escape —
+//                    the smallest rewind that saves you IS the point of no
+//                    return. Then it replays the ghost.
+//   3. AUTOPSY     — every live hp write flows through events, so
+//                    why(you, Vital) names your killer from the causality
+//                    ledger: handler -> event -> emitter.
+//
+// Run:    rad projects/dogfood/deathsight/main.rad
+// Modes (first input line):
+//   demo / blank — a doomed hero ignores the sight and beelines for the exit
+//   oracle       — the hero obeys the sight (watch the same dungeon get beaten)
+//   play         — you: w/a/s/d to move (walk into a monster to smite it),
+//                  . or blank to wait, q to concede
+//
+// Tape:   rad projects/dogfood/deathsight/main.rad --record ds.radr   (then: rad replay ds.radr)
+
+use "lib_sight.rad"
+
+// ---------------------------------------------------------------------------
+// Terminal rendering — from the live world, or from a lib units-dump.
+// ---------------------------------------------------------------------------
+
+fn glyph_for(kind: str) -> str {
+    if kind == "you" { return "@" }
+    return chars(kind)[0]
+}
+
+fn render_dump(dump: str) -> str {
+    let mut grid = []
+    for y in range(0, H) {
+        let row_chars = chars(MAP[y])
+        let mut row = []
+        for x in range(0, W) {
+            let mut cell = "."
+            if row_chars[x] == "#" { cell = "#" }
+            if x == EXIT_X and y == EXIT_Y { cell = ">" }
+            row << cell
+        }
+        grid << row
+    }
+    let mut status = []
+    for u in split(dump, ";") {
+        let f = split(u, " ")
+        let mut gl = glyph_for(f[1])
+        if f[1] == "you" and to_num(f[4]) <= 0 { gl = "x" }
+        grid[to_num(f[3])][to_num(f[2])] = gl
+        status << f"{f[0]} {f[4]}/{f[5]}"
+    }
+    let mut rows = []
+    for y in range(0, H) {
+        rows << "  " + join(grid[y], " ")
+    }
+    rows << "  " + join(status, " | ")
+    return join(rows, "\n")
+}
+
+fn render_live() -> str {
+    return render_dump(dump_units())
+}
+
+fn sight_line(report: list) -> str {
+    let mut parts = []
+    for entry in report {
+        let c = entry[0]
+        let pct = entry[1] * 100 / SAMPLES
+        parts << f"{c.label} {pct}%"
+    }
+    return "  deathsight> " + join(parts, " | ")
+}
+
+fn to_num(s: str) -> int {
+    let digits = { "0": 0, "1": 1, "2": 2, "3": 3, "4": 4, "5": 5, "6": 6, "7": 7, "8": 8, "9": 9 }
+    let mut n = 0
+    for c in chars(s) {
+        if !contains(keys(digits), c) { return n }
+        n = n * 10 + digits[c]
+    }
+    return n
+}
+
+// ---------------------------------------------------------------------------
+// Hosts' narration of the necromancy search.
+// ---------------------------------------------------------------------------
+
+fn run_necromancy(checkpoints: list, history: list, death_turn: int) -> nil {
+    print("\nNECROMANCY: searching the multiverse for the timeline where you live...")
+    let futures_at_death = (get_resource(Run) |> unwrap).futures
+    let res = necromancy_search(checkpoints, death_turn)
+    let found_back = res[0]
+    let first_label = res[1]
+    let steps = res[2]
+    let probes = res[3]
+    let search_cost = res[4]
+
+    for p in probes {
+        print(f"  rewind {p[0]} turn(s) -> tried all {p[1]} first moves: every line ends in death")
+    }
+
+    if found_back == - 1 {
+        print(f"  no surviving timeline within {MAX_REWIND} turns of rewind:")
+        print("  your death was sealed before you ever saw it coming.")
+    } else {
+        print(f"  rewind {found_back} turn(s), first move {first_label} -> A SURVIVING TIMELINE EXISTS")
+        let start_turn = death_turn - found_back + 1
+        if found_back == 1 {
+            print(f"\n=== your death was never inevitable ===")
+            print(f"the move you made on turn {death_turn} ({history[death_turn - 1]}) is itself what killed you.")
+        } else {
+            print(f"\n=== THE POINT OF NO RETURN was turn {start_turn + 1} ===")
+            print(f"at turn {start_turn} the multiverse still contained an escape —")
+            print(f"you went {history[start_turn - 1]}, and after that every future ends in death.")
+        }
+        print("\n-- the life you should have lived --")
+        for s in steps {
+            let mut note = ""
+            if s[0] - 1 < len(history) { note = f"   (you went: {history[s[0] - 1]})" }
+            print(f"ghost turn {s[0]}: goes {s[1]}{note}")
+            print(render_dump(s[2]))
+        }
+        print(f"\nthe ghost walks out of the dungeon. you died on turn {death_turn}.")
+    }
+    let r = get_resource(Run) |> unwrap
+    set_resource(Run, Run { turn: r.turn, futures: futures_at_death + search_cost, log: r.log })
+}
+
+fn human_pick(report: list) -> Cand {
+    let mut asking = true
+    while asking {
+        print("  move> w/a/s/d (into a monster = smite) | . or blank = wait | q concede")
+        let key = trim(readline())
+        if key == "q" { return Cand { label: "concede", dir: "stay", kind: "concede" } }
+        let mut want = "stay"
+        if key == "w" { want = "N" }
+        if key == "s" { want = "S" }
+        if key == "a" { want = "W" }
+        if key == "d" { want = "E" }
+        for entry in report {
+            let c = entry[0]
+            if c.dir == want { return c }
+        }
+        print("  that way is a wall.")
+    }
+    return Cand {}
+}
+
+fn main() -> nil {
+    rand_seed(1337)
+    spawn_dungeon()
+    let you = get_entity("you")
+
+    print("=== DEATHSIGHT ===")
+    print("the floor knows when you will die. @ you, > the way out,")
+    print("g ghoul (3 dmg), h hound (fast), s spitter (shoots, range 4).")
+    print(f"the sight stages every move and samples {SAMPLES} jittered futures, {DEPTH} turns deep, in parallel.")
+    print("mode> blank/demo = doomed hero ignores the sight | oracle = obey the sight | play = you")
+    let mut mode = trim(readline())
+    if mode == "" { mode = "demo" }
+    if mode == "demo" { print("\na doomed hero strides in, ignoring the whispers of the floor...") }
+    if mode == "oracle" { print("\nthe hero closes their eyes and lets the multiverse walk for them...") }
+
+    let t_run = clock()
+    let mut checkpoints = []
+    let mut history = []
+    let mut fate = ""
+    let mut t = 1
+    while fate == "" and t <= MAX_TURNS {
+        let r = get_resource(Run) |> unwrap
+        set_resource(Run, Run { turn: t, futures: r.futures, log: r.log })
+        checkpoints << fork()
+        let turn_start = fork()
+
+        let rep = deathsight()
+        print(f"\n-- turn {t} --")
+        print(render_live())
+        print(sight_line(rep))
+
+        let mut c = Cand {}
+        if mode == "play" {
+            c = human_pick(rep)
+        } else { if mode == "oracle" {
+            c = choose_oracle(rep)
+            } else {
+                c = choose_doomed(rep)
+        } }
+        if c.kind == "concede" {
+            fate = "conceded"
+            break
+        }
+        if mode != "play" { print(f"  move: {c.label}") }
+        history << c.label
+        apply_live(c)
+
+        let yp = get(you, Pos) |> unwrap
+        if yp.x == EXIT_X and yp.y == EXIT_Y {
+            fate = "escaped"
+        } else {
+            monsters_act()
+            let yv = get(you, Vital) |> unwrap
+            if yv.hp <= 0 { fate = "died" }
+        }
+
+        // The fence: a turn may touch positions, hp, and the run journal.
+        // Nothing else in the universe is allowed to change — checkable here.
+        assert_only_changed(turn_start, fork(), [Pos, Vital, Intent, Run])
+        t = t + 1
+    }
+
+    let death_turn = t - 1
+    let r = get_resource(Run) |> unwrap // captured before any rewind: this is YOUR journal
+
+    if fate == "escaped" {
+        print(f"\n=== you walk out alive on turn {death_turn} ===")
+        print(render_live())
+    }
+    if fate == "" {
+        print(f"\n=== you survived {MAX_TURNS} turns without escaping — the dungeon keeps you ===")
+    }
+    if fate == "conceded" {
+        print("\n=== you kneel. the dungeon accepts. ===")
+    }
+    if fate == "died" {
+        print(f"\n=== YOU DIE on turn {death_turn} ===")
+        print(render_live())
+        print("\nautopsy (the causality ledger):")
+        print(why(you, Vital))
+        run_necromancy(checkpoints, history, death_turn)
+    }
+
+    let elapsed = clock() - t_run
+    let total = (get_resource(Run) |> unwrap).futures
+    let rate = to_fixed(float(total) / elapsed, 0)
+    print(f"\nthe sight burned {total} forked futures in {to_fixed(elapsed * 1000.0, 1)} ms ({rate} universes/sec)")
+    print("journal of the life you actually lived:")
+    print(r.log)
+}

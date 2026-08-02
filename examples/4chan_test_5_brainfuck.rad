@@ -1,0 +1,92 @@
+// O(n) bracket precompute, O(1) jumps per `[`/`]` — same idea as cursed_brainfuck.rad.
+
+pure fn precompute_jumps(program: list < str > ) -> list < int > {
+    let n = len(program)
+    let mut jump_map = []
+    let mut i = 0
+    while i < n {
+        jump_map = push(jump_map, 0)
+        i = i + 1
+    }
+
+    let mut stack = []
+    i = 0
+    while i < n {
+        if program[i] == "[" {
+            stack = push(stack, i)
+        }
+        if program[i] == "]" {
+            if len(stack) > 0 {
+                let open = pop(stack)
+                stack = drop_last(stack)
+                jump_map[open] = i
+                jump_map[i] = open
+            }
+        }
+        i = i + 1
+    }
+    return jump_map
+}
+
+pure fn run_bf(code: str) -> str {
+    let program = chars(code)
+    let jump_map = precompute_jumps(program)
+    let tape_size = 300
+    let mut tape = []
+    let mut i = 0
+    while i < tape_size {
+        tape = push(tape, 0)
+        i = i + 1
+    }
+
+    let mut ip = 0
+    let mut dp = 0
+    let mut output = ""
+    let plen = len(program)
+    let mut steps = 0
+    let max_steps = 100000
+
+    while ip < plen and steps < max_steps {
+        steps = steps + 1
+        let cmd = program[ip]
+
+        if cmd == ">" { dp = dp + 1 }
+        if cmd == "<" { dp = dp - 1 }
+        if cmd == "+" { tape[dp] = tape[dp] + 1 }
+        if cmd == "-" { tape[dp] = tape[dp] - 1 }
+        if cmd == "." { output = output + chr(tape[dp]) }
+        if cmd == "[" {
+            if tape[dp] == 0 {
+                ip = jump_map[ip]
+            }
+        }
+        if cmd == "]" {
+            if tape[dp] != 0 {
+                ip = jump_map[ip]
+            }
+        }
+
+        ip = ip + 1
+    }
+
+    return output
+}
+
+fn main() -> nil {
+    let code = "++++++++[>++++++++++<-]>++.>++++++[>++++++++++<-]>+++++.>++++++[>++++++++++<-]>++++++++."
+
+    print("Executing Brainfuck (jump table + step limit)...")
+    let result = run_bf(code)
+    print("Output:", result)
+    assert(result == "RAD", "brainfuck must print RAD")
+
+    print("--- Pipeline batch (pure interpreter composes with |> ) ---")
+    let programs = [
+        "++++++++++++++++++++++++++++++++++++++++++++++++.",
+        "+++++++++++++++++++++++++++++++++++++++++++++++++.",
+        "++++++++++++++++++++++++++++++++++++++++++++++++++.",
+        "+++++++++++++++++++++++++++++++++++++++++++++++++++."
+    ]
+    let outs = programs |> map(run_bf)
+    print("Batch outputs:", outs)
+}

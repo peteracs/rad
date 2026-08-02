@@ -1,0 +1,61 @@
+// PROBE 17: two parallel systems iterating the SAME entity set and emitting
+// DIFFERENT event types - the exact shape of Advance/Wearing in bugs/11.
+//
+// bugs/09 emitted ONE event type from two systems over DIFFERENT entity sets
+// and the order was rock stable. bugs/11 has two DIFFERENT event types over
+// the SAME entities, and its `scrapped` tally (which counts how often Broke
+// beat Finished to the same machine) is the number that swings most between
+// runs.
+//
+// spec.md:1754-1755: the main VM "merges writes in schedule order and sorts
+// parallel-emitted events by trace id, then event name".
+//
+// Handlers for Alpha and Beta each append their letter to a shared log, so
+// the printed sequence IS the delivery order. Run it several times.
+
+component Tag { n: 0 }
+
+resource G1 { n: 0 }
+resource G2 { n: 0 }
+resource Log { head: "", count: 0, checksum: 0 }
+
+event Alpha { n: int }
+event Beta { n: int }
+
+system EmitAlpha(t: Tag, _g: mut G1) {
+    emit Alpha { n: t.n }
+}
+
+system EmitBeta(t: Tag, _g: mut G2) {
+    emit Beta { n: t.n }
+}
+
+fn record(letter: str) -> nil {
+    let l = res(Log)
+    let pos = l.count + 1
+    update(Log) {
+        count = pos,
+        checksum = (l.checksum * 31 + ord(letter) + pos % 17) % 1000000007,
+    }
+    if pos <= 16 {
+        update(Log) { head = res(Log).head + letter }
+    }
+}
+
+on Alpha(_e) {
+    record("A")
+}
+
+on Beta(_e) {
+    record("B")
+}
+
+for i in range(0, 200) {
+    spawn(Tag { n: i })
+}
+
+schedule [EmitAlpha, EmitBeta]
+flush_events()
+
+let l = res(Log)
+print(f"events={l.count} first16={l.head} checksum={l.checksum}")

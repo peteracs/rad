@@ -1,0 +1,11 @@
+// Attack: find where no element matches — should return None
+fn main() -> nil {
+    let data = [1, 2, 3]
+    let result = find(data, fn(x) { return x > 100 })
+    match result {
+        Some(v) => { print("BUG:", v) }
+        None => { print("none") }
+    }
+}
+
+// expect: none

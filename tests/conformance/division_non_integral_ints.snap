@@ -1,0 +1,6 @@
+---
+source: tests\conformance\division_non_integral_ints.rad
+exit_code: 0
+---
+5
+2

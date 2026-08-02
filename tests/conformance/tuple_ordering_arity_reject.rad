@@ -1,0 +1,5 @@
+// Tuple keys of different arity never order silently.
+fn main() -> nil {
+    let xs = [(1, 2), (1, 2, 3)]
+    print(xs |> sort_by(fn(r) { return r }))
+}

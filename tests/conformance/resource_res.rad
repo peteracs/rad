@@ -1,0 +1,37 @@
+// res(R) — direct resource access (RAD_GAPS #7). Declared resources
+// auto-initialize from field defaults, so the `get_resource(R) |> unwrap`
+// Option dance is ceremony; res() reads the value straight.
+
+resource Rng { s: int = 12345 }
+resource Score { points: int = 0, combo: int = 1, label: str = "run" }
+
+fn lcg_next() -> int {
+    // read-modify-write composes in one update entry
+    update(Rng) { s = (res(Rng).s * 1103515245 + 12345) % 2147483648 }
+    return shr(res(Rng).s, 16) % 1000
+}
+
+fn main() -> nil {
+    // defaults are visible before any set_resource/update
+    print(res(Rng).s)               // 12345
+    print(res(Score).points)        // 0
+    print(res(Score).label)         // run
+
+    // updates flow through
+    update(Score) { points = 150, combo = 3 }
+    print(res(Score).points)        // 150
+    print(res(Score).combo)         // 3
+
+    // field access composes into expressions and f-strings
+    print(res(Score).points * res(Score).combo)    // 450
+    print(f"score={res(Score).points}x{res(Score).combo}")
+
+    // the one-integer-RNG that motivated the gap, now two lines per draw
+    print(lcg_next())               // 468
+    print(lcg_next())               // 988
+    print(lcg_next())               // 117
+
+    // res() agrees with the long form, always
+    let long = get_resource(Rng) |> unwrap
+    print(long.s == res(Rng).s)     // true
+}

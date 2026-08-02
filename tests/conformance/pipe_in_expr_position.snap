@@ -1,0 +1,11 @@
+---
+source: tests\conformance\pipe_in_expr_position.rad
+exit_code: 0
+---
+vec: [6, 2, 4]
+[13, 11, 12, "pad"]
+7
+calls: ["b!", "a!"]
+["a", "pad"]
+chain: [9, 4]
+[6, 2, 4]

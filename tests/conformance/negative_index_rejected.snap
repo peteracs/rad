@@ -1,0 +1,7 @@
+---
+source: tests\conformance\negative_index_rejected.rad
+exit_code: 1
+---
+
+---stderr---
+Error: [line 3] in main: Negative index

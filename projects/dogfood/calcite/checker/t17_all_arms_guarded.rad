@@ -1,0 +1,21 @@
+// SUSPECT: every variant appears, so the match is "exhaustive" -- but every
+// arm carries a guard that is false, so NO arm can run. Does the checker
+// count a guarded arm as covering its variant?
+type Light {
+    Red {}
+    Amber {}
+    Green {}
+}
+
+fn go(l: Light, open: bool) -> str {
+    match l {
+        Red when open => { return "red" }
+        Amber when open => { return "amber" }
+        Green when open => { return "green" }
+    }
+}
+
+fn main() -> nil {
+    let r = Light::Red {}
+    print(f"guarded-false result: [{go(r, false)}]")
+}

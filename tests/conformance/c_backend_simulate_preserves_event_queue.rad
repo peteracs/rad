@@ -1,0 +1,34 @@
+// backend: both
+component Counter { n: 0 }
+
+component Driver { x: 0 }
+
+event Ping {}
+
+entity counter_e {
+    Counter { n: 0 }
+}
+
+on Ping(_e) {
+    let c = unwrap(get(counter_e, Counter))
+    set(counter_e, Counter { n: c.n + 1 })
+}
+
+system Noop(_d: Driver) {}
+
+fn main() -> nil {
+    let _d = spawn(Driver { x: 1 })
+
+    emit Ping {}
+    let f = fork()
+    let _f2 = simulate(f, [system::Noop], 1)
+
+    let before = unwrap(get(counter_e, Counter))
+    print(before.n)
+
+    flush_events()
+    let after = unwrap(get(counter_e, Counter))
+    print(after.n)
+}
+// expect: 0
+// expect: 1

@@ -1,0 +1,73 @@
+// World merge demo (list item #7) — git merge for program state.
+//
+// Two strategies are explored from the same base timeline, then merged:
+// the economy branch raises gold, the combat branch trains the hero and
+// recruits a scout. Field-level three-way merge lands both, including an
+// id-collision remap: each branch spawned its own new entity under the
+// same runtime id, and every reference follows the remap.
+//
+//   rad projects/dogfood/worldmerge/main.rad
+
+component Stats { atk: 1, def: 1 }
+
+component Tag { label: "" }
+
+component Escort { guard: entity | nil = nil }
+resource Bank { gold: 100, vault: "copper" }
+
+let hero = spawn("hero", Stats { atk: 5, def: 5 })
+let base = fork()
+
+// ---- branch A: economy. Raise gold, upgrade the vault, hire a merchant.
+set_resource(Bank, Bank { gold: 950, vault: "copper" })
+let _merchant = spawn("merchant", Tag { label: "sells potions" })
+let economy = fork()
+
+// ---- rewind, branch B: combat. Train the hero, recruit a scout who
+// escorts him. The scout gets the SAME runtime id the merchant got in
+// branch A — two different logical entities on one handle.
+commit(base)
+set(hero, Stats { atk: 9, def: 5 })
+let scout = spawn("scout", Tag { label: "fast" })
+set(hero, Escort { guard: scout })
+let combat = fork()
+
+// ---- merge: both futures, one timeline.
+match merge_forks(base, economy, combat) {
+    Ok(merged) => {
+        commit(merged)
+        let b = get_resource(Bank) |> unwrap
+        let s = get(hero, Stats) |> unwrap
+        print(f"bank: {b.gold} gold | hero: atk {s.atk} def {s.def}")
+        let m = get_entity("merchant")
+        let sc = get_entity("scout")
+        let tm = get(m, Tag) |> unwrap
+        let ts = get(sc, Tag) |> unwrap
+        print(f"merchant ({tm.label}) and scout ({ts.label}) both exist: {m != sc}")
+        let e = get(hero, Escort) |> unwrap
+        print(f"escort reference followed the remap: {e.guard == sc}")
+    }
+    Err(msg) => { print(msg) }
+}
+
+// ---- and the honest failure: both branches touch the same field.
+// Conflicts are data, not prose: destructure and report.
+let base2 = fork()
+set(hero, Stats { atk: 11, def: 5 })
+let left = fork()
+commit(base2)
+set(hero, Stats { atk: 12, def: 5 })
+let right = fork()
+match merge_forks(base2, left, right) {
+    Ok(_) => { print("merged?!") }
+    Err(conflicts) => {
+        for c in conflicts {
+            match c {
+                FieldConflict { ent: _ent, name, comp, field, base, ours, theirs } => {
+                    print(f"conflict: {name}: {comp}.{field} changed in both forks (base {base}, ours {ours}, theirs {theirs})")
+                }
+                _ => { print("conflict: structural") }
+            }
+        }
+    }
+}

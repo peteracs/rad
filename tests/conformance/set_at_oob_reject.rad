@@ -1,0 +1,5 @@
+// set_at() bounds-checks like indexed assignment: no silent growth.
+fn main() -> nil {
+    let xs = [1, 2, 3]
+    print(set_at(xs, 3, 99))
+}

@@ -1,0 +1,57 @@
+// Cross: phases + guarded handlers + update + typed events + main->nil ?
+component Health { hp: 100, max_hp: 100 }
+component Armor { defense: 0 }
+
+event Damage { target: entity, amount: int }
+event Death { who: entity }
+
+on Damage(e) where e.amount > 0 {
+    let h = get(e.target, Health)?
+    let armor = get(e.target, Armor)
+    let def = match armor {
+        Some(a) => { a.defense }
+        None => { 0 }
+    }
+    let effective = e.amount - def
+    if effective < 0 { return }
+    let new_hp = h.hp - effective
+    if new_hp <= 0 {
+        update(e.target, Health) { hp = 0 }
+        emit Death { who: e.target }
+    } else {
+        update(e.target, Health) { hp = new_hp }
+    }
+}
+
+on Death(e) {
+    print("death!")
+}
+
+system Regen(h: mut Health) {
+    if h.hp > 0 and h.hp < h.max_hp {
+        h.hp = h.hp + 1
+    }
+}
+
+system PrintHP(h: Health) {
+    print(f"  hp={h.hp}/{h.max_hp}")
+}
+
+phase Tick { Regen }
+phase Report { PrintHP }
+
+fn main() -> nil {
+    let hero = spawn(Health { hp: 20, max_hp: 100 }, Armor { defense: 5 })
+
+    schedule [Tick]
+    schedule [Report]
+
+    emit Damage { target: hero, amount: 10 }
+    flush_events()
+    schedule [Report]
+
+    emit Damage { target: hero, amount: 100 }
+    flush_events()
+    flush_events()
+    schedule [Report]
+}

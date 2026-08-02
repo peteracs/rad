@@ -1,0 +1,44 @@
+use "core/c-backend/src/lexer.rad"
+use "core/c-backend/src/parser.rad"
+use "core/c-backend/src/checker.rad"
+
+fn main() -> nil {
+    // Test 1: Valid program - should have 0 errors
+    let src1 = "fn foo(x: int) -> int { return x + 1 } fn main() -> nil { let a = foo(42) print(a) }"
+    let tokens1 = lex(src1)
+    let ast1 = parse(tokens1)
+    let errs1 = check_program(ast1)
+    print(f"test1 errors: {len(errs1)}")
+
+    // Test 2: Wrong arity for builtin
+    let src2 = "fn main() -> nil { print(1, 2) }"
+    let tokens2 = lex(src2)
+    let ast2 = parse(tokens2)
+    let errs2 = check_program(ast2)
+    print(f"test2 errors: {len(errs2)}")
+    if len(errs2) > 0 {
+        print(f"  {format_errors(errs2)}")
+    }
+
+    // Test 3: Wrong arity for user fn
+    let src3 = "fn add(a: int, b: int) -> int { return a + b } fn main() -> nil { add(1) }"
+    let tokens3 = lex(src3)
+    let ast3 = parse(tokens3)
+    let errs3 = check_program(ast3)
+    print(f"test3 errors: {len(errs3)}")
+    if len(errs3) > 0 {
+        print(f"  {format_errors(errs3)}")
+    }
+
+    // Test 4: Assign to immutable variable
+    let src4 = "fn main() -> nil { let x = 1 x = 2 }"
+    let tokens4 = lex(src4)
+    let ast4 = parse(tokens4)
+    let errs4 = check_program(ast4)
+    print(f"test4 errors: {len(errs4)}")
+    if len(errs4) > 0 {
+        print(f"  {format_errors(errs4)}")
+    }
+
+    print("checker tests done")
+}

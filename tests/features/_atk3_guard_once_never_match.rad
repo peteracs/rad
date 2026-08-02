@@ -1,0 +1,16 @@
+// Attack: once + guard where guard NEVER passes — handler never fires, never consumed
+event Ping { val: int }
+
+on Ping once (e) where e.val > 1000 {
+    print("BUG: should never fire")
+}
+
+fn main() -> nil {
+    for i in range(0, 10) {
+        emit Ping { val: i }
+    }
+    flush_events()
+    print("survived")
+}
+
+// expect: survived

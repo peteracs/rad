@@ -1,0 +1,10 @@
+---
+source: tests\conformance\variables.rad
+exit_code: 0
+---
+10
+5
+99
+10
+3
+6

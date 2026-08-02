@@ -1,0 +1,16 @@
+// BUG 05: the mixed-value-map warning's own suggested remedy does not work.
+//
+// The diagnostic says verbatim:
+//   hint: Use a struct for fixed-shape records, or annotate the binding as
+//         `map<K, any>` to silence this warning
+//
+// This file applies exactly that annotation. The warning still fires.
+//
+// Run: target\debug\rad.exe projects\dogfood\bastion\bugs\05_map_any_hint_ineffective.rad
+
+let unannotated = { "n": 1, "s": "two" }
+print(f"unannotated: {unannotated}")
+
+// The hint's remedy, applied literally.
+let annotated: map<str, any> = { "n": 1, "s": "two" }
+print(f"annotated:   {annotated}")

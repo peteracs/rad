@@ -1,0 +1,5 @@
+---
+source: tests\features\test_on_when_guard.rad
+exit_code: 0
+---
+30

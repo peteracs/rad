@@ -1,0 +1,39 @@
+// moba-rad RAD-owned UDP authority.
+// Browser clients use WebTransport through a host/gateway that forwards
+// the same compact packets to this UDP authority. Do not add HTTP polling here.
+
+use "sim/components.rad"
+use "world/scene.rad"
+use "world/avatars.rad"
+use "sim/movement.rad"
+use "server/state.rad"
+use "server/replay_log.rad"
+use "server/clock.rad"
+use "transport/udp_match.rad"
+
+// No avatar is seeded at startup: the authority owns no player by default.
+// Each peer's avatar is seeded on connect (see remember_peer), so an empty
+// server broadcasts no phantom, unowned avatar to clients.
+
+fn main() -> nil {
+    let cfg = res(ServerConfig)
+    let started_ms = now_unix_ms()
+    start_authority(started_ms)
+    start_match_replay(default_match_replay_path(), started_ms)
+    let udp_socket = udp_bind(cfg.host, cfg.udp_port)
+
+    print(f"moba-rad authority UDP {cfg.host}:{cfg.udp_port}")
+
+    while authority_should_run() {
+        let now_ms = now_unix_ms()
+        pump_udp_match(udp_socket, authority_udp_timeout_ms(now_ms))
+        let after_io_ms = now_unix_ms()
+        let ticks = pump_authority_clock(after_io_ms)
+        cleanup_udp_peers(after_io_ms)
+        maybe_send_udp_snapshot(udp_socket, ticks, after_io_ms)
+    }
+    cleanup_udp_peers(now_unix_ms())
+    finish_match_replay(now_unix_ms())
+    udp_close(udp_socket)
+    print(f"moba-rad authority stopped: {shutdown_reason()}")
+}

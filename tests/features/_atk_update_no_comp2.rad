@@ -1,0 +1,9 @@
+// Attack: update on entity without the component — explicit check
+component C { x: 0 }
+
+fn main() -> nil {
+    let e = spawn()
+    print("before update")
+    update(e, C) { x = 5 }
+    print("after update")
+}

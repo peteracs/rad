@@ -1,0 +1,9 @@
+fn main() -> nil {
+    let data = [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
+    let filtered = data |> filter(fn([a, b, c]) { return a + b + c > 10 })
+    let mut result = 0
+    for [x, y, z] in filtered {
+        result = result + x * y * z
+    }
+    print(result)
+}

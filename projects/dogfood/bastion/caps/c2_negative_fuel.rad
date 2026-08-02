@@ -1,0 +1,9 @@
+// caps case 2: negative fuel.
+component Reactor { temp: 0 }
+let _s = spawn("site", Reactor { temp: 1 })
+print("before")
+match sandbox_run("print(\"hi\")", fork(), f"""{ "write": [], "fuel": -1 }""") {
+    Ok(_f) => { print("Ok") }
+    Err(m) => { print(f"Err: {m}") }
+}
+print("after")

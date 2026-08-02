@@ -1,0 +1,17 @@
+// Attack: guard using 'or' logic
+event Msg { code }
+
+on Msg(e) where e.code == 1 or e.code == 3 {
+    print("match:", e.code)
+}
+
+fn main() -> nil {
+    emit Msg { code: 0 }
+    emit Msg { code: 1 }
+    emit Msg { code: 2 }
+    emit Msg { code: 3 }
+    flush_events()
+}
+
+// expect: match: 1
+// expect: match: 3

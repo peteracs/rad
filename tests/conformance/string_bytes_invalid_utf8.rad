@@ -1,0 +1,3 @@
+// expect-runtime-error: does not form valid UTF-8
+let s = "🚀" // 4 bytes
+print(substring_bytes(s, 0, 2)) // Invalid cut, splits the emoji

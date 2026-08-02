@@ -1,0 +1,65 @@
+// PROBE 16: a STATE-typed component field written from inside a parallel
+// system via transition().
+//
+// Clean controls so far (all deterministic, all correct):
+//   bugs/10  per-entity component writes in a parallel batch
+//   bugs/13  parallel systems sharing read components + handler feedback
+//   bugs/14  delayed `emit ... after N` timers with a parallel batch
+//   bugs/15  a component written by both a system and a handler
+//
+// The remaining ingredient in bugs/11 is the state machine: Feed does
+//   f.state = unwrap(transition(f.state, "start"))
+// inside a system, i.e. a parallel worker writes a non-primitive (state /
+// sum-type) value into a component field, which the main VM must then merge.
+//
+// 40 entities, 60 ticks, flipping A <-> B every tick. After an even number of
+// ticks every entity must be back in A, and the B-visit tally must be exact.
+
+component Fsm { state: S::A }
+component Visits { b: 0, a: 0 }
+component Filler { n: 0 }
+
+state S {
+    A { on go -> B }
+    B { on go -> A }
+}
+
+resource G1 { n: 0 }
+resource G2 { n: 0 }
+
+// writes a STATE value into a component field, in a parallel batch
+system Flip(f: mut Fsm, v: mut Visits, _g: mut G1) {
+    f.state = unwrap(transition(f.state, "go"))
+    if f.state is B {
+        v.b = v.b + 1
+    } else {
+        v.a = v.a + 1
+    }
+}
+
+// harmless neighbour with disjoint components/resources -> forces parallelism
+system Filling(x: mut Filler, _g: mut G2) {
+    x.n = x.n + 1
+}
+
+for _i in range(0, 40) {
+    spawn(Fsm { state: S::A }, Visits { b: 0, a: 0 }, Filler { n: 0 })
+}
+
+for _t in range(0, 60) {
+    schedule [Flip, Filling]
+}
+
+let vb = query { Visits } select Visits |> reduce(0, fn(acc, v) { return acc + v.b })
+let va = query { Visits } select Visits |> reduce(0, fn(acc, v) { return acc + v.a })
+let fill = query { Filler } select Filler |> reduce(0, fn(acc, x) { return acc + x.n })
+
+let mut in_a = 0
+for (_id, f) in query { Fsm } {
+    if f.state is A {
+        in_a = in_a + 1
+    }
+}
+
+print(f"B-visits={vb} A-visits={va} filler={fill} back_in_A={in_a}")
+print("expected: B-visits=1200 A-visits=1200 filler=2400 back_in_A=40")

@@ -1,0 +1,4 @@
+prio T-2 1
+digest
+shutdown
+quit

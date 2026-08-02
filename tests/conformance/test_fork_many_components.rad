@@ -1,0 +1,55 @@
+// Test: Entities with many different components
+// Stress the archetype snapshot system
+
+component A { a: 0 }
+component B { b: 0 }
+component C { c: 0 }
+component D { d: 0 }
+component E { e: 0 }
+component F { f: 0 }
+
+system IncA(a: mut A) { a = A { a: a.a + 1 } }
+system IncB(b: mut B) { b = B { b: b.b + 1 } }
+
+// Entity with all 6 components
+let e1 = spawn("e1", A { a: 0 }, B { b: 0 }, C { c: 0 }, D { d: 0 }, E { e: 0 }, F { f: 0 })
+
+// Entity with only A and C
+let e2 = spawn("e2", A { a: 100 }, C { c: 100 })
+
+// Entity with only B
+let e3 = spawn("e3", B { b: 200 })
+
+// Simulate IncA and IncB for 10 ticks
+let f = fork()
+let f = simulate(f, [system::IncA, system::IncB], 10)
+
+// Main untouched
+let ma = get(e1, A) |> unwrap
+assert(ma.a == 0, f"Main e1.A should be 0, got {ma.a}")
+
+commit(f)
+
+// e1: has both A and B, both incremented 10x
+let a1 = get(e1, A) |> unwrap
+let b1 = get(e1, B) |> unwrap
+assert(a1.a == 10, f"e1.A expected 10, got {a1.a}")
+assert(b1.b == 10, f"e1.B expected 10, got {b1.b}")
+
+// e1: other components unchanged
+let c1 = get(e1, C) |> unwrap
+let d1 = get(e1, D) |> unwrap
+assert(c1.c == 0, f"e1.C should be unchanged, got {c1.c}")
+assert(d1.d == 0, f"e1.D should be unchanged, got {d1.d}")
+
+// e2: has A only (no B), so only IncA ran
+let a2 = get(e2, A) |> unwrap
+assert(a2.a == 110, f"e2.A expected 110, got {a2.a}")
+let c2 = get(e2, C) |> unwrap
+assert(c2.c == 100, f"e2.C should be unchanged, got {c2.c}")
+
+// e3: has B only, IncB ran
+let b3 = get(e3, B) |> unwrap
+assert(b3.b == 210, f"e3.B expected 210, got {b3.b}")
+
+print("PASS: many components")

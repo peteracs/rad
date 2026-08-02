@@ -1,0 +1,13 @@
+// fib(30), recursive — function-call overhead. Same algorithm in every
+// runtime; the harness cross-checks RESULT and reads MS.
+fn fib(n: int) -> int {
+    if n < 2 { return n }
+    return fib(n - 1) + fib(n - 2)
+}
+
+fn main() -> nil {
+    let t0 = now_unix_ms()
+    let r = fib(30)
+    let t1 = now_unix_ms()
+    print(f"RESULT {r} MS {t1 - t0}")
+}

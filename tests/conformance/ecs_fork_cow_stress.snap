@@ -1,0 +1,27 @@
+---
+source: tests\conformance\ecs_fork_cow_stress.rad
+exit_code: 0
+---
+Peek 0 e1: alpha_updated ["a", "sys"]
+Live 0 e1: alpha ["a"]
+Peek 1 e1: alpha_updated ["a", "sys"]
+Live 1 e1: alpha ["a"]
+Peek 2 e1: alpha_updated ["a", "sys"]
+Live 2 e1: alpha ["a"]
+Peek 3 e1: alpha_updated ["a", "sys"]
+Live 3 e1: alpha ["a"]
+Peek 4 e1: alpha_updated ["a", "sys"]
+Live 4 e1: alpha ["a"]
+Peek 5 e1: alpha_updated ["a", "sys"]
+Live 5 e1: alpha ["a"]
+Peek 6 e1: alpha_updated ["a", "sys"]
+Live 6 e1: alpha ["a"]
+Peek 7 e1: alpha_updated ["a", "sys"]
+Live 7 e1: alpha ["a"]
+Peek 8 e1: alpha_updated ["a", "sys"]
+Live 8 e1: alpha ["a"]
+Peek 9 e1: alpha_updated ["a", "sys"]
+Live 9 e1: alpha ["a"]
+Committed.
+Final e1: alpha_updated ["a", "sys"]
+Final e2: beta_live_live_live_live_live_live_live_live_live_updated ["b", "live", "live", "live", "live", "live", "live", "live", "live", "live", "sys"]

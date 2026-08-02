@@ -1,0 +1,7 @@
+---
+source: tests\conformance\test_fork_unknown_system.rad
+exit_code: 1
+---
+
+---stderr---
+Error: Unknown system 'NonExistentSystem' in system reference

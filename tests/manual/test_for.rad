@@ -1,0 +1,7 @@
+fn main() -> nil {
+    let l = [ ["a", "b"], ["c", "d"] ]
+    for p in l {
+        print(p[0])
+        print(p[1])
+    }
+}

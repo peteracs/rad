@@ -1,0 +1,192 @@
+// GROWWORK — browser-moba's XP and leveling, written the way it wants
+// to be written (fake-port round 18). The code comes first; whatever
+// the language can't run becomes a feature.
+//
+// The era rules (ExpCurve.ini + Mission.ini [Experience], via
+// map/rules.ts):
+//   - The curve is a LADDER: xp required to reach each level, 1..18.
+//   - A minion's death sweeps champions in EXP_GIVEN_RADIUS; the
+//     bounty splits by the SplitXP ladder — solo lanes earn 92%,
+//     shared lanes mint 110% split across the heads. The ladder is
+//     map DATA; an even split is the fallback.
+//   - XP grants cascade: one big grant can clear several rungs.
+//   - Level-ups mint skill points; ranks are GATED — a spell rank
+//     never exceeds ceil(level/2), the ultimate unlocks at 6/11/16.
+
+pub let MAX_LEVEL = 18
+pub let XP_RADIUS = 14.0
+
+// cumulative xp to REACH level i+2 (era-shaped quadratic curve)
+pub let EXP_CURVE = [280.0, 660.0, 1140.0, 1720.0, 2400.0, 3180.0, 4060.0, 5040.0, 6120.0, 7300.0, 8580.0, 9960.0, 11440.0, 13020.0, 14700.0, 16480.0, 18360.0]
+
+// per-head share by recipient count - 1 (the 92%/110% ladder)
+pub let SPLIT = [0.92, 0.55, 0.38, 0.30, 0.25]
+
+pub let ULT_LEVELS = [6, 11, 16]
+
+component Pos { at: (float, float) = (0.0, 0.0) }
+
+component Growth { xp: float = 0.0, level: int = 1, points: int = 0 }
+
+component Ranks { q: int = 0, w: int = 0, e: int = 0, r: int = 0 }
+
+pub event MinionDied { at: (float, float), bounty: float }
+pub event LeveledUp { who: entity, to: int }
+
+pure fn share_for(heads: int) -> float {
+    if heads <= 0 { return 0.0 }
+    if heads <= len(SPLIT) { return SPLIT[heads - 1] }
+    return 1.0 / float(heads)              // beyond the ladder: even split
+}
+
+// total xp needed to REACH a level
+pure fn xp_to_reach(level: int) -> float {
+    if level <= 1 { return 0.0 }
+    return EXP_CURVE[level - 2]
+}
+
+// the cascade: one grant may clear several rungs
+fn grant_xp(who: entity, amount: float) -> nil {
+    let g = require(who, Growth)
+    let mut xp = g.xp + amount
+    let mut level = g.level
+    let mut points = g.points
+    while level < MAX_LEVEL and xp >= xp_to_reach(level + 1) {
+        level = level + 1
+        points = points + 1
+        emit LeveledUp { who: who, to: level }
+    }
+    update(who, Growth) { xp = xp, level = level, points = points }
+}
+
+// the death sweep: everyone in radius shares by the ladder
+on MinionDied(e) {
+    let heads = query { Growth } |> filter(fn(c) {
+        return has(c, Pos) and dist(require(c, Pos).at, e.at) <= XP_RADIUS
+    })
+    let share = e.bounty * share_for(len(heads))
+    for h in heads {
+        grant_xp(h, share)
+    }
+}
+
+// ------------------------------------------------------ rank gates
+
+pure fn max_basic_rank(level: int) -> int {
+    return min((level + 1) / 2, 5)
+}
+
+pure fn max_ult_rank(level: int) -> int {
+    return ULT_LEVELS |> filter(fn(l) { return level >= l }) |> len
+}
+
+// spend a point: gates enforced, illegal spends refused
+pub fn rank_up(who: entity, slot: str) -> bool {
+    let g = require(who, Growth)
+    if g.points <= 0 { return false }
+    let r = require(who, Ranks)
+    let ok = if slot == "r" {
+        r.r < max_ult_rank(g.level)
+    } else if slot == "q" {
+        r.q < max_basic_rank(g.level)
+    } else if slot == "w" {
+        r.w < max_basic_rank(g.level)
+    } else {
+        r.e < max_basic_rank(g.level)
+    }
+    if not ok { return false }
+    if slot == "q" { update(who, Ranks) { q = r.q + 1 } }
+    if slot == "w" { update(who, Ranks) { w = r.w + 1 } }
+    if slot == "e" { update(who, Ranks) { e = r.e + 1 } }
+    if slot == "r" { update(who, Ranks) { r = r.r + 1 } }
+    update(who, Growth) { points = g.points - 1 }
+    return true
+}
+
+pure fn dist(a: (float, float), b: (float, float)) -> float {
+    let (dx, dy) = a - b
+    return sqrt(dx * dx + dy * dy)
+}
+
+// ------------------------------------------------------- scenarios
+
+fn champ(name: str, at: (float, float)) -> entity {
+    return entity name { Pos { at: at }, Growth {}, Ranks {} }
+}
+
+fn kill_minion_at(at: (float, float), bounty: float, times: int) -> nil {
+    for _ in range(0, times) {
+        emit MinionDied { at: at, bounty: bounty }
+        flush_events()
+        flush_events()
+    }
+}
+
+fn check(ok: bool, id: str, detail: str) -> int {
+    if ok {
+        print(f"  pass  {id}")
+        return 1
+    }
+    print(f"  FAIL  {id}: {detail}")
+    return 0
+}
+
+fn main() -> nil {
+    let mut passed = 0
+    let total = 6
+    let blank = fork()
+
+    // ---- solo lane earns 92%
+    commit(blank)
+    let solo = champ("solo", (0.0, 0.0))
+    kill_minion_at((2.0, 0.0), 100.0, 1)
+    let g = require(solo, Growth)
+    passed = passed + check(g.xp == 92.0, "solo-92", f"xp={g.xp}")
+
+    // ---- duo lane mints 110%, split 55/55
+    commit(blank)
+    let a = champ("a", (0.0, 0.0))
+    let b = champ("b", (1.0, 0.0))
+    kill_minion_at((2.0, 0.0), 100.0, 1)
+    let xa = require(a, Growth).xp
+    let xb = require(b, Growth).xp
+    let ok_duo = abs(xa - 55.0) < 0.000001 and abs(xb - 55.0) < 0.000001
+    passed = passed + check(ok_duo, "duo-110", f"{xa}/{xb}")
+
+    // ---- out-of-radius heads earn nothing
+    commit(blank)
+    let near = champ("near", (0.0, 0.0))
+    let far = champ("far", (40.0, 0.0))
+    kill_minion_at((2.0, 0.0), 100.0, 1)
+    let ok_radius = require(far, Growth).xp == 0.0 and require(near, Growth).xp == 92.0
+    passed = passed + check(ok_radius, "radius", f"far={require(far, Growth).xp}")
+
+    // ---- one grant cascades through several rungs
+    commit(blank)
+    let smurf = champ("smurf", (0.0, 0.0))
+    grant_xp(smurf, 1200.0)
+    let sg = require(smurf, Growth)
+    passed = passed + check(sg.level == 4 and sg.points == 3, "cascade", f"lvl={sg.level} pts={sg.points}")
+
+    // ---- rank gates: r refused before 6, q capped at ceil(level/2)
+    commit(blank)
+    let c = champ("c", (0.0, 0.0))
+    grant_xp(c, 2400.0)                    // exactly level 6
+    let lvl = require(c, Growth).level
+    let r1 = rank_up(c, "q")               // ok (cap 3)
+    let r2 = rank_up(c, "q")               // ok
+    let r3 = rank_up(c, "q")               // ok (rank 3 == cap)
+    let r4 = rank_up(c, "q")               // REFUSED: cap
+    let r5 = rank_up(c, "r")               // ok at 6
+    let ok_gates = lvl == 6 and r1 and r2 and r3 and not r4 and r5
+    passed = passed + check(ok_gates, "rank-gates", f"lvl={lvl} {r1} {r2} {r3} {r4} {r5}")
+
+    // ---- the curve tops out at 18
+    commit(blank)
+    let cap = champ("cap", (0.0, 0.0))
+    grant_xp(cap, 99999.0)
+    passed = passed + check(require(cap, Growth).level == MAX_LEVEL, "cap-18", f"{require(cap, Growth).level}")
+
+    print(f"{passed}/{total} passed")
+    assert(passed == total, "the growth rules must hold")
+}

@@ -1,0 +1,306 @@
+// RADTRACK sync server — the shared timeline.
+//
+//   rad projects/dogfood/radtrack/server.rad [-- <savefile>]
+//   rad --record incident.radr projects/dogfood/radtrack/server.rad -- <savefile>
+//
+// Offline-first sync, the rad way: a client PULLs the world once (full fork
+// bytes, base remembered by digest), works disconnected for hours, then
+// SYNCs a fork_delta of everything it did. The server reconstructs the
+// client's world, three-way merges it against its own current state with
+// the pulled base as ancestor, and answers with the delta from the client's
+// pushed state to the merged world. Both sides converge byte-for-byte —
+// digests are compared to prove it.
+//
+// Conflicts are DATA, not prose. merge_forks reports them as `Conflict` sum
+// values; server policy (in rad) auto-resolves bookkeeping collisions
+// (`Ticket.updated` -> max wins) and ships everything else to the human as
+// json. The client answers RESOLVE with per-conflict picks.
+//
+// Line protocol (one request per connection, "\n"-terminated):
+//   PULL <user>                       -> fork bytes
+//   SYNC <user> <base_digest>\t<delta>
+//                                     -> MERGED <digest>\t<down_delta>
+//                                      | CONFLICTS\t<json RS json RS ...>
+//                                      | ERROR ...
+//   RESOLVE <user> <i:server|yours,...>\t<delta>
+//                                     -> MERGED <digest>\t<down_delta> | ERROR
+//   WHY <T-n>                         -> provenance, newlines as " | "
+//   LIST                              -> ticket count + open rows
+//   SHUTDOWN                          -> BYE (persists first)
+
+use "lib_track.rad"
+
+let PORT = 7979
+
+fn persist(save_path: str) -> nil {
+    write_file(save_path, save_world())
+}
+
+// Policy: `updated` is bookkeeping, not intent — both sides bumping it is
+// not a real conflict. Take the later timestamp. Everything else is a
+// human decision.
+fn auto_resolutions(conflicts: list < Conflict > ) -> list < (Conflict, any) > {
+    let mut picks = []
+    for c in conflicts {
+        match c {
+            FieldConflict { ent, name, comp, field, base, ours, theirs } => {
+                if comp == "Ticket" and field == "updated" {
+                    picks << (c, max(ours, theirs))
+                }
+            }
+            ResourceFieldConflict { res, field, base, ours, theirs } => {
+                // Both sides minted ticket ids: next_id collides. The ids
+                // themselves were already remapped by the merge (spawn
+                // collision handling); the counter takes the max.
+                if res == "Tracker" and field == "next_id" {
+                    picks << (c, max(ours, theirs))
+                }
+            }
+            _ => {}
+        }
+    }
+    return picks
+}
+
+fn conflict_json(c: Conflict) -> str {
+    match c {
+        FieldConflict { ent, name, comp, field, base, ours, theirs } => {
+            return json_stringify( {
+                "kind": "field", "name": name, "comp": comp, "field": field,
+                "base": base, "ours": ours, "theirs": theirs
+            })
+        }
+        ResourceFieldConflict { res, field, base, ours, theirs } => {
+            return json_stringify( {
+                "kind": "resfield", "res": res, "field": field,
+                "base": base, "ours": ours, "theirs": theirs
+            })
+        }
+        NameConflict { name, entities } => {
+            // Both sides minted the same ticket name offline. Resolvable
+            // since D3: the client answers rename=<server's>|<yours>.
+            return json_stringify( { "kind": "name", "name": name, "n": f"{len(entities)}" })
+        }
+        _ => {
+            return json_stringify( { "kind": "structural", "detail": "see server log" })
+        }
+    }
+}
+
+// The conflicts a human still has to look at, after policy.
+fn human_conflicts(conflicts: list < Conflict > ) -> list < Conflict > {
+    let mut out = []
+    for c in conflicts {
+        match c {
+            FieldConflict { ent, name, comp, field, base, ours, theirs } => {
+                if comp == "Ticket" and field == "updated" { continue }
+                out << c
+            }
+            ResourceFieldConflict { res, field, base, ours, theirs } => {
+                if res == "Tracker" and field == "next_id" { continue }
+                out << c
+            }
+            _ => { out << c }
+        }
+    }
+    return out
+}
+
+fn main() -> nil {
+    let argv = sys_args()
+    let mut save_path = "projects/dogfood/radtrack/server_world.radw"
+    if len(argv) >= 1 { save_path = argv[0] }
+
+    if file_exists(save_path) {
+        let n = load_world(read_file(save_path))
+        print(f"radtrack server: restored {n} entities from {save_path}")
+    } else {
+        // A fresh tracker is born with the backlog every project starts with.
+        let t0 = now_unix_s()
+        new_ticket("Set up CI", "founder", t0)
+        new_ticket("Write onboarding doc", "founder", t0)
+        print(f"radtrack server: fresh world, seeded {len(ticket_ids(\"all\"))} tickets")
+    }
+
+    let listener = tcp_listen("127.0.0.1", PORT)
+    print(f"listening on 127.0.0.1:{PORT}")
+
+    // Base forks clients might still sync against, by digest. A real server
+    // would expire these; we cap the map and a stale client re-pulls.
+    let mut bases = {}
+    // Pending RESOLVE state per user: the conflicts and forks of the SYNC
+    // that just refused, so picks can be applied to the same merge.
+    let mut pending = {}
+
+    let mut running = true
+    while running {
+        let conn = tcp_accept(listener)
+        let msg = read_msg(conn)
+        let parts = split(msg, " ")
+        let cmd = parts[0]
+
+        if cmd == "PULL" {
+            if len(keys(bases)) > 32 { bases = {} }
+            let base = fork()
+            let bytes = fork_to_bytes(base)
+            bases[digest_of(base)] = base
+            send_msg(conn, bytes)
+            let user = parts[1]
+            print(f"PULL {user}: served {digest_of(base)} ({len(bytes)} B)")
+        }
+        if cmd == "SYNC" or cmd == "RESOLVE" {
+            let user = parts[1]
+            let rest = join(slice(parts, 2, len(parts)), " ")
+            let dparts = split(rest, "\t")
+            let mut reply = "ERROR malformed request"
+
+            let mut base = fork()      // placeholder, replaced below
+            let mut have_base = false
+            let mut picks_spec = ""
+            if cmd == "SYNC" and len(dparts) == 2 and contains(keys(bases), dparts[0]) {
+                base = bases[dparts[0]]
+                have_base = true
+            }
+            if cmd == "RESOLVE" and len(dparts) == 2 and contains(keys(pending), user) {
+                base = pending[user]
+                have_base = true
+                picks_spec = dparts[0]
+            }
+
+            if !have_base {
+                reply = "ERROR unknown base (pull again)"
+            } else {
+                match fork_apply(base, dparts[1]) {
+                    Ok(theirs) => {
+                        let ours = fork()
+                        let mut auto = []
+                        let mut merged_ok = false
+                        let mut merged = ours
+                        match merge_forks(base, ours, theirs) {
+                            Ok(m) => {
+                                merged = m
+                                merged_ok = true
+                            }
+                            Err(conflicts) => {
+                                auto = auto_resolutions(conflicts)
+                                let humans = human_conflicts(conflicts)
+                                if cmd == "RESOLVE" {
+                                    // i:server keeps ours, i:yours keeps theirs,
+                                    // i:rename=A|B renames a name claim's
+                                    // entities (merge-id order: server's
+                                    // entity first, the remapped client
+                                    // spawn second)
+                                    let mut chosen = auto
+                                    for spec in split(picks_spec, ",") {
+                                        let kv = split(spec, ":")
+                                        let idx = int(kv[0])
+                                        let c = humans[idx]
+                                        match c {
+                                            FieldConflict { ent, name, comp, field, base, ours, theirs } => {
+                                                let mut v = theirs
+                                                if kv[1] == "server" { v = ours }
+                                                chosen << (c, v)
+                                            }
+                                            NameConflict { name, entities } => {
+                                                if starts_with(kv[1], "rename=") {
+                                                    let names = split(slice(kv[1], 7, len(kv[1])), "|")
+                                                    chosen << (c, names)
+                                                }
+                                            }
+                                            _ => {}
+                                        }
+                                    }
+                                    match merge_forks_with(base, ours, theirs, chosen) {
+                                        Ok(m) => {
+                                            merged = m
+                                            merged_ok = true
+                                        }
+                                        Err(remaining) => {
+                                            reply = f"ERROR {len(remaining)} conflicts survived resolution"
+                                        }
+                                    }
+                                } else if len(humans) == 0 {
+                                    // policy resolved everything mechanical
+                                    match merge_forks_with(base, ours, theirs, auto) {
+                                        Ok(m) => {
+                                            merged = m
+                                            merged_ok = true
+                                        }
+                                        Err(remaining) => {
+                                            reply = f"ERROR {len(remaining)} conflicts survived policy"
+                                        }
+                                    }
+                                } else {
+                                    let mut blobs = []
+                                    for c in humans { blobs << conflict_json(c) }
+                                    pending[user] = base
+                                    reply = "CONFLICTS\t" + join(blobs, chr(30))
+                                    print(f"SYNC {user}: {len(humans)} conflicts for the human, {len(auto)} auto-resolved pending")
+                                }
+                            }
+                        }
+                        if merged_ok {
+                            commit(merged)
+                            flush_events()
+                            persist(save_path)
+                            let new_base = fork()
+                            let nd = digest_of(new_base)
+                            bases[nd] = new_base
+                            pending = remove_key(pending, user)
+                            let down = fork_delta(theirs, new_base)
+                            reply = f"MERGED {nd}\t" + down
+                            let upb = len(dparts[1])
+                            print(f"{cmd} {user}: merged -> {nd} ({upb} B up, {len(down)} B down)")
+                        }
+                    }
+                    Err(m) => { reply = f"ERROR delta: {m}" }
+                }
+            }
+            send_msg(conn, reply)
+        }
+        if cmd == "WHY" {
+            let ent = get_entity(parts[1])
+            if ent == nil {
+                send_msg(conn, f"no ticket {parts[1]}")
+            } else {
+                send_msg(conn, replace(why(ent, Ticket), "\n", " | "))
+            }
+        }
+        if cmd == "DIGEST" {
+            // world digest + schema fingerprint: the client can tell
+            // "diverged" apart from "different schema vintage".
+            send_msg(conn, world_digest() + " " + schema_digest())
+        }
+        if cmd == "CERTIFY" {
+            // Rolling-upgrade convergence receipt: the client ships its
+            // FULL fork bytes; decoding migrates them to OUR schema, and
+            // world_digest(fork) hashes that view — comparable with our
+            // own digest even when the client runs an older build.
+            let payload = join(slice(parts, 1, len(parts)), " ")
+            match fork_from_bytes(payload) {
+                Ok(theirs) => {
+                    let their_view = world_digest(theirs)
+                    let ours = world_digest()
+                    let mut verdict = "MISMATCH"
+                    if their_view == ours { verdict = "MATCH" }
+                    send_msg(conn, f"{their_view} {ours} {verdict}")
+                }
+                Err(m) => { send_msg(conn, f"ERROR {m}") }
+            }
+        }
+        if cmd == "LIST" {
+            let ids = ticket_ids("all")
+            let mut rows = []
+            for id in ids { rows << fmt_row(id, now_unix_s()) }
+            send_msg(conn, f"{len(ids)} tickets | " + join(rows, " | "))
+        }
+        if cmd == "SHUTDOWN" {
+            persist(save_path)
+            send_msg(conn, "BYE")
+            running = false
+        }
+        tcp_close(conn)
+    }
+    tcp_close(listener)
+    print("server down, world persisted")
+}

@@ -1,0 +1,4 @@
+---
+source: tests\conformance\modules\adversarial_graph\mid_right.rad
+exit_code: 0
+---

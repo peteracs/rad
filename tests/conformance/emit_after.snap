@@ -1,0 +1,11 @@
+---
+source: tests\conformance\emit_after.rad
+exit_code: 0
+---
+t1 ping now
+t2 ping one
+t2 ping also-one
+t4 ping three
+t7 hop 1
+t9 hop 2
+t11 hop 3

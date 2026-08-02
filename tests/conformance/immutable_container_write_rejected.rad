@@ -1,0 +1,6 @@
+// backend: both
+fn main() -> nil {
+    let xs = [1, 2, 3]
+    xs[0] = 9
+}
+// expect-runtime-error: Cannot assign to immutable variable 'xs'

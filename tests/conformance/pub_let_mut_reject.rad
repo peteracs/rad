@@ -1,0 +1,7 @@
+// `pub let` must be immutable — exported mutable globals would be shared
+// mutable state in disguise; resources are the sanctioned tool for that.
+pub let mut COUNTER = 0
+
+fn main() -> nil {
+    print(COUNTER)
+}

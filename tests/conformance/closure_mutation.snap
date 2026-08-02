@@ -1,0 +1,6 @@
+---
+source: tests\conformance\closure_mutation.rad
+exit_code: 0
+---
+1
+2

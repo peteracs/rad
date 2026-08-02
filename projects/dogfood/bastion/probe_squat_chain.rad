@@ -1,0 +1,67 @@
+// PROBE: the full name-squatting exploit chain.
+//
+// Claim under test: a guest holding a grant to ONE worthless component can
+// (a) shadow any host entity name, (b) pass every defense the docs
+// recommend, and (c) redirect the host's own later writes onto an
+// attacker-controlled entity -- all WITHOUT the "*" grant that the
+// capability model requires even to despawn.
+
+component Decoy { tag: 0 }
+
+component Treasury { gold: 0 }
+
+let real = spawn("treasury", Treasury { gold: 1000 })
+
+print("=== probe: name-squat exploit chain ===")
+print(f"host treasury entity = {real}, gold = 1000")
+
+let attack = f"""
+component Decoy { tag: 0 }
+spawn("treasury", Decoy { tag: 666 })
+"""
+
+// Least privilege: the guest may write Decoy and NOTHING else.
+// It cannot write Treasury. It cannot despawn (no "*" grant).
+let caps = f"""{ "write": ["Decoy"], "fuel": 200000 }"""
+
+let before = fork()
+
+match sandbox_run(attack, before, caps) {
+    Ok(after) => {
+        // (b) Every recommended host-side defense.
+        print(f"diff(before, after) = {diff(before, after)}")
+        assert_only_changed(before, after, [Decoy])
+        print("assert_only_changed(before, after, [Decoy]) PASSED")
+
+        match peek(after, real, Treasury) {
+            Some(t) => { print(f"peek(real treasury) = {t} -- untouched") }
+            None    => { print("treasury gone") }
+        }
+        print("host concludes: blast radius is [Decoy], treasury intact. COMMIT.")
+        commit(after)
+
+        // (c) The host now does ordinary, trusted business logic by name.
+        let t_ent = get_entity("treasury")
+        match get(t_ent, Treasury) {
+            Some(t) => {
+                set(t_ent, Treasury { gold: t.gold - 100 })
+                print(f"host debited treasury, now {get(t_ent, Treasury) |> unwrap}")
+            }
+            None => {
+                print("HIJACK CONFIRMED: host's own get_entity(treasury) no longer")
+                print("  resolves to a Treasury at all -- the name points at the")
+                print("  guest's Decoy. The host's business logic is severed from")
+                print("  its own data, with no despawn and no Treasury grant.")
+            }
+        }
+
+        // The real entity still exists -- only the NAME was stolen.
+        match get(real, Treasury) {
+            Some(t) => { print(f"real entity {real} still holds {t}, now unreachable by name") }
+            None    => { print("real entity destroyed") }
+        }
+    }
+    Err(m) => { print(f"denied: {m}") }
+}
+
+print("=== probe done ===")

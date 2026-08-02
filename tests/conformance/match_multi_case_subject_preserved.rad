@@ -1,0 +1,16 @@
+// backend: both
+// Regression: multi-case match must preserve subject across failed arms.
+type Packet {
+    Ping { id: 0 }
+    Pong { id: 0 }
+    Data { id: 0 }
+}
+
+let p = Packet::Data { id: 7 }
+match p {
+    Ping { id } => { print("ping") print(id) }
+    Pong { id } => { print("pong") print(id) }
+    Data { id } => { print("data") print(id) }
+}
+// expect: data
+// expect: 7

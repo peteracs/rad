@@ -1,0 +1,129 @@
+// =====================================================================
+//  Elevator System — Multi-state FSM with events
+// =====================================================================
+
+state ElevatorState {
+    Idle {
+        on call -> Moving
+    }
+    Moving {
+        on arrive -> DoorsOpening
+    }
+    DoorsOpening {
+        on opened -> DoorsOpen
+    }
+    DoorsOpen {
+        on close -> DoorsClosing
+        on obstruction -> DoorsOpening
+    }
+    DoorsClosing {
+        on closed -> Idle
+        on obstruction -> DoorsOpening
+    }
+}
+
+event FloorRequest { floor }
+
+event FloorArrival { floor }
+
+event DoorEvent { action }
+
+event ElevatorStatus { floor, state_name, passengers }
+
+on FloorRequest(e) {
+    print(f"  [REQ] Floor {e.floor} requested")
+}
+
+on FloorArrival(e) {
+    print(f"  [ARR] Arrived at floor {e.floor}")
+}
+
+on DoorEvent(e) {
+    print(f"  [DOOR] {e.action}")
+}
+
+on ElevatorStatus(e) {
+    print(f"  [STATUS] Floor {e.floor} | {e.state_name} | {e.passengers} passengers")
+}
+
+fn state_str(s) {
+    let mut name = ""
+    match s {
+        Idle => { name = "Idle" }
+        Moving => { name = "Moving" }
+        DoorsOpening => { name = "Opening" }
+        DoorsOpen => { name = "Open" }
+        DoorsClosing => { name = "Closing" }
+    }
+    return name
+}
+
+fn main() -> any {
+    print("=== Elevator System ===\n")
+
+    let mut es = ElevatorState::Idle
+    let mut floor = 1
+    let mut passengers = 0
+
+    emit ElevatorStatus { floor: floor, state_name: state_str(es), passengers: passengers }
+
+    // Someone on floor 5 presses button
+    let requests = [5, 3, 8, 1]
+
+    for target in requests {
+        print(f"\n--- Servicing floor {target} ---")
+
+        emit FloorRequest { floor: target }
+        es = transition(es, "call") ?
+
+        // Simulate movement
+        if target > floor {
+            let mut f = floor
+            while f < target {
+                f = f + 1
+                print(f"  ... passing floor {f}")
+            }
+        } else {
+            let mut f = floor
+            while f > target {
+                f = f - 1
+                print(f"  ... passing floor {f}")
+            }
+        }
+        floor = target
+
+        es = transition(es, "arrive") ?
+        emit FloorArrival { floor: floor }
+
+        es = transition(es, "opened") ?
+        emit DoorEvent { action: "Doors opened" }
+
+        // Passengers enter/exit
+        if floor == 5 {
+            passengers = passengers + 2
+            print("  2 passengers entered")
+        }
+        if floor == 3 {
+            passengers = passengers + 1
+            print("  1 passenger entered")
+        }
+        if floor == 8 {
+            let exiting = 1
+            passengers = passengers - exiting
+            if passengers < 0 { passengers = 0 }
+            print(f"  {exiting} passenger exited")
+        }
+        if floor == 1 {
+            print(f"  {passengers} passengers exited")
+            passengers = 0
+        }
+
+        es = transition(es, "close") ?
+        emit DoorEvent { action: "Doors closing" }
+
+        es = transition(es, "closed") ?
+        emit ElevatorStatus { floor: floor, state_name: state_str(es), passengers: passengers }
+    }
+
+    print(f"\nElevator returned to idle at floor {floor}")
+}

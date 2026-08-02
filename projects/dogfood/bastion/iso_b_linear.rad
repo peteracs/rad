@@ -1,0 +1,13 @@
+// ISO B: LINEAR self-re-emit. Infinite, but the queue stays size 1.
+// Fuel must stop this.
+let src = f"""
+event Ping { n }
+on Ping(e) {
+    emit Ping { n: e.n + 1 }
+}
+emit Ping { n: 0 }
+"""
+match sandbox_run(src, fork(), f"""{ "write": [], "fuel": 2000 }""") {
+    Ok(_f) => { print("B: ok (fuel did NOT stop an infinite handler chain)") }
+    Err(m) => { print(f"B: err {m}") }
+}

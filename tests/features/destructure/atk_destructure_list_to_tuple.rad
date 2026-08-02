@@ -1,0 +1,10 @@
+fn main() -> nil {
+    let rows = [[1, 2], [3, 4]]
+    let tuples = rows |> map(fn([a, b]) { return (a, b) })
+    let (x, y) = tuples[0]
+    let (p, q) = tuples[1]
+    print(x)
+    print(y)
+    print(p)
+    print(q)
+}

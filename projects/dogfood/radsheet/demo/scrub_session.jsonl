@@ -1,0 +1,13 @@
+{"jsonrpc":"2.0","id":1,"method":"info"}
+{"jsonrpc":"2.0","id":2,"method":"peek","params":{"frame":2,"entity":"B3","component":"Cell"}}
+{"jsonrpc":"2.0","id":3,"method":"peek","params":{"frame":6,"entity":"B3","component":"Cell"}}
+{"jsonrpc":"2.0","id":4,"method":"peek","params":{"frame":10,"entity":"B3","component":"Cell"}}
+{"jsonrpc":"2.0","id":5,"method":"peek","params":{"frame":12,"entity":"B3","component":"Cell"}}
+{"jsonrpc":"2.0","id":6,"method":"peek","params":{"frame":14,"entity":"B3","component":"Cell"}}
+{"jsonrpc":"2.0","id":7,"method":"peek","params":{"frame":16,"entity":"B3","component":"Cell"}}
+{"jsonrpc":"2.0","id":8,"method":"peek","params":{"frame":18,"entity":"B3","component":"Cell"}}
+{"jsonrpc":"2.0","id":9,"method":"peek","params":{"frame":18,"entity":"B4","component":"Cell"}}
+{"jsonrpc":"2.0","id":10,"method":"why","params":{"frame":18,"entity":"B3","component":"Cell"}}
+{"jsonrpc":"2.0","id":11,"method":"goto_frame","params":{"frame":12}}
+{"jsonrpc":"2.0","id":12,"method":"why","params":{"frame":12,"entity":"B3","component":"Cell"}}
+{"jsonrpc":"2.0","id":13,"method":"shutdown"}

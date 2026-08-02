@@ -1,0 +1,120 @@
+// =====================================================================
+//  Brainfuck interpreter in RAD -- the most wrong-tool-for-the-job
+//  possible: implementing an esoteric Turing-complete language inside
+//  an ECS/pipeline/event-driven DSL.
+//
+//  Uses ECS entities as the tape cells because why not.
+// =====================================================================
+
+component Cell { value: 0 }
+
+pure fn precompute_jumps(program) {
+    let n = len(program)
+    let mut jump_map = []
+    let mut i = 0
+    while i < n {
+        jump_map = push(jump_map, 0)
+        i = i + 1
+    }
+
+    // Find matching brackets
+    let mut stack = []
+    i = 0
+    while i < n {
+        if program[i] == "[" {
+            stack = push(stack, i)
+        }
+        if program[i] == "]" {
+            if len(stack) > 0 {
+                let open = pop(stack)
+                stack = drop_last(stack)
+                jump_map[open] = i
+                jump_map[i] = open
+            }
+        }
+        i = i + 1
+    }
+    return jump_map
+}
+
+pure fn run_bf(program) {
+    let jump_map = precompute_jumps(program)
+    let tape_size = 100
+
+    // Build tape as list of ints
+    let mut tape = []
+    let mut i = 0
+    while i < tape_size {
+        tape = push(tape, 0)
+        i = i + 1
+    }
+
+    let mut ip = 0
+    let mut dp = 0
+    let mut output = ""
+    let plen = len(program)
+    let mut steps = 0
+    let max_steps = 100000
+
+    while ip < plen and steps < max_steps {
+        steps = steps + 1
+        let cmd = program[ip]
+
+        if cmd == ">" { dp = dp + 1 }
+        if cmd == "<" { dp = dp - 1 }
+        if cmd == "+" { tape[dp] = tape[dp] + 1 }
+        if cmd == "-" { tape[dp] = tape[dp] - 1 }
+        if cmd == "." { output = f"{output}{chr(tape[dp])}" }
+        if cmd == "[" {
+            if tape[dp] == 0 {
+                ip = jump_map[ip]
+            }
+        }
+        if cmd == "]" {
+            if tape[dp] != 0 {
+                ip = jump_map[ip]
+            }
+        }
+
+        ip = ip + 1
+    }
+
+    return output
+}
+
+fn main() -> any {
+    print("=== Cursed Brainfuck Interpreter ===\n")
+
+    // "Hello World!" in Brainfuck
+    let hello_world = "++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]>>.>---.+++++++..+++.>>.<-.<.+++.------.--------.>>+.>++."
+    print("Program: Hello World")
+    let result = run_bf(hello_world)
+    print(f"Output:  {result}")
+
+    // Simple: print 'A' (65 = 5*13)
+    let print_a = "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++."
+    print("\nProgram: Print 'A' (65 increments)")
+    print(f"Output:  {run_bf(print_a)}")
+
+    // Add two numbers: 3 + 5
+    // Cell 0 = 3, Cell 1 = 5, add cell1 to cell0, print result as digit
+    let add = "+++>+++++[<+>-]<++++++++++++++++++++++++++++++++++++++++++++++++."
+    print("\nProgram: 3 + 5")
+    print(f"Output:  {run_bf(add)}")
+
+    // "RAD" in brainfuck: R=82 A=65 D=68
+    // 8*10=80, +2=82='R', then new cell: 6*10=60, +5=65='A', new cell: 6*11=66, +2=68='D'
+    let rad = "++++++++[>++++++++++<-]>++.[-]>++++++++[<++++++++>-]<+.+++."
+    print("\nProgram: RAD")
+    print(f"Output:  {run_bf(rad)}")
+
+    print("\n--- Pipeline batch execution ---")
+    let programs = [
+        "++++++++++++++++++++++++++++++++++++++++++++++++.",
+        "+++++++++++++++++++++++++++++++++++++++++++++++++.",
+        "++++++++++++++++++++++++++++++++++++++++++++++++++.",
+        "+++++++++++++++++++++++++++++++++++++++++++++++++++."
+    ]
+    let outputs = programs |> map(run_bf)
+    print(f"Batch: {outputs}")
+}

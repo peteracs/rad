@@ -1,0 +1,15 @@
+---
+source: tests\conformance\resource_res.rad
+exit_code: 0
+---
+12345
+0
+run
+150
+3
+450
+score=150x3
+468
+988
+117
+true

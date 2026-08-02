@@ -1,0 +1,130 @@
+// =====================================================================
+//  Todo App — Task management with ECS and state machines
+// =====================================================================
+
+component TaskInfo { title: "", priority: 0 }
+
+state TaskStatus {
+    Todo {
+        on start -> InProgress
+        on cancel -> Cancelled
+    }
+    InProgress {
+        on complete -> Done
+        on block -> Blocked
+        on cancel -> Cancelled
+    }
+    Blocked {
+        on unblock -> InProgress
+        on cancel -> Cancelled
+    }
+    Done {}
+    Cancelled {}
+}
+
+event TaskCreated { id, title }
+
+event TaskUpdated { id, title, new_status }
+
+event TaskCompleted { title }
+
+on TaskCreated(e) {
+    print(f"  [+] Created: \"{e.title}\"")
+}
+
+on TaskUpdated(e) {
+    print(f"  [~] {e.title} -> {e.new_status}")
+}
+
+on TaskCompleted(e) {
+    print(f"  [*] Completed: \"{e.title}\"")
+}
+
+fn status_str(status) {
+    let mut s = ""
+    match status {
+        Todo => { s = "todo" }
+        InProgress => { s = "in-progress" }
+        Blocked => { s = "blocked" }
+        Done => { s = "done" }
+        Cancelled => { s = "cancelled" }
+    }
+    return s
+}
+
+fn main() -> any {
+    print("=== Todo App ===\n")
+
+    // Create tasks as data
+    let tasks = [
+        "Write lexer",
+        "Write parser",
+        "Write interpreter",
+        "Build playground",
+        "Write examples"
+    ]
+
+    let priorities = [3, 3, 3, 2, 1]
+
+    // All start as Todo
+    let mut statuses = [
+        TaskStatus::Todo,
+        TaskStatus::Todo,
+        TaskStatus::Todo,
+        TaskStatus::Todo,
+        TaskStatus::Todo
+    ]
+
+    for i in range(5) {
+        emit TaskCreated { id: i, title: tasks[i] }
+    }
+
+    print("")
+
+    // Work through tasks using pipeline to find highest priority
+    let ranked = [0, 1, 2, 3, 4]
+    |> map(fn(i) { return priorities[i] })
+    |> reduce(0, fn(a, b) { return a + b })
+    print(f"Total priority points: {ranked}")
+    print("")
+
+    // Start the lexer
+    statuses[0] = transition(statuses[0], "start") ?
+    emit TaskUpdated { id: 0, title: tasks[0], new_status: status_str(statuses[0]) }
+
+    // Complete the lexer
+    statuses[0] = transition(statuses[0], "complete") ?
+    emit TaskCompleted { title: tasks[0] }
+
+    // Start the parser
+    statuses[1] = transition(statuses[1], "start") ?
+    emit TaskUpdated { id: 1, title: tasks[1], new_status: status_str(statuses[1]) }
+
+    // Parser gets blocked
+    statuses[1] = transition(statuses[1], "block") ?
+    emit TaskUpdated { id: 1, title: tasks[1], new_status: status_str(statuses[1]) }
+
+    // Unblock and complete
+    statuses[1] = transition(statuses[1], "unblock") ?
+    emit TaskUpdated { id: 1, title: tasks[1], new_status: status_str(statuses[1]) }
+    statuses[1] = transition(statuses[1], "complete") ?
+    emit TaskCompleted { title: tasks[1] }
+
+    // Start interpreter
+    statuses[2] = transition(statuses[2], "start") ?
+    emit TaskUpdated { id: 2, title: tasks[2], new_status: status_str(statuses[2]) }
+    statuses[2] = transition(statuses[2], "complete") ?
+    emit TaskCompleted { title: tasks[2] }
+
+    // Cancel the playground for now
+    statuses[3] = transition(statuses[3], "cancel") ?
+    emit TaskUpdated { id: 3, title: tasks[3], new_status: status_str(statuses[3]) }
+
+    print("\n--- Status Summary ---")
+    for i in range(5) {
+        print(f"  {tasks[i]}: {status_str(statuses[i])}")
+    }
+
+    let completed = statuses |> filter(fn(s) { return s == TaskStatus::Done })
+    print(f"\nCompleted: {len(completed)}/{len(tasks)}")
+}

@@ -1,0 +1,158 @@
+// RADGUI dogfood: pixel painter. Forces the critique fixes —
+// Bounds/panel absolute layout (256 positioned cells), Drag strokes
+// (paint by holding the pointer), select (palette), checkbox (grid
+// lines), and stroke-granular undo (one Ctrl+Z = one stroke, because the
+// renderer checkpoints at Drag start). Also the render-delta torture
+// test: painting touches ONE cell entity per move, and exactly one
+// upsert should travel.
+
+use "lib_gui.rad"
+
+component Cell { idx: int = 0 }
+
+component PaintPanel { z: int = 0 }
+
+component ColorSel { z: int = 0 }
+
+component GridToggle { z: int = 0 }
+
+component ClearBtn { z: int = 0 }
+
+component HintLabel { z: int = 0 }
+
+resource Paint { color: str = "#5dff8f", strokes: int = 0 }
+
+// last painted point, for gap-free strokes: the renderer never drops the
+// trailing move, and the app interpolates the line between samples.
+resource Stroke { lx: int = -1, ly: int = -1, active: int = 0 }
+
+let GRID = 16
+let CELL = 20
+let EMPTY = "#14141d"
+
+fn cell_border(grid_on: bool) -> str {
+    if grid_on { return "1px solid #262636" }
+    return "none"
+}
+
+fn paint_at(x: int, y: int) -> nil {
+    if x < 0 or y < 0 { return }
+    let cx = x / CELL
+    let cy = y / CELL
+    if cx >= GRID or cy >= GRID { return }
+    let idx = cy * GRID + cx
+    let cell = get_entity(f"px-{idx}")
+    let color = (get_resource(Paint) |> unwrap).color
+    update(cell, Style) { bg = color }
+}
+
+// Bresenham-lite: paint every cell on the segment between drag samples,
+// so fast strokes are solid lines instead of morse code.
+fn paint_line(x0: int, y0: int, x1: int, y1: int) -> nil {
+    let dx = x1 - x0
+    let dy = y1 - y0
+    let mut steps = abs(dx)
+    if abs(dy) > steps { steps = abs(dy) }
+    if steps == 0 {
+        paint_at(x1, y1)
+        return
+    }
+    for i in range(0, steps + 1) {
+        paint_at(x0 + dx * i / steps, y0 + dy * i / steps)
+    }
+}
+
+on Drag(e) {
+    if has(e.target, PaintPanel) {
+        let s = get_resource(Stroke) |> unwrap
+        if e.phase == "start" {
+            let p = get_resource(Paint) |> unwrap
+            set_resource(Paint, Paint { color: p.color, strokes: p.strokes + 1 })
+            paint_at(e.x, e.y)
+            set_resource(Stroke, Stroke { lx: e.x, ly: e.y, active: 1 })
+        }
+        if e.phase == "move" and s.active == 1 {
+            paint_line(s.lx, s.ly, e.x, e.y)
+            set_resource(Stroke, Stroke { lx: e.x, ly: e.y, active: 1 })
+        }
+        if e.phase == "end" {
+            set_resource(Stroke, Stroke { lx: -1, ly: -1, active: 0 })
+        }
+    }
+}
+
+on Hover(e) {
+    if has(e.target, PaintPanel) {
+        for h in entities(HintLabel) {
+            if e.entered == 1 {
+                ui_set_text(h, "painting — hold and drag; Ctrl+Z undoes a whole stroke")
+            } else {
+                ui_set_text(h, "hover the canvas")
+            }
+        }
+    }
+}
+
+on Changed(e) {
+    if has(e.target, ColorSel) {
+        let p = get_resource(Paint) |> unwrap
+        set_resource(Paint, Paint { color: e.value, strokes: p.strokes })
+    }
+    if has(e.target, GridToggle) {
+        let grid_on = e.value == "1"
+        for c in entities(Cell) {
+            update(c, Style) { border = cell_border(grid_on) }
+        }
+    }
+}
+
+on Click(e) {
+    if has(e.target, ClearBtn) {
+        for c in entities(Cell) {
+            update(c, Style) { bg = EMPTY }
+        }
+    }
+}
+
+fn main() -> nil {
+    ui_title("RADGUI pixels")
+    ui_enable_undo()
+    ui_enable_collab()    // open a second tab: same canvas, live
+    ui_enable_persist()   // refresh-proof: the world rides localStorage
+
+    let root = ui_root()
+    update(root, Style) { pad = 12, gap = 10 }
+
+    let bar = ui_row(root)
+    update(bar, Style) { gap = 10, align = "center" }
+    let sel = ui_select(bar, "#5dff8f|#ff5d5d|#b58cff|#ffc857|#e8e6f0|#14141d", "#5dff8f")
+    set(sel, ColorSel { z: 0 })
+    let cb = ui_checkbox(bar, true)
+    set(cb, GridToggle { z: 0 })
+    let cbl = ui_label(bar, "grid")
+    update(cbl, Style) { fg = "#8a87a0", size = 12 }
+    let clear = ui_button(bar, "clear")
+    set(clear, ClearBtn { z: 0 })
+    update(clear, Style) { hover_bg = "#3a1518", hover_fg = "#ff5d5d" }
+
+    let panel = ui_panel(root, GRID * CELL, GRID * CELL)
+    set(panel, PaintPanel { z: 0 })
+    set(panel, Draggable { z: 0 })
+    set(panel, Hoverable { z: 0 })
+    update(panel, Style) { bg = "#10101a", border = "1px solid #262636" }
+    let pname = name_of(panel)
+
+    for i in range(0, GRID * GRID) {
+        let n = fresh_id()
+        let _c = entity f"px-{i}" {
+            Widget { kind: "label", parent: pname, order: n },
+            Style { bg: EMPTY, border: "1px solid #262636" },
+            Bounds { x: (i % GRID) * CELL, y: (i / GRID) * CELL, w: CELL, h: CELL, z: 1 },
+            Cell { idx: i },
+        }
+    }
+
+    let hint = ui_label(root, "hover the canvas")
+    set(hint, HintLabel { z: 0 })
+    update(hint, Style) { fg = "#8a87a0", size = 12 }
+}

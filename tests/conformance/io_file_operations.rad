@@ -1,0 +1,34 @@
+// Test: file I/O builtins — write, read, append, exists, remove
+
+let path = "_test_io_file_ops.tmp"
+
+// Clean up if leftover from a previous run
+if file_exists(path) {
+    remove_file(path)
+}
+
+// file_exists returns false for missing file
+print(file_exists(path))
+// expect: false
+
+// write_file creates a file
+write_file(path, "hello")
+print(file_exists(path))
+// expect: true
+
+// read_file reads it back
+print(read_file(path))
+// expect: hello
+
+// append_file adds content
+append_file(path, " world")
+print(read_file(path))
+// expect: hello world
+
+// remove_file deletes it
+remove_file(path)
+print(file_exists(path))
+// expect: false
+
+print("file ops ok")
+// expect: file ops ok

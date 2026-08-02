@@ -1,0 +1,7 @@
+---
+source: tests\conformance\builtin_pop_last_empty_error.rad
+exit_code: 1
+---
+
+---stderr---
+Error: Ignored result from 'pop_last' call; this statement has no effect unless you use the returned value

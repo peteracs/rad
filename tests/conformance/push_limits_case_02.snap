@@ -1,0 +1,5 @@
+---
+source: tests\conformance\push_limits_case_02.rad
+exit_code: 0
+---
+CASE02:2

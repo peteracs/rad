@@ -1,0 +1,6 @@
+// backend: both
+fn main() -> nil {
+    let x: int = "oops"
+    print(x)
+}
+// expect-runtime-error: Type mismatch

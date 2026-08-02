@@ -1,0 +1,423 @@
+// =====================================================================
+//  RadAgent — ECS-Native Agentic AI Framework
+//
+//  Production pattern: autonomous agent orchestration
+//    - Each Agent is an ECS entity with typed components
+//    - State machine enforces the Think → Act → Reflect cycle
+//    - Memory is just a component — no hidden global state
+//    - Events decouple agent communication (message passing)
+//    - Systems drive the agent loop deterministically
+//    - Pipelines compute fleet-wide analytics
+//    - Speculative execution lets agents "preview" actions
+//
+//  Architecture:
+//    Perceive → Think → Plan → Act → Reflect → (loop)
+//
+//  Demonstrates:
+//    indexed fields, query select, update sugar, guarded events,
+//    state machines, speculative execution (fork/peek), pure analytics,
+//    named phases, sum types for tool results
+//
+//  Run: rad examples/rad_agent.rad
+// =====================================================================
+
+// --- Agent identity and configuration ---
+
+component AgentProfile {
+    indexed name: str = "",
+    role: str = "",
+    model: str = "default",
+    max_retries: int = 3
+}
+
+component Memory {
+    facts: list = [],
+    scratchpad: str = "",
+    context_window: int = 10
+}
+
+component TaskQueue {
+    pending: list = [],
+    current_task: str = "",
+    completed: int = 0,
+    failed: int = 0
+}
+
+component Stats {
+    think_cycles: int = 0,
+    actions_taken: int = 0,
+    reflections: int = 0,
+    tokens_used: int = 0
+}
+
+resource AgentPool {
+    active_agents: int = 0,
+    total_tasks_completed: int = 0,
+    tick: int = 0
+}
+
+// --- Agent lifecycle state machine ---
+
+state AgentState {
+    Idle {
+        on assign_task -> Perceiving
+    }
+    Perceiving {
+        on perceived -> Thinking
+    }
+    Thinking {
+        on plan_ready -> Planning
+        on confused -> Reflecting
+    }
+    Planning {
+        on execute -> Acting
+        on replan -> Thinking
+    }
+    Acting {
+        on success -> Reflecting
+        on failure -> Reflecting
+        on blocked -> Thinking
+    }
+    Reflecting {
+        on next_task -> Perceiving
+        on all_done -> Idle
+        on retry -> Thinking
+    }
+}
+
+// --- Tool results (sum type) ---
+// Variant fields use `field: default` (no type annotation)
+
+type ToolResult {
+    Success { output: "", tokens: 0 }
+    Failure { error: "", retryable: true }
+    Timeout { after_ms: 0 }
+}
+
+// --- Events for agent communication ---
+
+event AgentAction { agent_name: str, action: str, detail: str }
+
+event AgentMessage { from_agent: str, to_agent: str, content: str }
+
+event TaskAssigned { agent_name: str, task: str }
+
+event TaskCompleted { agent_name: str, task: str, tokens: int }
+
+event TaskFailed { agent_name: str, task: str, reason: str }
+
+// --- Event handlers ---
+
+on AgentAction(e) {
+    print(f"  [{e.agent_name}] {e.action}: {e.detail}")
+}
+
+on AgentMessage(e) {
+    print(f"  [msg] {e.from_agent} -> {e.to_agent}: {e.content}")
+    match lookup(AgentProfile, "name", e.to_agent) {
+        Some(id) => {
+            let mem = require(id, Memory)
+            let mut facts = mem.facts
+            facts << f"message from {e.from_agent}: {e.content}"
+            if len(facts) > mem.context_window {
+                facts = slice(facts, len(facts) - mem.context_window, len(facts))
+            }
+            update(id, Memory) { facts = facts }
+        }
+        None => {}
+    }
+}
+
+on TaskCompleted(e) {
+    print(f"  [done] {e.agent_name} finished '{e.task}' ({e.tokens} tokens)")
+    let pool = get_resource(AgentPool) ?
+    update(AgentPool) { total_tasks_completed = pool.total_tasks_completed + 1 }
+}
+
+on TaskFailed(e) {
+    print(f"  [fail] {e.agent_name} failed '{e.task}': {e.reason}")
+}
+
+// --- Simulated tool execution ---
+
+fn simulate_tool(task: str, tick: int) -> ToolResult {
+    if task == "search_docs" {
+        return ToolResult::Success { output: "Found 3 relevant documents", tokens: 150 }
+    }
+    if task == "write_code" {
+        if tick < 3 {
+            return ToolResult::Failure { error: "Context incomplete", retryable: true }
+        }
+        return ToolResult::Success { output: "Generated handler function", tokens: 420 }
+    }
+    if task == "run_tests" {
+        return ToolResult::Success { output: "All 12 tests passed", tokens: 80 }
+    }
+    if task == "deploy" {
+        return ToolResult::Success { output: "Deployed to staging", tokens: 60 }
+    }
+    if task == "review_pr" {
+        return ToolResult::Success { output: "Approved with 2 suggestions", tokens: 310 }
+    }
+    if task == "analyze_logs" {
+        if tick < 4 {
+            return ToolResult::Timeout { after_ms: 5000 }
+        }
+        return ToolResult::Success { output: "Found anomaly in auth service", tokens: 280 }
+    }
+    return ToolResult::Failure { error: f"Unknown task: {task}", retryable: false }
+}
+
+// --- Systems ---
+
+system PerceiveEnvironment(_p: AgentProfile, mem: mut Memory, tq: TaskQueue) {
+    if tq.current_task == "" { return }
+    let observation = f"tick observation: working on '{tq.current_task}', {len(tq.pending)} tasks queued"
+    let mut facts = mem.facts
+    facts << observation
+    if len(facts) > mem.context_window {
+        facts = slice(facts, len(facts) - mem.context_window, len(facts))
+    }
+    mem.facts = facts
+    mem.scratchpad = f"focus: {tq.current_task}"
+}
+
+system ExecuteAction(p: AgentProfile, tq: mut TaskQueue, s: mut Stats, mem: mut Memory) {
+    if tq.current_task == "" { return }
+    let pool = get_resource(AgentPool) ?
+    let result = simulate_tool(tq.current_task, pool.tick)
+    s.actions_taken = s.actions_taken + 1
+
+    match result {
+        Success { output, tokens } => {
+            s.tokens_used = s.tokens_used + tokens
+            let mut facts = mem.facts
+            facts << f"result: {output}"
+            mem.facts = facts
+            emit TaskCompleted { agent_name: p.name, task: tq.current_task, tokens: tokens }
+            emit AgentAction { agent_name: p.name, action: "TOOL_OK", detail: output }
+            tq.completed = tq.completed + 1
+            tq.current_task = ""
+        }
+        Failure { error, retryable } => {
+            if retryable and s.actions_taken < p.max_retries * (tq.completed + tq.failed + 1) {
+                emit AgentAction { agent_name: p.name, action: "RETRY", detail: error }
+            } else {
+                emit TaskFailed { agent_name: p.name, task: tq.current_task, reason: error }
+                tq.failed = tq.failed + 1
+                tq.current_task = ""
+            }
+        }
+        Timeout { after_ms } => {
+            emit AgentAction { agent_name: p.name, action: "TIMEOUT", detail: f"{after_ms}ms" }
+        }
+    }
+}
+
+system AdvanceQueue(p: AgentProfile, tq: mut TaskQueue) {
+    if tq.current_task != "" { return }
+    if len(tq.pending) == 0 { return }
+    tq.current_task = tq.pending[0]
+    tq.pending = slice(tq.pending, 1, len(tq.pending))
+    emit TaskAssigned { agent_name: p.name, task: tq.current_task }
+    emit AgentAction { agent_name: p.name, action: "PICK", detail: tq.current_task }
+}
+
+system Reflect(_p: AgentProfile, s: mut Stats, mem: mut Memory, tq: TaskQueue) {
+    s.reflections = s.reflections + 1
+    s.think_cycles = s.think_cycles + 1
+
+    let progress = f"completed={tq.completed} failed={tq.failed} pending={len(tq.pending)}"
+    let mut facts = mem.facts
+    facts << f"reflection: {progress}"
+    if len(facts) > mem.context_window {
+        facts = slice(facts, len(facts) - mem.context_window, len(facts))
+    }
+    mem.facts = facts
+}
+
+// Side-effect-free version of the tick loop for speculative execution
+system SimTick(_p: AgentProfile, tq: mut TaskQueue, s: mut Stats) {
+    if tq.current_task != "" {
+        s.actions_taken = s.actions_taken + 1
+        s.tokens_used = s.tokens_used + 100
+        tq.completed = tq.completed + 1
+        tq.current_task = ""
+    }
+    if tq.current_task == "" and len(tq.pending) > 0 {
+        tq.current_task = tq.pending[0]
+        tq.pending = slice(tq.pending, 1, len(tq.pending))
+    }
+}
+
+// --- Named phases ---
+
+phase AgentTick { PerceiveEnvironment, ExecuteAction, AdvanceQueue, Reflect }
+
+// --- Pure analytics ---
+
+readonly fn agent_snapshot() -> list {
+    return query { AgentProfile, TaskQueue, Stats } select AgentProfile, TaskQueue, Stats
+}
+
+pure fn fleet_summary(rows: list) -> map {
+    let total_completed = rows |> reduce(0, fn(acc, [_p, tq, _s]) { return acc + tq.completed })
+    let total_failed = rows |> reduce(0, fn(acc, [_p, tq, _s]) { return acc + tq.failed })
+    let total_tokens = rows |> reduce(0, fn(acc, [_p, _tq, s]) { return acc + s.tokens_used })
+    let total_pending = rows |> reduce(0, fn(acc, [_p, tq, _s]) { return acc + len(tq.pending) })
+    return {
+        "completed": total_completed,
+        "failed": total_failed,
+        "tokens": total_tokens,
+        "pending": total_pending
+    }
+}
+
+pure fn expected_total_tasks() -> int { return 7 }
+
+pure fn max_ticks() -> int { return 15 }
+
+// --- Spawn the agent fleet ---
+
+fn spawn_agents() -> nil {
+    spawn(
+        AgentProfile { name: "coder", role: "engineer", model: "gpt-4", max_retries: 3 },
+        Memory { facts: [], scratchpad: "", context_window: 8 },
+        TaskQueue {
+            pending: ["search_docs", "write_code", "run_tests", "deploy"],
+            current_task: "",
+            completed: 0,
+            failed: 0
+        },
+        Stats { think_cycles: 0, actions_taken: 0, reflections: 0, tokens_used: 0 }
+    )
+
+    spawn(
+        AgentProfile { name: "reviewer", role: "qa", model: "claude-3", max_retries: 2 },
+        Memory { facts: [], scratchpad: "", context_window: 6 },
+        TaskQueue {
+            pending: ["review_pr", "analyze_logs"],
+            current_task: "",
+            completed: 0,
+            failed: 0
+        },
+        Stats { think_cycles: 0, actions_taken: 0, reflections: 0, tokens_used: 0 }
+    )
+
+    spawn(
+        AgentProfile { name: "ops", role: "sre", model: "gpt-4", max_retries: 4 },
+        Memory { facts: [], scratchpad: "", context_window: 10 },
+        TaskQueue {
+            pending: ["analyze_logs"],
+            current_task: "",
+            completed: 0,
+            failed: 0
+        },
+        Stats { think_cycles: 0, actions_taken: 0, reflections: 0, tokens_used: 0 }
+    )
+}
+
+// --- Entry ---
+
+fn main() -> nil {
+    print("================================================================")
+    print(" RadAgent — ECS-Native Agentic AI Framework")
+    print("================================================================")
+    print("")
+
+    spawn_agents()
+
+    emit AgentMessage { from_agent: "ops", to_agent: "coder", content: "auth service is flaky, check logs" }
+    emit AgentMessage { from_agent: "reviewer", to_agent: "coder", content: "PR #42 needs tests before merge" }
+    flush_events()
+
+    let goal = expected_total_tasks()
+    let mut tick = 0
+
+    while tick < max_ticks() {
+        update(AgentPool) { tick = tick }
+
+        schedule [AgentTick]
+        flush_events()
+
+        let rows = agent_snapshot()
+        let summary = fleet_summary(rows)
+
+        print(f"\n[tick {tick}] completed={summary[\"completed\"]}/{goal} failed={summary[\"failed\"]} tokens={summary[\"tokens\"]} pending={summary[\"pending\"]}")
+
+        for row in rows {
+            let profile = row[0]
+            let tq = row[1]
+            if tq.current_task != "" {
+                print(f"  {profile.name} ({profile.role}): working: {tq.current_task}")
+            } else {
+                if len(tq.pending) > 0 {
+                    print(f"  {profile.name} ({profile.role}): queued {len(tq.pending)}")
+                } else {
+                    print(f"  {profile.name} ({profile.role}): idle")
+                }
+            }
+        }
+
+        if int(summary["completed"]) + int(summary["failed"]) >= goal {
+            print("")
+            print("*** all tasks resolved ***")
+            break
+        }
+
+        tick = tick + 1
+    }
+
+    if tick >= max_ticks() {
+        print("")
+        print("[timeout] hit max ticks")
+    }
+
+    // --- Speculative execution: what if we gave coder 5 more ticks? ---
+    print("")
+    print("--- speculative: 5 more ticks on current state ---")
+    let future = simulate(fork(), [system::SimTick], 5)
+
+    match lookup(AgentProfile, "name", "coder") {
+        Some(coder_id) => {
+            match peek(future, coder_id, Stats) {
+                Some(future_stats) => {
+                    let current = require(coder_id, Stats)
+                    print(f"  coder now:    actions={current.actions_taken} tokens={current.tokens_used}")
+                    print(f"  coder +5:     actions={future_stats.actions_taken} tokens={future_stats.tokens_used}")
+                }
+                None => {}
+            }
+        }
+        None => {}
+    }
+
+    // --- Final analytics ---
+    print("")
+    print("--- fleet analytics ---")
+    let final_rows = agent_snapshot()
+    let final_summary = fleet_summary(final_rows)
+    print(f"  total completed: {final_summary[\"completed\"]}")
+    print(f"  total failed:    {final_summary[\"failed\"]}")
+    print(f"  total tokens:    {final_summary[\"tokens\"]}")
+
+    for row in final_rows {
+        let profile = row[0]
+        let tq = row[1]
+        let stats = row[2]
+        print(f"  {profile.name}: {tq.completed} done, {tq.failed} failed, {stats.tokens_used} tokens, {stats.reflections} reflections")
+    }
+
+    let best = max_by(final_rows, fn(r) { return r[2].tokens_used })
+    match best {
+        Some(winner) => {
+            let wp = winner[0]
+            let ws = winner[2]
+            print(f"\n  highest token usage: {wp.name} ({ws.tokens_used} tokens)")
+        }
+        None => {}
+    }
+
+    print("")
+    print("================================================================")
+}

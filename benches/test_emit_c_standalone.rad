@@ -1,0 +1,11 @@
+use "../core/c-backend/src/lexer.rad"
+use "../core/c-backend/src/parser.rad"
+use "../core/c-backend/src/emit_c.rad"
+
+fn main() -> nil {
+    let src = "fn main() -> nil { print(42) }"
+    let tokens = lex(src)
+    let ast = parse(tokens)
+    let c_code = emit_c(ast)
+    print(c_code)
+}

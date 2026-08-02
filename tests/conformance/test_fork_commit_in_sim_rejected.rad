@@ -1,0 +1,14 @@
+// M1 Test: commit() inside a simulated system must be a compile error
+
+component X { v: 0 }
+
+system BadCommit(x: mut X) {
+    x = X { v: x.v + 1 }
+    let f = fork()
+    commit(f)
+}
+
+let e = spawn("e", X { v: 0 })
+let f = fork()
+let f = simulate(f, [system::BadCommit], 1)
+print("FAIL: should not reach here — commit inside simulation is forbidden")

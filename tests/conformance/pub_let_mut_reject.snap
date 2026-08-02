@@ -1,0 +1,8 @@
+---
+source: tests\conformance\pub_let_mut_reject.rad
+exit_code: 1
+---
+
+---stderr---
+Error: `pub let` must be immutable — exported module state would hide shared mutation; use a resource for shared mutable state
+Error: Undefined variable 'COUNTER'

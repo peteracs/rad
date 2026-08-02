@@ -1,0 +1,656 @@
+// DUEL — the browser-moba combat core, stripped down to RAD.
+//
+// This is the executable SPEC for the RL bare-metal ladder:
+//   rad (this file, debuggable in RADSCOPE with time travel + why())
+//     -> Rust batched SoA sim   (must reproduce this file bit-exactly)
+//     -> CUDA kernel            (must reproduce the Rust sim bit-exactly)
+//     -> PPO self-play on the 3080 Ti
+//     -> trained policies issue the SAME commands back into the real
+//        browser client, full graphics.
+//
+// Scope v0: mirror Ezreal 1v1 on an open lane strip. Numbers are
+// transcribed from browser-moba's RE'd era data (provenance comments on
+// every constant — content/champions/ezreal/*, sim/systems/combat.ts).
+//
+// DETERMINISM CONTRACT: integer fixed-point throughout. Distances in mm
+// (their meters x1000), hp/mana/damage in milli-points, rates in
+// per-mille. Division is rad integer division (trunc toward zero) — the
+// ports must match it. No floats anywhere. The golden trace is
+// world_digest() sampled on a fixed cadence; rad<->Rust<->CUDA agree
+// bit-for-bit, rad<->TS-sim agrees behaviorally (the TS sim is floats).
+
+// Generated constants: arena/tools/gen_constants.py reads content.json
+// (the dumpContent bridge out of browser-moba) — balance patches in the
+// JS game flow through here automatically.
+use "gen_content.rad"
+
+// ---------------------------------------------------------------- map
+
+let _TICK_HZ = 30          // sim/constants.ts SIM_TICK_RATE (doc constant)
+let LANE_W = 60000         // 60 m lane strip
+let LANE_H = 30000         // 30 m
+let SPAWN_X_BLUE = 8000
+let SPAWN_X_RED = 52000
+let SPAWN_Z = 15000
+
+// ------------------------------------------- Ezreal @ level 6, fixed
+// Stats from the generated per-level tables (index level-1).
+// Ranks: Q3 / W1 / E1 / R1 (standard level-6 spread).
+
+let LVL_IX = 5             // level 6
+let hp_tbl = ez_hp()
+let mp_tbl = ez_mp()
+let ad_tbl = ez_ad()
+let armor_tbl = ez_armor()
+let mr_tbl = ez_mr()
+let hpreg_tbl = ez_hp_regen()
+let mpreg_tbl = ez_mp_regen()
+let period_tbl = ez_atk_period()
+let windup_tbl = ez_atk_windup()
+
+let HP_MAX = hp_tbl[LVL_IX]
+let MP_MAX = mp_tbl[LVL_IX]
+let HP_REGEN_TICK = hpreg_tbl[LVL_IX]
+let MP_REGEN_TICK = mpreg_tbl[LVL_IX]
+let AD_M = ad_tbl[LVL_IX]
+let AP_M = 0               // no items in v0
+let ARMOR_M = armor_tbl[LVL_IX]
+let MR_M = mr_tbl[LVL_IX]
+let MS_MM_TICK = ez_ms_mm_tick()
+let ATK_RANGE = ez_atk_range()
+let ATK_PERIOD = period_tbl[LVL_IX]
+let ATK_WINDUP = windup_tbl[LVL_IX]
+let ATK_MIS_SPEED = ez_atk_mis_speed()
+
+let q_cost_tbl = ez_q_cost()
+let q_cd_tbl = ez_q_cd()
+let w_cost_tbl = ez_w_cost()
+let w_cd_tbl = ez_w_cd()
+let e_cost_tbl = ez_e_cost()
+let e_cd_tbl = ez_e_cd()
+let r_cost_tbl = ez_r_cost()
+let r_cd_tbl = ez_r_cd()
+
+let Q_COST = q_cost_tbl[2]
+let Q_CD = q_cd_tbl[2]
+let Q_RANGE = ez_q_range()
+let Q_WINDUP = ez_q_windup()
+let W_COST = w_cost_tbl[0]
+let W_CD = w_cd_tbl[0]
+let W_RANGE = ez_w_range()
+let W_WINDUP = ez_w_windup()
+let E_COST = e_cost_tbl[0]
+let E_CD = e_cd_tbl[0]
+let E_RANGE = ez_e_range()
+let R_COST = r_cost_tbl[0]
+let R_CD = r_cd_tbl[0]
+let R_WINDUP = ez_r_windup()
+
+// ------------------------- hand-pinned, TRACE-VERIFIED (arena conform)
+// These live inside ability scripts in the JS game (closures don't
+// serialize); their observable effects are pinned by truth traces.
+
+let Q_DMG = 75000          // SHOT_DAMAGE[2] x1000 (rank 3)
+let Q_AD_PM = 1000         // SHOT_AD_RATIO 1.0 (total AD)
+let Q_AP_PM = 200          // SHOT_AP_RATIO 0.2
+let Q_SPEED = 800          // 24 m/s -> mm/tick
+let Q_HALF_W = 600         // LineWidth 60 -> half-width 0.6 m
+let Q_CDR_TICKS = 30       // era signature: landing Q refunds 1 s on EVERY cd
+let W_DMG = 80000          // FLUX_DAMAGE[0]
+let W_AP_PM = 700
+let W_SPEED = 1067         // 32 m/s -> mm/tick
+let W_HALF_W = 1200
+let W_AS_SLOW_PM = 200     // FLUX_AS_PCT[0] = 20%, enemy attack-speed slow
+let W_SLOW_TICKS = 150     // 5 s
+let E_DMG = 75000          // SHIFT_DAMAGE[0]
+let E_AP_PM = 750
+let E_SEEK = 15000         // bolt seeks nearest enemy within 15 m
+let R_DMG = 350000         // BARRAGE_DAMAGE[0]
+let R_AP_PM = 900
+let R_SPEED = 1333         // 40 m/s
+let R_HALF_W = 1600
+
+// ------------------------------------------------------------- world
+
+pub component Champ { team: int = 0 }
+
+pub component Pos { x: int = 0, z: int = 0 }
+
+pub component Vitals { hp: int = 0, mp: int = 0, alive: int = 1 }
+
+// move intent (mm target) + windup state for autos/casts
+pub component Intent { mx: int = 0, mz: int = 0, moving: int = 0 }
+
+pub component Cds { q: int = 0, w: int = 0, e: int = 0, r: int = 0, atk: int = 0 }
+
+// one pending wind-up per champ: kind 0=none 1=auto 2=Q 3=W 4=R
+pub component Windup { kind: int = 0, left: int = 0, tx: int = 0, tz: int = 0 }
+
+// the only buff in v0: W's attack-speed slow (per-mille, ticks left)
+pub component AsSlow { pm: int = 0, left: int = 0 }
+
+pub component Score { dmg_dealt: int = 0, dmg_taken: int = 0, kills: int = 0, deaths: int = 0 }
+
+// fixed missile pool (no dynamic entities — ports mirror this layout).
+// kind 0=free 1=auto 2=Q 3=W 4=R; dir is a per-mille unit vector.
+pub component Missile {
+    kind: int = 0, x: int = 0, z: int = 0, dx_pm: int = 0, dz_pm: int = 0,
+    speed: int = 0, half_w: int = 0, left_mm: int = 0, src: int = 0,
+    hit0: int = 0, hit1: int = 0,
+}
+
+pub resource Clock { tick: int = 0, over: int = 0, winner: int = -1 }
+
+// ----------------------------------------------------- commands (in)
+// The action surface the RL policy gets — mirrors browser-moba Command
+// kinds: move / attack(implicit nearest) / cast Q W E R at a point.
+
+pub event Cmd { team: int, op: int, x: int, z: int }
+// op: 0=move-to 1=stop 2=attack 3=Q 4=W 5=E 6=R
+
+// ------------------------------------------------------- events (out)
+
+pub event Damage { src_team: int, dst_team: int, amount: int, via: int }
+
+pub event Kill { killer_team: int, victim_team: int, tick: int }
+
+let MIS_POOL = 8
+
+fn champ_of(team: int) -> entity {
+    if team == 0 { return require_entity("blue") }
+    return require_entity("red")
+}
+
+fn isqrt(n: int) -> int {
+    if n <= 0 { return 0 }
+    let mut x = n
+    let mut y = (x + 1) / 2
+    let mut guard = 0
+    while y < x and guard < 64 {
+        x = y
+        y = (x + n / x) / 2
+        guard = guard + 1
+    }
+    return x
+}
+
+fn dist_mm(ax: int, az: int, bx: int, bz: int) -> int {
+    let dx = (bx - ax) / 10
+    let dz = (bz - az) / 10
+    return isqrt(dx * dx + dz * dz) * 10
+}
+
+// classic mitigation — sim/systems/combat.ts mitigate():
+// amount * 100 / (100 + resist), resists in milli => x100000.
+fn mitigate(amount: int, resist_m: int) -> int {
+    let mut r = resist_m
+    if r < 0 { r = 0 }
+    return amount * 100000 / (100000 + r)
+}
+
+fn deal_damage(src_team: int, dst_team: int, raw: int, physical: int) -> nil {
+    let victim = champ_of(dst_team)
+    let v = get(victim, Vitals) |> unwrap
+    if v.alive == 0 { return }
+    let mut resist = MR_M
+    if physical == 1 { resist = ARMOR_M }
+    let dealt = mitigate(raw, resist)
+    update(victim, Vitals) { hp = v.hp - dealt }
+    let src = champ_of(src_team)
+    let ss = get(src, Score) |> unwrap
+    update(src, Score) { dmg_dealt = ss.dmg_dealt + dealt }
+    let vs = get(victim, Score) |> unwrap
+    update(victim, Score) { dmg_taken = vs.dmg_taken + dealt }
+    emit Damage { src_team: src_team, dst_team: dst_team, amount: dealt, via: physical }
+}
+
+fn spawn_missile(kind: int, src_team: int, x: int, z: int, tx: int, tz: int, speed: int, half_w: int, max_range: int) -> nil {
+    let dx = tx - x
+    let dz = tz - z
+    let len = dist_mm(x, z, tx, tz)
+    if len == 0 { return }
+    for i in range(0, MIS_POOL) {
+        let m = require_entity(f"mis-{i}")
+        let mm = get(m, Missile) |> unwrap
+        if mm.kind == 0 {
+            set(m, Missile {
+                kind: kind, x: x, z: z,
+                dx_pm: dx * 1000 / len, dz_pm: dz * 1000 / len,
+                speed: speed, half_w: half_w, left_mm: max_range, src: src_team,
+                hit0: 0, hit1: 0,
+            })
+            return
+        }
+    }
+}
+
+// ------------------------------------------------------ command intake
+
+on Cmd(c) {
+    let me = champ_of(c.team)
+    let v = get(me, Vitals) |> unwrap
+    if v.alive == 0 { return }
+    let cd = get(me, Cds) |> unwrap
+    let wu = get(me, Windup) |> unwrap
+    let p = get(me, Pos) |> unwrap
+    let vt = get(me, Vitals) |> unwrap
+    if c.op == 0 {
+        set(me, Intent { mx: c.x, mz: c.z, moving: 1 })
+        if wu.kind == 1 { set(me, Windup { kind: 0, left: 0, tx: 0, tz: 0 }) }
+    }
+    if c.op == 1 {
+        set(me, Intent { mx: 0, mz: 0, moving: 0 })
+        set(me, Windup { kind: 0, left: 0, tx: 0, tz: 0 })
+    }
+    if c.op == 2 and cd.atk == 0 and wu.kind == 0 {
+        let foe = champ_of(1 - c.team)
+        let fp = get(foe, Pos) |> unwrap
+        let fv = get(foe, Vitals) |> unwrap
+        if fv.alive == 1 and dist_mm(p.x, p.z, fp.x, fp.z) <= ATK_RANGE {
+            set(me, Windup { kind: 1, left: ATK_WINDUP, tx: fp.x, tz: fp.z })
+            set(me, Intent { mx: 0, mz: 0, moving: 0 })
+        }
+    }
+    if c.op == 3 and cd.q == 0 and vt.mp >= Q_COST and wu.kind == 0 {
+        update(me, Vitals) { mp = vt.mp - Q_COST }
+        update(me, Cds) { q = Q_CD }
+        set(me, Windup { kind: 2, left: Q_WINDUP, tx: c.x, tz: c.z })
+        set(me, Intent { mx: 0, mz: 0, moving: 0 })
+    }
+    if c.op == 4 and cd.w == 0 and vt.mp >= W_COST and wu.kind == 0 {
+        update(me, Vitals) { mp = vt.mp - W_COST }
+        update(me, Cds) { w = W_CD }
+        set(me, Windup { kind: 3, left: W_WINDUP, tx: c.x, tz: c.z })
+        set(me, Intent { mx: 0, mz: 0, moving: 0 })
+    }
+    if c.op == 5 and cd.e == 0 and vt.mp >= E_COST and wu.kind == 0 {
+        // Arcane Shift: instant blink (castPointTicks 0), clamped to range
+        update(me, Vitals) { mp = vt.mp - E_COST }
+        update(me, Cds) { e = E_CD }
+        blink_and_bolt(c.team, c.x, c.z)
+    }
+    if c.op == 6 and cd.r == 0 and vt.mp >= R_COST and wu.kind == 0 {
+        update(me, Vitals) { mp = vt.mp - R_COST }
+        update(me, Cds) { r = R_CD }
+        set(me, Windup { kind: 4, left: R_WINDUP, tx: c.x, tz: c.z })
+        set(me, Intent { mx: 0, mz: 0, moving: 0 })
+    }
+}
+
+fn blink_and_bolt(team: int, tx: int, tz: int) -> nil {
+    let me = champ_of(team)
+    let p = get(me, Pos) |> unwrap
+    let d = dist_mm(p.x, p.z, tx, tz)
+    let mut nx = tx
+    let mut nz = tz
+    if d > E_RANGE {
+        nx = p.x + (tx - p.x) * E_RANGE / d
+        nz = p.z + (tz - p.z) * E_RANGE / d
+    }
+    nx = clamp_x(nx)
+    nz = clamp_z(nz)
+    set(me, Pos { x: nx, z: nz })
+    // the landing bolt: nearest enemy within E_SEEK takes the hit
+    let foe = champ_of(1 - team)
+    let fp = get(foe, Pos) |> unwrap
+    let fv = get(foe, Vitals) |> unwrap
+    if fv.alive == 1 and dist_mm(nx, nz, fp.x, fp.z) <= E_SEEK {
+        deal_damage(team, 1 - team, E_DMG + AP_M * E_AP_PM / 1000, 0)
+    }
+}
+
+fn clamp_x(x: int) -> int {
+    if x < 0 { return 0 }
+    if x > LANE_W { return LANE_W }
+    return x
+}
+
+fn clamp_z(z: int) -> int {
+    if z < 0 { return 0 }
+    if z > LANE_H { return LANE_H }
+    return z
+}
+
+// ------------------------------------------------------- tick systems
+
+fn sys_timers(team: int) -> nil {
+    let me = champ_of(team)
+    let cd = get(me, Cds) |> unwrap
+    let mut q = cd.q - 1
+    let mut w = cd.w - 1
+    let mut e = cd.e - 1
+    let mut r = cd.r - 1
+    let mut a = cd.atk - 1
+    if q < 0 { q = 0 }
+    if w < 0 { w = 0 }
+    if e < 0 { e = 0 }
+    if r < 0 { r = 0 }
+    if a < 0 { a = 0 }
+    set(me, Cds { q: q, w: w, e: e, r: r, atk: a })
+    let v = get(me, Vitals) |> unwrap
+    if v.alive == 1 {
+        let mut hp = v.hp + HP_REGEN_TICK
+        let mut mp = v.mp + MP_REGEN_TICK
+        if hp > HP_MAX { hp = HP_MAX }
+        if mp > MP_MAX { mp = MP_MAX }
+        update(me, Vitals) { hp = hp, mp = mp }
+    }
+    let sl = get(me, AsSlow) |> unwrap
+    if sl.left > 0 {
+        let mut left = sl.left - 1
+        let mut pm = sl.pm
+        if left == 0 { pm = 0 }
+        set(me, AsSlow { pm: pm, left: left })
+    }
+}
+
+fn sys_move(team: int) -> nil {
+    let me = champ_of(team)
+    let it = get(me, Intent) |> unwrap
+    let v = get(me, Vitals) |> unwrap
+    if it.moving == 0 or v.alive == 0 { return }
+    let p = get(me, Pos) |> unwrap
+    let d = dist_mm(p.x, p.z, it.mx, it.mz)
+    if d <= MS_MM_TICK {
+        set(me, Pos { x: clamp_x(it.mx), z: clamp_z(it.mz) })
+        update(me, Intent) { moving = 0 }
+        return
+    }
+    let nx = p.x + (it.mx - p.x) * MS_MM_TICK / d
+    let nz = p.z + (it.mz - p.z) * MS_MM_TICK / d
+    set(me, Pos { x: clamp_x(nx), z: clamp_z(nz) })
+}
+
+fn sys_windup(team: int) -> nil {
+    let me = champ_of(team)
+    let wu = get(me, Windup) |> unwrap
+    if wu.kind == 0 { return }
+    let v = get(me, Vitals) |> unwrap
+    if v.alive == 0 {
+        set(me, Windup { kind: 0, left: 0, tx: 0, tz: 0 })
+        return
+    }
+    if wu.left > 1 {
+        update(me, Windup) { left = wu.left - 1 }
+        return
+    }
+    let p = get(me, Pos) |> unwrap
+    if wu.kind == 1 {
+        // auto fires: homing handled as straight shot at target's CURRENT pos
+        let foe = champ_of(1 - team)
+        let fp = get(foe, Pos) |> unwrap
+        spawn_missile(1, team, p.x, p.z, fp.x, fp.z, ATK_MIS_SPEED, 900, ATK_RANGE * 2)
+        // attack period: slowed by W's flux debuff (per-mille)
+        let sl = get(me, AsSlow) |> unwrap
+        let period = ATK_PERIOD * 1000 / (1000 - sl.pm)
+        update(me, Cds) { atk = period }
+    }
+    if wu.kind == 2 {
+        spawn_missile(2, team, p.x, p.z, wu.tx, wu.tz, Q_SPEED, Q_HALF_W, Q_RANGE)
+    }
+    if wu.kind == 3 {
+        spawn_missile(3, team, p.x, p.z, wu.tx, wu.tz, W_SPEED, W_HALF_W, W_RANGE)
+    }
+    if wu.kind == 4 {
+        spawn_missile(4, team, p.x, p.z, wu.tx, wu.tz, R_SPEED, R_HALF_W, LANE_W * 2)
+    }
+    set(me, Windup { kind: 0, left: 0, tx: 0, tz: 0 })
+}
+
+// swept missile-vs-champ collision, then on-hit scripts
+fn sys_missiles() -> nil {
+    for i in range(0, MIS_POOL) {
+        let m = require_entity(f"mis-{i}")
+        let mm = get(m, Missile) |> unwrap
+        if mm.kind == 0 { continue }
+        let mut step = mm.speed
+        if step > mm.left_mm { step = mm.left_mm }
+        let nx = mm.x + mm.dx_pm * step / 1000
+        let nz = mm.z + mm.dz_pm * step / 1000
+        // collide against the enemy champ (gameplayRadius 1.3 m)
+        let foe_team = 1 - mm.src
+        let foe = champ_of(foe_team)
+        let fv = get(foe, Vitals) |> unwrap
+        let mut already = mm.hit0
+        if foe_team == 1 { already = mm.hit1 }
+        let mut hit = 0
+        if fv.alive == 1 and already == 0 {
+            let fp = get(foe, Pos) |> unwrap
+            if seg_hits(mm.x, mm.z, nx, nz, fp.x, fp.z, mm.half_w + 1300) == 1 {
+                hit = 1
+            }
+        }
+        if hit == 1 {
+            on_missile_hit(mm.kind, mm.src, foe_team)
+            // autos and Q stop on first hit; W and R pierce
+            if mm.kind == 1 or mm.kind == 2 {
+                set(m, Missile { kind: 0, x: 0, z: 0, dx_pm: 0, dz_pm: 0, speed: 0, half_w: 0, left_mm: 0, src: 0, hit0: 0, hit1: 0 })
+                continue
+            }
+            if foe_team == 0 {
+                update(m, Missile) { hit0 = 1 }
+            } else {
+                update(m, Missile) { hit1 = 1 }
+            }
+        }
+        let left = mm.left_mm - step
+        if left <= 0 {
+            set(m, Missile { kind: 0, x: 0, z: 0, dx_pm: 0, dz_pm: 0, speed: 0, half_w: 0, left_mm: 0, src: 0, hit0: 0, hit1: 0 })
+        } else {
+            update(m, Missile) { x = nx, z = nz, left_mm = left }
+        }
+    }
+}
+
+// closest approach of segment (ax,az)->(bx,bz) to point (px,pz) <= rad?
+// integer-only: work in centimeter grid to keep products in range.
+fn seg_hits(ax: int, az: int, bx: int, bz: int, px: int, pz: int, rad: int) -> int {
+    let abx = (bx - ax) / 10
+    let abz = (bz - az) / 10
+    let apx = (px - ax) / 10
+    let apz = (pz - az) / 10
+    let ab2 = abx * abx + abz * abz
+    let mut t_pm = 0
+    if ab2 > 0 {
+        t_pm = (apx * abx + apz * abz) * 1000 / ab2
+        if t_pm < 0 { t_pm = 0 }
+        if t_pm > 1000 { t_pm = 1000 }
+    }
+    let cx = ax / 10 + abx * t_pm / 1000
+    let cz = az / 10 + abz * t_pm / 1000
+    let dx = px / 10 - cx
+    let dz = pz / 10 - cz
+    let r = rad / 10
+    if dx * dx + dz * dz <= r * r { return 1 }
+    return 0
+}
+
+fn on_missile_hit(kind: int, src_team: int, dst_team: int) -> nil {
+    if kind == 1 {
+        deal_damage(src_team, dst_team, AD_M, 1)
+    }
+    if kind == 2 {
+        // Mystic Shot: physical, AD + 0.2 AP — and the era signature:
+        // landing Q ticks EVERY cooldown down 1 s
+        deal_damage(src_team, dst_team, Q_DMG + AD_M * Q_AD_PM / 1000 + AP_M * Q_AP_PM / 1000, 1)
+        let me = champ_of(src_team)
+        let cd = get(me, Cds) |> unwrap
+        let mut q = cd.q - Q_CDR_TICKS
+        let mut w = cd.w - Q_CDR_TICKS
+        let mut e = cd.e - Q_CDR_TICKS
+        let mut r = cd.r - Q_CDR_TICKS
+        if q < 0 { q = 0 }
+        if w < 0 { w = 0 }
+        if e < 0 { e = 0 }
+        if r < 0 { r = 0 }
+        set(me, Cds { q: q, w: w, e: e, r: r, atk: cd.atk })
+    }
+    if kind == 3 {
+        deal_damage(src_team, dst_team, W_DMG + AP_M * W_AP_PM / 1000, 0)
+        let foe = champ_of(dst_team)
+        set(foe, AsSlow { pm: W_AS_SLOW_PM, left: W_SLOW_TICKS })
+    }
+    if kind == 4 {
+        // 1v1: first target struck -> falloff index 0 -> full damage
+        deal_damage(src_team, dst_team, R_DMG + AP_M * R_AP_PM / 1000, 0)
+    }
+}
+
+fn sys_deaths() -> nil {
+    for t in range(0, 2) {
+        let me = champ_of(t)
+        let v = get(me, Vitals) |> unwrap
+        if v.alive == 1 and v.hp <= 0 {
+            update(me, Vitals) { alive = 0, hp = 0 }
+            let killer = champ_of(1 - t)
+            let ks = get(killer, Score) |> unwrap
+            update(killer, Score) { kills = ks.kills + 1 }
+            let vs = get(me, Score) |> unwrap
+            update(me, Score) { deaths = vs.deaths + 1 }
+            let clk = get_resource(Clock) |> unwrap
+            set_resource(Clock, Clock { tick: clk.tick, over: 1, winner: 1 - t })
+            emit Kill { killer_team: 1 - t, victim_team: t, tick: clk.tick }
+        }
+    }
+}
+
+pub fn step() -> nil {
+    let clk = get_resource(Clock) |> unwrap
+    set_resource(Clock, Clock { tick: clk.tick + 1, over: clk.over, winner: clk.winner })
+    sys_timers(0)
+    sys_timers(1)
+    sys_move(0)
+    sys_move(1)
+    sys_windup(0)
+    sys_windup(1)
+    sys_missiles()
+    sys_deaths()
+}
+
+pub fn build_world() -> nil {
+    set_resource(Clock, Clock { tick: 0, over: 0, winner: -1 })
+    let _b = entity "blue" {
+        Champ { team: 0 }, Pos { x: SPAWN_X_BLUE, z: SPAWN_Z },
+        Vitals { hp: HP_MAX, mp: MP_MAX, alive: 1 },
+        Intent {}, Cds {}, Windup {}, AsSlow {}, Score {},
+    }
+    let _r = entity "red" {
+        Champ { team: 1 }, Pos { x: SPAWN_X_RED, z: SPAWN_Z },
+        Vitals { hp: HP_MAX, mp: MP_MAX, alive: 1 },
+        Intent {}, Cds {}, Windup {}, AsSlow {}, Score {},
+    }
+    for i in range(0, MIS_POOL) {
+        let _m = entity f"mis-{i}" { Missile {} }
+    }
+}
+
+// ------------------------------------------- scripted duel: the golden
+// Two deterministic bots — blue is an aggressive kiter (walk in, Q on
+// sight, auto in range, E away when low); red strafes a zigzag trying
+// to dodge and pokes back. 100% integer decisions: the trace is the
+// conformance fixture for the Rust and CUDA ports.
+
+fn bot_blue(tick: int) -> nil {
+    let me = require_entity("blue")
+    let foe = require_entity("red")
+    let p = get(me, Pos) |> unwrap
+    let fp = get(foe, Pos) |> unwrap
+    let v = get(me, Vitals) |> unwrap
+    let cd = get(me, Cds) |> unwrap
+    let d = dist_mm(p.x, p.z, fp.x, fp.z)
+    if v.hp < HP_MAX / 4 and cd.e == 0 {
+        emit Cmd { team: 0, op: 5, x: p.x - 9000, z: p.z }
+        return
+    }
+    if d <= Q_RANGE and cd.q == 0 {
+        emit Cmd { team: 0, op: 3, x: fp.x, z: fp.z }
+        return
+    }
+    if d <= ATK_RANGE and cd.atk == 0 {
+        emit Cmd { team: 0, op: 2, x: 0, z: 0 }
+        return
+    }
+    if d > ATK_RANGE {
+        emit Cmd { team: 0, op: 0, x: fp.x, z: fp.z }
+    } else {
+        if tick % 30 < 15 {
+            emit Cmd { team: 0, op: 0, x: p.x - 2000, z: p.z + 1500 }
+        } else {
+            emit Cmd { team: 0, op: 0, x: p.x + 1000, z: p.z - 1500 }
+        }
+    }
+}
+
+fn bot_red(tick: int) -> nil {
+    let me = require_entity("red")
+    let foe = require_entity("blue")
+    let p = get(me, Pos) |> unwrap
+    let fp = get(foe, Pos) |> unwrap
+    let cd = get(me, Cds) |> unwrap
+    let d = dist_mm(p.x, p.z, fp.x, fp.z)
+    if d <= W_RANGE and cd.w == 0 {
+        emit Cmd { team: 1, op: 4, x: fp.x, z: fp.z }
+        return
+    }
+    if d <= ATK_RANGE and cd.atk == 0 {
+        emit Cmd { team: 1, op: 2, x: 0, z: 0 }
+        return
+    }
+    // zigzag strafe: dodge-shaped movement, fully deterministic
+    if tick % 40 < 20 {
+        emit Cmd { team: 1, op: 0, x: p.x - 1000, z: p.z + 2500 }
+    } else {
+        emit Cmd { team: 1, op: 0, x: p.x - 1000, z: p.z - 2500 }
+    }
+}
+
+// canonical observable state — the CROSS-IMPLEMENTATION conformance
+// line. The Rust and CUDA ports print the identical format from their
+// own state; fixtures diff as text. (rad's world_digest can't travel:
+// other implementations have no rad world to hash.)
+fn champ_state(team: int) -> str {
+    let me = champ_of(team)
+    let p = get(me, Pos) |> unwrap
+    let v = get(me, Vitals) |> unwrap
+    let cd = get(me, Cds) |> unwrap
+    let wu = get(me, Windup) |> unwrap
+    let sl = get(me, AsSlow) |> unwrap
+    return f"{p.x},{p.z},{v.hp},{v.mp},{v.alive},{cd.q},{cd.w},{cd.e},{cd.r},{cd.atk},{wu.kind},{wu.left},{sl.pm},{sl.left}"
+}
+
+fn missile_state() -> str {
+    let mut parts = []
+    for i in range(0, MIS_POOL) {
+        let mm = get(require_entity(f"mis-{i}"), Missile) |> unwrap
+        if mm.kind != 0 {
+            parts << f"{i}:{mm.kind},{mm.x},{mm.z},{mm.left_mm},{mm.src}"
+        }
+    }
+    return join(parts, ";")
+}
+
+fn state_line(t: int) -> str {
+    return f"S {t} B[{champ_state(0)}] R[{champ_state(1)}] M[{missile_state()}]"
+}
+
+fn main() -> nil {
+    build_world()
+    let mut t = 0
+    let mut running = 1
+    while t < 1800 and running == 1 {
+        bot_blue(t)
+        bot_red(t)
+        flush_events()
+        step()
+        if t % 30 == 0 { print(state_line(t)) }
+        let clk = get_resource(Clock) |> unwrap
+        if clk.over == 1 { running = 0 }
+        t = t + 1
+    }
+    let clk = get_resource(Clock) |> unwrap
+    let b = get(require_entity("blue"), Vitals) |> unwrap
+    let r = get(require_entity("red"), Vitals) |> unwrap
+    let bs = get(require_entity("blue"), Score) |> unwrap
+    print(state_line(clk.tick))
+    print(f"END tick={clk.tick} winner={clk.winner} blue_hp={b.hp} red_hp={r.hp} blue_dealt={bs.dmg_dealt}")
+}

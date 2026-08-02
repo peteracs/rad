@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Orianna Ability Lab</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="./orianna_arena.css?v=three-perf-3">
+</head>
+<body>
+<main class="shell">
+  <section class="stage-wrap">
+    <canvas id="arena" width="1000" height="700" aria-label="Orianna ability arena"></canvas>
+    <div id="mode" class="mode">MOVE</div>
+  </section>
+
+  <aside class="hud">
+    <div class="brand">
+      <div class="brand-mark">O</div>
+      <div>
+        <h1>Orianna Ability Lab</h1>
+        <p id="status">Loading Rad VM...</p>
+      </div>
+    </div>
+
+    <div class="bars">
+      <div class="bar-row">
+        <span>HP</span>
+        <div class="bar"><i id="hpBar"></i></div>
+        <b id="hpText">-</b>
+      </div>
+      <div class="bar-row">
+        <span>Mana</span>
+        <div class="bar mana"><i id="manaBar"></i></div>
+        <b id="manaText">-</b>
+      </div>
+    </div>
+
+    <div class="abilities" id="abilities">
+      <button class="ability" data-slot="q"><b>Q</b><span>Command: Attack</span><em></em></button>
+      <button class="ability" data-slot="w"><b>W</b><span>Dissonance</span><em></em></button>
+      <button class="ability" data-slot="e"><b>E</b><span>Protect</span><em></em></button>
+      <button class="ability" data-slot="r"><b>R</b><span>Shockwave</span><em></em></button>
+      <button class="ability utility" data-slot="aa"><b>A</b><span>Passive Hit</span><em></em></button>
+    </div>
+
+    <div class="tools">
+      <button id="undo" class="tool">Undo</button>
+      <button id="redo" class="tool">Redo</button>
+      <button id="pause" class="tool">Pause</button>
+      <button id="step" class="tool">Step</button>
+      <button id="inspect" class="tool wide">Inspect</button>
+    </div>
+
+    <div class="state-grid">
+      <div><span>Ball</span><b id="ballState">-</b></div>
+      <div><span>Anchor</span><b id="anchorState">-</b></div>
+      <div><span>Target</span><b id="targetState">-</b></div>
+      <div><span>Tick</span><b id="tickState">0</b></div>
+      <div><span>Runtime</span><b id="runtimeState">-</b></div>
+      <div><span>Stack</span><b id="schemaState">-</b></div>
+      <div><span>FPS</span><b id="perfState">-</b></div>
+    </div>
+
+    <pre id="inspectPanel" class="inspect-panel"></pre>
+    <pre id="log" class="log"></pre>
+    <button id="reset" class="reset">Reset</button>
+  </aside>
+</main>
+
+<script type="module" src="./orianna_arena.js?v=three-perf-3"></script>
+</body>
+</html>

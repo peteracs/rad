@@ -1,0 +1,20 @@
+// Attack: complex guard expression with multiple conditions
+event Data { x, y, tag }
+
+on Data(e) where e.x > 0 and e.y > 0 and e.tag == "valid" {
+    print(f"accepted: x={e.x} y={e.y}")
+}
+
+on Data(e) where e.tag != "valid" {
+    print(f"rejected: tag={e.tag}")
+}
+
+fn main() -> nil {
+    emit Data { x: 1, y: 2, tag: "valid" }
+    emit Data { x: -1, y: 2, tag: "valid" }
+    emit Data { x: 1, y: 2, tag: "invalid" }
+    flush_events()
+}
+
+// expect: accepted: x=1 y=2
+// expect: rejected: tag=invalid

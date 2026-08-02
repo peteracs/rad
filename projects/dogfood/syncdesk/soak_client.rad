@@ -1,0 +1,118 @@
+// syncdesk soak client — one "machine" hammering the server for a duration.
+//
+// Each cycle: PULL (commit as local world), diverge offline (status edit,
+// assignee edit, an in-flight note), DPUSH the delta, occasionally ask WHY.
+// Latencies are measured around each rpc and printed as sample lines:
+//
+//   S <cycle> <pull_ms> <push_ms> <delta_bytes> <verdict>
+//
+// stdin: "<duration_seconds> <client_name>", e.g.  echo 3600 alice | rad soak_client.rad
+//
+// A push can be refused with "unknown base (pull again)" when the server's
+// served-bases window evicted our pull (bounded memory beats unbounded
+// promises). That is the protocol working, not failing: the client counts
+// it as a retry and pulls fresh.
+
+component Ticket { title: "", status: "open", assignee: "" }
+resource Audit { log: "" }
+
+event NoteAdded { ticket, note }
+
+on NoteAdded(e) {
+    let t = get(e.ticket, Ticket)
+    match t {
+        Some(tv) => {
+            let a = get_resource(Audit) |> unwrap
+            set_resource(Audit, Audit { log: a.log + f"[{tv.title}: {e.note}] " })
+        }
+        None => {}
+    }
+}
+
+fn rpc(request: str) -> str {
+    let conn = tcp_connect("127.0.0.1", 7777)
+    tcp_write(conn, request + "\n")
+    let mut buf = ""
+    while true {
+        let chunk = tcp_read(conn, 65536)
+        if len(chunk) == 0 { break }
+        buf = buf + chunk
+        if ends_with(buf, "\n") { break }
+    }
+    tcp_close(conn)
+    return trim(buf)
+}
+
+fn main() -> nil {
+    let stdin = split(trim(read_stdin_all()), " ")
+    let duration_s = int(stdin[0])
+    let me = stdin[1]
+
+    let start = clock()
+    let mut cycle = 0
+    let mut merged = 0
+    let mut retries = 0
+    let mut conflicts = 0
+
+    let mut base_fork = fork()
+    let mut base_digest = ""
+
+    while clock() - start < float(duration_s) {
+        cycle = cycle + 1
+
+        // -- pull: fresh base every cycle --------------------------------
+        let t0 = clock()
+        let base_bytes = rpc("PULL")
+        let pull_ms = (clock() - t0) * 1000.0
+        match fork_from_bytes(base_bytes) {
+            Ok(f) => {
+                commit(f)
+                base_fork = f
+                base_digest = split(base_bytes, " ")[1]
+            }
+            Err(msg) => {
+                print(f"E {cycle} pull failed: {msg}")
+                continue
+            }
+        }
+
+        // -- diverge offline ----------------------------------------------
+        let mut tname = "T-1"
+        if cycle % 2 == 0 { tname = "T-2" }
+        let t = get_entity(tname)
+        if cycle % 3 == 0 {
+            update(t, Ticket) { status = "escalated" }
+        } else {
+            update(t, Ticket) { assignee = me }
+        }
+        if cycle % 5 == 0 {
+            emit NoteAdded { ticket: t, note: f"{me} cycle {cycle}" }
+        }
+
+        // -- push the divergence ------------------------------------------
+        let delta = fork_delta(base_fork, fork())
+        let t1 = clock()
+        let reply = rpc("DPUSH " + base_digest + "\t" + delta)
+        let push_ms = (clock() - t1) * 1000.0
+        let verdict = split(reply, " ")[0]
+        if verdict == "MERGED" { merged = merged + 1 }
+        if verdict == "CONFLICT" { conflicts = conflicts + 1 }
+        if verdict == "ERROR" { retries = retries + 1 }
+
+        print(f"S {cycle} {pull_ms} {push_ms} {len(delta)} {verdict}")
+
+        // -- occasionally exercise cross-machine why ----------------------
+        if cycle % 25 == 0 {
+            let _w = rpc("WHY " + tname)
+        }
+
+        // Pace the loop: each cycle opens 2 one-shot TCP connections, and
+        // Windows parks closed sockets in TIME_WAIT for 120 s. Unpaced,
+        // 3 clients exhaust the ~16k ephemeral ports in ~60 s and every
+        // connect after that dies with WSAEADDRINUSE. ~10 cycles/s keeps
+        // the TIME_WAIT pool at ~7k with 2x headroom.
+        sleep_ms(100)
+    }
+
+    print(f"DONE {me} cycles={cycle} merged={merged} conflicts={conflicts} retries={retries} wall_s={clock() - start}")
+}

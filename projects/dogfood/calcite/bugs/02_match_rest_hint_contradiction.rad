@@ -1,0 +1,51 @@
+// BUG 02 - there is no clean way to ignore a variant field in default mode,
+// and the checker's own hint recommends a spelling the checker rejects.
+//
+// Run:  target\debug\rad.exe projects\dogfood\calcite\bugs\02_match_rest_hint_contradiction.rad
+//
+// `kind` only needs `op`. Three spellings, three bad outcomes:
+//
+//   OPTION A (partial binding)  -> ERROR "Pattern does not bind all fields",
+//                                  hinting: "Use `..` to ignore remaining fields"
+//   OPTION B (take the hint)    -> ERROR E2503 "requires --compat-v0.5-dx"
+//                                  (see 02b_match_rest_rejected.rad)
+//   OPTION C (bind everything)  -> 2x WARNING "Unused variable"
+//
+// Only OPTION A is shown here so the hint text is visible in the output.
+
+type Expr {
+    ENum { num: 0.0 }
+    EBin { op: "", lhs: 0.0, rhs: 0.0 }
+}
+
+// OPTION A: bind just the field we need.
+fn kind_partial(e: Expr) -> str {
+    match e {
+        ENum { num } => { return "num" }
+        EBin { op } => { return op }
+    }
+}
+
+// OPTION C: bind all three, then get warned for the two we were forced to add.
+fn kind_all(e: Expr) -> str {
+    match e {
+        ENum { num } => { return "num" }
+        EBin { op, lhs, rhs } => { return op }
+    }
+}
+
+// THE ACTUAL WORKAROUND, which no diagnostic ever mentions: rename the
+// unwanted bindings with the `field: _name` form so they read as discards.
+fn kind_workaround(e: Expr) -> str {
+    match e {
+        ENum { num: _num } => { return "num" }
+        EBin { op, lhs: _lhs, rhs: _rhs } => { return op }
+    }
+}
+
+fn main() -> nil {
+    let b = Expr::EBin { op: "+", lhs: 1.0, rhs: 2.0 }
+    print(kind_partial(b))
+    print(kind_all(b))
+    print(kind_workaround(b))
+}

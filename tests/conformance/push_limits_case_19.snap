@@ -1,0 +1,5 @@
+---
+source: tests\conformance\push_limits_case_19.rad
+exit_code: 0
+---
+CASE19:100

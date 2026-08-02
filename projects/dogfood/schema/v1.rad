@@ -1,0 +1,17 @@
+// Schema evolution demo (list item #5) — version 1 of a tiny RPG.
+// Run me first: I create a world and persist it with save_world().
+//
+//   rad projects/dogfood/schema/v1.rad
+
+component Health { hp: 100 }
+
+component Pos { x: 0, y: 0 }
+resource Bank { gold: 0 }
+
+let _hero = spawn("hero", Health { hp: 73 }, Pos { x: 4, y: 9 })
+let _sidekick = spawn("sidekick", Health { hp: 41 }, Pos { x: 3, y: 9 })
+set_resource(Bank, Bank { gold: 250 })
+
+let save = save_world()
+write_file("projects/dogfood/schema/world.radw", save)
+print(f"v1: saved {len(save)} bytes to world.radw")

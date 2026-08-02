@@ -1,0 +1,5 @@
+---
+source: tests\conformance\test_fork_deep_chain.rad
+exit_code: 0
+---
+PASS: deep chain (20 cycles)

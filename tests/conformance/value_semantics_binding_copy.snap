@@ -1,0 +1,6 @@
+---
+source: tests\conformance\value_semantics_binding_copy.rad
+exit_code: 0
+---
+1
+99

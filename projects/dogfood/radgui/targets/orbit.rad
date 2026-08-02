@@ -1,0 +1,42 @@
+// RADSCOPE demo target: three moons orbit a planet for 36 frames.
+// A clean, busy timeline — good for feeling out the scrubber and watching
+// component values move. Moon-c crashes into the planet at frame 30
+// (its Orbit decays), which is fun to find by scrubbing.
+
+component Pos { x: int = 0, y: int = 0 }
+
+component Orbit { radius: int = 0, speed: int = 0, angle: int = 0 }
+
+event Advance { steps: int }
+
+on Advance(e) {
+    for m in entities(Orbit) {
+        let o = get(m, Orbit) |> unwrap
+        let mut r = o.radius
+        if name_of(m) == "moon-c" and r > 2 { r = r - 1 } // decaying orbit
+        let a = (o.angle + o.speed * e.steps) % 360
+        update(m, Orbit) { angle = a, radius = r }
+        // table-free integer "trig": a diamond orbit
+        let mut dx = 0
+        let mut dy = 0
+        if a < 90 { dx = a
+            dy = 90 - a } else { if a < 180 { dx = 180 - a
+                dy = 0 - (a - 90) } else { if a < 270 { dx = 0 - (a - 180)
+                    dy = 0 - (270 - a) } else { dx = 0 - (360 - a)
+                    dy = a - 270 } } }
+        update(m, Pos) { x = 50 + dx * r / 90, y = 50 + dy * r / 90 }
+    }
+}
+
+fn main() -> nil {
+    let _p = entity "planet" { Pos { x: 50, y: 50 } }
+    let _a = entity "moon-a" { Pos {}, Orbit { radius: 20, speed: 17, angle: 0 } }
+    let _b = entity "moon-b" { Pos {}, Orbit { radius: 35, speed: 29, angle: 120 } }
+    let _c = entity "moon-c" { Pos {}, Orbit { radius: 30, speed: 41, angle: 240 } }
+
+    for _t in range(0, 36) {
+        emit Advance { steps: 1 }
+        flush_events()
+    }
+    print("36 frames of sky recorded. moon-c had a bad time.")
+}

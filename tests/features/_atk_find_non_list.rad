@@ -1,0 +1,5 @@
+// Attack: find on a string (wrong type)
+fn main() -> nil {
+    let r = find("hello", fn(c) { return c == "l" })
+    print(r)
+}

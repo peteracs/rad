@@ -1,0 +1,17 @@
+// Attack: once handler — first event matches guard, should fire
+event Ping { val }
+
+on Ping once (e) where e.val > 5 {
+    print("once handler:", e.val)
+}
+
+fn main() -> nil {
+    emit Ping { val: 10 }
+    flush_events()
+    emit Ping { val: 20 }
+    flush_events()
+    print("done")
+}
+
+// expect: once handler: 10
+// expect: done

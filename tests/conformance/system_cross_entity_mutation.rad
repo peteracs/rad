@@ -1,0 +1,23 @@
+component A { val: 0 }
+
+entity e1 { A { val: 10 } }
+
+entity e2 { A { val: 20 } }
+
+system ModifyOther(a: mut A) {
+    if a.val == 10 {
+        // e1 modifies e2
+        let e2_id = query { A } where A.val == 20
+        if len(e2_id) > 0 {
+            let e2_a = require(e2_id[0], A)
+            set(e2_id[0], A { val: 99, ..e2_a })
+        }
+    }
+}
+
+fn main() -> nil {
+    ModifyOther()
+    let e2_id = query { A } where A.val == 99
+    print(len(e2_id) > 0)
+    // expect: true
+}

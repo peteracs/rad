@@ -1,0 +1,19 @@
+// Attack: once handler — non-matching event consumed the once shot
+event Ping { val }
+
+on Ping once (e) where e.val > 5 {
+    print("handler fired:", e.val)
+}
+
+fn main() -> nil {
+    emit Ping { val: 1 }
+    flush_events()
+    print("after first (should not fire)")
+
+    emit Ping { val: 10 }
+    flush_events()
+    print("after second (SHOULD fire)")
+}
+
+// EXPECTED: handler fired: 10
+// ACTUAL BUG: handler never fires because once was consumed by the val=1 event

@@ -1,0 +1,11 @@
+// Attack: min_by with negative numbers
+fn main() -> nil {
+    let data = [3, -10, 5, -2, 0]
+    let result = min_by(data, fn(x) { return x })
+    match result {
+        Some(v) => { print("min:", v) }
+        None => { print("none") }
+    }
+}
+
+// expect: min: -10

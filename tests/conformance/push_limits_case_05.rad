@@ -1,0 +1,6 @@
+// backend: both
+let raw = "  finance,security,platform  "
+let cleaned = trim(raw)
+let teams = split(cleaned, ",")
+print("CASE05:" + join(teams, "|"))
+// expect: CASE05:finance|security|platform

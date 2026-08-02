@@ -1,0 +1,20 @@
+// Attack: multiple handlers for same event, different guards
+event Msg { text }
+
+on Msg(e) where len(e.text) > 5 {
+    print("long:", e.text)
+}
+
+on Msg(e) where len(e.text) <= 5 {
+    print("short:", e.text)
+}
+
+on Msg(e) {
+    print("all:", e.text)
+}
+
+fn main() -> nil {
+    emit Msg { text: "hi" }
+    emit Msg { text: "hello world" }
+    flush_events()
+}

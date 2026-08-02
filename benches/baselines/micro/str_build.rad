@@ -1,0 +1,12 @@
+// String building: 60k appends — allocator + string representation.
+fn main() -> nil {
+    let t0 = now_unix_ms()
+    let mut s = ""
+    let mut i = 0
+    while i < 60000 {
+        s = s + "ab" + f"{i % 10}"
+        i = i + 1
+    }
+    let t1 = now_unix_ms()
+    print(f"RESULT {len(s)} MS {t1 - t0}")
+}

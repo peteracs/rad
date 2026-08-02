@@ -1,0 +1,30 @@
+use "../sim/components.rad"
+use "../world/scene.rad"
+use "../world/avatars.rad"
+use "../sim/movement.rad"
+
+let _local_avatar = seed_moba_world()
+
+fn main() -> nil {
+    let avatar = player_avatar(1)
+    let render = get(avatar, RenderAvatar) |> unwrap
+
+    assert(static_collider_count() == 3, "the shared map must expose the expected static collider count")
+    assert(overlaps_static_collider(22.0, 0.0, render.radius), "the center wall must block avatar-radius movement")
+
+    issue_move_order(1, 1, 22.0, 0.0)
+    let target = get(avatar, MoveTarget) |> unwrap
+    assert(not overlaps_static_collider(target.x, target.y, render.radius), "move targets inside terrain must resolve to a free edge")
+
+    update(avatar, Position) {
+        x = 0.0,
+        y = 30.0
+    }
+    issue_move_order(1, 2, 40.0, 0.0)
+    tick_movement(0.5)
+    let slid = get(avatar, Position) |> unwrap
+
+    assert(slid.x == 0.0, "terrain collision must block the colliding x axis")
+    assert(slid.y < 30.0, "terrain collision must preserve free-axis sliding")
+    assert(not overlaps_static_collider(slid.x, slid.y, render.radius), "slide correction must end outside terrain")
+}

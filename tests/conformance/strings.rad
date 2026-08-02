@@ -1,0 +1,22 @@
+// Concat, len, indexing, reverse on string
+print("a" + "b")
+// expect: ab
+print("hello" + " " + "rad")
+// expect: hello rad
+print(len("rad"))
+// expect: 3
+print(str(len("")))
+// expect: 0
+let s = "abc"
+print(s[0])
+// expect: 97
+print(s[2])
+// expect: 99
+print(reverse("rad"))
+// expect: dar
+print(contains("hello", "ll"))
+// expect: true
+print(contains("hi", "bye"))
+// expect: false
+print(slice("abcdef", 1, 4))
+// expect: bcd

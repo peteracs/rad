@@ -1,0 +1,174 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+permissions:
+  contents: read
+
+jobs:
+  dependency-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+        with:
+          toolchain: stable
+      - name: Audit Rust lockfiles
+        run: |
+          cargo install cargo-audit --version 0.22.2 --locked
+          cargo audit --deny warnings
+          cargo audit --deny warnings --file projects/moba-rad/server/edge-proxy/Cargo.lock
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+      - name: Audit Node lockfiles
+        run: |
+          npm audit --package-lock-only --ignore-scripts --audit-level=high --prefix benches/baselines/collab
+          npm audit --package-lock-only --ignore-scripts --audit-level=high --prefix projects/playground/relay
+          npm audit --package-lock-only --ignore-scripts --audit-level=high --prefix projects/moba-rad/server
+          npm audit --package-lock-only --ignore-scripts --audit-level=high --prefix projects/moba-rad/client
+
+  rust-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+        with:
+          toolchain: stable
+      - name: Cache cargo
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
+      - name: cargo fmt
+        run: cargo fmt --all -- --check
+      - name: cargo check
+        run: cargo check --workspace --all-targets
+      - name: cargo test
+        run: cargo test -p rad-vm --verbose
+      - name: Run snapshot tests
+        run: cargo run -p rad-vm --bin rad -- snapshot tests/
+      - name: Playground smoke (WASM compile_and_run)
+        run: cargo test -p rad-vm compile_and_run_playground --verbose
+      - name: cargo clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+  rust-compile-examples:
+    runs-on: ubuntu-latest
+    needs: rust-tests
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+        with:
+          toolchain: stable
+      - name: Build rad CLI
+        run: cargo build -p rad-vm
+      - name: Entry main must declare return type (no bare fn main() {)
+        run: |
+          if grep -rE "fn\s+main\s*\(\s*\)\s*\{" examples tooling/templates tests/conformance benches --include='*.rad' 2>/dev/null; then
+            echo "Bare \`fn main() {\` is forbidden in examples, tooling/templates, conformance, and benches." >&2
+            echo "Use \`fn main() -> nil {\` (or another explicit \`-> Type\`). See docs/src/reference/spec.md §7.1.1." >&2
+            exit 1
+          fi
+          echo "OK: no bare implicit return \`fn main()\` in canonical .rad trees."
+      - name: Compile examples with Rust VM
+        run: |
+          for f in examples/*.rad; do
+            echo "--- $f ---"
+            ./target/debug/rad "$f" || exit 1
+          done
+      - name: Compile modular examples with Rust VM
+        run: |
+          for entry in examples/*/main.rad; do
+            [ -f "$entry" ] || continue
+            echo "--- $entry ---"
+            ./target/debug/rad "$entry" || exit 1
+          done
+
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+      - name: Documentation links resolve
+        run: python tooling/scripts/check_doc_links.py
+
+  # The edge proxy sets its own `[workspace]`, so `cargo check --workspace` at
+  # the repo root does not reach it. Gate it separately.
+  moba-rad-edge-proxy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+        with:
+          toolchain: stable
+      - name: Cache cargo
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            projects/moba-rad/server/edge-proxy/target
+          key: ${{ runner.os }}-edge-proxy-${{ hashFiles('projects/moba-rad/server/edge-proxy/Cargo.toml') }}
+      - name: cargo test
+        run: cargo test --manifest-path projects/moba-rad/server/edge-proxy/Cargo.toml
+
+  moba-rad-client:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+        with:
+          toolchain: stable
+          targets: wasm32-unknown-unknown
+      - name: Install wasm-pack
+        run: cargo install wasm-pack --version 0.15.0 --locked
+      - name: Build browser runtime
+        run: wasm-pack build --target web --out-dir ../../projects/playground/pkg core/vm
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: projects/moba-rad/client/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+        working-directory: projects/moba-rad/client
+      - name: Typecheck and unit tests
+        run: npm test
+        working-directory: projects/moba-rad/client
+      - name: Production build
+        run: npm run build
+        working-directory: projects/moba-rad/client
+
+  moba-rad-server:
+    runs-on: ubuntu-latest
+    needs: rust-tests
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+        with:
+          toolchain: stable
+      - name: Build rad CLI
+        run: cargo build -p rad-vm --bin rad
+      - name: RAD authority smoke suites
+        run: npm test
+        working-directory: projects/moba-rad/server
+

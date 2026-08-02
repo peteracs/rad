@@ -1,0 +1,5 @@
+// Attack: ? on a plain int in main() -> nil should error at runtime
+fn main() -> nil {
+    let x = 42 ?
+    print("BUG:", x)
+}

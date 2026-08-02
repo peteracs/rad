@@ -1,0 +1,27 @@
+// BUG 06: debug_trace() inside a sandboxed guest escapes the host's
+// provenance tagging and its output stream.
+//
+// bi_sandbox_run buffers guest print output and re-emits it tagged:
+//     let tagged = format!("[sandbox] {}", line);
+// with the comment "Surface buffered guest output to the host, tagged for
+// provenance." debug_trace bypasses that entirely.
+//
+// Run, separating the streams, to see it:
+//   target\debug\rad.exe projects\dogfood\bastion\bugs\06_debug_trace_untagged.rad 1>out.txt 2>err.txt
+
+component Reactor { temp: 0 }
+
+let _site = spawn("site", Reactor { temp: 20 })
+let caps = f"""{ "write": ["Reactor"], "fuel": 200000, "mem_bytes": 4194304 }"""
+
+let guest = f"""
+print("guest print -- expect [sandbox] tag")
+debug_trace("guest debug_trace -- attacker-controlled text")
+"""
+
+print("HOST: before sandbox_run")
+match sandbox_run(guest, fork(), caps) {
+    Ok(_f) => { print("HOST: guest returned Ok") }
+    Err(m) => { print(f"HOST: denied {m}") }
+}
+print("HOST: after sandbox_run")

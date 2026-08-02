@@ -1,0 +1,7 @@
+---
+source: tests\features\test_enumerate.rad
+exit_code: 0
+---
+0: a
+1: b
+2: c

@@ -1,0 +1,179 @@
+// strongbox — RETROACTIVE POLICY EDIT of main.rad.
+//
+//   rad replay projects/dogfood/strongbox/run.radr --with projects/dogfood/strongbox/fixed.rad
+//
+// The question an incident review actually asks: "if we had tightened the
+// SLA policy BEFORE that week, which incidents would have breached?"
+//
+// This file is main.rad with exactly one changed line — sla_for() gives
+// severity>=3 a 15-minute SLA instead of 30. Replaying the recorded session
+// against it answers the question against the REAL week's events rather than
+// a hypothetical, and the blast radius names precisely what the policy moved.
+//
+// WHY THIS APP EXISTS
+//
+// fork_to_bytes() wraps its payload in a blake3 integrity digest, so a
+// tampered fork is rejected on ingest (proved 12 ways in tamper_wire.rad).
+// save_world() has no such envelope: an archive on disk is a plain
+// `RADWORLD2 {json}` document that anyone can edit, and load_world() will
+// read the edit back as gospel (proved in run_tamper_saves.ps1).
+//
+// Strongbox builds the missing layer out of the language itself. Every state
+// transition is followed by a world_digest() receipt appended to a chain, so
+// the archive carries an independent, verifiable history:
+//
+//   verify.rad replays the receipts against the archive and reports whether
+//   the world on disk is the world the receipts describe.
+//
+// The chain is only as trustworthy as its own storage, so it is deliberately
+// kept in a SEPARATE file from the archive: an attacker must now forge two
+// artifacts consistently instead of editing one number.
+
+component Incident { code: "", severity: 1, status: "open", age: 0, sla_mins: 60 }
+
+component Assignee { name: "", team: "unassigned" }
+
+component Source { origin: "" }
+
+resource Ledger { count: 0, region: "", revision: 3 }
+
+event Report { code, severity, origin, who }
+
+event Escalate { code }
+
+event Resolve { code }
+
+// Severity policy lives in one place so the migrations, the handlers and the
+// forecast cannot drift apart.
+pure fn sla_for(severity: int) -> int {
+    if severity >= 5 {
+        return 15
+    }
+    if severity >= 3 {
+        return 15
+    }
+    return 60
+}
+
+pure fn team_for(who: str) -> str {
+    if who == "chen" {
+        return "data"
+    }
+    return "platform"
+}
+
+on Report(e) {
+    spawn(
+        e.code,
+        Incident { code: e.code, severity: e.severity, status: "open", age: 0, sla_mins: sla_for(e.severity) },
+        Assignee { name: e.who, team: team_for(e.who) },
+        Source { origin: e.origin },
+    )
+    let l = res(Ledger)
+    set_resource(Ledger, Ledger { count: l.count + 1, region: l.region, revision: l.revision })
+}
+
+on Escalate(e) {
+    let ent = get_entity(e.code)
+    if ent == nil {
+        return
+    }
+    let i = get(ent, Incident) |> unwrap
+    let bumped = i.severity + 1
+    set(ent, Incident { severity: bumped, sla_mins: sla_for(bumped), ..i })
+}
+
+on Resolve(e) {
+    let ent = get_entity(e.code)
+    if ent == nil {
+        return
+    }
+    let i = get(ent, Incident) |> unwrap
+    set(ent, Incident { status: "resolved", ..i })
+}
+
+// Open incidents age; resolved ones stop the clock. This is the system the
+// forecast runs forward without touching the live world.
+system Age(i: mut Incident) {
+    if i.status == "open" {
+        i = Incident { age: i.age + 1, ..i }
+    }
+}
+
+// ---------------------------------------------------------------- the run
+
+print("=== strongbox: tamper-evident incident archive ===")
+
+set_resource(Ledger, Ledger { count: 0, region: "us-east", revision: 3 })
+
+// io boundary #1: the incident feed. Under --record this read is captured,
+// so replay reproduces the session with no feed file present.
+let feed = read_file("projects/dogfood/strongbox/feed.txt")
+let lines = split(feed, "\n") |> filter(fn(l: str) -> bool { return len(l) > 0 })
+print(f"feed: {len(lines)} entries")
+
+// The receipt chain. Each entry pins the world state after one transition.
+let mut receipts = []
+
+for [idx, raw] in enumerate(lines) {
+    let line = replace(raw, "\r", "")
+    let parts = split(line, "|")
+    let action = parts[0]
+
+    if action == "REPORT" {
+        emit Report {
+            code: parts[1],
+            severity: try_int(parts[2]) |> unwrap,
+            origin: parts[3],
+            who: parts[4],
+        }
+    } else if action == "ESCALATE" {
+        emit Escalate { code: parts[1] }
+    } else if action == "RESOLVE" {
+        emit Resolve { code: parts[1] }
+    } else {
+        print(f"  !! unknown action {action}")
+    }
+
+    flush_events()
+
+    // One receipt per transition: the digest is the state AFTER this entry.
+    receipts = push(receipts, f"{idx}|{action}|{world_digest()}")
+}
+
+print(f"processed {len(receipts)} transitions")
+
+// ---------------------------------------------------------------- forecast
+// The archive is a live world, not just a document: fork it and run the SLA
+// clock forward without disturbing the state the receipts describe.
+let sealed = world_digest()
+let now = fork()
+let later = simulate(now, [system::Age], 30)
+
+let mut breaching = []
+for e in entities(Incident) {
+    let i = get(e, Incident) |> unwrap
+    if i.status == "open" {
+        let f = peek(later, e, Incident) |> unwrap
+        if f.age > i.sla_mins {
+            breaching = push(breaching, f"{i.code}(sev{i.severity} {f.age}m>{i.sla_mins}m)")
+        }
+    }
+}
+print(f"forecast +30m: {len(breaching)} SLA breaches — {breaching}")
+print(f"forecast left the archive untouched: {world_digest() == sealed}")
+
+// ---------------------------------------------------------------- seal
+let archive = save_world()
+write_file("projects/dogfood/strongbox/saves/archive.radw", archive)
+
+// The chain is stored apart from the archive it certifies.
+let chain = join(receipts, "\n")
+write_file("projects/dogfood/strongbox/saves/receipts.log", chain)
+
+let l = res(Ledger)
+print(f"ledger: {l.count} incidents filed in {l.region} (schema rev {l.revision})")
+print(f"archive: {len(archive)} bytes -> saves/archive.radw")
+print(f"receipts: {len(receipts)} entries -> saves/receipts.log")
+print(f"schema_digest: {schema_digest()}")
+print(f"final world_digest: {world_digest()}")

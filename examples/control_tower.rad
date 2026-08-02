@@ -1,0 +1,203 @@
+// =====================================================================
+//  Control Tower — End-to-end Rad showcase application
+//  Demonstrates: ECS systems, scheduled runs, events, pipelines,
+//  state machines, sum types + match, typed functions, value semantics.
+// =====================================================================
+
+component Name { value: "" }
+
+component Position { zone: 0 }
+
+component Battery { level: 100, drain: 10 }
+
+component Throughput { delivered: 0 }
+
+entity courier_a {
+    Name { value: "Courier-A" },
+    Position { zone: 1 },
+    Battery { level: 65, drain: 14 },
+    Throughput { delivered: 0 }
+}
+
+entity courier_b {
+    Name { value: "Courier-B" },
+    Position { zone: 4 },
+    Battery { level: 28, drain: 8 },
+    Throughput { delivered: 0 }
+}
+
+state OrderState {
+    Queued {
+        on pack -> Packed
+        on cancel -> Cancelled
+    }
+    Packed {
+        on ship -> InTransit
+    }
+    InTransit {
+        on deliver -> Delivered
+        on fail -> Failed
+    }
+    Delivered {}
+    Failed {}
+    Cancelled {}
+}
+
+type DeliveryIssue {
+    Clear {}
+    Delayed { minutes: 0 }
+    Lost { last_zone: 0 }
+}
+
+event OrderMoved { order_id, actor, from, to }
+
+event BatteryWarning { actor, level }
+
+event OrderDelivered { order_id, actor }
+
+on OrderMoved(e) {
+    print(f"  order#{e.order_id} [{e.actor}] {e.from} -> {e.to}")
+}
+
+on BatteryWarning(e) {
+    print(f"  warning: {e.actor} battery low at {e.level}%")
+}
+
+on OrderDelivered(e) {
+    let t = get(e.actor, Throughput) ?
+    set(e.actor, Throughput { delivered: t.delivered + 1 })
+    print(f"  delivered: order#{e.order_id} by {(get(e.actor, Name) ?).value}")
+}
+
+system TopUpCritical(name: Name, b: mut Battery) before DrainBattery {
+    if b.level < 25 {
+        b.level = b.level + 35
+        if b.level > 100 {
+            b.level = 100
+        }
+        print(f"  charging {name.value} -> {b.level}%")
+    }
+}
+
+system DrainBattery(name: Name, b: mut Battery) {
+    b.level = b.level - b.drain
+    if b.level < 0 {
+        b.level = 0
+    }
+    if b.level < 20 {
+        emit BatteryWarning { actor: name.value, level: b.level }
+    }
+}
+
+system MoveCouriers(p: mut Position, b: Battery) after DrainBattery {
+    if b.level > 0 {
+        p.zone = p.zone + 1
+    }
+}
+
+fn state_label(s: OrderState) -> str {
+    match s {
+        Queued => { return "queued" }
+        Packed => { return "packed" }
+        InTransit => { return "in_transit" }
+        Delivered => { return "delivered" }
+        Failed => { return "failed" }
+        Cancelled => { return "cancelled" }
+    }
+}
+
+fn issue_message(issue: DeliveryIssue) -> str {
+    match issue {
+        Clear => { return "clear route" }
+        Delayed { minutes } => { return f"delayed by {minutes} min" }
+        Lost { last_zone } => { return f"lost near zone {last_zone}" }
+    }
+}
+
+fn process_order(order_id: int, actor, issue: DeliveryIssue) -> Result<int, str> {
+    let mut s = OrderState::Queued
+    let from0 = state_label(s)
+    s = transition(s, "pack") ?
+    emit OrderMoved { order_id: order_id, actor: (get(actor, Name) |> unwrap).value, from: from0, to: state_label(s) }
+
+    let from1 = state_label(s)
+    s = transition(s, "ship") ?
+    emit OrderMoved { order_id: order_id, actor: (get(actor, Name) |> unwrap).value, from: from1, to: state_label(s) }
+
+    match issue {
+        Clear => {
+            let from2 = state_label(s)
+            s = transition(s, "deliver") ?
+            emit OrderMoved { order_id: order_id, actor: (get(actor, Name) |> unwrap).value, from: from2, to: state_label(s) }
+            emit OrderDelivered { order_id: order_id, actor: actor }
+            return Ok(1)
+        }
+        Delayed { minutes } => {
+            print(f"  note: order#{order_id} {issue_message(DeliveryIssue::Delayed { minutes: minutes })}")
+                let from2 = state_label(s)
+                s = transition(s, "deliver") ?
+                emit OrderMoved { order_id: order_id, actor: (get(actor, Name) |> unwrap).value, from: from2, to: state_label(s) }
+                emit OrderDelivered { order_id: order_id, actor: actor }
+                return Ok(1)
+            }
+            Lost { last_zone } => {
+                print(f"  note: order#{order_id} {issue_message(DeliveryIssue::Lost { last_zone: last_zone })}")
+                    let from2 = state_label(s)
+                    s = transition(s, "fail") ?
+                    emit OrderMoved { order_id: order_id, actor: (get(actor, Name) |> unwrap).value, from: from2, to: state_label(s) }
+                    return Ok(0)
+                }
+            }
+        }
+
+        fn print_status(title: str) {
+            print(title)
+            print(f"  Courier-A zone={(get(courier_a, Position) ?).zone} battery={(get(courier_a, Battery) ?).level}")
+            print(f"  Courier-B zone={(get(courier_b, Position) ?).zone} battery={(get(courier_b, Battery) ?).level}")
+        }
+
+        fn main() -> any {
+            print("========================================")
+            print(" Rad Control Tower")
+            print("========================================")
+
+            print("\n--- ECS + scheduled systems ---")
+            print_status("Before ticks:")
+            schedule [MoveCouriers, DrainBattery, TopUpCritical]
+            schedule [TopUpCritical, MoveCouriers, DrainBattery]
+            print_status("After ticks:")
+
+            print("\n--- Event-driven order flow ---")
+            let mut outcomes = []
+            // push returns a new list (value semantics), so rebind each time.
+        outcomes = push(outcomes, process_order(101, courier_a, DeliveryIssue::Clear {}) |> unwrap)
+        outcomes = push(outcomes, process_order(102, courier_b, DeliveryIssue::Delayed { minutes: 12 }) |> unwrap)
+        outcomes = push(outcomes, process_order(103, courier_a, DeliveryIssue::Lost { last_zone: 6 }) |> unwrap)
+
+            print("\n--- Pipelines for analytics ---")
+            let delivered_total = outcomes |> reduce(0, fn(a, b) { return a + b })
+            let failed_total = len(outcomes) - delivered_total
+            let delivery_times = [14, 9, 17, 11, 21, 8, 13]
+            let fast_runs = delivery_times |> filter(fn(t) { return t <= 12 })
+            let time_total = delivery_times |> reduce(0, fn(a, b) { return a + b })
+
+            print(f"  successful deliveries: {delivered_total}")
+            print(f"  failed deliveries: {failed_total}")
+            print(f"  fast runs (<=12 min): {len(fast_runs)}")
+            print(f"  total route minutes: {time_total}")
+
+            print("\n--- Value semantics ---")
+            let mut baseline = [1, 2, 3]
+            let mut cloned = baseline
+            cloned[0] = 99
+            print(f"  baseline stays independent: {baseline}")
+            print(f"  cloned list changed:        {cloned}")
+
+            print("\n--- ECS data snapshot ---")
+            let delivered_by_courier = [
+                (get(courier_a, Throughput) ?).delivered,
+                (get(courier_b, Throughput) ?).delivered
+            ]
+            print(f"  delivered_by_courier: {delivered_by_courier}")
+            print("========================================")
+        }

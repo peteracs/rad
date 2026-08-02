@@ -1,0 +1,7 @@
+---
+source: tests\conformance\pipe_type_mismatch_rejected.rad
+exit_code: 1
+---
+
+---stderr---
+Error: Argument 1 to 'needs_str' expects str, got int

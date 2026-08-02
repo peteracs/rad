@@ -1,0 +1,10 @@
+// Single element — max_by/min_by/find
+fn main() -> nil {
+    let r1 = max_by([42], fn(x) { return x })
+    let r2 = min_by([42], fn(x) { return x })
+    let r3 = find([42], fn(x) { return x == 42 })
+    let r4 = find([42], fn(x) { return x == 99 })
+    print(r1, r2, r3, r4)
+}
+
+// expect: Option::Some { value: 42 } Option::Some { value: 42 } Option::Some { value: 42 } Option::None {}

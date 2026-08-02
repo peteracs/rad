@@ -1,0 +1,11 @@
+// Attack: enumerate of enumerate — should produce [[0, [0, "x"]], [1, [1, "y"]]]
+fn main() -> nil {
+    let inner = enumerate(["x", "y"])
+    let outer = enumerate(inner)
+    for pair in outer {
+        print(f"i={pair[0]} inner_i={pair[1][0]} val={pair[1][1]}")
+    }
+}
+
+// expect: i=0 inner_i=0 val=x
+// expect: i=1 inner_i=1 val=y

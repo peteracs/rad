@@ -1,0 +1,5 @@
+---
+source: tests\conformance\push_limits_case_09.rad
+exit_code: 0
+---
+CASE09:3:20

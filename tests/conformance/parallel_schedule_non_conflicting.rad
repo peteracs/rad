@@ -1,0 +1,32 @@
+// expect: 11
+// expect: 120
+
+component Position { x: 0 }
+
+component Velocity { dx: 0 }
+
+component Health { hp: 0 }
+
+component Regen { amount: 0 }
+
+entity player {
+    Position { x: 10 },
+    Velocity { dx: 1 },
+    Health { hp: 100 },
+    Regen { amount: 20 }
+}
+
+system Move(pos: mut Position, vel: Velocity) {
+    pos.x = pos.x + vel.dx
+}
+
+system Heal(h: mut Health, r: Regen) {
+    h.hp = h.hp + r.amount
+}
+
+schedule [Move, Heal]
+
+let p = get(player, Position) |> unwrap
+let h = get(player, Health) |> unwrap
+print(p.x)
+print(h.hp)

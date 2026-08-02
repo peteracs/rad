@@ -1,0 +1,186 @@
+// WAREWORK — browser-moba's wave director + minion aggro, written the
+// way it wants to be written (fake-port round 6). The code comes first;
+// whatever the language can't run becomes a feature.
+//
+// Architecture (mirrors sim/systems/barracks.ts + callForHelp.ts):
+//   - The wave clock is a delayed-event chain: each WaveDue re-arms the
+//     next. Composition comes from a constant table; the cannon rides
+//     the cadence waves (every 3rd).
+//   - Aggro is the era's call-for-help ladder, and a ranking IS a key:
+//     responders pick min_by (inverted rung, distance) — TUPLE KEYS,
+//     compared lexicographically. The turret table is the same scan
+//     with every rung below champ-on-champ flattened to "nearest".
+
+pub let WAVE_EVERY = 90            // demo ticks between waves
+pub let CANNON_CADENCE = 3         // every 3rd wave brings the cannon
+pub let ACQUIRE_RANGE = 12.0
+
+// the default-table ladder, top rung first (callForHelp.ts)
+pub let RUNG_CHAMP_ON_CHAMP = 5
+pub let RUNG_MINION_ON_CHAMP = 4
+pub let RUNG_MINION_ON_MINION = 3
+pub let RUNG_CHAMP_ON_MINION = 2
+pub let RUNG_NEAREST = 1
+
+pub let WAVE_MELEE = 3
+pub let WAVE_CASTER = 3
+
+// ---------------------------------------------------------- sim state
+
+component Pos { at: (float, float) = (0.0, 0.0) }
+
+component Soldier { team: int, kind: str = "melee", champion: bool = false }
+
+component Aggro { target: entity | nil = nil, table: str = "default" }
+
+component Attacking { victim: entity }     // who this unit is hitting now
+
+component Barracks { team: int, gate: (float, float) = (0.0, 0.0), wave_n: int = 0 }
+
+pub event WaveDue { rack: entity }
+pub event Acquired { who: entity, target: entity, rung: int }
+
+// ------------------------------------------------------------- waves
+
+pub fn wave_composition(n: int) -> list {
+    let mut kinds = []
+    for _ in range(0, WAVE_MELEE) { kinds << "melee" }
+    for _ in range(0, WAVE_CASTER) { kinds << "caster" }
+    if n % CANNON_CADENCE == 0 { kinds << "cannon" }
+    return kinds
+}
+
+on WaveDue(e) {
+    let rack = require(e.rack, Barracks)
+    let n = rack.wave_n + 1
+    update(e.rack, Barracks) { wave_n = n }
+    let kinds = wave_composition(n)
+    let mut i = 0
+    for kind in kinds {
+        let _m = entity f"t{rack.team}-w{n}-{kind}-{i}" {
+            Pos { at: rack.gate + (float(i) * 0.8, 0.0) },
+            Soldier { team: rack.team, kind: kind },
+            Aggro {},
+        }
+        i = i + 1
+    }
+    print(f"  wave {n} (team {rack.team}): {kinds |> len} minions {kinds}")
+    emit WaveDue { rack: e.rack } after WAVE_EVERY
+}
+
+// ------------------------------------------------------------- aggro
+
+pure fn dist(a: (float, float), b: (float, float)) -> float {
+    let (dx, dy) = a - b
+    return sqrt(dx * dx + dy * dy)
+}
+
+// the default-table rung for "attacker hitting victim" (callForHelp.ts)
+pure fn rung_of(attacker_champ: bool, victim_champ: bool) -> int {
+    if victim_champ {
+        if attacker_champ { return RUNG_CHAMP_ON_CHAMP }
+        return RUNG_MINION_ON_CHAMP
+    }
+    if attacker_champ { return RUNG_CHAMP_ON_MINION }
+    return RUNG_MINION_ON_MINION
+}
+
+// a stamped rung viewed through the responder's table: turrets keep only
+// champ-on-champ and flatten the rest to nearest
+pure fn rung_for(table: str, default_rung: int) -> int {
+    if table == "turret" and default_rung != RUNG_CHAMP_ON_CHAMP {
+        return RUNG_NEAREST
+    }
+    return default_rung
+}
+
+// what rung does this threat occupy from MY team's point of view?
+fn threat_rung(me: entity, threat: entity) -> int {
+    let s = require(threat, Soldier)
+    if has(threat, Attacking) {
+        let victim = require(threat, Attacking).victim
+        // only attacks on MY allies count as calls for help
+        if require(victim, Soldier).team == require(me, Soldier).team {
+            return rung_of(s.champion, require(victim, Soldier).champion)
+        }
+    }
+    return RUNG_NEAREST
+}
+
+// one acquisition scan, both tables: rank by (inverted rung, distance)
+// — a tuple key, compared lexicographically
+system acquire(a: mut Aggro, p: Pos, s: Soldier) {
+    let me = self
+    let table = a.table
+    let threats = query { Soldier, Pos } where Soldier.team != s.team
+    let in_range = threats |> filter(fn(t) {
+        return dist(require(t, Pos).at, p.at) <= ACQUIRE_RANGE
+    })
+    let best = in_range |> min_by(fn(t) {
+        let rung = rung_for(table, threat_rung(me, t))
+        return (-rung, dist(require(t, Pos).at, p.at))
+    })
+    match best {
+        Some { value: t } => {
+            if a.target != t {
+                a.target = t
+                emit Acquired {
+                    who: me, target: t,
+                    rung: rung_for(table, threat_rung(me, t)),
+                }
+            }
+        }
+        None => { a.target = nil }
+    }
+}
+
+on Acquired(e) {
+    print(f"  {name_of(e.who)} -> {name_of(e.target)} (rung {e.rung})")
+}
+
+// -------------------------------------------------------------- demo
+
+fn tick(n: int) -> nil {
+    for _ in range(0, n) {
+        schedule [acquire]
+    }
+}
+
+fn main() -> nil {
+    // the wave director: first wave due immediately, then on the clock
+    let rack = entity "blue-rack" { Barracks { team: 0, gate: (0.0, 0.0) } }
+    emit WaveDue { rack: rack } after 1
+    tick(1)
+
+    // a red caster minion wanders into range, hitting nobody: "nearest"
+    let _red_minion = entity "red-caster" {
+        Pos { at: (4.0, 2.0) }, Soldier { team: 1, kind: "caster" }, Aggro {},
+    }
+    tick(1)
+
+    // a red champion dives and strikes a BLUE champion: top rung — every
+    // blue minion switches off the caster onto the diver
+    let blue_champ = entity "ez" {
+        Pos { at: (3.0, 0.0) }, Soldier { team: 0, kind: "champ", champion: true }, Aggro {},
+    }
+    let diver = entity "annie" {
+        Pos { at: (6.0, 1.0) }, Soldier { team: 1, kind: "champ", champion: true },
+        Aggro {}, Attacking { victim: blue_champ },
+    }
+    tick(1)
+
+    // the turret table: champ-on-champ outranks, all else is nearest —
+    // the red minion is CLOSER, but the diver took a swing at a champion
+    let _turret = entity "blue-turret" {
+        Pos { at: (2.0, 0.0) },
+        Soldier { team: 0, kind: "turret" }, Aggro { table: "turret" },
+    }
+    tick(1)
+
+    // two more waves roll: cannon arrives on the cadence wave
+    tick(WAVE_EVERY * 2)
+    let blues = query { Soldier } where Soldier.team == 0
+    let hunters = query { Aggro } where Aggro.target == diver
+    print(f"blue army: {blues |> len}")
+    print(f"diver hunted by: {hunters |> len}")
+}

@@ -1,0 +1,19 @@
+// ILLEGAL: sum-type match must cover every variant. Spec 2.4.
+type Light {
+    Red {}
+    Amber {}
+    Green {}
+}
+
+fn go(l: Light) -> bool {
+    match l {
+        Red => { return false }
+        Green => { return true }
+    }
+}
+
+fn main() -> nil {
+    // Bound first: `Light::Red {}` inside the f-string would hit bug 05.
+    let r = Light::Red {}
+    print(f"{go(r)}")
+}

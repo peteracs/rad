@@ -1,0 +1,16 @@
+// Attack: chaining multiple ? on same line in main -> nil
+fn opt_add(a: int, b: int) -> Option<int> {
+    if a > 0 and b > 0 {
+        return Some(a + b)
+    }
+    return None
+}
+
+fn main() -> nil {
+    let x = opt_add(1, 2) ?
+    let y = opt_add(x, 3) ?
+    let z = opt_add(y, 4) ?
+    print("chain:", z)
+}
+
+// expect: chain: 10

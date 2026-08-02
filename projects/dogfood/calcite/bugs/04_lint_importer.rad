@@ -1,0 +1,15 @@
+// BUG 04, file 2 of 2 - the importer. It contains NO variable named
+// `basket` and builds no collection imperatively.
+//
+// Run:  target\debug\rad.exe lint projects\dogfood\calcite\bugs\04_lint_importer.rad
+//
+// Expected: diagnostics for 04_lint_lib.rad are attributed to that file,
+//           or suppressed as "not the file I asked you to lint".
+// Actual:   they are reported under the heading `04_lint_importer.rad`
+//           with 04_lint_lib.rad's line numbers and variable names.
+
+use "04_lint_lib.rad"
+
+fn main() -> nil {
+    print(f"{collect([1, 2, 3])}")
+}

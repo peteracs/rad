@@ -1,0 +1,8 @@
+---
+source: tests\conformance\gigachad_ergonomics.rad
+exit_code: 0
+---
+ok: 42
+some: 99
+let else ok: 42
+let else some: 99

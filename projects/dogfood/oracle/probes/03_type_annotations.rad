@@ -1,0 +1,55 @@
+// Probe: which declared type names are spellable in fn signatures, and what
+// is the workaround for the resource case (see bugs/02)?
+//   component -> ok
+//   struct    -> ok
+//   resource  -> "Unknown type annotation"; must be laundered through `any`
+
+component Health {
+    hp: int = 100
+}
+
+resource Bank {
+    gold: int = 10
+}
+
+struct Point {
+    x: int = 0,
+    y: int = 0
+}
+
+fn heal(h: Health) -> Health {
+    return Health { hp: h.hp + 10 }
+}
+
+fn shift(p: Point) -> Point {
+    return Point { x: p.x + 1, y: p.y }
+}
+
+// Workaround for a resource-typed value crossing a fn boundary: `any`.
+fn topup(b: any) -> any {
+    return Bank { gold: b.gold + 5 }
+}
+
+let e = spawn("e", Health { hp: 50 })
+
+let h = heal(get(e, Health) |> unwrap)
+print(f"A component annotation: hp={h.hp}")
+
+let p = shift(Point { x: 1, y: 2 })
+print(f"B struct annotation: x={p.x} y={p.y}")
+
+let b = topup(get_resource(Bank) |> unwrap)
+print(f"C resource via any: gold={b.gold}")
+set_resource(Bank, b)
+let stored = get_resource(Bank) |> unwrap
+print(f"C round-trips through set_resource: gold={stored.gold}")
+
+// D: get_entity is documented as returning `entity | nil` (NOT an Option),
+// so it needs a nil guard, not unwrap. require_entity is the fail-fast pair.
+let found = get_entity("e")
+if found == nil {
+    print("D unreachable")
+} else {
+    print(f"D get_entity: {found}")
+}
+print(f"D require_entity: {require_entity(\"e\")}")

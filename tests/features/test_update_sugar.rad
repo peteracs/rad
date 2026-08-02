@@ -1,0 +1,32 @@
+component Health { current: 100, max: 100 }
+component Position { x: 0, y: 0 }
+
+fn main() -> nil {
+    let e = spawn(Health { current: 80, max: 100 }, Position { x: 5, y: 10 })
+
+    // update a single field
+    update(e, Health) {
+        current = 50
+    }
+    let h1 = unwrap(get(e, Health))
+    print(f"health after update: {h1.current}/{h1.max}")
+
+    // update multiple fields
+    update(e, Position) {
+        x = 20,
+        y = 30
+    }
+    let p1 = unwrap(get(e, Position))
+    print(f"position after update: ({p1.x}, {p1.y})")
+
+    // update preserves untouched fields
+    update(e, Health) {
+        max = 200
+    }
+    let h2 = unwrap(get(e, Health))
+    print(f"health max changed, current preserved: {h2.current}/{h2.max}")
+}
+
+// expect: health after update: 50/100
+// expect: position after update: (20, 30)
+// expect: health max changed, current preserved: 50/200

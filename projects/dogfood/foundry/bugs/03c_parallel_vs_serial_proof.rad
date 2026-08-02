@@ -1,0 +1,46 @@
+// BUG 03 (mechanism proof): the trigger is PARALLEL BATCHING, not the number
+// of systems in the schedule list.
+//
+// docs/src/guide/ecs.md:400 -- "two systems that both hold a mutable reference
+// to the same resource are serialized." So we can toggle parallelism on/off
+// while keeping "two systems in one schedule [...] call" constant:
+//
+//   DisjointA / DisjointB -> mut on DIFFERENT resources -> parallel -> WRONG
+//   SharedA   / SharedB   -> mut on the SAME resource   -> serial   -> right
+//
+// Same entity count, same per-entity += 1, same one-call schedule.
+
+component Tag { probe: 0 }
+
+resource DA { n: 0 }
+resource DB { n: 0 }
+resource Shared { n: 0 }
+
+// disjoint resources -> conflict analyser sees no conflict -> parallel batch
+system DisjointA(_t: Tag, a: mut DA) {
+    a.n = a.n + 1
+}
+system DisjointB(_t: Tag, b: mut DB) {
+    b.n = b.n + 1
+}
+
+// same resource -> conflict -> forced serial
+system SharedA(_t: Tag, s: mut Shared) {
+    s.n = s.n + 1
+}
+system SharedB(_t: Tag, s: mut Shared) {
+    s.n = s.n + 1
+}
+
+for _i in range(0, 10) {
+    spawn(Tag { probe: 0 })
+}
+
+print(f"entities: {query_count(Tag)}")
+print("")
+
+schedule [DisjointA, DisjointB]
+print(f"parallel (disjoint res)  DA={res(DA).n} DB={res(DB).n}       expected 10 / 10")
+
+schedule [SharedA, SharedB]
+print(f"serial   (shared res)    Shared={res(Shared).n}            expected 20")

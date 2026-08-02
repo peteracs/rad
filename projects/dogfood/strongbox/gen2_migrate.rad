@@ -1,0 +1,62 @@
+// strongbox — generation 2. Loads a gen1 save through migrate blocks.
+//
+//   rad projects/dogfood/strongbox/gen1_seed.rad     (first)
+//   rad projects/dogfood/strongbox/gen2_migrate.rad
+//
+// Drift from gen1:
+//   Incident  sev -> severity (rename), + opened_at   (added)
+//   Assignee  who -> name     (rename), + team        (added)
+//   Ledger                             , + revision   (resource migration)
+//   Source    unchanged  -> must load with no migrate block declared
+//
+// Writes saves/gen2.radw so gen3 can prove it reads BOTH generations.
+
+component Incident { code: "", severity: 1, open: true, opened_at: 0 }
+
+component Assignee { name: "", team: "unassigned" }
+
+component Source { origin: "" }
+
+resource Ledger { count: 0, site: "", revision: 2 }
+
+migrate Incident(old) {
+    return Incident {
+        code: old["code"],
+        severity: old["sev"],
+        open: old["open"],
+        opened_at: 0,
+    }
+}
+
+migrate Assignee(old) {
+    let mut team = "platform"
+    if old["who"] == "chen" {
+        team = "data"
+    }
+    return Assignee { name: old["who"], team: team }
+}
+
+migrate Ledger(old) {
+    return Ledger { count: old["count"], site: old["site"], revision: 2 }
+}
+
+print("=== strongbox gen2: migrate gen1 -> gen2 ===")
+
+let n = load_world(read_file("projects/dogfood/strongbox/saves/gen1.radw"))
+print(f"loaded {n} entities from a gen1 save")
+
+for name in ["inc-1001", "inc-1002", "inc-1003", "inc-1004"] {
+    let e = get_entity(name)
+    let inc = get(e, Incident) |> unwrap
+    let who = get(e, Assignee) |> unwrap
+    let src = get(e, Source) |> unwrap
+    print(f"  {name} {inc.code} sev={inc.severity} open={inc.open} -> {who.name}/{who.team} via {src.origin}")
+}
+
+let led = get_resource(Ledger) |> unwrap
+print(f"ledger: count={led.count} site={led.site} revision={led.revision}")
+
+let save = save_world()
+write_file("projects/dogfood/strongbox/saves/gen2.radw", save)
+print(f"schema_digest: {schema_digest()}")
+print(f"world_digest:  {world_digest()}")

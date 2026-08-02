@@ -1,0 +1,11 @@
+// res() reads world state — readonly effect, forbidden inside `pure fn`
+// (use a `readonly fn` annotation or pass the value in as a parameter).
+resource Cfg { n: int = 1 }
+
+pure fn bad() -> int {
+    return res(Cfg).n
+}
+
+fn main() -> nil {
+    print(bad())
+}

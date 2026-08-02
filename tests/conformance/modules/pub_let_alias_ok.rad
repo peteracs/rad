@@ -1,0 +1,8 @@
+// Aliased import of a module whose pub fns read its own top-level lets —
+// the checker defines those lets before checking the fn twins, matching
+// what the compiler executes.
+use "pub_let_lib.rad" as cfg
+
+fn main() -> nil {
+    print(cfg.scaled(2))      // 2000
+}

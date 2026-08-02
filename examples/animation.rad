@@ -1,0 +1,136 @@
+// =====================================================================
+//  Animation System — Sprite animation with ECS and state machines
+// =====================================================================
+
+component Sprite { frame: 0, total_frames: 4, speed: 1 }
+
+component Transform { x: 0.0, y: 0.0, scale: 1.0, rotation: 0.0 }
+
+component AnimName { value: "" }
+
+state AnimState {
+    Idle {
+        on play -> Playing
+    }
+    Playing {
+        on pause -> Paused
+        on finish -> Idle
+        on loop -> Playing
+    }
+    Paused {
+        on play -> Playing
+        on stop -> Idle
+    }
+}
+
+event FrameAdvanced { entity_name, frame, total }
+
+event AnimComplete { entity_name, anim_name }
+
+on FrameAdvanced(e) {
+    let pct = (e.frame * 100) / e.total
+    let mut bar = ""
+    let mut i = 0
+    while i < 10 {
+        if i * 10 < pct { bar = f"{bar}#" }
+        else { bar = f"{bar}-" }
+        i = i + 1
+    }
+    print(f"  {e.entity_name} frame {e.frame}/{e.total} [{bar}]")
+}
+
+on AnimComplete(e) {
+    print(f"  >> {e.entity_name} animation '{e.anim_name}' complete!")
+}
+
+system Animate(sprite: mut Sprite, name: AnimName) {
+    sprite.frame = sprite.frame + sprite.speed
+    emit FrameAdvanced { entity_name: name.value, frame: sprite.frame, total: sprite.total_frames }
+}
+
+entity character {
+    Sprite { frame: 0, total_frames: 8, speed: 1 },
+    Transform { x: 100.0, y: 200.0, scale: 2.0, rotation: 0.0 },
+    AnimName { value: "Hero" }
+}
+
+entity coin {
+    Sprite { frame: 0, total_frames: 4, speed: 2 },
+    Transform { x: 300.0, y: 150.0, scale: 1.0, rotation: 0.0 },
+    AnimName { value: "Coin" }
+}
+
+entity flame {
+    Sprite { frame: 0, total_frames: 6, speed: 1 },
+    Transform { x: 50.0, y: 50.0, scale: 1.5, rotation: 0.0 },
+    AnimName { value: "Flame" }
+}
+
+fn main() -> any {
+    print("=== Animation System ===\n")
+
+    let mut hero_anim = AnimState::Idle
+    let mut coin_anim = AnimState::Idle
+    let mut flame_anim = AnimState::Idle
+
+    // Start all animations
+    hero_anim = transition(hero_anim, "play") ?
+    coin_anim = transition(coin_anim, "play") ?
+    flame_anim = transition(flame_anim, "play") ?
+
+    print("Playing animations...\n")
+
+    let mut tick = 0
+    while tick < 5 {
+        print(f"--- Tick {tick} ---")
+        Animate()
+
+        // Check if any animation finished
+        let hero_sprite = get(character, Sprite) ?
+        if hero_sprite.frame >= hero_sprite.total_frames {
+            emit AnimComplete { entity_name: "Hero", anim_name: "walk" }
+            set(character, Sprite { frame: 0, total_frames: 8, speed: 1 })
+            hero_anim = transition(hero_anim, "loop") ?
+        }
+
+        let coin_sprite = get(coin, Sprite) ?
+        if coin_sprite.frame >= coin_sprite.total_frames {
+            emit AnimComplete { entity_name: "Coin", anim_name: "spin" }
+            set(coin, Sprite { frame: 0, total_frames: 4, speed: 2 })
+            coin_anim = transition(coin_anim, "loop") ?
+        }
+
+        let flame_sprite = get(flame, Sprite) ?
+        if flame_sprite.frame >= flame_sprite.total_frames {
+            emit AnimComplete { entity_name: "Flame", anim_name: "flicker" }
+            set(flame, Sprite { frame: 0, total_frames: 6, speed: 1 })
+            flame_anim = transition(flame_anim, "loop") ?
+        }
+
+        print("")
+        tick = tick + 1
+    }
+
+    // Pause hero animation
+    hero_anim = transition(hero_anim, "pause") ?
+    print("Hero animation paused.")
+
+    match hero_anim {
+        Idle => { print("  State: Idle") }
+        Playing => { print("  State: Playing") }
+        Paused => { print("  State: Paused") }
+    }
+
+    // Stop flame
+    flame_anim = transition(flame_anim, "pause") ?
+    flame_anim = transition(flame_anim, "stop") ?
+    print("Flame animation stopped.")
+
+    print("\nFinal transforms:")
+    let t1 = get(character, Transform) ?
+    print(f"  Hero:  ({t1.x}, {t1.y}) scale={t1.scale}")
+    let t2 = get(coin, Transform) ?
+    print(f"  Coin:  ({t2.x}, {t2.y}) scale={t2.scale}")
+    let t3 = get(flame, Transform) ?
+    print(f"  Flame: ({t3.x}, {t3.y}) scale={t3.scale}")
+}

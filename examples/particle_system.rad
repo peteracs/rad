@@ -1,0 +1,94 @@
+// =====================================================================
+//  Particle System — Spawn, update, despawn with ECS
+// =====================================================================
+
+component Pos { x: 0.0, y: 0.0 }
+
+component Vel { dx: 0.0, dy: 0.0 }
+
+component Life { remaining: 10, max: 10 }
+
+component Color { r: 255, g: 255, b: 255 }
+
+event ParticleSpawned { id }
+
+event ParticleDied { id, x, y }
+
+on ParticleDied(e) {
+    print(f"  ~ particle {e.id} faded at ({e.x}, {e.y})")
+}
+
+system UpdateParticles(p: mut Pos, v: Vel, life: mut Life) {
+    p.x = p.x + v.dx
+    p.y = p.y + v.dy
+    life.remaining = life.remaining - 1
+}
+
+fn spawn_particle(name, x, y, vx, vy, lifetime, r, g, b) {
+    let id = spawn(name,
+        Pos { x: x, y: y },
+        Vel { dx: vx, dy: vy },
+        Life { remaining: lifetime, max: lifetime },
+        Color { r: r, g: g, b: b }
+    )
+    return id
+}
+
+fn main() -> any {
+    print("=== Particle System ===\n")
+
+    // Spawn a burst of particles
+    let mut particles = []
+    let count = 8
+
+    let vx_list = [1.0, 0.7, 0.0, -0.7, -1.0, -0.7, 0.0, 0.7]
+    let vy_list = [0.0, 0.7, 1.0, 0.7, 0.0, -0.7, -1.0, -0.7]
+
+    print(f"Spawning {count} particles from origin...")
+    for i in range(count) {
+        let id = spawn_particle(
+            f"p{i}",
+            0.0, 0.0,
+            vx_list[i] * 2.0, vy_list[i] * 2.0,
+            5,
+            255, 128 + i * 15, 0
+        )
+        particles = push(particles, id)
+    }
+    print(f"  Spawned {len(particles)} particles\n")
+
+    // Simulate
+    let mut tick = 0
+    while tick < 6 {
+        print(f"--- Tick {tick} ---")
+        UpdateParticles()
+
+        let mut alive = 0
+        for pid in particles {
+            if has(pid, Life) {
+                let life = get(pid, Life) ?
+                let pos = get(pid, Pos) ?
+                if life.remaining <= 0 {
+                    emit ParticleDied { id: pid, x: pos.x, y: pos.y }
+                    despawn(pid)
+                } else {
+                    alive = alive + 1
+                    let pct = (life.remaining * 100) / life.max
+                    print(f"  particle {pid}: ({pos.x}, {pos.y}) life={pct}%")
+                }
+            }
+        }
+        print(f"  alive: {alive}/{count}")
+        print("")
+        tick = tick + 1
+    }
+
+    // Any stragglers (entities are not GC'd)
+    for pid in particles {
+        if has(pid, Life) {
+            despawn(pid)
+        }
+    }
+
+    print("All particles expired. System complete.")
+}

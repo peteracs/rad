@@ -1,0 +1,27 @@
+fn main() -> nil {
+    let ok_val = Ok(42)
+    let _err_val = Err("bad")
+    let some_val = Some(99)
+    let _none_val = None()
+    let _bare_none = None
+
+    match ok_val {
+        Ok(v) => { print(f"ok: {v}") }
+        Err(e) => { print(f"err: {e}") }
+    }
+    // expect: ok: 42
+
+    match some_val {
+        Some(v) => { print(f"some: {v}") }
+        None => { print("none") }
+    }
+    // expect: some: 99
+
+    let Ok(x) = ok_val else { return }
+    print(f"let else ok: {x}")
+    // expect: let else ok: 42
+
+    let Some(y) = some_val else { return }
+    print(f"let else some: {y}")
+    // expect: let else some: 99
+}

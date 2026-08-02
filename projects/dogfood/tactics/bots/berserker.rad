@@ -1,0 +1,83 @@
+// berserker — an honest player bot for RADTACTICS.
+//
+// Runs inside sandbox_run() with the capability grant { "write": ["Intent"] }:
+// it can read the entire world (positions, stats, teams) but the only thing
+// it may write is its own order. The host injects `me` (this unit) and a
+// `dist` helper, validates the Intent against the legal move list, and
+// replays it through the live evented path.
+//
+// Contract — write exactly one Intent on `me`:
+//   kind "move":   tx,ty = destination, within mov (manhattan), unoccupied
+//   kind "attack": tx,ty = tile to stand on, target = enemy within rng of it
+//   kind "wait":   tx,ty = current tile
+//
+// Strategy: zero subtlety. Find the nearest living enemy; hit it if in
+// range, otherwise stomp straight at it.
+
+let p = get(me, Pos) |> unwrap
+let s = get(me, Stats) |> unwrap
+let t = get(me, Team) |> unwrap
+
+let mut foe = ""
+let mut foe_d = 9999
+let mut fx = 0
+let mut fy = 0
+for other in entities(Team) {
+    let ot = get(other, Team) |> unwrap
+    if ot.side == t.side { continue }
+    let os = get(other, Stats) |> unwrap
+    if os.hp <= 0 { continue }
+    let op = get(other, Pos) |> unwrap
+    let d = dist(p.x, p.y, op.x, op.y)
+    if d < foe_d {
+        foe_d = d
+        foe = name_of(other)
+        fx = op.x
+        fy = op.y
+    }
+}
+
+fn occupied(x: int, y: int) -> bool {
+    for e in entities(Pos) {
+        let es = get(e, Stats) |> unwrap
+        if es.hp <= 0 { continue }
+        let ep = get(e, Pos) |> unwrap
+        if ep.x == x and ep.y == y { return true }
+    }
+    return false
+}
+
+if foe == "" {
+    update(me, Intent) { kind = "wait", tx = p.x, ty = p.y, target = "" }
+} else {
+    if foe_d <= s.rng {
+        update(me, Intent) { kind = "attack", tx = p.x, ty = p.y, target = foe }
+    } else {
+        // Greedy march: one axis step at a time, up to mov, never onto a body.
+        let mut nx = p.x
+        let mut ny = p.y
+        let mut steps = s.mov
+        while steps > 0 {
+            let mut cx = nx
+            let mut cy = ny
+            if fx > cx { cx = cx + 1 } else { if fx < cx { cx = cx - 1 } else {
+                if fy > cy { cy = cy + 1 } else { if fy < cy { cy = cy - 1 } }
+            } }
+            if (cx == nx and cy == ny) or occupied(cx, cy) { steps = 0 } else {
+                nx = cx
+                ny = cy
+                steps = steps - 1
+            }
+        }
+        if nx == p.x and ny == p.y {
+            update(me, Intent) { kind = "wait", tx = p.x, ty = p.y, target = "" }
+        } else {
+            // Marching may have opened striking distance: hit from the new tile.
+            if dist(nx, ny, fx, fy) <= s.rng {
+                update(me, Intent) { kind = "attack", tx = nx, ty = ny, target = foe }
+            } else {
+                update(me, Intent) { kind = "move", tx = nx, ty = ny, target = "" }
+            }
+        }
+    }
+}

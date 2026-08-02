@@ -1,0 +1,30 @@
+fn main() -> any {
+    // math
+    print(round(-143.895 * 1.0))      // -144
+    print(round(2.5))                  // 3
+    print(round(-2.5))                 // -3 (half away from zero)
+    print(floor(-1.2))                 // -2
+    print(ceil(-1.2))                  // -1
+    print(sqrt(144.0))                 // 12
+    print(pow(2, 10))                  // 1024 (int)
+    print(pow(2.0, 0.5))               // 1.414...
+    // formatting — the bug that bit the budget app
+    print(to_fixed(-143.90, 2))        // -143.90
+    print(to_fixed(0.125, 2))          // 0.12 or 0.13
+    print(to_fixed(3.0, 0))            // 3
+    // json round trip (struct -> json -> map)
+    let task = Task { id: 7, text: "buy milk", done: false }
+    let text = json_stringify(task)
+    print(text)
+    let back = json_parse(text) |> unwrap
+    print(back["text"])                // buy milk
+    print(back["id"])                  // 7
+    // nested list + map round trip
+    let scores = {"alice": [90, 95], "bob": [70, 80]}
+    let s2 = json_parse(json_stringify(scores)) |> unwrap
+    print(s2["bob"][1])                // 80
+    // bad json -> None
+    print(is_none(json_parse("{nope")))  // true
+}
+
+struct Task { id: int = 0, text: str = "", done: bool = false }

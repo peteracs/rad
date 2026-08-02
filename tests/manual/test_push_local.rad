@@ -1,0 +1,6 @@
+fn main() -> nil {
+    let mut a = [1, 2]
+    a << 3
+    a = push(a, 4)
+    print(str(a))
+}

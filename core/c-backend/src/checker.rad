@@ -1,0 +1,1548 @@
+use "parser.rad"
+
+// Type representation as strings: "int", "float", "str", "bool", "nil",
+// "entity", "list", "fn", "any", or a component/struct name.
+
+component CheckError { line: int = 0, col: int = 0, message: str = "" }
+component CheckResult { errors: list<entity> = [] }
+
+component Binding { name: str = "", ty: str = "any", is_mut: bool = false }
+component Scope { bindings: list<entity> = [], parent: entity | nil = nil }
+component FnSig { name: str = "", param_types: list<str> = [], ret_type: str = "any", raw_param_types: list<str> = [] }
+
+component CheckerState {
+    scope: entity | nil = nil,
+    fn_sigs: list<entity> = [],
+    errors: list<entity> = [],
+    current_fn_ret: str = "any",
+    component_names: list<str> = [],
+    struct_names: list<str> = [],
+    type_names: list<str> = [],
+    type_variant_names: list<str> = [],
+    state_names: list<str> = [],
+    state_variant_names: list<str> = [],
+    field_types: list<entity> = [],
+    private_types: list<str> = [],
+    event_names: list<str> = []
+}
+
+component FieldTypeEntry { comp_name: str = "", field_name: str = "", field_type: str = "any" }
+component CheckerFlags { compat_v05_dx: bool = false }
+component TypeVariantGroup { type_name: str = "", variants: list<str> = [], variant_field_counts: list<int> = [] }
+
+pub component CheckerNode {}
+
+fn make_error(state: entity, line: int, col: int, msg: str) -> nil {
+    let err = entity { CheckerNode {}, CheckError { line: line, col: col, message: msg } }
+    let mut errs = require(state, CheckerState).errors
+    errs << err
+    set(state, CheckerState {
+        scope: require(state, CheckerState).scope,
+        fn_sigs: require(state, CheckerState).fn_sigs,
+        errors: errs,
+        current_fn_ret: require(state, CheckerState).current_fn_ret,
+        component_names: require(state, CheckerState).component_names,
+        struct_names: require(state, CheckerState).struct_names,
+        type_names: require(state, CheckerState).type_names,
+        type_variant_names: require(state, CheckerState).type_variant_names,
+        state_names: require(state, CheckerState).state_names,
+        state_variant_names: require(state, CheckerState).state_variant_names,
+        field_types: require(state, CheckerState).field_types,
+        private_types: require(state, CheckerState).private_types,
+        event_names: require(state, CheckerState).event_names
+    })
+    return nil
+}
+
+fn push_scope(state: entity) -> nil {
+    let old_scope = require(state, CheckerState).scope
+    let new_scope = entity { CheckerNode {}, Scope { bindings: [], parent: old_scope } }
+    let cs = require(state, CheckerState)
+    set(state, CheckerState {
+        scope: new_scope,
+        fn_sigs: cs.fn_sigs,
+        errors: cs.errors,
+        current_fn_ret: cs.current_fn_ret,
+        component_names: cs.component_names,
+        struct_names: cs.struct_names,
+        type_names: cs.type_names,
+        type_variant_names: cs.type_variant_names,
+        state_names: cs.state_names,
+        state_variant_names: cs.state_variant_names,
+        field_types: cs.field_types,
+        private_types: cs.private_types,
+        event_names: cs.event_names
+    })
+    return nil
+}
+
+fn pop_scope(state: entity) -> nil {
+    let current = require(state, CheckerState).scope
+    if current == nil {
+        return nil
+    } else {
+        if not has(current, Scope) { return nil }
+        let parent = require(current, Scope).parent
+        // Keep root scope alive; extra pops should be no-ops.
+        if parent == nil { return nil }
+        let cs = require(state, CheckerState)
+        set(state, CheckerState {
+            scope: parent,
+            fn_sigs: cs.fn_sigs,
+            errors: cs.errors,
+            current_fn_ret: cs.current_fn_ret,
+            component_names: cs.component_names,
+            struct_names: cs.struct_names,
+            type_names: cs.type_names,
+            type_variant_names: cs.type_variant_names,
+            state_names: cs.state_names,
+            state_variant_names: cs.state_variant_names,
+            field_types: cs.field_types,
+            private_types: cs.private_types,
+            event_names: cs.event_names
+        })
+    }
+    return nil
+}
+
+fn define_var(state: entity, name: str, ty: str, is_mut: bool) -> nil {
+    let scope0 = require(state, CheckerState).scope
+    if scope0 == nil {
+        push_scope(state)
+    } else {
+        if not has(scope0, Scope) {
+            push_scope(state)
+        }
+    }
+    let scope_eid = require(state, CheckerState).scope
+    if scope_eid == nil { return nil }
+    let b = entity { CheckerNode {}, Binding { name: name, ty: ty, is_mut: is_mut } }
+    let mut bindings = require(scope_eid, Scope).bindings
+    bindings << b
+    set(scope_eid, Scope { bindings: bindings, parent: require(scope_eid, Scope).parent })
+    return nil
+}
+
+// Scope chains are walked recursively so `if scope_eid == nil { ... } else { ... }` narrows
+// `entity | nil` for the Rust VM checker. Depth equals lexical scope depth (small); a `while`
+// would need loop-body narrowing the VM does not implement yet.
+fn var_exists_inner(scope_eid: entity | nil, name: str) -> bool {
+    if scope_eid == nil {
+        return false
+    } else {
+        if not has(scope_eid, Scope) { return false }
+        let sc = require(scope_eid, Scope)
+        for b_eid in sc.bindings {
+            let b = require(b_eid, Binding)
+            if b.name == name { return true }
+        }
+        return var_exists_inner(sc.parent, name)
+    }
+}
+
+fn var_exists(state: entity, name: str) -> bool {
+    return var_exists_inner(require(state, CheckerState).scope, name)
+}
+
+fn lookup_var_inner(scope_eid: entity | nil, name: str) -> str {
+    if scope_eid == nil {
+        return "any"
+    } else {
+        if not has(scope_eid, Scope) { return "any" }
+        let sc = require(scope_eid, Scope)
+        for b_eid in sc.bindings {
+            let b = require(b_eid, Binding)
+            if b.name == name { return b.ty }
+        }
+        return lookup_var_inner(sc.parent, name)
+    }
+}
+
+fn lookup_var(state: entity, name: str) -> str {
+    return lookup_var_inner(require(state, CheckerState).scope, name)
+}
+
+fn lookup_var_mut_inner(scope_eid: entity | nil, name: str) -> bool {
+    if scope_eid == nil {
+        return false
+    } else {
+        if not has(scope_eid, Scope) { return false }
+        let sc = require(scope_eid, Scope)
+        for b_eid in sc.bindings {
+            let b = require(b_eid, Binding)
+            if b.name == name { return b.is_mut }
+        }
+        return lookup_var_mut_inner(sc.parent, name)
+    }
+}
+
+fn lookup_var_mut(state: entity, name: str) -> bool {
+    return lookup_var_mut_inner(require(state, CheckerState).scope, name)
+}
+
+fn get_parent_type_of_variant(variant_name: str) -> str {
+    for tvg_eid in query { TypeVariantGroup } {
+        let tvg = require(tvg_eid, TypeVariantGroup)
+        if str_in_list(tvg.variants, variant_name) { return tvg.type_name }
+    }
+    return ""
+}
+
+fn get_type_variants(type_name: str) -> list<str> {
+    for tvg_eid in query { TypeVariantGroup } {
+        let tvg = require(tvg_eid, TypeVariantGroup)
+        if tvg.type_name == type_name { return tvg.variants }
+    }
+    return []
+}
+
+fn is_zero_field_variant(variant_name: str) -> bool {
+    for tvg_eid in query { TypeVariantGroup } {
+        let tvg = require(tvg_eid, TypeVariantGroup)
+        let mut i = 0
+        for vn in tvg.variants {
+            if vn == variant_name {
+                if i < len(tvg.variant_field_counts) {
+                    return tvg.variant_field_counts[i] == 0
+                }
+            }
+            i = i + 1
+        }
+    }
+    return false
+}
+
+fn outer_scope_has_mut(state: entity, name: str) -> bool {
+    let scope = require(state, CheckerState).scope
+    if scope != nil {
+        if not has(scope, Scope) { return false }
+        let sc = require(scope, Scope)
+        return lookup_var_mut_inner(sc.parent, name)
+    }
+    return false
+}
+
+fn find_fn_sig(state: entity, name: str) -> Option<entity> {
+    let sigs = require(state, CheckerState).fn_sigs
+    for s_eid in sigs {
+        let s = require(s_eid, FnSig)
+        if s.name == name { return Some(s_eid) }
+    }
+    return None
+}
+
+fn base_type(t: str) -> str {
+    let blen = byte_len(t)
+    let mut i = 0
+    while i < blen {
+        let c = byte_at(t, i)
+        if c == 60 { return substring_bytes(t, 0, i) }
+        i = i + 1
+    }
+    return t
+}
+
+fn str_in_list(lst: list<str>, item: str) -> bool {
+    for s in lst {
+        if s == item { return true }
+    }
+    return false
+}
+
+fn is_value_type(t: str) -> bool {
+    return t == "int" or t == "float" or t == "str" or t == "bool" or t == "list" or t == "fn"
+}
+
+fn resolve_type_str(state: entity, t: str) -> str {
+    if t == "" { return "any" }
+    let b = base_type(t)
+    if b == "int" { return "int" }
+    if b == "float" { return "float" }
+    if b == "str" { return "str" }
+    if b == "bool" { return "bool" }
+    if b == "nil" { return "nil" }
+    if b == "entity" { return "entity" }
+    if b == "list" { return "list" }
+    if b == "fn" { return "fn" }
+    if b == "any" { return "any" }
+    let cs = require(state, CheckerState)
+    if str_in_list(cs.component_names, b) { return b }
+    if str_in_list(cs.struct_names, b) { return b }
+    if str_in_list(cs.type_names, b) { return b }
+    if str_in_list(cs.type_variant_names, b) { return b }
+    return "any"
+}
+
+fn types_compatible(expected: str, actual: str) -> bool {
+    if expected == "any" or actual == "any" { return true }
+    if expected == actual { return true }
+    if expected == "nil" or actual == "nil" { return true }
+    if expected == "float" and actual == "int" { return true }
+    if expected == "int" and actual == "float" { return true }
+    if expected == "entity" and not is_value_type(actual) { return true }
+    if actual == "entity" and not is_value_type(expected) { return true }
+    // Tagged variants should satisfy their parent sum type at boundaries.
+    let expected_parent = get_parent_type_of_variant(expected)
+    if expected_parent != "" and expected_parent == actual { return true }
+    let actual_parent = get_parent_type_of_variant(actual)
+    if actual_parent != "" and actual_parent == expected { return true }
+    return false
+}
+
+fn lookup_field_type(state: entity, comp_name: str, field_name: str) -> str {
+    let fts = require(state, CheckerState).field_types
+    for ft_eid in fts {
+        let ft = require(ft_eid, FieldTypeEntry)
+        if ft.comp_name == comp_name and ft.field_name == field_name {
+            return ft.field_type
+        }
+    }
+    return "any"
+}
+
+fn get_span(eid: entity) -> Option<entity> {
+    if has(eid, Span) { return Some(eid) }
+    return None
+}
+
+fn get_line(eid: entity) -> int {
+    if has(eid, Span) {
+        return require(eid, Span).line
+    }
+    return 0
+}
+
+fn get_col(eid: entity) -> int {
+    if has(eid, Span) {
+        return require(eid, Span).col
+    }
+    return 0
+}
+
+fn is_builtin_fn(name: str) -> bool {
+    if name == "print" { return true }
+    if name == "len" { return true }
+    if name == "str" { return true }
+    if name == "range" { return true }
+    if name == "assert" { return true }
+    if name == "byte_at" { return true }
+    if name == "byte_len" { return true }
+    if name == "substring_bytes" { return true }
+    if name == "try_int" { return true }
+    if name == "try_float" { return true }
+    if name == "map_or" { return true }
+    if name == "read_file" { return true }
+    if name == "write_file" { return true }
+    if name == "variant_of" { return true }
+    if name == "spawn" { return true }
+    if name == "get_entity" { return true }
+    if name == "has" { return true }
+    if name == "require" { return true }
+    if name == "set" { return true }
+    if name == "sys_args" { return true }
+    if name == "flush_events" { return true }
+    if name == "bitset_new" { return true }
+    if name == "bitset_set" { return true }
+    if name == "bitset_has" { return true }
+    if name == "bitset_clear" { return true }
+    if name == "buffer_new" { return true }
+    if name == "buffer_append" { return true }
+    if name == "buffer_to_str" { return true }
+    if name == "fork" { return true }
+    if name == "simulate" { return true }
+    if name == "commit" { return true }
+    if name == "clock" { return true }
+    if name == "keys" { return true }
+    if name == "values" { return true }
+    if name == "contains" { return true }
+    if name == "map_contains" { return true }
+    if name == "map_remove" { return true }
+    if name == "map_set" { return true }
+    if name == "map_get" { return true }
+    if name == "remove" { return true }
+    if name == "despawn" { return true }
+    if name == "entities" { return true }
+    if name == "typeof" { return true }
+    if name == "eprint" { return true }
+    if name == "int" { return true }
+    if name == "float" { return true }
+    if name == "abs" { return true }
+    if name == "min" { return true }
+    if name == "max" { return true }
+    if name == "int_div" { return true }
+    if name == "push" { return true }
+    if name == "pop" { return true }
+    if name == "pop_last" { return true }
+    if name == "drop_last" { return true }
+    if name == "sort" { return true }
+    if name == "sort_by" { return true }
+    if name == "reverse" { return true }
+    if name == "slice" { return true }
+    if name == "map" { return true }
+    if name == "filter" { return true }
+    if name == "reduce" { return true }
+    if name == "flat_map" { return true }
+    if name == "get" { return true }
+    if name == "require_all" { return true }
+    if name == "transition" { return true }
+    if name == "format" { return true }
+    if name == "entries" { return true }
+    if name == "merge" { return true }
+    if name == "remove_key" { return true }
+    if name == "group_by" { return true }
+    if name == "split" { return true }
+    if name == "join" { return true }
+    if name == "trim" { return true }
+    if name == "replace" { return true }
+    if name == "starts_with" { return true }
+    if name == "ends_with" { return true }
+    if name == "append" { return true }
+    if name == "extend" { return true }
+    if name == "zip" { return true }
+    if name == "chr" { return true }
+    if name == "ord" { return true }
+    if name == "chars" { return true }
+    if name == "to_upper" { return true }
+    if name == "to_lower" { return true }
+    if name == "unwrap" { return true }
+    if name == "unwrap_or" { return true }
+    if name == "expect" { return true }
+    if name == "is_some" { return true }
+    if name == "is_none" { return true }
+    if name == "assert_eq" { return true }
+    if name == "trace_id" { return true }
+    if name == "peek" { return true }
+    if name == "debug_trace" { return true }
+    if name == "gc_collect" { return true }
+    if name == "write_stdout" { return true }
+    if name == "write_stderr" { return true }
+    if name == "read_stdin_all" { return true }
+    if name == "flush_stdout" { return true }
+    if name == "input" { return true }
+    if name == "readline" { return true }
+    if name == "append_file" { return true }
+    if name == "file_exists" { return true }
+    if name == "remove_file" { return true }
+    if name == "list_dir" { return true }
+    if name == "create_dir" { return true }
+    if name == "remove_dir" { return true }
+    if name == "read_file_bytes" { return true }
+    if name == "write_file_bytes" { return true }
+    if name == "rand_int" { return true }
+    if name == "rand_float" { return true }
+    if name == "rand_bool" { return true }
+    if name == "rand_seed" { return true }
+    if name == "with_field" { return true }
+    if name == "query_where" { return true }
+    if name == "query_map" { return true }
+    if name == "query_count" { return true }
+    if name == "now_unix_s" { return true }
+    if name == "now_unix_ms" { return true }
+    return false
+}
+
+fn builtin_ret_type(name: str) -> str {
+    if name == "print" { return "nil" }
+    if name == "len" { return "int" }
+    if name == "str" { return "str" }
+    if name == "range" { return "list" }
+    if name == "assert" { return "nil" }
+    if name == "byte_at" { return "int" }
+    if name == "byte_len" { return "int" }
+    if name == "substring_bytes" { return "str" }
+    if name == "try_int" { return "any" }
+    if name == "try_float" { return "any" }
+    if name == "map_or" { return "any" }
+    if name == "read_file" { return "str" }
+    if name == "write_file" { return "nil" }
+    if name == "variant_of" { return "str" }
+    if name == "spawn" { return "entity" }
+    if name == "get_entity" { return "any" }
+    if name == "has" { return "bool" }
+    if name == "require" { return "entity" }
+    if name == "set" { return "nil" }
+    if name == "sys_args" { return "list" }
+    if name == "flush_events" { return "nil" }
+    if name == "bitset_new" { return "entity" }
+    if name == "bitset_set" { return "entity" }
+    if name == "bitset_has" { return "bool" }
+    if name == "bitset_clear" { return "entity" }
+    if name == "buffer_new" { return "any" }
+    if name == "buffer_append" { return "any" }
+    if name == "buffer_to_str" { return "str" }
+    if name == "fork" { return "any" }
+    if name == "simulate" { return "any" }
+    if name == "commit" { return "nil" }
+    if name == "clock" { return "float" }
+    if name == "keys" { return "list" }
+    if name == "values" { return "list" }
+    if name == "contains" { return "bool" }
+    if name == "map_contains" { return "bool" }
+    if name == "map_remove" { return "any" }
+    if name == "map_set" { return "any" }
+    if name == "map_get" { return "any" }
+    if name == "debug_trace" { return "any" }
+    return "any"
+}
+
+fn builtin_arity(name: str) -> int {
+    if name == "print" { return 1 }
+    if name == "len" { return 1 }
+    if name == "str" { return 1 }
+    if name == "range" { return 2 }
+    if name == "assert" { return 2 }
+    if name == "byte_at" { return 2 }
+    if name == "byte_len" { return 1 }
+    if name == "substring_bytes" { return 3 }
+    if name == "try_int" { return 1 }
+    if name == "try_float" { return 1 }
+    if name == "map_or" { return 3 }
+    if name == "read_file" { return 1 }
+    if name == "write_file" { return 2 }
+    if name == "variant_of" { return 1 }
+    if name == "spawn" { return -1 }
+    if name == "get_entity" { return 1 }
+    if name == "has" { return 2 }
+    if name == "require" { return 2 }
+    if name == "set" { return 2 }
+    if name == "sys_args" { return 0 }
+    if name == "flush_events" { return 0 }
+    if name == "bitset_new" { return 0 }
+    if name == "bitset_set" { return 2 }
+    if name == "bitset_has" { return 2 }
+    if name == "bitset_clear" { return 2 }
+    if name == "buffer_new" { return 0 }
+    if name == "buffer_append" { return 2 }
+    if name == "buffer_to_str" { return 1 }
+    if name == "fork" { return 0 }
+    if name == "simulate" { return 3 }
+    if name == "commit" { return 1 }
+    if name == "clock" { return 0 }
+    if name == "keys" { return 1 }
+    if name == "values" { return 1 }
+    if name == "contains" { return 2 }
+    if name == "map_contains" { return 2 }
+    if name == "map_remove" { return 2 }
+    if name == "map_set" { return 3 }
+    if name == "map_get" { return 2 }
+    if name == "get" { return 2 }
+    if name == "transition" { return 2 }
+    if name == "peek" { return 3 }
+    if name == "debug_trace" { return 1 }
+    return -1
+}
+
+// Success payload type for `expr?` (Option/Result unwrap); used only for TryExpr typing.
+fn infer_try_payload_type(state: entity, eid: entity) -> str {
+    if not has(eid, CallExpr) {
+        return infer_expr_type(state, eid)
+    }
+    let x = require(eid, CallExpr)
+    let mut fname = ""
+    if has(x.callee, IdentExpr) {
+        fname = require(x.callee, IdentExpr).name
+    }
+    if fname == "get" {
+        if len(x.args) >= 2 {
+            let ent_ty = infer_expr_type(state, x.args[0])
+            let comp_arg = x.args[1]
+            if has(comp_arg, IdentExpr) {
+                let comp_name = require(comp_arg, IdentExpr).name
+                let cs = require(state, CheckerState)
+                if str_in_list(cs.component_names, comp_name) { return comp_name }
+                if str_in_list(cs.struct_names, comp_name) { return comp_name }
+            }
+            infer_expr_type(state, x.args[1])
+        }
+        return "any"
+    }
+    if fname == "try_int" {
+        if len(x.args) >= 1 { infer_expr_type(state, x.args[0]) }
+        return "int"
+    }
+    if fname == "try_float" {
+        if len(x.args) >= 1 { infer_expr_type(state, x.args[0]) }
+        return "float"
+    }
+    if fname == "transition" and len(x.args) >= 2 {
+        infer_expr_type(state, x.args[0])
+        infer_expr_type(state, x.args[1])
+        return infer_expr_type(state, x.args[0])
+    }
+    return infer_expr_type(state, eid)
+}
+
+fn infer_expr_type(state: entity, eid: entity) -> str {
+    if has(eid, IntLiteral) { return "int" }
+    if has(eid, FloatLiteral) { return "float" }
+    if has(eid, StringLiteral) { return "str" }
+    if has(eid, BooleanLiteral) { return "bool" }
+    if has(eid, NilLiteral) { return "nil" }
+    if has(eid, SystemRefExpr) { return "system" }
+
+    if has(eid, FStringExpr) {
+        let fsx = require(eid, FStringExpr)
+        for part in fsx.parts {
+            if has(part, FStringExprPart) {
+                let ep = require(part, FStringExprPart)
+                infer_expr_type(state, ep.expr)
+            }
+        }
+        return "str"
+    }
+
+    if has(eid, IdentExpr) {
+        let x = require(eid, IdentExpr)
+        if var_exists(state, x.name) {
+            return lookup_var(state, x.name)
+        }
+        let cs = require(state, CheckerState)
+        let name_len = byte_len(x.name)
+        let mut colon_pos = -1
+        let mut ci = 0
+        while ci < name_len - 1 {
+            if byte_at(x.name, ci) == 58 and byte_at(x.name, ci + 1) == 58 {
+                colon_pos = ci
+            }
+            ci = ci + 1
+        }
+        if colon_pos >= 0 {
+            let variant_part = substring_bytes(x.name, colon_pos + 2, name_len)
+            if str_in_list(cs.type_variant_names, variant_part) and is_zero_field_variant(variant_part) {
+                let mut is_compat = false
+                for fl_eid in query { CheckerFlags } {
+                    if require(fl_eid, CheckerFlags).compat_v05_dx { is_compat = true }
+                }
+                if not is_compat {
+                    make_error(state, get_line(eid), get_col(eid),
+                        f"Zero-field variant shorthand '{x.name}' requires --compat-v0.5-dx. Use '{x.name} {{ }}' instead")
+                }
+                return variant_part
+            }
+        }
+        if is_builtin_fn(x.name) { return "fn" }
+        let Some { value: _sig_eid } = find_fn_sig(state, x.name) else {
+            make_error(state, get_line(eid), get_col(eid),
+                f"Undefined variable '{x.name}'")
+            return "any"
+        }
+        return "fn"
+    }
+
+    if has(eid, BinaryOp) {
+        let x = require(eid, BinaryOp)
+        let lt = infer_expr_type(state, x.lhs)
+        let rt = infer_expr_type(state, x.rhs)
+        if x.op == "Plus" {
+            if lt == "str" or rt == "str" { return "str" }
+            if lt == "float" or rt == "float" { return "float" }
+            return "int"
+        }
+        if x.op == "Minus" or x.op == "Star" or x.op == "Slash" or x.op == "Percent" {
+            if lt == "float" or rt == "float" { return "float" }
+            return "int"
+        }
+        if x.op == "Eq" or x.op == "Neq" or x.op == "Lt" or x.op == "Lte" or x.op == "Gt" or x.op == "Gte" {
+            return "bool"
+        }
+        if x.op == "And" or x.op == "Or" { return "bool" }
+        if x.op == "Pipe" {
+            if has(x.rhs, IdentExpr) {
+                let pipe_fn = require(x.rhs, IdentExpr)
+                let Some { value: pipe_sig_eid } = find_fn_sig(state, pipe_fn.name) else {
+                    return "any"
+                }
+                let pipe_sig = require(pipe_sig_eid, FnSig)
+                if len(pipe_sig.param_types) > 0 {
+                    let first_param = pipe_sig.param_types[0]
+                    if lt != "any" and first_param != "any" and not types_compatible(first_param, lt) {
+                        make_error(state, get_line(eid), get_col(eid),
+                            f"Argument 1 to '{pipe_fn.name}' expects {first_param}, got {lt}")
+                    }
+                }
+                return pipe_sig.ret_type
+            }
+            return "any"
+        }
+        return "any"
+    }
+
+    if has(eid, UnaryOp) {
+        let x = require(eid, UnaryOp)
+        let inner_ty = infer_expr_type(state, x.operand)
+        if x.op == "Minus" { return inner_ty }
+        if x.op == "Not" { return "bool" }
+        return "any"
+    }
+
+    if has(eid, TryExpr) {
+        let x = require(eid, TryExpr)
+        return infer_try_payload_type(state, x.inner)
+    }
+
+    if has(eid, CallExpr) {
+        let x = require(eid, CallExpr)
+        let mut fname = ""
+        if has(x.callee, IdentExpr) {
+            fname = require(x.callee, IdentExpr).name
+        }
+        let has_local_callee = len(fname) > 0 and var_exists(state, fname)
+        if not has_local_callee and is_builtin_fn(fname) {
+            let expected_arity = builtin_arity(fname)
+            let actual_arity = len(x.args)
+            if expected_arity >= 0 and actual_arity != expected_arity {
+                make_error(state, get_line(eid), get_col(eid),
+                    f"'{fname}' expects {expected_arity} argument(s), got {actual_arity}")
+            }
+            for a in x.args {
+                infer_expr_type(state, a)
+            }
+            if fname == "require" and len(x.args) >= 2 {
+                let comp_arg = x.args[1]
+                if has(comp_arg, IdentExpr) {
+                    let comp_name = require(comp_arg, IdentExpr).name
+                    let cs = require(state, CheckerState)
+                    if str_in_list(cs.component_names, comp_name) { return comp_name }
+                    if str_in_list(cs.struct_names, comp_name) { return comp_name }
+                    if str_in_list(cs.type_variant_names, comp_name) { return comp_name }
+                }
+            }
+            return builtin_ret_type(fname)
+        }
+        if has_local_callee {
+            for a in x.args {
+                infer_expr_type(state, a)
+            }
+            return "any"
+        }
+        let Some { value: sig_eid } = find_fn_sig(state, fname) else {
+            if len(fname) > 0 {
+                make_error(state, get_line(eid), get_col(eid),
+                    f"Undefined function '{fname}'")
+            }
+            for a in x.args {
+                infer_expr_type(state, a)
+            }
+            return "any"
+        }
+        let sig = require(sig_eid, FnSig)
+        let expected = len(sig.param_types)
+        let actual = len(x.args)
+        if actual != expected {
+            make_error(state, get_line(eid), get_col(eid),
+                f"'{fname}' expects {expected} argument(s), got {actual}")
+        }
+        let mut generic_bindings_keys: list<str> = []
+        let mut generic_bindings_vals: list<str> = []
+        let mut ai = 0
+        for a in x.args {
+            let arg_ty = infer_expr_type(state, a)
+            if ai < expected {
+                let param_ty = sig.param_types[ai]
+                let raw_ty = sig.raw_param_types[ai]
+                if param_ty == "any" and raw_ty != "" and raw_ty != "any" and not is_value_type(raw_ty) {
+                    let mut bound_idx = -1
+                    let mut gi = 0
+                    for gk in generic_bindings_keys {
+                        if gk == raw_ty { bound_idx = gi }
+                        gi = gi + 1
+                    }
+                    if bound_idx < 0 {
+                        generic_bindings_keys << raw_ty
+                        generic_bindings_vals << arg_ty
+                    } else {
+                        let bound_ty = generic_bindings_vals[bound_idx]
+                        if arg_ty != "any" and bound_ty != "any" and not types_compatible(bound_ty, arg_ty) {
+                            make_error(state, get_line(eid), get_col(eid),
+                                f"Argument {ai + 1} to '{fname}' expects {bound_ty}, got {arg_ty}")
+                        }
+                    }
+                } else if not types_compatible(param_ty, arg_ty) {
+                    make_error(state, get_line(a), get_col(a),
+                        f"Argument {ai + 1} of '{fname}': expected '{param_ty}', got '{arg_ty}'")
+                }
+            }
+            ai = ai + 1
+        }
+        return sig.ret_type
+    }
+
+    if has(eid, ListLiteral) {
+        let x = require(eid, ListLiteral)
+        for e in x.elements {
+            infer_expr_type(state, e)
+        }
+        return "list"
+    }
+
+    if has(eid, IndexExpr) {
+        let x = require(eid, IndexExpr)
+        let obj_ty = infer_expr_type(state, x.object)
+        let idx_ty = infer_expr_type(state, x.index)
+        if idx_ty != "int" and idx_ty != "str" and idx_ty != "any" {
+            make_error(state, get_line(eid), get_col(eid),
+                f"Index must be int or str, got '{idx_ty}'")
+        }
+        if obj_ty == "str" { return "int" }
+        return "any"
+    }
+
+    if has(eid, FieldAccessExpr) {
+        let fa = require(eid, FieldAccessExpr)
+        let obj_ty = infer_expr_type(state, fa.object)
+        return lookup_field_type(state, obj_ty, fa.field)
+    }
+
+    if has(eid, StructLiteral) {
+        let sl = require(eid, StructLiteral)
+        if len(sl.path) > 0 {
+            let cs = require(state, CheckerState)
+            let last = sl.path[len(sl.path) - 1]
+            if str_in_list(cs.type_variant_names, last) { return last }
+            let name = sl.path[0]
+            if str_in_list(cs.component_names, name) { return name }
+            if str_in_list(cs.struct_names, name) { return name }
+            if str_in_list(cs.type_names, name) { return name }
+        }
+        return "entity"
+    }
+
+    if has(eid, ClosureExpr) {
+        return "fn"
+    }
+
+    if has(eid, EntityExpr) {
+        let ee = require(eid, EntityExpr)
+        let ee_name = ee.name
+        if ee_name != nil { infer_expr_type(state, ee_name) }
+        for comp in ee.components {
+            infer_expr_type(state, comp)
+        }
+        return "entity"
+    }
+
+    return "any"
+}
+
+fn check_stmt(state: entity, stmt_id: entity) -> nil {
+    if has(stmt_id, LetStmt) {
+        let s = require(stmt_id, LetStmt)
+        let val_ty = infer_expr_type(state, s.value)
+        let ann = resolve_type_str(state, s.type_ann)
+        if ann != "any" and val_ty != "any" and not types_compatible(ann, val_ty) {
+            let mut var_name = "?"
+            if len(s.names) > 0 { var_name = s.names[0] }
+            make_error(state, get_line(stmt_id), get_col(stmt_id),
+                f"Type mismatch: '{var_name}' declared as {ann}, got {val_ty}")
+        }
+        let mut bind_ty = ann
+        if ann == "any" { bind_ty = val_ty }
+        if len(s.names) == 1 {
+            define_var(state, s.names[0], bind_ty, s.is_mut)
+        } else {
+            for name in s.names {
+                define_var(state, name, "any", s.is_mut)
+            }
+        }
+        return nil
+    }
+    if has(stmt_id, LetElseStmt) {
+        let s = require(stmt_id, LetElseStmt)
+        let val_ty = infer_expr_type(state, s.value)
+        if val_ty != "any" and val_ty != "entity" {
+            let parent_type = get_parent_type_of_variant(val_ty)
+            if parent_type != "" and s.variant_name != "" {
+                let cs = require(state, CheckerState)
+                let type_variants = get_type_variants(parent_type)
+                if not str_in_list(type_variants, s.variant_name) {
+                    make_error(state, get_line(stmt_id), get_col(stmt_id),
+                        f"Variant '{s.variant_name}' not found in type '{parent_type}'")
+                }
+            }
+        }
+        if s.bind_name != "" {
+            define_var(state, s.bind_name, "any", false)
+        }
+        check_block(state, s.else_block)
+        return nil
+    }
+    if has(stmt_id, AssignStmt) {
+        let s = require(stmt_id, AssignStmt)
+        if s.name == "__index_assign__" {
+            if has(stmt_id, IndexExpr) {
+                let ie = require(stmt_id, IndexExpr)
+                infer_expr_type(state, ie.object)
+                infer_expr_type(state, ie.index)
+                infer_expr_type(state, s.value)
+                if has(ie.object, IdentExpr) {
+                    let obj_id = require(ie.object, IdentExpr)
+                    if var_exists(state, obj_id.name) {
+                        if not lookup_var_mut(state, obj_id.name) {
+                            make_error(state, get_line(stmt_id), get_col(stmt_id),
+                                f"Cannot assign to immutable variable '{obj_id.name}'")
+                        }
+                    }
+                }
+            }
+            return nil
+        }
+        infer_expr_type(state, s.value)
+        if not var_exists(state, s.name) {
+            let Some { value: _sig_eid } = find_fn_sig(state, s.name) else {
+                if not is_builtin_fn(s.name) {
+                    make_error(state, get_line(stmt_id), get_col(stmt_id),
+                        f"Assignment to undefined variable '{s.name}'")
+                }
+                return nil
+            }
+        } else {
+            let is_mut = lookup_var_mut(state, s.name)
+            if not is_mut {
+                if outer_scope_has_mut(state, s.name) {
+                    make_error(state, get_line(stmt_id), get_col(stmt_id),
+                        f"Cannot assign to '{s.name}' — it refers to an immutable pattern binding that shadows your outer 'let mut {s.name}'")
+                } else {
+                    make_error(state, get_line(stmt_id), get_col(stmt_id),
+                        f"Cannot assign to immutable variable '{s.name}'")
+                }
+            }
+        }
+        return nil
+    }
+    if has(stmt_id, PushStmt) {
+        let s = require(stmt_id, PushStmt)
+        infer_expr_type(state, s.value)
+        return nil
+    }
+    if has(stmt_id, EmitEventStmt) {
+        let s = require(stmt_id, EmitEventStmt)
+        let cs = require(state, CheckerState)
+        if not str_in_list(cs.event_names, s.event_name) {
+            make_error(state, get_line(stmt_id), get_col(stmt_id),
+                f"Emitting unknown event '{s.event_name}'")
+        } else {
+            let mut fi = 0
+            while fi < len(s.fields) {
+                let expected = lookup_field_type(state, s.event_name, s.fields[fi])
+                if expected != "any" {
+                    let actual = infer_expr_type(state, s.values[fi])
+                    if actual != "any" and not types_compatible(expected, actual) {
+                        make_error(state, get_line(stmt_id), get_col(stmt_id),
+                            f"Event '{s.event_name}' field '{s.fields[fi]}' expects {expected}, got {actual}")
+                    }
+                } else {
+                    infer_expr_type(state, s.values[fi])
+                }
+                fi = fi + 1
+            }
+        }
+        return nil
+    }
+    if has(stmt_id, ExprStmt) {
+        let s = require(stmt_id, ExprStmt)
+        infer_expr_type(state, s.expr)
+        return nil
+    }
+    if has(stmt_id, ReturnStmt) {
+        let s = require(stmt_id, ReturnStmt)
+        if s.has_value {
+            let ret_ty = infer_expr_type(state, s.value)
+            let expected = require(state, CheckerState).current_fn_ret
+            if not types_compatible(expected, ret_ty) {
+                make_error(state, get_line(stmt_id), get_col(stmt_id),
+                    f"Return type mismatch: expected '{expected}', got '{ret_ty}'")
+            }
+        }
+        return nil
+    }
+    if has(stmt_id, IfStmt) {
+        let s = require(stmt_id, IfStmt)
+        let cond_ty = infer_expr_type(state, s.cond)
+        check_block(state, s.then_block)
+        let eb = s.else_block
+        if eb != nil {
+            if has(eb, BlockStmt) {
+                check_block(state, eb)
+            }
+        }
+        return nil
+    }
+    if has(stmt_id, WhileStmt) {
+        let s = require(stmt_id, WhileStmt)
+        infer_expr_type(state, s.cond)
+        check_block(state, s.body)
+        return nil
+    }
+    if has(stmt_id, ForStmt) {
+        let s = require(stmt_id, ForStmt)
+        infer_expr_type(state, s.iterable)
+        push_scope(state)
+        for bname in s.bindings {
+            define_var(state, bname, "any", false)
+        }
+        check_block_no_scope(state, s.body)
+        pop_scope(state)
+        return nil
+    }
+    if has(stmt_id, MatchStmt) {
+        let ms = require(stmt_id, MatchStmt)
+        let subject_ty = infer_expr_type(state, ms.subject)
+        let mut has_wildcard = false
+        let mut covered: list<str> = []
+        for c_eid in ms.cases {
+            let mc = require(c_eid, MatchCase)
+            if mc.is_wildcard { has_wildcard = true }
+            if len(mc.pattern_path) > 0 {
+                covered << mc.pattern_path[len(mc.pattern_path) - 1]
+            }
+            push_scope(state)
+            for bname in mc.bindings {
+                define_var(state, bname, "any", false)
+            }
+            check_block_no_scope(state, mc.body)
+            pop_scope(state)
+        }
+        if not has_wildcard {
+            let cs = require(state, CheckerState)
+            let mut resolved_type = subject_ty
+            if str_in_list(cs.type_variant_names, subject_ty) or str_in_list(cs.state_variant_names, subject_ty) {
+                resolved_type = get_parent_type_of_variant(subject_ty)
+            }
+            if str_in_list(cs.type_names, resolved_type) or str_in_list(cs.state_names, resolved_type) {
+                let all_variants = get_type_variants(resolved_type)
+                if len(all_variants) > 0 {
+                    for vname in all_variants {
+                        if not str_in_list(covered, vname) {
+                            make_error(state, get_line(stmt_id), get_col(stmt_id),
+                                f"""Non-exhaustive match: variant '${vname}' of type '${resolved_type}' is not covered. Add a case: ${vname} => { ... }""")
+                        }
+                    }
+                }
+            }
+        }
+        return nil
+    }
+    if has(stmt_id, EntityStmt) {
+        let es = require(stmt_id, EntityStmt)
+        define_var(state, es.name, "entity", false)
+        return nil
+    }
+    if has(stmt_id, BreakStmt) { return nil }
+    if has(stmt_id, ContinueStmt) { return nil }
+    return nil
+}
+
+fn check_block_no_scope(state: entity, block_id: entity) -> nil {
+    if not has(block_id, BlockStmt) { return nil }
+    let b = require(block_id, BlockStmt)
+    for st in b.stmts {
+        check_stmt(state, st)
+    }
+    return nil
+}
+
+fn check_block(state: entity, block_id: entity) -> nil {
+    push_scope(state)
+    check_block_no_scope(state, block_id)
+    pop_scope(state)
+    return nil
+}
+
+fn register_fn_sig(state: entity, decl_id: entity) -> nil {
+    let f = require(decl_id, FnDecl)
+    let mut ptypes: list<str> = []
+    let mut raw_ptypes: list<str> = []
+    for p_eid in f.params {
+        let p = require(p_eid, Param)
+        ptypes << resolve_type_str(state, p.type_str)
+        raw_ptypes << p.type_str
+    }
+    let ret = resolve_type_str(state, f.ret_type)
+    let sig = entity { CheckerNode {}, FnSig { name: f.name, param_types: ptypes, ret_type: ret, raw_param_types: raw_ptypes } }
+    let mut sigs = require(state, CheckerState).fn_sigs
+    sigs << sig
+    let cs = require(state, CheckerState)
+    set(state, CheckerState {
+        scope: cs.scope,
+        fn_sigs: sigs,
+        errors: cs.errors,
+        current_fn_ret: cs.current_fn_ret,
+        component_names: cs.component_names,
+        struct_names: cs.struct_names,
+        type_names: cs.type_names,
+        type_variant_names: cs.type_variant_names,
+        state_names: cs.state_names,
+        state_variant_names: cs.state_variant_names,
+        field_types: cs.field_types,
+        private_types: cs.private_types,
+        event_names: cs.event_names
+    })
+    return nil
+}
+
+fn check_fn_decl(state: entity, decl_id: entity) -> nil {
+    let f = require(decl_id, FnDecl)
+    
+    if has(decl_id, Decl) and require(decl_id, Decl).is_pub {
+        let mut i = 0
+        for p_eid in f.params {
+            let p = require(p_eid, Param)
+            if p.type_str == "" {
+                make_error(state, get_line(decl_id), get_col(decl_id),
+                    f"Public function '{f.name}' requires explicit type annotations for all parameters")
+            }
+            i = i + 1
+        }
+        if f.ret_type == "" {
+            make_error(state, get_line(decl_id), get_col(decl_id),
+                f"Public function '{f.name}' requires an explicit return type")
+        }
+    }
+
+    let prev_ret = require(state, CheckerState).current_fn_ret
+    let fn_ret = resolve_type_str(state, f.ret_type)
+    let cs0 = require(state, CheckerState)
+    set(state, CheckerState {
+        scope: cs0.scope,
+        fn_sigs: cs0.fn_sigs,
+        errors: cs0.errors,
+        current_fn_ret: fn_ret,
+        component_names: cs0.component_names,
+        struct_names: cs0.struct_names,
+        type_names: cs0.type_names,
+        type_variant_names: cs0.type_variant_names,
+        state_names: cs0.state_names,
+        state_variant_names: cs0.state_variant_names,
+        field_types: cs0.field_types,
+        private_types: cs0.private_types,
+        event_names: cs0.event_names
+    })
+    push_scope(state)
+    for p_eid in f.params {
+        let p = require(p_eid, Param)
+        define_var(state, p.name, resolve_type_str(state, p.type_str), p.is_mut)
+    }
+    check_block_no_scope(state, f.body)
+    pop_scope(state)
+    let cs1 = require(state, CheckerState)
+    set(state, CheckerState {
+        scope: cs1.scope,
+        fn_sigs: cs1.fn_sigs,
+        errors: cs1.errors,
+        current_fn_ret: prev_ret,
+        component_names: cs1.component_names,
+        struct_names: cs1.struct_names,
+        type_names: cs1.type_names,
+        type_variant_names: cs1.type_variant_names,
+        state_names: cs1.state_names,
+        state_variant_names: cs1.state_variant_names,
+        field_types: cs1.field_types,
+        private_types: cs1.private_types,
+        event_names: cs1.event_names
+    })
+    return nil
+}
+
+fn resolve_field_type(ts: str) -> str {
+    if ts == "" { return "any" }
+    return base_type(ts)
+}
+
+fn collect_decl_names(state: entity, root: entity) -> nil {
+    if not has(root, Program) { return nil }
+    let p = require(root, Program)
+
+    let mut comps: list<str> = []
+    let mut structs: list<str> = []
+    let mut types: list<str> = []
+    let mut tvariants: list<str> = []
+    let mut snames: list<str> = []
+    let mut svariants: list<str> = []
+    let mut fts: list<entity> = []
+    let mut priv_types: list<str> = []
+    let mut evnames: list<str> = []
+    
+    for d in p.decls {
+        if has(d, ComponentDecl) {
+            let cd = require(d, ComponentDecl)
+            let cd_pub = has(d, Decl) and require(d, Decl).is_pub
+            if cd_pub {
+                for f in cd.fields {
+                    let cf = require(f, ComponentField)
+                    if cf.type_str == "" {
+                        make_error(state, get_line(d), get_col(d),
+                            f"Public component '{cd.name}' requires explicit type annotations for all fields")
+                    }
+                }
+            } else {
+                priv_types << cd.name
+            }
+            comps << cd.name
+            for f in cd.fields {
+                let cf = require(f, ComponentField)
+                fts << entity { CheckerNode {}, FieldTypeEntry { comp_name: cd.name, field_name: cf.name, field_type: resolve_field_type(cf.type_str) } }
+            }
+        }
+        if has(d, StructDecl) {
+            let sd = require(d, StructDecl)
+            let sd_pub = has(d, Decl) and require(d, Decl).is_pub
+            if sd_pub {
+                for f in sd.fields {
+                    if has(f, ComponentField) {
+                        let cf = require(f, ComponentField)
+                        if cf.type_str == "" {
+                            make_error(state, get_line(d), get_col(d),
+                                f"Public struct '{sd.name}' requires explicit type annotations for all fields")
+                        }
+                    }
+                }
+            } else {
+                priv_types << sd.name
+            }
+            structs << sd.name
+            for f in sd.fields {
+                if has(f, ComponentField) {
+                    let cf = require(f, ComponentField)
+                    fts << entity { CheckerNode {}, FieldTypeEntry { comp_name: sd.name, field_name: cf.name, field_type: resolve_field_type(cf.type_str) } }
+                }
+            }
+        }
+        if has(d, TypeDecl) {
+            let td = require(d, TypeDecl)
+            if not (has(d, Decl) and require(d, Decl).is_pub) {
+                priv_types << td.name
+            }
+            types << td.name
+            let mut variant_names: list<str> = []
+            let mut variant_fcounts: list<int> = []
+            for v_eid in td.variants {
+                let tv = require(v_eid, TypeVariant)
+                tvariants << tv.name
+                variant_names << tv.name
+                variant_fcounts << len(tv.fields)
+                for vf in tv.fields {
+                    let vfield = require(vf, VariantField)
+                    fts << entity { CheckerNode {}, FieldTypeEntry { comp_name: tv.name, field_name: vfield.name, field_type: resolve_field_type(vfield.type_str) } }
+                }
+            }
+            entity { CheckerNode {}, TypeVariantGroup { type_name: td.name, variants: variant_names, variant_field_counts: variant_fcounts } }
+        }
+        if has(d, StateDecl) {
+            let sm = require(d, StateDecl)
+            if not (has(d, Decl) and require(d, Decl).is_pub) {
+                priv_types << sm.name
+            }
+            snames << sm.name
+            let mut sv_names: list<str> = []
+            let mut sv_fcounts: list<int> = []
+            for sv_eid in sm.variants {
+                let sv = require(sv_eid, StateVariant)
+                svariants << sv.name
+                svariants << f"{sm.name}::{sv.name}"
+                sv_names << sv.name
+                sv_fcounts << 0
+            }
+            entity { CheckerNode {}, TypeVariantGroup { type_name: sm.name, variants: sv_names, variant_field_counts: sv_fcounts } }
+        }
+        if has(d, EventDecl) {
+            let ed = require(d, EventDecl)
+            evnames << ed.name
+            let mut fi = 0
+            while fi < len(ed.fields) {
+                let mut ftype = "any"
+                if fi < len(ed.field_types) { ftype = ed.field_types[fi] }
+                fts << entity { CheckerNode {}, FieldTypeEntry { comp_name: ed.name, field_name: ed.fields[fi], field_type: resolve_field_type(ftype) } }
+                fi = fi + 1
+            }
+        }
+    }
+    let cs = require(state, CheckerState)
+    set(state, CheckerState {
+        scope: cs.scope,
+        fn_sigs: cs.fn_sigs,
+        errors: cs.errors,
+        current_fn_ret: cs.current_fn_ret,
+        component_names: comps,
+        struct_names: structs,
+        type_names: types,
+        type_variant_names: tvariants,
+        state_names: snames,
+        state_variant_names: svariants,
+        field_types: fts,
+        private_types: priv_types,
+        event_names: evnames
+    })
+
+    for c in comps {
+        define_var(state, c, c, false)
+    }
+    for s in structs {
+        define_var(state, s, s, false)
+    }
+    for t in types {
+        define_var(state, t, t, false)
+    }
+    for tv in tvariants {
+        define_var(state, tv, tv, false)
+    }
+    for sn in snames {
+        define_var(state, sn, sn, false)
+    }
+    for sv in svariants {
+        define_var(state, sv, sv, false)
+    }
+
+    // Pass 2: register function signatures (needs type names to be populated)
+    for d in p.decls {
+        if has(d, FnDecl) {
+            register_fn_sig(state, d)
+        }
+    }
+    return nil
+}
+
+fn is_private_type(state: entity, name: str) -> bool {
+    let cs = require(state, CheckerState)
+    return str_in_list(cs.private_types, name)
+}
+
+fn is_alphanumeric(c: int) -> bool {
+    // a-z
+    if c >= 97 and c <= 122 { return true }
+    // A-Z
+    if c >= 65 and c <= 90 { return true }
+    // 0-9
+    if c >= 48 and c <= 57 { return true }
+    // _
+    if c == 95 { return true }
+    return false
+}
+
+fn check_type_expr_visibility(state: entity, type_str: str, decl_id: entity, context: str) -> nil {
+    if type_str == "" { return nil }
+    
+    let blen = byte_len(type_str)
+    let mut i = 0
+    while i < blen {
+        let c = byte_at(type_str, i)
+        if is_alphanumeric(c) {
+            let start = i
+            while i < blen and is_alphanumeric(byte_at(type_str, i)) {
+                i = i + 1
+            }
+            let ident = substring_bytes(type_str, start, i)
+            if is_private_type(state, ident) {
+                make_error(state, get_line(decl_id), get_col(decl_id),
+                    f"Public API leak: {context} exposes private type '{ident}'")
+            }
+        } else {
+            i = i + 1
+        }
+    }
+    return nil
+}
+
+fn check_public_reachability(state: entity, root: entity) -> nil {
+    if not has(root, Program) { return nil }
+    let p = require(root, Program)
+    set(state, Program { decls: p.decls }) // Temporarily store program for lookups
+    
+    for d in p.decls {
+        let d_pub = has(d, Decl) and require(d, Decl).is_pub
+        if has(d, FnDecl) {
+            let f = require(d, FnDecl)
+            if d_pub {
+                let mut i = 0
+                for p_eid in f.params {
+                    let param = require(p_eid, Param)
+                    check_type_expr_visibility(state, param.type_str, d, f"parameter '{param.name}' of public function '{f.name}'")
+                    i = i + 1
+                }
+                check_type_expr_visibility(state, f.ret_type, d, f"return type of public function '{f.name}'")
+            }
+        }
+        if has(d, ComponentDecl) {
+            let c = require(d, ComponentDecl)
+            if d_pub {
+                for f_eid in c.fields {
+                    let cf = require(f_eid, ComponentField)
+                    check_type_expr_visibility(state, cf.type_str, d, f"field '{cf.name}' of public component '{c.name}'")
+                }
+            }
+        }
+        if has(d, StructDecl) {
+            let s = require(d, StructDecl)
+            if d_pub {
+                for f_eid in s.fields {
+                    if has(f_eid, ComponentField) {
+                        let cf = require(f_eid, ComponentField)
+                        check_type_expr_visibility(state, cf.type_str, d, f"field '{cf.name}' of public struct '{s.name}'")
+                    }
+                }
+            }
+        }
+        if has(d, TypeDecl) {
+            let t = require(d, TypeDecl)
+            if d_pub {
+                for v_eid in t.variants {
+                    let tv = require(v_eid, TypeVariant)
+                    for vf_eid in tv.fields {
+                        let vf = require(vf_eid, VariantField)
+                        check_type_expr_visibility(state, vf.type_str, d, f"field '{vf.name}' of public sum type variant '{t.name}::{tv.name}'")
+                    }
+                }
+            }
+        }
+    }
+    remove(state, "Program") // Cleanup
+    return nil
+}
+
+fn register_builtin_types(state: entity) -> nil {
+    entity { CheckerNode {}, TypeVariantGroup { type_name: "Option", variants: ["Some", "None"], variant_field_counts: [1, 0] } }
+    entity { CheckerNode {}, TypeVariantGroup { type_name: "Result", variants: ["Ok", "Err"], variant_field_counts: [1, 1] } }
+
+    let cs = require(state, CheckerState)
+    let mut tnames = cs.type_names
+    tnames << "Option"
+    tnames << "Result"
+    let mut tvnames = cs.type_variant_names
+    tvnames << "Some"
+    tvnames << "None"
+    tvnames << "Ok"
+    tvnames << "Err"
+    set(state, CheckerState {
+        scope: cs.scope,
+        fn_sigs: cs.fn_sigs,
+        errors: cs.errors,
+        current_fn_ret: cs.current_fn_ret,
+        component_names: cs.component_names,
+        struct_names: cs.struct_names,
+        type_names: tnames,
+        type_variant_names: tvnames,
+        state_names: cs.state_names,
+        state_variant_names: cs.state_variant_names,
+        field_types: cs.field_types,
+        private_types: cs.private_types,
+        event_names: cs.event_names
+    })
+
+    let scope = require(state, CheckerState).scope
+    define_var(state, "Option", "Option", false)
+    define_var(state, "Result", "Result", false)
+    define_var(state, "Some", "Some", false)
+    define_var(state, "None", "None", false)
+    define_var(state, "Ok", "Ok", false)
+    define_var(state, "Err", "Err", false)
+    return nil
+}
+
+pub fn check_program(root: entity) -> list<entity> {
+    return check_program_with_flags(root, false)
+}
+
+pub fn check_program_compat(root: entity, compat_v05_dx: bool) -> list<entity> {
+    return check_program_with_flags(root, compat_v05_dx)
+}
+
+fn check_program_with_flags(root: entity, compat_v05_dx: bool) -> list<entity> {
+    entity { CheckerNode {}, CheckerFlags { compat_v05_dx: compat_v05_dx } }
+
+    let root_scope = entity { CheckerNode {}, Scope { bindings: [], parent: nil } }
+    let state = entity {
+        CheckerNode {},
+        CheckerState {
+            scope: root_scope,
+            fn_sigs: [],
+            errors: [],
+            current_fn_ret: "any",
+            component_names: [],
+            struct_names: [],
+            type_names: [],
+            type_variant_names: [],
+            state_names: [],
+            state_variant_names: [],
+            field_types: [],
+            private_types: [],
+            event_names: []
+        }
+    }
+
+    collect_decl_names(state, root)
+    register_builtin_types(state)
+    check_public_reachability(state, root)
+
+    if not has(root, Program) { return [] }
+    let p = require(root, Program)
+    for d in p.decls {
+        if has(d, FnDecl) {
+            check_fn_decl(state, d)
+        }
+        if has(d, LetStmt) and not has(d, FnDecl) {
+            let s = require(d, LetStmt)
+            let ann = resolve_type_str(state, s.type_ann)
+            let mut bind_ty = "any"
+            if ann != "any" { bind_ty = ann }
+            if has(s.value, StructLiteral) {
+                let sl = require(s.value, StructLiteral)
+                if len(sl.path) > 0 {
+                    let cs2 = require(state, CheckerState)
+                    let last2 = sl.path[len(sl.path) - 1]
+                    if str_in_list(cs2.type_variant_names, last2) or str_in_list(cs2.state_variant_names, last2) { bind_ty = last2 }
+                }
+            }
+            if has(s.value, IdentExpr) {
+                let ie = require(s.value, IdentExpr)
+                let ie_name = ie.name
+                let ie_len = byte_len(ie_name)
+                let mut ie_cpos = -1
+                let mut ie_ci = 0
+                while ie_ci < ie_len - 1 {
+                    if byte_at(ie_name, ie_ci) == 58 and byte_at(ie_name, ie_ci + 1) == 58 {
+                        ie_cpos = ie_ci
+                    }
+                    ie_ci = ie_ci + 1
+                }
+                if ie_cpos >= 0 {
+                    let ie_vpart = substring_bytes(ie_name, ie_cpos + 2, ie_len)
+                    let cs3 = require(state, CheckerState)
+                    if (str_in_list(cs3.type_variant_names, ie_vpart) or str_in_list(cs3.state_variant_names, ie_vpart)) and is_zero_field_variant(ie_vpart) {
+                        let is_state_variant = str_in_list(cs3.state_variant_names, ie_vpart)
+                        if not is_state_variant {
+                            let mut ie_compat = false
+                            for fl_eid in query { CheckerFlags } {
+                                if require(fl_eid, CheckerFlags).compat_v05_dx { ie_compat = true }
+                            }
+                            if not ie_compat {
+                                make_error(state, get_line(d), get_col(d),
+                                    f"Zero-field variant shorthand '{ie_name}' requires --compat-v0.5-dx. Use '{ie_name} {{ }}' instead")
+                            }
+                        }
+                        bind_ty = ie_vpart
+                    }
+                }
+            }
+            if len(s.names) == 1 {
+                define_var(state, s.names[0], bind_ty, s.is_mut)
+            } else {
+                for name in s.names {
+                    define_var(state, name, "any", s.is_mut)
+                }
+            }
+        }
+        if has(d, LetElseStmt) {
+            check_stmt(state, d)
+        }
+    }
+
+    return require(state, CheckerState).errors
+}
+
+pub fn format_errors(errors: list<entity>) -> str {
+    let mut buf = buffer_new()
+    for err in errors {
+        let e = require(err, CheckError)
+        buf = buffer_append(buf, f"[{e.line}:{e.col}] {e.message}\n")
+    }
+    return buffer_to_str(buf)
+}

@@ -1,0 +1,23 @@
+---
+source: tests\conformance\stdlib_strings.rad
+exit_code: 0
+---
+["a", "b", "c"]
+["he", "o"]
+["no-match"]
+["", "", ""]
+a, b, c
+only
+
+1 + 2 + 3
+hello
+already
+hello rad
+bbbbbb
+no match
+true
+false
+true
+true
+false
+true

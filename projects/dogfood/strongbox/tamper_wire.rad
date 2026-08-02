@@ -1,0 +1,144 @@
+// strongbox — adversarial tests for the fork wire codec.
+//
+//   rad projects/dogfood/strongbox/tamper_wire.rad
+//
+// The documented contract (builtins.md, fork_to_bytes/fork_from_bytes):
+//   "Corruption is an Err, not a crash. The payload carries a blake3
+//    integrity digest; tampered or truncated bytes are rejected with a
+//    digest mismatch, garbage is a parse error. Network input is a system
+//    boundary."
+//
+// fork_from_bytes returns Result, so every case below runs in one process.
+// A case PASSES when a tampered payload is REJECTED and a clean payload is
+// accepted. Silent acceptance of tampered bytes is the failure mode we hunt.
+
+component Incident { code: "", severity: 1, status: "open", opened_at: 0, sla_mins: 60 }
+
+component Assignee { name: "", team: "unassigned" }
+
+resource Ledger { count: 0, region: "", revision: 3 }
+
+fn seed(n: int) -> nil {
+    for i in range(0, n) {
+        spawn(
+            f"inc-{3000 + i}",
+            Incident { code: f"CODE_{i % 7}", severity: 1 + i % 5, status: "open", opened_at: i * 60, sla_mins: 30 },
+            Assignee { name: f"eng-{i % 3}", team: "platform" },
+        )
+    }
+    set_resource(Ledger, Ledger { count: n, region: "us-east", revision: 3 })
+    return nil
+}
+
+fn reset() -> nil {
+    for e in entities() {
+        despawn(e)
+    }
+    return nil
+}
+
+// Replace one byte, keeping length identical (pure tamper, not truncation).
+fn flip_at(s: str, idx: int) -> str {
+    let ch = substring_bytes(s, idx, idx + 1)
+    let mut repl = "A"
+    if ch == "A" {
+        repl = "B"
+    }
+    return substring_bytes(s, 0, idx) + repl + substring_bytes(s, idx + 1, len(s))
+}
+
+// A tampered payload must be rejected.
+fn expect_reject(label: str, bytes: str) -> int {
+    match fork_from_bytes(bytes) {
+        Ok(f) => {
+            print(f"  FAIL  {label}: ACCEPTED tampered bytes (digest {world_digest(f)})")
+            return 1
+        }
+        Err(m) => {
+            print(f"  PASS  {label}: rejected — {m}")
+            return 0
+        }
+    }
+}
+
+fn expect_accept(label: str, bytes: str, want_digest: str) -> int {
+    match fork_from_bytes(bytes) {
+        Ok(f) => {
+            if world_digest(f) == want_digest {
+                print(f"  PASS  {label}: accepted, digest matches")
+                return 0
+            }
+            print(f"  FAIL  {label}: accepted but digest drifted")
+            return 1
+        }
+        Err(m) => {
+            print(f"  FAIL  {label}: rejected a CLEAN payload — {m}")
+            return 1
+        }
+    }
+}
+
+let mut fails = 0
+
+print("=== strongbox: wire-codec tamper harness ===")
+
+// ---------------------------------------------------------------- payload A
+seed(400)
+let digest_a = world_digest()
+let packed = fork_to_bytes(fork())
+print(f"payload A: {len(packed)} bytes, prefix '{substring_bytes(packed, 0, 9)}'")
+
+// A second, DIFFERENT world, to graft parts across payloads.
+reset()
+seed(12)
+let small = fork_to_bytes(fork())
+print(f"payload B: {len(small)} bytes, prefix '{substring_bytes(small, 0, 9)}'")
+
+print("-- clean payloads --")
+fails = fails + expect_accept("W0  clean RADPACK payload", packed, digest_a)
+
+print("-- structural garbage --")
+fails = fails + expect_reject("W1  empty string", "")
+fails = fails + expect_reject("W2  arbitrary text", "not a fork at all")
+fails = fails + expect_reject("W3  correct prefix, garbage body", "RADPACK1:w " + "deadbeef" * 8 + " !!!!not-base64!!!!")
+
+print("-- truncation --")
+fails = fails + expect_reject("W4  last 40 bytes chopped", substring_bytes(packed, 0, len(packed) - 40))
+fails = fails + expect_reject("W5  half the payload", substring_bytes(packed, 0, len(packed) / 2))
+fails = fails + expect_reject("W6  header only", substring_bytes(packed, 0, 80))
+
+print("-- single-byte tampering of the compressed body --")
+let body_start = 9 + 64 + 2
+fails = fails + expect_reject("W7  one byte flipped mid-body", flip_at(packed, body_start + 200))
+fails = fails + expect_reject("W8  one byte flipped near the end", flip_at(packed, len(packed) - 12))
+
+// The envelope is `RADPACK1:<tag> <digest> <base64(body)>`, so the three
+// space-separated tokens can be recombined exactly — no byte arithmetic.
+print("-- tampering the integrity digest itself --")
+let a_parts = split(packed, " ")
+let b_parts = split(small, " ")
+let a_tag = a_parts[0]
+let a_digest = a_parts[1]
+let a_body = a_parts[2]
+let b_digest = b_parts[1]
+let b_body = b_parts[2]
+
+fails = fails + expect_reject("W9  one hex char of the digest flipped", a_tag + " " + flip_at(a_digest, 3) + " " + a_body)
+
+// A well-formed, genuine digest — of a DIFFERENT world. The receiver must
+// verify what it decoded, not merely that a digest is well-formed.
+fails = fails + expect_reject("W10 genuine digest of another world grafted on", a_tag + " " + b_digest + " " + a_body)
+
+// The mirror: keep payload A's digest, swap in payload B's body.
+fails = fails + expect_reject("W11 body swapped for another world's body", a_tag + " " + a_digest + " " + b_body)
+
+// Both halves come from payload B, only the tag is A's: internally
+// consistent, so ONLY a caller-side expectation can catch this. Rad's codec
+// has no notion of "which world did I ask for", so acceptance here is
+// correct behaviour, recorded to make the boundary explicit.
+match fork_from_bytes(a_tag + " " + b_digest + " " + b_body) {
+    Ok(f) => { print(f"  NOTE  W12 self-consistent foreign payload accepted (digest {slice(world_digest(f), 0, 12)}…) — codec verifies integrity, not identity") }
+    Err(m) => { print(f"  NOTE  W12 self-consistent foreign payload rejected — {m}") }
+}
+
+print(f"=== wire tamper: {fails} failure(s) ===")

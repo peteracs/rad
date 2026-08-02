@@ -1,0 +1,22 @@
+// Attack: guards on multiple different events
+event A { x }
+event B { y }
+
+on A(e) where e.x > 0 {
+    print("A+:", e.x)
+}
+
+on B(e) when len(e.y) > 3 {
+    print("B long:", e.y)
+}
+
+fn main() -> nil {
+    emit A { x: -1 }
+    emit A { x: 5 }
+    emit B { y: "hi" }
+    emit B { y: "hello" }
+    flush_events()
+}
+
+// expect: A+: 5
+// expect: B long: hello

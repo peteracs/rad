@@ -1,0 +1,464 @@
+use "arena_schema.rad"
+use "moba_stack.rad"
+
+fn ball_position(caster_id: str) -> Position {
+    let caster = ent(caster_id)
+    let state = require(caster, OriannaState)
+    if state.ball_attached {
+        return require(ent(state.anchor_id), Position)
+    }
+    return require(ent(state.ball_id), Position)
+}
+
+fn set_ball_anchor(caster_id: str, anchor_id: str, deployed: bool, attached: bool, x: float, y: float) -> nil {
+    let caster = ent(caster_id)
+    let state = require(caster, OriannaState)
+    let ball = ent(state.ball_id)
+    set(ball, Position { x: x, y: y })
+    set(caster, SpellBook { sealed: false, ..require(caster, SpellBook) })
+    set(caster, OriannaState {
+        ball_id: state.ball_id,
+        anchor_id: anchor_id,
+        ball_deployed: deployed,
+        ball_attached: attached,
+        in_flight: false,
+        ghost_alive: true,
+        ultimate_x: x,
+        ultimate_y: y
+    })
+}
+
+fn ball_leash_radius() -> float {
+    return 1125.0
+}
+
+fn clamp_q_target(caster_pos: Position, x: float, y: float) -> Position {
+    let mut dx = x - caster_pos.x
+    let mut dy = y - caster_pos.y
+    let mut d = sqrt(dx * dx + dy * dy)
+    if d <= 0.001 {
+        dx = 1.0
+        dy = 0.0
+        d = 1.0
+    }
+    let final_d = clamp(d, 150.0, ability_spec("q").range)
+    return Position {
+        x: caster_pos.x + (dx / d) * final_d,
+        y: caster_pos.y + (dy / d) * final_d
+    }
+}
+
+fn start_ball_travel(caster_id: str, kind: str, target_id: str, target_x: float, target_y: float, speed: float, hit_radius: float, finish_radius: float, damage: float, shield: float) -> nil {
+    let caster = ent(caster_id)
+    let state = require(caster, OriannaState)
+    let ball = ent(state.ball_id)
+    let ids = res(Ids)
+    let travel_id = f"{kind}:{res(MatchClock).tick}:{ids.next_log}"
+    set(ball, BallTravel {
+        id: travel_id,
+        caster_id: caster_id,
+        kind: kind,
+        target_id: target_id,
+        target_x: target_x,
+        target_y: target_y,
+        speed: speed,
+        hit_radius: hit_radius,
+        finish_radius: finish_radius,
+        damage: damage,
+        q_percent: 1.0,
+        shield_on_arrival: shield
+    })
+    set(caster, SpellBook { sealed: true, ..require(caster, SpellBook) })
+    set(caster, OriannaState {
+        ball_deployed: true,
+        ball_attached: false,
+        in_flight: true,
+        ghost_alive: true,
+        ..state
+    })
+}
+
+fn deal_damage(source_id: str, target_id: str, amount: float, tag: str) -> nil {
+    emit DamageRequest { source_id: source_id, target_id: target_id, amount: amount, tag: tag }
+}
+
+fn cast_q(caster: entity, x: float, y: float) -> nil {
+    if not spend_and_cd(caster, "q") { return }
+    let pos = require(caster, Position)
+    let stats = require(caster, Stats)
+    let target = clamp_q_target(pos, x, y)
+    let spec = ability_spec("q")
+    let damage = ability_damage("q", 5, stats.ap)
+    start_ball_travel("orianna", "q", "", target.x, target.y, 1275.0, spec.radius, 25.0, damage, 0.0)
+    log(f"Q Command: ball to ({target.x}, {target.y})")
+}
+
+fn cast_w(caster: entity) -> nil {
+    if not spend_and_cd(caster, "w") { return }
+    let center = ball_position("orianna")
+    let stats = require(caster, Stats)
+    let spec = ability_spec("w")
+    let damage = ability_damage("w", 5, stats.ap)
+    let speed = w_speed_mod(5)
+    for unit in units_in_radius(center, spec.radius, "any", caster) {
+        let u = require(unit, Unit)
+        if is_enemy(caster, unit) {
+            deal_damage("orianna", u.id, damage, "OrianaDissonance")
+            apply_buff(u.id, "orianna", "OrianaSlow", "slow", 20, 1, 1, 0.0, 0.0 - speed)
+        } else {
+            apply_buff(u.id, "orianna", "OrianaHaste", "haste", 20, 1, 1, 0.0, speed)
+        }
+    }
+    let ids = res(Ids)
+    let zone_key = f"zone-{ids.next_zone}"
+    set_resource(Ids, Ids { next_log: ids.next_log, next_zone: ids.next_zone + 1 })
+    let _zone = entity zone_key {
+        Zone { key: zone_key, caster_id: "orianna", name: "OrianaDissonanceWave", x: center.x, y: center.y, radius: spec.radius, ticks_left: 30, tick_every: 3, level: 5 }
+    }
+    log("W Command: Dissonance pulse")
+}
+
+fn cast_e(caster: entity, target_id: str) -> nil {
+    if target_id == "" {
+        log("E needs an allied target")
+        return
+    }
+    match lookup(Unit, "id", target_id) {
+        Some(target) => {
+            if require(target, Unit).team != "blue" {
+                log("E can only target an ally")
+                return
+            }
+        }
+        None => {
+            log("E needs an allied target")
+            return
+        }
+    }
+    if not spend_and_cd(caster, "e") { return }
+    let target = ent(target_id)
+    let target_pos = require(target, Position)
+    let amount = e_shield(5, require(caster, Stats).ap)
+    let ball_pos = ball_position("orianna")
+    if dist(ball_pos, target_pos) <= 100.0 {
+        set_ball_anchor("orianna", target_id, false, true, target_pos.x, target_pos.y)
+        set(target, Health { shield: require(target, Health).shield + amount, ..require(target, Health) })
+        apply_buff(target_id, "orianna", "OrianaRedactShield", "shield", 40, 1, 1, amount, 0.0)
+        log(f"E Command: shielded {target_id}")
+        return
+    }
+    start_ball_travel("orianna", "e", target_id, target_pos.x, target_pos.y, 2250.0, 100.0, 35.0, amount * 0.75, amount)
+    log(f"E Command: ball returns to {target_id}")
+}
+
+fn cast_r(caster: entity) -> nil {
+    if not spend_and_cd(caster, "r") { return }
+    let center = ball_position("orianna")
+    set(caster, OriannaState { ultimate_x: center.x, ultimate_y: center.y, ..require(caster, OriannaState) })
+    let spec = ability_spec("r")
+    let damage = ability_damage("r", 3, require(caster, Stats).ap)
+    for unit in units_in_radius(center, spec.radius, "enemy", caster) {
+        let u = require(unit, Unit)
+        deal_damage("orianna", u.id, damage, "OrianaDetonate")
+        apply_buff(u.id, "orianna", "OrianaStun", "stun", 8, 1, 1, 0.0, 0.0)
+        set(unit, ForcedMove { center_x: center.x, center_y: center.y, ticks_left: 8 })
+    }
+    log("R Command: Shockwave")
+}
+
+on CastCommand(e) {
+    let caster = ent("orianna")
+    if e.slot == "q" { cast_q(caster, e.x, e.y) }
+    if e.slot == "w" { cast_w(caster) }
+    if e.slot == "e" { cast_e(caster, e.target_id) }
+    if e.slot == "r" { cast_r(caster) }
+}
+
+on MoveCommand(e) {
+    let ori = ent("orianna")
+    let p = clamp_world_pos(e.x, e.y)
+    set(ori, MoveTarget { x: p.x, y: p.y })
+}
+
+on BasicAttackCommand(e) {
+    let source = ent("orianna")
+    let target = lookup(Unit, "id", e.target_id) |> unwrap
+    if not is_enemy(source, target) { return }
+    let stacks = buff_stacks(e.target_id, "OrianaPowerDagger")
+    let damage = (passive_base(require(source, Unit).level) + require(source, Stats).ap * 0.2) * (1.0 + 0.15 * stacks)
+    for b in query { Buff } {
+        let buff = require(b, Buff)
+        if buff.source_id == "orianna" and buff.name == "OrianaPowerDagger" and buff.owner_id != e.target_id {
+            despawn(b)
+        }
+    }
+    apply_buff(e.target_id, "orianna", "OrianaPowerDagger", "passive", 40, 1, 3, 0.0, 0.0)
+    deal_damage("orianna", e.target_id, damage, "OrianaSpellSword")
+}
+
+on DamageRequest(e) {
+    let target = lookup(Unit, "id", e.target_id) |> unwrap
+    let h = require(target, Health)
+    let absorbed = min(h.shield, e.amount)
+    let hp_damage = e.amount - absorbed
+    let next_hp = max(0.0, h.hp - hp_damage)
+    set(target, Health { hp: next_hp, max: h.max, shield: h.shield - absorbed })
+    if next_hp <= 0.0 {
+        set(target, Unit { alive: false, targetable: false, ..require(target, Unit) })
+    }
+    log(f"{e.tag}: {e.target_id} takes {e.amount}")
+}
+
+system MoveUnits(u: Unit, pos: mut Position, mt: mut MoveTarget, stats: Stats) {
+    if not u.alive { return }
+    let here = Position { x: pos.x, y: pos.y }
+    let target = Position { x: mt.x, y: mt.y }
+    let d = dist(here, target)
+    if d <= 3.0 {
+        remove(self, MoveTarget)
+        return
+    }
+    let step = map4_move_step(stats)
+    let next = move_towards_pos(here, target, min(step, d))
+    pos.x = next.x
+    pos.y = next.y
+}
+
+system CooldownTick(cd: mut Cooldowns) {
+    let next = tick_cooldowns(Cooldowns { q: cd.q, w: cd.w, e: cd.e, r: cd.r })
+    cd.q = next.q
+    cd.w = next.w
+    cd.e = next.e
+    cd.r = next.r
+}
+
+system BallAttachSync(ball: Ball, pos: mut Position) {
+    let caster = ent(ball.owner_id)
+    let state = require(caster, OriannaState)
+    if state.ball_attached {
+        let holder = ent(state.anchor_id)
+        let hp = require(holder, Position)
+        pos.x = hp.x
+        pos.y = hp.y
+    }
+}
+
+system BallTravelMove(bt: BallTravel, pos: mut Position) {
+    let caster = ent(bt.caster_id)
+    let mut tx = bt.target_x
+    let mut ty = bt.target_y
+    if bt.target_id != "" {
+        match lookup(Unit, "id", bt.target_id) {
+            Some(target) => {
+                let tp = require(target, Position)
+                tx = tp.x
+                ty = tp.y
+            }
+            None => {}
+        }
+    }
+    let here = Position { x: pos.x, y: pos.y }
+    let travel_target = Position { x: tx, y: ty }
+    let d = dist(here, travel_target)
+    if d <= bt.finish_radius {
+        remove(self, BallTravel)
+        set(caster, SpellBook { sealed: false, ..require(caster, SpellBook) })
+        if bt.kind == "q" {
+            set_ball_anchor(bt.caster_id, require(caster, OriannaState).ball_id, true, false, pos.x, pos.y)
+            log("Q landed")
+        }
+        if bt.kind == "e" {
+            set_ball_anchor(bt.caster_id, bt.target_id, false, true, pos.x, pos.y)
+            let target = ent(bt.target_id)
+            set(target, Health { shield: require(target, Health).shield + bt.shield_on_arrival, ..require(target, Health) })
+            apply_buff(bt.target_id, bt.caster_id, "OrianaRedactShield", "shield", 40, 1, 1, bt.shield_on_arrival, 0.0)
+            log(f"E attached to {bt.target_id}")
+        }
+        return
+    }
+    let step = bt.speed * res(MatchClock).dt
+    let next = move_towards_pos(here, travel_target, min(step, d))
+    pos.x = next.x
+    pos.y = next.y
+    let mut next_q = bt.q_percent
+    if bt.damage > 0.0 {
+        for target in units_in_radius(Position { x: pos.x, y: pos.y }, bt.hit_radius, "enemy", caster) {
+            let tu = require(target, Unit)
+            let marker = hit_key(bt.id, tu.id)
+            match lookup(BallHitMarker, "key", marker) {
+                Some(_) => {}
+                None => {
+                    let _m = entity marker {
+                        BallHitMarker { key: marker, travel_id: bt.id, target_id: tu.id },
+                        Lifetime { ticks_left: 80 }
+                    }
+                    if bt.kind == "q" {
+                        deal_damage(bt.caster_id, tu.id, bt.damage * next_q, "OrianaIzuna")
+                        next_q = max(0.4, next_q * 0.9)
+                    } else {
+                        deal_damage(bt.caster_id, tu.id, bt.damage, "OrianaRedact")
+                    }
+                }
+            }
+        }
+    }
+    if next_q != bt.q_percent or tx != bt.target_x or ty != bt.target_y {
+        set(self, BallTravel { target_x: tx, target_y: ty, q_percent: next_q, ..bt })
+    }
+}
+
+system OriannaBallLeash(ball: Ball, pos: mut Position) {
+    if has(self, BallTravel) { return }
+    let caster = ent(ball.owner_id)
+    let state = require(caster, OriannaState)
+    if state.ball_attached and state.anchor_id == ball.owner_id { return }
+    let caster_pos = require(caster, Position)
+    let here = Position { x: pos.x, y: pos.y }
+    if dist(here, caster_pos) > ball_leash_radius() {
+        pos.x = caster_pos.x
+        pos.y = caster_pos.y
+        set(caster, SpellBook { sealed: false, ..require(caster, SpellBook) })
+        set(caster, OriannaState {
+            ball_id: state.ball_id,
+            anchor_id: ball.owner_id,
+            ball_deployed: false,
+            ball_attached: true,
+            in_flight: false,
+            ghost_alive: true,
+            ultimate_x: caster_pos.x,
+            ultimate_y: caster_pos.y
+        })
+        apply_buff(ball.owner_id, ball.owner_id, "OrianaGhostSelf", "ball", 250000, 1, 1, 0.0, 0.0)
+        log("OrianaGhost leash: ball restored at 1125 range")
+    }
+}
+
+system ZoneTick(z: mut Zone) {
+    z.ticks_left = z.ticks_left - 1
+    z.tick_counter = z.tick_counter + 1
+    if z.tick_counter >= z.tick_every {
+        z.tick_counter = 0
+        let caster = ent(z.caster_id)
+        let center = Position { x: z.x, y: z.y }
+        let speed = w_speed_mod(z.level)
+        for unit in units_in_radius(center, z.radius, "any", caster) {
+            let u = require(unit, Unit)
+            if is_enemy(caster, unit) {
+                apply_buff(u.id, z.caster_id, "OrianaSlow", "slow", 6, 1, 1, 0.0, 0.0 - speed)
+            } else {
+                apply_buff(u.id, z.caster_id, "OrianaHaste", "haste", 6, 1, 1, 0.0, speed)
+            }
+        }
+    }
+    if z.ticks_left <= 0 { despawn(self) }
+}
+
+system ForcedMoveTick(f: mut ForcedMove, pos: mut Position) {
+    let dx = f.center_x - pos.x
+    let dy = f.center_y - pos.y
+    pos.x = pos.x + dx * 0.28
+    pos.y = pos.y + dy * 0.28
+    f.ticks_left = f.ticks_left - 1
+    if f.ticks_left <= 0 { remove(self, ForcedMove) }
+}
+
+system BuffTick(b: mut Buff) {
+    b.ticks_left = b.ticks_left - 1
+    if b.ticks_left <= 0 {
+        if b.kind == "shield" {
+            match lookup(Unit, "id", b.owner_id) {
+                Some(owner) => {
+                    let h = require(owner, Health)
+                    set(owner, Health { shield: max(0.0, h.shield - b.shield_left), ..h })
+                }
+                None => {}
+            }
+        }
+        despawn(self)
+    }
+}
+
+system LifetimeTick(l: mut Lifetime) {
+    l.ticks_left = l.ticks_left - 1
+    if l.ticks_left <= 0 { despawn(self) }
+}
+
+on Tick(e) {
+    set_resource(MatchClock, MatchClock { tick: res(MatchClock).tick + 1, dt: e.dt })
+    schedule [MoveUnits, CooldownTick, BallAttachSync, BallTravelMove, OriannaBallLeash, ZoneTick, ForcedMoveTick, BuffTick, LifetimeTick]
+    flush_events()
+}
+
+fn spawn_world() -> nil {
+    let west = map4_spawn_west()
+    let east = map4_spawn_east()
+    let _ori = entity "orianna" {
+        Unit { id: "orianna", champion: "Orianna", team: "blue", kind: "hero", level: 11 },
+        Position { x: west.x, y: west.y },
+        Health { hp: 1300.0, max: 1300.0 },
+        Stats { ap: 200.0, armor: 35.0, mr: 30.0, move_speed: 300.0 },
+        SpellBook { mana: 1000.0 },
+        Cooldowns {},
+        OriannaState { ball_id: "orianna_ball", anchor_id: "orianna", ball_attached: true, ball_deployed: false }
+    }
+    let _ball = entity "orianna_ball" {
+        Unit { id: "orianna_ball", champion: "OriannaBall", team: "blue", kind: "ball", targetable: false },
+        Position { x: west.x, y: west.y },
+        Ball { owner_id: "orianna" }
+    }
+    let _ally = entity "blue_ally" {
+        Unit { id: "blue_ally", champion: "Ashe", team: "blue", kind: "hero", level: 10 },
+        Position { x: west.x + 2200.0, y: west.y + 1400.0 },
+        Health { hp: 1000.0, max: 1000.0 },
+        Stats { armor: 30.0, mr: 30.0, move_speed: 310.0 }
+    }
+    let _front = entity "red_front" {
+        Unit { id: "red_front", champion: "TrainingDummy", team: "red", kind: "hero", level: 10 },
+        Position { x: east.x, y: east.y },
+        Health { hp: 1200.0, max: 1200.0 },
+        Stats { armor: 25.0, mr: 25.0, move_speed: 0.0 }
+    }
+    let _back = entity "red_back" {
+        Unit { id: "red_back", champion: "TrainingDummy", team: "red", kind: "hero", level: 10 },
+        Position { x: east.x - 2200.0, y: east.y + 1600.0 },
+        Health { hp: 1200.0, max: 1200.0 },
+        Stats { armor: 25.0, mr: 25.0, move_speed: 0.0 }
+    }
+    let _top = entity "red_top" {
+        Unit { id: "red_top", champion: "TrainingDummy", team: "red", kind: "hero", level: 10 },
+        Position { x: east.x - 3800.0, y: east.y - 2200.0 },
+        Health { hp: 1200.0, max: 1200.0 },
+        Stats { armor: 25.0, mr: 25.0, move_speed: 0.0 }
+    }
+    apply_buff("orianna", "orianna", "OrianaSpellSword", "passive", 250000, 1, 1, 0.0, 0.0)
+    apply_buff("orianna", "orianna", "OrianaGhostSelf", "ball", 250000, 1, 1, 0.0, 0.0)
+    log("Orianna ready")
+}
+
+on ResetGame(_e) {
+    for ent in query { Unit } { despawn(ent) }
+    for ent in query { Buff } { despawn(ent) }
+    for ent in query { Zone } { despawn(ent) }
+    for ent in query { LogLine } { despawn(ent) }
+    for ent in query { BallHitMarker } { despawn(ent) }
+    set_resource(MatchClock, MatchClock {})
+    set_resource(Ids, Ids {})
+    configure_map4_host()
+    spawn_world()
+}
+
+fn touch_host_events() -> nil {
+    if res(MatchClock).tick < 0 {
+        emit Tick { dt: 0.1 }
+        emit MoveCommand { x: 0.0, y: 0.0 }
+        emit CastCommand { slot: "q", x: 0.0, y: 0.0, target_id: "" }
+        emit ResetGame { reason: "" }
+        emit BasicAttackCommand { target_id: "" }
+    }
+}
+
+fn main() -> nil {
+    touch_host_events()
+    configure_map4_host()
+    spawn_world()
+}

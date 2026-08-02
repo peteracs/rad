@@ -1,0 +1,138 @@
+// SCENEWORK — browser-moba's scenario system, written the way it wants
+// to be written (fake-port round 15). The code comes first; whatever
+// the language can't run becomes a feature.
+//
+// Architecture (mirrors game/scenarios/*): a scenario is DATA — id,
+// description, a staging closure, a verdict closure. Scenarios boot
+// through the same seams as a real match (no bespoke world poking),
+// and the rad twist: every scenario runs in a FORK, so isolation is
+// not a convention, it is the type system. The harness is ~15 lines;
+// the scenario table is the whole product.
+
+component Pos { at: (float, float) = (0.0, 0.0) }
+
+component Vitals { hp: float = 1000.0, max_hp: float = 1000.0, team: int = 0, alive: bool = true }
+
+component Melee { reach: float = 3.0, swing: float = 60.0 }
+
+// swings are EVENTS, applied after the sweep — mid-iteration damage
+// would let whoever iterates first kill their attacker's swing (the
+// asymmetry the mirror scenario exists to catch)
+pub event Hit { target: entity, amount: float }
+
+system combat(a: Pos, m: Melee, v: Vitals) {
+    if not v.alive { return }
+    for (foe, fp, fv) in query { Pos, Vitals } {
+        if fv.team == v.team or not fv.alive { continue }
+        if dist(a.at, fp.at) <= m.reach {
+            emit Hit { target: foe, amount: m.swing }
+        }
+    }
+}
+
+on Hit(e) {
+    let v = require(e.target, Vitals)
+    if not v.alive { return }
+    let hp = max(v.hp - e.amount, 0.0)
+    update(e.target, Vitals) { hp = hp, alive = hp > 0.0 }
+}
+
+pure fn dist(a: (float, float), b: (float, float)) -> float {
+    let (dx, dz) = a - b
+    return sqrt(dx * dx + dz * dz)
+}
+
+// ---------------------------------------------------------- staging
+
+// the ScenarioContext: spawn a unit into the CURRENT world (the
+// harness forks afterward, so stages never leak into each other)
+fn unit(name: str, team: int, at: (float, float), hp: float) -> entity {
+    return entity name {
+        Pos { at: at },
+        Vitals { hp: hp, max_hp: hp, team: team },
+        Melee {},
+    }
+}
+
+// ------------------------------------------------------- scenarios
+
+// each row: (id, describe, stage, ticks, verify)
+// stage  : fn() -> entity      — build the situation, return the subject
+// verify : fn(fork, entity) -> str — "" passes, anything else is the failure
+pub fn scenarios() -> list {
+    return [
+        (
+            "duel",
+            "two champions in reach trade until one falls",
+            fn() {
+                let me = unit("tr", 0, (0.0, 0.0), 1000.0)
+                let _ = unit("annie", 1, (2.0, 0.0), 500.0)
+                return me
+            },
+            20,
+            fn(end, me) {
+                let v = unwrap(peek(end, me, Vitals))
+                if not v.alive { return "subject died in a duel it should win" }
+                let foe = unwrap(peek(end, require_entity("annie"), Vitals))
+                if foe.alive { return "annie survived 20 ticks in melee reach" }
+                return ""
+            },
+        ),
+        (
+            "standoff",
+            "out-of-reach units never trade",
+            fn() {
+                let me = unit("tr", 0, (0.0, 0.0), 1000.0)
+                let _ = unit("annie", 1, (50.0, 0.0), 500.0)
+                return me
+            },
+            30,
+            fn(end, me) {
+                let v = unwrap(peek(end, me, Vitals))
+                if v.hp != v.max_hp { return f"took damage at 50m: hp={v.hp}" }
+                return ""
+            },
+        ),
+        (
+            "mirror",
+            "an even mirror match leaves both standing or both down",
+            fn() {
+                let me = unit("a", 0, (0.0, 0.0), 600.0)
+                let _ = unit("b", 1, (2.0, 0.0), 600.0)
+                return me
+            },
+            10,
+            fn(end, me) {
+                let a = unwrap(peek(end, me, Vitals))
+                let b = unwrap(peek(end, require_entity("b"), Vitals))
+                if a.alive != b.alive { return "mirror match broke symmetry" }
+                return ""
+            },
+        ),
+    ]
+}
+
+// --------------------------------------------------------- harness
+
+fn main() -> nil {
+    let mut passed = 0
+    let mut failed = 0
+    let blank = fork()                      // the empty world, kept pristine
+
+    for (id, describe, stage, ticks, verify) in scenarios() {
+        commit(blank)                       // every scenario boots clean
+        let me = stage()
+        let end = simulate(fork(), [system::combat], ticks)
+        let verdict = verify(end, me)
+        if verdict == "" {
+            passed = passed + 1
+            print(f"  pass  {id}: {describe}")
+        } else {
+            failed = failed + 1
+            print(f"  FAIL  {id}: {verdict}")
+        }
+    }
+
+    print(f"{passed} passed, {failed} failed")
+    assert(failed == 0, "scenario suite must be green")
+}

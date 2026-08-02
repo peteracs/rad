@@ -1,0 +1,7 @@
+---
+source: tests\conformance\required_field_resource_reject.rad
+exit_code: 1
+---
+
+---stderr---
+Error: Resource 'Config' field 'owner' has a type but no default — resources auto-initialize, so every field needs one

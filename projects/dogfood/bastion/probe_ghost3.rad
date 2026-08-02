@@ -1,0 +1,54 @@
+// PROBE round 3: correct the two malformed tests, and measure how much a
+// guest can read in ONE call.
+//
+// save_world() does NOT touch the disk -- it serializes the world to a
+// string ("serialization is pure, io stays io"), so it is correctly allowed
+// by the effect mask. But inside a sandbox that has no READ capability
+// dimension at all, it is a single-call dump of 100% of world state.
+
+component Reactor { temp: 0 }
+component Vault { gold: 0 }
+component ApiToken { secret: "" }
+
+let _site = spawn("site", Reactor { temp: 20 }, Vault { gold: 5000 }, ApiToken { secret: "sk-live-DEADBEEF" })
+let caps = f"""{ "write": ["Reactor"], "fuel": 200000, "mem_bytes": 4194304 }"""
+
+print("=== probe: one-call world dump + despawn ACL ===")
+
+// G10: does save_world() hand the guest components it was never granted?
+let g10 = f"""
+let dump = save_world()
+print("guest dumped " + str(len(dump)) + " bytes of world state")
+if contains(dump, "sk-live-DEADBEEF") {
+    print("LEAK CONFIRMED: the api token is in the guest's dump")
+}
+if contains(dump, "5000") {
+    print("LEAK CONFIRMED: the vault balance is in the guest's dump")
+}
+"""
+match sandbox_run(g10, fork(), caps) {
+    Ok(_f) => { print("G10 save_world: allowed (serialization only, no disk)") }
+    Err(m) => { print(f"G10 save_world denied: {m}") }
+}
+
+// G7 redone: despawn needs a strict entity, so use require_entity.
+let g7 = f"""
+despawn(require_entity("site"))
+"""
+match sandbox_run(g7, fork(), caps) {
+    Ok(_f) => { print("G7 despawn: ALLOWED without the \"*\" wildcard") }
+    Err(m) => { print(f"G7 despawn denied (correct): {m}") }
+}
+
+// G8: the same despawn WITH the wildcard, which the docs say is required.
+let star = f"""{ "write": ["*"], "fuel": 200000, "mem_bytes": 4194304 }"""
+let before = fork()
+match sandbox_run(g7, before, star) {
+    Ok(after) => {
+        let d = diff(before, after)
+        print(f"G8 despawn under \"*\": allowed as documented; blast radius {d}")
+    }
+    Err(m) => { print(f"G8 despawn under \"*\" denied: {m}") }
+}
+
+print("=== probe done ===")

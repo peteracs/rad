@@ -1,0 +1,4 @@
+---
+source: tests\conformance\modules\pub_let_dup_b.rad
+exit_code: 0
+---

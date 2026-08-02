@@ -1,0 +1,175 @@
+// RADGUI rung 1 — todo. Forces: text input round-trip, dynamic widget
+// spawn/despawn (ui_remove subtree), per-item identity via marker
+// components carrying the item entity's name, and computed footer text.
+
+use "lib_gui.rad"
+
+// a todo item: the DATA entity (Item) is separate from its WIDGET row —
+// model and view are both entities, linked by name strings.
+component Item { text: str = "", done: int = 0, row: str = "" }
+
+component NewInput { z: int = 0 }
+
+component AddBtn { z: int = 0 }
+
+component ClearBtn { z: int = 0 }
+
+component FooterLabel { z: int = 0 }
+
+component ListCol { z: int = 0 }
+
+// per-row buttons remember which item they command
+component ToggleOf { item: str = "" }
+
+component KillOf { item: str = "" }
+
+component RowLabel { item: str = "" }
+
+resource Pending { text: str = "" }
+
+fn footer_text() -> str {
+    let mut total = 0
+    let mut done = 0
+    for it in entities(Item) {
+        total = total + 1
+        if (get(it, Item) |> unwrap).done == 1 { done = done + 1 }
+    }
+    if total == 0 { return "nothing to do. enjoy it." }
+    return f"{done}/{total} done"
+}
+
+fn refresh_footer() -> nil {
+    for l in entities(FooterLabel) {
+        ui_set_text(l, footer_text())
+    }
+}
+
+fn list_col() -> entity {
+    let mut found = get_entity("ui-root")
+    for c in entities(ListCol) { found = c }
+    return found
+}
+
+fn add_item(text: str) -> nil {
+    if trim(text) == "" { return }
+    let item = entity f"item-{text}-{clock()}" { Item { text: text, done: 0, row: "" } }
+
+    let row = ui_row(list_col())
+    update(row, Style) { gap = 8, align = "center" }
+    update(item, Item) { row = name_of(row) }
+
+    let toggle = ui_checkbox(row, false)
+    set(toggle, ToggleOf { item: name_of(item) })
+
+    let lbl = ui_label(row, text)
+    set(lbl, RowLabel { item: name_of(item) })
+    update(lbl, Style) { grow = 1 }
+
+    let kill = ui_button(row, "x")
+    set(kill, KillOf { item: name_of(item) })
+    update(kill, Style) { fg = "#ff5d5d" }
+
+    refresh_footer()
+}
+
+fn sync_row(item: entity) -> nil {
+    let it = get(item, Item) |> unwrap
+    let iname = name_of(item)
+    for b in entities(ToggleOf) {
+        if (get(b, ToggleOf) |> unwrap).item == iname {
+            let mut v = "0"
+            if it.done == 1 { v = "1" }
+            update(b, Input) { value = v }
+        }
+    }
+    for l in entities(RowLabel) {
+        if (get(l, RowLabel) |> unwrap).item == iname {
+            let mut color = "#e8e6f0"
+            if it.done == 1 { color = "#8a87a0" }
+            update(l, Style) { fg = color }
+        }
+    }
+}
+
+on Changed(e) {
+    if has(e.target, NewInput) {
+        set_resource(Pending, Pending { text: e.value })
+    }
+    // real checkboxes toggle via Changed, not Click
+    if has(e.target, ToggleOf) {
+        let item = get_entity((get(e.target, ToggleOf) |> unwrap).item)
+        let mut d = 0
+        if e.value == "1" { d = 1 }
+        update(item, Item) { done = d }
+        sync_row(item)
+        refresh_footer()
+    }
+}
+
+on Submit(e) {
+    if has(e.target, NewInput) {
+        add_item(e.value)
+        set_resource(Pending, Pending { text: "" })
+        update(e.target, Input) { value = "" }
+        ui_focus(e.target)
+    }
+}
+
+on Click(e) {
+    if has(e.target, AddBtn) {
+        let p = get_resource(Pending) |> unwrap
+        add_item(p.text)
+        set_resource(Pending, Pending { text: "" })
+        for inp in entities(NewInput) { ui_focus(inp) }
+        for i in entities(NewInput) { update(i, Input) { value = "" } }
+    }
+    if has(e.target, KillOf) {
+        let item = get_entity((get(e.target, KillOf) |> unwrap).item)
+        let it = get(item, Item) |> unwrap
+        ui_remove(get_entity(it.row))
+        despawn(item)
+        refresh_footer()
+    }
+    if has(e.target, ClearBtn) {
+        let mut doomed = []
+        for it in entities(Item) {
+            if (get(it, Item) |> unwrap).done == 1 { doomed << it }
+        }
+        for it in doomed {
+            ui_remove(get_entity((get(it, Item) |> unwrap).row))
+            despawn(it)
+        }
+        refresh_footer()
+    }
+}
+
+fn main() -> nil {
+    ui_title("RADGUI todo")
+    ui_enable_undo() // delete the wrong item? Ctrl+Z. zero app code.
+
+    let root = ui_root()
+    update(root, Style) { pad = 12, gap = 12, width = 460 }
+
+    let entry = ui_row(root)
+    update(entry, Style) { gap = 8 }
+    let inp = ui_input(entry, "what needs doing?")
+    set(inp, NewInput { z: 0 })
+    update(inp, Style) { grow = 1 }
+    let add = ui_button(entry, "add")
+    set(add, AddBtn { z: 0 })
+
+    let list = ui_col(root)
+    set(list, ListCol { z: 0 })
+    update(list, Style) { gap = 6 }
+
+    let foot = ui_row(root)
+    update(foot, Style) { gap = 8, align = "center" }
+    let footer = ui_label(foot, footer_text())
+    set(footer, FooterLabel { z: 0 })
+    update(footer, Style) { fg = "#8a87a0", size = 12, grow = 1 }
+    let clear = ui_button(foot, "clear done")
+    set(clear, ClearBtn { z: 0 })
+
+    add_item("try RADGUI")
+    add_item("undo something")
+}

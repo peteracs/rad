@@ -1,0 +1,5 @@
+---
+source: tests\conformance\push_limits_case_04.rad
+exit_code: 0
+---
+CASE04:14:91

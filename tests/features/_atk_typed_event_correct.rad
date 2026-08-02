@@ -1,0 +1,13 @@
+// Attack: emit with correct types — sanity check
+event Data { count: int, label: str, active: bool }
+
+on Data(e) {
+    print(f"count={e.count} label={e.label} active={e.active}")
+}
+
+fn main() -> nil {
+    emit Data { count: 42, label: "test", active: true }
+    flush_events()
+}
+
+// expect: count=42 label=test active=true

@@ -1,0 +1,7 @@
+---
+source: tests\conformance\match_destructure_shadow_hint.rad
+exit_code: 1
+---
+
+---stderr---
+Error: Cannot assign to 'description' — it refers to an immutable pattern binding that shadows your outer 'let mut description'

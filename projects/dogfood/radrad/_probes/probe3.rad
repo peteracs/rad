@@ -1,0 +1,93 @@
+// Probe 3: globals-from-fns, sys_args, recursion depth, misc.
+
+let mut ARENA: list<any> = []
+let mut OUT: list<str> = []
+
+fn env_new(parent: int) -> int {
+    ARENA << { "vars": {}, "parent": parent }
+    return len(ARENA) - 1
+}
+
+fn env_set(idx: int, name: str, val: any) -> nil {
+    ARENA[idx]["vars"][name] = val
+}
+
+fn env_get(idx: int, name: str) -> any {
+    let mut cur = idx
+    while cur >= 0 {
+        let e = ARENA[cur]
+        let vars = e["vars"]
+        if contains(vars, name) {
+            return vars[name]
+        }
+        cur = e["parent"]
+    }
+    return nil
+}
+
+fn deep(n: int) -> int {
+    if n == 0 { return 0 }
+    return 1 + deep(n - 1)
+}
+
+fn emit_out(s: str) -> nil {
+    OUT << s
+}
+
+fn main() -> nil {
+    // sys_args behavior
+    let args = sys_args()
+    print(f"args: {args}")
+
+    // global arena from named fns
+    let g = env_new(-1)
+    let inner = env_new(g)
+    env_set(g, "x", 100)
+    env_set(inner, "y", 200)
+    print(f"x from inner: {env_get(inner, "x")}")
+    print(f"y from inner: {env_get(inner, "y")}")
+    print(f"y from global: {env_get(g, "y") == nil}")
+
+    // shadowing in inner env
+    env_set(inner, "x", 111)
+    print(f"x shadowed: {env_get(inner, "x")} outer still: {env_get(g, "x")}")
+
+    // recursion depth (512-frame hard cap found; 400 is safe)
+    print(f"deep(400): {deep(400)}")
+
+    // int match
+    let code = 2
+    let name = match code {
+        1 => "one"
+        2 => "two"
+        _ => "many"
+    }
+    print(f"int match: {name}")
+
+    // string indexing gives byte int; chars gives strings
+    let s = "ab"
+    print(f"s[0]: {s[0]} chars: {chars(s)}")
+
+    // list append to global from fn
+    emit_out("hello")
+    emit_out("world")
+    print(f"OUT: {OUT}")
+
+    // typeof checks used by interpreter dispatch
+    print(typeof(1), typeof(1.5), typeof("s"), typeof(true), typeof(nil), typeof([1]), typeof({"a": 1}))
+
+    // float formatting behavior of str()
+    print(str(2.0), str(2.5), 1 + 2.0)
+
+    // int/float equality
+    print(1 == 1.0, 10 / 3, 10.0 / 4)
+
+    // string comparisons (NOTE: "abc" < "abd" is a compile error — dogfood finding)
+    print("a" + "b" == "ab")
+
+    // "==" on lists
+    print([1, 2] == [1, 2])
+
+    // negative modulo (interp needs to mirror host)
+    print(-7 % 3, 7 % -3)
+}

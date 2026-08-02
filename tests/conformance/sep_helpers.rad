@@ -1,0 +1,48 @@
+pub component Name { text: str = "" }
+pub component Health { hp: int = 0, max_hp: int = 100 }
+pub component Position { x: int = 0, y: int = 0 }
+
+pub fn make_entity(name: str, hp: int, x: int, y: int) -> entity {
+    return entity {
+        Name { text: name },
+        Health { hp: hp, max_hp: 100 },
+        Position { x: x, y: y }
+    }
+}
+
+pub fn describe(e: entity) -> str {
+    let n = require(e, Name)
+    let h = require(e, Health)
+    let p = require(e, Position)
+    return f"{n.text} hp={h.hp} at ({p.x},{p.y})"
+}
+
+pub fn is_alive(e: entity) -> bool {
+    let h = require(e, Health)
+    return h.hp > 0
+}
+
+pub fn clamp(val: int, lo: int, hi: int) -> int {
+    if val < lo { return lo }
+    if val > hi { return hi }
+    return val
+}
+
+pub fn abs_val(n: int) -> int {
+    if n < 0 { return 0 - n }
+    return n
+}
+
+pub fn fib(n: int) -> int {
+    if n < 2 { return n }
+    let mut a = 0
+    let mut b = 1
+    let mut i = 2
+    while i <= n {
+        let tmp = a + b
+        a = b
+        b = tmp
+        i = i + 1
+    }
+    return b
+}

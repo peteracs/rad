@@ -1,0 +1,2 @@
+{"jsonrpc":"2.0","id":1,"method":"propose","params":{"source":"event Ping { n }\non Ping(e) {\n    emit Ping { n: e.n + 1 }\n}\nemit Ping { n: 0 }","caps":{"write":[],"fuel":2000,"mem_bytes":1048576}}}
+{"jsonrpc":"2.0","id":2,"method":"shutdown"}

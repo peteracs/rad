@@ -1,0 +1,6 @@
+---
+source: tests\conformance\closures.rad
+exit_code: 0
+---
+15
+25

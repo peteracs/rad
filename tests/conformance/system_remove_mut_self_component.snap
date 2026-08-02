@@ -1,0 +1,5 @@
+---
+source: tests\conformance\system_remove_mut_self_component.rad
+exit_code: 0
+---
+fuses=0

@@ -1,0 +1,42 @@
+// Test 8: Stress test — many entities, many ticks
+
+component Energy { e: 1000 }
+component Drain  { rate: 1 }
+
+system DrainEnergy(en: mut Energy, dr: Drain) {
+    en = Energy { e: en.e - dr.rate }
+}
+
+// Spawn 50 entities with different drain rates
+let mut i = 0
+let mut entities = []
+while i < 50 {
+    let ent = spawn(f"e{i}", Energy { e: 1000 }, Drain { rate: i + 1 })
+    entities = push(entities, ent)
+    i = i + 1
+}
+
+// Simulate 100 ticks — that's 50 entities x 100 ticks = 5000 system calls
+let f = fork()
+let f = simulate(f, [system::DrainEnergy], 100)
+
+// Main world should be untouched
+let main_e0 = get(entities[0], Energy) |> unwrap
+assert(main_e0.e == 1000, "Main world entity 0 should still be 1000")
+
+// Commit and verify
+commit(f)
+
+// Entity 0 has drain rate 1, after 100 ticks: 1000 - 100 = 900
+let post_e0 = get(entities[0], Energy) |> unwrap
+assert(post_e0.e == 900, f"Entity 0: expected 900, got {post_e0.e}")
+
+// Entity 49 has drain rate 50, after 100 ticks: 1000 - 5000 = -4000
+let post_e49 = get(entities[49], Energy) |> unwrap
+assert(post_e49.e == -4000, f"Entity 49: expected -4000, got {post_e49.e}")
+
+// Entity 9 has drain rate 10, after 100 ticks: 1000 - 1000 = 0
+let post_e9 = get(entities[9], Energy) |> unwrap
+assert(post_e9.e == 0, f"Entity 9: expected 0, got {post_e9.e}")
+
+print("PASS: stress test (50 entities, 100 ticks)")

@@ -1,0 +1,7 @@
+fn main() -> nil {
+    let rows = [[1], [2]]
+    for [a, b] in rows {
+        print(a)
+        print(b)
+    }
+}

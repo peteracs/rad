@@ -1,0 +1,21 @@
+component Score { points: 0, level: 1 }
+
+event LevelUp { player_id }
+
+on LevelUp(e) {
+    let s = unwrap(get(e.player_id, Score))
+    update(e.player_id, Score) {
+        points = s.points - 100,
+        level = s.level + 1
+    }
+}
+
+fn main() -> nil {
+    let player = spawn(Score { points: 150, level: 1 })
+    emit LevelUp { player_id: player }
+    flush_events()
+    let after = unwrap(get(player, Score))
+    print(f"points={after.points} level={after.level}")
+}
+
+// expect: points=50 level=2

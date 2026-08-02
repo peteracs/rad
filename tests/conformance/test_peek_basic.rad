@@ -1,0 +1,27 @@
+// M2 Test: Basic peek functionality
+
+component Health { hp: 100 }
+component Armor  { def: 5 }
+
+system Damage(h: mut Health) {
+    h = Health { hp: h.hp - 10 }
+}
+
+let hero = spawn("hero", Health { hp: 100 }, Armor { def: 5 })
+
+let f = fork()
+let simulated = simulate(f, [system::Damage], 3)
+
+// peek into the simulated fork WITHOUT committing
+let peeked_hp = peek(simulated, hero, Health) |> unwrap
+assert(peeked_hp.hp == 70, f"Peek should show 70 HP after 3 damage ticks, got {peeked_hp.hp}")
+
+// Main world must be untouched
+let main_hp = get(hero, Health) |> unwrap
+assert(main_hp.hp == 100, f"Main world should still be 100, got {main_hp.hp}")
+
+// Peek at armor (unchanged by Damage system, but should exist in fork)
+let peeked_armor = peek(simulated, hero, Armor) |> unwrap
+assert(peeked_armor.def == 5, f"Armor should be 5 in fork, got {peeked_armor.def}")
+
+print("PASS: peek basic")

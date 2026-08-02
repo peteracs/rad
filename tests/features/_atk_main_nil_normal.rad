@@ -1,0 +1,13 @@
+// Attack: main() -> nil with ? on a Some value
+// Expected: should unwrap and print normally
+
+fn get_val() -> any {
+    return Some(42)
+}
+
+fn main() -> nil {
+    let v = get_val()?
+    print(v)
+}
+
+// expect: 42

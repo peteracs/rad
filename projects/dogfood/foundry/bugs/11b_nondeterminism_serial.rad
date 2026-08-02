@@ -1,0 +1,120 @@
+// BUG 11 bisect: projects/dogfood/foundry/main.rad is not reproducible. Three
+// runs of the same binary on the same source with a fixed LCG seed and no
+// other entropy produced three different results (job finishes 3325 / 3327 /
+// 3330, scrapped 40 / 41 / 54).
+//
+// This is a compact version of that sim, small enough to run repeatedly.
+// Everything here is deterministic by construction: no clock, no rng, no I/O.
+//
+// Flip SERIAL between the two tick_once bodies below to compare:
+//   parallel: one schedule call containing every system (the normal spelling)
+//   serial:   one schedule call per system (forces the serial path)
+
+component Machine { indexed code: "", speed: 1 }
+component Fsm { state: MState::Idle }
+component Job { remaining: 0, runs: 0 }
+component Wear { level: 0, limit: 6 }
+
+state MState {
+    Idle { on start -> Running }
+    Running { on finish -> Idle, on wear_out -> Broken }
+    Broken { on repair -> Idle }
+}
+
+resource Tally { starts: 0, finishes: 0, scrapped: 0, breaks: 0 }
+
+event Finished { code: str }
+event Broke { code: str }
+
+system Feed(m: Machine, f: mut Fsm, j: mut Job) {
+    if f.state is Idle {
+        j.remaining = m.speed
+        f.state = unwrap(transition(f.state, "start"))
+    }
+}
+
+system Advance(m: Machine, f: Fsm, j: mut Job) after Feed {
+    if f.state is Running {
+        j.remaining = j.remaining - 1
+        if j.remaining <= 0 {
+            j.runs = j.runs + 1
+            emit Finished { code: m.code }
+        }
+    }
+}
+
+system Wearing(m: Machine, f: Fsm, w: mut Wear) after Advance {
+    if f.state is Running {
+        w.level = w.level + 1
+        if w.level >= w.limit {
+            emit Broke { code: m.code }
+        }
+    }
+}
+
+on Finished(e) where e.code != "" {
+    match lookup(Machine, "code", e.code) {
+        Some(id) => {
+            let f = require(id, Fsm)
+            if f.state is Running {
+                update(id, Fsm) { state = unwrap(transition(f.state, "finish")) }
+                update(Tally) { finishes = res(Tally).finishes + 1 }
+            } else {
+                update(Tally) { scrapped = res(Tally).scrapped + 1 }
+            }
+        }
+        None => { }
+    }
+}
+
+on Broke(e) {
+    match lookup(Machine, "code", e.code) {
+        Some(id) => {
+            let f = require(id, Fsm)
+            if f.state is Running {
+                update(id, Fsm) { state = unwrap(transition(f.state, "wear_out")) }
+                update(id, Wear) { level = 0 }
+                update(Tally) { breaks = res(Tally).breaks + 1 }
+                emit Broke { code: "" } after 2
+            }
+        }
+        None => { }
+    }
+}
+
+// repair timer: the delayed empty-code Broke wakes everyone that is Broken.
+// NB: written as an unfiltered mut query with an inner `if` because
+// `query { mut X } where ...` is a runtime error - see bugs/12.
+on Broke(e) where e.code == "" {
+    for (_id, f) in query { mut Fsm } {
+        if f.state is Broken {
+            f.state = unwrap(transition(f.state, "repair"))
+        }
+    }
+}
+
+phase Line { Feed, Advance, Wearing }
+
+for i in range(0, 24) {
+    spawn(
+        Machine { code: f"m-{i}", speed: 1 + i % 3 },
+        Fsm { state: MState::Idle },
+        Job { remaining: 0, runs: 0 },
+        Wear { level: 0, limit: 4 + i % 5 },
+    )
+}
+
+// SERIAL VARIANT of 11_nondeterminism_bisect.rad: identical program, except
+// each system gets its own schedule call so no parallel batch can form.
+for _t in range(0, 60) {
+    schedule [Feed]
+    schedule [Advance]
+    schedule [Wearing]
+    flush_events()
+}
+
+let t = res(Tally)
+let rows = query { Job } select Job
+let runs = rows |> reduce(0, fn(acc, j) { return acc + j.runs })
+
+print(f"finishes={t.finishes} scrapped={t.scrapped} breaks={t.breaks} runs={runs}")

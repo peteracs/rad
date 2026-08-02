@@ -1,0 +1,48 @@
+// Cross-extension: once guard + update + enumerate + find in handler chain
+component Item { name: "", price: 0 }
+event Purchase { item_name: str, buyer: str }
+
+on Purchase once (e) where e.buyer == "vip" {
+    print(f"VIP first purchase: {e.item_name}")
+}
+
+on Purchase(e) where e.buyer != "" {
+    // Collect pure data first, then use find on it
+    let mut items_data = []
+    for id in entities(Item) {
+        let item = unwrap(get(id, Item))
+        items_data = push(items_data, [id, item.name, item.price])
+    }
+    let found = find(items_data, fn(row) { return row[1] == e.item_name })
+    match found {
+        Some(row) => {
+            let id = row[0]
+            let old_price = row[2]
+            update(id, Item) { price = old_price + 1 }
+            print(f"purchased {e.item_name}, new count: {old_price + 1}")
+        }
+        None => {
+            print(f"unknown item: {e.item_name}")
+        }
+    }
+}
+
+fn main() -> nil {
+    spawn(Item { name: "sword", price: 0 })
+    spawn(Item { name: "shield", price: 0 })
+
+    emit Purchase { item_name: "sword", buyer: "vip" }
+    flush_events()
+
+    emit Purchase { item_name: "shield", buyer: "vip" }
+    flush_events()
+
+    emit Purchase { item_name: "sword", buyer: "guest" }
+    flush_events()
+
+    for pair in enumerate(entities(Item)) {
+        let idx = pair[0]
+        let item = unwrap(get(pair[1], Item))
+        print(f"[{idx}] {item.name}: {item.price}")
+    }
+}

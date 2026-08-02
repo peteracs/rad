@@ -1,0 +1,3 @@
+// The colliding half: same exported name, different value. Without
+// duplicate detection this would silently last-write-win.
+pub let LIMIT = 99

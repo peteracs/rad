@@ -1,0 +1,7 @@
+let s = "a\0b"
+print(byte_len(s))
+// expect: 3
+print(byte_at(s, 1))
+// expect: 0
+print(substring_bytes(s, 0, 3) == s)
+// expect: true

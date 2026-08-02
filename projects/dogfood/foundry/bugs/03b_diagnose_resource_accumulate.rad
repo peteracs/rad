@@ -1,0 +1,42 @@
+// BUG 03 diagnostic: does the system body run once per entity, or does the
+// resource writeback collapse?
+//
+// `probe` is a per-entity component: if it reaches 100 on every entity we
+// know the body executed 10 times. `c.n` is the resource accumulator from
+// guide/ecs.md. If probe==100 everywhere but c.n==1, the body ran and the
+// resource writes were thrown away.
+
+component Tag { probe: 0 }
+
+resource Acc { n: 0 }
+resource Acc2 { n: 0 }
+resource Acc3 { n: 0 }
+
+// documented accumulator pattern: mut resource param alongside a component
+system BumpParam(t: mut Tag, c: mut Acc) {
+    t.probe = t.probe + 100
+    c.n = c.n + 1
+}
+
+// same thing, but the resource is touched through update()
+system BumpUpdate(t: Tag, _dummy: mut Acc3) {
+    update(Acc2) { n = res(Acc2).n + 1 }
+}
+
+for _i in range(0, 10) {
+    spawn(Tag { probe: 0 })
+}
+
+print(f"entities: {query_count(Tag)}")
+
+// each system alone in its own schedule -> no parallel batching possible
+schedule [BumpParam]
+schedule [BumpUpdate]
+
+let probes = query { Tag } select Tag
+let probe_total = probes |> reduce(0, fn(acc, t) { return acc + t.probe })
+
+print("")
+print(f"probe total       = {probe_total}   (expected 1000 -> body ran 10x)")
+print(f"acc via mut param = {res(Acc).n}   (expected 10)")
+print(f"acc via update()  = {res(Acc2).n}   (expected 10)")

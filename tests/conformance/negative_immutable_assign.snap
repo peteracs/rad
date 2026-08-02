@@ -1,0 +1,7 @@
+---
+source: tests\conformance\negative_immutable_assign.rad
+exit_code: 1
+---
+
+---stderr---
+Error: Cannot assign to immutable variable 'x'

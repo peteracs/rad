@@ -1,0 +1,105 @@
+use "lexer.rad"
+use "parser.rad"
+use "emit_c.rad"
+use "emit_wasm.rad"
+
+fn ensure_output_dir(path: str) -> nil {
+    let mut last_slash = -1
+    let mut i = 0
+    while i < byte_len(path) {
+        let c = byte_at(path, i)
+        if c == 47 or c == 92 {
+            last_slash = i
+        }
+        i = i + 1
+    }
+    if last_slash == -1 {
+        return nil
+    }
+    let dir = substring_bytes(path, 0, last_slash + 1)
+    if dir != "" and not file_exists(dir) {
+        create_dir(dir)
+    }
+}
+
+fn main() -> nil {
+    let args = sys_args()
+    let mut offset = 0
+    if len(args) > 0 and ends_with(args[0], ".rad") {
+        offset = 1
+    }
+    if len(args) <= offset {
+        print("Usage: rad compile [--release] [--unstable-wasm] <input.rad> <output.c>")
+        print("       rad compile-separate [--release] <input.rad> [out_dir]")
+        return nil
+    }
+    
+    let cmd = args[offset]
+    if cmd == "compile" {
+        let mut release = false
+        let mut unstable_wasm = false
+        let mut rest: list<str> = []
+        let mut i = offset + 1
+        while i < len(args) {
+            if args[i] == "--release" {
+                release = true
+            } else if args[i] == "--unstable-wasm" {
+                unstable_wasm = true
+            } else {
+                rest << args[i]
+            }
+            i = i + 1
+        }
+        if len(rest) < 1 {
+            print("compile: missing input .rad path")
+            return nil
+        }
+        let src_path = rest[0]
+        let mut out_path = "out.c"
+        if len(rest) > 1 {
+            out_path = rest[1]
+        }
+        if unstable_wasm {
+            emit_wasm_unstable_gate()
+        }
+        if release {
+            print("Note: compile generated C with gcc -DRAD_RELEASE ... to strip debug_trace in the C runtime.")
+        }
+        print("Compiling " + src_path + " to " + out_path + " ...")
+        ensure_output_dir(out_path)
+        compile_file_to_c(src_path, out_path)
+        print("Done.")
+    } else if cmd == "compile-separate" {
+        let mut release = false
+        let mut rest: list<str> = []
+        let mut i = offset + 1
+        while i < len(args) {
+            if args[i] == "--release" {
+                release = true
+            } else {
+                rest << args[i]
+            }
+            i = i + 1
+        }
+        if len(rest) < 1 {
+            print("compile-separate: missing input .rad path")
+            return nil
+        }
+        let src_path = rest[0]
+        let mut out_dir = "."
+        if len(rest) > 1 {
+            out_dir = rest[1]
+        }
+        if release {
+            print("Note: compile generated C with gcc -DRAD_RELEASE ... to strip debug_trace in the C runtime.")
+        }
+        print("Compiling " + src_path + " to " + out_dir + "/ (separate) ...")
+        if not file_exists(out_dir) {
+            create_dir(out_dir)
+        }
+        compile_file_separate(src_path, out_dir)
+        print("Done.")
+    } else {
+        print("Unknown command: " + cmd)
+    }
+}

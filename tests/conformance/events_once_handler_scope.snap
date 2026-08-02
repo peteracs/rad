@@ -1,0 +1,7 @@
+---
+source: tests\conformance\events_once_handler_scope.rad
+exit_code: 0
+---
+once:1
+always:1
+always:2

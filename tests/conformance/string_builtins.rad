@@ -1,0 +1,56 @@
+// chr / ord round-trip
+print(chr(65))
+// expect: A
+print(chr(97))
+// expect: a
+print(len(chr(10)))
+// expect: 1
+
+print(ord("A"))
+// expect: 65
+print(ord("a"))
+// expect: 97
+
+// chars splits into individual characters
+print(chars("abc"))
+// expect: ["a", "b", "c"]
+print(chars(""))
+// expect: []
+
+// to_upper / to_lower
+print(to_upper("hello"))
+// expect: HELLO
+print(to_lower("WORLD"))
+// expect: world
+print(to_upper(""))
+// expect:
+print(to_lower("Already lower"))
+// expect: already lower
+
+// values extracts map values
+print(values( {"a": 1, "b": 2}))
+// expect: [1, 2]
+print(values( {}))
+// expect: []
+
+// byte_at extracts raw bytes
+print(byte_at("abc", 0))
+// expect: 97
+print(byte_at("abc", 2))
+// expect: 99
+
+// substring_bytes extracts byte slices
+print(substring_bytes("hello world", 0, 5))
+// expect: hello
+print(substring_bytes("hello world", 6, 11))
+// expect: world
+
+// byte_len
+print(byte_len(""))
+// expect: 0
+print(byte_len("abc"))
+// expect: 3
+print(byte_len("🚀"))
+// expect: 4
+print(byte_len("ñ"))
+// expect: 2

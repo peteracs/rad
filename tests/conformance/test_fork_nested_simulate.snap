@@ -1,0 +1,5 @@
+---
+source: tests\conformance\test_fork_nested_simulate.rad
+exit_code: 0
+---
+PASS: nested simulate (depth counter)

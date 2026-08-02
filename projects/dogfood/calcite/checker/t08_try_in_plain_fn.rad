@@ -1,0 +1,10 @@
+// ILLEGAL: `?` propagates None out of a fn whose return type is `int`,
+// which cannot represent the failure. Spec 2.5.
+fn first_or(xs: list) -> int {
+    let v = find(xs, fn(x) { return x > 100 })?
+    return v
+}
+
+fn main() -> nil {
+    print(f"{first_or([1, 2, 3])}")
+}

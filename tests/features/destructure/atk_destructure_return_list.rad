@@ -1,0 +1,7 @@
+fn main() -> nil {
+    let rows = [[1, 2], [3, 4]]
+    let swapped = rows |> map(fn([a, b]) { return [b, a] })
+    for [x, y] in swapped {
+        print(f"{x},{y}")
+    }
+}

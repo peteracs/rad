@@ -1,0 +1,98 @@
+// Example: AI Move Selection via Speculative Execution
+//
+// An AI agent evaluates three possible strategies by forking the world,
+// simulating each, and using peek() to compare outcomes without committing.
+
+component HP { hp: 100, max_hp: 100 }
+
+component Attack { damage: 10 }
+
+component Shield { block: 0 }
+
+component Name { label: "" }
+
+// Aggressive strategy: high damage, no block
+system AggressiveStrike(hp: mut HP, atk: Attack) {
+    hp = HP { hp: hp.hp - atk.damage * 2, ..hp }
+}
+
+// Defensive strategy: half damage, gain shield
+system DefensiveStance(hp: mut HP, atk: Attack, sh: mut Shield) {
+    hp = HP { hp: hp.hp - atk.damage / 2, ..hp }
+    sh = Shield { block: sh.block + 5 }
+}
+
+// Balanced strategy: normal damage
+system BalancedFight(hp: mut HP, atk: Attack) {
+    hp = HP { hp: hp.hp - atk.damage, ..hp }
+}
+
+// --- Setup ---
+let hero = spawn("hero",
+    HP { hp: 80, max_hp: 100 },
+    Attack { damage: 8 },
+    Shield { block: 0 },
+    Name { label: "Knight" }
+)
+
+let boss = spawn("boss",
+    HP { hp: 200, max_hp: 200 },
+    Attack { damage: 15 },
+    Shield { block: 10 },
+    Name { label: "Dragon" }
+)
+
+print("=== AI Move Selection ===")
+print("Hero HP: 80 | Boss HP: 200")
+print("")
+
+// --- Evaluate three 5-tick futures ---
+let aggressive_future = simulate(fork(), [system::AggressiveStrike], 5)
+let defensive_future = simulate(fork(), [system::DefensiveStance], 5)
+let balanced_future = simulate(fork(), [system::BalancedFight], 5)
+
+// --- Use peek to compare WITHOUT committing ---
+let hero_hp_agg = peek(aggressive_future, hero, HP) ?
+let hero_hp_def = peek(defensive_future, hero, HP) ?
+let hero_hp_bal = peek(balanced_future, hero, HP) ?
+
+let boss_hp_agg = peek(aggressive_future, boss, HP) ?
+let boss_hp_def = peek(defensive_future, boss, HP) ?
+let boss_hp_bal = peek(balanced_future, boss, HP) ?
+
+print("After 5 ticks:")
+print(f"  Aggressive: Hero={hero_hp_agg.hp} Boss={boss_hp_agg.hp}")
+print(f"  Defensive:  Hero={hero_hp_def.hp} Boss={boss_hp_def.hp}")
+print(f"  Balanced:   Hero={hero_hp_bal.hp} Boss={boss_hp_bal.hp}")
+print("")
+
+// --- AI Decision: pick the strategy where hero survives with most HP ---
+let mut best_hp = hero_hp_agg.hp
+let mut best_name = "Aggressive"
+let mut best_future = aggressive_future
+
+if hero_hp_def.hp > best_hp {
+    best_hp = hero_hp_def.hp
+    best_name = "Defensive"
+    best_future = defensive_future
+}
+if hero_hp_bal.hp > best_hp {
+    best_hp = hero_hp_bal.hp
+    best_name = "Balanced"
+    best_future = balanced_future
+}
+
+print(f"AI chooses: {best_name} (hero survives at {best_hp} HP)")
+
+// --- Commit the chosen future ---
+commit(best_future)
+
+let final_hero = get(hero, HP) ?
+let final_boss = get(boss, HP) ?
+print(f"Committed: Hero={final_hero.hp} Boss={final_boss.hp}")
+
+// Verify main world was untouched until commit
+assert(final_hero.hp == best_hp, "Hero HP should match chosen strategy")
+
+print("")
+print("AI move selection complete!")

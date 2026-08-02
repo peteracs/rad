@@ -1,0 +1,5 @@
+fn main() -> nil {
+    let rows = [[42]]
+    let out = rows |> map(fn([x]) { return x * 2 })
+    print(out[0])
+}

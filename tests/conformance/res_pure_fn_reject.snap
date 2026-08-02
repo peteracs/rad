@@ -1,0 +1,7 @@
+---
+source: tests\conformance\res_pure_fn_reject.rad
+exit_code: 1
+---
+
+---stderr---
+Error: Effect violation: 'res' requires readonly effect(s), but current context is pure

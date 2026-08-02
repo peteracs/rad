@@ -1,0 +1,136 @@
+// Scene and map definition: render/scene configuration plus the map-bound
+// clamps that keep movement inside the playable plane. The dimensions here
+// describe the map, so the bound helpers live next to them. Keep this file
+// free of `use` statements for browser-client concatenation.
+
+pub resource MobaScene {
+    background_color: str = "#ffffff",
+    plane_color: str = "#000000",
+    plane_w: float = 284.29,
+    plane_h: float = 152.57,
+    camera_zoom: float = 1.0,
+    avatar_spawn_x: float = 0.0,
+    avatar_spawn_y: float = 0.0,
+    avatar_scale: float = 5.5,
+    static_collider_count: int = 3,
+    static_0_min_x: float = 20.0,
+    static_0_min_y: float = -30.0,
+    static_0_max_x: float = 24.0,
+    static_0_max_y: float = 30.0,
+    static_1_min_x: float = -88.0,
+    static_1_min_y: float = 18.0,
+    static_1_max_x: float = -36.0,
+    static_1_max_y: float = 24.0,
+    static_2_min_x: float = 58.0,
+    static_2_min_y: float = -12.0,
+    static_2_max_x: float = 78.0,
+    static_2_max_y: float = 10.0
+}
+
+pub fn clamp_world_x(x: float) -> float {
+    let half_w = res(MobaScene).plane_w / 2.0
+    return clamp(x, 0.0 - half_w, half_w)
+}
+
+pub fn clamp_world_y(y: float) -> float {
+    let half_h = res(MobaScene).plane_h / 2.0
+    return clamp(y, 0.0 - half_h, half_h)
+}
+
+pub fn static_collider_count() -> int {
+    return res(MobaScene).static_collider_count
+}
+
+pub fn static_collider_min_x(index: int) -> float {
+    let scene = res(MobaScene)
+    if index == 0 { return scene.static_0_min_x }
+    if index == 1 { return scene.static_1_min_x }
+    if index == 2 { return scene.static_2_min_x }
+    return 0.0
+}
+
+pub fn static_collider_min_y(index: int) -> float {
+    let scene = res(MobaScene)
+    if index == 0 { return scene.static_0_min_y }
+    if index == 1 { return scene.static_1_min_y }
+    if index == 2 { return scene.static_2_min_y }
+    return 0.0
+}
+
+pub fn static_collider_max_x(index: int) -> float {
+    let scene = res(MobaScene)
+    if index == 0 { return scene.static_0_max_x }
+    if index == 1 { return scene.static_1_max_x }
+    if index == 2 { return scene.static_2_max_x }
+    return 0.0
+}
+
+pub fn static_collider_max_y(index: int) -> float {
+    let scene = res(MobaScene)
+    if index == 0 { return scene.static_0_max_y }
+    if index == 1 { return scene.static_1_max_y }
+    if index == 2 { return scene.static_2_max_y }
+    return 0.0
+}
+
+pub fn overlaps_static_collider(x: float, y: float, radius: float) -> bool {
+    let mut i = 0
+    while i < static_collider_count() {
+        if x >= static_collider_min_x(i) - radius and
+            x <= static_collider_max_x(i) + radius and
+            y >= static_collider_min_y(i) - radius and
+            y <= static_collider_max_y(i) + radius {
+            return true
+        }
+        i = i + 1
+    }
+    return false
+}
+
+pub fn nearest_free_target_x(x: float, y: float, radius: float) -> float {
+    let mut resolved = x
+    let mut i = 0
+    while i < static_collider_count() {
+        let min_x = static_collider_min_x(i) - radius
+        let max_x = static_collider_max_x(i) + radius
+        let min_y = static_collider_min_y(i) - radius
+        let max_y = static_collider_max_y(i) + radius
+        if resolved >= min_x and resolved <= max_x and y >= min_y and y <= max_y {
+            let left = resolved - min_x
+            let right = max_x - resolved
+            let down = y - min_y
+            let up = max_y - y
+            let x_exit = min(left, right)
+            let y_exit = min(down, up)
+            if x_exit <= y_exit {
+                resolved = if left <= right { min_x - 0.001 } else { max_x + 0.001 }
+            }
+        }
+        i = i + 1
+    }
+    return clamp_world_x(resolved)
+}
+
+pub fn nearest_free_target_y(x: float, y: float, radius: float) -> float {
+    let mut resolved = y
+    let mut i = 0
+    while i < static_collider_count() {
+        let min_x = static_collider_min_x(i) - radius
+        let max_x = static_collider_max_x(i) + radius
+        let min_y = static_collider_min_y(i) - radius
+        let max_y = static_collider_max_y(i) + radius
+        if x >= min_x and x <= max_x and resolved >= min_y and resolved <= max_y {
+            let left = x - min_x
+            let right = max_x - x
+            let down = resolved - min_y
+            let up = max_y - resolved
+            let x_exit = min(left, right)
+            let y_exit = min(down, up)
+            if y_exit < x_exit {
+                resolved = if down <= up { min_y - 0.001 } else { max_y + 0.001 }
+            }
+        }
+        i = i + 1
+    }
+    return clamp_world_y(resolved)
+}

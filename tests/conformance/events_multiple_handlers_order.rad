@@ -1,0 +1,27 @@
+// backend: both
+event Ping { id }
+
+on Ping(e) {
+    print("first")
+    print(e.id)
+}
+
+on Ping(e) {
+    print("second")
+    print(e.id)
+}
+
+fn main() -> nil {
+    emit Ping { id: 1 }
+    flush_events()
+    emit Ping { id: 2 }
+    flush_events()
+}
+// expect: first
+// expect: 1
+// expect: second
+// expect: 1
+// expect: first
+// expect: 2
+// expect: second
+// expect: 2

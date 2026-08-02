@@ -1,0 +1,348 @@
+// =====================================================================
+//  ORACLE - a deterministic multi-ply beam-search auto-planner.
+//
+//  A colony of four sectors is governed by three knobs (tax, ration,
+//  investment). The knobs trade off against each other over time: taxing
+//  hard fills the treasury now and breeds unrest later; feeding well buys
+//  morale but burns the grain buffer; investing buys workers but costs
+//  credits up front. No greedy one-step rule finds a good policy.
+//
+//  So the colony plans instead of guessing. Every planning round it runs a
+//  BEAM SEARCH over futures:
+//
+//    for each ply:
+//      for each surviving world in the beam:
+//        for each candidate policy:
+//          commit the node, set the policy, fork,
+//          simulate_par() N seeded rollouts of that policy,
+//          score risk-averse (mean blended with the worst case),
+//          carry rollout 0 forward as the nominal successor
+//      keep the top-K scoring successors
+//
+//  The winning branch's FIRST move is the only thing that touches reality
+//  (receding-horizon control): plan deep, commit one step. Everything else
+//  is discarded speculation.
+//
+//  Every branch is explored on a fork, but seeding a node's policy still
+//  requires commit(), so the live world is scribbled on once per expansion.
+//  The invariant that makes that safe is checked rather than assumed: after
+//  the search the world is restored to the root fork and its world_digest()
+//  must equal the pre-search digest, bit for bit. The planner leaves no
+//  trace.
+//
+//  Run: target\debug\rad.exe projects\dogfood\oracle\main.rad
+// =====================================================================
+
+resource Ledger {
+    credits: int = 120,
+    unrest: int = 0,
+    tick: int = 0
+}
+
+resource Policy {
+    tax: int = 5,
+    ration: int = 10,
+    invest: int = 0
+}
+
+// This component deliberately carries NO `str` field, and that is load-bearing:
+// peeking a str-bearing component off a simulate_par() result fork corrupts
+// memory and kills the process with an access violation. fork_value() peeks
+// Sector on every rollout, so a `name: str` field here made this planner die on
+// ~27% of runs. Sector names live in spawn() instead, which is not on the peek
+// path. See bugs/03_simulate_par_str_peek_crash.rad and bugs/03_NOTES.md.
+component Sector {
+    workers: int = 10
+}
+
+component Stock {
+    food: int = 0,
+    goods: int = 0
+}
+
+component Morale {
+    level: int = 50
+}
+
+// --- Systems. All pure: no IO, no commit, no transition, so every one of
+// --- them is legal inside simulate() and simulate_par().
+
+system Harvest(s: Sector, st: mut Stock, m: Morale) {
+    st.food = st.food + s.workers * (50 + m.level) / 50
+}
+
+system Manufacture(s: Sector, st: mut Stock, p: Policy) {
+    st.goods = st.goods + s.workers * (10 + p.invest) / 10
+}
+
+system Ration(s: Sector, st: mut Stock, m: mut Morale, p: Policy) after Harvest {
+    let need = s.workers * p.ration / 10
+    if st.food >= need {
+        st.food = st.food - need
+        let target = 20 + p.ration * 4
+        if m.level < target {
+            m.level = m.level + 3
+        } else if m.level > target {
+            m.level = m.level - 1
+        }
+    } else {
+        st.food = 0
+        m.level = m.level - 12
+    }
+    if m.level > 100 {
+        m.level = 100
+    }
+    if m.level < 0 {
+        m.level = 0
+    }
+}
+
+system Levy(st: mut Stock, m: mut Morale, l: mut Ledger, p: Policy) after Manufacture {
+    let take = st.goods * p.tax / 10
+    st.goods = st.goods - take
+    l.credits = l.credits + take
+    if p.tax > 5 {
+        m.level = m.level - (p.tax - 5)
+    }
+}
+
+system Growth(s: mut Sector, l: mut Ledger, p: Policy) after Levy {
+    let cost = p.invest * 9
+    if p.invest > 0 and l.credits >= cost {
+        l.credits = l.credits - cost
+        s.workers = s.workers + p.invest
+    }
+}
+
+system Audit(m: Morale, l: mut Ledger) after Growth {
+    if m.level < 35 {
+        l.unrest = l.unrest + (35 - m.level)
+    }
+}
+
+system Clock(l: mut Ledger) after Audit {
+    l.tick = l.tick + 1
+}
+
+// Harvest shock. rand_int is statically BANNED inside simulate() (a plain
+// fork carries no seed) and permitted inside simulate_par(), whose forks are
+// explicitly seeded. This system is therefore usable only in the search.
+system Weather(st: mut Stock) after Harvest {
+    let swing = rand_int(-3, 2)
+    st.food = st.food + st.food * swing / 10
+}
+
+// --- Helpers. Declared before any top-level code runs: see
+// --- bugs/01_forward_fn_call.rad for why declaration order is load-bearing.
+
+// The objective. Credits and grain are wealth, workers are capacity, and
+// unrest is priced steeply because it compounds.
+// Scores a candidate future by reading it off the result fork.
+//
+// This reads exactly TWO things per fork -- the Ledger resource and the Stock
+// component -- and that restraint is not stylistic. Peeking a third distinct
+// thing (Sector, for a workers term) off simulate_par result forks crashes the
+// VM with an access violation on roughly a third of runs. See
+// bugs/03_NOTES.md. Workers are still valued, just indirectly: more workers
+// means more harvest, and harvest lands in Stock.food, which is scored here.
+fn fork_value(f: world_fork, sectors: list<entity>) -> int {
+    let l = peek_resource(f, Ledger) |> unwrap
+    let mut food = 0
+    for e in sectors {
+        let st = peek(f, e, Stock) |> unwrap
+        food = food + st.food
+    }
+    return l.credits * 4 + food - l.unrest * 30
+}
+
+// Risk-averse aggregate over a rollout set: the worst case counts double.
+fn risk_score(outs: list<world_fork>, sectors: list<entity>) -> int {
+    let mut worst = 2000000000
+    let mut total = 0
+    for f in outs {
+        let v = fork_value(f, sectors)
+        total = total + v
+        if v < worst {
+            worst = v
+        }
+    }
+    return (total / len(outs) + worst * 2) / 3
+}
+
+fn argmax_unused(scores: list<int>, used: list<bool>) -> int {
+    let mut best = -1
+    let mut best_v = -2000000000
+    for i in range(len(scores)) {
+        if not used[i] and scores[i] > best_v {
+            best_v = scores[i]
+            best = i
+        }
+    }
+    return best
+}
+
+fn policy_name(ci: int) -> str {
+    let names = ["generous", "austere", "balanced", "expansion"]
+    return names[ci]
+}
+
+// Writes the candidate policy into the live world. This would read better as
+// `fn policy_for(ci: int) -> Policy`, but a resource type name is not a legal
+// annotation: see bugs/02_resource_type_annotation.rad.
+fn apply_policy(ci: int) {
+    let taxes = [3, 8, 5, 4]
+    let rations = [12, 7, 10, 8]
+    let invests = [0, 0, 2, 4]
+    set_resource(Policy, Policy { tax: taxes[ci], ration: rations[ci], invest: invests[ci] })
+}
+
+fn candidate_count() -> int {
+    return 4
+}
+
+fn report_world(label: str, sectors: list<entity>) {
+    let l = get_resource(Ledger) |> unwrap
+    let mut food = 0
+    let mut workers = 0
+    let mut morale = 0
+    for e in sectors {
+        let st = get(e, Stock) |> unwrap
+        let sc = get(e, Sector) |> unwrap
+        let m = get(e, Morale) |> unwrap
+        food = food + st.food
+        workers = workers + sc.workers
+        morale = morale + m.level
+    }
+    print(f"{label}: tick={l.tick} credits={l.credits} grain={food} workers={workers} morale={morale / len(sectors)} unrest={l.unrest}")
+}
+
+// --- The colony ------------------------------------------------------
+
+let north = spawn("north", Sector { workers: 12 }, Stock { food: 40, goods: 0 }, Morale { level: 55 })
+let delta = spawn("delta", Sector { workers: 9 }, Stock { food: 25, goods: 0 }, Morale { level: 48 })
+let ridge = spawn("ridge", Sector { workers: 15 }, Stock { food: 55, goods: 0 }, Morale { level: 40 })
+let harbor = spawn("harbor", Sector { workers: 7 }, Stock { food: 18, goods: 0 }, Morale { level: 62 })
+
+let sectors = [north, delta, ridge, harbor]
+
+let plies = 3
+let beam_width = 2
+let rollouts = 6
+let ticks_per_ply = 4
+
+print("=====================================================")
+print(" ORACLE - beam-search colony planner")
+print(f" {plies} plies x {candidate_count()} candidates x {rollouts} rollouts x {ticks_per_ply} ticks")
+print("=====================================================")
+report_world("initial ", sectors)
+
+// --- Plan ------------------------------------------------------------
+
+let root = fork()
+let root_digest = world_digest(root)
+print(f"root digest {slice(root_digest, 0, 16)}")
+
+let mut beam_fork = [root]
+let mut beam_score = [0]
+let mut beam_path = [""]
+let mut beam_first = [-1]
+let mut expansions = 0
+
+for ply in range(plies) {
+    let mut next_fork = []
+    let mut next_score = []
+    let mut next_path = []
+    let mut next_first = []
+
+    for bi in range(len(beam_fork)) {
+        for ci in range(candidate_count()) {
+            // The seed is a pure function of the search coordinates, so the
+            // whole search is reproducible run to run.
+            let seed = 9001 + ply * 733 + bi * 97 + ci * 13
+
+            // Seed the node: restore it, set the candidate policy, snapshot.
+            commit(beam_fork[bi])
+            apply_policy(ci)
+            let seeded = fork()
+
+            let outs = simulate_par(
+                seeded,
+                [
+                    system::Harvest,
+                    system::Weather,
+                    system::Ration,
+                    system::Manufacture,
+                    system::Levy,
+                    system::Growth,
+                    system::Audit,
+                    system::Clock
+                ],
+                ticks_per_ply,
+                rollouts,
+                seed
+            )
+            let sc = risk_score(outs, sectors)
+            expansions = expansions + 1
+
+            next_fork = push(next_fork, outs[0])
+            next_score = push(next_score, beam_score[bi] + sc)
+            next_path = push(next_path, f"{beam_path[bi]}{policy_name(ci)} ")
+            if ply == 0 {
+                next_first = push(next_first, ci)
+            } else {
+                next_first = push(next_first, beam_first[bi])
+            }
+        }
+    }
+
+    // Keep the top `beam_width` successors.
+    let mut used = []
+    for _i in range(len(next_score)) {
+        used = push(used, false)
+    }
+    let mut kept_fork = []
+    let mut kept_score = []
+    let mut kept_path = []
+    let mut kept_first = []
+    for _k in range(beam_width) {
+        let pick = argmax_unused(next_score, used)
+        used[pick] = true
+        kept_fork = push(kept_fork, next_fork[pick])
+        kept_score = push(kept_score, next_score[pick])
+        kept_path = push(kept_path, next_path[pick])
+        kept_first = push(kept_first, next_first[pick])
+    }
+
+    beam_fork = kept_fork
+    beam_score = kept_score
+    beam_path = kept_path
+    beam_first = kept_first
+
+    print(f"  ply {ply + 1}: kept [{beam_path[0]}] {beam_score[0]}  |  [{beam_path[1]}] {beam_score[1]}")
+}
+
+let winner_first = beam_first[0]
+print(f"searched {expansions} branches, {expansions * rollouts} rollouts")
+print(f"best plan: {beam_path[0]} (cumulative score {beam_score[0]})")
+print(f"first move to commit: {policy_name(winner_first)}")
+
+// --- The planner must leave no trace ---------------------------------
+
+commit(root)
+let restored = world_digest()
+print(f"world restored to root: {restored == root_digest}")
+assert(restored == root_digest, "search must not perturb the live world")
+
+// --- Act: apply only the first move, for real ------------------------
+
+let before_act = fork()
+apply_policy(winner_first)
+schedule [Harvest, Ration, Manufacture, Levy, Growth, Audit, Clock]
+report_world("after 1 real tick", sectors)
+
+// The blast radius of one governed tick, checked as negative space: any
+// component NOT in this list changing would be a bug in the systems above.
+assert_only_changed(before_act, fork(), [Stock, Morale, Sector, Ledger, Policy])
+print("blast radius verified: only Stock/Morale/Sector/Ledger/Policy moved")
+print(f"diff of one real tick: {diff(before_act, fork())}")
+print(f"final digest {slice(world_digest(), 0, 16)}")

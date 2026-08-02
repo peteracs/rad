@@ -1,0 +1,9 @@
+fn main() -> nil {
+    let rows = [(10, 1), (20, 2), (30, 3)]
+    let result = rows |> reduce((0, 0), fn([sum_v, sum_w], [v, w]) {
+        return (sum_v + v, sum_w + w)
+    })
+    let (total_v, total_w) = result
+    print(total_v)
+    print(total_w)
+}

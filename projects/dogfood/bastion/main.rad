@@ -1,0 +1,282 @@
+// BASTION - a plugin host that runs UNTRUSTED third-party mods against
+// least-privilege capability forks.
+//
+// The host owns a small industrial world: a Vault (never grantable), a
+// Reactor (the tunable surface plugins are hired to tune), and Telemetry.
+// Third-party plugins arrive as SOURCE TEXT with a manifest declaring the
+// capabilities they want. Bastion runs each one in a capability-bounded
+// guest VM and then decides, on its own evidence, whether to commit.
+//
+// The pipeline per plugin, in order:
+//   1. least privilege  - the grant is the INTERSECTION of what the plugin
+//                         asked for and what host policy is willing to give.
+//   2. isolation        - sandbox_run against a fork; the guest never sees
+//                         the live world.
+//   3. defense in depth - diff() the returned fork and verify the blast
+//                         radius independently, EVEN THOUGH the ACL already
+//                         ran. Two independent checks, not one.
+//   4. semantic policy  - the ACL says "which components", never "which
+//                         values". The host peeks and enforces the invariant
+//                         the ACL cannot express.
+//   5. commit           - only host-approved effects reach the live world.
+//   6. quarantine       - a plugin that trips any layer earns a strike and
+//                         is refused on resubmission WITHOUT being run again.
+//
+// Run: target\debug\rad.exe projects\dogfood\bastion\main.rad
+
+component Vault { gold: 0 }
+
+component Reactor { temp: 0, output: 0 }
+
+component Telemetry { reading: 0 }
+
+resource Registry { approved: 0, rejected: 0 }
+
+// Single-system schedule on purpose: batched schedules currently lose
+// resource accumulation (A1 BUG 03), so host bookkeeping never rides in one.
+system ReactorPhysics(r: mut Reactor) {
+    r.output = r.temp * 3
+}
+
+// ---------------------------------------------------------------------------
+// Host helpers. Declared before any top-level use: `fn` bindings only exist
+// once execution REACHES the declaration (A2 BUG 01), so order is load-bearing.
+// ---------------------------------------------------------------------------
+
+// Render a capability grant. Bare braces are literal inside f"""..."""; only
+// ${expr} interpolates, which is exactly what generating JSON wants.
+fn caps_json(writes: list<str>, fuel: int, mem: int) -> str {
+    let mut quoted = []
+    for w in writes {
+        quoted << "\"" + w + "\""
+    }
+    let inner = join(quoted, ", ")
+    return f"""{ "write": [${inner}], "fuel": ${fuel}, "mem_bytes": ${mem} }"""
+}
+
+// Least privilege: a plugin gets the intersection of what it asked for with
+// what policy permits, never the union. Anything else is silently dropped.
+fn narrow(requested: list<str>, policy: list<str>) -> list<str> {
+    let mut granted = []
+    for w in requested {
+        if contains(policy, w) {
+            granted << w
+        }
+    }
+    return granted
+}
+
+// Defense in depth. The ACL already refused ungranted writes -- we verify the
+// returned fork anyway and report the first component outside the grant.
+// Returns "" when the blast radius is clean.
+fn radius_breach(changed: map<str, int>, granted: list<str>) -> str {
+    for name in keys(changed) {
+        if !contains(granted, name) {
+            return name
+        }
+    }
+    return ""
+}
+
+fn describe(changed: map<str, int>) -> str {
+    let mut parts = []
+    for (name, rows) in changed {
+        parts << f"{name}={rows}"
+    }
+    if len(parts) == 0 {
+        return "(nothing)"
+    }
+    return join(parts, " ")
+}
+
+// ---------------------------------------------------------------------------
+// The live world.
+// ---------------------------------------------------------------------------
+
+let site = spawn("site", Vault { gold: 5000 }, Reactor { temp: 20, output: 60 }, Telemetry { reading: 0 })
+
+// Host policy: plugins may ever touch only these, and the reactor has a
+// hard thermal envelope no plugin may leave.
+let POLICY_WRITES = ["Reactor", "Telemetry"]
+let TEMP_MIN = 0
+let TEMP_MAX = 100
+
+print("=== BASTION :: capability-sandboxed plugin host ===")
+let v0 = get(site, Vault) |> unwrap
+let r0 = get(site, Reactor) |> unwrap
+print(f"live world: vault={v0.gold} reactor.temp={r0.temp} reactor.output={r0.output}")
+print(f"host policy: writable={POLICY_WRITES} temp envelope=[{TEMP_MIN},{TEMP_MAX}]")
+print("")
+
+// ---------------------------------------------------------------------------
+// The plugin catalogue. One benign plugin that does its job, and one attacker
+// per escape class. Every source below is UNTRUSTED text.
+// ---------------------------------------------------------------------------
+
+// Reads its target through the data-only input channel rather than having the
+// host splice values into its source text.
+let src_tuner = f"""
+component Reactor { temp: 0, output: 0 }
+let job = sandbox_input()
+let target = job["target_temp"]
+let site = get_entity("site")
+let r = get(site, Reactor) |> unwrap
+print("tuner: raising temp from " + str(r.temp) + " to " + str(target))
+set(site, Reactor { temp: target, output: r.output })
+sandbox_output({ "new_temp": target })
+"""
+
+// Stays perfectly inside its grant, but proposes a value that would melt the
+// reactor. The ACL cannot see this; only host policy can.
+let src_overheat = f"""
+component Reactor { temp: 0, output: 0 }
+let site = get_entity("site")
+let r = get(site, Reactor) |> unwrap
+set(site, Reactor { temp: 100000, output: r.output })
+"""
+
+// Writes a component it was never granted.
+let src_greedy = f"""
+component Vault { gold: 0 }
+set(get_entity("site"), Vault { gold: 999999 })
+"""
+
+// Reaches for the filesystem.
+let src_spy = f"""
+let secrets = read_file("secrets.txt")
+print(secrets)
+"""
+
+// Tries to commit its own work, bypassing the host's decision entirely.
+let src_smuggler = f"""
+component Reactor { temp: 0, output: 0 }
+set(get_entity("site"), Reactor { temp: 42, output: 0 })
+commit(fork())
+"""
+
+// Burns instructions in a bytecode loop.
+let src_looper = f"""
+let mut i = 0
+while i >= 0 {
+    i = i + 1
+}
+"""
+
+// Allocates without bound.
+let src_hog = f"""
+let mut xs = []
+while true {
+    xs = push(xs, "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx")
+}
+"""
+
+struct Plugin {
+    name: "",
+    src: "",
+    wants: [],
+    fuel: 0,
+    mem: 0
+}
+
+let catalogue = [
+    Plugin { name: "thermal-tuner", src: src_tuner, wants: ["Reactor"], fuel: 200000, mem: 4194304 },
+    Plugin { name: "overclocker", src: src_overheat, wants: ["Reactor"], fuel: 200000, mem: 4194304 },
+    Plugin { name: "gold-rush", src: src_greedy, wants: ["Vault", "Reactor"], fuel: 200000, mem: 4194304 },
+    Plugin { name: "peeping-tom", src: src_spy, wants: ["Telemetry"], fuel: 200000, mem: 4194304 },
+    Plugin { name: "smuggler", src: src_smuggler, wants: ["Reactor"], fuel: 200000, mem: 4194304 },
+    Plugin { name: "spin-cycle", src: src_looper, wants: ["Telemetry"], fuel: 50000, mem: 4194304 },
+    Plugin { name: "heap-hog", src: src_hog, wants: ["Telemetry"], fuel: 100000000, mem: 1048576 }
+]
+
+// ---------------------------------------------------------------------------
+// The host loop.
+// ---------------------------------------------------------------------------
+
+let mut quarantined = []
+
+for p in catalogue {
+    let granted = narrow(p.wants, POLICY_WRITES)
+    let caps = caps_json(granted, p.fuel, p.mem)
+
+    print(f"-- plugin '{p.name}'")
+    print(f"   asked for {p.wants} -> granted {granted}")
+
+    if len(granted) < len(p.wants) {
+        print("   note: least privilege dropped ungranted requests")
+    }
+
+    let before = fork()
+    let job: map<str, any> = { "target_temp": 55, "plugin": p.name }
+
+    match sandbox_run(p.src, before, caps, job) {
+        Err(denial) => {
+            print(f"   DENIED by sandbox: {denial}")
+            quarantined << p.name
+            let reg = get_resource(Registry) |> unwrap
+            set_resource(Registry, Registry { approved: reg.approved, rejected: reg.rejected + 1 })
+        }
+        Ok(proposal) => {
+            // Layer 3: verify the blast radius ourselves. The ACL ran, but a
+            // host that trusts one check has one check.
+            let changed = diff(before, proposal)
+            print(f"   guest returned Ok; blast radius: {describe(changed)}")
+
+            let breach = radius_breach(changed, granted)
+            if breach != "" {
+                print(f"   REJECTED: fork touched '{breach}', outside the grant")
+                quarantined << p.name
+                let reg = get_resource(Registry) |> unwrap
+                set_resource(Registry, Registry { approved: reg.approved, rejected: reg.rejected + 1 })
+            } else {
+                // Layer 4: the ACL says WHICH components, never WHICH values.
+                let proposed = peek(proposal, site, Reactor) |> unwrap
+                if proposed.temp < TEMP_MIN || proposed.temp > TEMP_MAX {
+                    print(f"   REJECTED by policy: temp {proposed.temp} leaves envelope [{TEMP_MIN},{TEMP_MAX}]")
+                    quarantined << p.name
+                    let reg = get_resource(Registry) |> unwrap
+                    set_resource(Registry, Registry { approved: reg.approved, rejected: reg.rejected + 1 })
+                } else {
+                    // Belt and braces. Only reached once we already believe
+                    // the radius is clean -- assert_only_changed RAISES rather
+                    // than returning, so it can assert but never decide.
+                    assert_only_changed(before, proposal, granted)
+                    commit(proposal)
+                    print(f"   APPROVED: temp -> {proposed.temp}, committed")
+                    let reg = get_resource(Registry) |> unwrap
+                    set_resource(Registry, Registry { approved: reg.approved + 1, rejected: reg.rejected })
+                }
+            }
+        }
+    }
+    print("")
+}
+
+// ---------------------------------------------------------------------------
+// Quarantine: a struck plugin is refused BEFORE it is ever run again.
+// ---------------------------------------------------------------------------
+
+print("-- resubmission attempt from 'gold-rush'")
+if contains(quarantined, "gold-rush") {
+    print("   REFUSED: plugin is quarantined; sandbox_run never called")
+} else {
+    print("   FAIL: quarantine did not hold")
+}
+print("")
+
+// The host's own trusted systems run on the committed world.
+schedule [ReactorPhysics]
+
+let v1 = get(site, Vault) |> unwrap
+let r1 = get(site, Reactor) |> unwrap
+let reg = get_resource(Registry) |> unwrap
+
+print("=== audit ===")
+print(f"approved: {reg.approved}   rejected: {reg.rejected}")
+print(f"quarantined: {quarantined}")
+print(f"live world: vault={v1.gold} reactor.temp={r1.temp} reactor.output={r1.output}")
+
+if v1.gold == 5000 {
+    print("vault untouched across 7 untrusted plugins: OK")
+} else {
+    print("VAULT BREACHED")
+}

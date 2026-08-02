@@ -1,0 +1,10 @@
+---
+source: tests\conformance\gc_collect_cycle.rad
+exit_code: 0
+---
+Test 1 - Single cycle swept: 3
+Test 2 - Multiple cycles swept: 11
+reader() = 42
+Test 3 - No cycle swept: 7
+Test 4 - First: 5, Second: 0
+All gc_collect tests passed

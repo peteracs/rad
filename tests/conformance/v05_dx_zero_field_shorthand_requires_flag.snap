@@ -1,0 +1,7 @@
+---
+source: tests\conformance\v05_dx_zero_field_shorthand_requires_flag.rad
+exit_code: 1
+---
+
+---stderr---
+Error: Error[E2502]: Zero-field variant shorthand 'AccessSignal::MfaDisabled' requires --compat-v0.5-dx

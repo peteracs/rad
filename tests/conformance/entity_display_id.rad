@@ -1,0 +1,5 @@
+// backend: both
+let e = spawn("p")
+print(e)
+despawn(e)
+// expect: 0

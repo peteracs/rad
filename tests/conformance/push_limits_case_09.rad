@@ -1,0 +1,4 @@
+// backend: both
+let zipped = zip(["a", "b", "c"], [10, 20, 30])
+print(f"CASE09:{len(zipped)}:{zipped[1][1]}")
+// expect: CASE09:3:20

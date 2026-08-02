@@ -1,0 +1,8 @@
+---
+source: tests\conformance\io_directory_operations.rad
+exit_code: 0
+---
+true
+["a.txt", "b.txt"]
+false
+dir ops ok

@@ -1,0 +1,9 @@
+fn main() -> nil {
+    let mut total = 0
+    let rows = [[1, 2], [3, 4], [5, 6]]
+    let _ = rows |> map(fn([a, b]) {
+        total = total + a + b
+        return a
+    })
+    print(total)
+}

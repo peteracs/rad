@@ -1,0 +1,11 @@
+---
+source: tests\conformance\pipes.rad
+exit_code: 0
+---
+[2, 4, 6]
+[3, 4]
+[1, 2, 3]
+10
+12
+2
+[6]

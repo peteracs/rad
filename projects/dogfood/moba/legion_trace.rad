@@ -1,0 +1,45 @@
+// LEGION_TRACE — the cross-backend conformance spec (round 21). Runs
+// the 84-champion brawl deterministically and prints checkpoints the
+// compiled backend must reproduce LINE FOR LINE. No clocks, no IO
+// beyond the trace itself: this file IS the contract.
+
+use "gen/legion_index.rad"
+use "gen/legion_core.rad"
+
+pub let TRACE_TICKS = 600
+pub let CHECK_EVERY = 100
+
+fn snapshot_line(t: int) -> str {
+    let everyone = query { LChamp }
+    let mut hp_sum = 0.0
+    let mut x_sum = 0.0
+    let mut fallen = 0
+    for e in everyone |> sort {
+        let c = require(e, LChamp)
+        hp_sum = hp_sum + c.hp
+        x_sum = x_sum + require(e, LPos).at[0]
+        if not c.alive { fallen = fallen + 1 }
+    }
+    return f"S t={t} fallen={fallen} hp={hp_sum:.6} x={x_sum:.6}"
+}
+
+fn main() -> nil {
+    let roster = muster()
+    assert(len(roster) == 84, "muster")
+
+    let mut t = 0
+    while t < TRACE_TICKS {
+        schedule [brawl]
+        t = t + 1
+        if t % CHECK_EVERY == 0 {
+            print(snapshot_line(t))
+        }
+    }
+
+    // the per-champion endgame: every hp at 6 decimals, eid order
+    for e in query { LChamp } |> sort {
+        let c = require(e, LChamp)
+        print(f"C {c.cname} {c.hp:.6} {c.alive}")
+    }
+    print(f"END ticks={TRACE_TICKS}")
+}

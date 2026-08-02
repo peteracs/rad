@@ -1,0 +1,6 @@
+---
+source: tests\conformance\ecs_entities_multi_filter.rad
+exit_code: 0
+---
+2
+1

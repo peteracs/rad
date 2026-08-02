@@ -1,0 +1,5 @@
+---
+source: tests\conformance\test_fork_multi_entity_diff_components.rad
+exit_code: 0
+---
+PASS: multi-entity different components

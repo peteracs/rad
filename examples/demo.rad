@@ -1,0 +1,224 @@
+// =====================================================================
+//  Rad Language v0.5 — Full Demo
+//  Demonstrating the Three Laws of Great Software Architecture
+//  Now with: let/let mut, match, system mut, runtime type checking
+// =====================================================================
+
+// ─── LAW 1: Separate Data from Logic (ECS) ─────────────────────────
+
+component Position { x: 0.0, y: 0.0 }
+
+component Velocity { dx: 0.0, dy: 0.0 }
+
+component Health { hp: 100, max: 100 }
+
+component Name { value: "" }
+
+entity hero {
+    Position { x: 0.0, y: 0.0 },
+    Velocity { dx: 2.0, dy: 1.5 },
+    Health { hp: 100, max: 100 },
+    Name { value: "Hero" }
+}
+
+entity goblin {
+    Position { x: 50.0, y: 30.0 },
+    Velocity { dx: -1.0, dy: 0.0 },
+    Health { hp: 40, max: 40 },
+    Name { value: "Goblin" }
+}
+
+entity dragon {
+    Position { x: 100.0, y: 100.0 },
+    Velocity { dx: 0.0, dy: -2.0 },
+    Health { hp: 200, max: 200 },
+    Name { value: "Dragon" }
+}
+
+// Systems declare mut access — read-only params cannot be written to
+system Physics(pos: mut Position, vel: Velocity) {
+    pos.x = pos.x + vel.dx
+    pos.y = pos.y + vel.dy
+}
+
+// ─── LAW 2: Move Data Through Pipelines ────────────────────────────
+
+fn square(x: int) -> int {
+    return x * x
+}
+
+fn process_scores(scores: list<int>) -> int {
+    return scores
+    |> filter(fn(s) { return s > 0 })
+    |> map(fn(s) { return s * 2 })
+    |> reduce(0, fn(a, b) { return a + b })
+}
+
+// ─── LAW 3: Components Talk Via Events ─────────────────────────────
+
+event Hit { target, amount }
+
+event Defeated { name }
+
+on Hit(e) {
+    let h = get(e.target, Health) ?
+    let mut new_hp = h.hp - e.amount
+    if new_hp < 0 {
+        new_hp = 0
+    }
+    set(e.target, Health { hp: new_hp, max: h.max })
+    let n = get(e.target, Name) ?
+    print(f"  {n.value} takes {e.amount} damage -> HP: {new_hp}")
+    if new_hp == 0 {
+        emit Defeated { name: n.value }
+    }
+}
+
+on Defeated(e) {
+    print(f"  *** {e.name} has been defeated! ***")
+}
+
+// ─── BONUS: Finite State Machines ──────────────────────────────────
+
+state DoorState {
+    Locked {
+        on unlock -> Closed
+    }
+    Closed {
+        on open -> Open
+        on lock -> Locked
+    }
+    Open {
+        on close -> Closed
+    }
+}
+
+state GameMode {
+    Menu {
+        on start -> Playing
+    }
+    Playing {
+        on pause -> Paused
+        on gameover -> GameOver
+    }
+    Paused {
+        on resume -> Playing
+    }
+    GameOver {
+        on restart -> Menu
+    }
+}
+
+// ─── Main Entry Point ──────────────────────────────────────────────
+
+fn main() -> any {
+    print("========================================")
+    print("  Rad Language v0.5 - Architecture Demo")
+    print("========================================")
+
+    // ── Law 1: ECS ──────────────────────────────
+    print("\n--- LAW 1: Data-Logic Separation (ECS) ---")
+    print("Systems declare mut access explicitly.")
+    print("")
+    print("Before Physics system:")
+    print(f"  Hero:   {get(hero, Position) ?}")
+    print(f"  Goblin: {get(goblin, Position) ?}")
+    print(f"  Dragon: {get(dragon, Position) ?}")
+
+    Physics()
+
+    print("After Physics system (one tick):")
+    print(f"  Hero:   {get(hero, Position) ?}")
+    print(f"  Goblin: {get(goblin, Position) ?}")
+    print(f"  Dragon: {get(dragon, Position) ?}")
+
+    // ── Law 2: Pipelines ────────────────────────
+    print("\n--- LAW 2: Immutable Data Pipelines ---")
+    print("let bindings are immutable. Use let mut when needed.")
+    print("")
+
+    let scores = [10, -5, 20, 0, 15, -3, 30]
+    let total = process_scores(scores)
+    print(f"  Input:    {scores}")
+    print("  Pipeline: filter(>0) |> map(*2) |> sum")
+    print(f"  Result:   {total}")
+
+    print("")
+    let nums = [1, 2, 3, 4, 5]
+    let squared = nums |> map(square)
+    print(f"  [1,2,3,4,5] |> map(square) = {squared}")
+
+    let evens = nums |> filter(fn(x) { return x % 2 == 0 })
+    print(f"  [1,2,3,4,5] |> filter(even) = {evens}")
+
+    let reduced_total = nums |> reduce(0, fn(a, b) { return a + b })
+    print(f"  [1,2,3,4,5] |> reduce(+)    = {reduced_total}")
+
+    // ── Law 3: Events ───────────────────────────
+    print("\n--- LAW 3: Event-Driven Communication ---")
+    print("Components never call each other directly.")
+    print("")
+
+    print(f"Goblin HP: {(get(goblin, Health) ?).hp}")
+    emit Hit { target: goblin, amount: 25 }
+    emit Hit { target: goblin, amount: 10 }
+    emit Hit { target: goblin, amount: 10 }
+
+    print("")
+    print(f"Dragon HP: {(get(dragon, Health) ?).hp}")
+    emit Hit { target: dragon, amount: 150 }
+
+    // ── State Machines + match ──────────────────
+    print("\n--- BONUS: Finite State Machines ---")
+    print("Exhaustive match: missing a state is an error.")
+    print("")
+
+    let mut door = DoorState::Locked
+    print(f"  Door: {door}")
+    door = transition(door, "unlock") ?
+    print(f"  unlock -> {door}")
+    door = transition(door, "open") ?
+    print(f"  open   -> {door}")
+
+    // Exhaustive match on door state
+    match door {
+        Locked => { print("  match: The door is locked.") }
+        Closed => { print("  match: The door is closed.") }
+        Open => { print("  match: The door is open!") }
+    }
+
+    door = transition(door, "close") ?
+    print(f"  close  -> {door}")
+    door = transition(door, "lock") ?
+    print(f"  lock   -> {door}")
+
+    print("")
+    let mut game = GameMode::Menu
+    print(f"  Game: {game}")
+    game = transition(game, "start") ?
+    print(f"  start    -> {game}")
+
+    match game {
+        Menu => { print("  match: In menu") }
+        Playing => { print("  match: Game is live!") }
+        Paused => { print("  match: Game paused") }
+        GameOver => { print("  match: Game over") }
+    }
+
+    game = transition(game, "pause") ?
+    print(f"  pause    -> {game}")
+    game = transition(game, "resume") ?
+    print(f"  resume   -> {game}")
+    game = transition(game, "gameover") ?
+    print(f"  gameover -> {game}")
+    game = transition(game, "restart") ?
+    print(f"  restart  -> {game}")
+
+    print("\n========================================")
+    print("  All three laws demonstrated!")
+    print("  + let/let mut immutability")
+    print("  + exhaustive match on state machines")
+    print("  + system mut annotations")
+    print("  + runtime type checking")
+    print("========================================")
+}

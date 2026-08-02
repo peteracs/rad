@@ -1,0 +1,12 @@
+// backend: both
+
+fn test_return() -> int {
+    let none = Option::None {}
+    let Some { value: y } = none else {
+        return 999
+    }
+    return y
+}
+
+print(test_return())
+// expect: 999

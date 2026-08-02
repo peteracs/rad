@@ -1,0 +1,64 @@
+// NEGATIVE CONTROL for BUG 03 -- this file does NOT crash. Kept deliberately.
+//
+// It was my first attempt at a minimal repro and it is clean at 40/40 runs,
+// RAYON_NUM_THREADS=32. It has every ingredient I first believed was
+// responsible:
+//     commit(result_fork_from_simulate_par)
+//     fork()
+//     simulate_par(...)  -> new result forks
+//     peek_resource + peek each result
+//     repeat for 3 generations, chaining result forks forward
+//
+// It stays alive because it peeks only TWO things per fork and neither carries
+// a str field. That makes it a useful boundary marker next to
+// 03_simulate_par_str_peek_crash.rad, which is the same shape and does crash.
+// See 03_NOTES.md for the full table of what does and does not trigger it.
+
+resource Meter {
+    ticks: int = 0,
+    total: int = 0
+}
+
+component Cell {
+    v: int = 1
+}
+
+system Spin(c: mut Cell, m: mut Meter) {
+    let r = rand_int(1, 9)
+    c.v = c.v + r
+    m.total = m.total + r
+    m.ticks = m.ticks + 1
+}
+
+let a = spawn("a", Cell { v: 1 })
+let b = spawn("b", Cell { v: 2 })
+let cells = [a, b]
+
+let mut cur = fork()
+let mut acc = 0
+
+// Three generations of chaining, mirroring the 3 plies in main.rad.
+for gen in range(3) {
+    let mut best = cur
+    let mut best_v = -1
+    for cand in range(4) {
+        commit(cur)
+        let seeded = fork()
+        let outs = simulate_par(seeded, [system::Spin], 4, 6, 1000 + gen * 31 + cand)
+        for f in outs {
+            let m = peek_resource(f, Meter) |> unwrap
+            let cv = peek(f, a, Cell) |> unwrap
+            acc = acc + m.total + cv.v
+            if m.total > best_v {
+                best_v = m.total
+                best = f
+            }
+        }
+    }
+    cur = best
+    print(f"gen {gen}: best total {best_v}")
+}
+
+print(f"acc {acc}")
+print(f"len cells {len(cells)}")
+print("SURVIVED")

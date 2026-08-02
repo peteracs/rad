@@ -1,0 +1,7 @@
+---
+source: tests\conformance\shift_list_expr_reject.rad
+exit_code: 1
+---
+
+---stderr---
+Error: '<<' as an expression is an int left shift, got list<int> and int

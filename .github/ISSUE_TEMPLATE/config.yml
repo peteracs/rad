@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: RAD Roadmap
+    url: https://github.com/peteracs/rad/blob/main/docs/src/project/roadmap.md
+    about: Check the public roadmap before opening a feature request
+  - name: RFC Process
+    url: https://github.com/peteracs/rad/blob/main/docs/src/project/rfcs.md
+    about: For language-level changes, write an RFC instead of a feature request

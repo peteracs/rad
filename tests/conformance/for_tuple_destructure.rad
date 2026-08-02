@@ -1,0 +1,47 @@
+// Parenthesized for-loop bindings over a LIST destructure tuples of
+// any arity — symmetric with `let (a, b) = t`. Map two-binding
+// iteration and query unpacking keep their existing meanings.
+
+fn main() -> nil {
+    let tape = [(0, "ez", 30, 20), (25, "ez", 0, 0), (50, "kat", 40, 40)]
+
+    // n-ary destructure
+    let mut sum_x = 0
+    for (tick, who, x, y) in tape {
+        sum_x = sum_x + x
+        let _ = (tick, who, y)
+    }
+    print(sum_x)                       // 70
+
+    // composes with `where`
+    for (due, who, x, y) in tape where due == 25 {
+        print(f"{who} -> ({x}, {y})")  // ez -> (0, 0)
+    }
+
+    // `_` discards positions
+    for (_, who, _, _) in tape {
+        print(who)                     // ez, ez, kat
+    }
+
+    // two bindings over a tuple list destructure pairs
+    let pairs = [(1, 10), (2, 20)]
+    let mut total = 0
+    for (k, v) in pairs {
+        total = total + k * v
+    }
+    print(total)                       // 50
+
+    // map iteration with two bindings is unchanged
+    let m = { "a": 1, "b": 2 }
+    let mut joined = ""
+    for (k, v) in m {
+        joined = joined + f"{k}{v}"
+    }
+    print(joined)                      // a1b2 (sorted key order)
+
+    // bracket form still works
+    for [a, b] in pairs {
+        let _ = (a, b)
+    }
+    print("brackets ok")
+}

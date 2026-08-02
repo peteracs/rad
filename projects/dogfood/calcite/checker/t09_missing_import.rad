@@ -1,0 +1,6 @@
+// ILLEGAL: the imported file does not exist. Spec 3.10.
+use "definitely_not_here.rad"
+
+fn main() -> nil {
+    print("unreachable")
+}

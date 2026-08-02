@@ -1,0 +1,33 @@
+// Test: Fork, then spawn new entities in main world, then commit the fork
+// The committed fork should overwrite the world — new entities should vanish
+
+component Tag { label: "" }
+
+let a = spawn("a", Tag { label: "original" })
+
+// Fork the world (only entity 'a' exists)
+let snapshot = fork()
+
+// Now spawn more entities in the main world
+let b = spawn("b", Tag { label: "new1" })
+let c = spawn("c", Tag { label: "new2" })
+
+// Verify they exist
+let all = entities(Tag)
+assert(len(all) == 3, f"Before commit: expected 3 entities, got {len(all)}")
+
+// Commit the old fork — should restore to when only 'a' existed
+commit(snapshot)
+
+let after = entities(Tag)
+assert(len(after) == 1, f"After commit old fork: expected 1 entity, got {len(after)}")
+
+// 'a' should still be there
+let tag_a = get(a, Tag) |> unwrap
+assert(tag_a.label == "original", f"Entity a should have label 'original', got {tag_a.label}")
+
+// 'b' and 'c' should be gone
+assert(is_none(get(b, Tag)), "Entity b should not exist after commit")
+assert(is_none(get(c, Tag)), "Entity c should not exist after commit")
+
+print("PASS: commit old fork erases newer entities")

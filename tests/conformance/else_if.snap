@@ -1,0 +1,12 @@
+---
+source: tests\conformance\else_if.rad
+exit_code: 0
+---
+medium
+medium
+three
+10
+a > b and b > 2
+either
+first
+d

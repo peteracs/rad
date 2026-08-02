@@ -1,0 +1,254 @@
+use "../server/state.rad"
+use "../server/input_queue.rad"
+use "../sim/components.rad"
+use "../world/scene.rad"
+use "../world/avatars.rad"
+use "../sim/movement.rad"
+use "../protocol/match_protocol.rad"
+
+pub fn send_state_packet(socket: int, peer: entity, status: str, now_ms: int) -> nil {
+    send_state_packet_with_mode(socket, peer, status, now_ms, false)
+}
+
+pub fn send_full_state_packet(socket: int, peer: entity, status: str, now_ms: int) -> nil {
+    send_state_packet_with_mode(socket, peer, status, now_ms, true)
+}
+
+pub fn send_state_packet_with_mode(socket: int, peer: entity, status: str, now_ms: int, full_sync: bool) -> nil {
+    let clock_state = res(ServerClock)
+    let conn = get(peer, PeerConnection) |> unwrap
+    let seq = next_server_seq()
+    let packet = if full_sync {
+        encode_full_state_packet_with_telemetry(
+            status,
+            now_ms,
+            clock_state.tick_count,
+            seq,
+            conn.session_id,
+            conn.player_id,
+            conn.received_client_seq,
+            conn.received_ack_bits,
+            peer_count(),
+            max_peers(),
+            input_queue_slots(),
+            pending_move_input_count(peer),
+            pending_cast_input_count(peer),
+            conn.connected,
+            conn.late_inputs,
+            conn.future_inputs,
+            conn.duplicate_inputs,
+            conn.overwritten_inputs,
+            conn.last_client_seq,
+            conn.last_applied_client_seq,
+            conn.applied_ack_bits
+        )
+    } else {
+        encode_state_packet_with_telemetry(
+            status,
+            now_ms,
+            clock_state.tick_count,
+            seq,
+            conn.session_id,
+            conn.player_id,
+            conn.received_client_seq,
+            conn.received_ack_bits,
+            peer_count(),
+            max_peers(),
+            input_queue_slots(),
+            pending_move_input_count(peer),
+            pending_cast_input_count(peer),
+            conn.connected,
+            conn.late_inputs,
+            conn.future_inputs,
+            conn.duplicate_inputs,
+            conn.overwritten_inputs,
+            conn.last_client_seq,
+            conn.last_applied_client_seq,
+            conn.applied_ack_bits
+        )
+    }
+    let _sent = udp_send_bytebuf(socket, conn.host, conn.port, packet)
+}
+
+pub fn send_protocol_error(socket: int, host: str, port: int, message: str) -> nil {
+    let _error_sent = udp_send_bytebuf(socket, host, port, encode_error_packet(message))
+}
+
+pub fn emit_udp_packet_status(status: str) -> nil {
+    emit UdpPacketServed { status: status }
+    flush_events()
+}
+
+pub fn send_peer_state_response(socket: int, peer: entity, status: str, cold_join: bool, now_ms: int) -> nil {
+    if cold_join {
+        send_full_state_packet(socket, peer, "full-sync", now_ms)
+    } else {
+        send_state_packet(socket, peer, status, now_ms)
+    }
+}
+
+pub fn reject_player_conflict(socket: int, host: str, port: int) -> nil {
+    send_protocol_error(socket, host, port, "player already connected")
+    emit_udp_packet_status("player-conflict")
+}
+
+pub fn reject_peer_table_full(socket: int, host: str, port: int) -> nil {
+    send_protocol_error(socket, host, port, "peer table full")
+    emit_udp_packet_status("peer-table-full")
+}
+
+pub fn handle_sync_packet(socket: int, data: any, host: str, port: int, now_ms: int) -> nil {
+    if player_id_claimed_by_other_session(sync_packet_session_id(data), sync_packet_player_id(data)) {
+        reject_player_conflict(socket, host, port)
+        return nil
+    }
+
+    let cold_join = not peer_exists(sync_packet_session_id(data), sync_packet_player_id(data))
+    match remember_peer(host, port, sync_packet_session_id(data), sync_packet_player_id(data), now_ms, 0, sync_packet_client_seq(data)) {
+        Some(peer) => {
+            let status = if cold_join { "full-sync" } else { "sync" }
+            mark_peer_status(peer, status)
+            record_peer_received_packet(peer, sync_packet_client_seq(data))
+            send_peer_state_response(socket, peer, status, cold_join, now_ms)
+            emit_udp_packet_status(status)
+        }
+        None => {
+            reject_peer_table_full(socket, host, port)
+        }
+    }
+}
+
+pub fn handle_move_packet(socket: int, data: any, host: str, port: int, now_ms: int) -> nil {
+    if player_id_claimed_by_other_session(move_packet_session_id(data), move_packet_player_id(data)) {
+        reject_player_conflict(socket, host, port)
+        return nil
+    }
+
+    let cold_join = not peer_exists(move_packet_session_id(data), move_packet_player_id(data))
+    match remember_peer(host, port, move_packet_session_id(data), move_packet_player_id(data), now_ms, move_packet_command_id(data), move_packet_client_seq(data)) {
+        Some(peer) => {
+            let clock_state = res(ServerClock)
+            let _queued = queue_move_input(
+                peer,
+                clock_state.tick_count,
+                move_packet_client_seq(data),
+                move_packet_target_tick(data),
+                move_packet_command_id(data),
+                move_packet_target_x(data),
+                move_packet_target_y(data)
+            )
+            record_peer_received_packet(peer, move_packet_client_seq(data))
+            let status = (get(peer, PeerConnection) |> unwrap).last_status
+            send_peer_state_response(socket, peer, status, cold_join, now_ms)
+            emit_udp_packet_status(status)
+        }
+        None => {
+            reject_peer_table_full(socket, host, port)
+        }
+    }
+}
+
+pub fn handle_cast_packet(socket: int, data: any, host: str, port: int, now_ms: int) -> nil {
+    if player_id_claimed_by_other_session(cast_packet_session_id(data), cast_packet_player_id(data)) {
+        reject_player_conflict(socket, host, port)
+        return nil
+    }
+
+    let cold_join = not peer_exists(cast_packet_session_id(data), cast_packet_player_id(data))
+    match remember_peer(host, port, cast_packet_session_id(data), cast_packet_player_id(data), now_ms, cast_packet_command_id(data), cast_packet_client_seq(data)) {
+        Some(peer) => {
+            let clock_state = res(ServerClock)
+            let _queued = queue_cast_input(
+                peer,
+                clock_state.tick_count,
+                cast_packet_client_seq(data),
+                cast_packet_target_tick(data),
+                cast_packet_command_id(data),
+                cast_packet_dir_x(data),
+                cast_packet_dir_y(data),
+                cast_packet_fire_view_tick(data)
+            )
+            record_peer_received_packet(peer, cast_packet_client_seq(data))
+            let status = (get(peer, PeerConnection) |> unwrap).last_status
+            send_peer_state_response(socket, peer, status, cold_join, now_ms)
+            emit_udp_packet_status(status)
+        }
+        None => {
+            reject_peer_table_full(socket, host, port)
+        }
+    }
+}
+
+pub fn handle_disconnect_packet(data: any) -> nil {
+    let _client_seq = disconnect_packet_client_seq(data)
+    if disconnect_peer(disconnect_packet_session_id(data), disconnect_packet_player_id(data)) {
+        emit UdpPacketServed { status: "bye" }
+        emit UdpPeerDisconnected { count: 1, status: "peer-disconnect" }
+        flush_events()
+    } else {
+        emit_udp_packet_status("bye-miss")
+    }
+}
+
+pub fn handle_udp_packet(socket: int, data: any, host: str, port: int, now_ms: int) -> nil {
+    if is_sync_packet(data) {
+        handle_sync_packet(socket, data, host, port, now_ms)
+        return nil
+    }
+
+    if is_disconnect_packet(data) {
+        handle_disconnect_packet(data)
+        return nil
+    }
+
+    if is_move_order_packet(data) {
+        handle_move_packet(socket, data, host, port, now_ms)
+        return nil
+    }
+
+    if is_cast_packet(data) {
+        handle_cast_packet(socket, data, host, port, now_ms)
+        return nil
+    }
+
+    send_protocol_error(socket, host, port, "rejected")
+    emit_udp_packet_status("rejected")
+}
+
+pub fn pump_udp_match(socket: int, first_timeout_ms: int) -> nil {
+    let cfg = res(ServerConfig)
+    let mut remaining = cfg.udp_receive_budget
+    let mut timeout_ms = first_timeout_ms
+
+    while remaining > 0 {
+        match udp_recv_bytebuf_timeout(socket, cfg.udp_packet_bytes, timeout_ms) {
+            Some(packet) => {
+                handle_udp_packet(socket, packet[0], packet[1], packet[2], now_unix_ms())
+                remaining = remaining - 1
+                timeout_ms = 0
+            }
+            None => { return nil }
+        }
+    }
+}
+
+pub fn maybe_send_udp_snapshot(socket: int, ticks: int, now_ms: int) -> nil {
+    if ticks <= 0 { return nil }
+
+    for peer in entities(PeerConnection) {
+        let conn = get(peer, PeerConnection) |> unwrap
+        if conn.connected {
+            send_state_packet(socket, peer, "snapshot", now_ms)
+            emit UdpSnapshotSent { status: "snapshot" }
+            flush_events()
+        }
+    }
+}
+
+pub fn cleanup_udp_peers(now_ms: int) -> nil {
+    let expired = expire_idle_peers(now_ms)
+    if expired > 0 {
+        emit UdpPeerExpired { count: expired, status: "peer-expired" }
+        flush_events()
+    }
+}

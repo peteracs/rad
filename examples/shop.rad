@@ -1,0 +1,107 @@
+// =====================================================================
+//  Shop System — Economy with buy/sell events
+// =====================================================================
+
+component Name { value: "" }
+
+component Wallet { gold: 0 }
+
+component Stock { item: "", price: 0, qty: 0 }
+
+event Purchase { buyer, seller, item, price, qty }
+
+event Sale { seller, buyer, item, price, qty }
+
+event Refund { buyer, item, amount }
+
+on Purchase(e) {
+    let buyer_name = (get(e.buyer, Name) ?).value
+    let total = e.price * e.qty
+
+    // Check buyer has enough gold
+    let wallet = get(e.buyer, Wallet) ?
+    if wallet.gold < total {
+        print(f"  [DENIED] {buyer_name} can't afford {e.qty}x {e.item} (${total})")
+        return nil
+    }
+
+    // Deduct gold
+    set(e.buyer, Wallet { gold: wallet.gold - total })
+
+    // Add gold to seller
+    let seller_wallet = get(e.seller, Wallet) ?
+    set(e.seller, Wallet { gold: seller_wallet.gold + total })
+
+    print(f"  [BUY] {buyer_name} bought {e.qty}x {e.item} for ${total}")
+}
+
+on Refund(e) {
+    let w = get(e.buyer, Wallet) ?
+    set(e.buyer, Wallet { gold: w.gold + e.amount })
+    let n = (get(e.buyer, Name) ?).value
+    print(f"  [REFUND] {n} received ${e.amount} refund for {e.item}")
+}
+
+entity player {
+    Name { value: "Player" },
+    Wallet { gold: 500 }
+}
+
+entity merchant {
+    Name { value: "Merchant" },
+    Wallet { gold: 1000 }
+}
+
+fn print_wallets() {
+    let p = (get(player, Wallet) ?).gold
+    let m = (get(merchant, Wallet) ?).gold
+    print(f"  Player: ${p}  |  Merchant: ${m}")
+}
+
+fn main() -> any {
+    print("=== Shop System ===\n")
+
+    // Available items with prices
+    let items = ["Sword", "Shield", "Potion", "Scroll", "Ring"]
+    let prices = [150, 100, 25, 50, 200]
+
+    print("Shop inventory:")
+    for i in range(len(items)) {
+        print(f"  {items[i]}: ${prices[i]}")
+    }
+    print("")
+
+    print("Starting gold:")
+    print_wallets()
+    print("")
+
+    // Buy some items
+    emit Purchase { buyer: player, seller: merchant, item: "Sword", price: 150, qty: 1 }
+    emit Purchase { buyer: player, seller: merchant, item: "Potion", price: 25, qty: 3 }
+    emit Purchase { buyer: player, seller: merchant, item: "Shield", price: 100, qty: 1 }
+
+    print("")
+    print("After shopping:")
+    print_wallets()
+    print("")
+
+    // Try to buy something too expensive
+    emit Purchase { buyer: player, seller: merchant, item: "Ring", price: 200, qty: 2 }
+
+    // Refund the shield
+    emit Refund { buyer: player, item: "Shield", amount: 100 }
+
+    print("")
+    print("Final balances:")
+    print_wallets()
+
+    // Pipeline: analyze spending
+    let spent = [150, 75, 100]
+    let total_spent = spent |> reduce(0, fn(a, b) { return a + b })
+    let avg_purchase = total_spent / len(spent)
+    print("")
+    print("Spending analysis:")
+    print(f"  Total spent: ${total_spent}")
+    print(f"  Purchases: {len(spent)}")
+    print(f"  Average: ${avg_purchase}")
+}

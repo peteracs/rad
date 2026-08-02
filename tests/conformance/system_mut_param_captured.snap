@@ -1,0 +1,7 @@
+---
+source: tests\conformance\system_mut_param_captured.rad
+exit_code: 0
+---
+2
+1
+["a", "b", "c"]

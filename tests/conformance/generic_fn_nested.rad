@@ -1,0 +1,13 @@
+// backend: both
+fn identity < T > (x: T) -> T {
+    return x
+}
+
+fn wrap < T > (x: T) -> list < T > {
+    return [identity(x)]
+}
+
+print(wrap(9)[0])
+print(wrap("ok")[0])
+// expect: 9
+// expect: ok

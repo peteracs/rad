@@ -1,0 +1,8 @@
+use "../core/c-backend/src/lexer.rad"
+use "../core/c-backend/src/parser.rad"
+use "../core/c-backend/src/emit_c.rad"
+
+fn main() -> nil {
+    compile_file_to_c("benches/stress_subset.rad", "core/c-backend/target/platinum_output.c")
+    print("done")
+}

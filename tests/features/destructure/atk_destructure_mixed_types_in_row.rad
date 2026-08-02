@@ -1,0 +1,7 @@
+fn main() -> nil {
+    let data = [("alice", 30), ("bob", 25)]
+    let out = data |> filter(fn([name, age]) { return age > 26 })
+        |> map(fn([name, age]) { return f"{name} is {age}" })
+    print(len(out))
+    print(out[0])
+}

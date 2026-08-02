@@ -1,0 +1,60 @@
+// LEGION — the content-volume round (fake-port round 20): all 84 era
+// champions, generated straight from their .ini-derived stats, fielded
+// at once. Round 17 proved three kits compose; this proves the
+// TOOLCHAIN survives the real fan-out — an 85-module import graph, 84
+// content tables, one schedule brawling the whole roster.
+
+use "gen/legion_index.rad"
+use "gen/legion_core.rad"
+use "gen/c_annie.rad"
+use "gen/c_tryndamere.rad"
+
+fn check(ok: bool, id: str, detail: str) -> int {
+    if ok {
+        print(f"  pass  {id}")
+        return 1
+    }
+    print(f"  FAIL  {id}: {detail}")
+    return 0
+}
+
+fn main() -> nil {
+    let mut passed = 0
+    let total = 6
+
+    // ---- the muster: every champion spawns through its own module
+    let roster = muster()
+    passed = passed + check(len(roster) == 84, "muster-84", f"{len(roster)}")
+
+    // ---- generated stats are the era's: annie 424+76/lvl, level 18
+    let annie = require_entity("annie")
+    level_to(annie, ANNIE, 18)
+    let a18 = require(annie, LChamp)
+    passed = passed + check(a18.max_hp == 424.0 + 76.0 * 17.0, "annie-curve", f"{a18.max_hp}")
+
+    // ---- both brawl shapes made it through generation
+    let shapes = roster |> map(fn(e) { return require(e, LChamp).shape })
+    let ranged = shapes |> filter(fn(s) { return s == "ranged" }) |> len
+    let melee = shapes |> filter(fn(s) { return s == "melee" }) |> len
+    passed = passed + check(ranged > 20 and melee > 20 and ranged + melee == 84, "shapes", f"r={ranged} m={melee}")
+
+    // ---- the brawl: 84 champions, 600 ticks, one schedule
+    let t0 = clock()
+    for _ in range(0, 600) {
+        schedule [brawl]
+    }
+    let dt = clock() - t0
+    let living = query { LChamp } |> filter(fn(e) { return require(e, LChamp).alive })
+    let fallen = 84 - len(living)
+    print(f"  brawl: {fallen} fallen, {len(living)} standing, 600 ticks in {dt:.2}s")
+    passed = passed + check(fallen > 10, "carnage", f"only {fallen} fell")
+    passed = passed + check(len(living) > 0, "survivors", "everyone died")
+
+    // ---- determinism at volume: the whole battlefield digests stably
+    let d1 = world_digest()
+    let d2 = world_digest()
+    passed = passed + check(d1 == d2, "digest-stable", "digest flapped")
+
+    print(f"{passed}/{total} passed")
+    assert(passed == total, "the legion must hold")
+}

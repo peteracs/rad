@@ -1,0 +1,68 @@
+state TicketState {
+    Open { on StartWork -> InProgress }
+    InProgress { on SubmitPR -> InReview }
+    InReview {
+
+        on Approve -> Closed
+
+        on Reject -> InProgress
+    }
+    Closed { }
+}
+
+type TransitionPayload {
+    StartWork { assignee: str }
+    SubmitPR { pr_url: str }
+    Approve { reviewer: str }
+    Reject { reason: str }
+}
+
+fn apply_transition(ticket: TicketState, event_name: str, payload: TransitionPayload) -> TicketState {
+    let Ok(next) = transition(ticket, event_name) else {
+        print("Unexpected transition failure:", event_name)
+        return ticket
+    }
+
+    match payload {
+        StartWork { assignee } => { print("Ticket assigned to:", assignee) }
+        SubmitPR { pr_url } => { print("PR submitted at:", pr_url) }
+        Approve { reviewer } => { print("Approved by:", reviewer) }
+        Reject { reason } => { print("Rejected because:", reason) }
+    }
+
+    return next
+}
+
+fn main() -> nil {
+    let mut ticket = TicketState::Open
+    assert(ticket is Open, "initial state")
+
+    ticket = apply_transition(ticket, "StartWork", TransitionPayload::StartWork { assignee: "wagie_dev" })
+    assert(ticket is InProgress, "after StartWork")
+
+    ticket = apply_transition(ticket, "SubmitPR", TransitionPayload::SubmitPR { pr_url: "github.com/pulls/1" })
+    assert(ticket is InReview, "after SubmitPR")
+
+    let bogus = transition(ticket, "StartWork")
+    match bogus {
+        Err(msg) => { print("Handled invalid transition (InReview + StartWork):", msg) }
+        Ok(_) => { assert(false, "expected Err") }
+    }
+
+    ticket = apply_transition(ticket, "Reject", TransitionPayload::Reject { reason: "needs tests" })
+    assert(ticket is InProgress, "after Reject")
+
+    ticket = apply_transition(ticket, "SubmitPR", TransitionPayload::SubmitPR { pr_url: "github.com/pulls/2" })
+    assert(ticket is InReview, "second review")
+
+    ticket = apply_transition(ticket, "Approve", TransitionPayload::Approve { reviewer: "chad_lead" })
+    assert(ticket is Closed, "done")
+
+    print("Final state:", variant_of(ticket))
+
+    let illegal = transition(TicketState::Open, "Approve")
+    match illegal {
+        Err(msg) => { print("Expected illegal Open -> Approve:", msg) }
+        Ok(_) => { assert(false, "Open -> Approve must fail") }
+    }
+}

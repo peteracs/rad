@@ -1,0 +1,14 @@
+---
+source: tests\conformance\test_separate_multi.rad
+exit_code: 0
+---
+Hero hp=80 at (10,20)
+Goblin hp=30 at (5,5)
+hero alive: true
+goblin alive: true
+hero score: 150
+clamp(15,0,10) = 10
+abs_val(-42) = 42
+fib(10) = 55
+ghost alive: false
+done

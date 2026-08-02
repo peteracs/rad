@@ -1,0 +1,18 @@
+// backend: both
+component Bag {
+    xs: []
+}
+
+fn main() -> nil {
+    let e = spawn(Bag { xs: [1, 2] })
+
+    let bag = unwrap(get(e, Bag))
+    let mut local = bag.xs
+    local = push(local, 99)
+
+    let after = unwrap(get(e, Bag))
+    print(len(local))
+    print(len(after.xs))
+}
+// expect: 3
+// expect: 2

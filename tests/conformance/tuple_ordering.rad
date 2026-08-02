@@ -1,0 +1,42 @@
+// Tuple keys order lexicographically — multi-key ranking is min_by /
+// sort_by with a tuple, the call-for-help ladder's natural shape:
+// rank by (inverted rung, distance).
+
+struct Threat { name: str = "", rung: int = 1, d: float = 0.0 }
+
+fn main() -> nil {
+    let threats = [
+        Threat { name: "far-champ", rung: 5, d: 9.0 },
+        Threat { name: "near-minion", rung: 1, d: 1.0 },
+        Threat { name: "near-champ", rung: 5, d: 3.0 },
+        Threat { name: "mid-minion", rung: 3, d: 2.0 },
+    ]
+
+    // top rung first, distance breaks ties
+    let best = threats |> min_by(fn(t) { return (-t.rung, t.d) })
+    match best {
+        Some { value: t } => { print(t.name) }      // near-champ
+        None => { print("none") }
+    }
+
+    // the whole ranking, as sort_by with the same key
+    let ranked = threats |> sort_by(fn(t) { return (-t.rung, t.d) })
+    print(ranked |> map(.name))
+    // ["near-champ", "far-champ", "mid-minion", "near-minion"]
+
+    // deep ties recurse element by element
+    let rows = [(1, (2, "b")), (1, (2, "a")), (0, (9, "z"))]
+    print(rows |> sort_by(fn(r) { return r }))
+    // [(0, (9, "z")), (1, (2, "a")), (1, (2, "b"))]
+
+    // mixed numeric elements promote per slot
+    print([(1, 2.5), (1, 2)] |> sort_by(fn(r) { return r }))
+    // [(1, 2), (1, 2.5)]
+
+    // max_by takes the other end
+    let strongest = threats |> max_by(fn(t) { return (t.rung, -t.d) })
+    match strongest {
+        Some { value: t } => { print(t.name) }      // near-champ
+        None => { print("none") }
+    }
+}

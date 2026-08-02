@@ -1,0 +1,12 @@
+// 10M-iteration arithmetic loop — interpreter dispatch + integer math.
+fn main() -> nil {
+    let t0 = now_unix_ms()
+    let mut acc = 0
+    let mut i = 0
+    while i < 10000000 {
+        acc = acc + i % 7
+        i = i + 1
+    }
+    let t1 = now_unix_ms()
+    print(f"RESULT {acc} MS {t1 - t0}")
+}

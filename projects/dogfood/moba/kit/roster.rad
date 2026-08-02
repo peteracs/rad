@@ -1,0 +1,80 @@
+// KIT/ROSTER — the scale test (fake-port round 17): three champions,
+// three SHAPES (skillshot artillery, targeted caster, melee stat-stick),
+// one set of shared libraries. What round 9 proved for one kit, this
+// file must prove for N: no name collisions, no cross-kit event bleed,
+// one schedule running every kit's systems side by side.
+
+use "core.rad"
+use "surge.rad"
+use "missiles.rad"
+use "ezreal.rad"
+use "annie.rad"
+use "trynd.rad"
+
+fn tick(n: int) -> nil {
+    for _ in range(0, n) {
+        schedule [fly_skillshots, age_surge, age_stuns]
+    }
+}
+
+fn main() -> nil {
+    let ez = entity "ez" {
+        Pos {}, Vitals { team: 0, ad: 120.0, ap: 50.0 }, Surge {},
+    }
+    let annie = entity "annie" {
+        Pos { at: (4.0, 0.0) }, Vitals { team: 0, ap: 100.0 },
+        AnnieKit {},
+    }
+    let trynd = entity "trynd" {
+        Pos { at: (8.0, 0.0) }, Vitals { team: 0, hp: 300.0, ad: 100.0 },
+        TryndKit {},
+    }
+    let d1 = entity "d1" { Pos { at: (16.0, 0.0) }, Vitals { team: 1, hp: 260.0 } }
+    let d2 = entity "d2" { Pos { at: (20.0, 0.0) }, Vitals { team: 1, hp: 800.0 } }
+
+    // ---- annie: three casts charge pyromania, the 4th stuns; the
+    // killing Q refunds its mana
+    print("annie:")
+    annie_w(annie, 1, (16.0, 0.0))     // hits both dummies (pyro 1)
+    annie_q(annie, 1, d2)              // pyro 2
+    annie_q(annie, 1, d2)              // pyro 3
+    let mana_before = require(annie, AnnieKit).mana
+    annie_q(annie, 1, d1)              // pyro 4: STUN + kill -> refund
+    tick(2)                            // damage applies, then the kill cascades
+    assert(has(d1, Stunned), "4th cast must stun")
+    assert(require(annie, AnnieKit).mana == mana_before, "killing Q must refund")
+    print(f"  pyro cycle + refund hold; d1 hp={require(d1, Vitals).hp:.0}")
+
+    // ---- ezreal: his passive is HIS — annie's casts gave him nothing,
+    // and his Q still refunds his own cooldowns
+    print("ez:")
+    assert(require(ez, Surge).stacks == 0, "annie's casts must not stack ez")
+    ezreal_setup(ez, {"w": 90})
+    cast_q(ez, 3, (30.0, 0.0))
+    tick(25)                           // 16 m at 0.8/tick, plus the hit flush
+    assert(require(ez, Surge).stacks > 0, "own Q must stack RSF")
+    assert(ezreal_cooldown(ez, "w") == 60, "own Q must refund 1s")
+    print(f"  RSF={require(ez, Surge).stacks} w-cd={ezreal_cooldown(ez, \"w\")}")
+
+    // ---- trynd: rage from his own blows, the heal consumes it, and
+    // five undying seconds where a 900-damage nuke cannot kill him
+    print("trynd:")
+    emit Damage { source: trynd, target: d2, amount: 60.0, kind: "physical" }
+    emit Damage { source: trynd, target: d2, amount: 60.0, kind: "physical" }
+    tick(1)
+    assert(require(trynd, TryndKit).rage == 2, "two blows, two stacks")
+    trynd_q(trynd, 1)
+    assert(require(trynd, TryndKit).rage == 0, "bloodlust consumes rage")
+
+    trynd_r(trynd)
+    emit Damage { source: d2, target: trynd, amount: 900.0, kind: "magic" }
+    tick(1)
+    assert(require(trynd, Vitals).hp == 1.0, "undying rage holds at 1")
+    tick(UNDYING_TICKS + 2)
+    emit Damage { source: d2, target: trynd, amount: 900.0, kind: "magic" }
+    tick(1)
+    assert(require(trynd, Vitals).hp < 0.0, "after the rage, death resumes")
+    print(f"  survived at 1 hp, died after expiry")
+
+    print("roster: 3 kits, one schedule, no bleed")
+}

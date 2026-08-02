@@ -1,0 +1,66 @@
+// Match EXPRESSIONS with bare-expression arms: `pat => expr` is sugar
+// for `pat => { expr }`, guards compose, and variant patterns must
+// actually match (regression: the expression compiler used to emit
+// qualified pattern names that never equaled the bare variant, so every
+// variant arm fell through to nil — silently).
+
+pub type Cc {
+    Free {}
+    Stunned {}
+    Taunted { by: 0 }
+}
+
+pub type Order {
+    Move { to: (float, float) }
+    Hold {}
+}
+
+pure fn effective(cc: Cc, queue: list) -> Order {
+    return match cc {
+        Cc::Taunted { by: t } when t > 0 => Order::Move { to: (float(t), 0.0) }
+        Cc::Taunted { by: _ } => Order::Hold {}
+        Cc::Stunned {} => Order::Hold {}
+        Cc::Free {} when len(queue) == 0 => Order::Hold {}
+        Cc::Free {} => queue[0]
+    }
+}
+
+pure fn describe(o: Order) -> str {
+    return match o {
+        Order::Move { to: d } => f"move {d}"
+        Order::Hold {} => "hold"
+    }
+}
+
+fn main() -> nil {
+    let q = [Order::Move { to: (4.0, 0.0) }]
+
+    print(describe(effective(Cc::Free {}, q)))            // move (4.0, 0.0)
+    print(describe(effective(Cc::Free {}, [])))           // hold
+    print(describe(effective(Cc::Stunned {}, q)))         // hold
+    print(describe(effective(Cc::Taunted { by: 7 }, q)))  // move (7.0, 0.0)
+    print(describe(effective(Cc::Taunted { by: 0 }, q)))  // hold (guard falls through)
+
+    // literal and wildcard arms as expressions
+    let n = 2
+    let word = match n {
+        1 => "one"
+        2 => "two"
+        _ => "many"
+    }
+    print(word)                                            // two
+
+    // block arms still work and yield their last expression
+    let doubled = match n {
+        2 => {
+            let x = n * 2
+            x
+        }
+        _ => 0
+    }
+    print(doubled)                                         // 4
+
+    // drop_first: the queue-advance dual of drop_last
+    print(drop_first([1, 2, 3]))                           // [2, 3]
+    print(drop_first(q) |> len)                            // 0
+}

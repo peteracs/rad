@@ -1,0 +1,6 @@
+// ILLEGAL: reaching a non-pub declaration through an alias. Spec 3.10.
+use "helper_private_lib.rad" as lib
+
+fn main() -> nil {
+    print(f"{lib.secret(5)}")
+}

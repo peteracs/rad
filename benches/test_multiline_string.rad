@@ -1,0 +1,6 @@
+fn main() -> nil {
+    let s = \\Hello
+            \\World
+            \\  Indented
+    print(s)
+}

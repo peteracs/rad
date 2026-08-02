@@ -1,0 +1,19 @@
+// backend: both
+// Indexing into a mixed-type list works correctly after widening to list<any>
+fn crack() {
+    let shift = 7
+    let text = "decrypted"
+    return [shift, text]
+}
+
+let result = crack()
+let found_shift = result[0]
+let found_text = result[1]
+print(f"shift: {found_shift}")
+// expect: shift: 7
+print(f"text: {found_text}")
+// expect: text: decrypted
+print(found_shift == 7)
+// expect: true
+print(found_text == "decrypted")
+// expect: true

@@ -1,0 +1,49 @@
+// backend: both
+// Division semantics: int/int stays int (truncates toward zero)
+
+// Exact division stays int
+let a = 10 / 2
+print(a)
+// expect: 5
+
+// Non-exact int division truncates
+let b = 10 / 3
+print(b)
+// expect: 3
+
+// Float division
+let c = 10.0 / 3.0
+print(c)
+// expect: 3.3333333333333335
+
+// Mixed int/float division
+let d = 10 / 3.0
+print(d)
+// expect: 3.3333333333333335
+
+// int_div: truncating integer division
+let e = int_div(10, 3)
+print(e)
+// expect: 3
+
+let f = int_div(7, 2)
+print(f)
+// expect: 3
+
+// int_div truncates toward zero (negative)
+let g = int_div(-7, 2)
+print(g)
+// expect: -3
+
+// int_div with exact division
+let h = int_div(10, 5)
+print(h)
+// expect: 2
+
+// int_div is pure — usable in pipelines
+pure fn half(x: int) -> int {
+    return int_div(x, 2)
+}
+let nums = [10, 20, 30] |> map(half)
+print(nums)
+// expect: [5, 10, 15]

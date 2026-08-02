@@ -1,0 +1,40 @@
+// =====================================================================
+//  Rad — System ordering: after / before + schedule [ ... ]
+//  The scheduler topologically sorts the listed systems so dependencies
+//  run first, no matter the order they appear in schedule [ ... ].
+// =====================================================================
+
+component Row { id: 0 }
+
+entity r { Row { id: 1 } }
+
+// Prep must run before S1 (declared from Prep's point of view).
+system Prep(x: Row) before S1 {
+    print("  step 0: Prep (before S1)")
+}
+
+system S1(x: Row) {
+    print("  step 1: S1")
+}
+
+system S2(x: Row) after S1 {
+    print("  step 2: S2 (after S1)")
+}
+
+system S3(x: Row) after S2 {
+    print("  step 3: S3 (after S2)")
+}
+
+system S4(x: Row) after S3 {
+    print("  step 4: S4 (after S3)")
+}
+
+fn main() -> any {
+    print("=== System schedule ===")
+    print("Chain: Prep -> S1 -> S2 -> S3 -> S4")
+    print("First run: scrambled list still respects edges:\n")
+    schedule [S4, S2, Prep, S1, S3]
+
+    print("\nSecond run: different permutation, same topological order:\n")
+    schedule [S1, S4, S3, S2, Prep]
+}

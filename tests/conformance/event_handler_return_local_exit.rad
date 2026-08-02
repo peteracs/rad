@@ -1,0 +1,17 @@
+// backend: both
+event E { n }
+
+on E(e) {
+    if e.n == 1 { return nil }
+    print(e.n)
+}
+
+fn main() -> nil {
+    emit E { n: 1 }
+    flush_events()
+    print("after")
+    emit E { n: 2 }
+    flush_events()
+}
+// expect: after
+// expect: 2

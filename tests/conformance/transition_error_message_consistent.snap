@@ -1,0 +1,8 @@
+---
+source: tests\conformance\transition_error_message_consistent.rad
+exit_code: 1
+---
+
+---stderr---
+Error: [line 8] in main: unwrap() called on Result::Err: No transition on 'nope' from state 'Gate::Open'
+  hint: match on Ok/Err to handle the failure, or expect(value, "why") to rename it

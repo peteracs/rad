@@ -1,0 +1,54 @@
+// Dogfood: List item #6 — retroactive edits with recorded io.
+//
+// An edited main.rad: stronger Decay (-4 hp) and MORE io than the original
+// session performed (an extra read_file and an extra clock). Replayed
+// against the Phase 1 trace, the oracle serves the recorded answers — the
+// extra calls are repeatable reads of the last recorded value:
+//
+//   rad replay projects/dogfood/timetravel/trace.radr --with projects/dogfood/timetravel/main_v2.rad
+
+component Health { hp: 100 }
+
+component Gold { amount: 0 }
+
+event Loot { amount }
+
+system Decay(h: mut Health) {
+    h = Health { hp: h.hp - 4 }   // <- the edit: decay hits harder
+}
+
+on Loot(e) {
+    let g = get_resource(Treasury) |> unwrap
+    set_resource(Treasury, Treasury { gold: g.gold + e.amount })
+}
+
+resource Treasury { gold: 0 }
+
+let hero = spawn("hero", Health { hp: 100 }, Gold { amount: 10 })
+
+print("=== Retro: edited code, original session's inputs ===")
+
+let started = clock()
+
+// Two reads where the original recorded one: the second is a repeatable
+// read served from the oracle, the file is never touched.
+let config = read_file("projects/dogfood/timetravel/loot_table.txt")
+let config2 = read_file("projects/dogfood/timetravel/loot_table.txt")
+print(f"loot table (read twice, one recorded): {config == config2}")
+
+for _i in range(0, 3) {
+    emit Loot { amount: rand_int(10, 50) }
+    flush_events()
+}
+
+let before = fork()
+let after = simulate(before, [system::Decay], 5)
+print(f"decay diff: {diff(before, after)}")
+
+let t = get_resource(Treasury) |> unwrap
+let h = get(hero, Health) |> unwrap
+print(f"treasury: {t.gold}, hero hp: {h.hp}")
+
+// Three clock calls vs two recorded: the third repeats the last reading.
+print(f"elapsed: {clock() - started >= 0.0}")
+print(f"frozen clock: {clock() == clock()}")

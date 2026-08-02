@@ -1,0 +1,51 @@
+// BUG 04 control: is update(R) inside a system broken by itself, or only when
+// the system is parallelised with another writer of R?
+//
+// If update() in a system were simply broken (always writing against a stale
+// base), these controls would also be wrong and BUG 04 would be a different,
+// simpler bug. They are all correct, which isolates the fault to conflict
+// analysis / parallel merge.
+
+resource R1 { n: 0 }
+resource R2 { n: 0 }
+resource R3 { n: 0 }
+resource D1 { x: 0 }
+
+fn bump_r3() -> nil {
+    update(R3) { n = res(R3).n + 1 }
+}
+
+system UpdateWriter(_d: mut D1) {
+    update(R1) { n = res(R1).n + 1 }
+}
+
+system MutWriter(r: mut R2) {
+    r.n = r.n + 100
+}
+
+system IndirectWriter(_d: mut D1) {
+    bump_r3()
+}
+
+// seed all three to 100 so we can see whether the pre-existing value survives
+set_resource(R1, R1 { n: 100 })
+set_resource(R2, R2 { n: 100 })
+set_resource(R3, R3 { n: 100 })
+
+// each ALONE in its own schedule call -> no parallel partner -> no race
+schedule [UpdateWriter]
+schedule [MutWriter]
+schedule [IndirectWriter]
+
+print(f"update() alone           R1={res(R1).n}   expected 101")
+print(f"mut param alone          R2={res(R2).n}   expected 200")
+print(f"fn -> update() alone     R3={res(R3).n}   expected 101")
+print("")
+
+// and the read side: does a system SEE a resource written by an earlier
+// schedule call? (sequential visibility control)
+system Reader(_d: mut D1) {
+    update(R1) { n = res(R1).n * 10 }
+}
+schedule [Reader]
+print(f"sequential visibility    R1={res(R1).n}   expected 1010")

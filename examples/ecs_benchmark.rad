@@ -1,0 +1,66 @@
+// =====================================================================
+//  ECS Benchmark — Performance test with many entities
+// =====================================================================
+
+component Pos { x: 0.0, y: 0.0 }
+
+component Vel { dx: 0.0, dy: 0.0 }
+
+component Tag { label: "" }
+
+system MoveAll(pos: mut Pos, vel: Vel) {
+    pos.x = pos.x + vel.dx
+    pos.y = pos.y + vel.dy
+}
+
+fn main() -> any {
+    print("=== ECS Benchmark ===\n")
+
+    let count = 100
+    print(f"Spawning {count} entities...")
+
+    let mut ids = []
+    for i in range(count) {
+        let vx = (i % 10) * 0.1
+        let vy = (i % 7) * 0.15
+        let id = spawn(f"e{i}",
+            Pos { x: 0.0, y: 0.0 },
+            Vel { dx: vx, dy: vy }
+        )
+        ids = push(ids, id)
+    }
+    print(f"Spawned {len(ids)} entities.\n")
+
+    let ticks = 50
+    print(f"Running {ticks} simulation ticks...")
+
+    for t in range(ticks) {
+        MoveAll()
+    }
+
+    // Sample some positions
+    print(f"\nSample positions after {ticks} ticks:")
+    let samples = [0, 25, 50, 75, 99]
+    for i in samples {
+        let pos = get(ids[i], Pos) ?
+        let vel = get(ids[i], Vel) ?
+        print(f"  Entity {i}: pos=({pos.x}, {pos.y}) vel=({vel.dx}, {vel.dy})")
+    }
+
+    // Stats via pipeline
+    let positions = ids
+    |> map(fn(id) { return (get(id, Pos) ?).x + (get(id, Pos) ?).y })
+    let total_distance = positions |> reduce(0.0, fn(a, b) { return a + b })
+    let max_dist = positions |> reduce(0.0, fn(a, b) { if a > b { return a } return b })
+    print("\nStats:")
+    print(f"  Total combined distance: {total_distance}")
+    print(f"  Max distance from origin: {max_dist}")
+    print(f"  Entities processed per tick: {count}")
+    print(f"  Total entity updates: {count * ticks}")
+
+    for id in ids {
+        despawn(id)
+    }
+
+    print("\nBenchmark complete.")
+}

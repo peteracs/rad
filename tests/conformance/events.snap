@@ -1,0 +1,9 @@
+---
+source: tests\conformance\events.rad
+exit_code: 0
+---
+10
+20
+30
+a
+b

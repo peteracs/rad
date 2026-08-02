@@ -1,0 +1,8 @@
+---
+source: tests\conformance\pop_returns_shortened_list.rad
+exit_code: 0
+---
+3
+y
+[3]
+[1, 2]

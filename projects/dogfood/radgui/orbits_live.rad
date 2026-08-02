@@ -1,0 +1,87 @@
+// RADGUI dogfood: live orbits. Forces Tick animation (rAF -> rad events),
+// Bounds repositioning every frame (the render delta carries exactly the
+// moons that moved), and the image widget (the planet is an inline SVG).
+
+use "lib_gui.rad"
+
+component Moon { radius: int = 0, speed: int = 0, angle: int = 0 }
+
+component StartBtn { z: int = 0 }
+
+component StopBtn { z: int = 0 }
+
+let SIZE = 320
+let HALF = 160
+
+fn place_moon(m: entity) -> nil {
+    let o = get(m, Moon) |> unwrap
+    let a = o.angle % 360
+    // diamond "trig" — integer-only orbit
+    let mut dx = 0
+    let mut dy = 0
+    if a < 90 {
+        dx = a
+        dy = 90 - a
+    } else { if a < 180 {
+        dx = 180 - a
+        dy = 0 - (a - 90)
+        } else { if a < 270 {
+            dx = 0 - (a - 180)
+            dy = 0 - (270 - a)
+            } else {
+                dx = 0 - (360 - a)
+                dy = a - 270
+    } } }
+    ui_place(m, HALF - 12 + dx * o.radius / 90, HALF - 12 + dy * o.radius / 90, 24, 24)
+}
+
+on Tick(_e) {
+    for m in entities(Moon) {
+        let o = get(m, Moon) |> unwrap
+        update(m, Moon) { angle = (o.angle + o.speed) % 360 }
+        place_moon(m)
+    }
+}
+
+on Click(e) {
+    if has(e.target, StartBtn) { ui_enable_tick(true) }
+    if has(e.target, StopBtn) { ui_enable_tick(false) }
+}
+
+fn main() -> nil {
+    ui_title("RADGUI orbits")
+
+    let root = ui_root()
+    update(root, Style) { pad = 12, gap = 10 }
+
+    let bar = ui_row(root)
+    update(bar, Style) { gap = 8 }
+    let start = ui_button(bar, "start")
+    set(start, StartBtn { z: 0 })
+    let stop = ui_button(bar, "stop")
+    set(stop, StopBtn { z: 0 })
+
+    let sky = ui_panel(root, SIZE, SIZE)
+    update(sky, Style) { bg = "#0b0b14", border = "1px solid #262636" }
+    let sky_name = name_of(sky)
+
+    let planet = ui_image(sky,
+        "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='48' height='48'><circle cx='24' cy='24' r='22' fill='%23b58cff'/><circle cx='17' cy='18' r='6' fill='%23d4c2ff'/></svg>",
+        "the planet")
+    update(planet, Widget) { parent = sky_name }
+    ui_place(planet, HALF - 24, HALF - 24, 48, 48)
+
+    let mut k = 0
+    for spec in [(60, 3), (105, 5), (140, 2)] {
+        k = k + 1
+        let n = fresh_id()
+        let _m = entity f"moon-{k}" {
+            Widget { kind: "label", parent: sky_name, order: n },
+            Style { size: 18, anim: 120 },
+            Text { value: "🌑" },
+            Moon { radius: spec[0], speed: spec[1], angle: k * 117 },
+            Bounds {},
+        }
+        place_moon(get_entity(f"moon-{k}"))
+    }
+}

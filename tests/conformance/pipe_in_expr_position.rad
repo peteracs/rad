@@ -1,0 +1,34 @@
+// Pipelines are expressions: they must produce correct results with
+// values already on the operand stack — f-string parts, call
+// arguments, binary operands, list elements. Pins two VM bugs where
+// fused pipeline loops aliased operand-stack values through local
+// slots (vectorized accumulator + scalar loop fallback).
+
+fn shout(s: str) -> str {
+    return s + "!"
+}
+
+fn wrap(prefix: str, xs: list) -> list {
+    return push(xs, prefix)
+}
+
+fn main() -> nil {
+    let xs = [3, 1, 2]
+
+    // vectorizable body (pure arithmetic) in expression position
+    print(f"vec: {xs |> map(fn(v) { return v * 2 })}")
+    print(wrap("pad", xs |> map(fn(v) { return v + 10 })))
+    print(1 + (xs |> map(fn(v) { return v * 2 }))[0])
+
+    // call-bearing body (not vectorizable) in expression position
+    let names = ["b", "a"]
+    print(f"calls: {names |> map(fn(s) { return shout(s) })}")
+    print(wrap("pad", names |> filter(fn(s) { return s == "a" })))
+
+    // chained map+filter inside an f-string
+    print(f"chain: {xs |> filter(fn(v) { return v > 1 }) |> map(fn(v) { return v * v })}")
+
+    // statement position still fuses (the fast path keeps working)
+    let doubled = xs |> map(fn(v) { return v * 2 })
+    print(doubled)
+}

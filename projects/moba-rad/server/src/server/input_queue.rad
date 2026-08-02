@@ -1,0 +1,528 @@
+use "state.rad"
+use "../sim/components.rad"
+use "../world/scene.rad"
+use "../world/avatars.rad"
+use "../sim/movement.rad"
+use "../sim/lag_compensation.rad"
+use "../sim/projectiles.rad"
+use "replay_log.rad"
+
+pub component PeerConnection {
+    indexed key: str = "",
+    connected: bool = true,
+    session_id: int = 0,
+    player_id: int = 1,
+    host: str = "",
+    port: int = 0,
+    last_seen_ms: int = 0,
+    last_command_id: int = 0,
+    last_client_seq: int = 0,
+    received_client_seq: int = 0,
+    received_ack_bits: int = 0,
+    last_applied_client_seq: int = 0,
+    applied_ack_bits: int = 0,
+    late_inputs: int = 0,
+    future_inputs: int = 0,
+    duplicate_inputs: int = 0,
+    overwritten_inputs: int = 0,
+    last_status: str = "idle"
+}
+
+pub component PeerInputRing {
+    active: list < bool > = [
+        false, false, false, false, false, false, false, false,
+        false, false, false, false, false, false, false, false,
+        false, false, false, false, false, false, false, false,
+        false, false, false, false, false, false, false, false
+    ],
+    target_ticks: list < int > = [
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0
+    ],
+    client_seqs: list < int > = [
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0
+    ],
+    command_ids: list < int > = [
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0
+    ],
+    target_xs: list < float > = [
+        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
+    ],
+    target_ys: list < float > = [
+        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
+    ]
+}
+
+pub component PeerCastRing {
+    active: list < bool > = [
+        false, false, false, false, false, false, false, false,
+        false, false, false, false, false, false, false, false,
+        false, false, false, false, false, false, false, false,
+        false, false, false, false, false, false, false, false
+    ],
+    target_ticks: list < int > = [
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0
+    ],
+    fire_view_ticks: list < int > = [
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0
+    ],
+    client_seqs: list < int > = [
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0
+    ],
+    command_ids: list < int > = [
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0
+    ],
+    dir_xs: list < float > = [
+        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
+    ],
+    dir_ys: list < float > = [
+        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+        0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
+    ]
+}
+
+pub fn max_peers() -> int {
+    return 8
+}
+
+pub fn input_queue_slots() -> int {
+    return 32
+}
+
+pub fn peer_key(session_id: int, player_id: int) -> str {
+    return f"{session_id}:{player_id}"
+}
+
+pub fn peer_count() -> int {
+    let mut count = 0
+    for peer in entities(PeerConnection) {
+        let conn = get(peer, PeerConnection) |> unwrap
+        if conn.connected { count = count + 1 }
+    }
+    return count
+}
+
+pub fn peer_exists(session_id: int, player_id: int) -> bool {
+    match lookup(PeerConnection, "key", peer_key(session_id, player_id)) {
+        Some(_) => { return true }
+        None => { return false }
+    }
+}
+
+pub fn player_id_claimed_by_other_session(session_id: int, player_id: int) -> bool {
+    for peer in entities(PeerConnection) {
+        let conn = get(peer, PeerConnection) |> unwrap
+        if conn.connected and conn.player_id == player_id and conn.session_id != session_id {
+            return true
+        }
+    }
+    return false
+}
+
+pub fn expire_idle_peers(now_ms: int) -> int {
+    let cfg = res(ServerConfig)
+    let mut expired = 0
+    for peer in entities(PeerConnection) {
+        let conn = get(peer, PeerConnection) |> unwrap
+        if conn.connected and now_ms - conn.last_seen_ms > cfg.peer_timeout_ms {
+            despawn_projectiles_for(conn.player_id)
+            remove_history_for(conn.player_id)
+            despawn_player_avatar_if_present(conn.player_id)
+            despawn(peer)
+            expired = expired + 1
+        }
+    }
+    return expired
+}
+
+pub fn disconnect_peer(session_id: int, player_id: int) -> bool {
+    match lookup(PeerConnection, "key", peer_key(session_id, player_id)) {
+        Some(peer) => {
+            despawn_projectiles_for(player_id)
+            remove_history_for(player_id)
+            despawn_player_avatar_if_present(player_id)
+            despawn(peer)
+            return true
+        }
+        None => {
+            return false
+        }
+    }
+}
+
+pub fn remember_peer(host: str, port: int, session_id: int, player_id: int, now_ms: int, command_id: int, client_seq: int) -> any {
+    let key = peer_key(session_id, player_id)
+    match lookup(PeerConnection, "key", key) {
+        Some(peer) => {
+            let conn = get(peer, PeerConnection) |> unwrap
+            update(peer, PeerConnection) {
+                connected = true,
+                host = host,
+                port = port,
+                last_seen_ms = now_ms,
+                last_command_id = command_id,
+                last_client_seq = max(conn.last_client_seq, client_seq)
+            }
+            return Some(peer)
+        }
+        None => {
+            if player_id_claimed_by_other_session(session_id, player_id) { return None }
+            if peer_count() >= max_peers() { return None }
+            let peer = spawn(f"peer_{session_id}_{player_id}",
+                PeerConnection {
+                    key: key,
+                    connected: true,
+                    session_id: session_id,
+                    player_id: player_id,
+                    host: host,
+                    port: port,
+                    last_seen_ms: now_ms,
+                    last_command_id: command_id,
+                    last_client_seq: client_seq
+                },
+                PeerInputRing {},
+                PeerCastRing {}
+            )
+            // Materialize the peer's avatar immediately so an idle (connected but
+            // not-yet-moved) player is broadcast in snapshots and visible to
+            // everyone else, not just after their first move order.
+            let _avatar = player_avatar(player_id)
+            return Some(peer)
+        }
+    }
+}
+
+pub fn pending_move_input_count(peer: entity) -> int {
+    let ring = get(peer, PeerInputRing) |> unwrap
+    let mut count = 0
+    let mut i = 0
+    while i < input_queue_slots() {
+        if ring.active[i] { count = count + 1 }
+        i = i + 1
+    }
+    return count
+}
+
+pub fn pending_cast_input_count(peer: entity) -> int {
+    let ring = get(peer, PeerCastRing) |> unwrap
+    let mut count = 0
+    let mut i = 0
+    while i < input_queue_slots() {
+        if ring.active[i] { count = count + 1 }
+        i = i + 1
+    }
+    return count
+}
+
+pub fn input_ring_slot(target_tick: int) -> int {
+    let slots = input_queue_slots()
+    let mut slot = target_tick % slots
+    if slot < 0 { slot = slot + slots }
+    return slot
+}
+
+pub fn advance_ack_bits(last_seq: int, bits: int, applied_seq: int) -> int {
+    if applied_seq <= 0 { return bits }
+    if last_seq <= 0 { return 1 }
+    if applied_seq == last_seq { return bits | 1 }
+    if applied_seq < last_seq {
+        let offset = last_seq - applied_seq
+        if offset >= 32 { return bits }
+        return bits | (1 << offset)
+    }
+    let delta = applied_seq - last_seq
+    if delta >= 32 { return 1 }
+    return ((bits << delta) | 1) & 4294967295
+}
+
+pub fn client_seq_in_ack_window(client_seq: int, highest_seq: int, bits: int) -> bool {
+    if client_seq <= 0 or highest_seq <= 0 { return false }
+    if client_seq > highest_seq { return false }
+    let offset = highest_seq - client_seq
+    if offset >= 32 { return false }
+    return ((bits >> offset) & 1) == 1
+}
+
+pub fn client_seq_before_ack_window(client_seq: int, highest_seq: int) -> bool {
+    if client_seq <= 0 or highest_seq <= 0 { return false }
+    if client_seq > highest_seq { return false }
+    return highest_seq - client_seq >= 32
+}
+
+pub fn peer_received_client_seq(peer: entity, client_seq: int) -> bool {
+    let conn = get(peer, PeerConnection) |> unwrap
+    return client_seq_in_ack_window(client_seq, conn.received_client_seq, conn.received_ack_bits)
+}
+
+pub fn record_peer_received_packet(peer: entity, client_seq: int) -> nil {
+    if client_seq <= 0 { return nil }
+    let conn = get(peer, PeerConnection) |> unwrap
+    update(peer, PeerConnection) {
+        last_client_seq = max(conn.last_client_seq, client_seq),
+        received_client_seq = max(conn.received_client_seq, client_seq),
+        received_ack_bits = advance_ack_bits(conn.received_client_seq, conn.received_ack_bits, client_seq)
+    }
+}
+
+pub fn mark_peer_status(peer: entity, status: str) -> nil {
+    update(peer, PeerConnection) { last_status = status }
+}
+
+pub fn peer_input_already_seen(peer: entity, client_seq: int) -> bool {
+    let conn = get(peer, PeerConnection) |> unwrap
+    return client_seq_in_ack_window(client_seq, conn.last_applied_client_seq, conn.applied_ack_bits) or
+        client_seq_in_ack_window(client_seq, conn.received_client_seq, conn.received_ack_bits) or
+        client_seq_before_ack_window(client_seq, conn.last_applied_client_seq) or
+        client_seq_before_ack_window(client_seq, conn.received_client_seq)
+}
+
+pub fn mark_duplicate_input(peer: entity) -> nil {
+    let conn = get(peer, PeerConnection) |> unwrap
+    update(peer, PeerConnection) {
+        duplicate_inputs = conn.duplicate_inputs + 1,
+        last_status = "duplicate"
+    }
+}
+
+pub fn mark_late_input(peer: entity) -> nil {
+    let conn = get(peer, PeerConnection) |> unwrap
+    update(peer, PeerConnection) {
+        late_inputs = conn.late_inputs + 1,
+        last_status = "late"
+    }
+}
+
+pub fn mark_future_input(peer: entity) -> nil {
+    let conn = get(peer, PeerConnection) |> unwrap
+    update(peer, PeerConnection) {
+        future_inputs = conn.future_inputs + 1,
+        last_status = "too-far-ahead"
+    }
+}
+
+pub fn mark_rejected_input(peer: entity) -> nil {
+    update(peer, PeerConnection) { last_status = "rejected" }
+}
+
+pub fn mark_expired_input(peer: entity) -> nil {
+    let conn = get(peer, PeerConnection) |> unwrap
+    update(peer, PeerConnection) {
+        late_inputs = conn.late_inputs + 1,
+        last_status = "expired"
+    }
+}
+
+pub fn mark_input_queued(peer: entity, overwrite_delta: int, status: str) -> nil {
+    let conn = get(peer, PeerConnection) |> unwrap
+    update(peer, PeerConnection) {
+        overwritten_inputs = conn.overwritten_inputs + overwrite_delta,
+        last_status = status
+    }
+}
+
+pub fn mark_applied_input(peer: entity, client_seq: int, command_id: int, status: str) -> nil {
+    let conn = get(peer, PeerConnection) |> unwrap
+    update(peer, PeerConnection) {
+        last_applied_client_seq = max(conn.last_applied_client_seq, client_seq),
+        applied_ack_bits = advance_ack_bits(conn.last_applied_client_seq, conn.applied_ack_bits, client_seq),
+        last_command_id = command_id,
+        last_status = status
+    }
+}
+
+pub fn reject_unqueueable_input(peer: entity, current_tick: int, client_seq: int, target_tick: int) -> bool {
+    let cfg = res(ServerConfig)
+    if peer_input_already_seen(peer, client_seq) {
+        mark_duplicate_input(peer)
+        return true
+    }
+
+    if target_tick <= current_tick {
+        mark_late_input(peer)
+        return true
+    }
+
+    if target_tick > current_tick + cfg.max_input_lead_ticks {
+        mark_future_input(peer)
+        return true
+    }
+
+    return false
+}
+
+pub fn queue_move_input(peer: entity, current_tick: int, client_seq: int, target_tick: int, command_id: int, target_x: float, target_y: float) -> bool {
+    let ring = get(peer, PeerInputRing) |> unwrap
+
+    if reject_unqueueable_input(peer, current_tick, client_seq, target_tick) {
+        return false
+    }
+
+    let slot = input_ring_slot(target_tick)
+    let mut overwrite_delta = 0
+    if ring.active[slot] and ring.target_ticks[slot] == target_tick and client_seq <= ring.client_seqs[slot] {
+        mark_duplicate_input(peer)
+        return false
+    }
+
+    let overwritten = ring.active[slot] and ring.target_ticks[slot] != target_tick
+    if overwritten { overwrite_delta = 1 }
+    update(peer, PeerInputRing) {
+        active[slot] = true,
+        target_ticks[slot] = target_tick,
+        client_seqs[slot] = client_seq,
+        command_ids[slot] = command_id,
+        target_xs[slot] = clamp_world_x(target_x),
+        target_ys[slot] = clamp_world_y(target_y)
+    }
+    mark_input_queued(peer, overwrite_delta, "queued")
+    return true
+}
+
+pub fn queue_cast_input(peer: entity, current_tick: int, client_seq: int, target_tick: int, command_id: int, dir_x: float, dir_y: float, fire_view_tick: int) -> bool {
+    let ring = get(peer, PeerCastRing) |> unwrap
+
+    if reject_unqueueable_input(peer, current_tick, client_seq, target_tick) {
+        return false
+    }
+
+    let slot = input_ring_slot(target_tick)
+    if ring.active[slot] and ring.target_ticks[slot] == target_tick and client_seq <= ring.client_seqs[slot] {
+        mark_duplicate_input(peer)
+        return false
+    }
+
+    let mag = sqrt(dir_x * dir_x + dir_y * dir_y)
+    if mag <= 0.0001 {
+        mark_rejected_input(peer)
+        return false
+    }
+
+    let overwritten = ring.active[slot] and ring.target_ticks[slot] != target_tick
+    let overwrite_delta = if overwritten { 1 } else { 0 }
+    update(peer, PeerCastRing) {
+        active[slot] = true,
+        target_ticks[slot] = target_tick,
+        fire_view_ticks[slot] = min(max(fire_view_tick, current_tick - history_capacity() + 1), target_tick),
+        client_seqs[slot] = client_seq,
+        command_ids[slot] = command_id,
+        dir_xs[slot] = dir_x / mag,
+        dir_ys[slot] = dir_y / mag
+    }
+    mark_input_queued(peer, overwrite_delta, "cast-queued")
+    return true
+}
+
+pub fn apply_peer_move_for_tick(peer: entity, server_tick: int) -> nil {
+    let conn = get(peer, PeerConnection) |> unwrap
+    let ring = get(peer, PeerInputRing) |> unwrap
+    let slot = input_ring_slot(server_tick)
+
+    if not ring.active[slot] { return nil }
+    if ring.target_ticks[slot] != server_tick {
+        if ring.target_ticks[slot] < server_tick {
+            update(peer, PeerInputRing) { active[slot] = false }
+            mark_expired_input(peer)
+        }
+        return nil
+    }
+
+    emit MoveOrder {
+        player_id: conn.player_id,
+        command_id: ring.command_ids[slot],
+        target_x: ring.target_xs[slot],
+        target_y: ring.target_ys[slot]
+    }
+    flush_events()
+    record_replay_move(
+        server_tick,
+        conn.session_id,
+        conn.player_id,
+        ring.client_seqs[slot],
+        ring.command_ids[slot],
+        ring.target_xs[slot],
+        ring.target_ys[slot]
+    )
+
+    update(peer, PeerInputRing) { active[slot] = false }
+    mark_applied_input(peer, ring.client_seqs[slot], ring.command_ids[slot], "applied")
+}
+
+pub fn apply_peer_cast_for_tick(peer: entity, server_tick: int) -> nil {
+    let conn = get(peer, PeerConnection) |> unwrap
+    let ring = get(peer, PeerCastRing) |> unwrap
+    let slot = input_ring_slot(server_tick)
+
+    if not ring.active[slot] { return nil }
+    if ring.target_ticks[slot] != server_tick {
+        if ring.target_ticks[slot] < server_tick {
+            update(peer, PeerCastRing) { active[slot] = false }
+            mark_expired_input(peer)
+        }
+        return nil
+    }
+
+    let _projectile = cast_projectile_with_command(
+        conn.player_id,
+        ring.command_ids[slot],
+        ring.dir_xs[slot],
+        ring.dir_ys[slot],
+        server_tick,
+        ring.fire_view_ticks[slot]
+    )
+    record_replay_cast(
+        server_tick,
+        conn.session_id,
+        conn.player_id,
+        ring.client_seqs[slot],
+        ring.command_ids[slot],
+        ring.dir_xs[slot],
+        ring.dir_ys[slot],
+        ring.fire_view_ticks[slot]
+    )
+
+    update(peer, PeerCastRing) { active[slot] = false }
+    mark_applied_input(peer, ring.client_seqs[slot], ring.command_ids[slot], "cast")
+}
+
+pub fn apply_queued_move_for_tick(server_tick: int) -> nil {
+    for peer in entities(PeerInputRing) {
+        apply_peer_move_for_tick(peer, server_tick)
+    }
+}
+
+pub fn apply_queued_cast_for_tick(server_tick: int) -> nil {
+    for peer in entities(PeerCastRing) {
+        apply_peer_cast_for_tick(peer, server_tick)
+    }
+}

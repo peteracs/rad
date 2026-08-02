@@ -1,0 +1,659 @@
+// =====================================================================
+// Stage 1: The Lexer
+//
+// Scans raw bytes to produce Tokens.
+// Uses zero-allocation string scanning (byte_at) for max performance.
+// Uses closures to manage lexer state without ECS overhead.
+// =====================================================================
+
+// Token Kinds
+pub type KeywordKind {
+    Let {}
+    Mut {}
+    Fn {}
+    If {}
+    Else {}
+    While {}
+    For {}
+    In {}
+    Return {}
+    Component {}
+    System {}
+    Entity {}
+    Type {}
+    Match {}
+    Use {}
+    Pub {}
+    And {}
+    Or {}
+    Not {}
+    Pure {}
+    Break {}
+    Continue {}
+}
+
+pub type OpKind {
+    Plus {}
+    Minus {}
+    Star {}
+    Slash {}
+    Percent {}
+    Assign {}
+    Eq {}
+    Neq {}
+    Lt {}
+    Gt {}
+    Lte {}
+    Gte {}
+    LParen {}
+    RParen {}
+    LBrace {}
+    RBrace {}
+    LBracket {}
+    RBracket {}
+    Comma {}
+    Colon {}
+    Dot {}
+    Arrow {}      // ->
+    FatArrow {}   // =>
+    Semicolon {}
+    Shl {}        // <<
+    PipeOp {}     // |>
+    Ampersand {}  // &
+    Question {}   // ?  (try / propagate Option or Result)
+}
+
+pub type LiteralKind {
+    StringLit { text: "" }
+    FStringStart { triple: false }
+    FStringFragment { text: "" }
+    FStringEnd {}
+    InterpolationStart {}
+    InterpolationEnd { spec: "" }
+    IntLit { val: 0 }
+    FloatLit { val: 0.0 }
+    True {}
+    False {}
+    Nil {}
+}
+
+pub type TokenKind {
+    Kw { kind: KeywordKind }
+    Op { kind: OpKind }
+    Lit { kind: LiteralKind }
+    Ident { text: "" }
+    Eof {}
+    Error { msg: "" }
+}
+
+// A single token with its source span
+pub struct Token {
+    kind: TokenKind = TokenKind::Eof {}
+    start: int = 0
+    end: int = 0
+    line: int = 1
+    col: int = 1
+}
+
+// --- Helpers ---
+
+pure fn is_digit(c: int) -> bool {
+    return c >= 48 and c <= 57
+}
+
+pure fn is_alpha(c: int) -> bool {
+    return (c >= 97 and c <= 122) or 
+           (c >= 65 and c <= 90) or 
+           c == 95
+}
+
+pure fn is_alphanumeric(c: int) -> bool {
+    return is_alpha(c) or is_digit(c)
+}
+
+// --- Public API ---
+
+pub fn lex(src: str) -> list<Token> {
+    let blen: int = byte_len(src)
+    
+    // Lexer State
+    let mut start: int = 0
+    let mut current: int = 0
+    let mut line: int = 1
+    let mut col: int = 1
+
+    // Mode stack: "normal", "fstring", "fstring_triple", "interpolation"
+    let mut mode_stack: list<str> = ["normal"]
+    let mut interp_depths: list<int> = []
+
+    // --- State Helpers (Closures) ---
+
+    let advance: fn() -> int = fn() -> int {
+        let c: int = byte_at(src, current)
+        current = current + 1
+        col = col + 1
+        return c
+    }
+
+    let peek: fn() -> int = fn() -> int {
+        if current >= blen { return 0 }
+        return byte_at(src, current)
+    }
+
+    let peek_next: fn() -> int = fn() -> int {
+        if current + 1 >= blen { return 0 }
+        return byte_at(src, current + 1)
+    }
+
+    let match_char: fn(int) -> bool = fn(expected: int) -> bool {
+        if current >= blen { return false }
+        if byte_at(src, current) != expected { return false }
+        current = current + 1
+        col = col + 1
+        return true
+    }
+
+    let skip_whitespace: fn() -> nil = fn() -> nil {
+        while true {
+            let c: int = peek()
+            if c == 32 or c == 13 or c == 9 {
+                advance()
+            } else if c == 10 {
+                line = line + 1
+                col = 0
+                advance()
+            } else if c == 47 {
+                if peek_next() == 47 {
+                    while peek() != 10 and current < blen {
+                        advance()
+                    }
+                } else {
+                    return
+                }
+            } else {
+                return
+            }
+        }
+    }
+
+    let make_token: fn(TokenKind) -> Token = fn(kind: TokenKind) -> Token {
+        return Token {
+            kind: kind,
+            start: start,
+            end: current,
+            line: line,
+            col: col - (current - start)
+        }
+    }
+
+    let error_token: fn(str) -> Token = fn(msg: str) -> Token {
+        return make_token(TokenKind::Error { msg: msg })
+    }
+
+    let string_lit: fn() -> Token = fn() -> Token {
+        while current < blen {
+            if peek() == 34 { break }
+            if peek() == 92 { // backslash
+                advance()
+                if current < blen { advance() }
+                continue
+            }
+            if peek() == 10 {
+                line = line + 1
+                col = 0
+            }
+            advance()
+        }
+
+        if current >= blen {
+            return error_token("Unterminated string.")
+        }
+
+        advance()
+
+        let val: str = substring_bytes(src, start + 1, current - 1)
+        return make_token(TokenKind::Lit { kind: LiteralKind::StringLit { text: val } })
+    }
+
+    let number_lit: fn() -> Token = fn() -> Token {
+        while is_digit(peek()) {
+            advance()
+        }
+
+        if peek() == 46 and is_digit(peek_next()) {
+            advance()
+            while is_digit(peek()) {
+                advance()
+            }
+            let val_str: str = substring_bytes(src, start, current)
+            let fval: float = map_or(try_float(val_str), 0.0, fn(x: float) -> float { return x })
+            return make_token(TokenKind::Lit { kind: LiteralKind::FloatLit { val: fval } })
+        }
+
+        let val_str2: str = substring_bytes(src, start, current)
+        let ival: int = map_or(try_int(val_str2), 0, fn(x: int) -> int { return x })
+        return make_token(TokenKind::Lit { kind: LiteralKind::IntLit { val: ival } })
+    }
+
+    let check_keyword: fn(int, int, str, TokenKind) -> TokenKind = fn(k_start: int, k_length: int, rest: str, kind: TokenKind) -> TokenKind {
+        if current - start == k_start + k_length {
+            let actual_rest: str = substring_bytes(src, start + k_start, start + k_start + k_length)
+            if actual_rest == rest {
+                return kind
+            }
+        }
+        return TokenKind::Ident { text: substring_bytes(src, start, current) }
+    }
+
+    let identifier_type: fn() -> TokenKind = fn() -> TokenKind {
+        let first: int = byte_at(src, start)
+        
+        if first == 97 { return check_keyword(1, 2, "nd", TokenKind::Kw { kind: KeywordKind::And {} }) }
+        if first == 98 { return check_keyword(1, 4, "reak", TokenKind::Kw { kind: KeywordKind::Break {} }) }
+        if first == 99 {
+            if current - start > 2 {
+                let third: int = byte_at(src, start + 2)
+                if third == 109 { return check_keyword(3, 6, "ponent", TokenKind::Kw { kind: KeywordKind::Component {} }) }
+                if third == 110 { return check_keyword(3, 5, "tinue", TokenKind::Kw { kind: KeywordKind::Continue {} }) }
+            }
+        }
+        if first == 101 {
+            if current - start > 1 {
+                let second: int = byte_at(src, start + 1)
+                if second == 108 { return check_keyword(2, 2, "se", TokenKind::Kw { kind: KeywordKind::Else {} }) }
+                if second == 110 { return check_keyword(2, 4, "tity", TokenKind::Kw { kind: KeywordKind::Entity {} }) }
+            }
+        }
+        if first == 102 {
+            if current - start > 1 {
+                let second: int = byte_at(src, start + 1)
+                if second == 97 { return check_keyword(2, 3, "lse", TokenKind::Lit { kind: LiteralKind::False {} }) }
+                if second == 110 { return check_keyword(2, 0, "", TokenKind::Kw { kind: KeywordKind::Fn {} }) }
+                if second == 111 { return check_keyword(2, 1, "r", TokenKind::Kw { kind: KeywordKind::For {} }) }
+            }
+        }
+        if first == 105 {
+            if current - start > 1 {
+                let second: int = byte_at(src, start + 1)
+                if second == 102 { return check_keyword(2, 0, "", TokenKind::Kw { kind: KeywordKind::If {} }) }
+                if second == 110 { return check_keyword(2, 0, "", TokenKind::Kw { kind: KeywordKind::In {} }) }
+            }
+        }
+        if first == 108 { return check_keyword(1, 2, "et", TokenKind::Kw { kind: KeywordKind::Let {} }) }
+        if first == 109 {
+            if current - start > 1 {
+                let second: int = byte_at(src, start + 1)
+                if second == 97 { return check_keyword(2, 3, "tch", TokenKind::Kw { kind: KeywordKind::Match {} }) }
+                if second == 117 { return check_keyword(2, 1, "t", TokenKind::Kw { kind: KeywordKind::Mut {} }) }
+            }
+        }
+        if first == 110 {
+            if current - start > 1 {
+                let second: int = byte_at(src, start + 1)
+                if second == 105 { return check_keyword(2, 1, "l", TokenKind::Lit { kind: LiteralKind::Nil {} }) }
+                if second == 111 { return check_keyword(2, 1, "t", TokenKind::Kw { kind: KeywordKind::Not {} }) }
+            }
+        }
+        if first == 111 { return check_keyword(1, 1, "r", TokenKind::Kw { kind: KeywordKind::Or {} }) }
+        if first == 112 {
+            if current - start > 1 {
+                let second: int = byte_at(src, start + 1)
+                if second == 117 {
+                    if current - start > 2 {
+                        let third: int = byte_at(src, start + 2)
+                        if third == 98 { return check_keyword(3, 0, "", TokenKind::Kw { kind: KeywordKind::Pub {} }) }
+                        if third == 114 { return check_keyword(3, 1, "e", TokenKind::Kw { kind: KeywordKind::Pure {} }) }
+                    }
+                }
+            }
+        }
+        if first == 114 { return check_keyword(1, 5, "eturn", TokenKind::Kw { kind: KeywordKind::Return {} }) }
+        if first == 115 { return check_keyword(1, 5, "ystem", TokenKind::Kw { kind: KeywordKind::System {} }) }
+        if first == 116 {
+            if current - start > 1 {
+                let second: int = byte_at(src, start + 1)
+                if second == 114 { return check_keyword(2, 2, "ue", TokenKind::Lit { kind: LiteralKind::True {} }) }
+                if second == 121 { return check_keyword(2, 2, "pe", TokenKind::Kw { kind: KeywordKind::Type {} }) }
+            }
+        }
+        if first == 117 { return check_keyword(1, 2, "se", TokenKind::Kw { kind: KeywordKind::Use {} }) }
+        if first == 119 { return check_keyword(1, 4, "hile", TokenKind::Kw { kind: KeywordKind::While {} }) }
+
+        return TokenKind::Ident { text: substring_bytes(src, start, current) }
+    }
+
+    let identifier: fn() -> Token = fn() -> Token {
+        while is_alphanumeric(peek()) {
+            advance()
+        }
+        if current - start == 1 and byte_at(src, start) == 102 and peek() == 34 {
+            let is_triple: bool = current + 1 < blen and byte_at(src, current + 1) == 34 and current + 2 < blen and byte_at(src, current + 2) == 34
+            if is_triple {
+                advance() // "
+                advance() // "
+                advance() // "
+                mode_stack << "fstring_triple"
+            } else {
+                advance() // "
+                mode_stack << "fstring"
+            }
+            return make_token(TokenKind::Lit { kind: LiteralKind::FStringStart { triple: is_triple } })
+        }
+        return make_token(identifier_type())
+    }
+
+    let scan_fstring_token: fn(bool) -> Token = fn(triple: bool) -> Token {
+        start = current
+        let mut text: str = ""
+        while current < blen {
+            let ch: int = peek()
+
+            // Check for closing delimiter
+            if not triple and ch == 34 {
+                if len(text) > 0 {
+                    let frag_tok: Token = make_token(TokenKind::Lit { kind: LiteralKind::FStringFragment { text: text } })
+                    return frag_tok
+                }
+                start = current
+                advance()
+                mode_stack = drop_last(mode_stack)
+                return make_token(TokenKind::Lit { kind: LiteralKind::FStringEnd {} })
+            }
+
+            if triple and ch == 34 and current + 1 < blen and byte_at(src, current + 1) == 34 and current + 2 < blen and byte_at(src, current + 2) == 34 {
+                if len(text) > 0 {
+                    let frag_tok: Token = make_token(TokenKind::Lit { kind: LiteralKind::FStringFragment { text: text } })
+                    return frag_tok
+                }
+                start = current
+                advance()
+                advance()
+                advance()
+                mode_stack = drop_last(mode_stack)
+                return make_token(TokenKind::Lit { kind: LiteralKind::FStringEnd {} })
+            }
+
+            // Check for ${ interpolation
+            if ch == 36 and current + 1 < blen and byte_at(src, current + 1) == 123 {
+                if len(text) > 0 {
+                    let frag_tok: Token = make_token(TokenKind::Lit { kind: LiteralKind::FStringFragment { text: text } })
+                    return frag_tok
+                }
+                start = current
+                advance() // $
+                advance() // {
+                mode_stack << "interpolation"
+                interp_depths << 1
+                return make_token(TokenKind::Lit { kind: LiteralKind::InterpolationStart {} })
+            }
+
+            // Single-line: { opens interpolation (with {{ escape)
+            if not triple and ch == 123 {
+                if current + 1 < blen and byte_at(src, current + 1) == 123 {
+                    text = text + "{"
+                    advance()
+                    advance()
+                    continue
+                }
+                if len(text) > 0 {
+                    let frag_tok: Token = make_token(TokenKind::Lit { kind: LiteralKind::FStringFragment { text: text } })
+                    return frag_tok
+                }
+                start = current
+                advance() // {
+                mode_stack << "interpolation"
+                interp_depths << 1
+                return make_token(TokenKind::Lit { kind: LiteralKind::InterpolationStart {} })
+            }
+
+            // Single-line: }} escape for literal }
+            if not triple and ch == 125 {
+                if current + 1 < blen and byte_at(src, current + 1) == 125 {
+                    text = text + "}"
+                    advance()
+                    advance()
+                    continue
+                }
+                if len(text) > 0 {
+                    return make_token(TokenKind::Lit { kind: LiteralKind::FStringFragment { text: text } })
+                }
+                start = current
+                advance()
+                return error_token("Unescaped '}' in f-string; use '}}' for a literal brace")
+            }
+
+            // Escape sequences
+            if ch == 92 {
+                advance()
+                if current >= blen { break }
+                let esc: int = advance()
+                if esc == 110 { text = text + "\n" }
+                else if esc == 116 { text = text + "\t" }
+                else if esc == 114 { text = text + "\r" }
+                else if esc == 92 { text = text + "\\" }
+                else if esc == 34 { text = text + "\"" }
+                else if esc == 48 { text = text + "\0" }
+                else if esc == 36 { text = text + "$" }
+                else if esc == 123 { text = text + "{" }
+                else if esc == 125 { text = text + "}" }
+                else {
+                    text = text + "\\" + chr(esc)
+                }
+                continue
+            }
+
+            // Track newlines for line counting
+            if ch == 10 {
+                line = line + 1
+                col = 0
+            }
+            text = text + chr(advance())
+        }
+        // EOF reached
+        if len(text) > 0 {
+            return make_token(TokenKind::Lit { kind: LiteralKind::FStringFragment { text: text } })
+        }
+        return error_token("Unterminated f-string")
+    }
+
+    let next_token: fn() -> Token = fn() -> Token {
+        // Check current mode
+        let cur_mode: str = mode_stack[len(mode_stack) - 1]
+
+        if cur_mode == "fstring" {
+            return scan_fstring_token(false)
+        }
+        if cur_mode == "fstring_triple" {
+            return scan_fstring_token(true)
+        }
+
+        if cur_mode == "interpolation" {
+            skip_whitespace()
+            start = current
+
+            if current >= blen {
+                return make_token(TokenKind::Eof {})
+            }
+
+            let ch: int = peek()
+
+            // Handle { in interpolation mode: increment depth
+            if ch == 123 {
+                let c: int = advance()
+                let di: int = len(interp_depths) - 1
+                interp_depths[di] = interp_depths[di] + 1
+                return make_token(TokenKind::Op { kind: OpKind::LBrace {} })
+            }
+
+            // Handle : at depth 1 — format specifier
+            if ch == 58 {
+                let di: int = len(interp_depths) - 1
+                if interp_depths[di] <= 1 {
+                    advance() // consume ':'
+                    let spec_start: int = current
+                    let mut depth: int = 1
+                    while current < blen and depth > 0 {
+                        let sc: int = peek()
+                        if sc == 123 {
+                            depth = depth + 1
+                            advance()
+                        } else if sc == 125 {
+                            depth = depth - 1
+                            if depth == 0 { break }
+                            advance()
+                        } else {
+                            advance()
+                        }
+                    }
+                    let spec_text: str = substring_bytes(src, spec_start, current)
+                    if current < blen and peek() == 125 {
+                        advance()
+                    }
+                    mode_stack = drop_last(mode_stack)
+                    interp_depths = drop_last(interp_depths)
+                    return make_token(TokenKind::Lit { kind: LiteralKind::InterpolationEnd { spec: spec_text } })
+                }
+            }
+
+            // Handle } in interpolation mode: decrement depth or pop mode
+            if ch == 125 {
+                let di: int = len(interp_depths) - 1
+                if interp_depths[di] <= 1 {
+                    start = current
+                    let c: int = advance()
+                    mode_stack = drop_last(mode_stack)
+                    interp_depths = drop_last(interp_depths)
+                    return make_token(TokenKind::Lit { kind: LiteralKind::InterpolationEnd { spec: "" } })
+                } else {
+                    let c: int = advance()
+                    interp_depths[di] = interp_depths[di] - 1
+                    return make_token(TokenKind::Op { kind: OpKind::RBrace {} })
+                }
+            }
+        }
+
+        // Normal mode (or interpolation fallthrough for non-brace tokens)
+        skip_whitespace()
+        start = current
+
+        if current >= blen {
+            return make_token(TokenKind::Eof {})
+        }
+
+        let c: int = advance()
+
+        if is_alpha(c) { return identifier() }
+        if is_digit(c) { return number_lit() }
+
+        if c == 40 { return make_token(TokenKind::Op { kind: OpKind::LParen {} }) }
+        if c == 41 { return make_token(TokenKind::Op { kind: OpKind::RParen {} }) }
+        if c == 123 { return make_token(TokenKind::Op { kind: OpKind::LBrace {} }) }
+        if c == 125 { return make_token(TokenKind::Op { kind: OpKind::RBrace {} }) }
+        if c == 91 { return make_token(TokenKind::Op { kind: OpKind::LBracket {} }) }
+        if c == 93 { return make_token(TokenKind::Op { kind: OpKind::RBracket {} }) }
+        if c == 44 { return make_token(TokenKind::Op { kind: OpKind::Comma {} }) }
+        if c == 46 { return make_token(TokenKind::Op { kind: OpKind::Dot {} }) }
+        if c == 59 { return make_token(TokenKind::Op { kind: OpKind::Semicolon {} }) }
+        if c == 43 { return make_token(TokenKind::Op { kind: OpKind::Plus {} }) }
+        if c == 45 { 
+            if match_char(62) { return make_token(TokenKind::Op { kind: OpKind::Arrow {} }) }
+            return make_token(TokenKind::Op { kind: OpKind::Minus {} }) 
+        }
+        if c == 42 { return make_token(TokenKind::Op { kind: OpKind::Star {} }) }
+        if c == 47 { return make_token(TokenKind::Op { kind: OpKind::Slash {} }) }
+        if c == 37 { return make_token(TokenKind::Op { kind: OpKind::Percent {} }) }
+        
+        if c == 58 { return make_token(TokenKind::Op { kind: OpKind::Colon {} }) }
+        
+        if c == 61 {
+            if match_char(61) { return make_token(TokenKind::Op { kind: OpKind::Eq {} }) }
+            if match_char(62) { return make_token(TokenKind::Op { kind: OpKind::FatArrow {} }) }
+            return make_token(TokenKind::Op { kind: OpKind::Assign {} })
+        }
+        if c == 33 {
+            if match_char(61) { return make_token(TokenKind::Op { kind: OpKind::Neq {} }) }
+            return error_token("Unexpected character '!'.")
+        }
+        if c == 60 {
+            if match_char(61) { return make_token(TokenKind::Op { kind: OpKind::Lte {} }) }
+            if match_char(60) { return make_token(TokenKind::Op { kind: OpKind::Shl {} }) }
+            return make_token(TokenKind::Op { kind: OpKind::Lt {} })
+        }
+        if c == 62 {
+            if match_char(61) { return make_token(TokenKind::Op { kind: OpKind::Gte {} }) }
+            return make_token(TokenKind::Op { kind: OpKind::Gt {} })
+        }
+        if c == 124 {
+            if match_char(62) { return make_token(TokenKind::Op { kind: OpKind::PipeOp {} }) }
+            return error_token("Unexpected character '|'.")
+        }
+        if c == 38 { return make_token(TokenKind::Op { kind: OpKind::Ampersand {} }) }
+        if c == 63 { return make_token(TokenKind::Op { kind: OpKind::Question {} }) }
+
+        if c == 34 { return string_lit() }
+
+        if c == 92 {
+            if match_char(92) {
+                let mut text: str = ""
+                let mut first: bool = true
+                while true {
+                    let line_start: int = current
+                    while peek() != 10 and current < blen {
+                        advance()
+                    }
+                    if not first {
+                        text = text + "\n"
+                    }
+                    text = text + substring_bytes(src, line_start, current)
+                    first = false
+                    
+                    let saved_current: int = current
+                    let saved_line: int = line
+                    let saved_col: int = col
+                    
+                    // skip whitespace
+                    while true {
+                        let nc: int = peek()
+                        if nc == 32 or nc == 13 or nc == 9 {
+                            advance()
+                        } else if nc == 10 {
+                            line = line + 1
+                            col = 0
+                            advance()
+                        } else {
+                            break
+                        }
+                    }
+                    
+                    if peek() == 92 and peek_next() == 92 {
+                        advance()
+                        advance()
+                        continue
+                    } else {
+                        current = saved_current
+                        line = saved_line
+                        col = saved_col
+                        break
+                    }
+                }
+                return make_token(TokenKind::Lit { kind: LiteralKind::StringLit { text: text } })
+            }
+            return error_token("Unexpected character '\\'.")
+        }
+
+        return error_token("Unexpected character.")
+    }
+
+    // --- Main Lexer Loop ---
+    let mut tokens: list<Token> = []
+    while true {
+        let tok: Token = next_token()
+        tokens << tok
+        
+        match tok.kind {
+            Eof => { break }
+            _ => {}
+        }
+    }
+    return tokens
+}

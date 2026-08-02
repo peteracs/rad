@@ -1,0 +1,12 @@
+// expect: 42
+
+async fn inc(x: int) -> int {
+    return x + 1
+}
+
+async fn add_two(x: int) -> int {
+    let first = await async inc(x)
+    return await async inc(first)
+}
+
+print(await async add_two(40))

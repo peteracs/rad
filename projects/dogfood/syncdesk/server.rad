@@ -1,0 +1,231 @@
+// syncdesk server — the authoritative copy of one world, on one machine.
+//
+// Clients PULL the world as fork bytes, diverge offline, and PUSH back a
+// (base, theirs) pair; the server three-way merges it against its own
+// timeline — field-level, id-remapping, in-flight events included — and
+// either commits or returns an honest conflict report. `WHY` answers
+// provenance queries for values that may have originated on another machine.
+//
+// Line protocol (one request per connection, "\n"-terminated):
+//   PULL                     -> fork bytes (server remembers the base it served)
+//   PUSH <base>\t<theirs>    -> MERGED <blast radius> | CONFLICT <report>
+//   DPUSH <digest>\t<delta>  -> same, but <delta> is fork_delta() against the
+//                               base the client pulled (identified by the
+//                               digest in the PULL payload's header) — the
+//                               wire carries the divergence, not the world
+//   WHY <name>               -> why(get_entity(name), Ticket), " | "-joined
+//   LIST                     -> ticket summary
+//   SHUTDOWN                 -> persist world, exit
+//
+//   rad projects/dogfood/syncdesk/server.rad
+
+component Ticket { title: "", status: "open", assignee: "" }
+resource Audit { log: "" }
+
+event NoteAdded { ticket, note }
+
+on NoteAdded(e) {
+    let t = get(e.ticket, Ticket)
+    match t {
+        Some(tv) => {
+            let a = get_resource(Audit) |> unwrap
+            set_resource(Audit, Audit { log: a.log + f"[{tv.title}: {e.note}] " })
+        }
+        None => {}
+    }
+}
+
+let WORLD_PATH = "projects/dogfood/syncdesk/world.json"
+
+fn read_msg(conn: int) -> str {
+    let mut buf = ""
+    while true {
+        let chunk = tcp_read(conn, 65536)
+        if len(chunk) == 0 { return trim(buf) }
+        buf = buf + chunk
+        if ends_with(buf, "\n") { return trim(buf) }
+    }
+    return trim(buf)
+}
+
+fn send(conn: int, msg: str) -> nil {
+    tcp_write(conn, msg + "\n")
+}
+
+fn ticket_summary() -> str {
+    let mut lines = []
+    for ent in entities(Ticket) {
+        let t = get(ent, Ticket) |> unwrap
+        let mut who = t.assignee
+        if who == "" { who = "unassigned" }
+        lines << f"{t.title} [{t.status}] ({who})"
+    }
+    let a = get_resource(Audit) |> unwrap
+    lines << f"audit: {a.log}"
+    return join(lines, " | ")
+}
+
+// Status precedence for the merge policy: a closed ticket stays closed,
+// escalation beats business-as-usual.
+fn rank(s: str) -> int {
+    if s == "closed" { return 3 }
+    if s == "escalated" { return 2 }
+    if s == "open" { return 1 }
+    return 0
+}
+
+fn adopt(ours, merged, how: str) -> str {
+    let radius = diff(ours, merged)
+    commit(merged)
+    flush_events()
+    write_file(WORLD_PATH, save_world())
+    return f"MERGED ({how}) {radius}"
+}
+
+// The sync policy, written in rad against structured conflicts — no string
+// parsing. Field conflicts on Ticket resolve mechanically:
+//   status   -> precedence (rank above)
+//   assignee -> the pusher wins (they touched it last, on purpose)
+// Everything else (titles, structural conflicts) is refused honestly, with
+// a report built from the conflict values themselves.
+fn merge_policy(b, t) -> str {
+    let ours = fork()
+    match merge_forks(b, ours, t) {
+        Ok(merged) => { return adopt(ours, merged, "clean") }
+        Err(conflicts) => {
+            let mut decisions = []
+            let mut refusals = []
+            for c in conflicts {
+                match c {
+                    FieldConflict { ent, name, comp, field, base, ours, theirs } => {
+                        if comp == "Ticket" and field == "status" {
+                            let mut pick = ours
+                            if rank(theirs) > rank(ours) { pick = theirs }
+                            decisions = push(decisions, (c, pick))
+                        } else {
+                            if comp == "Ticket" and field == "assignee" {
+                                decisions = push(decisions, (c, theirs))
+                            } else {
+                                refusals << f"{name}: {comp}.{field} ours={ours} theirs={theirs}"
+                            }
+                        }
+                    }
+                    NameConflict { name, entities } => {
+                        refusals << f"name {name} claimed by {len(entities)} entities"
+                    }
+                    EventConflict { detail, base, ours, theirs } => {
+                        refusals << f"in-flight events consumed by {detail}"
+                    }
+                    _ => { refusals << "structural conflict" }
+                }
+            }
+            if len(refusals) > 0 {
+                return "CONFLICT " + join(refusals, "; ")
+            }
+            match merge_forks_with(b, ours, t, decisions) {
+                Ok(merged) => {
+                    return adopt(ours, merged, f"policy resolved {len(decisions)}")
+                }
+                Err(rest) => {
+                    return f"CONFLICT {len(rest)} unresolvable after policy"
+                }
+            }
+        }
+    }
+}
+
+fn handle_push(payload: str) -> str {
+    let parts = split(payload, "\t")
+    if len(parts) != 2 { return "ERROR push wants <base>\t<theirs>" }
+    let base = fork_from_bytes(parts[0])
+    let theirs = fork_from_bytes(parts[1])
+    match base {
+        Ok(b) => {
+            match theirs {
+                Ok(t) => { return merge_policy(b, t) }
+                Err(msg) => { return f"ERROR theirs: {msg}" }
+            }
+        }
+        Err(msg) => { return f"ERROR base: {msg}" }
+    }
+}
+
+fn main() -> nil {
+    if file_exists(WORLD_PATH) {
+        load_world(read_file(WORLD_PATH))
+        print("world restored from disk")
+    } else {
+        let _t1 = spawn("T-1", Ticket { title: "db latency" })
+        let _t2 = spawn("T-2", Ticket { title: "login 500s" })
+        write_file(WORLD_PATH, save_world())
+        print("world seeded: T-1, T-2")
+    }
+
+    let listener = tcp_listen("127.0.0.1", 7777)
+    print("syncdesk listening on 127.0.0.1:7777")
+
+    // Bases served to clients, keyed by the digest in the PULL payload
+    // header. DPUSH names its base by that digest; the server applies the
+    // delta to its own copy — the world never crosses the wire twice.
+    let mut pulls = {}
+
+    let mut running = true
+    while running {
+        let conn = tcp_accept(listener)
+        let msg = read_msg(conn)
+        let parts = split(msg, " ")
+        let cmd = parts[0]
+
+        if cmd == "PULL" {
+            if len(keys(pulls)) > 16 { pulls = {} }
+            let base = fork()
+            let bytes = fork_to_bytes(base)
+            pulls[split(bytes, " ")[1]] = base
+            send(conn, bytes)
+            print("served PULL")
+        }
+        if cmd == "PUSH" {
+            let reply = handle_push(join(slice(parts, 1, len(parts)), " "))
+            send(conn, reply)
+            let verdict = split(reply, " ")[0]
+            print(f"served PUSH -> {verdict}")
+        }
+        if cmd == "DPUSH" {
+            let payload = join(slice(parts, 1, len(parts)), " ")
+            let dparts = split(payload, "\t")
+            let mut reply = "ERROR dpush wants <digest>\t<delta>"
+            if len(dparts) == 2 {
+                if contains(keys(pulls), dparts[0]) {
+                    let b = pulls[dparts[0]]
+                    match fork_apply(b, dparts[1]) {
+                        Ok(t) => { reply = merge_policy(b, t) }
+                        Err(msg) => { reply = f"ERROR delta: {msg}" }
+                    }
+                } else {
+                    reply = "ERROR unknown base (pull again)"
+                }
+            }
+            send(conn, reply)
+            let verdict = split(reply, " ")[0]
+            print(f"served DPUSH -> {verdict}")
+        }
+        if cmd == "WHY" {
+            let name = parts[1]
+            let t = get_entity(name)
+            send(conn, replace(why(t, Ticket), "\n", " | "))
+            print(f"served WHY {name}")
+        }
+        if cmd == "LIST" {
+            send(conn, ticket_summary())
+            print("served LIST")
+        }
+        if cmd == "SHUTDOWN" {
+            write_file(WORLD_PATH, save_world())
+            send(conn, "BYE")
+            print("world persisted, shutting down")
+            running = false
+        }
+        tcp_close(conn)
+    }
+    tcp_close(listener)
+}

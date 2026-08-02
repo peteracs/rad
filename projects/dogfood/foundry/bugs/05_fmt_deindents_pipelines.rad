@@ -1,0 +1,23 @@
+// BUG 05: `rad fmt` de-indents multi-line pipeline continuation lines to
+// column 0, reformatting the style used by every example in the docs into a
+// style that appears nowhere in the docs.
+//
+// The body of this file is copied verbatim from docs/src/guide/pipelines.md:7-10.
+//
+// Run:  target\debug\rad.exe fmt --check projects\dogfood\foundry\bugs\05_fmt_deindents_pipelines.rad
+//   -> "needs formatting"
+// Then: target\debug\rad.exe fmt projects\dogfood\foundry\bugs\05_fmt_deindents_pipelines.rad
+//   -> the three |> lines are flattened to column 0.
+
+let result = [1, 2, 3, 4, 5]
+    |> filter(fn(x) { return x > 2 })
+    |> map(fn(x) { return x * 10 })
+
+print(f"result = {result}")
+
+let total = [10, -5, 20, 0, 15, -3, 30]
+    |> filter(fn(s) { return s > 0 })
+    |> map(fn(s) { return s * 2 })
+    |> reduce(0, fn(a, b) { return a + b })
+
+print(f"total = {total}")

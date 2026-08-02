@@ -1,0 +1,9 @@
+// Attack: empty phase declaration
+phase Empty {}
+
+fn main() -> nil {
+    schedule [Empty]
+    print("empty phase ran")
+}
+
+// expect: empty phase ran

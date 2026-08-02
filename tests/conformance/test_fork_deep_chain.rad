@@ -1,0 +1,24 @@
+// Test: Deep chain of fork-simulate-commit operations
+// Fork from committed state, commit, repeat many times
+
+component N { v: 0 }
+
+system Bump(n: mut N) {
+    n = N { v: n.v + 1 }
+}
+
+let e = spawn("e", N { v: 0 })
+
+// Chain 20 fork-simulate(1)-commit cycles
+let mut i = 0
+while i < 20 {
+    let f = fork()
+    let f = simulate(f, [system::Bump], 1)
+    commit(f)
+    i = i + 1
+}
+
+let final_val = get(e, N) |> unwrap
+assert(final_val.v == 20, f"After 20 chained fork/commit cycles: expected 20, got {final_val.v}")
+
+print("PASS: deep chain (20 cycles)")

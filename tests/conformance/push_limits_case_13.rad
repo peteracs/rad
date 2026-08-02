@@ -1,0 +1,6 @@
+// backend: both
+match try_float("3.5") {
+    Some { value } => { print(f"CASE13:{int(value * 10)}") }
+    None => { print("CASE13:none") }
+}
+// expect: CASE13:35

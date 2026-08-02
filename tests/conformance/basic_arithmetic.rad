@@ -1,0 +1,21 @@
+// Integer and float ops; precedence
+print(2 + 3)
+// expect: 5
+print(10 - 3)
+// expect: 7
+print(4 * 5)
+// expect: 20
+print(20 / 4)
+// expect: 5
+print(2 + 3 * 4)
+// expect: 14
+print(7 % 3)
+// expect: 1
+print(1.5 + 2.5)
+// expect: 4.0
+print(10.0 - 3.5)
+// expect: 6.5
+print(2.0 * 3.0)
+// expect: 6.0
+print((1 + 2) * (3 + 4))
+// expect: 21

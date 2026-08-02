@@ -1,0 +1,74 @@
+// PROBE 15: a component written by BOTH a system (`mut` parameter) AND an
+// event handler (`update(id, C)`), while two OTHER systems read it in a
+// parallel batch.
+//
+// This is the last structural ingredient bugs/11 has that the clean probes
+// (10, 13, 14) do not. In bugs/11 the Fsm component is written by the Feed
+// system and also by the Finished / Broke handlers, while Advance and Wearing
+// read it from the parallel snapshot.
+//
+// Everything is deterministic by construction: no clock, no rng, no I/O.
+
+component Machine { indexed code: "", speed: 1 }
+component Gate { open: true, ticks: 0 }
+component Job { n: 0 }
+component Wear { n: 0 }
+
+resource Flips { n: 0 }
+
+event Toggle { code: str }
+
+// SYSTEM writes Gate (mut) - conflicts with the readers below, so it is
+// serialised ahead of them
+system AgeGate(g: mut Gate) {
+    g.ticks = g.ticks + 1
+    if g.ticks % 11 == 0 {
+        g.open = true
+    }
+}
+
+// these two READ Gate and write their own components -> parallel with each other
+system BumpJob(_m: Machine, g: Gate, j: mut Job) after AgeGate {
+    if g.open {
+        j.n = j.n + 1
+    }
+}
+
+system BumpWear(m: Machine, g: Gate, w: mut Wear) after AgeGate {
+    if g.open {
+        w.n = w.n + 1
+        if w.n % 7 == 0 {
+            emit Toggle { code: m.code }
+        }
+    }
+}
+
+// HANDLER also writes Gate
+on Toggle(e) {
+    match lookup(Machine, "code", e.code) {
+        Some(id) => {
+            update(id, Gate) { open = false }
+            update(Flips) { n = res(Flips).n + 1 }
+        }
+        None => { }
+    }
+}
+
+for i in range(0, 20) {
+    spawn(
+        Machine { code: f"m-{i}", speed: 1 },
+        Gate { open: true, ticks: 0 },
+        Job { n: 0 },
+        Wear { n: 0 },
+    )
+}
+
+for _t in range(0, 40) {
+    schedule [AgeGate, BumpJob, BumpWear]
+    flush_events()
+}
+
+let jt = query { Job } select Job |> reduce(0, fn(acc, j) { return acc + j.n })
+let wt = query { Wear } select Wear |> reduce(0, fn(acc, w) { return acc + w.n })
+
+print(f"job_total={jt} wear_total={wt} flips={res(Flips).n}   (job_total must equal wear_total)")

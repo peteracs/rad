@@ -1,0 +1,7 @@
+fn main() -> nil {
+    let rows = [[1, 2]]
+    let _ = rows |> map(fn([a, b]) {
+        a = 99
+        return a
+    })
+}

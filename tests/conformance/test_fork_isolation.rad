@@ -1,0 +1,37 @@
+// Test 2: State isolation — simulate must NOT leak to the main world
+
+component Counter { n: 0 }
+
+system Increment(c: mut Counter) {
+    c = Counter { n: c.n + 1 }
+}
+
+let e = spawn("counter", Counter { n: 0 })
+
+// Simulate 10 ticks — main world must remain at 0
+let f = fork()
+let f = simulate(f, [system::Increment], 10)
+
+let main_val = get(e, Counter) |> unwrap
+assert(main_val.n == 0, f"Main world leaked! Expected 0, got {main_val.n}")
+
+// Simulate again from the same original fork — should start from 0 again
+let f2 = fork()
+let f2 = simulate(f2, [system::Increment], 5)
+
+let main_val2 = get(e, Counter) |> unwrap
+assert(main_val2.n == 0, f"Main world leaked on second simulate! Got {main_val2.n}")
+
+// Now commit the 10-tick fork
+commit(f)
+let after = get(e, Counter) |> unwrap
+assert(after.n == 10, f"After commit, expected 10, got {after.n}")
+
+// Fork again from the committed state — should start at 10
+let f3 = fork()
+let f3 = simulate(f3, [system::Increment], 3)
+commit(f3)
+let after2 = get(e, Counter) |> unwrap
+assert(after2.n == 13, f"Fork-from-committed expected 13, got {after2.n}")
+
+print("PASS: state isolation")

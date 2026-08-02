@@ -1,0 +1,3 @@
+let s = "abc"
+print(substring_bytes(s, 3, 3) == "")
+// expect: true

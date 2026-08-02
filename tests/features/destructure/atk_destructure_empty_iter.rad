@@ -1,0 +1,8 @@
+fn main() -> nil {
+    let rows: list = []
+    for [a, b] in rows {
+        print(a)
+        print(b)
+    }
+    print("done_empty_iter")
+}

@@ -1,0 +1,22 @@
+// Attack: complex guard expression with multiple conditions
+event Msg { level, text }
+
+on Msg(e) where e.level > 2 and len(e.text) > 5 {
+    print("important:", e.text)
+}
+
+on Msg(e) when e.level <= 2 {
+    print("debug:", e.text)
+}
+
+fn main() -> nil {
+    emit Msg { level: 1, text: "hi" }
+    flush_events()
+    emit Msg { level: 3, text: "critical failure detected" }
+    flush_events()
+    emit Msg { level: 3, text: "short" }
+    flush_events()
+}
+
+// expect: debug: hi
+// expect: important: critical failure detected

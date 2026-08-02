@@ -1,0 +1,33 @@
+// `phase` groups + system `after` ordering — the match-frame shapes:
+// one schedule word runs the whole frame, and declared ordering holds
+// inside it regardless of declaration order.
+
+component Acc { log: list = [] }
+
+// declared out of order on purpose: `after` is the contract
+system third(a: mut Acc) after second {
+    a.log = push(a.log, "third")
+}
+
+system first(a: mut Acc) {
+    a.log = push(a.log, "first")
+}
+
+system second(a: mut Acc) after first {
+    a.log = push(a.log, "second")
+}
+
+phase frame { third, second, first }
+
+fn main() -> nil {
+    let e = entity "e" { Acc {} }
+
+    schedule [frame]
+    print(require(e, Acc).log)        // ["first", "second", "third"]
+
+    // phases compose with plain systems in one schedule
+    update(e, Acc) { log = [] }
+    schedule [frame]
+    schedule [frame]
+    print(require(e, Acc).log |> len) // 6
+}

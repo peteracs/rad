@@ -1,0 +1,4 @@
+// backend: both
+let x: NotAType = 1
+print(x)
+// expect-runtime-error: Unknown type annotation 'NotAType'

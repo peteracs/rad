@@ -1,0 +1,13 @@
+---
+source: tests\conformance\peek_resource_sign.rad
+exit_code: 0
+---
+1
+-1
+0
+1.0
+-1.0
+0.0
+in the fork: 90.0
+live: 100.0
+true

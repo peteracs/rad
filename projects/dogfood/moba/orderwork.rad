@@ -1,0 +1,184 @@
+// ORDERWORK — browser-moba's order pipeline, written the way it wants
+// to be written (fake-port round 7). The code comes first; whatever the
+// language can't run becomes a feature.
+//
+// Architecture (mirrors sim/commands.ts + ccState.ts):
+//   - Orders are a sum type; the per-unit QUEUE is a list of them.
+//     Plain orders replace the queue, shift-orders append.
+//   - The hard-CC gate DISCARDS incoming orders (taunt/fear/suppress —
+//     never buffered); permission bits gate per kind.
+//   - Exotic CC FORCES the effective order without touching the queue:
+//     a taunted unit attacks its taunter, the saved queue resumes when
+//     the taunt drops — the effective order is a match EXPRESSION over
+//     the CC state.
+//   - Execution matches on the head order with `when` guards: an
+//     arrived move or a dead attack-target completes and the queue
+//     advances.
+
+pub let ARRIVE_M = 0.3
+pub let STRIKE_RANGE = 5.5
+pub let STEP = 0.5            // demo movement per tick
+
+pub type Order {
+    Move { to: (float, float) }
+    Attack { target: entity }
+    AttackMove { to: (float, float) }
+    Hold {}
+}
+
+type Cc {
+    Free {}
+    Stunned {}
+    Taunted { by: entity }
+    Feared { from: (float, float) }
+}
+
+component Pos { at: (float, float) = (0.0, 0.0) }
+
+component Vitals { hp: float = 500.0, team: int }
+
+component Brain {
+    queue: list = [],           // list<Order>
+    cc: Cc = Cc::Free {},
+}
+
+pub event Struck { attacker: entity, victim: entity }
+
+// ------------------------------------------------------------ issuing
+
+// the era ingress: hard CC discards outright; plain replaces, shift queues
+pub fn issue(u: entity, o: Order, shift: bool) -> bool {
+    let b = require(u, Brain)
+    match b.cc {
+        Cc::Free {} => {}
+        _ => { return false }       // taunt/fear/stun: discarded, never buffered
+    }
+    if shift {
+        update(u, Brain) { queue = push(b.queue, o) }
+    } else {
+        update(u, Brain) { queue = [o] }
+    }
+    return true
+}
+
+// ------------------------------------------------------------- helpers
+
+pure fn dist(a: (float, float), b: (float, float)) -> float {
+    let (dx, dy) = a - b
+    return sqrt(dx * dx + dy * dy)
+}
+
+pure fn step_toward(from: (float, float), to: (float, float)) -> (float, float) {
+    let gap = dist(from, to)
+    if gap <= STEP { return to }
+    return from + (to - from) * (STEP / gap)
+}
+
+fn alive(u: entity) -> bool {
+    return require(u, Vitals).hp > 0.0
+}
+
+// the CC override: forced orders never touch the queue
+fn effective_order(u: entity) -> Order {
+    let b = require(u, Brain)
+    return match b.cc {
+        Cc::Taunted { by: t } when alive(t) => Order::Attack { target: t }
+        Cc::Taunted { by: _ } => Order::Hold {}
+        Cc::Feared { from: f } => {
+            // flee directly away from the fear source
+            let here = require(u, Pos).at
+            Order::Move { to: here + (here - f) }
+        }
+        Cc::Stunned {} => Order::Hold {}
+        Cc::Free {} when len(b.queue) == 0 => Order::Hold {}
+        Cc::Free {} => b.queue[0]
+    }
+}
+
+fn advance_queue(u: entity) -> nil {
+    let b = require(u, Brain)
+    // only a queue-sourced order can complete; forced orders aren't queued
+    match b.cc {
+        Cc::Free {} => {
+            if len(b.queue) > 0 {
+                update(u, Brain) { queue = drop_first(b.queue) }
+            }
+        }
+        _ => {}
+    }
+}
+
+// ------------------------------------------------------------ execution
+
+system act(Brain, p: mut Pos) {
+    match effective_order(self) {
+        Order::Move { to: dest } when dist(p.at, dest) <= ARRIVE_M => {
+            advance_queue(self)
+        }
+        Order::Move { to: dest } => {
+            p.at = step_toward(p.at, dest)
+        }
+        Order::Attack { target: t } when not alive(t) => {
+            advance_queue(self)
+        }
+        Order::Attack { target: t } => {
+            let there = require(t, Pos).at
+            if dist(p.at, there) <= STRIKE_RANGE {
+                emit Struck { attacker: self, victim: t }
+            } else {
+                p.at = step_toward(p.at, there)
+            }
+        }
+        Order::AttackMove { to: dest } => {
+            // simplified: walk; a real port acquires along the way
+            p.at = step_toward(p.at, dest)
+            if dist(p.at, dest) <= ARRIVE_M { advance_queue(self) }
+        }
+        Order::Hold {} => {}
+    }
+}
+
+on Struck(e) {
+    let v = require(e.victim, Vitals)
+    update(e.victim, Vitals) { hp = v.hp - 25.0 }
+}
+
+// -------------------------------------------------------------- demo
+
+fn brain_line(u: entity) -> str {
+    let b = require(u, Brain)
+    let (x, y) = require(u, Pos).at
+    return f"at ({x:.1}, {y:.1}) queue={len(b.queue)}"
+}
+
+fn tick(n: int) -> nil {
+    for _ in range(0, n) { schedule [act] }
+}
+
+fn main() -> nil {
+    let ez = entity "ez" { Pos {}, Vitals { team: 0 }, Brain {} }
+    let annie = entity "annie" { Pos { at: (16.0, 0.0) }, Vitals { team: 1 }, Brain {} }
+
+    // shift-queue a patrol: three waypoints run in order
+    issue(ez, Order::Move { to: (4.0, 0.0) }, false)
+    issue(ez, Order::Move { to: (4.0, 3.0) }, true)
+    issue(ez, Order::Attack { target: annie }, true)
+    tick(9)
+    print(f"t9   {brain_line(ez)}")        // first leg done, on the second
+
+    // a plain order mid-patrol REPLACES the whole queue
+    let granted = issue(ez, Order::Move { to: (0.0, 0.0) }, false)
+    print(f"replace granted={granted} queue={len(require(ez, Brain).queue)}")
+
+    // taunt: the forced attack overrides WITHOUT touching the queue
+    update(ez, Brain) { cc = Cc::Taunted { by: annie } }
+    let discarded = issue(ez, Order::Move { to: (9.0, 9.0) }, false)
+    print(f"taunted: order granted={discarded}")
+    tick(30)
+    print(f"t39  {brain_line(ez)} annie hp={require(annie, Vitals).hp:.0}")
+
+    // the taunt drops: the saved queue resumes exactly where it was
+    update(ez, Brain) { cc = Cc::Free {} }
+    tick(40)
+    print(f"t79  {brain_line(ez)}")        // back at (0,0), queue drained
+}

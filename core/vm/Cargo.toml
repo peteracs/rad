@@ -1,0 +1,60 @@
+[package]
+name = "rad-vm"
+version = "0.5.0"
+edition = "2021"
+description = "Rad bytecode VM for debugging and testing stateful simulations"
+license = "MIT"
+repository = "https://github.com/peteracs/rad"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[[bin]]
+name = "rad"
+path = "src/main.rs"
+
+[dependencies]
+hex = "0.4"
+im = "15"
+sha2 = "0.10"
+num_enum = "0.7"
+parking_lot = "0.12.5"
+regex = "1.12.3"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+rayon = "1.11.0"
+blake3 = "1.8.4"
+egg = "0.11.0"
+# RADPACK transport envelope: pure-Rust DEFLATE + base64 (wasm-safe).
+miniz_oxide = "0.8"
+base64 = "0.22"
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+# RADPACKZ file envelope (tapes): zstd beats DEFLATE ~25% on digest-dense
+# JSONL. C bindings, so native-only; the wire envelope stays pure-Rust.
+zstd = "0.13"
+libloading = "0.8"
+ureq = "3.3.0"
+tower-lsp = "0.20.0"
+tokio = { version = "1.36.0", features = ["full"] }
+# Use the supported Wasmtime 36 LTS line so sandbox security fixes continue
+# arriving as API-compatible patch releases.
+wasmtime = { version = "36.0.13", optional = true, default-features = false, features = ["cranelift", "runtime", "std"] }
+wasm-encoder = { version = "0.220.0", optional = true }
+
+[features]
+default = ["native-wasm-phase3"]
+# Native CLI/LSP: load `compiler.wasm` via wasmtime and Phase 3 reactor ABI.
+native-wasm-phase3 = ["dep:wasmtime", "dep:wasm-encoder"]
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = "0.2"
+js-sys = "0.3"
+getrandom = { version = "0.2", features = ["js"] }
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[[bench]]
+name = "rad_benchmarks"
+harness = false

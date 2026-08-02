@@ -1,0 +1,18 @@
+// Attack: mutating enumerated pairs should not affect original list
+fn main() -> nil {
+    let data = ["a", "b", "c"]
+    let pairs = enumerate(data)
+    // modify index in pair
+    for pair in pairs {
+        let idx = pair[0]
+        let val = pair[1]
+        print(f"{idx}:{val}")
+    }
+    // original should be untouched
+    print(data)
+}
+
+// expect: 0:a
+// expect: 1:b
+// expect: 2:c
+// expect: [a, b, c]

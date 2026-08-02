@@ -1,0 +1,13 @@
+// Attack: enumerate |> max_by in a pipeline
+fn main() -> nil {
+    let result = ["short", "looooong", "mid"]
+        |> enumerate
+        |> max_by(fn(pair) { return len(pair[1]) })
+
+    match result {
+        Some(p) => { print(f"idx={p[0]} word={p[1]}") }
+        None => { print("none") }
+    }
+}
+
+// expect: idx=1 word=looooong

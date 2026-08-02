@@ -1,0 +1,49 @@
+// PROBE 07: given BUG 03 (per-entity `mut` resource accumulation collapses in
+// a parallel batch) and BUG 04 (update() writes are invisible to conflict
+// analysis), is there ANY safe way to accumulate per-entity work from a system
+// that shares a schedule call with another system?
+//
+// The obvious candidate is events: emit one event per entity from the system,
+// and do the accumulation in the handler, which runs serially at
+// flush_events(). This is what projects/dogfood/foundry/main.rad already does
+// for its `finishes` counter (which is exact) as opposed to its `starts`
+// counter (which is wrong - it uses update() from inside a system).
+//
+// If events ALSO get dropped on the parallel merge, then there is no safe
+// accumulator at all and BUG 03/04 become much more severe.
+
+component Tag { n: 0 }
+
+resource ViaEvent { n: 0 }
+resource ViaMut { n: 0 }
+resource Other { n: 0 }
+
+event Ping { who: int }
+
+// Two systems in ONE schedule call with DISJOINT resources -> parallel batch.
+// PingEach emits one Ping per entity; BumpMut accumulates the BUG 03 way so we
+// can see both numbers side by side under identical conditions.
+system PingEach(t: Tag, _o: mut Other) {
+    emit Ping { who: t.n }
+}
+
+system BumpMut(_t: Tag, v: mut ViaMut) {
+    v.n = v.n + 1
+}
+
+on Ping(_e) {
+    update(ViaEvent) { n = res(ViaEvent).n + 1 }
+}
+
+for i in range(0, 10) {
+    spawn(Tag { n: i })
+}
+
+print(f"entities: {query_count(Tag)}")
+print("")
+
+schedule [PingEach, BumpMut]
+flush_events()
+
+print(f"accumulated via EVENT handler : {res(ViaEvent).n}   expected 10")
+print(f"accumulated via mut resource  : {res(ViaMut).n}   expected 10")

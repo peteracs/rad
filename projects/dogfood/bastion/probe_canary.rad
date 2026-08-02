@@ -1,0 +1,24 @@
+// CANARY: is a geometric event bomb fuel-bounded? Tiny budget so that a
+// negative result cannot hurt the machine.
+
+event Ping { n }
+
+on Ping(e) {
+    emit Ping { n: e.n + 1 }
+    emit Ping { n: e.n + 1 }
+}
+
+let bomb = f"""
+event Ping { n }
+on Ping(e) {
+    emit Ping { n: e.n + 1 }
+    emit Ping { n: e.n + 1 }
+}
+emit Ping { n: 0 }
+"""
+
+let t0 = clock()
+match sandbox_run(bomb, fork(), f"""{ "write": [], "fuel": 2000, "mem_bytes": 1048576 }""") {
+    Ok(_f) => { print(f"CANARY: bomb completed in {clock() - t0} s (NOT bounded by fuel)") }
+    Err(m) => { print(f"CANARY stopped in {clock() - t0} s: {m}") }
+}

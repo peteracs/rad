@@ -1,0 +1,18 @@
+// Homogeneous string-keyed maps (single value type per literal)
+let scores = {"alice": 10, "bob": 20, "carol": 15}
+print(scores["bob"])
+// expect: 20
+print(len(scores))
+// expect: 3
+
+print(keys(scores))
+// expect: ["alice", "bob", "carol"]
+print(len(values(scores)))
+// expect: 3
+
+let extra = {"dave": 5}
+let merged = merge(scores, extra)
+print(merged["dave"])
+// expect: 5
+print(merged["alice"])
+// expect: 10

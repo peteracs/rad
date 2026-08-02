@@ -1,0 +1,3 @@
+// expect-runtime-error: out of bounds
+let s = "abc"
+print(byte_at(s, 5))

@@ -1,0 +1,9 @@
+let xs = [1, 2, 3]
+print(pop_last(xs))
+// expect: 3
+print(drop_last(xs))
+// expect: [1, 2]
+
+// pop() is identical to pop_last()
+print(pop(xs))
+// expect: 3

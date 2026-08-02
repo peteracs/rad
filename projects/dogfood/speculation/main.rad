@@ -1,0 +1,133 @@
+// Dogfood: Feature #1 — the speculation sandbox.
+//
+// Scenario: a kingdom-management host program receives an untrusted,
+// "AI-generated" policy proposal as source code. The host:
+//   1. runs the proposal in a capability-bounded sandbox against a fork,
+//   2. explores parallel futures of the post-proposal world with simulate_par,
+//   3. peeks at outcomes, scores them, and commits only if the policy is safe.
+//
+// The proposal never touches the live world, can only write Treasury and
+// Morale (not Army), cannot do IO, and runs under a fuel budget.
+//
+// Note the f""" triple-quoted strings: braces are literal inside them, so
+// embedded RAD code needs no escaping — that's what they're designed for.
+
+component Treasury { gold: 1000 }
+
+component Morale { level: 50 }
+
+component Army { soldiers: 300 }
+
+system Economy(t: mut Treasury, m: Morale) {
+    // Tax revenue scales with morale.
+    t = Treasury { gold: t.gold + m.level }
+}
+
+system Unrest(m: mut Morale, t: Treasury) {
+    // Low treasury erodes morale.
+    if t.gold < 500 {
+        m = Morale { level: m.level - 5 }
+    }
+}
+
+let kingdom = spawn("kingdom", Treasury { gold: 1000 }, Morale { level: 50 }, Army { soldiers: 300 })
+
+print("=== Speculation Sandbox Demo ===")
+let t0 = get(kingdom, Treasury) |> unwrap
+let m0 = get(kingdom, Morale) |> unwrap
+print(f"Live world: gold={t0.gold} morale={m0.level}")
+print("")
+
+// --- 1. An untrusted proposal arrives -------------------------------------
+
+let benign_proposal = f"""
+component Treasury { gold: 1000 }
+component Morale   { level: 50 }
+let k = get_entity("kingdom")
+let t = get(k, Treasury) |> unwrap
+let m = get(k, Morale) |> unwrap
+// Festival policy: spend 300 gold, gain 30 morale
+set(k, Treasury { gold: t.gold - 300 })
+set(k, Morale { level: m.level + 30 })
+print("festival policy applied")
+"""
+
+let caps = f"""{ "write": ["Treasury", "Morale"], "fuel": 1000000, "seed": 7 }"""
+
+let f = fork()
+let proposal_result = sandbox_run(benign_proposal, f, caps)
+
+match proposal_result {
+    Ok(value) => {
+        let t = peek(value, kingdom, Treasury) |> unwrap
+        let m = peek(value, kingdom, Morale) |> unwrap
+        print(f"Proposal fork: gold={t.gold} morale={m.level}")
+
+        // --- 2. Explore 4 parallel futures of the proposed world ----------
+        let futures = simulate_par(value, [system::Economy, system::Unrest], 10, 4, 42)
+
+        // --- 3. Score: keep the proposal only if every future stays solvent
+        let mut worst_gold = 999999999
+        for fut in futures {
+            let ft = peek(fut, kingdom, Treasury) |> unwrap
+            if ft.gold < worst_gold {
+                worst_gold = ft.gold
+            }
+        }
+        print(f"Worst-case gold across 4 futures, 10 ticks: {worst_gold}")
+
+        if worst_gold > 0 {
+            commit(value)
+            print("Policy is safe in all futures -> COMMITTED")
+        } else {
+            print("Policy bankrupts a future -> REJECTED (fork discarded)")
+        }
+    }
+    Err(value) => {
+        print(f"Proposal failed: {value}")
+    }
+}
+
+let t1 = get(kingdom, Treasury) |> unwrap
+let m1 = get(kingdom, Morale) |> unwrap
+print(f"Live world after decision: gold={t1.gold} morale={m1.level}")
+print("")
+
+// --- 4. Hostile proposals bounce off every layer --------------------------
+
+let raid_proposal = f"""
+component Army { soldiers: 300 }
+set(get_entity("kingdom"), Army { soldiers: 0 })
+"""
+let raid = sandbox_run(raid_proposal, fork(), caps)
+match raid {
+    Ok(_value) => { print("FAIL: raid should have been denied") }
+    Err(value) => { print(f"Raid denied (ACL): {value}") }
+}
+
+let spy_proposal = f"""
+let secrets = read_file("secrets.txt")
+"""
+let spy = sandbox_run(spy_proposal, fork(), caps)
+match spy {
+    Ok(_value) => { print("FAIL: spying should have been denied") }
+    Err(value) => { print(f"Spy denied (builtin mask): {value}") }
+}
+
+let bomb_proposal = f"""
+let mut i = 0
+while i >= 0 {
+    i = i + 1
+}
+"""
+let bomb = sandbox_run(bomb_proposal, fork(), caps)
+match bomb {
+    Ok(_value) => { print("FAIL: infinite loop should have starved") }
+    Err(value) => { print(f"Bomb starved (fuel budget): {value}") }
+}
+
+let t2 = get(kingdom, Treasury) |> unwrap
+let a2 = get(kingdom, Army) |> unwrap
+print("")
+print(f"Final live world: gold={t2.gold} soldiers={a2.soldiers}")
+print("All three hostile proposals deflected; the host alone decides what commits.")

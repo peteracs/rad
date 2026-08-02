@@ -1,0 +1,37 @@
+use "sep_helpers.rad"
+
+pub component Score { value: int = 0 }
+
+fn award_points(e: entity, pts: int) -> nil {
+    if has(e, Score) {
+        let s = require(e, Score)
+        set(e, Score { value: s.value + pts })
+    } else {
+        set(e, Score { value: pts })
+    }
+}
+
+fn main() -> nil {
+    let hero = make_entity("Hero", 80, 10, 20)
+    let goblin = make_entity("Goblin", 30, 5, 5)
+
+    print(describe(hero))
+    print(describe(goblin))
+
+    print(f"hero alive: {is_alive(hero)}")
+    print(f"goblin alive: {is_alive(goblin)}")
+
+    award_points(hero, 100)
+    award_points(hero, 50)
+    let hs = require(hero, Score)
+    print(f"hero score: {hs.value}")
+
+    print(f"clamp(15,0,10) = {clamp(15, 0, 10)}")
+    print(f"abs_val(-42) = {abs_val(0 - 42)}")
+    print(f"fib(10) = {fib(10)}")
+
+    let e3 = entity { Name { text: "Ghost" }, Health { hp: 0, max_hp: 50 } }
+    print(f"ghost alive: {is_alive(e3)}")
+
+    print("done")
+}

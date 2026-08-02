@@ -1,0 +1,12 @@
+// Attack: update field using current field value (self-referential increment)
+component Counter { n: 0 }
+
+fn main() -> nil {
+    let e = spawn(Counter { n: 10 })
+    let c = unwrap(get(e, Counter))
+    update(e, Counter) { n = c.n + 1 }
+    let c2 = unwrap(get(e, Counter))
+    print("n:", c2.n)
+}
+
+// expect: n: 11

@@ -1,0 +1,3 @@
+// backend: both
+print("CASE06:" + replace("pci-audit-2026", "-", "_"))
+// expect: CASE06:pci_audit_2026

@@ -1,0 +1,5 @@
+---
+source: tests\conformance\test_fork_system_reads_correct_state.rad
+exit_code: 0
+---
+PASS: system reads correct forked state

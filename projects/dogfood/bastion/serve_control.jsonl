@@ -1,0 +1,2 @@
+{"jsonrpc":"2.0","id":1,"method":"propose","params":{"source":"component Treasury { gold: 1000 }\nset(get_entity(\"vault\"), Treasury { gold: 1234 })","caps":{"write":["Treasury"],"fuel":200000}}}
+{"jsonrpc":"2.0","id":2,"method":"shutdown"}

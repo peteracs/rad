@@ -1,0 +1,32 @@
+// append, extend, zip, flat_map
+print(append([1, 2], [3, 4]))
+// expect: [1, 2, 3, 4]
+print(append([], [1]))
+// expect: [1]
+print(append([1], []))
+// expect: [1]
+
+print(extend(["a"], ["b", "c"]))
+// expect: ["a", "b", "c"]
+
+print(zip([1, 2, 3], ["a", "b", "c"]))
+// expect: [[1, "a"], [2, "b"], [3, "c"]]
+print(zip([1, 2], ["a", "b", "c"]))
+// expect: [[1, "a"], [2, "b"]]
+print(zip([], []))
+// expect: []
+
+fn to_pair(n) {
+    return [n, n * 2]
+}
+print(flat_map([1, 2, 3], to_pair))
+// expect: [1, 2, 2, 4, 3, 6]
+
+fn echo_list(x) {
+    return [x]
+}
+print(flat_map(["a", "b"], echo_list))
+// expect: ["a", "b"]
+
+print(flat_map([], echo_list))
+// expect: []

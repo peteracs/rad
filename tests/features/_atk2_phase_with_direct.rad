@@ -1,0 +1,17 @@
+// Attack: mixing phase name and direct system name in same schedule
+component C { v: 0 }
+
+system X(c: C) { print("X") }
+system Y(c: C) { print("Y") }
+system Z(c: C) { print("Z") }
+
+phase AB { X, Y }
+
+fn main() -> nil {
+    spawn(C { v: 0 })
+    schedule [AB, Z]
+}
+
+// expect: X
+// expect: Y
+// expect: Z

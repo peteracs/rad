@@ -1,0 +1,11 @@
+// Attack: emit with extra field not in declaration
+event Simple { x: int }
+
+on Simple(e) {
+    print(e.x)
+}
+
+fn main() -> nil {
+    emit Simple { x: 1, y: 2 }
+    flush_events()
+}

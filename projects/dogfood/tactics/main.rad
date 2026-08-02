@@ -1,0 +1,209 @@
+// RADTACTICS — a tactics battler where the AI thinks by forking the
+// universe. The combat brain lives in lib_combat.rad (shared by the local
+// game, the networked arena, and the bot tournament — rad's module system
+// dogfooded for real).
+//
+// Every oracle decision: fork checkpoint -> stage candidate -> simulate_par
+// samples PAR_FUTURES jittered opponent behaviors DEPTH frames deep, in
+// parallel -> score the WORST one -> rollback. The real move replays through
+// events, so why(unit, Stats) can name the killing blow afterwards.
+//
+// Run:   rad projects/dogfood/tactics/main.rad
+// Tape:  rad projects/dogfood/tactics/main.rad --record projects/dogfood/tactics/battle.radr
+//        rad replay projects/dogfood/tactics/battle.radr
+//
+// The first input line picks who commands red (blue is always the oracle):
+//   auto (or blank)   — red is the oracle too: the classic auto-battle
+//   play              — YOU command red; `hint` consults the oracle
+//   bot <file>        — a player-written rad script commands red, inside a
+//                       sandbox whose capability grant is exactly
+//                       { "write": ["Intent"] }. See projects/dogfood/tactics/bots/.
+//
+// Two-machine battles: arena_server.rad / arena_client.rad.
+// Bot league:          tournament.rad.
+//
+// After the battle an autopsy prompt accepts:
+//   why <unit-name>   — causal history of that unit's Stats (the killing blow)
+//   log               — the full battle narrative
+//   quit
+
+use "lib_combat.rad"
+
+let MAX_ROUNDS = 40
+
+// One human-commanded turn. Returns "" normally, "concede" to end the battle.
+fn player_turn(me) -> str {
+    let n = name_of(me)
+    let s = get(me, Stats) |> unwrap
+    while true {
+        let p = get(me, Pos) |> unwrap
+        let hp = (get(me, Stats) |> unwrap).hp
+        print(f"\n[{n}] {s.cls} at ({p.x},{p.y}) hp {hp}/{s.max_hp}")
+        print("  orders: move x y | attack t [x y] | heal t [x y] | hint | auto | wait | board | log | concede")
+        let line = trim(readline())
+        let parts = split(line, " ")
+        let cmd = parts[0]
+
+        if cmd == "board" {
+            draw()
+            continue
+        }
+        if cmd == "log" {
+            print((get_resource(Battle) |> unwrap).log)
+            continue
+        }
+        if cmd == "concede" { return "concede" }
+        if cmd == "hint" {
+            // Ask the oracle: fork the universe per candidate, sample
+            // jittered futures, report — and change nothing.
+            let a = choose(me)
+            print(f"  oracle says: {describe_act(a)}")
+            continue
+        }
+        if cmd == "auto" {
+            act_live(me, choose(me))
+            return ""
+        }
+        if cmd == "" or cmd == "wait" or cmd == "pass" {
+            act_live(me, Act { kind: "wait", tx: p.x, ty: p.y, target: "" })
+            return ""
+        }
+
+        let mut a = Act { kind: "illegal" }
+        if cmd == "move" and len(parts) == 3 {
+            a = find_act(me, "move", to_num(parts[1]), to_num(parts[2]), "")
+        }
+        if (cmd == "attack" or cmd == "heal") and len(parts) == 2 {
+            a = find_targeted(me, cmd, parts[1])
+        }
+        if (cmd == "attack" or cmd == "heal") and len(parts) == 4 {
+            a = find_act(me, cmd, to_num(parts[2]), to_num(parts[3]), parts[1])
+        }
+        if a.kind == "illegal" {
+            print("  illegal order (out of range, blocked tile, or bad command) - try again")
+            continue
+        }
+        act_live(me, a)
+        return ""
+    }
+    return ""
+}
+
+// One bot-commanded turn: decide in the sandbox, narrate, replay live.
+fn bot_turn(me, bot_src: str) -> nil {
+    let n = name_of(me)
+    let r = bot_decide(me, bot_src)
+    let act = r[0]
+    let status = r[1]
+    if status == "ok" {
+        print(f"  [{n}] bot: {describe_act(act)}")
+    } else {
+        print(f"  [{n}] bot {status} - unit hesitates")
+    }
+    act_live(me, act)
+}
+
+fn main() -> nil {
+    rand_seed(2026)
+    roster("red", 1, -1)
+    roster("blue", W - 2, 1)
+
+    print("=== RADTACTICS: red (KAMC) vs blue (kamc) ===")
+    print("mode> auto (blank = oracle both sides) | play (you command red) | bot <file>")
+    let mline = split(trim(readline()), " ")
+    let mut mode = "auto"
+    let mut bot_src = ""
+    if mline[0] == "play" { mode = "play" }
+    if mline[0] == "bot" and len(mline) == 2 {
+        if file_exists(mline[1]) {
+            bot_src = read_file(mline[1])
+            mode = "bot"
+            print(f"red is commanded by sandboxed bot {mline[1]} (caps: write Intent only)")
+        } else {
+            print(f"no bot at {mline[1]} - falling back to auto")
+        }
+    }
+    print(f"the oracle samples {PAR_FUTURES} jittered futures per candidate, {DEPTH} frames deep, in parallel\n")
+    draw()
+
+    let t_battle = clock()
+    let mut round = 1
+    let mut winner = ""
+    while winner == "" and round <= MAX_ROUNDS {
+        let b0 = get_resource(Battle) |> unwrap
+        set_resource(Battle, Battle { round: round, winner: "", log: b0.log, futures: b0.futures })
+        let round_start = fork()
+
+        for side in ["red", "blue"] {
+            for unit in living(side) {
+                if side == "red" and mode == "play" {
+                    if player_turn(unit) == "concede" { winner = "blue (red conceded)" }
+                } else if side == "red" and mode == "bot" {
+                    bot_turn(unit, bot_src)
+                } else {
+                    act_live(unit, choose(unit))
+                }
+                if winner != "" { break }
+            }
+            if side_hp("red") == 0 { winner = "blue" }
+            if side_hp("blue") == 0 { winner = "red" }
+            if winner != "" { break }
+        }
+
+        // Sudden death: from round 25 the ring closes — everyone bleeds.
+        // Evented, so an autopsy can tell a ring death from a blade death.
+        if winner == "" and round >= 25 {
+            for side in ["red", "blue"] {
+                for unit in living(side) {
+                    emit Sapped { unit: unit, amount: 2 }
+                }
+            }
+            flush_events()
+            let rh = side_hp("red")
+            let bh = side_hp("blue")
+            // a simultaneous ring wipe is a draw, not a win for whichever
+            // side happens to be checked last
+            if rh == 0 and bh == 0 { winner = "draw (mutual ring death)" }
+            else if rh == 0 { winner = "blue" }
+            else if bh == 0 { winner = "red" }
+        }
+
+        // The always-on fence: a battle round may touch combat state and the
+        // battle journal — nothing else, ever.
+        assert_only_changed(round_start, fork(), [Pos, Stats, Intent, Battle])
+
+        print(f"\n-- after round {round} --")
+        draw()
+        round = round + 1
+    }
+
+    let elapsed = clock() - t_battle
+    let b = get_resource(Battle) |> unwrap
+    if winner == "" { winner = "nobody (round limit)" }
+    print(f"\n=== {winner} wins in {round - 1} rounds ===")
+    let rate = to_fixed(float(b.futures) / elapsed, 0)
+    print(f"oracle explored {b.futures} forked futures in {to_fixed(elapsed * 1000.0, 1)} ms ({rate} universes/sec)")
+
+    // ---- autopsy prompt ---------------------------------------------------
+    print("\nautopsy> commands: why <unit>, log, quit")
+    let mut going = true
+    while going {
+        let line = trim(readline())
+        if line == "" or line == "quit" {
+            going = false
+            continue
+        }
+        let parts = split(line, " ")
+        if parts[0] == "why" and len(parts) == 2 {
+            let ent = get_entity(parts[1])
+            if ent == nil {
+                print(f"no unit named {parts[1]}")
+            } else {
+                print(why(ent, Stats))
+            }
+        }
+        if parts[0] == "log" {
+            print((get_resource(Battle) |> unwrap).log)
+        }
+    }
+}

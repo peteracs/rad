@@ -1,0 +1,18 @@
+[package]
+name = "moba-simcore"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+publish = false
+
+# The compiled consumer of the damage_core rad spec — built for SPEED:
+# native (tests/golden) and wasm (the browser game's sim core).
+# No interpreter anywhere near a hot path.
+
+[lib]
+crate-type = ["rlib", "cdylib"]
+
+[dependencies]
+wasm-bindgen = "0.2"
+
+[dev-dependencies]

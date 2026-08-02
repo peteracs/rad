@@ -1,0 +1,7 @@
+// Attack: update on entity without the component
+component C { x: 0 }
+
+fn main() -> nil {
+    let e = spawn()
+    update(e, C) { x = 5 }
+}

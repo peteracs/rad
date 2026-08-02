@@ -1,0 +1,13 @@
+use "../core/c-backend/src/lexer.rad"
+use "../core/c-backend/src/parser.rad"
+
+fn main() -> nil {
+    let src = "fn main() -> nil { let x = 10 + 20\n print(x) }"
+    let tokens = lex(src)
+    let ast = parse(tokens)
+    let p = require(ast, Program)
+    print(len(p.decls))
+    let d = p.decls[0]
+    let f = require(d, FnDecl)
+    print(f.name)
+}

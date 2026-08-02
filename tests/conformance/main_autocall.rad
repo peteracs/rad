@@ -1,0 +1,5 @@
+// backend: both
+fn main() -> nil {
+    print("auto-main")
+}
+// expect: auto-main

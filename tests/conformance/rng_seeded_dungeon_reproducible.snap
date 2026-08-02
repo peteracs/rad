@@ -1,0 +1,7 @@
+---
+source: tests\conformance\rng_seeded_dungeon_reproducible.rad
+exit_code: 0
+---
+hero=19 dragon=22 shield=false crit=false damage=7 outcome=retreat
+hero=19 dragon=22 shield=false crit=false damage=7 outcome=retreat
+true

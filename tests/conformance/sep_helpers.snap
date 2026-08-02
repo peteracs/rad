@@ -1,0 +1,4 @@
+---
+source: tests\conformance\sep_helpers.rad
+exit_code: 0
+---

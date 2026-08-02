@@ -1,0 +1,8 @@
+---
+source: tests\conformance\events_main_emit_stack_cleanup.rad
+exit_code: 0
+---
+10
+20
+DoorState::Locked
+2

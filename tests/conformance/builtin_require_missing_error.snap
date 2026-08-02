@@ -1,0 +1,7 @@
+---
+source: tests\conformance\builtin_require_missing_error.rad
+exit_code: 1
+---
+
+---stderr---
+Error: [line 8] in main: require() missing component 'Health' on 'box' (has: [Label])

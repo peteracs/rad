@@ -1,0 +1,35 @@
+// BUG 02 (narrowing): what EXACTLY makes despawn() inside a `mut` query loop
+// crash? It is not despawn-during-iteration in general -- it is the
+// unconditional writeback of a *dirtied* mut binding at end of iteration.
+//
+// Case A: mut binding is never written, then despawn -> fine.
+// Case B: mut binding IS written, then despawn  -> "Cannot set component on
+//                                                   non-existent entity N"
+//
+// Case B is the documented idiom (docs/src/guide/ecs.md lines 513-520 and the
+// Lifetime example at lines 265-272, plus production-patterns.md 213-220).
+
+component A { n: 0 }
+component B { n: 0 }
+
+for i in range(0, 4) {
+    spawn(A { n: i })
+    spawn(B { n: i })
+}
+
+// ---- Case A: despawn WITHOUT touching the mut binding ----
+for (id, a) in query { mut A } {
+    if a.n % 2 == 0 {
+        despawn(id)
+    }
+}
+print(f"case A (despawn, no write): survived, {len(query { A })} A left")
+
+// ---- Case B: write the mut binding, THEN despawn, same iteration ----
+for (id, b) in query { mut B } {
+    b.n = b.n + 100
+    if b.n % 2 == 0 {
+        despawn(id)
+    }
+}
+print(f"case B (write then despawn): survived, {len(query { B })} B left")

@@ -1,0 +1,7 @@
+prio T-1 1
+assign T-1 alice
+add Search is case sensitive
+sync
+digest
+list all
+quit

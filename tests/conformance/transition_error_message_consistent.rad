@@ -1,0 +1,9 @@
+// backend: both
+state Gate {
+    Open { on close -> Closed }
+    Closed { on open -> Open }
+}
+
+let g = Gate::Open
+let _ = transition(g, "nope") |> unwrap
+// expect-runtime-error: No transition on 'nope' from state 'Gate::Open'

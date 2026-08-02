@@ -1,0 +1,8 @@
+// backend: both
+component Position { x: 0 }
+
+fn main() -> nil {
+    let p: Position = [1, 2, 3]
+    print(p)
+}
+// expect-runtime-error: Type mismatch

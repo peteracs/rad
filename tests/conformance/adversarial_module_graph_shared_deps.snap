@@ -1,0 +1,7 @@
+---
+source: tests\conformance\adversarial_module_graph_shared_deps.rad
+exit_code: 0
+---
+125
+60
+188

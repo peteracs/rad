@@ -1,0 +1,131 @@
+// Netcode authority smoke test: exercises the per-peer jitter buffer in
+// server/input_queue.rad without any sockets. It drives the same functions the
+// UDP loop calls (remember_peer, queue_move_input, apply_peer_move_for_tick)
+// so the input-validation grammar, receipt/applied ack bookkeeping, and peer cap stay locked
+// down even though the live authority loops forever on a real UDP handle.
+
+use "../server/state.rad"
+use "../server/input_queue.rad"
+use "../sim/components.rad"
+use "../world/scene.rad"
+use "../world/avatars.rad"
+use "../sim/movement.rad"
+use "../sim/lag_compensation.rad"
+use "../sim/projectiles.rad"
+use "../protocol/match_protocol.rad"
+
+let _seed = seed_moba_world()
+
+fn peer_conn(peer: entity) -> PeerConnection {
+    return get(peer, PeerConnection) |> unwrap
+}
+
+fn require_peer(session_id: int, player_id: int, client_seq: int) -> entity {
+    match remember_peer("127.0.0.1", 7000, session_id, player_id, 0, 0, client_seq) {
+        Some(peer) => { return peer }
+        None => {
+            assert(false, "peer table unexpectedly full while seeding test peer")
+            return seed_moba_player(player_id)
+        }
+    }
+}
+
+fn main() -> nil {
+    assert(peer_key(9001, 1) == "9001:1", "peer key must be session:player")
+
+    // A sync/move from a new peer creates exactly one bounded peer entity, and
+    // a second packet on the same key reuses it instead of growing the table.
+    let peer = require_peer(9001, 1, 1)
+    let _again = require_peer(9001, 1, 2)
+    assert(peer_count() == 1, "same session:player must reuse one peer entity")
+    assert(player_id_claimed_by_other_session(9002, 1), "another session must not claim an active player id")
+
+    // current_tick = 100, default lead window = 24 ticks.
+    assert(queue_move_input(peer, 100, 5, 110, 42, 12.5, -8.25), "fresh future input must queue")
+    record_peer_received_packet(peer, 5)
+    assert(peer_conn(peer).last_status == "queued", "queued input must report queued status")
+    assert(peer_conn(peer).received_client_seq == 5, "receipt ack must advance before simulation applies input")
+    assert(peer_conn(peer).received_ack_bits == 1, "first received packet must set the low receipt ack bit")
+    assert(peer_conn(peer).last_applied_client_seq == 0, "queued-but-unapplied input must not advance applied ack")
+
+    // Same slot + same target tick + non-advancing seq is a duplicate.
+    assert(not queue_move_input(peer, 100, 5, 110, 99, 1.0, 1.0), "duplicate input must be rejected")
+    assert(peer_conn(peer).last_status == "duplicate", "duplicate input must report duplicate status")
+
+    // target_tick <= current_tick is late; far beyond the lead window is future.
+    assert(not queue_move_input(peer, 100, 6, 100, 50, 0.0, 0.0), "late input must be rejected")
+    record_peer_received_packet(peer, 6)
+    assert(peer_conn(peer).last_status == "late", "late input must report late status")
+    assert(not queue_move_input(peer, 100, 7, 200, 51, 0.0, 0.0), "too-far-ahead input must be rejected")
+    record_peer_received_packet(peer, 7)
+    assert(peer_conn(peer).last_status == "too-far-ahead", "future input must report too-far-ahead status")
+    assert(peer_conn(peer).received_client_seq == 7, "receipt ack must include rejected but well-formed packets")
+    assert(peer_conn(peer).received_ack_bits == 7, "receipt ack window must retain contiguous received packet history")
+
+    assert(peer_conn(peer).duplicate_inputs == 1, "duplicate counter must advance once")
+    assert(peer_conn(peer).late_inputs == 1, "late counter must advance once")
+    assert(peer_conn(peer).future_inputs == 1, "future counter must advance once")
+
+    // Applying the matching tick emits a MoveOrder, acks the client seq, and
+    // clears the slot. flush_events runs the movement handler synchronously.
+    apply_peer_move_for_tick(peer, 110)
+    assert(peer_conn(peer).last_status == "applied", "matching tick must apply the queued input")
+    assert(peer_conn(peer).last_applied_client_seq == 5, "applied input must ack its client seq")
+    assert(peer_conn(peer).applied_ack_bits == 1, "first applied input must set the low applied ack bit")
+
+    let target = get(player_avatar(1), MoveTarget) |> unwrap
+    assert(target.command_id == 42, "applied input must reach the movement target")
+    assert(target.active, "applied input must arm the movement target")
+    assert(target.x == 12.5 and target.y == -8.25, "applied input must carry clamped coordinates")
+
+    // A client may request a far click target, but the server never accepts a
+    // position write from the packet. Applying the queued order only changes
+    // MoveTarget; Position advances later through fixed-speed simulation.
+    assert(queue_move_input(peer, 110, 8, 112, 43, 9999.0, -9999.0), "far target input must queue as a movement order")
+    record_peer_received_packet(peer, 8)
+    apply_peer_move_for_tick(peer, 112)
+    let far_target = get(player_avatar(1), MoveTarget) |> unwrap
+    assert(far_target.command_id == 43, "new far target must replace the previous command")
+    assert(far_target.x == clamp_world_x(9999.0), "far target x must be clamped to the map")
+    assert(far_target.y == clamp_world_y(-9999.0), "far target y must be clamped to the map")
+
+    let pos_before_tick = get(player_avatar(1), Position) |> unwrap
+    assert(pos_before_tick.x == 0.0 and pos_before_tick.y == 0.0, "move orders must not teleport position")
+    tick_avatar_movement(player_avatar(1), 1.0 / 128.0)
+    let pos_after_tick = get(player_avatar(1), Position) |> unwrap
+    let moved_distance = sqrt(pos_after_tick.x * pos_after_tick.x + pos_after_tick.y * pos_after_tick.y)
+    assert(moved_distance > 0.0, "fixed movement tick must advance toward the target")
+    assert(moved_distance <= 58.0 / 128.0 + 0.0001, "fixed movement tick must respect avatar speed")
+
+    assert(queue_cast_input(peer, 112, 9, 114, 44, 1.0, 0.0, 106), "fresh cast input must queue")
+    record_peer_received_packet(peer, 9)
+    apply_peer_cast_for_tick(peer, 114)
+    assert(peer_conn(peer).last_status == "cast", "matching tick must apply the queued cast")
+    assert(peer_conn(peer).last_applied_client_seq == 9, "applied cast must ack its client seq")
+    assert(peer_conn(peer).applied_ack_bits == 19, "applied ack window must retain out-of-order applied history")
+    assert(projectile_count() == 1, "applied cast must spawn an authoritative projectile")
+    let projectile_packet = encode_state_packet("snapshot", 1200, 114, 6, 9001, 1, peer_conn(peer).received_client_seq, peer_conn(peer).received_ack_bits)
+    assert(byte_at(projectile_packet, 55) == 1, "state packet must include authoritative projectile records")
+    assert(byte_at(projectile_packet, 63) == 1, "projectile snapshot must include one peer telemetry record")
+    assert(len(projectile_packet) == state_packet_header_len() + state_peer_record_len() + state_avatar_record_len() + state_projectile_record_len(), "projectile snapshot must append fixed-stride peer and projectile records")
+
+    record_position_history(1, 113)
+    assert(not is_none(lookup(PositionHistory, "owner_id", 1)), "history should exist before peer disconnect")
+    assert(disconnect_peer(9001, 1), "explicit disconnect must remove the peer")
+    assert(peer_count() == 0, "disconnect must free the peer slot")
+    assert(is_none(lookup(PositionHistory, "owner_id", 1)), "disconnect must remove lag-compensation history")
+    assert(projectile_count() == 0, "disconnect must remove projectiles owned by that peer")
+
+    // The bounded table saturates at max_peers and rejects further peers.
+    let mut i = 0
+    let mut rejected = false
+    while i < max_peers() + 2 {
+        match remember_peer("127.0.0.1", 6000, 2000 + i, 10 + i, 0, 0, 1) {
+            Some(_p) => {}
+            None => { rejected = true }
+        }
+        i = i + 1
+    }
+    assert(peer_count() == max_peers(), "peer table must saturate at max_peers")
+    assert(rejected, "peer table must reject peers beyond max_peers")
+}

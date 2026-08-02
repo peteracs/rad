@@ -1,0 +1,112 @@
+// =====================================================================
+//  Chat System — Entities as users, state machines as rooms, events
+// =====================================================================
+
+component Username { name: "" }
+
+component RoomInfo { name: "", capacity: 10 }
+
+component MemberOf { room: "" }
+
+state ConnectionState {
+    Offline {
+        on connect -> Online
+    }
+    Online {
+        on disconnect -> Offline
+        on idle_timeout -> Away
+    }
+    Away {
+        on activity -> Online
+        on disconnect -> Offline
+    }
+}
+
+event Message { from_name, room, text }
+
+event UserJoined { user_name, room }
+
+event UserLeft { user_name, room }
+
+event StatusChange { user_name, old_status, new_status }
+
+on Message(e) {
+    print("  [" + e.room + "] " + e.from_name + ": " + e.text)
+}
+
+on UserJoined(e) {
+    print("  --> " + e.user_name + " joined #" + e.room)
+}
+
+on UserLeft(e) {
+    print("  <-- " + e.user_name + " left #" + e.room)
+}
+
+on StatusChange(e) {
+    print("  * " + e.user_name + " is now " + e.new_status)
+}
+
+fn get_status_str(s) {
+    let mut result = "unknown"
+    match s {
+        Offline => { result = "offline" }
+        Online => { result = "online" }
+        Away => { result = "away" }
+    }
+    return result
+}
+
+fn main() -> any {
+    print("=== Chat System ===\n")
+
+    // Users
+    let mut alice_status = ConnectionState::Offline
+    let mut bob_status = ConnectionState::Offline
+
+    // Alice connects
+    alice_status = transition(alice_status, "connect") ?
+    emit StatusChange { user_name: "Alice", old_status: "offline", new_status: get_status_str(alice_status) }
+
+    // Bob connects
+    bob_status = transition(bob_status, "connect") ?
+    emit StatusChange { user_name: "Bob", old_status: "offline", new_status: get_status_str(bob_status) }
+
+    print("")
+
+    // Join rooms
+    emit UserJoined { user_name: "Alice", room: "general" }
+    emit UserJoined { user_name: "Bob", room: "general" }
+    emit UserJoined { user_name: "Alice", room: "random" }
+
+    print("")
+
+    // Chat
+    emit Message { from_name: "Alice", room: "general", text: "Hey everyone!" }
+    emit Message { from_name: "Bob", room: "general", text: "Hi Alice! How are you?" }
+    emit Message { from_name: "Alice", room: "general", text: "Great! Working on Rad lang." }
+    emit Message { from_name: "Bob", room: "general", text: "Nice! What's new?" }
+    emit Message { from_name: "Alice", room: "random", text: "Anyone here?" }
+
+    print("")
+
+    // Alice goes away
+    alice_status = transition(alice_status, "idle_timeout") ?
+    emit StatusChange { user_name: "Alice", old_status: "online", new_status: get_status_str(alice_status) }
+
+    // Alice comes back
+    alice_status = transition(alice_status, "activity") ?
+    emit StatusChange { user_name: "Alice", old_status: "away", new_status: get_status_str(alice_status) }
+
+    emit Message { from_name: "Alice", room: "general", text: "Sorry, was AFK" }
+
+    print("")
+
+    // Bob disconnects
+    emit UserLeft { user_name: "Bob", room: "general" }
+    bob_status = transition(bob_status, "disconnect") ?
+    emit StatusChange { user_name: "Bob", old_status: "online", new_status: get_status_str(bob_status) }
+
+    print("\nFinal statuses:")
+    print("  Alice: " + get_status_str(alice_status))
+    print("  Bob: " + get_status_str(bob_status))
+}

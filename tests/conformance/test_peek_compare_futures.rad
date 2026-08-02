@@ -1,0 +1,49 @@
+// M2 Test: Compare multiple futures using peek — the core use case
+
+component HP   { hp: 100 }
+component Atk  { damage: 0 }
+
+system Strike(hp: mut HP, atk: Atk) {
+    hp = HP { hp: hp.hp - atk.damage }
+}
+
+let warrior = spawn("warrior", HP { hp: 100 }, Atk { damage: 20 })
+let mage    = spawn("mage",    HP { hp: 60 },  Atk { damage: 35 })
+
+// Strategy A: aggressive — simulate 5 ticks
+let fork_a = fork()
+let future_a = simulate(fork_a, [system::Strike], 5)
+
+// Strategy B: defensive — simulate only 2 ticks
+let fork_b = fork()
+let future_b = simulate(fork_b, [system::Strike], 2)
+
+// Compare warrior HP across futures WITHOUT committing either
+let warrior_hp_a = peek(future_a, warrior, HP) |> unwrap
+let warrior_hp_b = peek(future_b, warrior, HP) |> unwrap
+let mage_hp_a    = peek(future_a, mage, HP) |> unwrap
+let mage_hp_b    = peek(future_b, mage, HP) |> unwrap
+
+// Warrior: 100 - 20*5 = 0 in A, 100 - 20*2 = 60 in B
+assert(warrior_hp_a.hp == 0,  f"Warrior in future A: expected 0, got {warrior_hp_a.hp}")
+assert(warrior_hp_b.hp == 60, f"Warrior in future B: expected 60, got {warrior_hp_b.hp}")
+
+// Mage: 60 - 35*5 = -115 in A, 60 - 35*2 = -10 in B
+assert(mage_hp_a.hp == -115, f"Mage in future A: expected -115, got {mage_hp_a.hp}")
+assert(mage_hp_b.hp == -10,  f"Mage in future B: expected -10, got {mage_hp_b.hp}")
+
+// Main world still untouched
+let main_warrior = get(warrior, HP) |> unwrap
+let main_mage    = get(mage, HP) |> unwrap
+assert(main_warrior.hp == 100, "Main warrior should be 100")
+assert(main_mage.hp == 60,     "Main mage should be 60")
+
+// Choose the less risky future and commit it
+if warrior_hp_b.hp > 0 {
+    commit(future_b)
+}
+
+let final_warrior = get(warrior, HP) |> unwrap
+assert(final_warrior.hp == 60, f"After committing B, warrior should be 60, got {final_warrior.hp}")
+
+print("PASS: compare futures with peek")

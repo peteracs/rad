@@ -1,0 +1,83 @@
+// BUG 03 (MEMORY CORRUPTION / CRITICAL): peek()-ing a component that contains a
+// `str` field out of a simulate_par() result fork corrupts memory. The process
+// dies with a Windows ACCESS VIOLATION (exit 0xC0000005 = -1073741819), and
+// occasionally STATUS_STACK_BUFFER_OVERRUN (0xC0000409 = -1073740791).
+//
+// RUN (crashes within a run or two at any thread count > 1):
+//   $env:RAYON_NUM_THREADS=32
+//   target\debug\rad.exe projects\dogfood\oracle\bugs\03_simulate_par_str_peek_crash.rad
+//
+// EXPECTED: prints "acc <n>" then "SURVIVED". Deterministically, every run.
+// ACTUAL:   process terminates with no output and exit code -1073741819.
+//           RAYON_NUM_THREADS=1 never crashes; the rate rises with thread count.
+//
+// THE ONE-TOKEN DIFF: delete `tag: str = ""` from `component Body` (and the two
+// uses of b.tag / the tag: initialiser) and this file becomes 100% clean. The
+// string field is the trigger; see bugs/03_NOTES.md for the full bisection.
+//
+// This is memory unsafety surfacing in a memory-safe language, and it silently
+// destroys the determinism guarantee that simulate_par() advertises.
+
+resource Bank { gold: int = 100, debt: int = 0 }
+component Body { tag: str = "", hp: int = 10 }
+component Mind { iq: int = 10 }
+
+system Grow(b: mut Body) { b.hp = b.hp + 1 }
+system Think(m: mut Mind) after Grow { m.iq = m.iq + 2 }
+system Earn(b: Body, k: mut Bank) after Think { k.gold = k.gold + b.hp }
+system Owe(m: Mind, k: mut Bank) after Earn { k.debt = k.debt + m.iq / 2 }
+system Drift(b: mut Body) after Grow {
+    let r = rand_int(-2, 2)
+    b.hp = b.hp + r
+}
+
+// Read a resource and TWO components, one of which carries the str field, out
+// of a result fork. This is an ordinary scoring function over a speculated
+// future -- exactly what peek() is documented for.
+fn score(f: world_fork, es: list<entity>) -> int {
+    let k = peek_resource(f, Bank) |> unwrap
+    let mut hp = 0
+    let mut iq = 0
+    for e in es {
+        let b = peek(f, e, Body) |> unwrap
+        let m = peek(f, e, Mind) |> unwrap
+        hp = hp + b.hp + len(b.tag)
+        iq = iq + m.iq
+    }
+    return k.gold * 4 + hp + iq * 6 - k.debt * 30
+}
+
+let mut ents = []
+for i in range(4) {
+    ents = push(ents, spawn(f"e{i}", Body { tag: f"body-{i}", hp: 10 + i }, Mind { iq: 10 }))
+}
+
+let mut beam = [fork()]
+let mut acc = 0
+
+for gen in range(3) {
+    let mut next = []
+    for bi in range(len(beam)) {
+        for cand in range(4) {
+            commit(beam[bi])
+            let seeded = fork()
+            let outs = simulate_par(
+                seeded,
+                [system::Grow, system::Drift, system::Think, system::Earn, system::Owe],
+                4, 6,
+                9001 + gen * 733 + bi * 97 + cand * 13
+            )
+            for f in outs {
+                acc = acc + score(f, ents)
+            }
+            next = push(next, outs[0])
+        }
+    }
+    let mut kept = []
+    kept = push(kept, next[0])
+    kept = push(kept, next[1])
+    beam = kept
+}
+
+print(f"acc {acc}")
+print("SURVIVED")

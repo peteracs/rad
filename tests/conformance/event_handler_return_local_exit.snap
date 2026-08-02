@@ -1,0 +1,6 @@
+---
+source: tests\conformance\event_handler_return_local_exit.rad
+exit_code: 0
+---
+after
+2

@@ -1,0 +1,36 @@
+// Characterize the forward-reference boundary precisely.
+//
+// Finding: `fn` declarations bind only when top-level execution REACHES the
+// declaration statement. Any call that EXECUTES before that point fails with
+// "Not callable: nil" -- even though the type checker resolved the callee.
+
+// A: mutual recursion, invoked AFTER both declarations -> works.
+fn ping(n: int) -> int {
+    if n <= 0 {
+        return 0
+    }
+    return pong(n - 1)
+}
+
+fn pong(n: int) -> int {
+    if n <= 0 {
+        return 0
+    }
+    return ping(n - 1) + 1
+}
+
+print(f"A mutual recursion called after both decls: {ping(6)}")
+
+// B: caller declared first, invoked BEFORE the callee's declaration -> fails.
+fn caller() -> int {
+    return callee(10)
+}
+
+// print(f"B: {caller()}")   // <- "Not callable: nil" if enabled here
+
+fn callee(n: int) -> int {
+    return n + 1
+}
+
+print(f"B same call, moved after the callee decl: {caller()}")
+print("done")

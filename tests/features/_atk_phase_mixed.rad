@@ -1,0 +1,15 @@
+// Attack: mix phase names and bare system names in schedule
+component V { x: 0 }
+system S1(v: mut V) { v.x = v.x + 10 }
+system S2(v: mut V) { v.x = v.x + 1 }
+
+phase Group { S1 }
+
+fn main() -> nil {
+    let e = spawn(V { x: 0 })
+    schedule [Group, S2]
+    let v = unwrap(get(e, V))
+    print("x =", v.x)
+}
+
+// expect: x = 11

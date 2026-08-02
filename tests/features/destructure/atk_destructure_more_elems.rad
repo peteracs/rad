@@ -1,0 +1,8 @@
+fn main() -> nil {
+    let rows = [[1, 2, 3, 4], [5, 6, 7, 8]]
+    for [a, b] in rows {
+        print(a)
+        print(b)
+    }
+    print("done_more_elems")
+}

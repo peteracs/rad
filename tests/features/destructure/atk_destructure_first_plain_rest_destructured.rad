@@ -1,0 +1,12 @@
+fn apply(f, x, y, z) { return f(x, y, z) }
+fn main() -> nil {
+    let result = apply(
+        fn(scalar, [a, b], [c, d]) {
+            return scalar * (a + b + c + d)
+        },
+        10,
+        [1, 2],
+        [3, 4]
+    )
+    print(result)
+}

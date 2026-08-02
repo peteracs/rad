@@ -1,0 +1,7 @@
+---
+source: tests\conformance\generic_fn_type_mismatch.rad
+exit_code: 1
+---
+
+---stderr---
+Error: Argument 2 to 'same' expects int, got str

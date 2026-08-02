@@ -1,0 +1,8 @@
+---
+source: tests\features\test_max_by_min_by.rad
+exit_code: 0
+---
+longest: greetings
+shortest: hi
+max: 9
+empty list

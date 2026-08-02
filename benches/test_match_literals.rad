@@ -1,0 +1,25 @@
+fn test_match_int(x: int) -> str {
+    match x {
+        1 => { return "one" }
+        2 => { return "two" }
+        42 => { return "forty-two" }
+        _ => { return "other" }
+    }
+}
+
+fn test_match_str(s: str) -> str {
+    match s {
+        "hello" => { return "world" }
+        "foo" => { return "bar" }
+        _ => { return "unknown" }
+    }
+}
+
+print(test_match_int(1))
+print(test_match_int(2))
+print(test_match_int(42))
+print(test_match_int(100))
+
+print(test_match_str("hello"))
+print(test_match_str("foo"))
+print(test_match_str("baz"))

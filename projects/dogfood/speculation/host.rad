@@ -1,0 +1,9 @@
+// Host world for `rad sandbox serve` — see serve_demo.ps1.
+component Treasury { gold: 1000 }
+
+component Morale { level: 50 }
+
+component Army { soldiers: 300 }
+
+let kingdom = spawn("kingdom", Treasury { gold: 1000 }, Morale { level: 50 }, Army { soldiers: 300 })
+print("kingdom ready")

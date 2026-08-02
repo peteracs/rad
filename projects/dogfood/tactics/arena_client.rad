@@ -1,0 +1,147 @@
+// RADTACTICS arena client - one side's war room (protocol v2).
+//
+// Thinks with the same fork-per-candidate oracle as the local game (imported
+// from lib_combat.rad), but the world it forks arrived over a TCP socket.
+//
+// v2 loop - the wire carries divergence in BOTH directions, and nothing else:
+//   sync once:  PULL                     (the only full world we ever see)
+//   each round: stage intents locally -> fork_delta(base, staged) -> ORDERS
+//               ... the call BLOCKS while the referee waits for the enemy ...
+//               <- RESOLVED <next> <winner> <digest>\t<delta>
+//               fork_apply(staged, delta) -> commit. Fully synced again.
+//
+// No polling. No idle traffic. A round costs exactly one connection, ~1-2 KB
+// up (our orders), ~0.5-2 KB down (everyone's resolved consequences).
+//
+// stdin line 1: "red" | "blue" | "red tamper" (dishonest client: every delta
+// also claims its units have 999 hp - the referee reads Intents only, logs
+// the tamper, and resolution proceeds from the sovereign live world).
+//
+// Run (after the server):  echo red  | rad projects/dogfood/tactics/arena_client.rad
+//                          echo blue | rad projects/dogfood/tactics/arena_client.rad
+
+use "lib_combat.rad"
+
+fn rpc(request: str) -> str {
+    let conn = tcp_connect("127.0.0.1", 7878)
+    tcp_write(conn, request + "\n")
+    let mut buf = ""
+    while true {
+        let chunk = tcp_read(conn, 65536)
+        if len(chunk) == 0 { break }
+        buf = buf + chunk
+        if ends_with(buf, "\n") { break }
+    }
+    tcp_close(conn)
+    return trim(buf)
+}
+
+fn main() -> nil {
+    let first = split(trim(readline()), " ")
+    let side = first[0]
+    let tamper = len(first) == 2 and first[1] == "tamper"
+    print(f"arena client v2: commanding {side}")
+
+    let mut total_up = 0
+    let mut total_down = 0
+    let mut rounds_played = 0
+    let mut full_pull = 0
+    let t0 = clock()
+
+    // -- sync once: the only full world transfer of the entire battle -------
+    let r0 = split(rpc("ROUND"), " ")
+    let mut round = int(r0[1])
+    let mut winner = ""
+    let base_bytes = rpc("PULL")
+    let mut digest = ""
+    match fork_from_bytes(base_bytes) {
+        Ok(base) => {
+            commit(base)
+            full_pull = len(base_bytes)
+            digest = split(base_bytes, " ")[1]
+            print(f"synced: round {round}, {full_pull} B full pull (the last one ever)")
+        }
+        Err(msg) => {
+            print(f"initial pull failed: {msg} - is the server up?")
+            return
+        }
+    }
+
+    while winner == "" {
+        // 1. think locally: the oracle burns THIS machine's cpu, staging
+        //    intents onto our world so later units plan around earlier ones.
+        let base = fork()
+        let t_think = clock()
+        for unit in living(side) {
+            let a = choose(unit)
+            update(unit, Pos) { x = a.tx, y = a.ty }
+            update(unit, Intent) { kind = a.kind, tx = a.tx, ty = a.ty, target = a.target }
+        }
+        let think_ms = to_fixed((clock() - t_think) * 1000.0, 1)
+
+        if tamper {
+            for unit in living(side) {
+                update(unit, Stats) { hp = 999 }
+            }
+        }
+
+        // 2. push the divergence; the reply arrives when the round resolves.
+        let staged = fork()
+        let delta = fork_delta(base, staged)
+        total_up = total_up + len(delta)
+        let reply = rpc(f"ORDERS {side} {round} {digest}\t" + delta)
+        let rparts = split(reply, "\t")
+        let head = split(rparts[0], " ")
+
+        if head[0] == "RESOLVED" {
+            round = int(head[1])
+            if head[2] != "-" { winner = head[2] }
+            digest = head[3]
+            // 3. apply the referee's resolution delta onto the very state we
+            //    pushed - we are now bit-identical with the server.
+            match fork_apply(staged, rparts[1]) {
+                Ok(resolved) => {
+                    commit(resolved)
+                    total_down = total_down + len(rparts[1])
+                    rounds_played = rounds_played + 1
+                    print(f"round {round - 1}: thought {think_ms} ms, {len(delta)} B up, {len(rparts[1])} B down")
+                }
+                Err(m) => {
+                    print(f"resolution delta failed: {m}")
+                    winner = "desync"
+                }
+            }
+        } else if head[0] == "STALE" {
+            // We joined mid-round or raced a resolve; resync the round
+            // counter and replan (rare path - costs one extra think).
+            round = int(head[1])
+            print(f"stale push, resyncing to round {round}")
+            commit(base)   // undo staged intents
+        } else {
+            print(f"server: {reply}")
+            winner = "error"
+        }
+    }
+
+    let elapsed = to_fixed(clock() - t0, 1)
+    print(f"\n=== {winner} wins ===")
+    print(f"final board as {side} saw it:")
+    draw()
+    print(f"{side}: {rounds_played} rounds, {total_up} B up + {total_down} B down after one {full_pull} B sync ({elapsed} s)")
+    print("server log: " + rpc("LOG"))
+
+    // Cross-machine provenance receipt: ask the referee why a fallen unit
+    // died - the causal chain lives on the server, we never saw it locally.
+    for ent in entities(Team) {
+        let s = get(ent, Stats) |> unwrap
+        if s.hp <= 0 {
+            let n = name_of(ent)
+            print(f"why {n} (from server): " + rpc(f"WHY {n}"))
+            break
+        }
+    }
+
+    if side == "red" {
+        print("server: " + rpc("SHUTDOWN"))
+    }
+}

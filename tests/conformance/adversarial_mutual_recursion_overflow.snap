@@ -1,0 +1,18 @@
+---
+source: tests\conformance\adversarial_mutual_recursion_overflow.rad
+exit_code: 1
+---
+
+---stderr---
+Error: [line 3] in ping: Stack overflow: exceeded 512 call frames
+  called from [line 7] in pong
+  called from [line 3] in ping
+  called from [line 7] in pong
+  called from [line 3] in ping
+  called from [line 7] in pong
+  called from [line 3] in ping
+  called from [line 7] in pong
+  called from [line 3] in ping
+  called from [line 7] in pong
+  called from [line 3] in ping
+  ... 501 more frames

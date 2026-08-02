@@ -1,0 +1,47 @@
+pub component Name { text: str = "" }
+pub component Health { hp: int = 0, max_hp: int = 100 }
+pub component Position { x: int = 0, y: int = 0 }
+
+fn main() -> nil {
+    let e1 = entity {
+        Name { text: "Hero" },
+        Health { hp: 80, max_hp: 100 },
+        Position { x: 10, y: 20 }
+    }
+
+    let e2 = entity {
+        Name { text: "Goblin" },
+        Health { hp: 30, max_hp: 30 }
+    }
+
+    if has(e1, Name) {
+        let n = require(e1, Name)
+        print(n.text)
+    }
+
+    if has(e1, Health) {
+        let h = require(e1, Health)
+        print(h.hp)
+        print(h.max_hp)
+    }
+
+    if has(e1, Position) {
+        let p = require(e1, Position)
+        print(p.x)
+        print(p.y)
+    }
+
+    let n2 = require(e2, Name)
+    print(n2.text)
+
+    let h2 = require(e2, Health)
+    print(h2.hp)
+
+    if has(e2, Position) {
+        print("has position")
+    } else {
+        print("no position")
+    }
+
+    print("done")
+}

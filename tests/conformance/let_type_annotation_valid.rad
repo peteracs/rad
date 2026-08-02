@@ -1,0 +1,17 @@
+// backend: both
+let x: int = 42
+print(x)
+let y: str = "hello"
+print(y)
+let z: float = 3.14
+print(z)
+let b: bool = true
+print(b)
+let mut n: int = 1
+n = 2
+print(n)
+// expect: 42
+// expect: hello
+// expect: 3.14
+// expect: true
+// expect: 2

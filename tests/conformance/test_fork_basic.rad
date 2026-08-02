@@ -1,0 +1,36 @@
+// Test 1: Basic correctness — fork, simulate 0 ticks, 1 tick, empty system list
+
+component Health { hp: 100 }
+component Armor  { def: 5 }
+
+system Decay(hp: mut Health) {
+    hp = Health { hp: hp.hp - 1 }
+}
+
+let e = spawn("unit", Health { hp: 100 }, Armor { def: 5 })
+
+// --- fork() returns a world_fork ---
+let f = fork()
+assert(str(f) == "<world_fork>", "fork() should return a world_fork value")
+
+// --- simulate with 0 ticks should be a no-op ---
+let f0 = simulate(f, [system::Decay], 0)
+commit(f0)
+let hp0 = get(e, Health) |> unwrap
+assert(hp0.hp == 100, f"0-tick simulate should not change state, got {hp0.hp}")
+
+// --- simulate with 1 tick ---
+let f1 = fork()
+let f1 = simulate(f1, [system::Decay], 1)
+commit(f1)
+let hp1 = get(e, Health) |> unwrap
+assert(hp1.hp == 99, f"1-tick Decay should reduce HP by 1, got {hp1.hp}")
+
+// --- simulate with empty system list ---
+let f2 = fork()
+let f2 = simulate(f2, [], 5)
+commit(f2)
+let hp2 = get(e, Health) |> unwrap
+assert(hp2.hp == 99, f"Empty system list should not change state, got {hp2.hp}")
+
+print("PASS: basic correctness")

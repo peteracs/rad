@@ -1,0 +1,3 @@
+// expect-runtime-error: cannot be negative
+let s = "abc"
+print(substring_bytes(s, -1, 2))

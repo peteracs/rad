@@ -1,0 +1,7 @@
+fn add(x, y) { return x + y }
+fn main() -> nil {
+    let rows = [[10, 20], [30, 40]]
+    let out = rows |> map(fn([a, b]) { return add(a, b) })
+    print(out[0])
+    print(out[1])
+}

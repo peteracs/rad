@@ -1,0 +1,52 @@
+// PROBE 08: does an explicit `after` ordering edge protect a per-entity
+// resource accumulator from the BUG 03 collapse?
+//
+// This matters for the mitigation story. If `after` forces serial execution,
+// the advice is "order your systems". If it does not, then BUG 03 cannot be
+// avoided by ordering, and the only safe accumulator is an event handler.
+//
+// projects/dogfood/foundry/main.rad suggests `after` does NOT help: its
+// FeedMachines system is declared `after HaulOre` and still counted 234 job
+// starts across 240 ticks (i.e. ~1 per schedule call) against 7269 actual
+// finishes.
+//
+// 10 entities, +1 per entity, so every correct answer below is 10.
+
+component Tag { n: 0 }
+
+resource A1 { n: 0 }
+resource B1 { n: 0 }
+resource A2 { n: 0 }
+resource B2 { n: 0 }
+resource A3 { n: 0 }
+resource B3 { n: 0 }
+
+// ---- case 1: no ordering edge (known-bad control) ----
+system C1A(_t: Tag, a: mut A1) { a.n = a.n + 1 }
+system C1B(_t: Tag, b: mut B1) { b.n = b.n + 1 }
+
+// ---- case 2: explicit `after` edge between the two ----
+system C2A(_t: Tag, a: mut A2) { a.n = a.n + 1 }
+system C2B(_t: Tag, b: mut B2) after C2A { b.n = b.n + 1 }
+
+// ---- case 3: same two systems, but grouped in a phase ----
+system C3A(_t: Tag, a: mut A3) { a.n = a.n + 1 }
+system C3B(_t: Tag, b: mut B3) after C3A { b.n = b.n + 1 }
+
+phase Ordered { C3A, C3B }
+
+for i in range(0, 10) {
+    spawn(Tag { n: i })
+}
+
+print(f"entities: {query_count(Tag)}   every expected value below is 10")
+print("")
+
+schedule [C1A, C1B]
+print(f"case 1  no ordering        A1={res(A1).n}  B1={res(B1).n}")
+
+schedule [C2A, C2B]
+print(f"case 2  C2B after C2A      A2={res(A2).n}  B2={res(B2).n}")
+
+schedule [Ordered]
+print(f"case 3  phase, ordered     A3={res(A3).n}  B3={res(B3).n}")

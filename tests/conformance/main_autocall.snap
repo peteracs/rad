@@ -1,0 +1,5 @@
+---
+source: tests\conformance\main_autocall.rad
+exit_code: 0
+---
+auto-main

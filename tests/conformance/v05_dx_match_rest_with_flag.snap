@@ -1,0 +1,7 @@
+---
+source: tests\conformance\v05_dx_match_rest_with_flag.rad
+exit_code: 1
+---
+
+---stderr---
+Error: Error[E2503]: Match rest binding '..' requires --compat-v0.5-dx

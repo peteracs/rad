@@ -1,0 +1,14 @@
+// Attack: guard is always false — handler body should never run
+event Ping { val }
+
+on Ping(e) where false {
+    print("BUG: should not run")
+}
+
+fn main() -> nil {
+    emit Ping { val: 1 }
+    flush_events()
+    print("done")
+}
+
+// expect: done

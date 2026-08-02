@@ -1,0 +1,62 @@
+// backend: both
+// vm-args: --compat-v0.5-dx
+// Zero-field sum type variant shorthand (no braces on construction)
+
+type Status {
+    Active {}
+    Inactive {}
+    Pending { reason: "" }
+}
+
+// Zero-field shorthand construction
+let s = Status::Active
+print(s)
+// expect: Status::Active {}
+
+// Zero-field with explicit braces (always works)
+let s2 = Status::Inactive {}
+print(s2)
+// expect: Status::Inactive {}
+
+// Non-zero-field variant (requires braces)
+let s3 = Status::Pending { reason: "review" }
+print(s3)
+// expect: Status::Pending {reason: "review" }
+
+// let mut with zero-field initial value, then reassign
+let mut current = Status::Active
+print(current)
+// expect: Status::Active {}
+current = Status::Pending { reason: "upgrade" }
+print(current)
+// expect: Status::Pending {reason: "upgrade" }
+current = Status::Inactive
+print(current)
+// expect: Status::Inactive {}
+
+// match on zero-field shorthand value
+match current {
+    Active => { print("active") }
+    Inactive => { print("inactive") }
+    Pending { reason } => { print("pending: " + reason) }
+}
+// expect: inactive
+
+// pass zero-field shorthand to function
+fn describe(st: Status) -> str {
+    match st {
+        Active => { return "on" }
+        Inactive => { return "off" }
+        Pending { reason } => { return "wait: " + reason }
+    }
+}
+print(describe(Status::Active))
+// expect: on
+print(describe(Status::Inactive))
+// expect: off
+
+// equality comparison
+let a = Status::Active
+let b = Status::Active
+print(a == b)
+// expect: true

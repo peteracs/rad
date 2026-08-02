@@ -1,0 +1,22 @@
+{
+  "name": "moba-rad-server",
+  "private": true,
+  "version": "0.1.0",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "dev": "node scripts/run-rad.mjs src/main.rad",
+    "test": "npm run test:movement && npm run test:event-movement && npm run test:netcode && npm run test:projectile && npm run test:flood && npm run test:collision && npm run test:lag-window && npm run test:shutdown && npm run test:replay",
+    "test:movement": "node scripts/run-rad.mjs src/test/movement_smoke.rad",
+    "test:event-movement": "node scripts/run-rad.mjs src/test/event_movement_smoke.rad",
+    "test:netcode": "node scripts/run-rad.mjs src/test/netcode_smoke.rad",
+    "test:projectile": "node scripts/run-rad.mjs src/test/projectile_smoke.rad",
+    "test:flood": "node scripts/run-rad.mjs src/test/input_flood_smoke.rad",
+    "test:collision": "node scripts/run-rad.mjs src/test/collision_smoke.rad",
+    "test:lag-window": "node scripts/run-rad.mjs src/test/lag_window_smoke.rad",
+    "test:shutdown": "node scripts/run-rad.mjs src/test/shutdown_smoke.rad",
+    "test:replay": "node scripts/run-rad.mjs src/test/replay_smoke.rad",
+    "proxy": "cargo run --manifest-path edge-proxy/Cargo.toml",
+    "proxy:release": "cargo run --release --manifest-path edge-proxy/Cargo.toml"
+  }
+}

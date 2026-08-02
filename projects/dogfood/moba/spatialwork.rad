@@ -1,0 +1,104 @@
+// SPATIALWORK — browser-moba's spatial index, written the way it wants
+// to be written (fake-port round 13). The code comes first; whatever
+// the language can't run becomes a feature.
+//
+// Architecture (mirrors sim/spatial.ts, itself modeled on the
+// original's MultiGrid):
+//   - A uniform bucket grid: every unit lives in exactly ONE cell (its
+//     center). Buckets are a tuple-keyed map — (cx, cz) -> [eids].
+//     Derived data: rebuilt from positions each tick, never snapshot
+//     state.
+//   - Queries inflate their radius by the largest body radius seen at
+//     rebuild, so edge-straddling bodies are never missed; callers
+//     keep the exact distance test.
+//   - Determinism: ascending-eid bucketing, row-major cell visits —
+//     candidate order is canonical no matter what produced it.
+
+pub let CELL_M = 4.0
+
+component Body { at: (float, float) = (0.0, 0.0), radius: float = 0.5 }
+
+resource Grid { buckets: map = {}, max_radius: float = 0.0 }
+
+// floor (not truncate): negative coords must not fold onto cell 0
+pure fn cell_of(p: (float, float)) -> (int, int) {
+    let (x, z) = p
+    return (int(floor(x / CELL_M)), int(floor(z / CELL_M)))
+}
+
+fn rebuild() -> nil {
+    let mut buckets = {}
+    let mut max_r = 0.0
+    let bodies = query { Body } |> sort        // ascending eid: canonical order
+    for e in bodies {
+        let b = require(e, Body)
+        buckets[cell_of(b.at)] << e
+        max_r = max(max_r, b.radius)
+    }
+    update(Grid) { buckets = buckets, max_radius = max_r }
+}
+
+// every unit whose CENTER cell intersects the inflated circle, in
+// row-major cell order then ascending eid — exact tests stay with
+// the caller, same contract as the JS grid
+fn near(center: (float, float), radius: float) -> list {
+    let g = res(Grid)
+    let reach = radius + g.max_radius
+    let (lo_x, lo_z) = cell_of(center - reach)
+    let (hi_x, hi_z) = cell_of(center + reach)
+    let mut out = []
+    for cz in range(lo_z, hi_z + 1) {
+        for cx in range(lo_x, hi_x + 1) {
+            for e in get_or(g.buckets, (cx, cz), []) {
+                out << e
+            }
+        }
+    }
+    return out
+}
+
+// the exact-circle test callers compose on top (inEraCircle)
+fn in_circle(e: entity, center: (float, float), radius: float) -> bool {
+    let b = require(e, Body)
+    let (dx, dz) = b.at - center
+    let reach = radius + b.radius
+    return dx * dx + dz * dz <= reach * reach
+}
+
+fn hits(center: (float, float), radius: float) -> list {
+    return near(center, radius) |> filter(fn(e) { return in_circle(e, center, radius) })
+}
+
+// ------------------------------------------------------------ demo
+
+fn main() -> nil {
+    let _a = entity "ashe" { Body { at: (1.0, 1.0) } }
+    let _b = entity "brand" { Body { at: (3.9, 1.0) } }          // same cell as ashe
+    let _c = entity "cho" { Body { at: (4.1, 1.0), radius: 2.0 } }  // next cell, fat body
+    let _d = entity "darius" { Body { at: (-0.5, -0.5) } }        // negative coords: cell (-1, -1)
+    let _e = entity "ez" { Body { at: (30.0, 30.0) } }        // far away
+    rebuild()
+
+    // bucket layout: tuple-keyed, floor-divided
+    let g = res(Grid)
+    print(f"cells used: {len(g.buckets)} max_r: {g.max_radius}")
+    print(f"darius cell: {cell_of((-0.5, -0.5))}")
+
+    // an AoE at ashe: brand is in range; cho straddles the cell edge
+    // and is only caught because the query inflates by max_radius
+    let names = hits((1.0, 1.0), 3.5) |> map(fn(e) { return name_of(e) })
+    print(f"aoe hits: {names}")
+
+    // tight nuke: only ashe herself
+    print(f"point hit: {hits((1.0, 1.0), 0.1) |> map(fn(e) { return name_of(e) })}")
+
+    // determinism: rebuilding from scratch yields the identical sweep
+    let first = near((1.0, 1.0), 6.0) |> map(fn(e) { return id_of(e) })
+    rebuild()
+    let second = near((1.0, 1.0), 6.0) |> map(fn(e) { return id_of(e) })
+    print(f"stable across rebuilds: {first == second} ids: {first}")
+
+    // population census per cell — group_by with tuple keys
+    let census = query { Body } |> group_by(fn(e) { return cell_of(require(e, Body).at) })
+    print(f"census cells: {len(census)} crowd at (0,0): {len(census[(0, 0)])}")
+}

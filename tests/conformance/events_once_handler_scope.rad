@@ -1,0 +1,18 @@
+// backend: both
+event Tick { n }
+
+on Tick once(e) {
+    print(f"once:{e.n}")
+}
+
+on Tick(e) {
+    print(f"always:{e.n}")
+}
+
+emit Tick { n: 1 }
+flush_events()
+emit Tick { n: 2 }
+flush_events()
+// expect: once:1
+// expect: always:1
+// expect: always:2

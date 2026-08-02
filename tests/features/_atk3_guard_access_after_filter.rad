@@ -1,0 +1,12 @@
+// Attack: guard references a field that doesn't exist on the event
+event Simple { x }
+
+on Simple(e) where e.nonexistent > 0 {
+    print("BUG")
+}
+
+fn main() -> nil {
+    emit Simple { x: 1 }
+    flush_events()
+    print("done")
+}

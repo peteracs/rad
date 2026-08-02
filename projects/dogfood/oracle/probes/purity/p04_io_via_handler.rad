@@ -1,0 +1,22 @@
+// P04: the system is pure; it only emits. The IO lives in the HANDLER.
+// Docs: emit is allowed inside simulate(), but the checker must reject systems
+// that "reach unsafe handler chains".
+// EXPECT: compile-time rejection.
+component C { v: int = 0 }
+
+event Ping { n: int }
+
+on Ping(ev) {
+    print(f"ESCAPED-P04 io ran in an event handler inside simulate n={ev.n}")
+}
+
+system Leak(c: mut C) {
+    c.v = c.v + 1
+    emit Ping { n: c.v }
+}
+
+let e = spawn("e", C { v: 0 })
+let f = fork()
+let r = simulate(f, [system::Leak], 2)
+let got = peek(r, e, C) |> unwrap
+print(f"COMPILED-AND-RAN v={got.v}")

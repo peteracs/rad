@@ -1,0 +1,28 @@
+// Cross: enumerate + find + max_by together
+fn main() -> nil {
+    let words = ["apple", "banana", "cherry", "date", "elderberry"]
+
+    let pairs = enumerate(words)
+
+    let found = find(pairs, fn(pair) { return pair[1] == "cherry" })
+    match found {
+        Some(pair) => { print(f"cherry at index {pair[0]}") }
+        None => { print("not found") }
+    }
+
+    let longest = max_by(pairs, fn(pair) { return len(pair[1]) })
+    match longest {
+        Some(pair) => { print(f"longest: {pair[1]} at index {pair[0]}") }
+        None => { print("empty") }
+    }
+
+    let shortest = min_by(pairs, fn(pair) { return len(pair[1]) })
+    match shortest {
+        Some(pair) => { print(f"shortest: {pair[1]} at index {pair[0]}") }
+        None => { print("empty") }
+    }
+}
+
+// expect: cherry at index 2
+// expect: longest: elderberry at index 4
+// expect: shortest: date at index 3

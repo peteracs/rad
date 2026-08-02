@@ -1,0 +1,326 @@
+// RADTACTICS bot tournament - a league of untrusted code.
+//
+// Eight bots, round-robin, every decision of every unit of every round of
+// every match runs inside sandbox_run() under the same capability grant:
+//   { "write": ["Intent"], "fuel": 2000000 }
+// Thousands of guest VM executions in one process - the multi-tenant soak
+// for the sandbox/fuel/GC stack. Hostile entrants (cheater, spy) are listed
+// too: they bounce off the fence every single turn and finish where
+// untrusted code that fights the runtime instead of the enemy belongs.
+//
+// Three file bots ride as-is from projects/dogfood/tactics/bots/; five more
+// personalities are stamped out of one template by string substitution -
+// the bot source is data, so a tournament can generate its own field.
+//
+// Run:  rad projects/dogfood/tactics/tournament.rad   (no input; ~a minute, release)
+
+use "lib_combat.rad"
+
+let MAX_ROUNDS = 30
+let RING_ROUND = 12
+
+// ---------------------------------------------------------------------------
+// The personality template. ${AGGR}: preferred engagement distance
+// (0 = melee charge, 3+ = kite). ${FOCUS}: "near" (closest) or "weak"
+// (lowest hp). Clerics ignore all of it and heal.
+// ---------------------------------------------------------------------------
+
+let TEMPLATE = f"""
+let p = get(me, Pos) |> unwrap
+let s = get(me, Stats) |> unwrap
+let t = get(me, Team) |> unwrap
+let AGGR = \${AGGR}
+let FOCUS = "\${FOCUS}"
+
+fn occupied(x: int, y: int) -> bool {
+    for e in entities(Pos) {
+        let es = get(e, Stats) |> unwrap
+        if es.hp <= 0 { continue }
+        let ep = get(e, Pos) |> unwrap
+        if ep.x == x and ep.y == y { return true }
+    }
+    return false
+}
+
+// march one axis-step at a time toward (gx,gy), stopping at distance `keep`
+fn march(px: int, py: int, gx: int, gy: int, mov: int, keep: int) -> (int, int) {
+    let mut nx = px
+    let mut ny = py
+    let mut steps = mov
+    while steps > 0 and dist(nx, ny, gx, gy) > keep {
+        let mut cx = nx
+        let mut cy = ny
+        if gx > cx { cx = cx + 1 } else if gx < cx { cx = cx - 1 } else {
+            if gy > cy { cy = cy + 1 } else if gy < cy { cy = cy - 1 }
+        }
+        if (cx == nx and cy == ny) or occupied(cx, cy) { steps = 0 } else {
+            nx = cx
+            ny = cy
+            steps = steps - 1
+        }
+    }
+    return (nx, ny)
+}
+
+if s.cls == "cleric" {
+    // medics: heal the most wounded ally in range, else walk toward them
+    let mut ally = ""
+    let mut worst = 9999
+    let mut ax = 0
+    let mut ay = 0
+    for other in entities(Team) {
+        let ot = get(other, Team) |> unwrap
+        if ot.side != t.side or name_of(other) == name_of(me) { continue }
+        let os = get(other, Stats) |> unwrap
+        if os.hp <= 0 or os.hp >= os.max_hp { continue }
+        if os.hp < worst {
+            worst = os.hp
+            ally = name_of(other)
+            ax = op_x(other)
+            ay = op_y(other)
+        }
+    }
+    if ally == "" {
+        update(me, Intent) { kind = "wait", tx = p.x, ty = p.y, target = "" }
+    } else if dist(p.x, p.y, ax, ay) <= s.rng {
+        update(me, Intent) { kind = "heal", tx = p.x, ty = p.y, target = ally }
+    } else {
+        let g = march(p.x, p.y, ax, ay, s.mov, s.rng)
+        if g[0] == p.x and g[1] == p.y {
+            update(me, Intent) { kind = "wait", tx = p.x, ty = p.y, target = "" }
+        } else if dist(g[0], g[1], ax, ay) <= s.rng {
+            update(me, Intent) { kind = "heal", tx = g[0], ty = g[1], target = ally }
+        } else {
+            update(me, Intent) { kind = "move", tx = g[0], ty = g[1], target = "" }
+        }
+    }
+} else {
+    // fighters: pick a target per FOCUS, keep AGGR distance, shoot in range
+    let mut foe = ""
+    let mut score = 99999
+    let mut fx = 0
+    let mut fy = 0
+    for other in entities(Team) {
+        let ot = get(other, Team) |> unwrap
+        if ot.side == t.side { continue }
+        let os = get(other, Stats) |> unwrap
+        if os.hp <= 0 { continue }
+        let mut sc = dist(p.x, p.y, op_x(other), op_y(other))
+        if FOCUS == "weak" { sc = os.hp }
+        if sc < score {
+            score = sc
+            foe = name_of(other)
+            fx = op_x(other)
+            fy = op_y(other)
+        }
+    }
+    if foe == "" {
+        update(me, Intent) { kind = "wait", tx = p.x, ty = p.y, target = "" }
+    } else {
+        let d = dist(p.x, p.y, fx, fy)
+        if d <= s.rng and d >= AGGR {
+            update(me, Intent) { kind = "attack", tx = p.x, ty = p.y, target = foe }
+        } else {
+            let g = march(p.x, p.y, fx, fy, s.mov, AGGR)
+            if g[0] == p.x and g[1] == p.y {
+                if d <= s.rng {
+                    update(me, Intent) { kind = "attack", tx = p.x, ty = p.y, target = foe }
+                } else {
+                    update(me, Intent) { kind = "wait", tx = p.x, ty = p.y, target = "" }
+                }
+            } else if dist(g[0], g[1], fx, fy) <= s.rng {
+                update(me, Intent) { kind = "attack", tx = g[0], ty = g[1], target = foe }
+            } else {
+                update(me, Intent) { kind = "move", tx = g[0], ty = g[1], target = "" }
+            }
+        }
+    }
+}
+"""
+
+// helper injected ahead of the template (Pos field reads through a fn keep
+// the template terse)
+let TEMPLATE_PRELUDE = f"""
+fn op_x(e: entity) -> int { return (get(e, Pos) |> unwrap).x }
+fn op_y(e: entity) -> int { return (get(e, Pos) |> unwrap).y }
+"""
+
+fn stamp(aggr: int, focus: str) -> str {
+    let src = replace(TEMPLATE, "\${AGGR}", str(aggr))
+    return TEMPLATE_PRELUDE + replace(src, "\${FOCUS}", focus)
+}
+
+// ---------------------------------------------------------------------------
+// Match machinery
+// ---------------------------------------------------------------------------
+
+fn clear_world() -> nil {
+    for ent in entities(Team) {
+        despawn(ent)
+    }
+    set_resource(Battle, Battle { round: 0, winner: "", log: "", futures: 0 })
+}
+
+// Returns "red"|"blue"|"draw" plus stats via the Battle resource.
+fn play_match(red_src: str, blue_src: str) -> (str, int, int, int) {
+    clear_world()
+    roster("red", 1, -1)
+    roster("blue", W - 2, 1)
+
+    let mut round = 1
+    let mut winner = ""
+    let mut runs = 0
+    let mut denials = 0
+
+    while winner == "" and round <= MAX_ROUNDS {
+        let b0 = get_resource(Battle) |> unwrap
+        set_resource(Battle, Battle { round: round, winner: "", log: b0.log, futures: b0.futures })
+
+        for side in ["red", "blue"] {
+            let mut src = red_src
+            if side == "blue" { src = blue_src }
+            for unit in living(side) {
+                let r = bot_decide(unit, src)
+                runs = runs + 1
+                if r[1] != "ok" { denials = denials + 1 }
+                act_live(unit, r[0])
+            }
+            if side_hp("red") == 0 { winner = "blue" }
+            if side_hp("blue") == 0 { winner = "red" }
+            if winner != "" { break }
+        }
+
+        if winner == "" and round >= RING_ROUND {
+            for side in ["red", "blue"] {
+                for unit in living(side) {
+                    emit Sapped { unit: unit, amount: 2 }
+                }
+            }
+            flush_events()
+            let rh = side_hp("red")
+            let bh = side_hp("blue")
+            // a simultaneous ring wipe is a draw, not a win for whichever
+            // side happens to be checked last
+            if rh == 0 and bh == 0 { winner = "draw" }
+            else if rh == 0 { winner = "blue" }
+            else if bh == 0 { winner = "red" }
+        }
+        round = round + 1
+    }
+
+    if winner == "" {
+        let rh = side_hp("red")
+        let bh = side_hp("blue")
+        if rh > bh { winner = "red" } else if bh > rh { winner = "blue" } else { winner = "draw" }
+    }
+    return (winner, round - 1, runs, denials)
+}
+
+fn main() -> nil {
+    rand_seed(7)
+
+    let mut names = []
+    let mut sources = []
+
+    // file bots: the honest one and both hostiles
+    names << "berserker"
+    sources << read_file("projects/dogfood/tactics/bots/berserker.rad")
+    names << "cheater"
+    sources << read_file("projects/dogfood/tactics/bots/cheater.rad")
+    names << "spy"
+    sources << read_file("projects/dogfood/tactics/bots/spy.rad")
+
+    // stamped personalities: source is data
+    names << "stalker"
+    sources << stamp(0, "weak")
+    names << "skirmisher"
+    sources << stamp(2, "near")
+    names << "kiter"
+    sources << stamp(3, "near")
+    names << "sniper"
+    sources << stamp(4, "weak")
+    names << "coward"
+    sources << stamp(6, "weak")
+
+    let n = len(names)
+    print(f"=== RADTACTICS bot league: {n} entrants, round-robin ===")
+    print("every order of every unit is a sandbox_run() under { write: Intent } - " +
+        "the league is a multi-tenant soak\n")
+
+    let mut wins = []
+    let mut draws = []
+    let mut losses = []
+    let mut fence = []
+    for _i in range(0, n) {
+        wins << 0
+        draws << 0
+        losses << 0
+        fence << 0
+    }
+
+    let mut total_runs = 0
+    let mut total_denials = 0
+    let mut matches = 0
+    let t0 = clock()
+
+    for i in range(0, n) {
+        for j in range(i + 1, n) {
+            let r = play_match(sources[i], sources[j])
+            matches = matches + 1
+            total_runs = total_runs + r[2]
+            total_denials = total_denials + r[3]
+            fence[i] = fence[i] + r[3]   // attribution is per match; hostile
+            fence[j] = fence[j] + r[3]   // bots dominate their own matches
+            let mut verdict = "draw"
+            if r[0] == "red" { verdict = names[i] }
+            if r[0] == "blue" { verdict = names[j] }
+            if r[0] == "red" {
+                wins[i] = wins[i] + 1
+                losses[j] = losses[j] + 1
+            } else if r[0] == "blue" {
+                wins[j] = wins[j] + 1
+                losses[i] = losses[i] + 1
+            } else {
+                draws[i] = draws[i] + 1
+                draws[j] = draws[j] + 1
+            }
+            print(f"{names[i]} vs {names[j]}: {verdict} in {r[1]} rounds ({r[2]} sandbox runs, {r[3]} denials)")
+        }
+    }
+
+    let elapsed = clock() - t0
+    let rate = to_fixed(float(total_runs) / elapsed, 0)
+
+    // leaderboard: 3 pts a win, 1 a draw; selection sort, N is tiny
+    let mut order = []
+    for i in range(0, n) { order << i }
+    for a in range(0, n) {
+        let mut best = a
+        for b in range(a + 1, n) {
+            let pb = wins[order[b]] * 3 + draws[order[b]]
+            let pa = wins[order[best]] * 3 + draws[order[best]]
+            if pb > pa { best = b }
+        }
+        let tmp = order[a]
+        order[a] = order[best]
+        order[best] = tmp
+    }
+
+    print(f"\n=== final table ({matches} matches) ===")
+    print("bot         pts  w  d  l")
+    for k in range(0, n) {
+        let i = order[k]
+        let pts = wins[i] * 3 + draws[i]
+        let mut pad = ""
+        let mut pl = 12 - len(names[i])
+        while pl > 0 {
+            pad = pad + " "
+            pl = pl - 1
+        }
+        print(f"{names[i]}{pad}{pts}    {wins[i]}  {draws[i]}  {losses[i]}")
+    }
+
+    print(f"\nsoak receipt: {total_runs} sandboxed guest VMs in {to_fixed(elapsed, 1)} s " +
+        f"({rate} guests/sec), {total_denials} hostile actions died at the fence, " +
+        "0 touched the live world")
+}

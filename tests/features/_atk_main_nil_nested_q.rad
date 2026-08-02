@@ -1,0 +1,16 @@
+// Attack: nested ? — function returns None, main propagates
+// Expected: clean exit with no output
+
+fn inner() -> any {
+    return None
+}
+
+fn middle() -> any {
+    let x = inner()?
+    return x
+}
+
+fn main() -> nil {
+    let val = middle()?
+    print("unreachable:", val)
+}

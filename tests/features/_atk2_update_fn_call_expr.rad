@@ -1,0 +1,19 @@
+// Attack: update with function call as entity expr — should evaluate once
+component Tag { label: "" }
+let mut call_count = 0
+
+fn get_entity(e: any) -> any {
+    call_count = call_count + 1
+    return e
+}
+
+fn main() -> nil {
+    let e = spawn(Tag { label: "old" })
+    update(get_entity(e), Tag) { label = "new" }
+    let t = unwrap(get(e, Tag))
+    print("label:", t.label)
+    print("calls:", call_count)
+}
+
+// expect: label: new
+// expect: calls: 1

@@ -1,0 +1,25 @@
+// backend: both
+component Counter { n: 0 }
+
+event Ping {}
+
+entity counter_e {
+    Counter { n: 0 }
+}
+
+on Ping(_e) {
+    let c = unwrap(get(counter_e, Counter))
+    set(counter_e, Counter { n: c.n + 1 })
+}
+
+fn main() -> nil {
+    emit Ping {}
+
+    let f = fork()
+    commit(f)
+    flush_events()
+
+    let c = unwrap(get(counter_e, Counter))
+    print(c.n)
+}
+// expect: 0

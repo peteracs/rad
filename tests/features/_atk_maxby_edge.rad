@@ -1,0 +1,70 @@
+// Attack max_by/min_by edge cases
+
+fn main() -> nil {
+    // 1. Empty list
+    let m1 = max_by([], fn(x) { return x })
+    print("max empty:", m1)
+    let n1 = min_by([], fn(x) { return x })
+    print("min empty:", n1)
+
+    // 2. Single element
+    let m2 = max_by([42], fn(x) { return x })
+    match m2 {
+        Some(v) => { print("max single:", v) }
+        None => { print("bug") }
+    }
+
+    // 3. All same keys
+    let m3 = max_by([1, 1, 1], fn(x) { return x })
+    match m3 {
+        Some(v) => { print("max same:", v) }
+        None => { print("bug") }
+    }
+
+    // 4. Negative keys
+    let m4 = max_by([-5, -1, -10], fn(x) { return x })
+    match m4 {
+        Some(v) => { print("max neg:", v) }
+        None => { print("bug") }
+    }
+    let n4 = min_by([-5, -1, -10], fn(x) { return x })
+    match n4 {
+        Some(v) => { print("min neg:", v) }
+        None => { print("bug") }
+    }
+
+    // 5. String keys
+    let m5 = max_by(["banana", "apple", "cherry"], fn(s) { return s })
+    match m5 {
+        Some(v) => { print("max str:", v) }
+        None => { print("bug") }
+    }
+    let n5 = min_by(["banana", "apple", "cherry"], fn(s) { return s })
+    match n5 {
+        Some(v) => { print("min str:", v) }
+        None => { print("bug") }
+    }
+
+    // 6. Float keys
+    let m6 = max_by([1.5, 3.14, 2.7], fn(x) { return x })
+    match m6 {
+        Some(v) => { print("max float:", v) }
+        None => { print("bug") }
+    }
+
+    // 7. Key function extracts nested data
+    let data = [[1, "z"], [2, "a"], [3, "m"]]
+    let m7 = max_by(data, fn(pair) { return pair[1] })
+    match m7 {
+        Some(v) => { print("max nested:", v) }
+        None => { print("bug") }
+    }
+
+    // 8. Large list performance check
+    let big = range(1000)
+    let m8 = max_by(big, fn(x) { return x })
+    match m8 {
+        Some(v) => { print("max 1000:", v) }
+        None => { print("bug") }
+    }
+}

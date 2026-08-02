@@ -1,0 +1,6 @@
+---
+source: tests\conformance\generic_fn_nested.rad
+exit_code: 0
+---
+9
+ok

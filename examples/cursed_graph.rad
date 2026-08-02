@@ -1,0 +1,160 @@
+// =====================================================================
+//  Graph Algorithms via ECS -- BFS, DFS, shortest path
+//  This abuses the ECS for something it was never meant to do:
+//  representing a graph as entities with adjacency-list components.
+// =====================================================================
+
+component Node { name: "", id: 0 }
+
+component Edges { neighbors: [] }
+
+component Visited { seen: false, distance: -1, parent: int | nil = nil }
+
+// Build 8-node graph as entities
+entity n0 { Node { name: "A", id: 0 }, Edges { neighbors: [1, 2] }, Visited { seen: false, distance: -1, parent: nil } }
+
+entity n1 { Node { name: "B", id: 1 }, Edges { neighbors: [0, 3, 4] }, Visited { seen: false, distance: -1, parent: nil } }
+
+entity n2 { Node { name: "C", id: 2 }, Edges { neighbors: [0, 5] }, Visited { seen: false, distance: -1, parent: nil } }
+
+entity n3 { Node { name: "D", id: 3 }, Edges { neighbors: [1, 6] }, Visited { seen: false, distance: -1, parent: nil } }
+
+entity n4 { Node { name: "E", id: 4 }, Edges { neighbors: [1, 7] }, Visited { seen: false, distance: -1, parent: nil } }
+
+entity n5 { Node { name: "F", id: 5 }, Edges { neighbors: [2, 7] }, Visited { seen: false, distance: -1, parent: nil } }
+
+entity n6 { Node { name: "G", id: 6 }, Edges { neighbors: [3] }, Visited { seen: false, distance: -1, parent: nil } }
+
+entity n7 { Node { name: "H", id: 7 }, Edges { neighbors: [4, 5] }, Visited { seen: false, distance: -1, parent: nil } }
+
+fn get_entities() {
+    return [n0, n1, n2, n3, n4, n5, n6, n7]
+}
+
+fn entity_name(entities, id) {
+    let node = get(entities[id], Node) ?
+    return node.name
+}
+
+fn reset_visited(entities) {
+    for e in entities {
+        set(e, Visited { seen: false, distance: -1, parent: nil })
+    }
+}
+
+fn bfs(entities, start_id) {
+    reset_visited(entities)
+    let mut queue = [start_id]
+    set(entities[start_id], Visited { seen: true, distance: 0, parent: nil })
+    let mut order = []
+
+    while len(queue) > 0 {
+        let cur = queue[0]
+        queue = slice(queue, 1, len(queue))
+
+        let node = get(entities[cur], Node) ?
+        order = push(order, node.name)
+
+        let edges = get(entities[cur], Edges) ?
+        let neighbors = edges.neighbors
+        let mut i = 0
+        while i < len(neighbors) {
+            let nb = neighbors[i]
+            let vis = get(entities[nb], Visited) ?
+            if vis.seen == false {
+                let cur_dist = (get(entities[cur], Visited) ?).distance
+                set(entities[nb], Visited { seen: true, distance: cur_dist + 1, parent: cur })
+                queue = push(queue, nb)
+            }
+            i = i + 1
+        }
+    }
+    return order
+}
+
+fn dfs(entities, start_id) {
+    reset_visited(entities)
+    let mut stack = [start_id]
+    let mut order = []
+
+    while len(stack) > 0 {
+        let cur = pop(stack)
+        stack = drop_last(stack)
+
+        let vis = get(entities[cur], Visited) ?
+        if vis.seen == false {
+            set(entities[cur], Visited { seen: true, distance: 0, parent: nil })
+            let node = get(entities[cur], Node) ?
+            order = push(order, node.name)
+
+            let edges = get(entities[cur], Edges) ?
+            let neighbors = edges.neighbors
+            let mut i = len(neighbors) - 1
+            while i >= 0 {
+                let nb = neighbors[i]
+                let nbvis = get(entities[nb], Visited) ?
+                if nbvis.seen == false {
+                    stack = push(stack, nb)
+                }
+                i = i - 1
+            }
+        }
+    }
+    return order
+}
+
+fn shortest_path(entities, from_id, to_id) {
+    let bfs_order = bfs(entities, from_id)
+
+    let target_vis = get(entities[to_id], Visited) ?
+    if target_vis.seen == false {
+        return []
+    }
+
+    let mut path = []
+    let mut cur: int | nil = to_id
+    while cur != nil {
+        let node = get(entities[cur], Node) ?
+        path = push(path, node.name)
+        let vis = get(entities[cur], Visited) ?
+        cur = vis.parent
+    }
+    return path |> reverse
+}
+
+fn main() -> any {
+    print("=== Cursed Graph Algorithms via ECS ===")
+    print("")
+    print("Graph: A-B-D-G")
+    print("       |   |")
+    print("       C   E")
+    print("       |   |")
+    print("       F---H")
+    print("")
+
+    let entities = get_entities()
+
+    // BFS from A
+    let bfs_result = bfs(entities, 0)
+    print(f"BFS from A: {bfs_result}")
+
+    // DFS from A
+    let dfs_result = dfs(entities, 0)
+    print(f"DFS from A: {dfs_result}")
+
+    // Shortest paths
+    print("\nShortest paths from A:")
+    let names = ["A", "B", "C", "D", "E", "F", "G", "H"]
+    let mut i = 0
+    while i < 8 {
+        let path = shortest_path(entities, 0, i)
+        let target_vis = get(entities[i], Visited) ?
+        print(f"  A -> {names[i]}: {path} (dist={target_vis.distance})")
+        i = i + 1
+    }
+
+    // Shortest path G to H (should go G->D->B->E->H)
+    print("\nShortest path G -> H:")
+    let gh = shortest_path(entities, 6, 7)
+    print(f"  {gh}")
+}

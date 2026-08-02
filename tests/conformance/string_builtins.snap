@@ -1,0 +1,25 @@
+---
+source: tests\conformance\string_builtins.rad
+exit_code: 0
+---
+A
+a
+1
+65
+97
+["a", "b", "c"]
+[]
+HELLO
+world
+
+already lower
+[1, 2]
+[]
+97
+99
+hello
+world
+0
+3
+4
+2

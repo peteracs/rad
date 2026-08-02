@@ -1,0 +1,6 @@
+// backend: both
+match try_int("bad") {
+    Some { value } => { print(f"CASE12:{value}") }
+    None => { print("CASE12:none") }
+}
+// expect: CASE12:none

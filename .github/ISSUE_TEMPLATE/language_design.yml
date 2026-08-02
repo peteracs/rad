@@ -1,0 +1,98 @@
+name: Language Design Discussion
+description: Propose or discuss a language design idea (syntax, semantics, type system)
+title: "[Design] "
+labels: ["language-design", "discussion"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Language design discussions are for early-stage ideas that aren't ready for a full RFC yet.
+        Use this to gauge community interest, explore alternatives, and refine the proposal.
+        If the discussion reaches consensus, the next step is writing an RFC from the wiki template in `docs/src/project/rfc-template.md`.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which area does this affect?
+      options:
+        - "ECS (components, entities, systems)"
+        - "Pipelines (|>, purity)"
+        - "Events (emit, on, once)"
+        - "State machines"
+        - "Sum types / pattern matching"
+        - "Type system / annotations"
+        - "Module system"
+        - "Control flow (loops, conditionals)"
+        - "Standard library"
+        - "Syntax sugar / ergonomics"
+        - "Other"
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem are you trying to solve?
+      description: Describe the use case or pain point. Include RAD code that is currently awkward or impossible.
+      placeholder: |
+        When iterating over a map, I currently have to use `keys()` and then `get` each value:
+        ```rad
+        let m = { "a": 1, "b": 2 }
+        for k in keys(m) {
+          let v = m[k]
+          print(k + " = " + str(v))
+        }
+        ```
+        This is verbose compared to most languages.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What does your proposed solution look like?
+      description: Show the syntax you'd like to write. Multiple alternatives are welcome.
+      placeholder: |
+        **Option A:**
+        ```rad
+        for k, v in map {
+          print(k + " = " + str(v))
+        }
+        ```
+
+        **Option B:**
+        ```rad
+        for entry in entries(map) {
+          print(entry.key + " = " + str(entry.value))
+        }
+        ```
+    validations:
+      required: true
+
+  - type: textarea
+    id: three_laws
+    attributes:
+      label: Impact on the Three Laws
+      description: |
+        How does this interact with RAD's core principles?
+        - Does it affect ECS data/logic separation?
+        - Does it preserve pipeline purity?
+        - Does it change event semantics?
+      placeholder: "This is purely syntactic sugar over existing builtins. No impact on ECS, pipelines, or events."
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What other approaches did you think about? Why do you prefer this one?
+
+  - type: dropdown
+    id: readiness
+    attributes:
+      label: How ready is this for an RFC?
+      options:
+        - "Just an idea — want community feedback first"
+        - "Fairly fleshed out — could write an RFC soon"
+        - "Ready — will write RFC if there's interest"
+    validations:
+      required: true

@@ -1,0 +1,8 @@
+---
+source: tests\conformance\io_eprint.rad
+exit_code: 0
+---
+eprint ok
+---stderr---
+hello stderr
+multi args 42

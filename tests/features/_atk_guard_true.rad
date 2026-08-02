@@ -1,0 +1,13 @@
+// Attack: guard is always true — handler should always run
+event Ping { val }
+
+on Ping(e) where true {
+    print("ping:", e.val)
+}
+
+fn main() -> nil {
+    emit Ping { val: 42 }
+    flush_events()
+}
+
+// expect: ping: 42

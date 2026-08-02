@@ -1,0 +1,5 @@
+// Trusted host world for the `rad sandbox serve` DoS test.
+component Treasury { gold: 1000 }
+
+let vault = spawn("vault", Treasury { gold: 1000 })
+print("serve host ready")

@@ -1,0 +1,5 @@
+// ILLEGAL: str initializer for an int-annotated binding. Spec 2.3.6.
+fn main() -> nil {
+    let z: int = "hello"
+    print(f"{z}")
+}
