@@ -149,6 +149,60 @@ impl GcHeap {
         self.bytes_allocated
     }
 
+    /// Return the heap accounting that would result from replacing an
+    /// already-tracked `Object` while preserving its allocation address.
+    ///
+    /// Replay graph cloning reserves object identities with placeholders so
+    /// cycles can close before their outgoing edges are populated. The
+    /// placeholder's retained-size charge is not a valid charge for the
+    /// eventual list/map/closure object; callers use this method to preflight
+    /// the replacement before allocating its native backing storage.
+    pub(crate) fn projected_object_replacement_bytes(
+        &self,
+        ptr: *mut crate::value::Object,
+        retained_bytes: usize,
+    ) -> Result<usize, String> {
+        let entry = self
+            .objects
+            .iter()
+            .find(|entry| entry.ptr == ptr.cast::<u8>())
+            .ok_or_else(|| "GC replacement target is not owned by this heap".to_string())?;
+        let replacement_size = entry.layout.size().saturating_add(retained_bytes);
+        Ok(self
+            .bytes_allocated
+            .saturating_sub(entry.accounted_size)
+            .saturating_add(replacement_size))
+    }
+
+    /// Replace a tracked `Object` in place and update retained-byte
+    /// accounting atomically with the replacement.
+    pub(crate) fn replace_accounted_object(
+        &mut self,
+        ptr: *mut crate::value::Object,
+        replacement: crate::value::Object,
+    ) -> Result<(), String> {
+        let retained_bytes = replacement.accounted_heap_bytes();
+        let entry = self
+            .objects
+            .iter_mut()
+            .find(|entry| entry.ptr == ptr.cast::<u8>())
+            .ok_or_else(|| "GC replacement target is not owned by this heap".to_string())?;
+        if entry.layout != std::alloc::Layout::new::<crate::value::Object>() {
+            return Err("GC replacement target is not an Object allocation".into());
+        }
+        let replacement_size = entry.layout.size().saturating_add(retained_bytes);
+        self.bytes_allocated = self
+            .bytes_allocated
+            .saturating_sub(entry.accounted_size)
+            .saturating_add(replacement_size);
+        entry.accounted_size = replacement_size;
+        // SAFETY: the entry proves `ptr` is a live Object owned exclusively by
+        // this heap. `replace` drops the placeholder after installing the new
+        // value without changing the stable address recorded by graph edges.
+        drop(unsafe { std::ptr::replace(ptr, replacement) });
+        Ok(())
+    }
+
     /// Append all allocations from `other` into `self`. Pointers in `Value`s that referred to
     /// `other` remain valid because object addresses are unchanged.
     pub fn merge(&mut self, mut other: GcHeap) {

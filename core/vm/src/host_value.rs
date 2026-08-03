@@ -598,28 +598,41 @@ impl VM {
     ) -> Result<crate::constraint_types::SettlementAttemptOutcome, crate::constraint_types::VmFailure>
     {
         use crate::constraint_types::{
-            FailedSettlementAttempt, SettlementAttemptOutcome, SETTLEMENT_ATTEMPT_RECORD_VERSION,
+            FailedSettlementAttempt, HostFault, RecordedFailedAttempt, SettlementAttemptOutcome,
+            VmFailure, SETTLEMENT_ATTEMPT_RECORD_VERSION,
         };
 
+        let replay_checkpoint = crate::vm::attempt_replay::AttemptReplayCheckpoint::capture(self)
+            .map_err(|message| {
+            VmFailure::Host(HostFault {
+                code: "attempt.checkpoint_failed".into(),
+                message,
+            })
+        })?;
         let base_world_digest = self.world.content_digest();
         let program_digest = self.program_digest();
         let runtime_feature_fingerprint = self.runtime_feature_fingerprint();
         let constraint_registry_digest = self.constraint_registry_digest();
+        let checkpoint_digest = replay_checkpoint.digest().to_string();
         match self.call_global_detailed(name, args) {
             Ok(value) => Ok(SettlementAttemptOutcome::Committed(value)),
             Err(crate::constraint_types::VmFailure::SettlementRejected(rejection)) => Ok(
-                SettlementAttemptOutcome::Rejected(Arc::new(FailedSettlementAttempt {
-                    version: SETTLEMENT_ATTEMPT_RECORD_VERSION,
-                    function: name.to_string(),
-                    arguments: args.to_vec(),
-                    base_world_digest,
-                    program_digest,
-                    runtime_feature_fingerprint,
-                    constraint_registry_digest,
-                    limit_profile_fingerprint: rejection.limit_profile_fingerprint.clone(),
-                    capabilities: rejection.capabilities.clone(),
-                    rejection,
-                })),
+                SettlementAttemptOutcome::Rejected(RecordedFailedAttempt::new(
+                    Arc::new(FailedSettlementAttempt {
+                        version: SETTLEMENT_ATTEMPT_RECORD_VERSION,
+                        function: name.to_string(),
+                        arguments: args.to_vec(),
+                        base_world_digest,
+                        program_digest,
+                        runtime_feature_fingerprint,
+                        constraint_registry_digest,
+                        limit_profile_fingerprint: rejection.limit_profile_fingerprint.clone(),
+                        capabilities: rejection.capabilities.clone(),
+                        checkpoint_digest,
+                        rejection,
+                    }),
+                    replay_checkpoint,
+                )),
             ),
             Err(other) => Err(other),
         }
@@ -630,9 +643,51 @@ impl VM {
     /// semantic rejection bytes.
     pub fn replay_failed_attempt(
         &mut self,
+        attempt: &crate::constraint_types::RecordedFailedAttempt,
+    ) -> Result<Arc<crate::constraint_types::SettlementRejection>, crate::constraint_types::VmFailure>
+    {
+        use crate::constraint_types::{HostFault, VmFailure};
+
+        let fail = |code: &str, message: String| {
+            VmFailure::Host(HostFault {
+                code: code.to_string(),
+                message,
+            })
+        };
+        let replay_vm = attempt
+            .replay_checkpoint
+            .fork()
+            .map_err(|message| fail("attempt.replay_fork_failed", message))?;
+        Self::execute_failed_attempt_replay(replay_vm, attempt)
+    }
+
+    /// Replay a pointer-free attempt recipe against the current VM as an
+    /// explicitly supplied checkpoint. Unlike [`VM::replay_failed_attempt`],
+    /// this requires the current complete checkpoint identity to match.
+    pub fn replay_portable_failed_attempt(
+        &mut self,
         attempt: &crate::constraint_types::FailedSettlementAttempt,
     ) -> Result<Arc<crate::constraint_types::SettlementRejection>, crate::constraint_types::VmFailure>
     {
+        use crate::constraint_types::{HostFault, VmFailure};
+
+        let fail = |code: &str, message: String| {
+            VmFailure::Host(HostFault {
+                code: code.to_string(),
+                message,
+            })
+        };
+        self.validate_attempt_recipe(attempt)?;
+        let replay_vm = self
+            .detached_attempt_replay_vm()
+            .map_err(|message| fail("attempt.replay_fork_failed", message))?;
+        Self::execute_failed_attempt_replay(replay_vm, attempt)
+    }
+
+    fn validate_attempt_recipe(
+        &self,
+        attempt: &crate::constraint_types::FailedSettlementAttempt,
+    ) -> Result<(), crate::constraint_types::VmFailure> {
         use crate::constraint_types::{HostFault, VmFailure, SETTLEMENT_ATTEMPT_RECORD_VERSION};
 
         let fail = |code: &str, message: String| {
@@ -689,12 +744,33 @@ impl VM {
                 "capability profile does not match the recorded attempt".into(),
             ));
         }
-        // Attempt replay is observational debugging, never an authoritative
-        // transition. Execute against a detached child timeline and discard
-        // it even if the program unexpectedly commits or faults.
-        let mut replay_vm = self
-            .detached_attempt_replay_vm()
-            .map_err(|message| fail("attempt.replay_fork_failed", message))?;
+        let actual_checkpoint = self.attempt_checkpoint_digest();
+        if actual_checkpoint != attempt.checkpoint_digest {
+            return Err(fail(
+                "attempt.checkpoint_mismatch",
+                format!(
+                    "attempt expects checkpoint {}, supplied checkpoint is {}",
+                    attempt.checkpoint_digest, actual_checkpoint
+                ),
+            ));
+        }
+        Ok(())
+    }
+
+    fn execute_failed_attempt_replay(
+        mut replay_vm: VM,
+        attempt: &crate::constraint_types::FailedSettlementAttempt,
+    ) -> Result<Arc<crate::constraint_types::SettlementRejection>, crate::constraint_types::VmFailure>
+    {
+        use crate::constraint_types::{HostFault, VmFailure};
+
+        let fail = |code: &str, message: String| {
+            VmFailure::Host(HostFault {
+                code: code.to_string(),
+                message,
+            })
+        };
+        replay_vm.validate_attempt_recipe(attempt)?;
         let replayed = match replay_vm.call_global_detailed(&attempt.function, &attempt.arguments) {
             Err(VmFailure::SettlementRejected(rejection)) => rejection,
             Ok(_) => {
@@ -710,7 +786,7 @@ impl VM {
             .map_err(|error| fail("attempt.rejection_encoding_failed", error.to_string()))?;
         let expected_bytes = attempt
             .rejection
-            .canonical_bytes(&self.constraint_limit_profile)
+            .canonical_bytes(&replay_vm.constraint_limit_profile)
             .map_err(|error| fail("attempt.rejection_encoding_failed", error.to_string()))?;
         if replayed.capabilities != attempt.capabilities || replayed_bytes != expected_bytes {
             return Err(fail(
@@ -728,43 +804,13 @@ impl VM {
         // and cycles inside the child while replacing every closure capture
         // cell. Constant pools are included because a malformed or legacy
         // pre-settlement path must not mutate a parent-owned constant alias.
-        let mut roots = self.globals.clone();
-        let chunk_constant_counts = self
-            .chunks
-            .iter()
-            .map(|chunk| {
-                roots.extend_from_slice(chunk.constants());
-                chunk.constants().len()
-            })
-            .collect::<Vec<_>>();
-        for (_, payload, _) in &self.events_current {
-            roots.push(*payload);
-        }
-        for (_, payload, _) in &self.events_next {
-            roots.push(*payload);
-        }
-        for (_, payload, _) in &self.events_processing {
-            roots.push(*payload);
-        }
-        for (_, _, payload, _) in &self.delayed_events {
-            roots.push(*payload);
-        }
-        for entry in &self.event_log {
-            roots.push(entry.payload);
-        }
-        let mut completed_tasks = self
-            .tasks
-            .iter()
-            .filter_map(|(id, task)| match task.status {
-                crate::vm::TaskStatus::Completed(value) => Some((*id, value)),
-                crate::vm::TaskStatus::Ready | crate::vm::TaskStatus::Failed(_) => None,
-            })
-            .collect::<Vec<_>>();
-        completed_tasks.sort_by_key(|(id, _)| *id);
-        roots.extend(completed_tasks.iter().map(|(_, value)| *value));
+        let layout = self.replay_root_layout();
+        let roots = layout.roots;
+        let chunk_constant_counts = layout.chunk_constant_counts;
+        let completed_tasks = layout.completed_tasks;
 
         let cloned =
-            crate::vm::replay_clone::VmForkCloneContext::new(&mut replay.gc).clone_roots(&roots);
+            crate::vm::replay_clone::VmForkCloneContext::new(&mut replay.gc).clone_roots(&roots)?;
         let mut cloned = cloned.into_iter();
         replay.globals = cloned.by_ref().take(self.globals.len()).collect();
         let mut child_chunks = Vec::with_capacity(self.chunks.len());
@@ -828,10 +874,17 @@ impl VM {
         }
 
         replay.world.restore(self.world.snapshot());
+        replay.next_frame_id = self.next_frame_id;
+        replay.next_settlement_id = self.next_settlement_id;
         replay.indexed_decl = self.indexed_decl.clone();
         replay.migrations = self.migrations.clone();
         replay.sandbox_caps = self.sandbox_caps.clone();
         replay.sys_args = self.sys_args.clone();
+        replay.print_buffer = self.print_buffer.clone();
+        replay.eprint_buffer = self.eprint_buffer.clone();
+        replay.trace_timeline = self.trace_timeline;
+        replay.trace_patch = self.trace_patch.clone();
+        replay.timeline = self.timeline.clone();
         replay.fuel = self.fuel;
         replay.mem_limit = self.mem_limit;
         replay.rng_state = self.rng_state;
@@ -843,11 +896,13 @@ impl VM {
         replay.next_task_id = self.next_task_id;
         replay.current_trace_id = self.current_trace_id;
         replay.next_trace_id = self.next_trace_id;
+        replay.in_simulation_fork = self.in_simulation_fork;
         replay.sandbox_input_json = self.sandbox_input_json.clone();
         replay.sandbox_output_json = self.sandbox_output_json.clone();
         replay.last_sandbox_output_json = self.last_sandbox_output_json.clone();
         replay.last_sandbox_fuel_spent = self.last_sandbox_fuel_spent;
         replay.once_guard_passed = self.once_guard_passed;
+        replay.serial_schedule = self.serial_schedule;
         replay.suppress_output = true;
         replay.observational_attempt_replay = true;
         Ok(replay)
@@ -901,7 +956,7 @@ impl VM {
         self.constraint_limit_profile = profile;
     }
 
-    fn program_digest(&self) -> String {
+    pub(crate) fn program_digest(&self) -> String {
         let mut digest = Sha256::new();
         digest.update(b"rad-compiled-program/v2\0");
         digest.update(b"bytecode-semantics/1\0compiler-semantics/1\0");
@@ -960,7 +1015,7 @@ impl VM {
         hex::encode(digest.finalize())
     }
 
-    fn constraint_registry_digest(&self) -> String {
+    pub(crate) fn constraint_registry_digest(&self) -> String {
         let mut digest = Sha256::new();
         digest.update(b"rad-constraint-registry/v1\0");
         for constraint in self.constraint_registry.iter() {
@@ -977,7 +1032,7 @@ impl VM {
         hex::encode(digest.finalize())
     }
 
-    fn runtime_feature_fingerprint(&self) -> String {
+    pub(crate) fn runtime_feature_fingerprint(&self) -> String {
         let descriptor = format!(
             "rad-runtime/v2;crate={};compiler_semantics=1;bytecode_semantics=1;causal_laws=1;candidate_constraints=1;constraint_profile={};target={}",
             env!("CARGO_PKG_VERSION"),

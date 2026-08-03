@@ -9,6 +9,8 @@ use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::io::Write;
+use std::ops::Deref;
+use std::rc::Rc;
 use std::sync::Arc;
 
 /// Version 3 makes `fuel_per_invocation` an every-opcode contract and
@@ -402,7 +404,7 @@ pub struct SettlementRejection {
     pub capabilities: RejectionCapabilityMetadata,
 }
 
-pub const SETTLEMENT_ATTEMPT_RECORD_VERSION: u32 = 3;
+pub const SETTLEMENT_ATTEMPT_RECORD_VERSION: u32 = 4;
 
 /// Pointer-free recipe and expected result for replaying one rejected host
 /// call. Ledger replay remains commit-only; this record belongs to a debugger
@@ -418,13 +420,70 @@ pub struct FailedSettlementAttempt {
     pub constraint_registry_digest: String,
     pub limit_profile_fingerprint: String,
     pub capabilities: RejectionCapabilityMetadata,
+    /// Canonical identity of the complete pre-attempt VM checkpoint. A
+    /// portable recipe can only be replayed when the host supplies a state
+    /// checkpoint with this identity.
+    pub checkpoint_digest: String,
     pub rejection: Arc<SettlementRejection>,
 }
+
+/// In-process failed-attempt record. The public recipe remains pointer-free;
+/// the private replay checkpoint owns a detached VM graph captured before the
+/// attempted call began.
+#[derive(Clone)]
+pub struct RecordedFailedAttempt {
+    recipe: Arc<FailedSettlementAttempt>,
+    pub(crate) replay_checkpoint: Rc<crate::vm::attempt_replay::AttemptReplayCheckpoint>,
+}
+
+impl RecordedFailedAttempt {
+    pub(crate) fn new(
+        recipe: Arc<FailedSettlementAttempt>,
+        replay_checkpoint: crate::vm::attempt_replay::AttemptReplayCheckpoint,
+    ) -> Self {
+        Self {
+            recipe,
+            replay_checkpoint: Rc::new(replay_checkpoint),
+        }
+    }
+
+    /// Return the pointer-free recipe suitable for serialization or for
+    /// replay against a separately supplied matching checkpoint.
+    pub fn portable_recipe(&self) -> Arc<FailedSettlementAttempt> {
+        Arc::clone(&self.recipe)
+    }
+}
+
+impl Deref for RecordedFailedAttempt {
+    type Target = FailedSettlementAttempt;
+
+    fn deref(&self) -> &Self::Target {
+        &self.recipe
+    }
+}
+
+impl fmt::Debug for RecordedFailedAttempt {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("RecordedFailedAttempt")
+            .field("recipe", &self.recipe)
+            .field("checkpoint_digest", &self.recipe.checkpoint_digest)
+            .finish_non_exhaustive()
+    }
+}
+
+impl PartialEq for RecordedFailedAttempt {
+    fn eq(&self, other: &Self) -> bool {
+        self.recipe == other.recipe
+    }
+}
+
+impl Eq for RecordedFailedAttempt {}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SettlementAttemptOutcome {
     Committed(FrozenValue),
-    Rejected(Arc<FailedSettlementAttempt>),
+    Rejected(RecordedFailedAttempt),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

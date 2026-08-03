@@ -420,8 +420,10 @@ fn invalid() { settle { Move(hero, 20) } }
     narrower.readable_components.clear();
     vm.sandbox_caps = Some(std::sync::Arc::new(narrower));
     let before_capability_mismatch = vm.observable_state_signature();
+    vm.replay_failed_attempt(&attempt)
+        .expect("recorded replay retains its original capability checkpoint");
     let mismatch = vm
-        .replay_failed_attempt(&attempt)
+        .replay_portable_failed_attempt(&attempt.portable_recipe())
         .expect_err("attempt replay must fail closed before executing under different caps");
     assert!(matches!(
         mismatch,
@@ -526,7 +528,9 @@ fn attempt() {{ settle {{ Push(hero) }} }}
         changed.get_world().content_digest()
     );
     let before = changed.observable_state_signature();
-    let failure = changed.replay_failed_attempt(&attempt).unwrap_err();
+    let failure = changed
+        .replay_portable_failed_attempt(&attempt.portable_recipe())
+        .unwrap_err();
     assert!(matches!(
         failure,
         crate::constraint_types::VmFailure::Host(crate::constraint_types::HostFault {

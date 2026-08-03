@@ -1,3 +1,4 @@
+pub(crate) mod attempt_replay;
 mod builtins_impl;
 pub(crate) use builtins_impl::value_to_json;
 mod constraint_runtime;

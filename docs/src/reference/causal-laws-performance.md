@@ -102,3 +102,13 @@ unavailable in constraints and fail before native work or allocation begins.
 The post-invocation heap check is defense in depth, not the primary meter. New
 constraint-safe builtins must add a resource-contract test with their pricing
 rule; benchmark improvements never justify weakening that upper bound.
+
+The constraint-native surface is a closed whitelist, not “all pure builtins.”
+Every admitted helper is enumerated in the contract test. Dynamic helpers are
+run under the test binary's per-thread tracking allocator, and their quoted
+heap must dominate peak GC plus temporary Rust allocation across boundary
+inputs. That oracle caught geometric UTF-8 replacement growth that retained-GC
+deltas alone missed. Callback helpers including `find`, `max_by`, `min_by`, and
+`reduce` remain unavailable in constraints until their native materialization
+cost has the same mechanical upper-bound evidence; ordinary RAD code is
+unchanged.

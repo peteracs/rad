@@ -346,7 +346,7 @@ fn ping() { }
     );
     assert!(rejection.evaluation_failures[0]
         .message
-        .contains("no audited resource contract"));
+        .contains("no mechanically verified native resource upper bound"));
     assert_eq!(before, vm.observable_state_signature());
     vm.call_global("ping", &[]).expect("VM remains reusable");
 }
@@ -394,7 +394,7 @@ fn ping() {{ }}
 }
 
 #[test]
-fn failed_attempt_replay_discards_an_unexpected_child_commit() {
+fn recorded_attempt_replay_ignores_later_parent_program_state() {
     let source = r#"
 component Position { x: int = 0 }
 component Unused { value: int = 0 }
@@ -434,13 +434,19 @@ fn attempt() { settle { Push(hero) } }
     vm.globals[reject_slot] = vm.globals[allow_slot];
 
     let before = vm.observable_state_signature();
-    let failure = vm.replay_failed_attempt(&attempt).unwrap_err();
+    vm.replay_failed_attempt(&attempt)
+        .expect("recorded replay must use the pre-attempt constraint closure");
+    assert_eq!(before, vm.observable_state_signature());
+
+    let failure = vm
+        .replay_portable_failed_attempt(&attempt.portable_recipe())
+        .expect_err("portable replay must reject the later parent checkpoint");
     assert!(matches!(
         failure,
         crate::constraint_types::VmFailure::Host(crate::constraint_types::HostFault {
             ref code,
             ..
-        }) if code == "attempt.unexpected_commit"
+        }) if code == "attempt.checkpoint_mismatch"
     ));
     assert_eq!(before, vm.observable_state_signature());
 }
@@ -449,9 +455,11 @@ fn attempt() { settle { Push(hero) } }
 fn failed_attempt_replay_does_not_mutate_parent_capture_cells() {
     let source = r#"
 component Position { x: int = 0 }
-intent Move { key target: entity }
-law Push(target: entity) { propose Move { target: target } }
-resolver ResolveMove for Move(target, proposals) { next(target, Position { x: 9 }) }
+intent Move { key target: entity, amount: int }
+law Push(target: entity, amount: int) { propose Move { target: target, amount: amount } }
+resolver ResolveMove for Move(target, proposals) {
+    next(target, Position { x: proposals[0].amount })
+}
 constraint Reject for Position(subject, proposed) {
     require false else "position.rejected"
 }
@@ -465,8 +473,8 @@ fn make_counter() {
 let counter = make_counter()
 entity hero { Position {} }
 fn attempt() {
-    counter()
-    settle { Push(hero) }
+    let amount = counter()
+    settle { Push(hero, amount) }
 }
 fn read_counter() { return counter() }
 "#;
@@ -479,13 +487,37 @@ fn read_counter() { return counter() }
         panic!("initial attempt must reject")
     };
 
-    vm.replay_failed_attempt(&attempt)
+    let expected = &attempt.rejection.candidate_details[&attempt.rejection.violations[0].candidate];
+    let crate::constraint_types::RejectionValue::Visible(FrozenValue::Component {
+        fields: expected_fields,
+        ..
+    }) = expected
+    else {
+        panic!("visible candidate detail expected")
+    };
+    assert_eq!(expected_fields["x"], FrozenValue::Int(1));
+
+    let replayed = vm
+        .replay_failed_attempt(&attempt)
         .expect("replay must reproduce rejection in a detached graph");
+    let replayed_detail = &replayed.candidate_details[&replayed.violations[0].candidate];
+    assert_eq!(
+        replayed_detail, expected,
+        "replay must start from count = 0"
+    );
     assert_eq!(
         vm.call_global("read_counter", &[])
             .expect("read parent counter"),
         FrozenValue::Int(2),
         "replay must increment only the child capture cell"
+    );
+
+    let replayed_again = vm
+        .replay_failed_attempt(&attempt)
+        .expect("later parent changes cannot move the replay checkpoint");
+    assert_eq!(
+        replayed_again.candidate_details[&replayed_again.violations[0].candidate],
+        expected.clone()
     );
 }
 
@@ -506,6 +538,7 @@ let reader = pair[0]
 let writer = pair[1]
 let shared = [42]
 let aliases = [shared, shared]
+let large = filled(16384, 7)
 fn make_cycle() {
     let mut holder: any = nil
     let cycle = fn() { return holder }
@@ -556,6 +589,13 @@ fn write_counter() { return writer() }
         parent_items.get(0).unwrap().object_identity(),
         child_items.get(0).unwrap().object_identity(),
         "child DAG nodes must not point into the parent heap"
+    );
+    let child_large = child.globals[slot(&child, "large")];
+    let large_retained = child_large.as_object().unwrap().accounted_heap_bytes();
+    assert!(
+        child.gc.bytes_allocated()
+            >= std::mem::size_of::<crate::value::Object>().saturating_add(large_retained),
+        "populated replay objects must replace placeholder accounting"
     );
 
     let parent_cycle = parent.globals[slot(&parent, "cycle")];

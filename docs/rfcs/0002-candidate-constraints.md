@@ -1,11 +1,11 @@
 # RFC-0002: Candidate Constraints—Order-Independent Settlement Validation
 
-- **Status:** Implemented experimentally
+- **Status:** Implemented — stable experimental transactional core
 - **Product name:** RAD Causal Laws
 - **Paradigm:** World-Law Programming
 - **Author:** peteracs
 - **Created:** 2026-08-03
-- **Last updated:** 2026-08-03
+- **Last updated:** 2026-08-04
 - **Depends on:** [RFC-0001](0001-causal-settlements.md)
 - **Proposed feature gate:** `--experimental-laws`
 
@@ -808,6 +808,14 @@ payloads, event-log payloads, and completed-task values participate in the
 same clone context. Native/FFI calls and irreversible host-effect builtins fail
 closed during observational replay.
 
+The in-process checkpoint is captured before the attempted request executes.
+This distinction is normative: a request may update a global or captured cell
+before entering `settle`, and replay must still begin from that original value.
+`RecordedFailedAttempt` pairs the private detached seed with the pointer-free
+`FailedSettlementAttempt` recipe. Portable replay requires a separately
+supplied checkpoint whose canonical digest matches the recipe; it never falls
+back to cloning the authoritative VM's current post-attempt state.
+
 A rejected settlement is absent from the durable ledger and therefore cannot
 be reconstructed from ledger provenance alone. Attempt replay consumes an
 explicit non-authoritative attempt record containing at least:
@@ -834,7 +842,7 @@ Once implemented, capability negotiation reports:
   "causal_laws": 1,
   "causal_constraints": 1,
   "constraint_limits": {
-    "version": 2,
+    "version": 3,
     "fingerprint": "<sha256>",
     "fuel_per_invocation": 100000,
     "max_heap_bytes_per_invocation": 1048576,
@@ -1282,10 +1290,19 @@ discarded, graph-isolated child timeline. Child closures rewrite captures onto
 child-owned cells while preserving internal sharing and cycles; replay-visible
 constant, event, and task roots are cloned in the same graph. Irreversible host
 effects fail closed. Constraint-safe native builtins use conservative work and
-peak-allocation quotes derived from their actual inputs, while helpers without
-a proved upper bound remain unavailable in constraints. Invocation-local
+peak-allocation quotes derived from their actual inputs. Admission is a closed,
+enumerated whitelist, and dynamically allocating contracts are checked against
+a per-thread peak allocator oracle that includes GC allocations and temporary
+Rust collections. `find`, `max_by`, `min_by`, `reduce`, and every other helper
+without that proof remain unavailable in constraints. Invocation-local
 violation retention also has an independent byte meter before results reach
 the settlement-wide outcome meter.
+
+Attempt recording now captures the complete graph-isolated seed before the
+host call. Recorded replay forks only that seed; portable replay requires a
+matching canonical checkpoint digest. Replay graph cloning is node/byte
+bounded, and cycle-breaking placeholders are re-accounted to the populated
+object's retained size before the child is exposed.
 
 Projection, priorities, fixed points, and parallel constraint execution remain
 out of scope and require follow-on RFCs.

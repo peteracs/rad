@@ -44,6 +44,31 @@ use std::cell::Cell;
 thread_local! {
     static TL_ALLOCATED: Cell<usize> = const { Cell::new(0) };
     static TL_FREED: Cell<usize> = const { Cell::new(0) };
+    static TL_MEASURE_LIVE: Cell<isize> = const { Cell::new(0) };
+    static TL_MEASURE_PEAK: Cell<usize> = const { Cell::new(0) };
+    static TL_MEASURE_ACTIVE: Cell<bool> = const { Cell::new(false) };
+}
+
+fn measure_allocated(bytes: usize) {
+    let _ = TL_MEASURE_ACTIVE.try_with(|active| {
+        if !active.get() {
+            return;
+        }
+        let _ = TL_MEASURE_LIVE.try_with(|live| {
+            let next = live.get().saturating_add_unsigned(bytes);
+            live.set(next);
+            let _ = TL_MEASURE_PEAK.try_with(|peak| peak.set(peak.get().max(next.max(0) as usize)));
+        });
+    });
+}
+
+fn measure_freed(bytes: usize) {
+    let _ = TL_MEASURE_ACTIVE.try_with(|active| {
+        if active.get() {
+            let _ = TL_MEASURE_LIVE
+                .try_with(|live| live.set(live.get().saturating_sub_unsigned(bytes)));
+        }
+    });
 }
 
 struct CountingAlloc;
@@ -53,11 +78,13 @@ unsafe impl GlobalAlloc for CountingAlloc {
         let p = System.alloc(layout);
         if !p.is_null() {
             let _ = TL_ALLOCATED.try_with(|c| c.set(c.get() + layout.size()));
+            measure_allocated(layout.size());
         }
         p
     }
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
         let _ = TL_FREED.try_with(|c| c.set(c.get() + layout.size()));
+        measure_freed(layout.size());
         System.dealloc(ptr, layout);
     }
     unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
@@ -65,6 +92,8 @@ unsafe impl GlobalAlloc for CountingAlloc {
         if !p.is_null() {
             let _ = TL_ALLOCATED.try_with(|c| c.set(c.get() + new_size));
             let _ = TL_FREED.try_with(|c| c.set(c.get() + layout.size()));
+            measure_freed(layout.size());
+            measure_allocated(new_size);
         }
         p
     }
@@ -78,6 +107,33 @@ fn net_bytes() -> i64 {
     let allocated = TL_ALLOCATED.try_with(Cell::get).unwrap_or(0) as i64;
     let freed = TL_FREED.try_with(Cell::get).unwrap_or(0) as i64;
     allocated - freed
+}
+
+/// Measure the peak native allocator growth on the current test thread.
+/// Inputs must be prepared before entering this scope; the result includes
+/// GC boxes and temporary Rust `Vec`/`String`/map allocations made by the
+/// operation under test.
+pub(crate) fn measure_peak_bytes<T>(operation: impl FnOnce() -> T) -> (T, usize) {
+    struct Reset;
+    impl Drop for Reset {
+        fn drop(&mut self) {
+            let _ = TL_MEASURE_ACTIVE.try_with(|active| active.set(false));
+        }
+    }
+
+    TL_MEASURE_LIVE.with(|live| live.set(0));
+    TL_MEASURE_PEAK.with(|peak| peak.set(0));
+    TL_MEASURE_ACTIVE.with(|active| {
+        assert!(
+            !active.replace(true),
+            "native peak measurements may not nest"
+        )
+    });
+    let reset = Reset;
+    let result = operation();
+    let peak = TL_MEASURE_PEAK.with(Cell::get);
+    drop(reset);
+    (result, peak)
 }
 
 /// With per-thread counters other tests can no longer pollute a measurement;

@@ -111,11 +111,20 @@ render the same typed result as text. Browser hosts can use
 `"kind": "settlement_rejected"`.
 
 Rejected attempts are not authoritative ledger entries. `call_global_attempt`
-can retain a pointer-free failed-attempt recipe, and `replay_failed_attempt`
-re-executes it only when the base digest, request, capability profile, and
-limit-profile fingerprint match. It also requires the same compiled-program,
-runtime-feature, and constraint-registry digests. Opaque settlement record IDs
-are diagnostic only and do not participate in semantic equality.
+captures a graph-isolated checkpoint **before** it invokes the target. A
+rejected result is a `RecordedFailedAttempt`: it owns that private in-process
+seed and exposes `portable_recipe()` for the pointer-free recipe. Calling
+`replay_failed_attempt(recorded)` always forks the original pre-attempt seed,
+so a global or closure capture changed before the failed settlement is replayed
+from its original value—not the authoritative VM's later value.
+
+Portable recipes deliberately do not smuggle a VM heap into wire data. A host
+must supply the exact state checkpoint and call
+`replay_portable_failed_attempt(recipe)`; RAD verifies the canonical checkpoint
+digest in addition to the base, request, capability, limit-profile,
+compiled-program, runtime-feature, and constraint-registry identities. Opaque
+settlement record IDs are diagnostic only and do not participate in semantic
+equality.
 
 Candidate details are frozen once per `(entity, component)` and shared by all
 violations that reference that candidate. One settlement outcome meter charges
@@ -133,7 +142,9 @@ preserves shared aliases and cycles within the child, and clones globals,
 sealed constants, queued event payloads, event-log payloads, and completed task
 values through one identity map. Native/FFI and irreversible host effects are
 disabled in this mode. Replaying a failed attempt therefore cannot mutate the
-authoritative VM or host being inspected.
+authoritative VM or host being inspected. Replay graph construction is bounded,
+and replacing cycle-breaking placeholders re-accounts the populated object's
+actual retained list, map, string, closure, or buffer storage.
 
 ## Capabilities and redaction
 

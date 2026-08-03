@@ -14,6 +14,44 @@ pub(crate) struct BuiltinResourceCharge {
     pub(crate) heap: usize,
 }
 
+/// Closed RFC-0002 native whitelist. Admission is intentionally independent
+/// of argument shape: an unsupported builtin cannot smuggle itself through a
+/// cheap error branch and then receive different legal arguments at runtime.
+fn has_mechanically_checked_contract(builtin: Builtin) -> bool {
+    matches!(
+        builtin,
+        Builtin::Filled
+            | Builtin::Range
+            | Builtin::BitsetNew
+            | Builtin::BitsetSet
+            | Builtin::BitsetClear
+            | Builtin::Replace
+            | Builtin::Abs
+            | Builtin::Sign
+            | Builtin::Min
+            | Builtin::Max
+            | Builtin::Chr
+            | Builtin::Ord
+            | Builtin::IntDiv
+            | Builtin::Popcount
+            | Builtin::Ctz
+            | Builtin::Shl
+            | Builtin::Shr
+            | Builtin::Clamp
+            | Builtin::Round
+            | Builtin::Floor
+            | Builtin::Ceil
+            | Builtin::Sqrt
+            | Builtin::Pow
+            | Builtin::ByteAt
+            | Builtin::ByteLen
+            | Builtin::BitsetHas
+            | Builtin::Len
+            | Builtin::StartsWith
+            | Builtin::EndsWith
+    )
+}
+
 /// Price constraint-safe builtins before they execute. Builtins with an
 /// unbounded or not-yet-audited native implementation fail closed instead of
 /// running outside the child meter. This is intentionally more conservative
@@ -23,6 +61,12 @@ pub(crate) fn builtin_resource_charge(
     builtin: Builtin,
     args: &[Value],
 ) -> Result<BuiltinResourceCharge, String> {
+    if !has_mechanically_checked_contract(builtin) {
+        return Err(format!(
+            "constraint builtin '{}' has no mechanically verified native resource upper bound",
+            builtin.name()
+        ));
+    }
     let object = std::mem::size_of::<Object>();
     let values = |count: usize| {
         count
@@ -188,9 +232,11 @@ pub(crate) fn builtin_resource_charge(
             let output = source
                 .len()
                 .saturating_add(matches_upper.saturating_mul(to.len().saturating_sub(from.len())));
-            // `str::replace` builds a temporary String; importing that String
-            // into Object::Str allocates the retained Arc<str> separately.
-            let bytes = output.saturating_mul(2).saturating_add(object);
+            // `str::replace` may grow its String geometrically before the
+            // completed buffer is converted into a separately allocated
+            // retained Arc<str>. The contract oracle observes all three live
+            // phases, so reserve four complete outputs plus the GC object.
+            let bytes = output.saturating_mul(4).saturating_add(object);
             sized(source.len().saturating_add(matches_upper).max(1), bytes)
         }
         Builtin::Push => {
@@ -398,10 +444,7 @@ pub(crate) fn builtin_resource_charge(
         | Builtin::All
         | Builtin::Find
         | Builtin::MaxBy
-        | Builtin::MinBy => {
-            let count = collection_len(0).unwrap_or(1);
-            sized(count, values(count))
-        }
+        | Builtin::MinBy => unreachable!("callback builtins fail the closed whitelist"),
         Builtin::SortBy => {
             let count = collection_len(0).unwrap_or(1);
             let work = count.saturating_mul((usize::BITS - count.max(1).leading_zeros()) as usize);
@@ -657,10 +700,179 @@ impl ConstraintOutcomeMeter {
 
 #[cfg(test)]
 mod resource_contract_tests {
-    use super::builtin_resource_charge;
+    use super::{builtin_resource_charge, has_mechanically_checked_contract};
     use crate::gc::GcHeap;
+    use crate::leak_lab::measure_peak_bytes;
     use crate::value::{Builtin, Object, Value};
-    use crate::vm::builtins_impl::{bi_bitset_clear, bi_bitset_set, bi_replace};
+    use crate::vm::builtins_impl::{
+        bi_bitset_clear, bi_bitset_set, bi_filled, bi_range, bi_replace,
+    };
+    use std::collections::BTreeSet;
+
+    #[test]
+    fn constraint_native_whitelist_is_closed_and_enumerated() {
+        let expected = BTreeSet::from([
+            "abs",
+            "bitset_clear",
+            "bitset_has",
+            "bitset_new",
+            "bitset_set",
+            "byte_at",
+            "byte_len",
+            "ceil",
+            "chr",
+            "clamp",
+            "ctz",
+            "ends_with",
+            "filled",
+            "floor",
+            "int_div",
+            "len",
+            "max",
+            "min",
+            "ord",
+            "popcount",
+            "pow",
+            "range",
+            "replace",
+            "round",
+            "shl",
+            "shr",
+            "sign",
+            "sqrt",
+            "starts_with",
+        ]);
+        let actual = Builtin::ALL
+            .iter()
+            .copied()
+            .filter(|builtin| has_mechanically_checked_contract(*builtin))
+            .map(Builtin::name)
+            .collect::<BTreeSet<_>>();
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn exact_option_and_string_reduce_counterexamples_fail_closed() {
+        let mut gc = GcHeap::new();
+        let empty = Value::list(&mut gc, Vec::new());
+        let text = Value::from_string(&mut gc, "abcdef".into());
+        for (builtin, args) in [
+            (Builtin::Find, vec![empty]),
+            (Builtin::MaxBy, vec![empty]),
+            (Builtin::MinBy, vec![empty]),
+            (Builtin::Reduce, vec![text]),
+        ] {
+            let error = builtin_resource_charge(builtin, &args).unwrap_err();
+            assert!(
+                error.contains("no mechanically verified"),
+                "{builtin:?}: {error}"
+            );
+        }
+    }
+
+    #[test]
+    fn admitted_dynamic_contracts_dominate_measured_native_peak() {
+        let mut gc = GcHeap::new();
+
+        let filled_args = vec![Value::int(16_384), Value::int(7)];
+        let filled_quote = builtin_resource_charge(Builtin::Filled, &filled_args).unwrap();
+        let (filled, filled_peak) = measure_peak_bytes(|| bi_filled(&mut gc, filled_args).unwrap());
+        assert!(
+            filled_peak <= filled_quote.heap,
+            "filled: {filled_peak} > {}",
+            filled_quote.heap
+        );
+        let _ = filled;
+
+        let range_args = vec![Value::int(0), Value::int(16_384)];
+        let range_quote = builtin_resource_charge(Builtin::Range, &range_args).unwrap();
+        let (range, range_peak) = measure_peak_bytes(|| bi_range(&mut gc, range_args).unwrap());
+        assert!(
+            range_peak <= range_quote.heap,
+            "range: {range_peak} > {}",
+            range_quote.heap
+        );
+        let _ = range;
+
+        let bitset = Value::bitset(&mut gc, vec![u64::MAX; 4_096]);
+        let bitset_args = vec![bitset, Value::int(65_536)];
+        let bitset_quote = builtin_resource_charge(Builtin::BitsetSet, &bitset_args).unwrap();
+        let (bitset_result, bitset_peak) =
+            measure_peak_bytes(|| bi_bitset_set(&mut gc, bitset_args).unwrap());
+        assert!(
+            bitset_peak <= bitset_quote.heap,
+            "bitset_set: {bitset_peak} > {}",
+            bitset_quote.heap
+        );
+        let _ = bitset_result;
+
+        let replace_args = vec![
+            Value::from_string(&mut gc, "a".repeat(8_192)),
+            Value::from_string(&mut gc, String::new()),
+            Value::from_string(&mut gc, "界".repeat(64)),
+        ];
+        let replace_quote = builtin_resource_charge(Builtin::Replace, &replace_args).unwrap();
+        let (replace_result, replace_peak) =
+            measure_peak_bytes(|| bi_replace(&mut gc, replace_args).unwrap());
+        assert!(
+            replace_peak <= replace_quote.heap,
+            "replace: {replace_peak} > {}",
+            replace_quote.heap
+        );
+        let _ = replace_result;
+    }
+
+    #[test]
+    fn admitted_fixed_contracts_dominate_measured_native_peak() {
+        let mut vm = crate::vm::VM::new_with_seed(7);
+        let text = Value::from_string(&mut vm.gc, "rad界".into());
+        let prefix = Value::from_string(&mut vm.gc, "rad".into());
+        let suffix = Value::from_string(&mut vm.gc, "界".into());
+        let bitset = Value::bitset(&mut vm.gc, vec![0b1010]);
+        let cases = vec![
+            (Builtin::BitsetNew, vec![]),
+            (Builtin::Abs, vec![Value::int(-7)]),
+            (Builtin::Sign, vec![Value::int(-7)]),
+            (Builtin::Min, vec![Value::int(1), Value::int(2)]),
+            (Builtin::Max, vec![Value::int(1), Value::int(2)]),
+            (Builtin::Chr, vec![Value::int(0x754c)]),
+            (Builtin::Ord, vec![text]),
+            (Builtin::IntDiv, vec![Value::int(7), Value::int(2)]),
+            (Builtin::Popcount, vec![Value::int(0b1010)]),
+            (Builtin::Ctz, vec![Value::int(0b1000)]),
+            (Builtin::Shl, vec![Value::int(1), Value::int(4)]),
+            (Builtin::Shr, vec![Value::int(16), Value::int(4)]),
+            (
+                Builtin::Clamp,
+                vec![Value::int(5), Value::int(0), Value::int(10)],
+            ),
+            (Builtin::Round, vec![Value::from_float(1.5)]),
+            (Builtin::Floor, vec![Value::from_float(1.5)]),
+            (Builtin::Ceil, vec![Value::from_float(1.5)]),
+            (Builtin::Sqrt, vec![Value::from_float(4.0)]),
+            (
+                Builtin::Pow,
+                vec![Value::from_float(2.0), Value::from_float(8.0)],
+            ),
+            (Builtin::ByteAt, vec![text, Value::int(0)]),
+            (Builtin::ByteLen, vec![text]),
+            (Builtin::BitsetHas, vec![bitset, Value::int(3)]),
+            (Builtin::Len, vec![text]),
+            (Builtin::StartsWith, vec![text, prefix]),
+            (Builtin::EndsWith, vec![text, suffix]),
+        ];
+
+        for (builtin, args) in cases {
+            let quote = builtin_resource_charge(builtin, &args).unwrap();
+            let (result, measured_peak) = measure_peak_bytes(|| vm.call_builtin(builtin, args));
+            result.unwrap_or_else(|error| panic!("{builtin:?}: {error}"));
+            assert!(
+                measured_peak <= quote.heap,
+                "{builtin:?}: measured {measured_peak} > quoted {}",
+                quote.heap
+            );
+        }
+    }
 
     #[test]
     fn bitset_clear_quote_includes_the_existing_vector_clone() {
@@ -693,7 +905,7 @@ mod resource_contract_tests {
             quote.heap
                 >= replacement_text
                     .len()
-                    .saturating_mul(2)
+                    .saturating_mul(4)
                     .saturating_add(std::mem::size_of::<Object>()),
             "the quote must cover Rust's temporary String and the retained RAD string"
         );
@@ -739,7 +951,7 @@ mod resource_contract_tests {
             quote.heap
                 >= source_text
                     .len()
-                    .saturating_mul(2)
+                    .saturating_mul(4)
                     .saturating_add(std::mem::size_of::<Object>())
         );
     }
@@ -790,7 +1002,10 @@ mod resource_contract_tests {
             Builtin::GroupBy,
         ] {
             let error = builtin_resource_charge(builtin, &[empty]).unwrap_err();
-            assert!(error.contains("no proven"), "{builtin:?}: {error}");
+            assert!(
+                error.contains("no proven") || error.contains("no mechanically verified"),
+                "{builtin:?}: {error}"
+            );
         }
     }
 }
