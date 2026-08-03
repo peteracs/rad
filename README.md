@@ -118,8 +118,9 @@ and known limits are in the [Introduction](docs/src/introduction.md#status).
 - [Built-in functions](docs/src/reference/builtins.md) — `why`, `fork`, `diff`, `sandbox_run`, and contracts
 - [Language guarantees](docs/src/reference/guarantees.md) — behavioral contracts with maturity labels
 - [Language spec](docs/src/reference/spec.md)
-- [Causal Laws guide](docs/src/guide/causal-laws.md) â€” experimental typed intents and atomic settlements
-- [RFC-0001](docs/rfcs/0001-causal-settlements.md) â€” normative v0 semantics
+- [Causal Laws guide](docs/src/guide/causal-laws.md) — experimental typed intents and atomic settlements
+- [RFC-0001](docs/rfcs/0001-causal-settlements.md) — normative v0 semantics
+- [RFC-0002 draft](docs/rfcs/0002-candidate-constraints.md) — validation-only candidate constraints
 - [Performance](docs/src/reference/performance.md)
 - [Contributing](docs/src/project/contributing.md)
 - [Repository map](docs/src/project/repo-map.md)

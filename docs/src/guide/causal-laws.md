@@ -133,4 +133,7 @@ internal record IDs.
 Constraints, resolver ordering, resolver-to-resolver reads, resource or
 composite-key intents, derived intents, fixed-point evaluation, structural
 world changes through `next`, cross-entity writes, and parallel settlement
-execution are deliberately outside RFC-0001.
+execution are deliberately outside RFC-0001. Validation-only constraints over
+the immutable complete candidate are proposed separately in
+[RFC-0002](https://github.com/peteracs/rad/blob/main/docs/rfcs/0002-candidate-constraints.md);
+the draft does not add projection, correction, or constraint ordering.

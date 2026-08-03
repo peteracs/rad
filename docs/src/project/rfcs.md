@@ -30,5 +30,6 @@ RFCs are the process for proposing changes to the Rad language, its semantics, o
 
 | RFC | Title | Status |
 |-----|-------|--------|
+| [0002](../../rfcs/0002-candidate-constraints.md) | Candidate Constraints—Order-Independent Settlement Validation | Draft |
 | [0001](../../rfcs/0001-causal-settlements.md) | Causal Settlements—Typed Intents, Laws, and Resolvers | Accepted for experimental implementation |
 | [0000](rfc-template.md) | RFC Template | — |
