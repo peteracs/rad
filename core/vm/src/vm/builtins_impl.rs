@@ -21,6 +21,7 @@ impl VM {
         args: Vec<Value>,
     ) -> Result<Value, String> {
         self.enforce_settlement_builtin(builtin)?;
+        self.meter_constraint_builtin(builtin, &args)?;
         if self.sandbox_caps.is_some() && !crate::sandbox::builtin_allowed_in_sandbox(builtin) {
             return Err(format!(
                 "sandbox: builtin '{}' is not permitted under the capability grant",

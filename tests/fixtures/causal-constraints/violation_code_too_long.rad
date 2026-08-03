@@ -1,0 +1,7 @@
+// flags: --experimental-laws
+// error: at most 128 lowercase ASCII
+
+component Position { x: int = 0 }
+constraint Invalid for Position(subject, proposed) {
+    require true else "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+}

@@ -11,7 +11,9 @@ use std::fmt;
 use std::io::Write;
 use std::sync::Arc;
 
-pub const CONSTRAINT_LIMIT_PROFILE_VERSION: u32 = 2;
+/// Version 3 makes `fuel_per_invocation` an every-opcode contract and
+/// `max_heap_bytes_per_invocation` a disposable-heap contract.
+pub const CONSTRAINT_LIMIT_PROFILE_VERSION: u32 = 3;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ConstraintLimitProfile {
@@ -360,11 +362,17 @@ pub enum RejectionProposalOrigin {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct CandidateCausalExplanation {
-    pub resolver: String,
-    pub intent: String,
-    pub intent_key: u32,
-    pub proposal_origins: Vec<RejectionProposalOrigin>,
+pub enum CandidateCausalExplanation {
+    Visible {
+        resolver: String,
+        intent: String,
+        intent_key: u32,
+        proposal_origins: Vec<RejectionProposalOrigin>,
+    },
+    /// Structurally opaque: hidden origin identity never remains in a field
+    /// that a serializer, debugger, or future renderer could accidentally
+    /// reveal. Only bounded multiplicity is retained.
+    Redacted { proposal_count: usize },
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -394,7 +402,7 @@ pub struct SettlementRejection {
     pub capabilities: RejectionCapabilityMetadata,
 }
 
-pub const SETTLEMENT_ATTEMPT_RECORD_VERSION: u32 = 2;
+pub const SETTLEMENT_ATTEMPT_RECORD_VERSION: u32 = 3;
 
 /// Pointer-free recipe and expected result for replaying one rejected host
 /// call. Ledger replay remains commit-only; this record belongs to a debugger
@@ -538,7 +546,12 @@ impl SettlementRejection {
             ))
         });
         for explanation in self.explanation.candidates.values_mut() {
-            explanation.proposal_origins.sort();
+            if let CandidateCausalExplanation::Visible {
+                proposal_origins, ..
+            } = explanation
+            {
+                proposal_origins.sort();
+            }
         }
     }
 
@@ -555,11 +568,13 @@ impl SettlementRejection {
         }
         if !capabilities.origins_visible {
             for explanation in rendered.explanation.candidates.values_mut() {
-                explanation.resolver = "<redacted-origin>".into();
-                explanation.intent = "<redacted-origin>".into();
-                for origin in &mut explanation.proposal_origins {
-                    *origin = RejectionProposalOrigin::Redacted;
-                }
+                let proposal_count = match explanation {
+                    CandidateCausalExplanation::Visible {
+                        proposal_origins, ..
+                    } => proposal_origins.len(),
+                    CandidateCausalExplanation::Redacted { proposal_count } => *proposal_count,
+                };
+                *explanation = CandidateCausalExplanation::Redacted { proposal_count };
             }
         }
         rendered.capabilities = capabilities;
@@ -678,32 +693,47 @@ impl SettlementRejection {
             if index > 0 {
                 writer.raw(b",")?;
             }
-            writer.raw(b"{\"intent\":")?;
-            writer.json(&explanation.intent)?;
-            writer.raw(b",\"intent_key\":")?;
-            writer.json(&explanation.intent_key)?;
-            writer.raw(b",\"key\":")?;
+            writer.raw(b"{\"key\":")?;
             candidate_key(&mut writer, key)?;
-            writer.raw(b",\"proposal_origins\":[")?;
-            for (origin_index, origin) in explanation.proposal_origins.iter().enumerate() {
-                if origin_index > 0 {
-                    writer.raw(b",")?;
+            match explanation {
+                CandidateCausalExplanation::Visible {
+                    resolver,
+                    intent,
+                    intent_key,
+                    proposal_origins,
+                } => {
+                    writer.raw(b",\"origin\":{\"intent\":")?;
+                    writer.json(intent)?;
+                    writer.raw(b",\"intent_key\":")?;
+                    writer.json(intent_key)?;
+                    writer.raw(b",\"proposal_origins\":[")?;
+                    for (origin_index, origin) in proposal_origins.iter().enumerate() {
+                        if origin_index > 0 {
+                            writer.raw(b",")?;
+                        }
+                        match origin {
+                            RejectionProposalOrigin::Visible { law, payload, .. } => {
+                                writer.raw(b"{\"law\":")?;
+                                writer.json(law)?;
+                                writer.raw(b",\"payload\":")?;
+                                frozen(&mut writer, payload, profile)?;
+                                writer.raw(b"}")?;
+                            }
+                            RejectionProposalOrigin::Redacted => {
+                                writer.raw(b"{\"redacted_origin\":true}")?;
+                            }
+                        }
+                    }
+                    writer.raw(b"],\"resolver\":")?;
+                    writer.json(resolver)?;
+                    writer.raw(b"}")?;
                 }
-                match origin {
-                    RejectionProposalOrigin::Visible { law, payload, .. } => {
-                        writer.raw(b"{\"law\":")?;
-                        writer.json(law)?;
-                        writer.raw(b",\"payload\":")?;
-                        frozen(&mut writer, payload, profile)?;
-                        writer.raw(b"}")?;
-                    }
-                    RejectionProposalOrigin::Redacted => {
-                        writer.raw(b"{\"redacted_origin\":true}")?;
-                    }
+                CandidateCausalExplanation::Redacted { proposal_count } => {
+                    writer.raw(b",\"origin\":{\"proposal_count\":")?;
+                    writer.json(proposal_count)?;
+                    writer.raw(b",\"redacted\":true}")?;
                 }
             }
-            writer.raw(b"],\"resolver\":")?;
-            writer.json(&explanation.resolver)?;
             writer.raw(b"}")?;
         }
         writer.raw(b"]},\"limit_profile_fingerprint\":")?;

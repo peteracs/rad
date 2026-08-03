@@ -476,10 +476,9 @@ fn attempt() { settle { Push(hero) } }
         .explanation
         .candidates
         .values()
-        .flat_map(|candidate| candidate.proposal_origins.iter())
-        .all(|origin| matches!(
-            origin,
-            crate::constraint_types::RejectionProposalOrigin::Redacted
+        .all(|candidate| matches!(
+            candidate,
+            crate::constraint_types::CandidateCausalExplanation::Redacted { .. }
         )));
     assert_eq!(
         first.canonical_bytes(vm.constraint_limit_profile()),
@@ -492,6 +491,7 @@ fn attempt() { settle { Push(hero) } }
     assert!(!encoded.contains("Push"));
     assert!(!encoded.contains("ResolveMove"));
     assert!(!encoded.contains("\"Move\""));
+    assert!(!encoded.contains("intent_key"));
 }
 
 #[test]
@@ -606,7 +606,11 @@ constraint WorldBounds for Position(subject, proposed) {{
 entity hero {{ Position {{}} }}
 fn attempt() {{ settle {{ Push(hero) }} }}
 "#,
-        "payload".repeat(1_000)
+        // Keep retained semantic data under the pre-retention outcome meter,
+        // while JSON keys/escaping still push the exact canonical envelope
+        // over the configured wire limit. This specifically exercises the
+        // bounded writer as the independent final backstop.
+        "payload".repeat(30)
     );
     let mut vm = compile_vm(&source);
     vm.run(0).expect("initialize output-limit program");

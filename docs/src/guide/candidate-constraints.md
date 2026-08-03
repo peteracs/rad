@@ -34,7 +34,8 @@ it does not stop other constraints from running.
 
 The attached component must be defined in the same module. Constraint names
 and violation codes are semantic identities, so use stable names rather than
-presentation text.
+presentation text. Violation codes are limited to 128 lowercase ASCII bytes
+using letters, digits, `.`, `_`, or `-`.
 
 ## Base and candidate reads
 
@@ -76,7 +77,12 @@ it in `watches` is a compile-time error.
 ## Rejection behavior
 
 Constraints collect all bounded semantic outcomes. Each invocation receives
-an isolated deterministic fuel and heap budget. Fuel exhaustion, memory
+an isolated deterministic fuel and heap budget. Every bytecode operation and
+audited native builtin is charged by its work; aggregate constructors and
+native collection operations preflight retained and temporary storage. An
+unaudited native helper fails closed. Each invocation uses a disposable GC
+heap, so previous invocations cannot consume its allowance and its allocations
+are reclaimed before the next constraint starts. Fuel exhaustion, memory
 exhaustion, or another ordinary evaluation fault becomes an evaluation
 failure; it does not suppress independent invocations.
 
@@ -111,10 +117,18 @@ runtime-feature, and constraint-registry digests. Opaque settlement record IDs
 are diagnostic only and do not participate in semantic equality.
 
 Candidate details are frozen once per `(entity, component)` and shared by all
-violations that reference that candidate. Canonical rejection encoding writes
-through a bounded sink; it never constructs an oversized JSON tree merely to
-measure it. If the envelope is exceeded, RAD returns one bounded aggregate
-limit outcome.
+violations that reference that candidate. One settlement outcome meter charges
+violations, failures, metadata, details, and origins before retaining them.
+Canonical rejection encoding adds an independent bounded sink; it never
+constructs an oversized JSON tree merely to measure it. If the envelope is
+exceeded, RAD discards detailed outcomes, continues evaluating the remaining
+constraints, and returns one bounded aggregate limit outcome rather than an
+order-dependent prefix.
+
+Attempt replay is observational. It executes the recorded call in a detached
+child VM and discards that child for every result, including an unexpected
+commit. Replaying a failed attempt therefore cannot mutate the authoritative
+world being inspected.
 
 ## Capabilities and redaction
 

@@ -447,6 +447,7 @@ impl Checker {
     }
 
     pub(super) fn check_require_stmt(&mut self, stmt: &RequireStmt) {
+        const MAX_CONSTRAINT_CODE_BYTES: usize = 128;
         if !matches!(
             self.scopes.last().map(|scope| &scope.causal_context),
             Some(CausalContext::Constraint { .. })
@@ -466,6 +467,7 @@ impl Checker {
             );
         }
         if stmt.code.is_empty()
+            || stmt.code.len() > MAX_CONSTRAINT_CODE_BYTES
             || !stmt.code.bytes().all(|byte| {
                 byte.is_ascii_lowercase() || byte.is_ascii_digit() || b"._-".contains(&byte)
             })
@@ -473,7 +475,9 @@ impl Checker {
             self.error(
                 &stmt.span,
                 format!("constraint violation code '{}' is not stable", stmt.code),
-                Some("Use lowercase ASCII letters, digits, '.', '_' or '-'".into()),
+                Some(format!(
+                    "Use at most {MAX_CONSTRAINT_CODE_BYTES} lowercase ASCII letters, digits, '.', '_' or '-'"
+                )),
             );
         }
     }

@@ -565,7 +565,11 @@ meter. Before any invocation runs, the runtime checks the complete selected set
 against that envelope. Failure returns `HostAborted` without exposing a partial
 collection. Inside the reservation, every invocation receives exactly its own
 declared fuel and heap allowance; earlier execution cannot consume a later
-invocation's contract.
+invocation's contract. Fuel is charged at every dispatched constraint opcode,
+including straight-line basic blocks. Each invocation allocates into a fresh
+throw-away GC heap; variable-size aggregate constructors preflight temporary
+and retained storage, every opcode performs a retained-heap backstop check, and
+the heap is discarded before the next invocation begins.
 
 A constraint can fail while evaluating—for example, a base `require(entity,
 Component)` may find a missing component. Ordinary errors and per-invocation
@@ -580,7 +584,11 @@ limit is exceeded, no order-dependent prefix is exposed; the rejection contains
 one bounded aggregate limit failure. Candidate values are retained once per
 candidate key and violations reference them. Proposal origins are bounded and
 filtered to the candidate's owning patch. Canonical output is written directly
-through a bounded sink rather than building an oversized JSON tree first.
+through a bounded sink rather than building an oversized JSON tree first. The
+settlement-wide outcome meter charges records before retention. Once it
+overflows, all detailed outcomes are discarded immediately, remaining
+constraints continue inside their isolated contracts, and no later detail or
+order-dependent prefix is retained.
 
 Process cancellation, allocator failure, VM termination, or another true
 host-fatal condition produces `HostAborted`. A host-fatal result exposes no
@@ -783,6 +791,10 @@ Attempt replay:
     digest and deterministic runtime profile, producing the same commit or
     structured rejection.
 ```
+
+Attempt replay is observational: it executes in a detached child VM and always
+discards that child. A mismatch, host abort, runtime fault, or unexpected
+commit cannot mutate the authoritative VM being inspected.
 
 A rejected settlement is absent from the durable ledger and therefore cannot
 be reconstructed from ledger provenance alone. Attempt replay consumes an
@@ -1251,7 +1263,10 @@ exact bounded writer; emits a real `HostAborted` route; redacts origin identity
 as one opaque value; follows only candidate-specific proposal fan-in; and binds
 attempt replay to compiled-program, runtime-feature, constraint-registry,
 limit-profile, capability, base-world, and request identities. Opaque
-settlement IDs do not participate in semantic rejection equality.
+settlement IDs do not participate in semantic rejection equality. Constraint
+fuel is charged per opcode, invocation allocations use disposable heaps,
+settlement outcomes are metered before retention, and replay runs only on a
+discarded child timeline.
 
 Projection, priorities, fixed points, and parallel constraint execution remain
 out of scope and require follow-on RFCs.

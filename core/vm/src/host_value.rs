@@ -689,7 +689,11 @@ impl VM {
                 "capability profile does not match the recorded attempt".into(),
             ));
         }
-        let replayed = match self.call_global_detailed(&attempt.function, &attempt.arguments) {
+        // Attempt replay is observational debugging, never an authoritative
+        // transition. Execute against a detached child timeline and discard
+        // it even if the program unexpectedly commits or faults.
+        let mut replay_vm = self.detached_attempt_replay_vm();
+        let replayed = match replay_vm.call_global_detailed(&attempt.function, &attempt.arguments) {
             Err(VmFailure::SettlementRejected(rejection)) => rejection,
             Ok(_) => {
                 return Err(fail(
@@ -700,7 +704,7 @@ impl VM {
             Err(other) => return Err(other),
         };
         let replayed_bytes = replayed
-            .canonical_bytes(&self.constraint_limit_profile)
+            .canonical_bytes(&replay_vm.constraint_limit_profile)
             .map_err(|error| fail("attempt.rejection_encoding_failed", error.to_string()))?;
         let expected_bytes = attempt
             .rejection
@@ -713,6 +717,31 @@ impl VM {
             ));
         }
         Ok(replayed)
+    }
+
+    fn detached_attempt_replay_vm(&self) -> VM {
+        let mut replay = VM::from_shared_state(self.shared_state());
+
+        // Globals may contain heap aggregates. Copy them into the child heap
+        // so even legacy pre-settlement code cannot mutate an alias owned by
+        // the authoritative VM while the attempt is being inspected.
+        replay.globals = self
+            .globals
+            .iter()
+            .map(|value| value.deep_copy(&mut replay.gc))
+            .collect();
+        replay.world.restore(self.world.snapshot());
+        replay.indexed_decl = self.indexed_decl.clone();
+        replay.migrations = self.migrations.clone();
+        replay.sandbox_caps = self.sandbox_caps.clone();
+        replay.sys_args = self.sys_args.clone();
+        replay.fuel = self.fuel;
+        replay.mem_limit = self.mem_limit;
+        replay.rng_state = self.rng_state;
+        replay.current_cause = self.current_cause.clone();
+        replay.causality_frame = self.causality_frame;
+        replay.ledger = self.ledger.clone();
+        replay
     }
 
     pub fn enqueue_frozen_event(&mut self, payload: &FrozenValue) -> Result<(), String> {
@@ -765,12 +794,14 @@ impl VM {
 
     fn program_digest(&self) -> String {
         let mut digest = Sha256::new();
-        digest.update(b"rad-compiled-program/v1\0");
+        digest.update(b"rad-compiled-program/v2\0");
+        digest.update(b"bytecode-semantics/1\0compiler-semantics/1\0");
         for chunk in self.chunks.iter() {
             digest.update((chunk.name().len() as u64).to_le_bytes());
             digest.update(chunk.name().as_bytes());
             digest.update((chunk.code().len() as u64).to_le_bytes());
             digest.update(chunk.code());
+            digest.update((chunk.constants().len() as u64).to_le_bytes());
             for constant in chunk.constants() {
                 if constant.is_nil() {
                     digest.update(b"nil\0");
@@ -791,9 +822,29 @@ impl VM {
                     digest.update(function.name.as_bytes());
                     digest.update([function.arity]);
                     digest.update((function.chunk_id as u64).to_le_bytes());
+                } else if let Ok(frozen) = export_value(constant) {
+                    digest.update(b"v");
+                    match frozen.canonical_bytes(&self.causal_value_limits) {
+                        Ok(bytes) => {
+                            digest.update((bytes.len() as u64).to_le_bytes());
+                            digest.update(bytes);
+                        }
+                        Err(error) => {
+                            // Sealed programs with constants outside the
+                            // host-value profile remain distinguishable and
+                            // fail closed for replay identity.
+                            let rendered = error.to_string();
+                            digest.update(b"invalid\0");
+                            digest.update((rendered.len() as u64).to_le_bytes());
+                            digest.update(rendered.as_bytes());
+                        }
+                    }
                 } else {
                     digest.update(b"o");
                     digest.update(constant.type_name().as_bytes());
+                    let rendered = constant.print_display();
+                    digest.update((rendered.len() as u64).to_le_bytes());
+                    digest.update(rendered.as_bytes());
                 }
             }
         }
@@ -819,9 +870,10 @@ impl VM {
 
     fn runtime_feature_fingerprint(&self) -> String {
         let descriptor = format!(
-            "rad-runtime/v1;crate={};causal_laws=1;candidate_constraints=1;constraint_profile={}",
+            "rad-runtime/v2;crate={};compiler_semantics=1;bytecode_semantics=1;causal_laws=1;candidate_constraints=1;constraint_profile={};target={}",
             env!("CARGO_PKG_VERSION"),
-            self.constraint_limit_profile.version()
+            self.constraint_limit_profile.version(),
+            std::env::consts::ARCH,
         );
         hex::encode(Sha256::digest(descriptor.as_bytes()))
     }

@@ -1,0 +1,7 @@
+---
+source: tests/fixtures/causal-constraints/violation_code_too_long.rad
+exit_code: 1
+---
+
+---stderr---
+Error: constraint violation code 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' is not stable

@@ -376,7 +376,15 @@ impl VM {
             context.base.get_component(entity, component)
         };
         Ok(match data {
-            Some(data) => Value::component(&mut self.gc, data.type_name, data.layout, data.values),
+            Some(data) => {
+                let heap = data
+                    .type_name
+                    .len()
+                    .saturating_add(data.layout.iter().map(String::len).sum::<usize>())
+                    .saturating_add(data.values.len().saturating_mul(192));
+                self.meter_constraint_resources(data.values.len(), heap)?;
+                Value::component(&mut self.gc, data.type_name, data.layout, data.values)
+            }
             None => Value::NIL,
         })
     }
@@ -483,6 +491,7 @@ impl VM {
     }
 
     fn evaluate_candidate_constraints(&mut self) -> crate::constraint_types::ValidationResult {
+        use super::constraint_runtime::{ConstraintExecutionMeter, ConstraintOutcomeMeter};
         use crate::constraint_types::{
             CandidateCausalExplanation, ConstraintEvaluationFailure, ConstraintIdentity,
             ConstraintViolation, EphemeralCausalExplanation, HostFault, RejectionEncodingError,
@@ -546,6 +555,11 @@ impl VM {
         }
         let mut violations: Vec<ConstraintViolation> = Vec::new();
         let mut evaluation_failures = Vec::new();
+        let mut outcome_meter = ConstraintOutcomeMeter::new(
+            self.constraint_limit_profile
+                .max_violations_per_settlement(),
+            self.constraint_limit_profile.max_serialized_outcome_bytes(),
+        );
         for (name, subject) in &selected {
             let constraint = by_name
                 .get(name)
@@ -562,13 +576,16 @@ impl VM {
                 continue;
             };
             let Some(callee) = self.globals.get(constraint.global_slot as usize).copied() else {
-                evaluation_failures.push(ConstraintEvaluationFailure {
-                    constraint: identity,
-                    subject: *subject,
-                    code: "constraint.not_initialized".into(),
-                    message: "compiled constraint global is missing".into(),
-                    source_line: 0,
-                });
+                outcome_meter.retain_failure(
+                    &mut evaluation_failures,
+                    ConstraintEvaluationFailure {
+                        constraint: identity,
+                        subject: *subject,
+                        code: "constraint.not_initialized".into(),
+                        message: "compiled constraint global is missing".into(),
+                        source_line: 0,
+                    },
+                );
                 continue;
             };
             self.settlement.as_mut().unwrap().active_constraint = Some(ActiveConstraint {
@@ -577,27 +594,70 @@ impl VM {
                 violations: Vec::new(),
                 overflowed: false,
             });
-            let subject_value = Value::from_entity_id(&mut self.gc, *subject);
-            let proposed_value = Value::component(
-                &mut self.gc,
-                proposed.type_name,
-                proposed.layout,
-                proposed.values,
-            );
             let frame_depth = self.frames.len();
             let stack_depth = self.stack.len();
             let next_frame_id = self.next_frame_id;
             let saved_fuel = self.fuel;
             let saved_mem_limit = self.mem_limit;
             let invocation_fuel = self.constraint_limit_profile.fuel_per_invocation();
-            self.fuel = invocation_fuel;
-            self.mem_limit = self.gc.bytes_allocated().saturating_add(
-                self.constraint_limit_profile
-                    .max_heap_bytes_per_invocation(),
-            );
-            let result = self.call_value(&callee, vec![subject_value, proposed_value]);
+            let invocation_heap_limit = self
+                .constraint_limit_profile
+                .max_heap_bytes_per_invocation();
+
+            // Constraint allocations live in a throw-away heap. This makes
+            // the advertised per-invocation heap allowance independent of
+            // both prior VM allocation history and earlier constraints, and
+            // guarantees reclamation after every outcome.
+            let parent_gc = std::mem::take(&mut self.gc);
+            self.fuel = u64::MAX;
+            self.mem_limit = invocation_heap_limit;
+            self.constraint_meter = Some(ConstraintExecutionMeter::new(
+                invocation_fuel,
+                invocation_heap_limit,
+            ));
+            let argument_bytes = std::mem::size_of::<crate::value::Object>()
+                .saturating_mul(2)
+                .saturating_add(proposed.type_name.len())
+                .saturating_add(
+                    proposed
+                        .layout
+                        .iter()
+                        .map(|field| field.len())
+                        .sum::<usize>(),
+                )
+                .saturating_add(
+                    proposed
+                        .values
+                        .len()
+                        .saturating_mul(std::mem::size_of::<Value>()),
+                );
+            let argument_preflight = self
+                .constraint_meter
+                .as_ref()
+                .unwrap()
+                .ensure_heap(self.gc.bytes_allocated(), argument_bytes);
+            let result = match argument_preflight {
+                Ok(()) => {
+                    let subject_value = Value::from_entity_id(&mut self.gc, *subject);
+                    let proposed_value = Value::component(
+                        &mut self.gc,
+                        proposed.type_name,
+                        proposed.layout,
+                        proposed.values,
+                    );
+                    self.call_value(&callee, vec![subject_value, proposed_value])
+                }
+                Err(error) => Err(error),
+            };
+            let post_heap_result = self.constraint_meter.as_ref().map_or(Ok(()), |meter| {
+                meter.ensure_heap(self.gc.bytes_allocated(), 0)
+            });
+            self.constraint_meter = None;
             self.fuel = saved_fuel;
             self.mem_limit = saved_mem_limit;
+            let invocation_gc = std::mem::replace(&mut self.gc, parent_gc);
+            drop(invocation_gc);
+            let result = result.and(post_heap_result.map(|_| Value::NIL));
             if result.is_err() {
                 self.frames.truncate(frame_depth);
                 self.stack.truncate(stack_depth);
@@ -610,54 +670,58 @@ impl VM {
                 .expect("constraint invocation must retain its active context");
             match result {
                 Ok(_) if active.overflowed => {
-                    evaluation_failures.push(ConstraintEvaluationFailure {
-                        constraint: identity,
-                        subject: *subject,
-                        code: "constraint.invocation_violation_limit".into(),
-                        message: format!(
-                            "constraint exceeded {} violations",
-                            self.constraint_limit_profile
-                                .max_violations_per_invocation()
-                        ),
-                        source_line: 0,
-                    });
-                }
-                Ok(_) => violations.extend(active.violations),
-                Err(error) => {
-                    evaluation_failures.push(ConstraintEvaluationFailure {
-                        constraint: identity,
-                        subject: *subject,
-                        code: if error.contains("memory limit") {
-                            "constraint.memory_exhausted".into()
-                        } else if error.contains("fuel") || error.contains("Budget exhausted") {
-                            "constraint.fuel_exhausted".into()
-                        } else {
-                            "constraint.evaluation_failed".into()
+                    outcome_meter.retain_failure(
+                        &mut evaluation_failures,
+                        ConstraintEvaluationFailure {
+                            constraint: identity,
+                            subject: *subject,
+                            code: "constraint.invocation_violation_limit".into(),
+                            message: format!(
+                                "constraint exceeded {} violations",
+                                self.constraint_limit_profile
+                                    .max_violations_per_invocation()
+                            ),
+                            source_line: 0,
                         },
-                        message: error,
-                        source_line: 0,
-                    });
+                    );
+                }
+                Ok(_) => outcome_meter.retain_violations(&mut violations, active.violations),
+                Err(error) => {
+                    outcome_meter.retain_failure(
+                        &mut evaluation_failures,
+                        ConstraintEvaluationFailure {
+                            constraint: identity,
+                            subject: *subject,
+                            code: if error.contains("memory limit") {
+                                "constraint.memory_exhausted".into()
+                            } else if error.contains("fuel") || error.contains("Budget exhausted") {
+                                "constraint.fuel_exhausted".into()
+                            } else {
+                                "constraint.evaluation_failed".into()
+                            },
+                            message: error,
+                            source_line: 0,
+                        },
+                    );
                 }
             }
         }
 
-        if violations.len()
-            > self
-                .constraint_limit_profile
-                .max_violations_per_settlement()
-        {
+        if outcome_meter.overflowed() {
             violations.clear();
+            evaluation_failures.clear();
             evaluation_failures.push(ConstraintEvaluationFailure {
                 constraint: ConstraintIdentity {
                     qualified_name: "<settlement>".into(),
                     attached_component: "<all>".into(),
                 },
                 subject: 0,
-                code: "constraint.settlement_violation_limit".into(),
+                code: "constraint.settlement_outcome_limit".into(),
                 message: format!(
-                    "settlement exceeded {} violations",
+                    "settlement exceeded its {}-outcome or {}-byte retained-result allowance",
                     self.constraint_limit_profile
-                        .max_violations_per_settlement()
+                        .max_violations_per_settlement(),
+                    self.constraint_limit_profile.max_serialized_outcome_bytes()
                 ),
                 source_line: 0,
             });
@@ -671,14 +735,6 @@ impl VM {
         base_world.restore(context.base.clone());
         let base_world_digest = base_world.content_digest();
         let capabilities = self.constraint_capabilities();
-        let applicable_constraints = selected
-            .iter()
-            .filter_map(|(name, _)| by_name.get(name))
-            .map(|constraint| ConstraintIdentity {
-                qualified_name: constraint.name.clone(),
-                attached_component: constraint.attached_component.clone(),
-            })
-            .collect::<Vec<_>>();
         let bounded_rejection = |code: &str, message: String| {
             let mut bounded = SettlementRejection {
                 settlement_id: context.settlement_id,
@@ -711,27 +767,73 @@ impl VM {
             std::sync::Arc::new(bounded)
         };
 
+        // Once collection overflowed, do not allocate registry, candidate,
+        // or origin detail merely to report that bounded failure.
+        if outcome_meter.overflowed() {
+            return ValidationResult::Rejected(bounded_rejection(
+                "constraint.settlement_outcome_limit",
+                format!(
+                    "settlement exceeded its {}-outcome or {}-byte retained-result allowance",
+                    self.constraint_limit_profile
+                        .max_violations_per_settlement(),
+                    self.constraint_limit_profile.max_serialized_outcome_bytes()
+                ),
+            ));
+        }
+
+        let applicable_constraints = selected
+            .iter()
+            .filter_map(|(name, _)| by_name.get(name))
+            .map(|constraint| ConstraintIdentity {
+                qualified_name: constraint.name.clone(),
+                attached_component: constraint.attached_component.clone(),
+            })
+            .collect::<Vec<_>>();
+        let applicable_bytes = applicable_constraints
+            .iter()
+            .fold(0usize, |total, identity| {
+                total
+                    .saturating_add(identity.qualified_name.len())
+                    .saturating_add(identity.attached_component.len())
+                    .saturating_add(16)
+            });
+        let capability_bytes = capabilities.readable_components.iter().fold(
+            capabilities.profile_id.len().saturating_add(16),
+            |total, name| total.saturating_add(name.len()).saturating_add(8),
+        );
+        if !outcome_meter.reserve_additional(applicable_bytes.saturating_add(capability_bytes)) {
+            return ValidationResult::Rejected(bounded_rejection(
+                "constraint.settlement_outcome_limit",
+                "constraint metadata exceeds the bounded settlement outcome arena".into(),
+            ));
+        }
+
         // Candidate values are exported at most once per key. Preflight the
-        // raw component encoding against a bounded share of the final output
-        // before allocating a pointer-free FrozenValue tree.
+        // raw component encoding against the shared outcome arena before
+        // allocating a pointer-free FrozenValue tree.
         let candidate_keys = violations
             .iter()
             .map(|violation| violation.candidate.clone())
             .collect::<std::collections::BTreeSet<_>>();
-        let detail_budget = self.constraint_limit_profile.max_serialized_outcome_bytes() / 2;
-        let mut detail_bytes = 0usize;
         let mut candidate_details = BTreeMap::new();
         for key in &candidate_keys {
             let readable = capabilities.readable_components.contains("*")
                 || capabilities.readable_components.contains(&key.component);
             if !readable {
+                if !outcome_meter.reserve_additional(key.component.len().saturating_add(24)) {
+                    return ValidationResult::Rejected(bounded_rejection(
+                        "constraint.settlement_outcome_limit",
+                        "candidate detail table exceeds the bounded settlement outcome arena"
+                            .into(),
+                    ));
+                }
                 candidate_details.insert(key.clone(), RejectionValue::Redacted);
                 continue;
             }
-            let remaining = detail_budget.saturating_sub(detail_bytes);
+            let remaining = self.constraint_limit_profile.max_serialized_outcome_bytes();
             if remaining == 0 {
                 return ValidationResult::Rejected(bounded_rejection(
-                    "constraint.outcome_byte_limit",
+                    "constraint.settlement_outcome_limit",
                     "candidate detail table exceeds its bounded output arena".into(),
                 ));
             }
@@ -761,7 +863,7 @@ impl VM {
                 Ok(encoded) => encoded,
                 Err(crate::CausalValueError::EncodedByteLimit { .. }) => {
                     return ValidationResult::Rejected(bounded_rejection(
-                        "constraint.outcome_byte_limit",
+                        "constraint.settlement_outcome_limit",
                         "candidate detail table exceeds its bounded output arena".into(),
                     ))
                 }
@@ -772,7 +874,17 @@ impl VM {
                     })
                 }
             };
-            detail_bytes = detail_bytes.saturating_add(encoded.len());
+            if !outcome_meter.reserve_additional(
+                encoded
+                    .len()
+                    .saturating_add(key.component.len())
+                    .saturating_add(32),
+            ) {
+                return ValidationResult::Rejected(bounded_rejection(
+                    "constraint.settlement_outcome_limit",
+                    "candidate detail table exceeds the bounded settlement outcome arena".into(),
+                ));
+            }
             let value = match crate::host_value::export_component_data(component, &limits) {
                 Ok(value) => value,
                 Err(error) => {
@@ -792,8 +904,6 @@ impl VM {
             .iter()
             .map(|proposal| (proposal.id, proposal))
             .collect::<BTreeMap<_, _>>();
-        let mut origin_bytes = 0usize;
-        let origin_budget = self.constraint_limit_profile.max_serialized_outcome_bytes() / 2;
         let mut explanation = EphemeralCausalExplanation::default();
         for key in &candidate_keys {
             let Some(patch) = context.patches.iter().find(|patch| {
@@ -803,6 +913,12 @@ impl VM {
             }) else {
                 continue;
             };
+            if !outcome_meter.reserve_additional(key.component.len().saturating_add(64)) {
+                return ValidationResult::Rejected(bounded_rejection(
+                    "constraint.settlement_outcome_limit",
+                    "candidate explanation exceeds the bounded settlement outcome arena".into(),
+                ));
+            }
             if patch.proposal_ids.len()
                 > self
                     .constraint_limit_profile
@@ -823,16 +939,29 @@ impl VM {
                     continue;
                 };
                 if !capabilities.origins_visible {
+                    if !outcome_meter.reserve_additional(8) {
+                        return ValidationResult::Rejected(bounded_rejection(
+                            "constraint.settlement_outcome_limit",
+                            "candidate origin table exceeds the bounded settlement outcome arena"
+                                .into(),
+                        ));
+                    }
                     origins.push(RejectionProposalOrigin::Redacted);
                     continue;
                 }
-                if proposal.canonical.len() > origin_budget.saturating_sub(origin_bytes) {
+                if !outcome_meter.reserve_additional(
+                    proposal
+                        .canonical
+                        .len()
+                        .saturating_add(proposal.law.len())
+                        .saturating_add(32),
+                ) {
                     return ValidationResult::Rejected(bounded_rejection(
-                        "constraint.outcome_byte_limit",
-                        "candidate origin table exceeds its bounded output arena".into(),
+                        "constraint.settlement_outcome_limit",
+                        "candidate origin table exceeds the bounded settlement outcome arena"
+                            .into(),
                     ));
                 }
-                origin_bytes = origin_bytes.saturating_add(proposal.canonical.len());
                 let payload = match crate::host_value::export_value(&proposal.payload) {
                     Ok(payload) => payload,
                     Err(error) => {
@@ -850,19 +979,17 @@ impl VM {
             }
             explanation.candidates.insert(
                 key.clone(),
-                CandidateCausalExplanation {
-                    resolver: if capabilities.origins_visible {
-                        patch.resolver.clone()
-                    } else {
-                        "<redacted-origin>".into()
-                    },
-                    intent: if capabilities.origins_visible {
-                        patch.intent.clone()
-                    } else {
-                        "<redacted-origin>".into()
-                    },
-                    intent_key: patch.key,
-                    proposal_origins: origins,
+                if capabilities.origins_visible {
+                    CandidateCausalExplanation::Visible {
+                        resolver: patch.resolver.clone(),
+                        intent: patch.intent.clone(),
+                        intent_key: patch.key,
+                        proposal_origins: origins,
+                    }
+                } else {
+                    CandidateCausalExplanation::Redacted {
+                        proposal_count: origins.len(),
+                    }
                 },
             );
         }

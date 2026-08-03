@@ -89,6 +89,65 @@ impl VM {
         Ok(())
     }
 
+    #[inline(always)]
+    fn charge_constraint_instruction(&mut self) -> Result<(), String> {
+        if let Some(meter) = &mut self.constraint_meter {
+            meter.charge_instruction()?;
+        }
+        Ok(())
+    }
+
+    #[inline(always)]
+    fn check_constraint_heap(&self, temporary: usize) -> Result<(), String> {
+        if let Some(meter) = &self.constraint_meter {
+            meter.ensure_heap(self.gc.bytes_allocated(), temporary)?;
+        }
+        Ok(())
+    }
+
+    #[inline]
+    fn preflight_constraint_binary_allocation(
+        &self,
+        op: Op,
+        left: &Value,
+        right: &Value,
+    ) -> Result<(), String> {
+        let retained = std::mem::size_of::<crate::value::Object>();
+        let temporary = match op {
+            Op::Add => {
+                if let (Some(left), Some(right)) = (left.as_str(), right.as_str()) {
+                    left.len()
+                        .saturating_add(right.len())
+                        .saturating_mul(2)
+                        .saturating_add(retained)
+                } else if let (Some(left), Some(right)) = (left.as_list(), right.as_list()) {
+                    left.len()
+                        .saturating_add(right.len())
+                        .saturating_mul(std::mem::size_of::<Value>())
+                        .saturating_mul(2)
+                        .saturating_add(retained)
+                } else {
+                    0
+                }
+            }
+            Op::Mul => {
+                let repeated = if let (Some(text), Some(count)) = (left.as_str(), right.as_int()) {
+                    (count >= 0).then(|| text.len().saturating_mul(count as usize))
+                } else if let (Some(count), Some(text)) = (left.as_int(), right.as_str()) {
+                    (count >= 0).then(|| text.len().saturating_mul(count as usize))
+                } else {
+                    None
+                };
+                repeated
+                    .unwrap_or(0)
+                    .saturating_mul(2)
+                    .saturating_add(retained)
+            }
+            _ => 0,
+        };
+        self.check_constraint_heap(temporary)
+    }
+
     /// Collect floating garbage when the heap crosses its growth threshold.
     ///
     /// Polled at loop back-edges and calls — the same points that charge
@@ -233,6 +292,7 @@ impl VM {
             let op_byte = self.read_byte()?;
             let op = Op::from_byte(op_byte)?;
             self.enforce_settlement_opcode(op)?;
+            self.charge_constraint_instruction()?;
             if self.op_profile {
                 self.op_counts[op_byte as usize] += 1;
             }
@@ -267,6 +327,7 @@ impl VM {
                 Op::Add => {
                     let b = self.pop()?;
                     let a = self.pop()?;
+                    self.preflight_constraint_binary_allocation(Op::Add, &a, &b)?;
                     let out = helpers::binary_add(&mut self.gc, a, b)?;
                     self.push(out);
                 }
@@ -279,6 +340,7 @@ impl VM {
                 Op::Mul => {
                     let b = self.pop()?;
                     let a = self.pop()?;
+                    self.preflight_constraint_binary_allocation(Op::Mul, &a, &b)?;
                     let out = helpers::binary_mul(&mut self.gc, a, b, self.mem_limit)?;
                     self.push(out);
                 }
@@ -1021,6 +1083,10 @@ impl VM {
                     let v = self.pop()?;
                     let type_name = v.type_name().to_string();
                     if let Some(tuple) = v.as_tuple() {
+                        self.meter_constraint_resources(
+                            tuple.len(),
+                            tuple.len().saturating_mul(std::mem::size_of::<Value>()),
+                        )?;
                         let items: Vec<Value> = tuple.clone();
                         for item in items {
                             self.push(item);
@@ -1039,6 +1105,11 @@ impl VM {
 
                 Op::MakeList => {
                     let n = self.read_u16()? as usize;
+                    self.meter_constraint_resources(
+                        n,
+                        n.saturating_mul(std::mem::size_of::<Value>())
+                            .saturating_mul(2),
+                    )?;
                     let mut items = Vec::with_capacity(n);
                     for _ in 0..n {
                         items.push(self.pop()?);
@@ -1048,6 +1119,11 @@ impl VM {
                 }
                 Op::MakeTuple => {
                     let n = self.read_u16()? as usize;
+                    self.meter_constraint_resources(
+                        n,
+                        n.saturating_mul(std::mem::size_of::<Value>())
+                            .saturating_mul(2),
+                    )?;
                     let mut items = Vec::with_capacity(n);
                     for _ in 0..n {
                         items.push(self.pop()?);
@@ -1058,6 +1134,7 @@ impl VM {
                 }
                 Op::MakeMap => {
                     let n = self.read_u16()? as usize;
+                    self.meter_constraint_resources(n, n.saturating_mul(192))?;
                     let mut entries = MapStorage::new();
                     for _ in 0..n {
                         let val = self.pop()?;
@@ -1072,6 +1149,7 @@ impl VM {
                     let type_idx = self.read_u16()? as usize;
                     let type_name = helpers::constant_string(self.current_chunk(), type_idx)?;
                     let field_count = self.read_u16()? as usize;
+                    self.meter_constraint_resources(field_count, field_count.saturating_mul(192))?;
                     let layout = self
                         .component_layouts
                         .get(&type_name)
@@ -1131,6 +1209,10 @@ impl VM {
                     let obj = self.pop()?;
                     let type_name = obj.type_name().to_string();
                     if let Some(mut c) = obj.into_component() {
+                        self.meter_constraint_resources(
+                            c.values.len(),
+                            c.values.len().saturating_mul(192),
+                        )?;
                         if let Some(idx) = c.layout.iter().position(|n| n == &field) {
                             c.values[idx] = val;
                             let out = Value::from_component_data(&mut self.gc, c);
@@ -1230,6 +1312,7 @@ impl VM {
                             None => return Err(format!("Cannot add {} and str", v.type_name())),
                         }
                     }
+                    self.meter_constraint_resources(total, total.saturating_mul(2))?;
                     let mut buf = String::with_capacity(total);
                     for v in &self.stack[base..] {
                         buf.push_str(v.as_str().unwrap());
@@ -1249,6 +1332,13 @@ impl VM {
                     let state_idx = self.read_u16()? as usize;
                     let machine = helpers::constant_string(self.current_chunk(), machine_idx)?;
                     let state = helpers::constant_string(self.current_chunk(), state_idx)?;
+                    self.meter_constraint_resources(
+                        1,
+                        machine
+                            .len()
+                            .saturating_add(state.len())
+                            .saturating_add(128),
+                    )?;
                     let __v = Value::from_state(&mut self.gc, machine, state);
                     self.push(__v);
                 }
@@ -1425,6 +1515,10 @@ impl VM {
                     let obj = self.pop()?;
                     let type_name = obj.type_name().to_string();
                     if let Some(mut c) = obj.into_component() {
+                        self.meter_constraint_resources(
+                            c.values.len(),
+                            c.values.len().saturating_mul(192),
+                        )?;
                         if slot < c.values.len() {
                             c.values[slot] = val;
                             let __v = Value::from_component_data(&mut self.gc, c);
@@ -1446,6 +1540,12 @@ impl VM {
                     let type_idx = self.read_u16()? as usize;
                     let type_name = helpers::constant_string(self.current_chunk(), type_idx)?;
                     let field_count = self.read_u16()? as usize;
+                    self.meter_constraint_resources(
+                        field_count,
+                        field_count
+                            .saturating_mul(std::mem::size_of::<Value>())
+                            .saturating_mul(2),
+                    )?;
                     let layout = self
                         .component_layouts
                         .get(&type_name)
@@ -1706,6 +1806,11 @@ impl VM {
                     return Ok(());
                 }
             }
+            // Defense in depth for allocation paths whose size is dynamic
+            // (including pure builtins). Variable-size aggregate opcodes are
+            // preflighted above; this catches every retained GC allocation
+            // before another instruction can observe it.
+            self.check_constraint_heap(0)?;
         }
     }
 
@@ -1933,6 +2038,12 @@ impl VM {
         let chunk_id = self.read_u16()? as usize;
         let arity = self.read_byte()?;
         let capture_count = self.read_byte()? as usize;
+        self.meter_constraint_resources(
+            capture_count,
+            capture_count
+                .saturating_mul(std::mem::size_of::<*mut crate::gc::CaptureCell>())
+                .saturating_mul(2),
+        )?;
         let mut captures: Vec<*mut crate::gc::CaptureCell> = Vec::with_capacity(capture_count);
         for _ in 0..capture_count {
             let is_local = self.read_byte()? == 1;
@@ -2030,12 +2141,14 @@ impl VM {
         if obj.as_list().is_some() {
             let i = helpers::index_as_usize(&idx_val)?;
             let mut list = obj.into_rad_list().expect("list type already checked");
+            self.meter_constraint_resources(list.len(), list.len().saturating_mul(192))?;
             list.set(i, val)?;
             let __v = Value::from_rad_list(&mut self.gc, list);
             self.push(__v);
         } else if obj.as_map().is_some() {
             let map_key = MapKey::from_value(&idx_val)?;
             let mut new_map = obj.into_map().expect("map type already checked");
+            self.meter_constraint_resources(new_map.len(), new_map.len().saturating_mul(256))?;
             new_map.insert(map_key, val);
             let __v = Value::map(&mut self.gc, new_map);
             self.push(__v);
@@ -3021,6 +3134,7 @@ impl VM {
         let field_count = self.read_u16()? as usize;
         let type_name = helpers::constant_string(self.current_chunk(), type_idx)?;
         let variant = helpers::constant_string(self.current_chunk(), variant_idx)?;
+        self.meter_constraint_resources(field_count, field_count.saturating_mul(192))?;
         let mut fields = HashMap::new();
         for _ in 0..field_count {
             let val = self.pop()?;
@@ -3498,6 +3612,7 @@ impl VM {
                     r.len()
                 ));
             }
+            self.meter_constraint_resources(l.len(), l.len().saturating_mul(192))?;
             let mut result = Vec::with_capacity(l.len());
             let ls = l.as_slice();
             let rs = r.as_slice();
@@ -3507,6 +3622,7 @@ impl VM {
             self.push_list_vec(result);
         } else if is_lhs_list {
             let l = lhs.into_rad_list().unwrap();
+            self.meter_constraint_resources(l.len(), l.len().saturating_mul(192))?;
             let mut result = Vec::with_capacity(l.len());
             let ls = l.as_slice();
             for lv in ls {
@@ -3515,6 +3631,7 @@ impl VM {
             self.push_list_vec(result);
         } else if is_rhs_list {
             let r = rhs.into_rad_list().unwrap();
+            self.meter_constraint_resources(r.len(), r.len().saturating_mul(192))?;
             let mut result = Vec::with_capacity(r.len());
             let rs = r.as_slice();
             for rv in rs {
@@ -3548,6 +3665,12 @@ impl VM {
                     r.len()
                 ));
             }
+            self.meter_constraint_resources(
+                l.len(),
+                l.len()
+                    .saturating_mul(std::mem::size_of::<Value>())
+                    .saturating_mul(2),
+            )?;
             let mut result = Vec::with_capacity(l.len());
             let ls = l.as_slice();
             let rs = r.as_slice();
@@ -3557,6 +3680,12 @@ impl VM {
             self.push_list_vec(result);
         } else if is_lhs_list {
             let l = lhs.into_rad_list().unwrap();
+            self.meter_constraint_resources(
+                l.len(),
+                l.len()
+                    .saturating_mul(std::mem::size_of::<Value>())
+                    .saturating_mul(2),
+            )?;
             let mut result = Vec::with_capacity(l.len());
             let ls = l.as_slice();
             for lv in ls {
@@ -3565,6 +3694,12 @@ impl VM {
             self.push_list_vec(result);
         } else if is_rhs_list {
             let r = rhs.into_rad_list().unwrap();
+            self.meter_constraint_resources(
+                r.len(),
+                r.len()
+                    .saturating_mul(std::mem::size_of::<Value>())
+                    .saturating_mul(2),
+            )?;
             let mut result = Vec::with_capacity(r.len());
             let rs = r.as_slice();
             for rv in rs {
@@ -3583,6 +3718,7 @@ impl VM {
     ) -> Result<(), String> {
         let val = self.pop()?;
         if let Some(list) = val.into_rad_list() {
+            self.meter_constraint_resources(list.len(), list.len().saturating_mul(192))?;
             let mut result = Vec::with_capacity(list.len());
             let slice = list.as_slice();
             for v in slice {
@@ -3599,6 +3735,12 @@ impl VM {
     fn exec_vec_not(&mut self) -> Result<(), String> {
         let val = self.pop()?;
         if let Some(list) = val.into_rad_list() {
+            self.meter_constraint_resources(
+                list.len(),
+                list.len()
+                    .saturating_mul(std::mem::size_of::<Value>())
+                    .saturating_mul(2),
+            )?;
             let mut result = Vec::with_capacity(list.len());
             for item in list.iter() {
                 result.push(Value::from_bool(!item.is_truthy()));
@@ -3622,6 +3764,13 @@ impl VM {
         let is_true_list = true_branch.as_list().is_some();
         let is_false_list = false_branch.as_list().is_some();
 
+        self.meter_constraint_resources(
+            mask_list.len(),
+            mask_list
+                .len()
+                .saturating_mul(std::mem::size_of::<Value>())
+                .saturating_mul(2),
+        )?;
         let mut result = Vec::with_capacity(mask_list.len());
         let msk = mask_list.as_slice();
 
@@ -3675,6 +3824,11 @@ impl VM {
             .into_rad_list()
             .ok_or("VecBroadcast: expected list template")?;
         let n = list.len();
+        self.meter_constraint_resources(
+            n,
+            n.saturating_mul(std::mem::size_of::<Value>())
+                .saturating_mul(2),
+        )?;
         let mut out = Vec::with_capacity(n);
         for _ in 0..n {
             out.push(fill);
@@ -3701,6 +3855,13 @@ impl VM {
                 mask_list.len()
             ));
         }
+        self.meter_constraint_resources(
+            source_list.len(),
+            source_list
+                .len()
+                .saturating_mul(std::mem::size_of::<Value>())
+                .saturating_mul(2),
+        )?;
 
         let src = source_list.as_slice();
         let msk = mask_list.as_slice();
@@ -3719,6 +3880,7 @@ impl VM {
         let field_idx = self.read_byte()? as usize;
         let comp_name = helpers::constant_string(self.current_chunk(), comp_name_idx)?;
         let column = self.get_world().get_column_values(&comp_name, field_idx)?;
+        self.meter_constraint_resources(column.len(), column.len().saturating_mul(192))?;
         let copied: Vec<Value> = column
             .into_iter()
             .map(|v| v.deep_copy(&mut self.gc))

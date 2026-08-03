@@ -5,6 +5,23 @@ use crate::host_value::FrozenValue;
 use crate::vm::VM;
 use crate::CausalValueLimits;
 
+fn profile(
+    fuel: u64,
+    heap: usize,
+    per_invocation: usize,
+    settlement: usize,
+) -> crate::constraint_types::ConstraintLimitProfile {
+    crate::constraint_types::ConstraintLimitProfile::try_new(
+        CausalValueLimits::default(),
+        fuel,
+        heap,
+        per_invocation,
+        settlement,
+        1024 * 1024,
+    )
+    .unwrap()
+}
+
 #[test]
 fn transaction_value_limits_cannot_diverge_from_constraint_value_limits() {
     let mut vm = VM::new_with_seed(7);
@@ -127,7 +144,7 @@ fn ping() { }
     assert!(rejection.candidate_details.is_empty());
     assert_eq!(
         rejection.evaluation_failures[0].code,
-        "constraint.outcome_byte_limit"
+        "constraint.settlement_outcome_limit"
     );
     assert!(
         rejection
@@ -173,12 +190,256 @@ fn attempt() {
     assert_eq!(rejection.explanation.candidates.len(), 1);
     let candidate = &rejection.violations[0].candidate;
     let explanation = &rejection.explanation.candidates[candidate];
-    assert_eq!(explanation.resolver, "ResolveMove");
-    assert_eq!(explanation.intent, "Move");
-    assert_eq!(explanation.proposal_origins.len(), 1);
+    let crate::constraint_types::CandidateCausalExplanation::Visible {
+        resolver,
+        intent,
+        proposal_origins,
+        ..
+    } = explanation
+    else {
+        panic!("trusted explanation should remain visible")
+    };
+    assert_eq!(resolver, "ResolveMove");
+    assert_eq!(intent, "Move");
+    assert_eq!(proposal_origins.len(), 1);
     assert!(matches!(
-        &explanation.proposal_origins[0],
+        &proposal_origins[0],
         crate::constraint_types::RejectionProposalOrigin::Visible { law, .. }
             if law == "Push"
     ));
+}
+
+#[test]
+fn straight_line_constraint_work_is_charged_per_opcode() {
+    let mut body = String::from("let n0 = proposed.x\n");
+    for index in 1..128 {
+        body.push_str(&format!("let n{index} = n{} + 1\n", index - 1));
+    }
+    body.push_str("require false else \"work.done\"\n");
+    let source = format!(
+        r#"
+component Position {{ x: int = 0 }}
+intent Move {{ key target: entity }}
+law Push(target: entity) {{ propose Move {{ target: target }} }}
+resolver ResolveMove for Move(target, proposals) {{ next(target, Position {{ x: 1 }}) }}
+constraint Work for Position(subject, proposed) {{
+{body}
+}}
+entity hero {{ Position {{}} }}
+fn attempt() {{ settle {{ Push(hero) }} }}
+fn ping() {{ }}
+"#
+    );
+    let mut vm = compile_vm(&source);
+    vm.run(0).expect("initialize straight-line fuel program");
+    vm.set_constraint_limit_profile(profile(20, 64 * 1024, 8, 16));
+
+    let before = vm.observable_state_signature();
+    let failure = vm.call_global_detailed("attempt", &[]).unwrap_err();
+    let crate::constraint_types::VmFailure::SettlementRejected(rejection) = failure else {
+        panic!("constraint resource failure should be a typed rejection")
+    };
+    assert_eq!(
+        rejection.evaluation_failures[0].code,
+        "constraint.fuel_exhausted"
+    );
+    assert_eq!(before, vm.observable_state_signature());
+    vm.call_global("ping", &[]).expect("VM remains reusable");
+}
+
+#[test]
+fn straight_line_aggregate_allocation_is_preflighted_and_reclaimed() {
+    let entries = std::iter::repeat_n("proposed.x", 512)
+        .collect::<Vec<_>>()
+        .join(", ");
+    let source = format!(
+        r#"
+component Position {{ x: int = 0 }}
+intent Move {{ key target: entity }}
+law Push(target: entity) {{ propose Move {{ target: target }} }}
+resolver ResolveMove for Move(target, proposals) {{ next(target, Position {{ x: 1 }}) }}
+constraint Allocate for Position(subject, proposed) {{
+    let values = [{entries}]
+    require len(values) > 0 else "allocation.complete"
+}}
+entity hero {{ Position {{}} }}
+fn attempt() {{ settle {{ Push(hero) }} }}
+fn ping() {{ }}
+"#
+    );
+    let mut vm = compile_vm(&source);
+    vm.run(0).expect("initialize straight-line heap program");
+    vm.set_constraint_limit_profile(profile(10_000, 1024, 8, 16));
+
+    let before = vm.observable_state_signature();
+    let failure = vm.call_global_detailed("attempt", &[]).unwrap_err();
+    let crate::constraint_types::VmFailure::SettlementRejected(rejection) = failure else {
+        panic!("constraint resource failure should be a typed rejection")
+    };
+    assert_eq!(
+        rejection.evaluation_failures[0].code,
+        "constraint.memory_exhausted"
+    );
+    assert_eq!(before, vm.observable_state_signature());
+    vm.call_global("ping", &[]).expect("VM remains reusable");
+}
+
+#[test]
+fn allocation_heavy_pure_builtin_is_preflighted_before_work() {
+    let source = r#"
+component Position { x: int = 0 }
+intent Move { key target: entity }
+law Push(target: entity) { propose Move { target: target } }
+resolver ResolveMove for Move(target, proposals) { next(target, Position { x: 1 }) }
+constraint Allocate for Position(subject, proposed) {
+    let values = range(0, 10000000)
+    require len(values) > 0 else "allocation.complete"
+}
+entity hero { Position {} }
+fn attempt() { settle { Push(hero) } }
+fn ping() { }
+"#;
+    let mut vm = compile_vm(source);
+    vm.run(0).expect("initialize builtin heap program");
+    vm.set_constraint_limit_profile(profile(10_000, 1024, 8, 16));
+
+    let before = vm.observable_state_signature();
+    let failure = vm.call_global_detailed("attempt", &[]).unwrap_err();
+    let crate::constraint_types::VmFailure::SettlementRejected(rejection) = failure else {
+        panic!("constraint resource failure should be a typed rejection")
+    };
+    assert_eq!(
+        rejection.evaluation_failures[0].code,
+        "constraint.memory_exhausted"
+    );
+    assert_eq!(before, vm.observable_state_signature());
+    vm.call_global("ping", &[]).expect("VM remains reusable");
+}
+
+#[test]
+fn unaudited_native_builtin_fails_closed_inside_constraint_meter() {
+    let source = r#"
+component Position { x: int = 0 }
+intent Move { key target: entity }
+law Push(target: entity) { propose Move { target: target } }
+resolver ResolveMove for Move(target, proposals) { next(target, Position { x: 1 }) }
+constraint Render for Position(subject, proposed) {
+    let rendered = str(proposed)
+    require len(rendered) > 0 else "render.empty"
+}
+entity hero { Position {} }
+fn attempt() { settle { Push(hero) } }
+fn ping() { }
+"#;
+    let mut vm = compile_vm(source);
+    vm.run(0).expect("initialize builtin fail-closed program");
+
+    let before = vm.observable_state_signature();
+    let failure = vm.call_global_detailed("attempt", &[]).unwrap_err();
+    let crate::constraint_types::VmFailure::SettlementRejected(rejection) = failure else {
+        panic!("unsupported native helper must reject the settlement")
+    };
+    assert_eq!(
+        rejection.evaluation_failures[0].code,
+        "constraint.evaluation_failed"
+    );
+    assert!(rejection.evaluation_failures[0]
+        .message
+        .contains("no audited resource contract"));
+    assert_eq!(before, vm.observable_state_signature());
+    vm.call_global("ping", &[]).expect("VM remains reusable");
+}
+
+#[test]
+fn settlement_outcome_limit_is_enforced_during_collection() {
+    let mut constraints = String::new();
+    for index in 0..12 {
+        constraints.push_str(&format!(
+            "constraint C{index} for Position(subject, proposed) {{\n\
+             require false else \"c{index}.a\"\n\
+             require false else \"c{index}.b\"\n\
+             }}\n"
+        ));
+    }
+    let source = format!(
+        r#"
+component Position {{ x: int = 0 }}
+intent Move {{ key target: entity }}
+law Push(target: entity) {{ propose Move {{ target: target }} }}
+resolver ResolveMove for Move(target, proposals) {{ next(target, Position {{ x: 1 }}) }}
+{constraints}
+entity hero {{ Position {{}} }}
+fn attempt() {{ settle {{ Push(hero) }} }}
+fn ping() {{ }}
+"#
+    );
+    let mut vm = compile_vm(&source);
+    vm.run(0).expect("initialize outcome-meter program");
+    vm.set_constraint_limit_profile(profile(10_000, 64 * 1024, 4, 5));
+
+    let before = vm.observable_state_signature();
+    let failure = vm.call_global_detailed("attempt", &[]).unwrap_err();
+    let crate::constraint_types::VmFailure::SettlementRejected(rejection) = failure else {
+        panic!("bounded rejection expected")
+    };
+    assert!(rejection.violations.is_empty());
+    assert_eq!(rejection.evaluation_failures.len(), 1);
+    assert_eq!(
+        rejection.evaluation_failures[0].code,
+        "constraint.settlement_outcome_limit"
+    );
+    assert_eq!(before, vm.observable_state_signature());
+    vm.call_global("ping", &[]).expect("VM remains reusable");
+}
+
+#[test]
+fn failed_attempt_replay_discards_an_unexpected_child_commit() {
+    let source = r#"
+component Position { x: int = 0 }
+component Unused { value: int = 0 }
+intent Move { key target: entity }
+law Push(target: entity) { propose Move { target: target } }
+resolver ResolveMove for Move(target, proposals) { next(target, Position { x: 9 }) }
+constraint Reject for Position(subject, proposed) {
+    require false else "position.rejected"
+}
+constraint Allow for Unused(subject, proposed) {
+    require true else "unused"
+}
+entity hero { Position {} }
+fn attempt() { settle { Push(hero) } }
+"#;
+    let mut vm = compile_vm(source);
+    vm.run(0).expect("initialize replay isolation program");
+    let crate::constraint_types::SettlementAttemptOutcome::Rejected(attempt) = vm
+        .call_global_attempt("attempt", &[])
+        .expect("record rejection")
+    else {
+        panic!("initial attempt must reject")
+    };
+
+    let reject_slot = vm
+        .constraint_registry
+        .iter()
+        .find(|constraint| constraint.name == "Reject")
+        .unwrap()
+        .global_slot as usize;
+    let allow_slot = vm
+        .constraint_registry
+        .iter()
+        .find(|constraint| constraint.name == "Allow")
+        .unwrap()
+        .global_slot as usize;
+    vm.globals[reject_slot] = vm.globals[allow_slot];
+
+    let before = vm.observable_state_signature();
+    let failure = vm.replay_failed_attempt(&attempt).unwrap_err();
+    assert!(matches!(
+        failure,
+        crate::constraint_types::VmFailure::Host(crate::constraint_types::HostFault {
+            ref code,
+            ..
+        }) if code == "attempt.unexpected_commit"
+    ));
+    assert_eq!(before, vm.observable_state_signature());
 }

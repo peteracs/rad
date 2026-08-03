@@ -1,5 +1,6 @@
 mod builtins_impl;
 pub(crate) use builtins_impl::value_to_json;
+mod constraint_runtime;
 mod exec;
 mod helpers;
 mod settlement;
@@ -259,6 +260,9 @@ pub struct VM {
     pub fuel: u64,
     /// GC allocation ceiling in bytes. `usize::MAX` means uncapped.
     pub mem_limit: usize,
+    /// Present only while one RFC-0002 constraint invocation is running.
+    /// Unlike the ordinary sandbox counters this meter charges every opcode.
+    pub(crate) constraint_meter: Option<constraint_runtime::ConstraintExecutionMeter>,
     /// Capability set for sandboxed execution. `None` for trusted code.
     pub(crate) sandbox_caps: Option<std::sync::Arc<crate::sandbox::SandboxCaps>>,
     /// Data-only input for sandboxed guests, as JSON. Read via `sandbox_input()`.
@@ -528,6 +532,7 @@ impl VM {
             once_guard_passed: false,
             fuel: u64::MAX,
             mem_limit: usize::MAX,
+            constraint_meter: None,
             sandbox_caps: None,
             sandbox_input_json: None,
             sandbox_output_json: None,
@@ -667,6 +672,7 @@ impl VM {
             once_guard_passed: false,
             fuel: u64::MAX,
             mem_limit: usize::MAX,
+            constraint_meter: None,
             sandbox_caps: None,
             sandbox_input_json: None,
             sandbox_output_json: None,
