@@ -1358,6 +1358,18 @@ seed state. It is reused for the attempt world, timeline snapshots, and
 `WorldFork` graph fingerprints. `World::content_digest()` remains intentionally
 content-only and is not proof of execution-checkpoint equivalence.
 
+Operational identity preserves topology as well as content. Replay
+fingerprinting assigns deterministic discovery IDs to heap objects, capture
+cells, and `Arc<WorldSnapshot>` nodes. A `WorldFork` emits a snapshot-node
+reference, and each distinct snapshot is encoded exactly once through an
+iterative pending-node walk. Consequently, two wrappers sharing one snapshot
+remain distinguishable from two wrappers around content-equal, separately
+allocated snapshots, matching language-visible fork equality. Fingerprinting
+is fallible and deterministically bounded by heap-object, capture,
+world-snapshot, edge, pending-node, and encoded-byte limits. A limit failure is
+a typed host failure produced before portable replay executes and cannot
+mutate the authoritative VM.
+
 Native extension implementations are content-addressed through a versioned
 manifest containing extension identity, optional package version, extension
 ABI, binary digest, target, exported names/arities, conservative effects, and
@@ -1365,7 +1377,11 @@ resource-contract version. Compiled-program and replay-root identity bind the
 manifest/export identity rather than a process-local function pointer. ABI-v1
 extensions cannot self-declare package versions or pure effects, so those
 fields remain explicitly absent/conservative and observational replay keeps
-its native-effect firewall.
+its native-effect firewall. The loader first materializes a read-only,
+digest-named image and retains an open handle to that image for the lifetime of
+the loaded library. The manifest is derived from those sealed bytes rather
+than from a mutable source path, and an extension-ID collision with different
+content is rejected.
 
 Projection, priorities, fixed points, and parallel constraint execution remain
 out of scope and require follow-on RFCs.

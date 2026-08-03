@@ -147,12 +147,23 @@ Replay validation uses the operational form. The renderer-oriented content
 digest is never accepted as proof that two worlds will execute identically.
 `WorldFork` values and timeline snapshots use the same operational encoder, so
 hidden allocator or queued-event differences change their replay identity.
+Snapshot sharing is part of that identity too: two `WorldFork` wrappers that
+share one immutable snapshot are distinct from two wrappers around equal but
+separately allocated snapshots, matching RAD's observable fork equality.
+Replay fingerprinting assigns deterministic IDs to heap objects, closure
+captures, and world snapshots, then processes each distinct node once. This
+keeps shared snapshot DAGs linear in their distinct nodes and avoids recursive
+snapshot expansion. Node, edge, pending-work, world-count, and exact encoded
+byte limits fail as a typed host error before portable replay executes.
 
-Loaded native extensions are content-addressed. Their binary digest, ABI,
+Loaded native extensions are copied to a read-only, content-addressed image
+before the dynamic loader sees them, and that image remains open for the
+library's lifetime. Their binary digest, ABI,
 target, exports, declared effect class, and resource-contract version are
 bound into program identity, while process-local function pointers are not.
 ABI-v1 extensions have no self-declared package version and are conservatively
-treated as host-effecting and constraint-unsafe.
+treated as host-effecting and constraint-unsafe. Loading the same extension ID
+with different sealed content is rejected.
 
 Public attempt recording is an authoritative main-timeline operation; worker
 and simulation-fork VMs are rejected as checkpoint roots. The detached replay

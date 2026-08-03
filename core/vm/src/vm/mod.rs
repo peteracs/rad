@@ -251,7 +251,7 @@ pub struct VM {
     #[cfg(not(target_arch = "wasm32"))]
     pub(crate) io_pool: IoPool,
     #[cfg(not(target_arch = "wasm32"))]
-    pub(crate) loaded_libraries: Vec<libloading::Library>,
+    pub(crate) loaded_libraries: Vec<crate::ffi::LoadedNativeLibrary>,
     #[cfg(not(target_arch = "wasm32"))]
     pub(crate) net_handles: HashMap<u64, NetHandle>,
     #[cfg(not(target_arch = "wasm32"))]
@@ -374,8 +374,8 @@ impl VM {
 
     /// Capture the canonical immutable identity of the currently installed
     /// executable program. Runtime values are intentionally excluded.
-    pub fn compiled_program_manifest(&self) -> CompiledProgramManifest {
-        CompiledProgramManifest::capture(self)
+    pub fn compiled_program_manifest(&self) -> Result<CompiledProgramManifest, String> {
+        CompiledProgramManifest::capture(self).map_err(|error| error.to_string())
     }
 
     /// Content-addressed manifests for native implementations installed in

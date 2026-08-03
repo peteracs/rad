@@ -8254,6 +8254,19 @@ impl VM {
         {
             let (functions, lib, manifest) = crate::ffi::load_plugin(path, &mut self.gc)?;
 
+            if let Some(existing) = self
+                .native_extension_manifests
+                .iter()
+                .find(|loaded| loaded.extension_id() == manifest.extension_id())
+            {
+                if existing.content_digest() != manifest.content_digest() {
+                    return Err(format!(
+                        "native extension '{}' is already sealed to different content",
+                        manifest.extension_id()
+                    ));
+                }
+            }
+
             self.loaded_libraries.push(lib);
             let manifests = std::sync::Arc::make_mut(&mut self.native_extension_manifests);
             if !manifests

@@ -610,7 +610,12 @@ impl VM {
             })
         })?;
         let base_world_digest = self.world.content_digest();
-        let program_digest = self.program_digest();
+        let program_digest = self.program_digest().map_err(|error| {
+            VmFailure::Host(HostFault {
+                code: "attempt.fingerprint_failed".into(),
+                message: error.to_string(),
+            })
+        })?;
         let runtime_feature_fingerprint = self.runtime_feature_fingerprint();
         let constraint_registry_digest = self.constraint_registry_digest();
         let checkpoint_digest = replay_checkpoint.digest().to_string();
@@ -719,7 +724,10 @@ impl VM {
                 "constraint limit profile does not match the recorded attempt".into(),
             ));
         }
-        if self.program_digest() != attempt.program_digest {
+        let actual_program = self
+            .program_digest()
+            .map_err(|error| fail("attempt.fingerprint_failed", error.to_string()))?;
+        if actual_program != attempt.program_digest {
             return Err(fail(
                 "attempt.program_mismatch",
                 "compiled program does not match the recorded attempt".into(),
@@ -744,7 +752,9 @@ impl VM {
                 "capability profile does not match the recorded attempt".into(),
             ));
         }
-        let actual_checkpoint = self.attempt_checkpoint_digest();
+        let actual_checkpoint = self
+            .attempt_checkpoint_digest()
+            .map_err(|error| fail("attempt.fingerprint_failed", error.to_string()))?;
         if actual_checkpoint != attempt.checkpoint_digest {
             return Err(fail(
                 "attempt.checkpoint_mismatch",
@@ -924,8 +934,12 @@ impl VM {
         self.constraint_limit_profile = profile;
     }
 
-    pub(crate) fn program_digest(&self) -> String {
-        self.compiled_program_manifest().digest().to_string()
+    pub(crate) fn program_digest(
+        &self,
+    ) -> Result<String, crate::vm::replay_clone::FingerprintError> {
+        Ok(crate::vm::CompiledProgramManifest::capture(self)?
+            .digest()
+            .to_string())
     }
 
     pub(crate) fn constraint_registry_digest(&self) -> String {

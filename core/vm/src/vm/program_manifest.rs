@@ -23,7 +23,7 @@ pub struct CompiledProgramManifest {
 }
 
 impl CompiledProgramManifest {
-    pub(crate) fn capture(vm: &VM) -> Self {
+    pub(crate) fn capture(vm: &VM) -> Result<Self, crate::vm::replay_clone::FingerprintError> {
         let mut out = CanonicalWriter::with_domain("rad-compiled-program-manifest/v2");
         out.u32(PROGRAM_MANIFEST_VERSION);
         out.u32(COMPILER_SEMANTIC_VERSION);
@@ -51,7 +51,9 @@ impl CompiledProgramManifest {
             out.usize(chunk.constants().len());
             constant_roots.extend_from_slice(chunk.constants());
         }
-        out.text(&crate::vm::replay_clone::fingerprint_roots(&constant_roots));
+        out.text(&crate::vm::replay_clone::fingerprint_roots(
+            &constant_roots,
+        )?);
 
         let mut machines = vm.state_machines.iter().collect::<Vec<_>>();
         machines.sort_by(|left, right| left.0.cmp(right.0));
@@ -220,10 +222,10 @@ impl CompiledProgramManifest {
 
         let canonical_bytes: std::sync::Arc<[u8]> = out.finish().into();
         let digest = hex::encode(Sha256::digest(&canonical_bytes));
-        Self {
+        Ok(Self {
             canonical_bytes,
             digest,
-        }
+        })
     }
 
     pub fn canonical_bytes(&self) -> &[u8] {
@@ -282,7 +284,11 @@ mod tests {
             .expect("compile");
         left.load_compile_result(result);
 
-        let original = left.compiled_program_manifest().digest().to_string();
+        let original = left
+            .compiled_program_manifest()
+            .expect("manifest should fit")
+            .digest()
+            .to_string();
         let attempt = left
             .global_names
             .iter()
@@ -294,7 +300,11 @@ mod tests {
             .position(|name| name == "alternate")
             .unwrap();
         std::sync::Arc::make_mut(&mut left.global_names).swap(attempt, alternate);
-        let swapped = left.compiled_program_manifest().digest().to_string();
+        let swapped = left
+            .compiled_program_manifest()
+            .expect("manifest should fit")
+            .digest()
+            .to_string();
 
         assert_ne!(original, swapped);
     }
@@ -303,11 +313,20 @@ mod tests {
     fn every_program_table_family_changes_manifest_identity() {
         fn baseline() -> (VM, String) {
             let vm = VM::new_with_seed(7);
-            let digest = vm.compiled_program_manifest().digest().to_string();
+            let digest = vm
+                .compiled_program_manifest()
+                .expect("manifest should fit")
+                .digest()
+                .to_string();
             (vm, digest)
         }
         fn changed(vm: &VM, baseline: &str) {
-            assert_ne!(vm.compiled_program_manifest().digest(), baseline);
+            assert_ne!(
+                vm.compiled_program_manifest()
+                    .expect("manifest should fit")
+                    .digest(),
+                baseline
+            );
         }
 
         let (mut vm, digest) = baseline();
@@ -423,7 +442,10 @@ mod tests {
                 &[("transform".into(), 1)],
             );
             Arc::make_mut(&mut vm.native_extension_manifests).push(Arc::new(extension));
-            vm.compiled_program_manifest().digest().to_string()
+            vm.compiled_program_manifest()
+                .expect("manifest should fit")
+                .digest()
+                .to_string()
         }
 
         assert_ne!(

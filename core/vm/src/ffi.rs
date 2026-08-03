@@ -15,7 +15,13 @@ use std::cell::RefCell;
 #[cfg(not(target_arch = "wasm32"))]
 use std::ffi::{c_char, c_void, CStr};
 #[cfg(not(target_arch = "wasm32"))]
+use std::fs::{File, OpenOptions};
+#[cfg(not(target_arch = "wasm32"))]
+use std::io::Write;
+#[cfg(not(target_arch = "wasm32"))]
 use std::path::{Path, PathBuf};
+#[cfg(not(target_arch = "wasm32"))]
+use std::sync::atomic::{AtomicU64, Ordering};
 
 #[cfg(not(target_arch = "wasm32"))]
 thread_local! {
@@ -28,6 +34,24 @@ pub type LoadedPlugin<L> = (
     L,
     std::sync::Arc<NativeExtensionManifest>,
 );
+
+#[cfg(not(target_arch = "wasm32"))]
+pub struct LoadedNativeLibrary {
+    // Drop the loader handle before releasing the open sealed-image handle.
+    _library: libloading::Library,
+    _sealed_file: File,
+    _sealed_path: PathBuf,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+struct SealedNativeImage {
+    path: PathBuf,
+    file: File,
+    bytes: Vec<u8>,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+static SEALED_IMAGE_NONCE: AtomicU64 = AtomicU64::new(0);
 
 pub const RAD_EXTENSION_ABI_VERSION: u32 = 1;
 pub const NATIVE_RESOURCE_CONTRACT_VERSION: u32 = 0;
@@ -360,7 +384,7 @@ unsafe extern "C" fn api_register_fn(
 pub fn load_plugin(
     path: &str,
     merge_into: &mut GcHeap,
-) -> Result<LoadedPlugin<libloading::Library>, String> {
+) -> Result<LoadedPlugin<LoadedNativeLibrary>, String> {
     unsafe {
         let requested = Path::new(path);
         let platform_path = if requested.extension().is_none() {
@@ -370,28 +394,14 @@ pub fn load_plugin(
             None
         };
         let resolved: PathBuf = platform_path.unwrap_or_else(|| requested.to_path_buf());
-        let binary = std::fs::read(&resolved).map_err(|error| {
+        let sealed = seal_native_library(&resolved)?;
+        let lib = libloading::Library::new(&sealed.path).map_err(|error| {
             format!(
-                "Failed to fingerprint plugin '{}': {}",
-                resolved.display(),
+                "Failed to load sealed plugin '{}': {}",
+                sealed.path.display(),
                 error
             )
         })?;
-        let lib = libloading::Library::new(&resolved)
-            .map_err(|e| format!("Failed to load plugin '{}': {}", resolved.display(), e))?;
-        let loaded_binary = std::fs::read(&resolved).map_err(|error| {
-            format!(
-                "Failed to seal loaded plugin '{}': {}",
-                resolved.display(),
-                error
-            )
-        })?;
-        if loaded_binary != binary {
-            return Err(format!(
-                "Plugin '{}' changed while it was being loaded",
-                resolved.display()
-            ));
-        }
 
         type InitFn = unsafe extern "C" fn(*const RadPluginApi);
         let init_fn: libloading::Symbol<InitFn> = lib
@@ -428,7 +438,7 @@ pub fn load_plugin(
             .collect::<Vec<_>>();
         let manifest = std::sync::Arc::new(NativeExtensionManifest::from_binary(
             &resolved,
-            &loaded_binary,
+            &sealed.bytes,
             &exports,
         ));
         let functions = context
@@ -445,11 +455,167 @@ pub fn load_plugin(
             })
             .collect();
 
-        Ok((functions, lib, manifest))
+        Ok((
+            functions,
+            LoadedNativeLibrary {
+                _library: lib,
+                _sealed_file: sealed.file,
+                _sealed_path: sealed.path,
+            },
+            manifest,
+        ))
     }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn seal_native_library(source: &Path) -> Result<SealedNativeImage, String> {
+    let bytes = std::fs::read(source)
+        .map_err(|error| format!("Failed to read plugin '{}': {}", source.display(), error))?;
+    let digest = hex::encode(Sha256::digest(&bytes));
+    let cache = std::env::temp_dir()
+        .join("rad-native-extension-cache")
+        .join("v1");
+    std::fs::create_dir_all(&cache).map_err(|error| {
+        format!(
+            "Failed to create native extension cache '{}': {}",
+            cache.display(),
+            error
+        )
+    })?;
+    let file_name = match source.extension().and_then(|extension| extension.to_str()) {
+        Some(extension) => format!("{digest}.{extension}"),
+        None => digest.clone(),
+    };
+    let sealed_path = cache.join(file_name);
+
+    if !sealed_path.exists() {
+        let nonce = SEALED_IMAGE_NONCE.fetch_add(1, Ordering::Relaxed);
+        let temporary = cache.join(format!(".{digest}.{}.{}.tmp", std::process::id(), nonce));
+        let mut output = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temporary)
+            .map_err(|error| {
+                format!(
+                    "Failed to create sealed plugin image '{}': {}",
+                    temporary.display(),
+                    error
+                )
+            })?;
+        output.write_all(&bytes).map_err(|error| {
+            format!(
+                "Failed to write sealed plugin image '{}': {}",
+                temporary.display(),
+                error
+            )
+        })?;
+        output.sync_all().map_err(|error| {
+            format!(
+                "Failed to sync sealed plugin image '{}': {}",
+                temporary.display(),
+                error
+            )
+        })?;
+        drop(output);
+        if let Err(error) = std::fs::rename(&temporary, &sealed_path) {
+            if !sealed_path.exists() {
+                return Err(format!(
+                    "Failed to publish sealed plugin image '{}': {}",
+                    sealed_path.display(),
+                    error
+                ));
+            }
+            let _ = std::fs::remove_file(&temporary);
+        }
+    }
+
+    let sealed_bytes = std::fs::read(&sealed_path).map_err(|error| {
+        format!(
+            "Failed to verify sealed plugin image '{}': {}",
+            sealed_path.display(),
+            error
+        )
+    })?;
+    if sealed_bytes != bytes {
+        return Err(format!(
+            "Sealed plugin image '{}' does not match content digest {}",
+            sealed_path.display(),
+            digest
+        ));
+    }
+    let mut permissions = std::fs::metadata(&sealed_path)
+        .map_err(|error| error.to_string())?
+        .permissions();
+    permissions.set_readonly(true);
+    std::fs::set_permissions(&sealed_path, permissions).map_err(|error| {
+        format!(
+            "Failed to make sealed plugin image '{}' read-only: {}",
+            sealed_path.display(),
+            error
+        )
+    })?;
+
+    let mut options = OpenOptions::new();
+    options.read(true);
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        // Permit the dynamic loader to read the image, but deny replacement
+        // and deletion while this VM retains the library handle.
+        options.share_mode(0x0000_0001);
+    }
+    let file = options.open(&sealed_path).map_err(|error| {
+        format!(
+            "Failed to retain sealed plugin image '{}': {}",
+            sealed_path.display(),
+            error
+        )
+    })?;
+    Ok(SealedNativeImage {
+        path: sealed_path,
+        file,
+        bytes,
+    })
 }
 
 #[cfg(target_arch = "wasm32")]
 pub fn load_plugin(_path: &str, _merge_into: &mut GcHeap) -> Result<LoadedPlugin<()>, String> {
     Err("Plugins are not supported on wasm32".to_string())
+}
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod tests {
+    use super::seal_native_library;
+    use sha2::{Digest, Sha256};
+
+    #[test]
+    fn native_image_is_content_addressed_and_detached_from_source_path() {
+        let nonce = super::SEALED_IMAGE_NONCE.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let directory = std::env::temp_dir().join(format!(
+            "rad-native-seal-test-{}-{nonce}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&directory).expect("create test directory");
+        let source = directory.join(format!("extension.{}", std::env::consts::DLL_EXTENSION));
+        let original = format!("sealed-native-image-{nonce}").into_bytes();
+        std::fs::write(&source, &original).expect("write source image");
+
+        let sealed = seal_native_library(&source).expect("seal native image");
+        let expected_digest = hex::encode(Sha256::digest(&original));
+        assert!(sealed
+            .path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| name.starts_with(&expected_digest)));
+
+        std::fs::write(&source, b"replacement image").expect("replace source path");
+        assert_eq!(
+            std::fs::read(&sealed.path).expect("read sealed image"),
+            original
+        );
+        assert_eq!(sealed.bytes, original);
+
+        std::fs::remove_file(&source).expect("remove source image");
+        std::fs::remove_dir(&directory).expect("remove test directory");
+    }
 }

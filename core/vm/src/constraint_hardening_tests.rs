@@ -556,6 +556,74 @@ fn attempt() {
 }
 
 #[test]
+fn portable_attempt_replay_rejects_nested_world_fork_topology_drift_before_execution() {
+    let source = r#"
+component Position { x: int = 0 }
+intent Move { key target: entity }
+law Push(target: entity) { propose Move { target: target } }
+resolver ResolveMove for Move(target, proposals) { next(target, Position { x: 9 }) }
+constraint Reject for Position(subject, proposed) {
+    require false else "position.rejected"
+}
+entity hero { Position {} }
+let mut topology = nil
+let mut attempt_runs = 0
+fn attempt() {
+    attempt_runs = attempt_runs + 1
+    settle { Push(hero) }
+}
+"#;
+    let mut recorder = compile_vm(source);
+    recorder.run(0).expect("initialize recorded program");
+    let topology_slot = recorder
+        .global_names
+        .iter()
+        .position(|name| name == "topology")
+        .unwrap();
+    let shared_snapshot = std::sync::Arc::new(recorder.world.snapshot());
+    let shared_left = Value::world_fork(&mut recorder.gc, shared_snapshot.clone());
+    let shared_right = Value::world_fork(&mut recorder.gc, shared_snapshot);
+    recorder.globals[topology_slot] =
+        Value::list(&mut recorder.gc, vec![shared_left, shared_right]);
+    let crate::constraint_types::SettlementAttemptOutcome::Rejected(recorded) = recorder
+        .call_global_attempt("attempt", &[])
+        .expect("record portable rejection")
+    else {
+        panic!("attempt must reject")
+    };
+
+    let mut supplied = compile_vm(source);
+    supplied.run(0).expect("initialize supplied checkpoint");
+    let topology_slot = supplied
+        .global_names
+        .iter()
+        .position(|name| name == "topology")
+        .unwrap();
+    let snapshot = supplied.world.snapshot();
+    let distinct_left = Value::world_fork(&mut supplied.gc, std::sync::Arc::new(snapshot.clone()));
+    let distinct_right = Value::world_fork(&mut supplied.gc, std::sync::Arc::new(snapshot));
+    supplied.globals[topology_slot] =
+        Value::list(&mut supplied.gc, vec![distinct_left, distinct_right]);
+    let runs_slot = supplied
+        .global_names
+        .iter()
+        .position(|name| name == "attempt_runs")
+        .unwrap();
+
+    let error = supplied
+        .replay_portable_failed_attempt(&recorded.portable_recipe())
+        .expect_err("nested WorldFork topology drift must fail before replay");
+    assert!(matches!(
+        error,
+        crate::constraint_types::VmFailure::Host(crate::constraint_types::HostFault {
+            ref code,
+            ..
+        }) if code == "attempt.checkpoint_mismatch"
+    ));
+    assert_eq!(supplied.globals[runs_slot].as_int(), Some(0));
+}
+
+#[test]
 fn matching_operational_checkpoint_replays_same_spawned_candidate() {
     let source = r#"
 component Position { x: int = 0 }

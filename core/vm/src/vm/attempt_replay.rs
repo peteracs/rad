@@ -203,7 +203,10 @@ impl AttemptReplayState {
             .collect()
     }
 
-    fn encode_checkpoint(&self, out: &mut crate::canonical::CanonicalWriter) {
+    fn encode_checkpoint(
+        &self,
+        out: &mut crate::canonical::CanonicalWriter,
+    ) -> Result<(), super::replay_clone::FingerprintError> {
         out.byte(match self.execution_role {
             ExecutionRole::Main => 0,
             ExecutionRole::Worker => 1,
@@ -307,9 +310,6 @@ impl AttemptReplayState {
             }
         }
 
-        out.text(&super::replay_clone::fingerprint_world_snapshot(
-            &self.world,
-        ));
         out.u64(self.rng_state);
         out.u64(self.fuel);
         out.usize(self.mem_limit);
@@ -328,10 +328,6 @@ impl AttemptReplayState {
         out.usize(self.eprint_buffer.len());
         for line in &self.eprint_buffer {
             out.text(line);
-        }
-        out.usize(self.timeline.len());
-        for snapshot in &self.timeline {
-            out.text(&super::replay_clone::fingerprint_world_snapshot(snapshot));
         }
         self.ledger.encode_checkpoint(out);
         crate::causality::CausalityLedger::encode_cause_checkpoint(&self.current_cause, out);
@@ -367,6 +363,7 @@ impl AttemptReplayState {
         } else {
             out.bool(false);
         }
+        Ok(())
     }
 }
 
@@ -386,9 +383,13 @@ impl AttemptReplayCheckpoint {
     pub(crate) fn capture(source: &VM) -> Result<Self, String> {
         source.ensure_attempt_checkpoint_boundary()?;
         let state = AttemptReplayState::capture(source);
-        let digest = source.attempt_checkpoint_digest_from(&state);
+        let digest = source
+            .attempt_checkpoint_digest_from(&state)
+            .map_err(|error| error.to_string())?;
         let seed = source.detached_attempt_replay_vm_from(&state)?;
-        let cloned_digest = seed.attempt_checkpoint_digest();
+        let cloned_digest = seed
+            .attempt_checkpoint_digest()
+            .map_err(|error| error.to_string())?;
         if cloned_digest != digest {
             return Err(format!(
                 "attempt replay checkpoint changed while detaching ({digest} != {cloned_digest})"
@@ -402,7 +403,10 @@ impl AttemptReplayCheckpoint {
     }
 
     pub(crate) fn fork(&self) -> Result<VM, String> {
-        let actual = self.seed.attempt_checkpoint_digest();
+        let actual = self
+            .seed
+            .attempt_checkpoint_digest()
+            .map_err(|error| error.to_string())?;
         if actual != self.digest {
             return Err("stored attempt replay checkpoint no longer matches its digest".into());
         }
@@ -476,15 +480,20 @@ impl VM {
     /// Canonical identity of all pre-attempt state that observational replay
     /// may read. Heap topology uses deterministic graph numbering, never raw
     /// allocator addresses.
-    pub(crate) fn attempt_checkpoint_digest(&self) -> String {
+    pub(crate) fn attempt_checkpoint_digest(
+        &self,
+    ) -> Result<String, super::replay_clone::FingerprintError> {
         let state = AttemptReplayState::capture(self);
         self.attempt_checkpoint_digest_from(&state)
     }
 
-    pub(crate) fn attempt_checkpoint_digest_from(&self, state: &AttemptReplayState) -> String {
-        hex::encode(Sha256::digest(
-            self.attempt_checkpoint_canonical_bytes_from(state),
-        ))
+    pub(crate) fn attempt_checkpoint_digest_from(
+        &self,
+        state: &AttemptReplayState,
+    ) -> Result<String, super::replay_clone::FingerprintError> {
+        Ok(hex::encode(Sha256::digest(
+            self.attempt_checkpoint_canonical_bytes_from(state)?,
+        )))
     }
 
     /// The versioned bytes hashed by portable replay. Persisting a checkpoint
@@ -492,16 +501,18 @@ impl VM {
     pub(crate) fn attempt_checkpoint_canonical_bytes_from(
         &self,
         state: &AttemptReplayState,
-    ) -> Vec<u8> {
-        let mut out = crate::canonical::CanonicalWriter::with_domain("rad-attempt-checkpoint/v4");
-        state.encode_checkpoint(&mut out);
-        out.text(&self.program_digest());
+    ) -> Result<Vec<u8>, super::replay_clone::FingerprintError> {
+        let mut out = crate::canonical::CanonicalWriter::with_domain("rad-attempt-checkpoint/v5");
+        state.encode_checkpoint(&mut out)?;
+        out.text(&self.program_digest()?);
         out.text(&self.runtime_feature_fingerprint());
         out.text(&self.constraint_registry_digest());
         out.text(&self.constraint_limit_profile.fingerprint());
-        out.text(&crate::vm::replay_clone::fingerprint_roots(
+        out.text(&crate::vm::replay_clone::fingerprint_attempt_state(
             &state.root_layout.roots,
-        ));
-        out.finish()
+            &state.world,
+            &state.timeline,
+        )?);
+        Ok(out.finish())
     }
 }

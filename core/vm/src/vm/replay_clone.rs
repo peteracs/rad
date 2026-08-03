@@ -15,27 +15,181 @@ use std::sync::Arc;
 
 const MAX_REPLAY_GRAPH_OBJECTS: usize = 1_000_000;
 const MAX_REPLAY_GRAPH_BYTES: usize = 256 * 1024 * 1024;
+const MAX_REPLAY_FINGERPRINT_WORLDS: usize = 100_000;
+const MAX_REPLAY_FINGERPRINT_EDGES: usize = 4_000_000;
 
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct FingerprintLimits {
+    pub(crate) max_nodes: usize,
+    pub(crate) max_worlds: usize,
+    pub(crate) max_edges: usize,
+    pub(crate) max_pending: usize,
+    pub(crate) max_encoded_bytes: usize,
+}
+
+impl Default for FingerprintLimits {
+    fn default() -> Self {
+        Self {
+            max_nodes: MAX_REPLAY_GRAPH_OBJECTS,
+            max_worlds: MAX_REPLAY_FINGERPRINT_WORLDS,
+            max_edges: MAX_REPLAY_FINGERPRINT_EDGES,
+            max_pending: MAX_REPLAY_GRAPH_OBJECTS,
+            max_encoded_bytes: MAX_REPLAY_GRAPH_BYTES,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) enum FingerprintError {
+    LimitExceeded {
+        resource: &'static str,
+        limit: usize,
+    },
+    InvalidObject,
+}
+
+impl std::fmt::Display for FingerprintError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::LimitExceeded { resource, limit } => write!(
+                formatter,
+                "replay fingerprint exceeds the {limit}-{resource} limit"
+            ),
+            Self::InvalidObject => {
+                formatter.write_str("replay fingerprint contains an invalid object")
+            }
+        }
+    }
+}
+
+impl std::error::Error for FingerprintError {}
+
+struct MeteredDigest {
+    digest: Sha256,
+    limits: FingerprintLimits,
+    encoded_bytes: usize,
+    edges: usize,
+    failure: Option<FingerprintError>,
+}
+
+impl MeteredDigest {
+    fn new(limits: FingerprintLimits) -> Self {
+        Self {
+            digest: Sha256::new(),
+            limits,
+            encoded_bytes: 0,
+            edges: 0,
+            failure: None,
+        }
+    }
+
+    fn update(&mut self, bytes: impl AsRef<[u8]>) {
+        if self.failure.is_some() {
+            return;
+        }
+        let bytes = bytes.as_ref();
+        let Some(total) = self.encoded_bytes.checked_add(bytes.len()) else {
+            self.failure = Some(FingerprintError::LimitExceeded {
+                resource: "encoded-byte",
+                limit: self.limits.max_encoded_bytes,
+            });
+            return;
+        };
+        if total > self.limits.max_encoded_bytes {
+            self.failure = Some(FingerprintError::LimitExceeded {
+                resource: "encoded-byte",
+                limit: self.limits.max_encoded_bytes,
+            });
+            return;
+        }
+        self.encoded_bytes = total;
+        self.digest.update(bytes);
+    }
+
+    fn edge(&mut self) {
+        if self.failure.is_some() {
+            return;
+        }
+        self.edges = self.edges.saturating_add(1);
+        if self.edges > self.limits.max_edges {
+            self.failure = Some(FingerprintError::LimitExceeded {
+                resource: "edge",
+                limit: self.limits.max_edges,
+            });
+        }
+    }
+
+    fn fail(&mut self, error: FingerprintError) {
+        if self.failure.is_none() {
+            self.failure = Some(error);
+        }
+    }
+
+    fn finish(self) -> Result<String, FingerprintError> {
+        if let Some(error) = self.failure {
+            Err(error)
+        } else {
+            Ok(hex::encode(self.digest.finalize()))
+        }
+    }
+}
+
+#[derive(Clone)]
 enum FingerprintNode {
     Object(Value),
     Capture(*mut CaptureCell),
+    World(Arc<WorldSnapshot>),
 }
 
 struct GraphFingerprinter {
-    digest: Sha256,
+    digest: MeteredDigest,
     objects: HashMap<usize, u64>,
     captures: HashMap<usize, u64>,
+    worlds: HashMap<usize, u64>,
     pending: Vec<FingerprintNode>,
 }
 
 impl GraphFingerprinter {
-    fn new() -> Self {
+    fn new(limits: FingerprintLimits) -> Self {
         Self {
-            digest: Sha256::new(),
+            digest: MeteredDigest::new(limits),
             objects: HashMap::new(),
             captures: HashMap::new(),
+            worlds: HashMap::new(),
             pending: Vec::new(),
         }
+    }
+
+    fn reserve_node(&mut self, worlds: usize) -> bool {
+        let limits = self.digest.limits;
+        let nodes = self
+            .objects
+            .len()
+            .saturating_add(self.captures.len())
+            .saturating_add(self.worlds.len())
+            .saturating_add(1);
+        if nodes > limits.max_nodes {
+            self.digest.fail(FingerprintError::LimitExceeded {
+                resource: "node",
+                limit: limits.max_nodes,
+            });
+            return false;
+        }
+        if worlds > limits.max_worlds {
+            self.digest.fail(FingerprintError::LimitExceeded {
+                resource: "world-snapshot",
+                limit: limits.max_worlds,
+            });
+            return false;
+        }
+        if self.pending.len().saturating_add(1) > limits.max_pending {
+            self.digest.fail(FingerprintError::LimitExceeded {
+                resource: "pending-node",
+                limit: limits.max_pending,
+            });
+            return false;
+        }
+        true
     }
 
     fn bytes(&mut self, bytes: &[u8]) {
@@ -69,11 +223,15 @@ impl GraphFingerprinter {
     }
 
     fn capture(&mut self, capture: *mut CaptureCell) {
+        self.digest.edge();
         let identity = capture as usize;
         let id = if let Some(id) = self.captures.get(&identity) {
             *id
         } else {
             let id = self.captures.len() as u64;
+            if !self.reserve_node(self.worlds.len()) {
+                return;
+            }
             self.captures.insert(identity, id);
             self.pending.push(FingerprintNode::Capture(capture));
             id
@@ -83,6 +241,7 @@ impl GraphFingerprinter {
     }
 
     fn value(&mut self, value: Value) {
+        self.digest.edge();
         if value.is_nil() {
             self.digest.update(b"n");
         } else if let Some(value) = value.as_bool() {
@@ -103,6 +262,9 @@ impl GraphFingerprinter {
                 *id
             } else {
                 let id = self.objects.len() as u64;
+                if !self.reserve_node(self.worlds.len()) {
+                    return;
+                }
                 self.objects.insert(identity, id);
                 self.pending.push(FingerprintNode::Object(value));
                 id
@@ -116,10 +278,11 @@ impl GraphFingerprinter {
     }
 
     fn object(&mut self, value: Value) {
-        match value
-            .as_object()
-            .expect("fingerprinted object remains live")
-        {
+        let Some(object) = value.as_object() else {
+            self.digest.fail(FingerprintError::InvalidObject);
+            return;
+        };
+        match object {
             Object::BigInt(value) => {
                 self.digest.update(b"I");
                 self.digest.update(value.to_le_bytes());
@@ -252,29 +415,54 @@ impl GraphFingerprinter {
                 self.bytes(name.as_bytes());
             }
             Object::WorldFork(snapshot) => {
-                self.digest.update(b"W");
-                snapshot.encode_operational_checkpoint(self);
+                self.world(snapshot);
             }
         }
     }
 
-    fn finish_pending(mut self) -> String {
+    fn world(&mut self, snapshot: &Arc<WorldSnapshot>) {
+        self.digest.edge();
+        let identity = Arc::as_ptr(snapshot) as usize;
+        let id = if let Some(id) = self.worlds.get(&identity) {
+            *id
+        } else {
+            let id = self.worlds.len() as u64;
+            if !self.reserve_node(self.worlds.len().saturating_add(1)) {
+                return;
+            }
+            self.worlds.insert(identity, id);
+            self.pending
+                .push(FingerprintNode::World(Arc::clone(snapshot)));
+            id
+        };
+        self.digest.update(b"W");
+        self.digest.update(id.to_le_bytes());
+    }
+
+    fn finish_pending(mut self) -> Result<String, FingerprintError> {
         let mut index = 0;
         while index < self.pending.len() {
-            match self.pending[index] {
+            if self.digest.failure.is_some() {
+                break;
+            }
+            match self.pending[index].clone() {
                 FingerprintNode::Object(value) => self.object(value),
                 FingerprintNode::Capture(capture) => {
                     self.digest.update(b"V");
                     self.value(unsafe { (*capture).get() });
                 }
+                FingerprintNode::World(snapshot) => {
+                    self.digest.update(b"X");
+                    snapshot.encode_operational_checkpoint(&mut self);
+                }
             }
             index += 1;
         }
-        hex::encode(self.digest.finalize())
+        self.digest.finish()
     }
 
-    fn finish(mut self, roots: &[Value]) -> String {
-        self.digest.update(b"rad-replay-graph/v2\0");
+    fn finish(mut self, roots: &[Value]) -> Result<String, FingerprintError> {
+        self.digest.update(b"rad-replay-graph/v3\0");
         self.digest.update((roots.len() as u64).to_le_bytes());
         for root in roots {
             self.value(*root);
@@ -282,10 +470,33 @@ impl GraphFingerprinter {
         self.finish_pending()
     }
 
-    fn finish_world(mut self, snapshot: &WorldSnapshot) -> String {
+    #[cfg(test)]
+    fn finish_world(mut self, snapshot: &WorldSnapshot) -> Result<String, FingerprintError> {
         self.digest
-            .update(b"rad-operational-world-fingerprint/v1\0");
+            .update(b"rad-operational-world-fingerprint/v2\0");
         snapshot.encode_operational_checkpoint(&mut self);
+        self.finish_pending()
+    }
+
+    fn finish_attempt_state(
+        mut self,
+        roots: &[Value],
+        world: &WorldSnapshot,
+        timeline: &[WorldSnapshot],
+    ) -> Result<String, FingerprintError> {
+        self.digest.update(b"rad-attempt-state-graph/v1\0");
+        self.digest.update(b"R");
+        self.digest.update((roots.len() as u64).to_le_bytes());
+        for root in roots {
+            self.value(*root);
+        }
+        self.digest.update(b"A");
+        world.encode_operational_checkpoint(&mut self);
+        self.digest.update(b"T");
+        self.digest.update((timeline.len() as u64).to_le_bytes());
+        for snapshot in timeline {
+            snapshot.encode_operational_checkpoint(&mut self);
+        }
         self.finish_pending()
     }
 }
@@ -327,14 +538,36 @@ impl OperationalWorldEncoder for GraphFingerprinter {
 /// Canonical content-and-topology identity for replay-visible VM roots.
 /// Mutable aliases and closure captures are numbered by deterministic graph
 /// discovery, never by allocator address.
-pub(crate) fn fingerprint_roots(roots: &[Value]) -> String {
-    GraphFingerprinter::new().finish(roots)
+pub(crate) fn fingerprint_roots(roots: &[Value]) -> Result<String, FingerprintError> {
+    fingerprint_roots_with_limits(roots, FingerprintLimits::default())
+}
+
+pub(crate) fn fingerprint_roots_with_limits(
+    roots: &[Value],
+    limits: FingerprintLimits,
+) -> Result<String, FingerprintError> {
+    GraphFingerprinter::new(limits).finish(roots)
 }
 
 /// Canonical identity of the complete execution-relevant world snapshot.
 /// This deliberately differs from the renderer/content digest.
-pub(crate) fn fingerprint_world_snapshot(snapshot: &WorldSnapshot) -> String {
-    GraphFingerprinter::new().finish_world(snapshot)
+#[cfg(test)]
+pub(crate) fn fingerprint_world_snapshot(
+    snapshot: &WorldSnapshot,
+) -> Result<String, FingerprintError> {
+    GraphFingerprinter::new(FingerprintLimits::default()).finish_world(snapshot)
+}
+
+/// One topology-preserving identity for every value graph reachable from an
+/// attempt checkpoint. A snapshot shared between a global, an event payload,
+/// the authoritative world, and a timeline entry receives one discovery ID.
+pub(crate) fn fingerprint_attempt_state(
+    roots: &[Value],
+    world: &WorldSnapshot,
+    timeline: &[WorldSnapshot],
+) -> Result<String, FingerprintError> {
+    GraphFingerprinter::new(FingerprintLimits::default())
+        .finish_attempt_state(roots, world, timeline)
 }
 
 pub(crate) struct VmForkCloneContext<'a> {
@@ -571,7 +804,10 @@ impl<'a> VmForkCloneContext<'a> {
 
 #[cfg(test)]
 mod tests {
-    use super::{fingerprint_roots, fingerprint_world_snapshot};
+    use super::{
+        fingerprint_roots, fingerprint_roots_with_limits, fingerprint_world_snapshot,
+        FingerprintError, FingerprintLimits,
+    };
     use crate::causality::WireProvenance;
     use crate::gc::GcHeap;
     use crate::value::Value;
@@ -610,7 +846,7 @@ mod tests {
         fn root_fingerprint(snapshot: crate::world::WorldSnapshot) -> String {
             let mut gc = GcHeap::new();
             let root = Value::world_fork(&mut gc, Arc::new(snapshot));
-            fingerprint_roots(&[root])
+            fingerprint_roots(&[root]).expect("test fingerprint should fit")
         }
 
         let baseline = World::new().snapshot();
@@ -645,5 +881,93 @@ mod tests {
         seeded.rollout_seed = Some(99);
         assert_eq!(visible, seeded.snapshot_json_like());
         assert_ne!(digest, root_fingerprint(seeded));
+    }
+
+    #[test]
+    fn world_fork_fingerprint_preserves_snapshot_sharing_topology() {
+        let snapshot = Arc::new(World::new().snapshot());
+
+        let mut shared_gc = GcHeap::new();
+        let shared_left = Value::world_fork(&mut shared_gc, Arc::clone(&snapshot));
+        let shared_right = Value::world_fork(&mut shared_gc, Arc::clone(&snapshot));
+        assert_eq!(shared_left, shared_right);
+        let shared = fingerprint_roots(&[shared_left, shared_right]).expect("shared graph fits");
+
+        let mut distinct_gc = GcHeap::new();
+        let distinct_left = Value::world_fork(&mut distinct_gc, Arc::new((*snapshot).clone()));
+        let distinct_right = Value::world_fork(&mut distinct_gc, Arc::new((*snapshot).clone()));
+        assert_ne!(distinct_left, distinct_right);
+        let distinct =
+            fingerprint_roots(&[distinct_left, distinct_right]).expect("distinct graph fits");
+
+        assert_ne!(shared, distinct);
+    }
+
+    #[test]
+    fn deep_copy_keeps_world_snapshot_topology() {
+        let mut source_gc = GcHeap::new();
+        let snapshot = Arc::new(World::new().snapshot());
+        let original = Value::world_fork(&mut source_gc, Arc::clone(&snapshot));
+        let copy = original.deep_copy(&mut source_gc);
+        assert_eq!(original, copy);
+
+        let same_snapshot = fingerprint_roots(&[original, copy]).expect("shared graph fits");
+        let distinct = Value::world_fork(&mut source_gc, Arc::new((*snapshot).clone()));
+        let distinct_snapshot =
+            fingerprint_roots(&[original, distinct]).expect("distinct graph fits");
+        assert_ne!(same_snapshot, distinct_snapshot);
+    }
+
+    #[test]
+    fn shared_world_snapshot_dag_is_fingerprinted_by_distinct_nodes() {
+        let mut gc = GcHeap::new();
+        let mut snapshot = Arc::new(World::new().snapshot());
+        for depth in 0..18 {
+            let left = Value::world_fork(&mut gc, Arc::clone(&snapshot));
+            let right = Value::world_fork(&mut gc, Arc::clone(&snapshot));
+            let mut next = World::new().snapshot();
+            next.events = Arc::new(vec![
+                (format!("left-{depth}"), left, depth * 2),
+                (format!("right-{depth}"), right, depth * 2 + 1),
+            ]);
+            snapshot = Arc::new(next);
+        }
+        let root = Value::world_fork(&mut gc, snapshot);
+        let limits = FingerprintLimits {
+            max_nodes: 128,
+            max_worlds: 32,
+            max_edges: 256,
+            max_pending: 128,
+            max_encoded_bytes: 1024 * 1024,
+        };
+        fingerprint_roots_with_limits(&[root], limits)
+            .expect("shared DAG work should be linear in distinct snapshots");
+    }
+
+    #[test]
+    fn deep_world_snapshot_chain_returns_a_typed_limit_error() {
+        let mut gc = GcHeap::new();
+        let mut snapshot = Arc::new(World::new().snapshot());
+        for depth in 0..10_000 {
+            let parent = Value::world_fork(&mut gc, snapshot);
+            let mut next = World::new().snapshot();
+            next.events = Arc::new(vec![(format!("depth-{depth}"), parent, depth)]);
+            snapshot = Arc::new(next);
+        }
+        let root = Value::world_fork(&mut gc, snapshot);
+        let limits = FingerprintLimits {
+            max_nodes: 1_000,
+            max_worlds: 32,
+            max_edges: 256,
+            max_pending: 1_000,
+            max_encoded_bytes: 1024 * 1024,
+        };
+        assert_eq!(
+            fingerprint_roots_with_limits(&[root], limits),
+            Err(FingerprintError::LimitExceeded {
+                resource: "world-snapshot",
+                limit: 32,
+            })
+        );
     }
 }
