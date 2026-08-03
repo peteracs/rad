@@ -1,0 +1,7 @@
+---
+source: ../../tests/fixtures/causal-constraints\missing_watch.rad
+exit_code: 1
+---
+
+---stderr---
+Error: constraint `InvalidMotion` reads `Velocity` without declaring `watches Velocity`

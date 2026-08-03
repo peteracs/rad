@@ -1,0 +1,9 @@
+// flags: --experimental-laws
+// error: explicitly list `Velocity` in `watches`
+
+component Position { x: int = 0 }
+component Velocity { x: int = 0 }
+constraint InvalidMotion for Position(subject, proposed) {
+    let velocity = candidate(subject, Velocity)
+    require proposed.x == velocity.x else "motion.mismatch"
+}

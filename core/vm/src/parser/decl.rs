@@ -57,6 +57,14 @@ impl Parser {
             decl.is_pub = is_pub;
             return Ok(Decl::Resolver(decl));
         }
+        if self.check_ident_text("constraint")
+            && self.peek_at(1).ty == TokenType::Ident
+            && self.peek_at(2).ty == TokenType::For
+        {
+            let mut decl = self.parse_constraint_decl()?;
+            decl.is_pub = is_pub;
+            return Ok(Decl::Constraint(decl));
+        }
         if self.check(TokenType::Entity) && self.peek_at(1).ty == TokenType::Ident {
             let mut decl = self.parse_entity_decl()?;
             decl.is_pub = is_pub;

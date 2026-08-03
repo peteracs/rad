@@ -18,6 +18,7 @@
 - [Pipelines](./guide/pipelines.md)
 - [Events](./guide/events.md)
 - [Causal Laws (experimental)](./guide/causal-laws.md)
+  - [Candidate Constraints](./guide/candidate-constraints.md)
 - [State Machines](./guide/state-machines.md)
 - [Sum Types & Pattern Matching](./guide/sum-types.md)
 - [Type Annotations](./guide/types.md)

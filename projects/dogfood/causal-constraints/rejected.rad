@@ -1,0 +1,38 @@
+// Same causal model as main.rad, with a candidate that occupies x = 13.
+
+component Position { x: int = 0 }
+component Velocity { dx: int = 0 }
+intent Displacement { key target: entity, source: str, amount: int }
+
+law InertialMovement(target: entity) {
+    propose Displacement {
+        target: target,
+        source: "velocity",
+        amount: require(target, Velocity).dx
+    }
+}
+law Wind(target: entity, amount: int) {
+    propose Displacement { target: target, source: "wind", amount: amount }
+}
+law Knockback(target: entity, amount: int) {
+    propose Displacement { target: target, source: "knockback", amount: amount }
+}
+resolver ResolveDisplacement for Displacement(target, proposals) {
+    let old = require(target, Position)
+    let total = proposals |> map(fn(proposal) { proposal.amount }) |> sum()
+    next(target, Position { x: old.x + total })
+}
+constraint WorldBounds for Position(subject, proposed) {
+    require proposed.x >= -100 else "position.below_world_min"
+    require proposed.x <= 100 else "position.above_world_max"
+}
+constraint NonPenetration for Position(subject, proposed) {
+    require proposed.x != 13 else "position.inside_solid"
+}
+entity hero { Position { x: 10 }, Velocity { dx: 1 } }
+
+settle {
+    Knockback(hero, 0)
+    Wind(hero, 2)
+    InertialMovement(hero)
+}

@@ -97,6 +97,8 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
       - name: Run Causal Laws snapshots with the experimental feature
         run: cargo run -p rad-vm --bin rad -- snapshot --experimental-laws tests/fixtures/causal-laws
+      - name: Run Candidate Constraint snapshots with the experimental feature
+        run: cargo run -p rad-vm --bin rad -- snapshot --experimental-laws tests/fixtures/causal-constraints
       - name: Verify Causal Laws remain gated without the feature
         run: cargo test -p rad-vm causal_syntax_is_rejected_without_the_experimental_feature --verbose
 

@@ -162,6 +162,34 @@ impl Checker {
             });
     }
 
+    pub(super) fn register_constraint(&mut self, decl: &ConstraintDecl) {
+        let name = self.resolve_canonical_name(&decl.name);
+        if self.constraints.contains_key(&name) || self.functions.contains_key(&name) {
+            self.error(
+                &decl.span,
+                format!(
+                    "Constraint '{}' conflicts with an existing declaration",
+                    decl.name
+                ),
+                None,
+            );
+            return;
+        }
+        let attached_component = self.resolve_canonical_name(&decl.component_name);
+        let watches = decl
+            .watches
+            .iter()
+            .map(|watch| self.resolve_canonical_name(watch))
+            .collect();
+        self.constraints.insert(
+            name.clone(),
+            ConstraintType {
+                attached_component,
+                watches,
+            },
+        );
+    }
+
     pub(super) fn check_intent_decl(&mut self, decl: &IntentDecl) {
         self.require_causal_feature(&decl.span);
     }
@@ -303,6 +331,227 @@ impl Checker {
         self.pop_scope();
         self.current_fn_name = saved_fn;
         self.current_fn_returns = saved_returns;
+    }
+
+    pub(super) fn check_constraint_decl(&mut self, decl: &ConstraintDecl) {
+        if !self.causal_laws_enabled() {
+            self.error(
+                &decl.span,
+                format!(
+                    "constraint `{}` is experimental RAD Causal Laws syntax",
+                    decl.name
+                ),
+                Some("Pass `--experimental-laws` to enable RFC-0002 syntax".into()),
+            );
+        }
+        let name = self.resolve_canonical_name(&decl.name);
+        let Some(info) = self.constraints.get(&name).cloned() else {
+            return;
+        };
+        let Some(component) = self.components.get(&info.attached_component).cloned() else {
+            self.error(
+                &decl.span,
+                format!(
+                    "Constraint '{}' is attached to unknown component '{}'",
+                    decl.name, decl.component_name
+                ),
+                None,
+            );
+            return;
+        };
+        if component.file_id != decl.span.file {
+            self.error(
+                &decl.span,
+                format!(
+                    "Constraint '{}' must be declared in the same module as component '{}'",
+                    decl.name, decl.component_name
+                ),
+                Some("Imported modules cannot attach invariants to foreign components".into()),
+            );
+        }
+        let mut seen = HashSet::new();
+        for watch in &decl.watches {
+            let resolved = self.resolve_canonical_name(watch);
+            if resolved == info.attached_component {
+                self.error(
+                    &decl.span,
+                    format!(
+                        "Constraint '{}' watches its attached component '{}' twice",
+                        decl.name, watch
+                    ),
+                    Some("The attached component is already an implicit trigger".into()),
+                );
+            }
+            if !seen.insert(resolved.clone()) {
+                self.error(
+                    &decl.span,
+                    format!("Constraint '{}' has duplicate watch '{}'", decl.name, watch),
+                    None,
+                );
+            }
+            if !self.components.contains_key(&resolved) {
+                self.error(
+                    &decl.span,
+                    format!(
+                        "Constraint '{}' watches unknown component '{}'",
+                        decl.name, watch
+                    ),
+                    None,
+                );
+            }
+        }
+        if let Some(reason) = self.find_block_readonly_breach(&decl.body) {
+            self.error(
+                &decl.span,
+                format!(
+                    "constraint `{}` cannot perform this effect: {}",
+                    decl.name, reason
+                ),
+                Some("Constraints only read the immutable base and complete candidate".into()),
+            );
+        }
+        let saved_fn = self.current_fn_name.replace(decl.name.clone());
+        let saved_returns = std::mem::take(&mut self.current_fn_returns);
+        self.push_scope();
+        {
+            let scope = self.scopes.last_mut().unwrap();
+            scope.effect_context = EffectSet::single(Effect::ReadECS);
+            scope.causal_context = CausalContext::Constraint {
+                name: name.clone(),
+                attached_component: info.attached_component.clone(),
+                subject_param: decl.subject_param.clone(),
+                proposed_param: decl.proposed_param.clone(),
+                watches: info.watches.clone(),
+            };
+        }
+        self.define(
+            &decl.subject_param,
+            Ty::EntityId,
+            false,
+            decl.span.clone(),
+            false,
+            false,
+        );
+        self.define(
+            &decl.proposed_param,
+            Ty::Component(info.attached_component),
+            false,
+            decl.span.clone(),
+            false,
+            false,
+        );
+        self.check_block(&decl.body);
+        self.pop_scope();
+        self.current_fn_name = saved_fn;
+        self.current_fn_returns = saved_returns;
+    }
+
+    pub(super) fn check_require_stmt(&mut self, stmt: &RequireStmt) {
+        if !matches!(
+            self.scopes.last().map(|scope| &scope.causal_context),
+            Some(CausalContext::Constraint { .. })
+        ) {
+            self.error(
+                &stmt.span,
+                "`require ... else \"code\"` is only valid inside a constraint".into(),
+                None,
+            );
+        }
+        let condition = self.check_expr(&stmt.condition);
+        if condition != Ty::Bool && condition != Ty::Any {
+            self.error(
+                stmt.condition.span(),
+                format!("constraint requirement must be bool, got {condition}"),
+                None,
+            );
+        }
+        if stmt.code.is_empty()
+            || !stmt.code.bytes().all(|byte| {
+                byte.is_ascii_lowercase() || byte.is_ascii_digit() || b"._-".contains(&byte)
+            })
+        {
+            self.error(
+                &stmt.span,
+                format!("constraint violation code '{}' is not stable", stmt.code),
+                Some("Use lowercase ASCII letters, digits, '.', '_' or '-'".into()),
+            );
+        }
+    }
+
+    pub(super) fn check_constraint_read_call(
+        &mut self,
+        read_kind: &str,
+        args: &[Expr],
+        span: &Span,
+    ) -> Option<Ty> {
+        if read_kind != "base" && read_kind != "candidate" {
+            return None;
+        }
+        let context = self.scopes.last().unwrap().causal_context.clone();
+        let CausalContext::Constraint {
+            name,
+            attached_component,
+            subject_param,
+            watches,
+            ..
+        } = context
+        else {
+            self.error(
+                span,
+                format!("`{read_kind}` is only valid inside a constraint"),
+                None,
+            );
+            for arg in args {
+                self.check_expr(arg);
+            }
+            return Some(Ty::Any);
+        };
+        if args.len() != 2 {
+            self.error(
+                span,
+                format!("`{read_kind}` expects (subject, Component)"),
+                None,
+            );
+            for arg in args {
+                self.check_expr(arg);
+            }
+            return Some(Ty::Any);
+        }
+        if !matches!(&args[0], Expr::Ident(subject, _) if subject == &subject_param) {
+            self.error(
+                args[0].span(),
+                format!("constraint `{name}` may only read its current subject `{subject_param}`"),
+                Some("RFC-0002 v0 permits same-entity candidate dependencies only".into()),
+            );
+        }
+        self.check_expr(&args[0]);
+        let Expr::Ident(component, component_span) = &args[1] else {
+            self.error(
+                args[1].span(),
+                format!("`{read_kind}` expects a component type as its second argument"),
+                None,
+            );
+            return Some(Ty::Any);
+        };
+        let component = self.resolve_canonical_name(component);
+        if !self.components.contains_key(&component) {
+            self.error(
+                component_span,
+                format!("`{read_kind}` references unknown component '{component}'"),
+                None,
+            );
+            return Some(Ty::Any);
+        }
+        if component != attached_component && !watches.contains(&component) {
+            self.error(
+                component_span,
+                format!(
+                    "constraint `{name}` reads `{component}` without declaring `watches {component}`"
+                ),
+                Some("Explicit watches make candidate invalidation auditable".into()),
+            );
+        }
+        Some(Ty::Component(component))
     }
 
     pub(super) fn check_settle_stmt(&mut self, stmt: &SettleStmt) {
@@ -465,6 +714,7 @@ impl Checker {
             ),
             (CausalContext::Law(name), Stmt::Return(ret))
             | (CausalContext::Resolver { name, .. }, Stmt::Return(ret))
+            | (CausalContext::Constraint { name, .. }, Stmt::Return(ret))
                 if ret.value.is_some() && !inside_anonymous_function =>
             {
                 self.error(

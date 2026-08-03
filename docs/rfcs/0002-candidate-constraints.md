@@ -1,6 +1,6 @@
 # RFC-0002: Candidate Constraints—Order-Independent Settlement Validation
 
-- **Status:** Draft
+- **Status:** Implemented experimentally
 - **Product name:** RAD Causal Laws
 - **Paradigm:** World-Law Programming
 - **Author:** peteracs
@@ -538,15 +538,18 @@ Every invocation receives an isolated deterministic resource contract:
 
 ```text
 fuel_per_invocation
+max_heap_bytes_per_invocation
 max_violations_per_invocation
 max_violations_per_settlement
 max_serialized_outcome_bytes
 ```
 
 All limits are finite, immutable for the settlement, exposed through the
-runtime capability profile, and included in attempt-replay metadata. Hosts may
-choose a supported profile before execution; changing it creates a different
-attempt contract rather than a nondeterministic replay of the same attempt.
+runtime capability profile, and included in attempt-replay metadata. The
+serialized-outcome limit measures the exact canonical UTF-8 rejection bytes,
+including escaping and delimiters. Hosts may choose a supported profile before
+execution; changing it creates a different attempt contract rather than a
+nondeterministic replay of the same attempt.
 
 A constraint can fail while evaluating—for example, a base `require(entity,
 Component)` may find a missing component. Ordinary errors and per-invocation
@@ -779,7 +782,10 @@ Once implemented, capability negotiation reports:
   "causal_laws": 1,
   "causal_constraints": 1,
   "constraint_limits": {
+    "version": 1,
+    "fingerprint": "<sha256>",
     "fuel_per_invocation": 100000,
+    "max_heap_bytes_per_invocation": 1048576,
     "max_violations_per_invocation": 256,
     "max_violations_per_settlement": 4096,
     "max_serialized_outcome_bytes": 1048576
@@ -1185,9 +1191,9 @@ The product thesis to protect is:
 > A constraint is not another resolver or schedule stage. It is an independent
 > judgment over one complete causal candidate.
 
-## Draft review status
+## Implementation status
 
-The initial semantic blockers are resolved normatively in this draft:
+The initial semantic blockers are resolved normatively:
 
 1. `candidate` is the v0 contextual read spelling.
 2. Stable violation codes are the v0 user-authored payload; optional human
@@ -1200,7 +1206,12 @@ The initial semantic blockers are resolved normatively in this draft:
 7. Internal rejection data is capability-filtered and deterministically
    redacted for each recipient.
 
-RFC-0002 remains **Draft** until its executable semantic fixtures, limit-profile
-handshake, typed host API prototype, and sandbox redaction fixtures are reviewed.
-Acceptance does not depend on adding projection, priorities, fixed points, or
-parallel execution; all remain out of scope.
+The executable fixtures live under `tests/fixtures/causal-constraints/`; the
+versioned limit-profile handshake is exposed by `runtime_features()`; the Rust
+host surface returns typed `VmFailure` values; WASM returns tagged rejection
+JSON; and capability-redaction, failed-attempt replay, permutation, fuel,
+atomicity, and reusable-VM regressions are part of the implementation suite.
+The movement vertical slice is in `projects/dogfood/causal-constraints/`.
+
+Projection, priorities, fixed points, and parallel constraint execution remain
+out of scope and require follow-on RFCs.

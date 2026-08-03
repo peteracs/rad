@@ -90,12 +90,46 @@ fn fixed_operand_bytes(op: Op) -> Option<usize> {
     match op {
         Closure | RunSchedule | RunScheduleSerial => None,
 
-        Const | DefGlobal | GetGlobal | SetGlobal | GetLocal | SetLocal | MoveLocal
-        | GetUpvalue | SetUpvalue | Jump | JumpIfFalse | JumpBack | MakeList | MakeTuple
-        | MakeMap | GetField | SetField | EcsGet | EcsHas | RunSystem | Transition
-        | GetFieldSlot | SetFieldSlot | ListPushLocal | ListSetLocal | ListGetLocal | IsVariant
-        | EqJF | NeqJF | LtJF | LteJF | GtJF | GteJF | EqConst | NeqConst | LogicalLoad
-        | ProposeIntent => Some(2),
+        Const
+        | DefGlobal
+        | GetGlobal
+        | SetGlobal
+        | GetLocal
+        | SetLocal
+        | MoveLocal
+        | GetUpvalue
+        | SetUpvalue
+        | Jump
+        | JumpIfFalse
+        | JumpBack
+        | MakeList
+        | MakeTuple
+        | MakeMap
+        | GetField
+        | SetField
+        | EcsGet
+        | EcsHas
+        | RunSystem
+        | Transition
+        | GetFieldSlot
+        | SetFieldSlot
+        | ListPushLocal
+        | ListSetLocal
+        | ListGetLocal
+        | IsVariant
+        | EqJF
+        | NeqJF
+        | LtJF
+        | LteJF
+        | GtJF
+        | GteJF
+        | EqConst
+        | NeqConst
+        | LogicalLoad
+        | ProposeIntent
+        | ReadBaseComponent
+        | ReadCandidateComponent
+        | RequireConstraint => Some(2),
 
         GetLocal2 | EqConstJF | NeqConstJF | IncLocal | ListGetLL | MakeComp | MakeCompSlot
         | InitResource | MakeState | MatchState => Some(4),
@@ -306,7 +340,10 @@ fn constant_indices(
         | Op::IsVariant
         | Op::MakeCompSlot
         | Op::LoadColumn
-        | Op::ProposeIntent => vec![one(at)?],
+        | Op::ProposeIntent
+        | Op::ReadBaseComponent
+        | Op::ReadCandidateComponent
+        | Op::RequireConstraint => vec![one(at)?],
         Op::EqConstJF | Op::NeqConstJF | Op::ConstArith => vec![one(at)?],
         Op::IncLocal => vec![one(at + 2)?],
         Op::MakeState | Op::MakeVariant => vec![one(at)?, one(at + 2)?],

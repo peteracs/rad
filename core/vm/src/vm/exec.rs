@@ -198,7 +198,16 @@ impl VM {
             && self.get_world().get_component(entity_id, ctype).is_some()
     }
 
-    pub(crate) fn run_frames(&mut self, min_depth: usize) -> Result<(), String> {
+    pub(crate) fn run_frames(
+        &mut self,
+        min_depth: usize,
+    ) -> Result<(), crate::constraint_types::VmFailure> {
+        #[allow(non_snake_case)]
+        fn Err<T, E: Into<crate::constraint_types::VmFailure>>(
+            error: E,
+        ) -> Result<T, crate::constraint_types::VmFailure> {
+            Result::Err(error.into())
+        }
         loop {
             if self.frames.len() <= min_depth {
                 return Ok(());
@@ -270,7 +279,7 @@ impl VM {
                 Op::Mul => {
                     let b = self.pop()?;
                     let a = self.pop()?;
-                    let out = helpers::binary_mul(&mut self.gc, a, b)?;
+                    let out = helpers::binary_mul(&mut self.gc, a, b, self.mem_limit)?;
                     self.push(out);
                 }
                 Op::Div => {
@@ -605,7 +614,7 @@ impl VM {
                     let out = match Op::from_byte(arith)? {
                         Op::Add => helpers::binary_add(&mut self.gc, a, b)?,
                         Op::Sub => helpers::binary_sub(&mut self.gc, a, b)?,
-                        Op::Mul => helpers::binary_mul(&mut self.gc, a, b)?,
+                        Op::Mul => helpers::binary_mul(&mut self.gc, a, b, self.mem_limit)?,
                         Op::Div => helpers::binary_div(&mut self.gc, a, b)?,
                         Op::Mod => helpers::binary_mod(&mut self.gc, a, b)?,
                         Op::BitAnd => helpers::binary_bitand(&mut self.gc, a, b)?,
@@ -1290,6 +1299,26 @@ impl VM {
                     let entity = self.pop()?;
                     self.stage_candidate(entity, component)?;
                 }
+                Op::ReadBaseComponent | Op::ReadCandidateComponent => {
+                    let candidate = op == Op::ReadCandidateComponent;
+                    let component_idx = self.read_u16()? as usize;
+                    let component = helpers::constant_string(self.current_chunk(), component_idx)?;
+                    let entity = self.pop()?;
+                    let value = self.read_constraint_component(entity, &component, candidate)?;
+                    self.push(value);
+                }
+                Op::RequireConstraint => {
+                    let code_idx = self.read_u16()? as usize;
+                    let code = helpers::constant_string(self.current_chunk(), code_idx)?;
+                    let condition = self.pop()?;
+                    let frame = self.current_frame();
+                    let line = self
+                        .chunks
+                        .get(frame.chunk_id)
+                        .and_then(|chunk| chunk.lines.get(frame.ip.saturating_sub(3)).copied())
+                        .unwrap_or(0);
+                    self.require_constraint(condition, code, line)?;
+                }
 
                 Op::MatchState => {
                     let pattern_idx = self.read_u16()? as usize;
@@ -1594,7 +1623,10 @@ impl VM {
                     self.exec_vec_binary(helpers::binary_sub)?;
                 }
                 Op::VecMul => {
-                    self.exec_vec_binary(helpers::binary_mul)?;
+                    let allocation_limit = self.mem_limit;
+                    self.exec_vec_binary(|gc, lhs, rhs| {
+                        helpers::binary_mul(gc, lhs, rhs, allocation_limit)
+                    })?;
                 }
                 Op::VecDiv => {
                     self.exec_vec_binary(helpers::binary_div)?;
@@ -2275,7 +2307,8 @@ impl VM {
                 captures: captures_arc.clone(),
                 system_writeback: None,
             });
-            self.run_frames(saved_depth)?;
+            self.run_frames(saved_depth)
+                .map_err(|error| error.to_string())?;
 
             let keep = self.pop()?.is_truthy();
             self.stack.truncate(stack_base);
@@ -2466,7 +2499,8 @@ impl VM {
             captures: None,
             system_writeback: None,
         });
-        self.run_frames(saved_depth)?;
+        self.run_frames(saved_depth)
+            .map_err(|error| error.to_string())?;
         let value = self.pop()?;
         self.stack.truncate(stack_base);
         Ok(value.is_truthy())
@@ -2843,7 +2877,8 @@ impl VM {
                     captures: None,
                     system_writeback: None,
                 });
-                self.run_frames(saved_depth)?;
+                self.run_frames(saved_depth)
+                    .map_err(|error| error.to_string())?;
                 let guard_passed = self.once_guard_passed;
                 self.once_guard_passed = saved_guard_flag;
                 if is_once && (!has_guard || guard_passed) {
@@ -2973,7 +3008,8 @@ impl VM {
                     mutable_resources,
                 }),
             });
-            self.run_frames(saved_depth)?;
+            self.run_frames(saved_depth)
+                .map_err(|error| error.to_string())?;
             self.stack.truncate(stack_base);
         }
         Ok(())
@@ -3198,6 +3234,15 @@ impl VM {
     }
 
     pub(crate) fn call_value(&mut self, callee: &Value, args: Vec<Value>) -> Result<Value, String> {
+        self.call_value_detailed(callee, args)
+            .map_err(|failure| failure.render_compat())
+    }
+
+    pub(crate) fn call_value_detailed(
+        &mut self,
+        callee: &Value,
+        args: Vec<Value>,
+    ) -> Result<Value, crate::constraint_types::VmFailure> {
         // A host call starts with no active frames and owns any settlement it
         // opens. If execution escapes before EndSettlement, unwind it here.
         // Nested VM calls (notably resolver invocation) preserve both their
@@ -3207,7 +3252,7 @@ impl VM {
         let stack_depth = self.stack.len();
         let next_frame_id_before = self.next_frame_id;
         let owns_execution_boundary = frame_depth == 0;
-        let result = self.call_value_inner(callee, args);
+        let result = self.call_value_inner_detailed(callee, args);
         let result = if owns_execution_boundary {
             self.enforce_settlement_balance(result)
         } else {
@@ -3221,7 +3266,17 @@ impl VM {
         result
     }
 
-    fn call_value_inner(&mut self, callee: &Value, args: Vec<Value>) -> Result<Value, String> {
+    fn call_value_inner_detailed(
+        &mut self,
+        callee: &Value,
+        args: Vec<Value>,
+    ) -> Result<Value, crate::constraint_types::VmFailure> {
+        #[allow(non_snake_case)]
+        fn Err<T, E: Into<crate::constraint_types::VmFailure>>(
+            error: E,
+        ) -> Result<T, crate::constraint_types::VmFailure> {
+            Result::Err(error.into())
+        }
         if self.frames.len() >= MAX_CALL_DEPTH {
             return Err(format!(
                 "Stack overflow: exceeded {} call frames",
@@ -3248,7 +3303,7 @@ impl VM {
                 system_writeback: None,
             });
             self.run_frames(saved_depth)?;
-            self.pop()
+            self.pop().map_err(Into::into)
         } else if let Some(cv) = callee.as_closure() {
             if cv.chunk_id >= self.chunks.len() {
                 return Err(format!("Invalid closure chunk {}", cv.chunk_id));
@@ -3269,9 +3324,9 @@ impl VM {
                 system_writeback: None,
             });
             self.run_frames(saved_depth)?;
-            self.pop()
+            self.pop().map_err(Into::into)
         } else if let Some(builtin) = callee.as_builtin() {
-            self.call_builtin(builtin, args)
+            self.call_builtin(builtin, args).map_err(Into::into)
         } else if let Some(native) = callee.as_native_fn() {
             if self.settlement.is_some() {
                 return Err(
@@ -3423,10 +3478,10 @@ impl VM {
         Ok(())
     }
 
-    fn exec_vec_binary(
-        &mut self,
-        op_fn: fn(&mut crate::gc::GcHeap, Value, Value) -> Result<Value, String>,
-    ) -> Result<(), String> {
+    fn exec_vec_binary<F>(&mut self, mut op_fn: F) -> Result<(), String>
+    where
+        F: FnMut(&mut crate::gc::GcHeap, Value, Value) -> Result<Value, String>,
+    {
         let rhs = self.pop()?;
         let lhs = self.pop()?;
 

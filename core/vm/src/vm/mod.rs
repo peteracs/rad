@@ -3,7 +3,9 @@ pub(crate) use builtins_impl::value_to_json;
 mod exec;
 mod helpers;
 mod settlement;
-pub(crate) use settlement::{IntentRuntimeInfo, ResolverRuntimeInfo, SettlementContext};
+pub(crate) use settlement::{
+    ConstraintRuntimeInfo, IntentRuntimeInfo, ResolverRuntimeInfo, SettlementContext,
+};
 #[cfg(not(target_arch = "wasm32"))]
 mod io_pool;
 mod parallel;
@@ -53,6 +55,7 @@ pub(crate) struct VmSharedState {
     pub(crate) systems: Arc<HashMap<String, SystemRuntimeInfo>>,
     pub(crate) intent_registry: Arc<HashMap<String, IntentRuntimeInfo>>,
     pub(crate) resolver_registry: Arc<HashMap<String, ResolverRuntimeInfo>>,
+    pub(crate) constraint_registry: Arc<Vec<ConstraintRuntimeInfo>>,
     pub(crate) component_layouts: Arc<HashMap<String, Arc<Vec<String>>>>,
     pub(crate) component_field_types: ComponentFieldTypes,
     /// Declared schema versions (`component X v2`), nonzero entries only
@@ -64,6 +67,7 @@ pub(crate) struct VmSharedState {
     pub(crate) suppress_output: bool,
     pub(crate) profile_copies: bool,
     pub(crate) causal_value_limits: crate::CausalValueLimits,
+    pub(crate) constraint_limit_profile: crate::constraint_types::ConstraintLimitProfile,
 }
 
 pub struct CallFrame {
@@ -163,9 +167,11 @@ pub struct VM {
     pub systems: Arc<HashMap<String, SystemRuntimeInfo>>,
     pub(crate) intent_registry: Arc<HashMap<String, IntentRuntimeInfo>>,
     pub(crate) resolver_registry: Arc<HashMap<String, ResolverRuntimeInfo>>,
+    pub(crate) constraint_registry: Arc<Vec<ConstraintRuntimeInfo>>,
     pub(crate) settlement: Option<SettlementContext>,
     pub(crate) next_settlement_id: u64,
     pub(crate) causal_value_limits: crate::CausalValueLimits,
+    pub(crate) constraint_limit_profile: crate::constraint_types::ConstraintLimitProfile,
     /// Schema migrations (#5): component/resource name → compiled
     /// `migrate X(old)` chunk, invoked by `load_world` on shape drift.
     pub(crate) migrations: HashMap<String, MigrationEntry>,
@@ -445,6 +451,7 @@ impl VM {
             systems: self.systems.clone(),
             intent_registry: self.intent_registry.clone(),
             resolver_registry: self.resolver_registry.clone(),
+            constraint_registry: self.constraint_registry.clone(),
             component_layouts: self.component_layouts.clone(),
             component_field_types: self.component_field_types.clone(),
             component_versions: self.component_versions.clone(),
@@ -454,6 +461,7 @@ impl VM {
             suppress_output: self.suppress_output,
             profile_copies: self.profile_copies,
             causal_value_limits: self.causal_value_limits,
+            constraint_limit_profile: self.constraint_limit_profile.clone(),
         }
     }
 
@@ -471,9 +479,11 @@ impl VM {
             systems: shared.systems,
             intent_registry: shared.intent_registry,
             resolver_registry: shared.resolver_registry,
+            constraint_registry: shared.constraint_registry,
             settlement: None,
             next_settlement_id: 1,
             causal_value_limits: shared.causal_value_limits,
+            constraint_limit_profile: shared.constraint_limit_profile,
             migrations: HashMap::new(),
             events_current: Vec::new(),
             events_next: Vec::new(),
@@ -548,6 +558,7 @@ impl VM {
             self.systems = Arc::clone(&shared.systems);
             self.intent_registry = Arc::clone(&shared.intent_registry);
             self.resolver_registry = Arc::clone(&shared.resolver_registry);
+            self.constraint_registry = Arc::clone(&shared.constraint_registry);
             self.component_layouts = Arc::clone(&shared.component_layouts);
             self.component_field_types = Arc::clone(&shared.component_field_types);
             self.component_versions = Arc::clone(&shared.component_versions);
@@ -566,6 +577,7 @@ impl VM {
         self.globals = shared.globals.clone();
         self.suppress_output = shared.suppress_output;
         self.profile_copies = shared.profile_copies;
+        self.constraint_limit_profile = shared.constraint_limit_profile.clone();
         self.stack.clear();
         self.frames.clear();
         self.events_next.clear();
@@ -606,9 +618,11 @@ impl VM {
             systems: Arc::new(HashMap::new()),
             intent_registry: Arc::new(HashMap::new()),
             resolver_registry: Arc::new(HashMap::new()),
+            constraint_registry: Arc::new(Vec::new()),
             settlement: None,
             next_settlement_id: 1,
             causal_value_limits: crate::CausalValueLimits::default(),
+            constraint_limit_profile: crate::constraint_types::ConstraintLimitProfile::default(),
             migrations: HashMap::new(),
             events_current: Vec::new(),
             events_next: Vec::new(),
@@ -1147,6 +1161,22 @@ impl VM {
                     },
                 );
             }
+            let constraints = Arc::make_mut(&mut self.constraint_registry);
+            constraints.extend(
+                result
+                    .constraints
+                    .iter()
+                    .map(|constraint| ConstraintRuntimeInfo {
+                        name: constraint.name.clone(),
+                        attached_component: constraint.attached_component.clone(),
+                        watches: Arc::new(constraint.watches.clone()),
+                        global_slot: constraint.global_slot,
+                    }),
+            );
+            constraints.sort_by(|left, right| {
+                (&left.name, &left.attached_component)
+                    .cmp(&(&right.name, &right.attached_component))
+            });
         }
         {
             let sm = Arc::make_mut(&mut self.state_machines);
@@ -1252,9 +1282,13 @@ impl VM {
         }
     }
 
-    pub fn run(&mut self, chunk_id: usize) -> Result<(), String> {
+    /// Execute a chunk and preserve structured settlement rejection data.
+    pub fn run_detailed(
+        &mut self,
+        chunk_id: usize,
+    ) -> Result<(), crate::constraint_types::VmFailure> {
         if chunk_id >= self.chunks.len() {
-            return Err(format!("Invalid chunk id {}", chunk_id));
+            return Err(format!("Invalid chunk id {}", chunk_id).into());
         }
         // A previous public boundary must already have enforced this
         // invariant. Restore transaction-local state defensively instead of
@@ -1284,12 +1318,14 @@ impl VM {
             captures: None,
             system_writeback: None,
         });
-        let result = self.run_frames(0).map_err(|e| {
-            if e.starts_with("[line") {
-                e
-            } else {
-                self.runtime_error(e)
+        let result = self.run_frames(0).map_err(|failure| match failure {
+            crate::constraint_types::VmFailure::Runtime(mut error) => {
+                if !error.message.starts_with("[line") {
+                    error.message = self.runtime_error(error.message);
+                }
+                crate::constraint_types::VmFailure::Runtime(error)
             }
+            other => other,
         });
         let result = self.enforce_settlement_balance(result);
         if result.is_err() {
@@ -1326,6 +1362,13 @@ impl VM {
             }
         }
         result
+    }
+
+    /// Compatibility execution API. New embedders should prefer
+    /// [`Self::run_detailed`] so rejected settlements remain structured.
+    pub fn run(&mut self, chunk_id: usize) -> Result<(), String> {
+        self.run_detailed(chunk_id)
+            .map_err(|failure| failure.render_compat())
     }
 
     pub(crate) fn allocate_task_id(&mut self) -> u64 {
@@ -1382,7 +1425,7 @@ impl VM {
             })
             .collect::<Vec<_>>();
         format!(
-            "chunks={};world={};ledger={:?};events={:?}|{:?}|{:?}|{:?};emit_ids={:?}|{:?};globals={:?};output={:?}|{:?};rng={};tasks={:?};next_task={};pending_io={:?};async={};timeline={};event_log={:?};commands={:?};settlement={};next_frame={};next_settlement={};frames={:?};stack={:?};sandbox={:?}|{:?}|{:?}|{};trace={:?}|{};cause={:?}|{};once={}",
+            "chunks={};world={};ledger={:?};events={:?}|{:?}|{:?}|{:?};emit_ids={:?}|{:?};globals={:?};output={:?}|{:?};rng={};fuel={};mem={};tasks={:?};next_task={};pending_io={:?};async={};timeline={};event_log={:?};commands={:?};settlement={};next_frame={};next_settlement={};frames={:?};stack={:?};sandbox={:?}|{:?}|{:?}|{};trace={:?}|{};cause={:?}|{};once={}",
             self.chunks.len(),
             self.world.content_digest(),
             self.ledger,
@@ -1396,6 +1439,8 @@ impl VM {
             self.print_buffer,
             self.eprint_buffer,
             self.rng_state,
+            self.fuel,
+            self.mem_limit,
             self.tasks,
             self.next_task_id,
             pending_io,

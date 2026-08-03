@@ -1,0 +1,6 @@
+// flags: --experimental-laws
+// error: `require ... else` is only valid inside a constraint
+
+fn invalid() {
+    require true else "invalid.context"
+}

@@ -417,6 +417,9 @@ impl Checker {
                             queue.push(VisitItem::Expr(expr));
                         }
                     }
+                    Stmt::Require(requirement) => {
+                        queue.push(VisitItem::Expr(&requirement.condition));
+                    }
                     Stmt::Match(m) => {
                         queue.push(VisitItem::Expr(&m.subject));
                         for arm in &m.cases {

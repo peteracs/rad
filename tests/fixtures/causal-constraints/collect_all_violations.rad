@@ -1,0 +1,18 @@
+// flags: --experimental-laws
+// error: position.above_max
+// error: position.even_forbidden
+
+component Position { x: int = 0 }
+intent Move { key target: entity, amount: int }
+law Push(target: entity, amount: int) { propose Move { target: target, amount: amount } }
+resolver ResolveMove for Move(target, proposals) {
+    next(target, Position { x: proposals[0].amount })
+}
+constraint WorldBounds for Position(subject, proposed) {
+    require proposed.x <= 10 else "position.above_max"
+}
+constraint OddPosition for Position(subject, proposed) {
+    require proposed.x % 2 != 0 else "position.even_forbidden"
+}
+entity hero { Position {} }
+settle { Push(hero, 20) }

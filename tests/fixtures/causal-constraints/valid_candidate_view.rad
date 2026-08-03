@@ -1,0 +1,19 @@
+// flags: --experimental-laws
+// expect: 4
+
+component Position { x: int = 0 }
+intent Move { key target: entity, amount: int }
+law Push(target: entity, amount: int) {
+    propose Move { target: target, amount: amount }
+}
+resolver ResolveMove for Move(target, proposals) {
+    let old = require(target, Position)
+    next(target, Position { x: old.x + proposals[0].amount })
+}
+constraint ForwardOnly for Position(subject, proposed) {
+    let old = base(subject, Position)
+    require proposed.x >= old.x else "position.backwards"
+}
+entity hero { Position {} }
+settle { Push(hero, 4) }
+print(require(hero, Position).x)

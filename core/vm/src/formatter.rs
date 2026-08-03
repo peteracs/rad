@@ -16,6 +16,7 @@ fn is_decl_keyword(word: &str) -> bool {
             | "intent"
             | "law"
             | "resolver"
+            | "constraint"
     )
 }
 
@@ -858,6 +859,16 @@ mod tests {
         assert!(result.contains("len(xs) < n"), "got: {}", result);
         assert!(result.contains("8 >> 2"), "got: {}", result);
         assert!(result.contains("x < y > z"), "got: {}", result);
+    }
+
+    #[test]
+    fn formats_candidate_constraint_declarations_idempotently() {
+        let source = "constraint WorldBounds for Position(subject, proposed) watches Velocity {\nrequire proposed.x >= 0 else \"position.below_min\"\n}\n";
+        let result = format_rad(source);
+        assert!(result
+            .contains("constraint WorldBounds for Position(subject, proposed) watches Velocity {"));
+        assert!(result.contains("\n    require proposed.x >= 0 else \"position.below_min\"\n"));
+        assert_eq!(format_rad(&result), result);
     }
 
     #[test]

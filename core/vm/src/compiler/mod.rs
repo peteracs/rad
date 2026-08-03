@@ -158,6 +158,14 @@ pub struct ResolverChunkInfo {
     pub global_slot: u16,
 }
 
+#[derive(Debug, Clone)]
+pub struct ConstraintChunkInfo {
+    pub name: String,
+    pub attached_component: String,
+    pub watches: Vec<String>,
+    pub global_slot: u16,
+}
+
 pub struct CompileResult {
     pub(crate) chunks: Vec<Chunk>,
     pub systems: Vec<SystemChunkInfo>,
@@ -166,6 +174,7 @@ pub struct CompileResult {
     pub state_machines: Vec<StateMachineInfo>,
     pub intents: Vec<IntentChunkInfo>,
     pub resolvers: Vec<ResolverChunkInfo>,
+    pub constraints: Vec<ConstraintChunkInfo>,
     pub(crate) layout_analysis: layout_analysis::LayoutAnalysis,
     pub(crate) materialization_plan: materialization::MaterializationPlan,
     pub component_layouts: HashMap<String, Vec<String>>,
@@ -219,6 +228,7 @@ pub struct Compiler {
     pub(crate) state_machines: Vec<StateMachineInfo>,
     pub(crate) intent_types: HashMap<String, (String, Vec<String>)>,
     pub(crate) resolvers: Vec<ResolverChunkInfo>,
+    pub(crate) constraints: Vec<ConstraintChunkInfo>,
     pub(crate) temp_counter: u32,
     pub(crate) global_mutability: HashMap<String, bool>,
     pub(crate) for_iter_kinds: HashMap<NodeId, ForIterKind>,
@@ -333,6 +343,7 @@ impl Compiler {
             state_machines: Vec::new(),
             intent_types: HashMap::new(),
             resolvers: Vec::new(),
+            constraints: Vec::new(),
             temp_counter: 0,
             global_mutability: HashMap::new(),
             for_iter_kinds: HashMap::new(),
@@ -405,6 +416,7 @@ impl Compiler {
             Decl::Intent(i) => Some(&i.name),
             Decl::Law(l) => Some(&l.name),
             Decl::Resolver(r) => Some(&r.name),
+            Decl::Constraint(c) => Some(&c.name),
             Decl::Entity(e) => Some(&e.name),
             Decl::State(s) => Some(&s.name),
             Decl::System(s) => Some(&s.name),
@@ -425,6 +437,7 @@ impl Compiler {
             Decl::Intent(i) => i.is_pub,
             Decl::Law(l) => l.is_pub,
             Decl::Resolver(r) => r.is_pub,
+            Decl::Constraint(c) => c.is_pub,
             Decl::Entity(e) => e.is_pub,
             Decl::State(s) => s.is_pub,
             Decl::System(s) => s.is_pub,
@@ -714,12 +727,18 @@ impl Compiler {
             self.predeclare_decl_metadata(decl);
         }
         for decl in &program.declarations {
-            if matches!(decl, Decl::Fn(_) | Decl::Law(_) | Decl::Resolver(_)) {
+            if matches!(
+                decl,
+                Decl::Fn(_) | Decl::Law(_) | Decl::Resolver(_) | Decl::Constraint(_)
+            ) {
                 self.compile_decl(decl)?;
             }
         }
         for decl in &program.declarations {
-            if !matches!(decl, Decl::Fn(_) | Decl::Law(_) | Decl::Resolver(_)) {
+            if !matches!(
+                decl,
+                Decl::Fn(_) | Decl::Law(_) | Decl::Resolver(_) | Decl::Constraint(_)
+            ) {
                 self.compile_decl(decl)?;
             }
         }
@@ -911,6 +930,7 @@ impl Compiler {
                 })
                 .collect(),
             resolvers: self.resolvers,
+            constraints: self.constraints,
             layout_analysis,
             materialization_plan,
             component_layouts,

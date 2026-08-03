@@ -4,9 +4,13 @@ pub mod builtins;
 mod bytecode_verifier;
 pub use bytecode_verifier::VerificationError;
 mod bytecode_effects;
+mod canonical_value;
 mod causal_value;
 pub use causal_value::{CausalValueError, CausalValueLimits};
 pub mod causality;
+#[doc(hidden)]
+pub mod constraint_reference;
+pub mod constraint_types;
 pub mod host_value;
 pub mod merge;
 pub mod radpack;

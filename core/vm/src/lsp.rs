@@ -397,6 +397,22 @@ impl LanguageServer for LspBackend {
                     range: None,
                 }));
             }
+            if let Some(constraint) = checker.constraints.get(&word) {
+                let mut watches = constraint.watches.iter().cloned().collect::<Vec<_>>();
+                watches.sort();
+                let watches = if watches.is_empty() {
+                    String::new()
+                } else {
+                    format!(" watches {}", watches.join(", "))
+                };
+                return Ok(Some(Hover {
+                    contents: HoverContents::Scalar(MarkedString::String(format!(
+                        "```rad\nconstraint {} for {}(subject, proposed){}\n```",
+                        word, constraint.attached_component, watches
+                    ))),
+                    range: None,
+                }));
+            }
             if let Some(sys) = checker.systems.get(&word) {
                 return Ok(Some(Hover {
                     contents: HoverContents::Scalar(MarkedString::String(
@@ -573,6 +589,10 @@ impl LanguageServer for LspBackend {
                     crate::ast::Decl::State(s) => (Some(&s.name), Some(&s.span)),
                     crate::ast::Decl::System(s) => (Some(&s.name), Some(&s.span)),
                     crate::ast::Decl::Event(e) => (Some(&e.name), Some(&e.span)),
+                    crate::ast::Decl::Intent(i) => (Some(&i.name), Some(&i.span)),
+                    crate::ast::Decl::Law(l) => (Some(&l.name), Some(&l.span)),
+                    crate::ast::Decl::Resolver(r) => (Some(&r.name), Some(&r.span)),
+                    crate::ast::Decl::Constraint(c) => (Some(&c.name), Some(&c.span)),
                     crate::ast::Decl::Fn(f) => (Some(&f.name), Some(&f.span)),
                     crate::ast::Decl::Type(t) => (Some(&t.name), Some(&t.span)),
                     crate::ast::Decl::TypeAlias(a) => (Some(&a.name), Some(&a.span)),
@@ -877,6 +897,26 @@ impl LanguageServer for LspBackend {
                             label: name.clone(),
                             kind: Some(CompletionItemKind::FUNCTION),
                             detail: Some(format!("law({}) — settle only", params)),
+                            ..Default::default()
+                        });
+                    }
+                }
+                for (name, constraint) in &checker.constraints {
+                    if name.starts_with(&prefix) {
+                        let mut watches = constraint.watches.iter().cloned().collect::<Vec<_>>();
+                        watches.sort();
+                        let watches = if watches.is_empty() {
+                            String::new()
+                        } else {
+                            format!(" watches {}", watches.join(", "))
+                        };
+                        items.push(CompletionItem {
+                            label: name.clone(),
+                            kind: Some(CompletionItemKind::FUNCTION),
+                            detail: Some(format!(
+                                "constraint for {}{}",
+                                constraint.attached_component, watches
+                            )),
                             ..Default::default()
                         });
                     }

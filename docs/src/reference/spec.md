@@ -39,7 +39,7 @@ async  await  rec  pub  readonly  phase  update
 
 In **v0.5 DX compatibility mode**, `..` is recognized in `match` binding lists as a rest-binding marker.
 
-Note: some declaration keywords are accepted as contextual identifiers in identifier positions where parsing is unambiguous (for example, `entity`, `before`, `after`, and `update` can be used as variable names). `update` is a contextual keyword: `update(...)` starts an update statement only when followed by `(`; otherwise it parses as an identifier. The experimental Causal Laws words `intent`, `law`, `resolver`, `settle`, `propose`, `next`, and `key` are also contextual rather than reserved.
+Note: some declaration keywords are accepted as contextual identifiers in identifier positions where parsing is unambiguous (for example, `entity`, `before`, `after`, and `update` can be used as variable names). `update` is a contextual keyword: `update(...)` starts an update statement only when followed by `(`; otherwise it parses as an identifier. The experimental Causal Laws words `intent`, `law`, `resolver`, `constraint`, `watches`, `settle`, `propose`, `next`, `require`, `else`, and `key` are also contextual rather than reserved.
 
 ### 1.3 Literals
 
@@ -83,6 +83,8 @@ struct_decl    = "struct" IDENT "{" { field_def [ "," ] } "}" ;
 intent_decl    = "intent" IDENT "{" { [ "key" ] IDENT ":" type_expr [ "," ] } "}" ;
 law_decl       = "law" IDENT "(" [ typed_params ] ")" block ;
 resolver_decl  = "resolver" IDENT "for" IDENT "(" IDENT "," IDENT ")" block ;
+constraint_decl = "constraint" IDENT "for" IDENT "(" IDENT "," IDENT ")"
+                  [ "watches" IDENT { "," IDENT } ] block ;
 entity_decl    = "entity" IDENT "{" { component_entry [ "," ] } "}" ;
 entity_expr    = "entity" [ expr ] "{" { component_entry [ "," ] } "}" ;
 component_entry = component_init | expr ;
@@ -127,7 +129,7 @@ test_decl      = "test" ( IDENT | STRING ) [ "for" IDENT "in" expr { "," IDENT "
 block          = "{" { statement } "}" ;
 statement      = let_stmt | let_else_stmt | assign_stmt | if_stmt | while_stmt | for_stmt
                | return_stmt | emit_stmt | schedule_stmt | match_stmt | settle_stmt
-               | propose_stmt | next_stmt
+               | propose_stmt | next_stmt | constraint_require_stmt
                | "break" | "continue" | expr_stmt ;
 
 let_stmt       = "let" [ "unique" ] [ "mut" ] [ "rec" ] ( IDENT | "(" IDENT { "," IDENT } ")" ) [ ":" type_expr ] "=" expr ;
@@ -145,6 +147,7 @@ match_case     = match_pattern [ ( "when" | "if" ) expr ] "=>" ( block | expr ) 
 settle_stmt    = "settle" "{" { statement } "}" ;
 propose_stmt   = "propose" IDENT "{" { field_init [ "," ] } "}" ;
 next_stmt      = "next" "(" expr "," component_init ")" ;
+constraint_require_stmt = "require" expr "else" STRING ;
 match_pattern  = "_" | INT | FLOAT | STRING | "true" | "false"
                | "has" IDENT [ "(" IDENT ")" ]
                | IDENT [ "{" { IDENT [ ":" IDENT ] [ "," ] } [ ".." ] "}" | "(" IDENT ")" ] ;
@@ -1879,9 +1882,26 @@ failure discards all transient proposals and patches without changing the live
 world or provenance ledger. A conflict-free patch is applied to a copy-on-write
 world and adopted atomically.
 
+After resolver conflict checks, constraints attached to staged components (or
+their explicitly watched same-entity components) run once per constraint and
+subject. Every constraint reads the original base through `base(subject,
+Component)` and the complete candidate through `candidate(subject, Component)`.
+It can report stable-code violations with `require condition else "code"`, but
+cannot write, propose, emit, perform I/O, use nondeterminism, call native code,
+or observe another constraint outcome. Reads of non-attached components require
+an explicit `watches` declaration.
+
+All selected invocations run under isolated deterministic fuel, heap, value,
+and output limits. Their violations and evaluation failures are canonically
+ordered. Zero outcomes permit the atomic commit; any outcome rejects the patch
+without changing the live world or durable provenance. Constraints have no
+ordering, priorities, projection, correction, or first-error semantics.
+
 The complete v0 syntax, static restrictions, interoperability rules, and
 non-goals are specified by [RFC-0001](https://github.com/peteracs/rad/blob/main/docs/rfcs/0001-causal-settlements.md)
-and summarized in the [Causal Laws guide](../guide/causal-laws.md).
+and [RFC-0002](https://github.com/peteracs/rad/blob/main/docs/rfcs/0002-candidate-constraints.md),
+and summarized in the [Causal Laws](../guide/causal-laws.md) and
+[Candidate Constraints](../guide/candidate-constraints.md) guides.
 
 ---
 

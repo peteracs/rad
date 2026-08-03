@@ -21,6 +21,7 @@ impl Checker {
                 Decl::Intent(i) => self.register_intent(i),
                 Decl::Law(l) => self.register_law(l),
                 Decl::Resolver(r) => self.register_resolver(r),
+                Decl::Constraint(c) => self.register_constraint(c),
                 Decl::State(s) => {
                     self.register_state_machine(s);
                     self.define(&s.name, Ty::Any, false, s.span.clone(), s.is_pub, false);
@@ -836,6 +837,7 @@ impl Checker {
                         .iter()
                         .all(|(_, expr)| self.expr_is_conservatively_pure(expr))
             }
+            Stmt::Require(s) => self.expr_is_conservatively_pure(&s.condition),
             Stmt::Match(m) => {
                 self.expr_is_conservatively_pure(&m.subject)
                     && m.cases.iter().all(|case| {
@@ -922,6 +924,7 @@ impl Checker {
                         .iter()
                         .all(|(_, expr)| self.expr_is_conservatively_readonly(expr))
             }
+            Stmt::Require(s) => self.expr_is_conservatively_readonly(&s.condition),
             Stmt::Match(m) => {
                 self.expr_is_conservatively_readonly(&m.subject)
                     && m.cases.iter().all(|case| {
@@ -1249,6 +1252,7 @@ impl Checker {
                     .iter()
                     .find_map(|(_, expr)| self.find_expr_purity_breach(expr))
             }),
+            Stmt::Require(s) => self.find_expr_purity_breach(&s.condition),
             Stmt::Match(m) => self.find_expr_purity_breach(&m.subject).or_else(|| {
                 m.cases.iter().find_map(|case| {
                     case.guard
@@ -1295,6 +1299,13 @@ impl Checker {
                 .or_else(|| self.find_expr_purity_breach(r)),
             Expr::Call(callee, args, _) => {
                 if let Expr::Ident(name, _) = callee.as_ref() {
+                    if self.purity_allow_read_ecs.get()
+                        && matches!(name.as_str(), "base" | "candidate")
+                    {
+                        return args
+                            .first()
+                            .and_then(|argument| self.find_expr_purity_breach(argument));
+                    }
                     // Read-tolerant mode (`find_block_readonly_breach`):
                     // world reads are not breaches. The read set is the
                     // curated `is_readonly_builtin` list, which shares no
@@ -1531,6 +1542,7 @@ impl Checker {
                     .iter()
                     .find_map(|(_, expr)| self.find_expr_sim_breach(expr))
             }),
+            Stmt::Require(s) => self.find_expr_sim_breach(&s.condition),
             Stmt::Match(m) => self.find_expr_sim_breach(&m.subject).or_else(|| {
                 m.cases.iter().find_map(|case| {
                     case.guard

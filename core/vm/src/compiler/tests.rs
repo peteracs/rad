@@ -2582,6 +2582,7 @@ if (x) { return ${n}; }
             state_machines: result.state_machines,
             intents: result.intents,
             resolvers: result.resolvers,
+            constraints: result.constraints,
             layout_analysis: crate::compiler::layout_analysis::LayoutAnalysis::default(),
             materialization_plan: crate::compiler::materialization::MaterializationPlan::default(),
             component_layouts: result.component_layouts,

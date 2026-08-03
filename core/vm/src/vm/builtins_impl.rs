@@ -5779,7 +5779,9 @@ impl VM {
         // load_world) holds already-decoded heap values in Rust locals the
         // collector cannot see. Auto-GC stays off for the duration.
         self.gc_pause += 1;
-        let run = self.run_frames(saved_depth);
+        let run = self
+            .run_frames(saved_depth)
+            .map_err(|error| error.to_string());
         self.gc_pause -= 1;
         run?;
         let result = self.pop()?;

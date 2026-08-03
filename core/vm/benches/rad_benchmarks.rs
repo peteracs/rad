@@ -182,7 +182,11 @@ fn attack(count: int) {
 "#;
 
 fn causal_vm() -> VM {
-    let mut lexer = Lexer::new(CAUSAL_SOURCE);
+    causal_vm_from(CAUSAL_SOURCE)
+}
+
+fn causal_vm_from(source: &str) -> VM {
+    let mut lexer = Lexer::new(source);
     let tokens = lexer.tokenize().0;
     let mut parser = Parser::new(tokens);
     let program = parser.parse();
@@ -205,6 +209,53 @@ fn causal_vm() -> VM {
     vm.run(0).expect("initialize causal benchmark");
     vm.set_causality_retention_cap(10_100);
     vm
+}
+
+const CONSTRAINT_SOURCE: &str = r#"
+component Position { x: int = 0 }
+intent Move { key target: entity, amount: int }
+law Push(target: entity, amount: int) {
+    propose Move { target: target, amount: amount }
+}
+resolver ResolveMove for Move(target, proposals) {
+    next(target, Position { x: proposals[0].amount })
+}
+constraint WorldBounds for Position(subject, proposed) {
+    require proposed.x >= -1000000 else "position.below_min"
+    require proposed.x <= 1000000 else "position.above_max"
+}
+constraint NonPenetration for Position(subject, proposed) {
+    require proposed.x != 13 else "position.inside_solid"
+}
+entity hero { Position {} }
+fn accepted(value: int) { settle { Push(hero, value) } }
+fn rejected() { settle { Push(hero, 13) } }
+"#;
+
+fn bench_candidate_constraints(c: &mut Criterion) {
+    let mut accepted = causal_vm_from(CONSTRAINT_SOURCE);
+    c.bench_function("causal/constraints/accepted", |b| {
+        let mut value = 0i64;
+        b.iter(|| {
+            value = (value + 1) % 10_000;
+            accepted
+                .call_global("accepted", &[FrozenValue::Int(black_box(value))])
+                .expect("accepted candidate")
+        })
+    });
+
+    let mut rejected = causal_vm_from(CONSTRAINT_SOURCE);
+    c.bench_function("causal/constraints/rejected_and_encoded", |b| {
+        b.iter(|| {
+            let failure = rejected
+                .call_global_detailed("rejected", &[])
+                .expect_err("rejected candidate");
+            let rad_vm::constraint_types::VmFailure::SettlementRejected(rejection) = failure else {
+                panic!("typed rejection expected")
+            };
+            black_box(rejection.canonical_bytes(rejected.constraint_limit_profile()))
+        })
+    });
 }
 
 fn bench_causal_settlement(c: &mut Criterion) {
@@ -422,5 +473,6 @@ criterion_group!(
     bench_causal_settlement,
     bench_causal_reference_and_provenance,
     bench_causal_phase_baselines,
+    bench_candidate_constraints,
 );
 criterion_main!(benches);

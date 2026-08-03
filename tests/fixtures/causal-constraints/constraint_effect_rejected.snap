@@ -1,0 +1,8 @@
+---
+source: ../../tests/fixtures/causal-constraints\constraint_effect_rejected.rad
+exit_code: 1
+---
+
+---stderr---
+Error: constraint `Invalid` cannot perform this effect: calls impure builtin 'print'
+Error: Effect violation: 'print' requires io effect(s), but current context is readonly

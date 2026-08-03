@@ -95,6 +95,7 @@ pub fn walk_decl<V: AstVisitor + ?Sized>(v: &mut V, decl: &Decl) {
             v.visit_block(&l.body);
         }
         Decl::Resolver(r) => v.visit_block(&r.body),
+        Decl::Constraint(c) => v.visit_block(&c.body),
         Decl::Entity(e) => {
             for entry in &e.components {
                 match entry {
@@ -226,6 +227,7 @@ pub fn walk_stmt<V: AstVisitor + ?Sized>(v: &mut V, stmt: &Stmt) {
                 v.visit_expr(expr);
             }
         }
+        Stmt::Require(s) => v.visit_expr(&s.condition),
         Stmt::Emit(s) => {
             for (_, ex) in &s.fields {
                 v.visit_expr(ex);

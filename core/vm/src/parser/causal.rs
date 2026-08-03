@@ -95,6 +95,42 @@ impl Parser {
         })
     }
 
+    pub(super) fn parse_constraint_decl(&mut self) -> Result<ConstraintDecl, ParseError> {
+        let span = self.span();
+        self.advance(); // soft keyword `constraint`
+        let name = self.expect_ident_text()?;
+        self.expect(TokenType::For)?;
+        let component_name = self.expect_ident_text()?;
+        self.expect(TokenType::LParen)?;
+        let subject_param = self.expect_ident_text()?;
+        self.expect(TokenType::Comma)?;
+        let proposed_param = self.expect_ident_text()?;
+        self.expect(TokenType::RParen)?;
+        let mut watches = Vec::new();
+        if self.check_ident_text("watches") {
+            self.advance();
+            loop {
+                watches.push(self.expect_ident_text()?);
+                if !self.check(TokenType::Comma) {
+                    break;
+                }
+                self.advance();
+            }
+        }
+        let body = self.parse_block()?;
+        Ok(ConstraintDecl {
+            id: self.next_id(),
+            span,
+            name,
+            is_pub: false,
+            component_name,
+            subject_param,
+            proposed_param,
+            watches,
+            body,
+        })
+    }
+
     pub(super) fn parse_settle(&mut self) -> Result<Stmt, ParseError> {
         let span = self.span();
         self.advance(); // soft keyword `settle`
@@ -134,6 +170,20 @@ impl Parser {
             entity,
             component_name,
             fields,
+        }))
+    }
+
+    pub(super) fn parse_require(&mut self) -> Result<Stmt, ParseError> {
+        let span = self.span();
+        self.advance(); // soft keyword `require`
+        let condition = self.parse_expr()?;
+        self.expect(TokenType::Else)?;
+        let code = self.expect_string_text()?;
+        Ok(Stmt::Require(RequireStmt {
+            id: self.next_id(),
+            span,
+            condition,
+            code,
         }))
     }
 

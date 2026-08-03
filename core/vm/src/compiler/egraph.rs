@@ -229,6 +229,12 @@ fn optimize_stmt(stmt: &Stmt) -> Stmt {
                 .map(|(name, expr)| (name.clone(), optimize_expr(expr)))
                 .collect(),
         }),
+        Stmt::Require(s) => Stmt::Require(RequireStmt {
+            id: s.id,
+            span: s.span.clone(),
+            condition: optimize_expr(&s.condition),
+            code: s.code.clone(),
+        }),
         Stmt::Match(m) => Stmt::Match(optimize_match_stmt(m)),
         Stmt::Expr(e) => Stmt::Expr(ExprStmt {
             id: e.id,

@@ -1,0 +1,9 @@
+---
+source: ../../tests/fixtures/causal-constraints\rejection_is_atomic.rad
+exit_code: 1
+---
+
+---stderr---
+Error: Settlement rejected: 1 violation(s), 0 evaluation failure(s)
+  - WorldBounds(0): position.above_max
+No world state was changed.

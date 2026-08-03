@@ -250,6 +250,9 @@ pub enum Op {
     EndSettlement,
     ProposeIntent,
     StageCandidate,
+    ReadBaseComponent,
+    ReadCandidateComponent,
+    RequireConstraint,
 }
 
 impl Op {

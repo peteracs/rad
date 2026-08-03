@@ -9,13 +9,14 @@ use crate::value::{Allocator, MapKey, Object, Value};
 use std::collections::HashSet;
 use std::fmt;
 
-/// Deterministic structural budget for values crossing a causal boundary.
+/// Deterministic graph and exact canonical-encoding budgets for values
+/// crossing a causal boundary.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct CausalValueLimits {
-    pub max_depth: usize,
-    pub max_nodes: usize,
-    pub max_encoded_bytes: usize,
-    pub max_collection_items: usize,
+    max_depth: usize,
+    max_nodes: usize,
+    max_encoded_bytes: usize,
+    max_collection_items: usize,
 }
 
 impl Default for CausalValueLimits {
@@ -29,19 +30,134 @@ impl Default for CausalValueLimits {
     }
 }
 
+impl CausalValueLimits {
+    pub const HARD_MAX_DEPTH: usize = 512;
+    pub const HARD_MAX_NODES: usize = 1_000_000;
+    pub const HARD_MAX_ENCODED_BYTES: usize = 64 * 1024 * 1024;
+    pub const HARD_MAX_COLLECTION_ITEMS: usize = 1_000_000;
+
+    pub fn try_new(
+        max_depth: usize,
+        max_nodes: usize,
+        max_encoded_bytes: usize,
+        max_collection_items: usize,
+    ) -> Result<Self, CausalValueError> {
+        let limits = Self {
+            max_depth,
+            max_nodes,
+            max_encoded_bytes,
+            max_collection_items,
+        };
+        limits.validate_profile()?;
+        Ok(limits)
+    }
+
+    pub fn max_depth(self) -> usize {
+        self.max_depth
+    }
+
+    pub fn max_nodes(self) -> usize {
+        self.max_nodes
+    }
+
+    pub fn max_encoded_bytes(self) -> usize {
+        self.max_encoded_bytes
+    }
+
+    pub fn max_collection_items(self) -> usize {
+        self.max_collection_items
+    }
+
+    pub fn validate_profile(self) -> Result<(), CausalValueError> {
+        let checks = [
+            ("max_depth", self.max_depth, Self::HARD_MAX_DEPTH),
+            ("max_nodes", self.max_nodes, Self::HARD_MAX_NODES),
+            (
+                "max_encoded_bytes",
+                self.max_encoded_bytes,
+                Self::HARD_MAX_ENCODED_BYTES,
+            ),
+            (
+                "max_collection_items",
+                self.max_collection_items,
+                Self::HARD_MAX_COLLECTION_ITEMS,
+            ),
+        ];
+        for (field, value, hard_max) in checks {
+            if value == 0 || value > hard_max {
+                return Err(CausalValueError::InvalidLimit {
+                    field,
+                    value,
+                    hard_max,
+                });
+            }
+        }
+        Ok(())
+    }
+
+    pub fn with_max_depth(self, value: usize) -> Result<Self, CausalValueError> {
+        Self::try_new(
+            value,
+            self.max_nodes,
+            self.max_encoded_bytes,
+            self.max_collection_items,
+        )
+    }
+
+    pub fn with_max_encoded_bytes(self, value: usize) -> Result<Self, CausalValueError> {
+        Self::try_new(
+            self.max_depth,
+            self.max_nodes,
+            value,
+            self.max_collection_items,
+        )
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CausalValueError {
+    InvalidLimit {
+        field: &'static str,
+        value: usize,
+        hard_max: usize,
+    },
     Cycle,
-    DepthLimit { limit: usize },
-    NodeLimit { limit: usize },
-    CollectionItemLimit { limit: usize },
-    EncodedByteLimit { limit: usize, actual: usize },
-    Unsupported { type_name: String },
+    DepthLimit {
+        limit: usize,
+    },
+    NodeLimit {
+        limit: usize,
+    },
+    CollectionItemLimit {
+        limit: usize,
+    },
+    EncodedByteLimit {
+        limit: usize,
+        actual: usize,
+    },
+    DuplicateMapKey {
+        key: String,
+    },
+    DuplicateField {
+        container: String,
+        field: String,
+    },
+    Unsupported {
+        type_name: String,
+    },
 }
 
 impl fmt::Display for CausalValueError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::InvalidLimit {
+                field,
+                value,
+                hard_max,
+            } => write!(
+                formatter,
+                "causal value limit `{field}` is {value}; expected 1..={hard_max}"
+            ),
             Self::Cycle => write!(formatter, "causal value graph contains a cycle"),
             Self::DepthLimit { limit } => write!(
                 formatter,
@@ -58,6 +174,13 @@ impl fmt::Display for CausalValueError {
             Self::EncodedByteLimit { limit, actual } => write!(
                 formatter,
                 "causal value encoding is {actual} bytes, exceeding the {limit}-byte limit"
+            ),
+            Self::DuplicateMapKey { key } => {
+                write!(formatter, "frozen map contains duplicate key {key}")
+            }
+            Self::DuplicateField { container, field } => write!(
+                formatter,
+                "frozen {container} contains duplicate field `{field}`"
             ),
             Self::Unsupported { type_name } => write!(
                 formatter,
@@ -110,9 +233,9 @@ impl<'a> GraphValidator<'a> {
 
     fn charge_bytes(&mut self, count: usize) -> Result<(), CausalValueError> {
         self.encoded_bytes = self.encoded_bytes.saturating_add(count);
-        if self.encoded_bytes > self.limits.max_encoded_bytes {
+        if self.encoded_bytes > CausalValueLimits::HARD_MAX_ENCODED_BYTES {
             return Err(CausalValueError::EncodedByteLimit {
-                limit: self.limits.max_encoded_bytes,
+                limit: CausalValueLimits::HARD_MAX_ENCODED_BYTES,
                 actual: self.encoded_bytes,
             });
         }
@@ -149,9 +272,9 @@ impl<'a> GraphValidator<'a> {
             });
         }
         self.charge_node()?;
-        // One stable type marker per value. Aggregate payloads add their data
-        // below; this is a deterministic structural encoding budget rather
-        // than an allocator-size estimate.
+        // This cheap structural charge rejects obviously excessive graphs
+        // before copying. The exact canonical byte count is enforced by the
+        // bounded encoder after this graph/cycle preflight succeeds.
         self.charge_bytes(1)?;
 
         let Some(object) = value.as_object() else {
@@ -242,7 +365,9 @@ impl Value {
         &self,
         limits: &CausalValueLimits,
     ) -> Result<(), CausalValueError> {
-        GraphValidator::new(limits).visit(self, 0)
+        limits.validate_profile()?;
+        GraphValidator::new(limits).visit(self, 0)?;
+        crate::canonical_value::internal_bytes(self, limits).map(|_| ())
     }
 
     /// Validate and detach a value graph crossing a causal capture boundary.

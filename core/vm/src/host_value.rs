@@ -28,7 +28,8 @@ use crate::causal_value::{CausalValueError, CausalValueLimits};
 use crate::gc::GcHeap;
 use crate::value::{ComponentData, MapKey, MapStorage, Object, Value};
 use crate::vm::VM;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
+use std::fmt;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
@@ -41,19 +42,59 @@ pub enum FrozenMapKey {
     Tuple(Vec<FrozenMapKey>),
 }
 
-#[derive(Clone, Debug, PartialEq)]
+/// Canonical IEEE-754 payload used at the owned host boundary.
+///
+/// Finite values retain their exact bits (including signed zero). Every NaN
+/// collapses to one quiet positive NaN so equality, hashing, fingerprints,
+/// and canonical encoding cannot depend on an attacker-controlled payload.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct FrozenFloat(u64);
+
+impl FrozenFloat {
+    const CANONICAL_NAN_BITS: u64 = 0x7FF8_0000_0000_0000;
+
+    pub fn new(value: f64) -> Self {
+        Self(if value.is_nan() {
+            Self::CANONICAL_NAN_BITS
+        } else {
+            value.to_bits()
+        })
+    }
+
+    pub fn get(self) -> f64 {
+        f64::from_bits(self.0)
+    }
+
+    pub fn bits(self) -> u64 {
+        self.0
+    }
+}
+
+impl From<f64> for FrozenFloat {
+    fn from(value: f64) -> Self {
+        Self::new(value)
+    }
+}
+
+impl fmt::Debug for FrozenFloat {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.get().fmt(formatter)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum FrozenValue {
     Nil,
     Bool(bool),
     Int(i64),
-    Float(f64),
+    Float(FrozenFloat),
     String(String),
     List(Vec<FrozenValue>),
     Tuple(Vec<FrozenValue>),
-    Map(Vec<(FrozenMapKey, FrozenValue)>),
+    Map(BTreeMap<FrozenMapKey, FrozenValue>),
     Component {
         type_name: String,
-        fields: Vec<(String, FrozenValue)>,
+        fields: BTreeMap<String, FrozenValue>,
     },
     State {
         machine: String,
@@ -62,7 +103,7 @@ pub enum FrozenValue {
     Sum {
         type_name: String,
         variant: String,
-        fields: Vec<(String, FrozenValue)>,
+        fields: BTreeMap<String, FrozenValue>,
     },
     Entity(u32),
     BitSet(Vec<u64>),
@@ -72,12 +113,56 @@ pub enum FrozenValue {
 }
 
 impl FrozenValue {
+    pub fn try_map(
+        entries: impl IntoIterator<Item = (FrozenMapKey, FrozenValue)>,
+    ) -> Result<Self, CausalValueError> {
+        let mut canonical = BTreeMap::new();
+        for (key, value) in entries {
+            if canonical.insert(key.clone(), value).is_some() {
+                return Err(CausalValueError::DuplicateMapKey {
+                    key: format!("{key:?}"),
+                });
+            }
+        }
+        Ok(Self::Map(canonical))
+    }
+
+    pub fn try_component(
+        type_name: impl Into<String>,
+        fields: impl IntoIterator<Item = (String, FrozenValue)>,
+    ) -> Result<Self, CausalValueError> {
+        let type_name = type_name.into();
+        let fields = collect_named_fields("component", fields)?;
+        Ok(Self::Component { type_name, fields })
+    }
+
+    pub fn try_sum(
+        type_name: impl Into<String>,
+        variant: impl Into<String>,
+        fields: impl IntoIterator<Item = (String, FrozenValue)>,
+    ) -> Result<Self, CausalValueError> {
+        let type_name = type_name.into();
+        let variant = variant.into();
+        let fields = collect_named_fields("sum", fields)?;
+        Ok(Self::Sum {
+            type_name,
+            variant,
+            fields,
+        })
+    }
+
+    pub fn canonical_bytes(&self, limits: &CausalValueLimits) -> Result<Vec<u8>, CausalValueError> {
+        limits.validate_profile()?;
+        self.validate_structure(limits)?;
+        crate::canonical_value::frozen_bytes(self, limits)
+    }
+
     fn import_into(&self, gc: &mut GcHeap) -> Value {
         match self {
             Self::Nil => Value::NIL,
             Self::Bool(value) => Value::from_bool(*value),
             Self::Int(value) => Value::from_int(gc, *value),
-            Self::Float(value) => Value::from_float(*value),
+            Self::Float(value) => Value::from_float(value.get()),
             Self::String(value) => Value::from_string(gc, value.clone()),
             Self::List(values) => {
                 let values = values.iter().map(|value| value.import_into(gc)).collect();
@@ -95,11 +180,8 @@ impl FrozenValue {
                 Value::map(gc, entries)
             }
             Self::Component { type_name, fields } => {
-                let layout = Arc::new(fields.iter().map(|(name, _)| name.clone()).collect());
-                let values = fields
-                    .iter()
-                    .map(|(_, value)| value.import_into(gc))
-                    .collect();
+                let layout = Arc::new(fields.keys().cloned().collect());
+                let values = fields.values().map(|value| value.import_into(gc)).collect();
                 Value::component(gc, type_name.clone(), layout, values)
             }
             Self::State { machine, state } => Value::from_state(gc, machine.clone(), state.clone()),
@@ -122,12 +204,11 @@ impl FrozenValue {
         }
     }
 
-    fn validate(&self, limits: &CausalValueLimits) -> Result<(), CausalValueError> {
+    fn validate_structure(&self, limits: &CausalValueLimits) -> Result<(), CausalValueError> {
         struct Budget<'a> {
             limits: &'a CausalValueLimits,
             nodes: usize,
             items: usize,
-            bytes: usize,
         }
 
         impl Budget<'_> {
@@ -135,34 +216,27 @@ impl FrozenValue {
                 &mut self,
                 nodes: usize,
                 items: usize,
-                bytes: usize,
+                _bytes: usize,
             ) -> Result<(), CausalValueError> {
                 self.nodes = self.nodes.saturating_add(nodes);
                 self.items = self.items.saturating_add(items);
-                self.bytes = self.bytes.saturating_add(bytes);
-                if self.nodes > self.limits.max_nodes {
+                if self.nodes > self.limits.max_nodes() {
                     return Err(CausalValueError::NodeLimit {
-                        limit: self.limits.max_nodes,
+                        limit: self.limits.max_nodes(),
                     });
                 }
-                if self.items > self.limits.max_collection_items {
+                if self.items > self.limits.max_collection_items() {
                     return Err(CausalValueError::CollectionItemLimit {
-                        limit: self.limits.max_collection_items,
-                    });
-                }
-                if self.bytes > self.limits.max_encoded_bytes {
-                    return Err(CausalValueError::EncodedByteLimit {
-                        limit: self.limits.max_encoded_bytes,
-                        actual: self.bytes,
+                        limit: self.limits.max_collection_items(),
                     });
                 }
                 Ok(())
             }
 
             fn key(&mut self, key: &FrozenMapKey, depth: usize) -> Result<(), CausalValueError> {
-                if depth > self.limits.max_depth {
+                if depth > self.limits.max_depth() {
                     return Err(CausalValueError::DepthLimit {
-                        limit: self.limits.max_depth,
+                        limit: self.limits.max_depth(),
                     });
                 }
                 self.charge(1, 0, 1)?;
@@ -182,9 +256,9 @@ impl FrozenValue {
             }
 
             fn value(&mut self, value: &FrozenValue, depth: usize) -> Result<(), CausalValueError> {
-                if depth > self.limits.max_depth {
+                if depth > self.limits.max_depth() {
                     return Err(CausalValueError::DepthLimit {
-                        limit: self.limits.max_depth,
+                        limit: self.limits.max_depth(),
                     });
                 }
                 self.charge(1, 0, 1)?;
@@ -246,10 +320,29 @@ impl FrozenValue {
             limits,
             nodes: 0,
             items: 0,
-            bytes: 0,
         }
         .value(self, 0)
     }
+
+    fn validate(&self, limits: &CausalValueLimits) -> Result<(), CausalValueError> {
+        self.canonical_bytes(limits).map(|_| ())
+    }
+}
+
+fn collect_named_fields(
+    container: &str,
+    fields: impl IntoIterator<Item = (String, FrozenValue)>,
+) -> Result<BTreeMap<String, FrozenValue>, CausalValueError> {
+    let mut canonical = BTreeMap::new();
+    for (name, value) in fields {
+        if canonical.insert(name.clone(), value).is_some() {
+            return Err(CausalValueError::DuplicateField {
+                container: container.to_string(),
+                field: name,
+            });
+        }
+    }
+    Ok(canonical)
 }
 
 impl FrozenMapKey {
@@ -274,7 +367,7 @@ impl FrozenMapKey {
     }
 }
 
-fn export_value(value: &Value) -> Result<FrozenValue, CausalValueError> {
+pub(crate) fn export_value(value: &Value) -> Result<FrozenValue, CausalValueError> {
     if value.is_nil() {
         return Ok(FrozenValue::Nil);
     }
@@ -285,7 +378,7 @@ fn export_value(value: &Value) -> Result<FrozenValue, CausalValueError> {
         return Ok(FrozenValue::Int(value));
     }
     if let Some(value) = value.as_float() {
-        return Ok(FrozenValue::Float(value));
+        return Ok(FrozenValue::Float(value.into()));
     }
     match value.as_object() {
         Some(Object::Str(value)) => Ok(FrozenValue::String(value.to_string())),
@@ -299,21 +392,17 @@ fn export_value(value: &Value) -> Result<FrozenValue, CausalValueError> {
             .map(export_value)
             .collect::<Result<Vec<_>, _>>()
             .map(FrozenValue::Tuple),
-        Some(Object::Map(values)) => {
-            let mut entries = values.iter().collect::<Vec<_>>();
-            entries.sort_by_key(|(key, _)| (*key).clone());
-            entries
-                .into_iter()
-                .map(|(key, value)| Ok((FrozenMapKey::export(key), export_value(value)?)))
-                .collect::<Result<Vec<_>, _>>()
-                .map(FrozenValue::Map)
-        }
+        Some(Object::Map(values)) => values
+            .iter()
+            .map(|(key, value)| Ok((FrozenMapKey::export(key), export_value(value)?)))
+            .collect::<Result<BTreeMap<_, _>, _>>()
+            .map(FrozenValue::Map),
         Some(Object::Component(component)) => component
             .layout
             .iter()
             .zip(&component.values)
             .map(|(name, value)| Ok((name.clone(), export_value(value)?)))
-            .collect::<Result<Vec<_>, _>>()
+            .collect::<Result<BTreeMap<_, _>, _>>()
             .map(|fields| FrozenValue::Component {
                 type_name: component.type_name.clone(),
                 fields,
@@ -323,12 +412,11 @@ fn export_value(value: &Value) -> Result<FrozenValue, CausalValueError> {
             state: value.state.clone(),
         }),
         Some(Object::SumType(sum)) => {
-            let mut fields = sum.fields.iter().collect::<Vec<_>>();
-            fields.sort_by_key(|(name, _)| (*name).clone());
-            let fields = fields
-                .into_iter()
+            let fields = sum
+                .fields
+                .iter()
                 .map(|(name, value)| Ok((name.clone(), export_value(value)?)))
-                .collect::<Result<Vec<_>, CausalValueError>>()?;
+                .collect::<Result<BTreeMap<_, _>, CausalValueError>>()?;
             Ok(FrozenValue::Sum {
                 type_name: sum.type_name.clone(),
                 variant: sum.variant.clone(),
@@ -360,7 +448,7 @@ fn export_value(value: &Value) -> Result<FrozenValue, CausalValueError> {
     }
 }
 
-fn export_component_data(
+pub(crate) fn export_component_data(
     component: ComponentData,
     limits: &CausalValueLimits,
 ) -> Result<FrozenValue, CausalValueError> {
@@ -375,7 +463,7 @@ fn export_component_data(
         .iter()
         .zip(&component.values)
         .map(|(name, value)| Ok((name.clone(), export_value(value)?)))
-        .collect::<Result<Vec<_>, CausalValueError>>()?;
+        .collect::<Result<BTreeMap<_, _>, CausalValueError>>()?;
     let frozen = FrozenValue::Component {
         type_name: component.type_name,
         fields,
@@ -452,23 +540,152 @@ impl VM {
     }
 
     pub fn call_global(&mut self, name: &str, args: &[FrozenValue]) -> Result<FrozenValue, String> {
+        self.call_global_detailed(name, args)
+            .map_err(|failure| failure.render_compat())
+    }
+
+    /// Call a RAD function while preserving typed settlement rejection,
+    /// runtime, and host failures for embedders.
+    pub fn call_global_detailed(
+        &mut self,
+        name: &str,
+        args: &[FrozenValue],
+    ) -> Result<FrozenValue, crate::constraint_types::VmFailure> {
         let slot = self
             .global_names
             .iter()
             .position(|candidate| candidate == name)
-            .ok_or_else(|| format!("unknown global `{name}`"))?;
+            .ok_or_else(|| crate::constraint_types::RuntimeError {
+                code: "runtime.unknown_global".into(),
+                message: format!("unknown global `{name}`"),
+            })
+            .map_err(crate::constraint_types::VmFailure::Runtime)?;
         let callee = self.globals[slot];
         let limits = self.causal_value_limits;
         let mut imported = Vec::with_capacity(args.len());
         for value in args {
-            value.validate(&limits).map_err(|error| error.to_string())?;
+            value.validate(&limits).map_err(|error| {
+                crate::constraint_types::VmFailure::Runtime(crate::constraint_types::RuntimeError {
+                    code: "host.invalid_argument".into(),
+                    message: error.to_string(),
+                })
+            })?;
             imported.push(value.import_into(&mut self.gc));
         }
-        let result = self.call_value(&callee, imported)?;
-        result
-            .validate_causal_value(&limits)
-            .map_err(|error| error.to_string())?;
-        export_value(&result).map_err(|error| error.to_string())
+        let result = self.call_value_detailed(&callee, imported)?;
+        result.validate_causal_value(&limits).map_err(|error| {
+            crate::constraint_types::VmFailure::Runtime(crate::constraint_types::RuntimeError {
+                code: "host.invalid_result".into(),
+                message: error.to_string(),
+            })
+        })?;
+        export_value(&result).map_err(|error| {
+            crate::constraint_types::VmFailure::Runtime(crate::constraint_types::RuntimeError {
+                code: "host.invalid_result".into(),
+                message: error.to_string(),
+            })
+        })
+    }
+
+    /// Execute and retain a pointer-free recipe when the settlement rejects.
+    /// The record is ephemeral debugger/test data and is never appended to
+    /// the authoritative causality ledger.
+    pub fn call_global_attempt(
+        &mut self,
+        name: &str,
+        args: &[FrozenValue],
+    ) -> Result<crate::constraint_types::SettlementAttemptOutcome, crate::constraint_types::VmFailure>
+    {
+        use crate::constraint_types::{
+            FailedSettlementAttempt, SettlementAttemptOutcome, SETTLEMENT_ATTEMPT_RECORD_VERSION,
+        };
+
+        let base_world_digest = self.world.content_digest();
+        match self.call_global_detailed(name, args) {
+            Ok(value) => Ok(SettlementAttemptOutcome::Committed(value)),
+            Err(crate::constraint_types::VmFailure::SettlementRejected(rejection)) => Ok(
+                SettlementAttemptOutcome::Rejected(Arc::new(FailedSettlementAttempt {
+                    version: SETTLEMENT_ATTEMPT_RECORD_VERSION,
+                    function: name.to_string(),
+                    arguments: args.to_vec(),
+                    base_world_digest,
+                    limit_profile_fingerprint: rejection.limit_profile_fingerprint.clone(),
+                    capabilities: rejection.capabilities.clone(),
+                    rejection,
+                })),
+            ),
+            Err(other) => Err(other),
+        }
+    }
+
+    /// Re-execute an ephemeral failed attempt against the same base world,
+    /// limits, request, and capability context, then compare canonical
+    /// semantic rejection bytes.
+    pub fn replay_failed_attempt(
+        &mut self,
+        attempt: &crate::constraint_types::FailedSettlementAttempt,
+    ) -> Result<Arc<crate::constraint_types::SettlementRejection>, crate::constraint_types::VmFailure>
+    {
+        use crate::constraint_types::{HostFault, VmFailure, SETTLEMENT_ATTEMPT_RECORD_VERSION};
+
+        let fail = |code: &str, message: String| {
+            VmFailure::Host(HostFault {
+                code: code.to_string(),
+                message,
+            })
+        };
+        if attempt.version != SETTLEMENT_ATTEMPT_RECORD_VERSION {
+            return Err(fail(
+                "attempt.unsupported_version",
+                format!("unsupported attempt record version {}", attempt.version),
+            ));
+        }
+        let actual_base = self.world.content_digest();
+        if actual_base != attempt.base_world_digest {
+            return Err(fail(
+                "attempt.base_mismatch",
+                format!(
+                    "attempt expects base {}, current world is {}",
+                    attempt.base_world_digest, actual_base
+                ),
+            ));
+        }
+        let actual_profile = self.constraint_limit_profile.fingerprint();
+        if actual_profile != attempt.limit_profile_fingerprint {
+            return Err(fail(
+                "attempt.limit_profile_mismatch",
+                "constraint limit profile does not match the recorded attempt".into(),
+            ));
+        }
+        let actual_capabilities = self.constraint_capabilities();
+        if actual_capabilities != attempt.capabilities {
+            return Err(fail(
+                "attempt.capability_mismatch",
+                "capability profile does not match the recorded attempt".into(),
+            ));
+        }
+        let replayed = match self.call_global_detailed(&attempt.function, &attempt.arguments) {
+            Err(VmFailure::SettlementRejected(rejection)) => rejection,
+            Ok(_) => {
+                return Err(fail(
+                    "attempt.unexpected_commit",
+                    "replayed attempt committed instead of rejecting".into(),
+                ))
+            }
+            Err(other) => return Err(other),
+        };
+        if replayed.capabilities != attempt.capabilities
+            || replayed.canonical_bytes(&self.constraint_limit_profile)
+                != attempt
+                    .rejection
+                    .canonical_bytes(&self.constraint_limit_profile)
+        {
+            return Err(fail(
+                "attempt.rejection_mismatch",
+                "replayed attempt produced a different canonical rejection".into(),
+            ));
+        }
+        Ok(replayed)
     }
 
     pub fn enqueue_frozen_event(&mut self, payload: &FrozenValue) -> Result<(), String> {
@@ -504,30 +721,42 @@ impl VM {
     pub fn set_causal_value_limits(&mut self, limits: CausalValueLimits) {
         self.causal_value_limits = limits;
     }
+
+    pub fn constraint_limit_profile(&self) -> &crate::constraint_types::ConstraintLimitProfile {
+        &self.constraint_limit_profile
+    }
+
+    pub fn set_constraint_limit_profile(
+        &mut self,
+        profile: crate::constraint_types::ConstraintLimitProfile,
+    ) {
+        self.constraint_limit_profile = profile;
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{FrozenMapKey, FrozenValue};
+    use super::{FrozenFloat, FrozenMapKey, FrozenValue};
     use crate::value::{ComponentData, Value};
     use crate::vm::VM;
     use crate::{CausalValueError, CausalValueLimits};
+    use std::collections::BTreeMap;
     use std::sync::Arc;
 
     #[test]
     fn frozen_values_round_trip_without_raw_heap_handles() {
         let source = FrozenValue::Component {
             type_name: "Payload".into(),
-            fields: vec![
+            fields: BTreeMap::from([
                 ("name".into(), FrozenValue::String("hero".into())),
                 (
                     "data".into(),
-                    FrozenValue::Map(vec![(
+                    FrozenValue::Map(BTreeMap::from([(
                         FrozenMapKey::String("hp".into()),
                         FrozenValue::Int(100),
-                    )]),
+                    )])),
                 ),
-            ],
+            ]),
         };
         let mut vm = VM::new();
         let handle = vm.import_value(&source).expect("owned import");
@@ -542,15 +771,98 @@ mod tests {
             0xFFFC_0000_0000_0000,
             0xFFFF_FFFF_FFFF_FFFF,
         ] {
-            let source = FrozenValue::Float(f64::from_bits(bits));
+            let source = FrozenValue::Float(f64::from_bits(bits).into());
             let mut vm = VM::new();
             let exported = vm
                 .import_value(&source)
                 .expect("NaN import")
                 .to_owned()
                 .expect("NaN export");
-            assert!(matches!(exported, FrozenValue::Float(value) if value.is_nan()));
+            assert!(matches!(exported, FrozenValue::Float(value) if value.get().is_nan()));
         }
+    }
+
+    #[test]
+    fn frozen_constructors_reject_duplicates_and_canonicalize_order_and_nan() {
+        let duplicate_key = FrozenMapKey::String("same".into());
+        assert!(matches!(
+            FrozenValue::try_map([
+                (duplicate_key.clone(), FrozenValue::Int(1)),
+                (duplicate_key, FrozenValue::Int(2)),
+            ]),
+            Err(CausalValueError::DuplicateMapKey { .. })
+        ));
+        assert!(matches!(
+            FrozenValue::try_component(
+                "Pair",
+                [
+                    ("same".into(), FrozenValue::Int(1)),
+                    ("same".into(), FrozenValue::Int(2)),
+                ],
+            ),
+            Err(CausalValueError::DuplicateField { .. })
+        ));
+        assert!(matches!(
+            FrozenValue::try_sum(
+                "Choice",
+                "One",
+                [
+                    ("same".into(), FrozenValue::Int(1)),
+                    ("same".into(), FrozenValue::Int(2)),
+                ],
+            ),
+            Err(CausalValueError::DuplicateField { .. })
+        ));
+
+        let first = FrozenValue::try_map([
+            (FrozenMapKey::String("z".into()), FrozenValue::Int(2)),
+            (FrozenMapKey::String("a".into()), FrozenValue::Int(1)),
+        ])
+        .expect("unique map");
+        let second = FrozenValue::try_map([
+            (FrozenMapKey::String("a".into()), FrozenValue::Int(1)),
+            (FrozenMapKey::String("z".into()), FrozenValue::Int(2)),
+        ])
+        .expect("unique map");
+        assert_eq!(first, second);
+        assert_eq!(
+            FrozenFloat::new(f64::from_bits(0xFFFF_FFFF_FFFF_FFFF)),
+            FrozenFloat::new(f64::from_bits(0x7FF0_0000_0000_0001))
+        );
+    }
+
+    #[test]
+    fn encoded_byte_limit_is_exact_canonical_output_length() {
+        let value = FrozenValue::try_component(
+            "Escaped",
+            [(
+                "text".into(),
+                FrozenValue::String("quote=\" newline=\n snowman=â˜ƒ".into()),
+            )],
+        )
+        .expect("canonical component");
+        let unlimited = CausalValueLimits::default();
+        let bytes = value.canonical_bytes(&unlimited).expect("canonical bytes");
+        let text = String::from_utf8(bytes.clone()).expect("canonical UTF-8");
+        assert_eq!(
+            text,
+            "{\"c\":[\"Escaped\",{\"text\":\"quote=\\\" newline=\\n snowman=â˜ƒ\"}]}"
+        );
+
+        let exact = CausalValueLimits::default()
+            .with_max_encoded_bytes(bytes.len())
+            .expect("exact profile");
+        assert_eq!(value.canonical_bytes(&exact).unwrap().len(), bytes.len());
+        let short = CausalValueLimits::default()
+            .with_max_encoded_bytes(bytes.len() - 1)
+            .expect("short profile");
+        assert_eq!(
+            value.canonical_bytes(&short),
+            Err(CausalValueError::EncodedByteLimit {
+                limit: bytes.len() - 1,
+                actual: bytes.len(),
+            })
+        );
     }
 
     #[test]
@@ -568,7 +880,7 @@ mod tests {
                     0 => FrozenValue::Nil,
                     1 => FrozenValue::Bool(next(seed) & 1 == 1),
                     2 => FrozenValue::Int(next(seed) as i64),
-                    3 => FrozenValue::Float((next(seed) as i32) as f64 / 7.0),
+                    3 => FrozenValue::Float(((next(seed) as i32) as f64 / 7.0).into()),
                     4 => FrozenValue::String(format!("s{:016x}", next(seed))),
                     _ => FrozenValue::Bytes(next(seed).to_le_bytes().to_vec()),
                 };
@@ -631,10 +943,9 @@ mod tests {
             deep = FrozenValue::List(vec![deep]);
         }
         let mut vm = VM::new();
-        let limits = CausalValueLimits {
-            max_depth: 32,
-            ..CausalValueLimits::default()
-        };
+        let limits = CausalValueLimits::default()
+            .with_max_depth(32)
+            .expect("test profile");
         assert!(matches!(
             vm.import_value_with_limits(&deep, &limits),
             Err(CausalValueError::DepthLimit { limit: 32 })
@@ -661,10 +972,11 @@ mod tests {
         };
         assert!(vm.world.set_component(entity, component.clone()));
         vm.world.init_resource("Pair", component);
-        vm.set_causal_value_limits(CausalValueLimits {
-            max_encoded_bytes: 12,
-            ..CausalValueLimits::default()
-        });
+        vm.set_causal_value_limits(
+            CausalValueLimits::default()
+                .with_max_encoded_bytes(12)
+                .expect("test profile"),
+        );
 
         assert!(matches!(
             vm.component_value(entity, "Pair"),

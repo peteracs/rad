@@ -23,6 +23,7 @@ base world snapshot
   -> one resolver owns each intent type
   -> resolvers stage isolated candidate writes
   -> conflicts are rejected
+  -> constraints validate the complete candidate
   -> the complete patch commits atomically
 ```
 
@@ -130,10 +131,11 @@ internal record IDs.
 
 ## v0 boundaries
 
-Constraints, resolver ordering, resolver-to-resolver reads, resource or
-composite-key intents, derived intents, fixed-point evaluation, structural
+Projection/correction, resolver or constraint ordering, resolver-to-resolver
+reads, resource or composite-key intents, derived intents, fixed-point
+evaluation, structural
 world changes through `next`, cross-entity writes, and parallel settlement
 execution are deliberately outside RFC-0001. Validation-only constraints over
-the immutable complete candidate are proposed separately in
+the immutable complete candidate are implemented by
 [RFC-0002](https://github.com/peteracs/rad/blob/main/docs/rfcs/0002-candidate-constraints.md);
-the draft does not add projection, correction, or constraint ordering.
+see the [Candidate Constraints](candidate-constraints.md) guide.

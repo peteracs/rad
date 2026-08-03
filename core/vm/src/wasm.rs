@@ -66,16 +66,28 @@ impl RadRuntime {
     /// Host contract fingerprint for browser/native embedders. Keep this
     /// tiny and stable: pages use it before wiring advanced session features.
     pub fn runtime_features(&self) -> String {
+        let value_limits = self.vm.causal_value_limits();
+        let constraint_limits = self.vm.constraint_limit_profile();
         serde_json::json!({
             "version": env!("CARGO_PKG_VERSION"),
             "session": 2,
             "causal_laws": 1,
             "host_values": 1,
+            "causal_constraints": 1,
             "causal_value_limits": {
-                "max_depth": 128,
-                "max_nodes": 100000,
-                "max_encoded_bytes": 8388608,
-                "max_collection_items": 100000
+                "max_depth": value_limits.max_depth(),
+                "max_nodes": value_limits.max_nodes(),
+                "max_encoded_bytes": value_limits.max_encoded_bytes(),
+                "max_collection_items": value_limits.max_collection_items()
+            },
+            "constraint_limits": {
+                "version": constraint_limits.version(),
+                "fingerprint": constraint_limits.fingerprint(),
+                "fuel_per_invocation": constraint_limits.fuel_per_invocation(),
+                "max_heap_bytes_per_invocation": constraint_limits.max_heap_bytes_per_invocation(),
+                "max_violations_per_invocation": constraint_limits.max_violations_per_invocation(),
+                "max_violations_per_settlement": constraint_limits.max_violations_per_settlement(),
+                "max_serialized_outcome_bytes": constraint_limits.max_serialized_outcome_bytes()
             },
             "features": [
                 "streaming-session",
@@ -86,6 +98,7 @@ impl RadRuntime {
                 "inspect-why",
                 "preview-fork",
                 "timeline-trace"
+                ,"candidate-constraints-v1"
             ]
         })
         .to_string()
@@ -151,6 +164,51 @@ impl RadRuntime {
     }
 
     pub fn compile_and_run(&mut self, source: &str) -> Result<String, String> {
+        self.compile_and_run_detailed(source)
+            .map_err(|failure| failure.to_string())
+    }
+
+    /// Tagged JSON boundary for browser hosts that need structured
+    /// settlement rejections rather than compatibility error strings.
+    pub fn compile_and_run_result_json(&mut self, source: &str) -> String {
+        match self.compile_and_run_detailed(source) {
+            Ok(output) => serde_json::json!({
+                "kind": "ok",
+                "output": output,
+            })
+            .to_string(),
+            Err(crate::constraint_types::VmFailure::SettlementRejected(rejection)) => {
+                let mut value: serde_json::Value = serde_json::from_slice(
+                    &rejection.canonical_bytes(self.vm.constraint_limit_profile()),
+                )
+                .expect("canonical rejection JSON");
+                if let Some(object) = value.as_object_mut() {
+                    object.insert(
+                        "kind".into(),
+                        serde_json::Value::String("settlement_rejected".into()),
+                    );
+                }
+                value.to_string()
+            }
+            Err(crate::constraint_types::VmFailure::Runtime(error)) => serde_json::json!({
+                "kind": "runtime_error",
+                "code": error.code,
+                "message": error.message,
+            })
+            .to_string(),
+            Err(crate::constraint_types::VmFailure::Host(error)) => serde_json::json!({
+                "kind": "host_fault",
+                "code": error.code,
+                "message": error.message,
+            })
+            .to_string(),
+        }
+    }
+
+    fn compile_and_run_detailed(
+        &mut self,
+        source: &str,
+    ) -> Result<String, crate::constraint_types::VmFailure> {
         self.vm = VM::new();
         self.output.clear();
 
@@ -181,7 +239,9 @@ impl RadRuntime {
             .iter()
             .any(|d| matches!(d, Decl::Use(_)))
         {
-            return Err("Module imports are not supported in browser playground yet".to_string());
+            return Err("Module imports are not supported in browser playground yet"
+                .to_string()
+                .into());
         }
 
         let mut checker = Self::checker();
@@ -196,17 +256,19 @@ impl RadRuntime {
         }
 
         if !all_errors.is_empty() {
-            return Err(all_errors.join("\n"));
+            return Err(all_errors.join("\n").into());
         }
 
         let compile_result = Self::compiler()
             .with_checker_output(checker_output)
             .compile(&program)
-            .map_err(|e| format!("Compile error: {}", e.message))?;
+            .map_err(|e| {
+                crate::constraint_types::VmFailure::from(format!("Compile error: {}", e.message))
+            })?;
         self.vm.load_compile_result(compile_result);
 
         self.vm.print_buffer.clear();
-        match self.vm.run(0) {
+        match self.vm.run_detailed(0) {
             Ok(()) => {
                 self.output = self.vm.print_buffer.clone();
                 Ok(self.output.join("\n"))
@@ -1263,12 +1325,37 @@ print(require(hero, Health).hp)
         let features: serde_json::Value =
             serde_json::from_str(&rt.runtime_features()).expect("feature JSON");
         assert_eq!(features["causal_laws"], 1);
+        assert_eq!(features["causal_constraints"], 1);
         assert_eq!(features["host_values"], 1);
         assert_eq!(features["causal_value_limits"]["max_depth"], 128);
         assert_eq!(
             features["causal_value_limits"]["max_encoded_bytes"],
             8 * 1024 * 1024
         );
+    }
+
+    #[test]
+    fn browser_boundary_returns_tagged_candidate_rejection_json() {
+        let mut runtime = RadRuntime::new();
+        let result: serde_json::Value = serde_json::from_str(&runtime.compile_and_run_result_json(
+            r#"
+component Position { x: int = 0 }
+intent Move { key target: entity, amount: int }
+law Push(target: entity) { propose Move { target: target, amount: 20 } }
+resolver ResolveMove for Move(target, proposals) {
+    next(target, Position { x: proposals[0].amount })
+}
+constraint WorldBounds for Position(subject, proposed) {
+    require proposed.x <= 10 else "position.above_max"
+}
+entity hero { Position {} }
+settle { Push(hero) }
+"#,
+        ))
+        .expect("tagged result JSON");
+        assert_eq!(result["kind"], "settlement_rejected");
+        assert_eq!(result["violations"][0]["code"], "position.above_max");
+        assert_eq!(result["evaluation_failures"], serde_json::json!([]));
     }
 
     #[test]

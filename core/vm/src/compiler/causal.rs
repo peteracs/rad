@@ -82,6 +82,46 @@ impl Compiler {
         Ok(())
     }
 
+    pub(crate) fn compile_constraint_decl(
+        &mut self,
+        decl: &ConstraintDecl,
+    ) -> Result<(), CompileError> {
+        self.require_causal_feature(&decl.span)?;
+        let name = self.resolve_canonical_name(&decl.name);
+        let attached_component = self.resolve_canonical_name(&decl.component_name);
+        let hidden_name = format!("__constraint__{name}");
+        self.causal_lowering_depth += 1;
+        let result = self.compile_fn_decl(&FnDecl {
+            id: decl.id,
+            span: decl.span.clone(),
+            name: hidden_name.clone(),
+            is_pub: false,
+            type_params: Vec::new(),
+            params: vec![decl.subject_param.clone(), decl.proposed_param.clone()],
+            param_muts: vec![false, false],
+            param_types: vec![None, None],
+            return_type: None,
+            body: decl.body.clone(),
+            is_pure: false,
+            is_async: false,
+            effects: vec!["readonly".to_string()],
+        });
+        self.causal_lowering_depth -= 1;
+        result?;
+        let global_slot = self.ensure_global_slot(&hidden_name);
+        self.constraints.push(ConstraintChunkInfo {
+            name,
+            attached_component,
+            watches: decl
+                .watches
+                .iter()
+                .map(|watch| self.resolve_canonical_name(watch))
+                .collect(),
+            global_slot,
+        });
+        Ok(())
+    }
+
     pub(crate) fn compile_settle(&mut self, stmt: &SettleStmt) -> Result<(), CompileError> {
         self.require_causal_feature(&stmt.span)?;
         self.emit_op(Op::BeginSettlement, stmt.span.line);
@@ -126,6 +166,15 @@ impl Compiler {
             stmt.span.clone(),
         ))?;
         self.emit_op(Op::StageCandidate, stmt.span.line);
+        Ok(())
+    }
+
+    pub(crate) fn compile_require(&mut self, stmt: &RequireStmt) -> Result<(), CompileError> {
+        self.require_causal_feature(&stmt.span)?;
+        self.compile_expr(&stmt.condition)?;
+        let code = self.add_constant_gc(|gc| Value::from_string(gc, stmt.code.clone()));
+        self.emit_op(Op::RequireConstraint, stmt.span.line);
+        self.emit_u16(code, stmt.span.line);
         Ok(())
     }
 

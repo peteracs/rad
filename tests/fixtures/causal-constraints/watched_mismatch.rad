@@ -1,0 +1,19 @@
+// flags: --experimental-laws
+// error: motion.mismatch
+
+component Position { x: int = 0 }
+component Velocity { x: int = 0 }
+intent Motion { key target: entity, position: int, velocity: int }
+law Move(target: entity, position: int, velocity: int) {
+    propose Motion { target: target, position: position, velocity: velocity }
+}
+resolver ResolveMotion for Motion(target, proposals) {
+    next(target, Position { x: proposals[0].position })
+    next(target, Velocity { x: proposals[0].velocity })
+}
+constraint ConsistentMotion for Position(subject, proposed) watches Velocity {
+    let velocity = candidate(subject, Velocity)
+    require proposed.x == velocity.x else "motion.mismatch"
+}
+entity hero { Position {}, Velocity {} }
+settle { Move(hero, 7, 8) }

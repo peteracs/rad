@@ -1,0 +1,7 @@
+---
+source: ../../tests/fixtures/causal-constraints\unstable_violation_code.rad
+exit_code: 1
+---
+
+---stderr---
+Error: constraint violation code 'Has Spaces' is not stable

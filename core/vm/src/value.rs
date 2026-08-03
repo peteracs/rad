@@ -1502,6 +1502,72 @@ pub enum Object {
 }
 
 impl Object {
+    /// Deterministic retained-size estimate for allocations owned by this
+    /// object but not covered by `size_of::<Object>()`. Causal code cannot
+    /// mutate these containers in place, so the allocation-time charge stays
+    /// valid for an invocation's heap budget.
+    pub(crate) fn accounted_heap_bytes(&self) -> usize {
+        fn key_bytes(key: &MapKey) -> usize {
+            match key {
+                MapKey::Int(_) => std::mem::size_of::<i64>(),
+                MapKey::Str(value) => value.len(),
+                MapKey::Bool(_) => 1,
+                MapKey::Entity(_) => std::mem::size_of::<u32>(),
+                MapKey::Tuple(values) => values.iter().map(key_bytes).sum(),
+            }
+        }
+        fn text_fields(fields: &HashMap<String, Value>) -> usize {
+            fields
+                .keys()
+                .map(|name| name.len().saturating_add(std::mem::size_of::<Value>()))
+                .sum()
+        }
+
+        match self {
+            Object::BigInt(_) => 0,
+            Object::Str(value) => value.len(),
+            Object::List(values) => values.len().saturating_mul(std::mem::size_of::<Value>()),
+            Object::Component(component) => component
+                .type_name
+                .len()
+                .saturating_add(
+                    component
+                        .values
+                        .len()
+                        .saturating_mul(std::mem::size_of::<Value>()),
+                )
+                .saturating_add(component.layout.iter().map(|name| name.len()).sum()),
+            Object::State(state) => state.machine.len().saturating_add(state.state.len()),
+            Object::SumType(sum) => sum
+                .type_name
+                .len()
+                .saturating_add(sum.variant.len())
+                .saturating_add(text_fields(&sum.fields)),
+            Object::Fn(function) => function.name.len(),
+            Object::Closure(closure) => closure
+                .captures
+                .len()
+                .saturating_mul(std::mem::size_of::<*mut gc::CaptureCell>()),
+            Object::Cell(_) | Object::BuiltinFn(_) | Object::EntityId(_) | Object::Task(_) => 0,
+            Object::NativeFn(native) => native.name.len(),
+            Object::Tuple(values) => values.len().saturating_mul(std::mem::size_of::<Value>()),
+            Object::Map(map) => map
+                .keys()
+                .map(|key| key_bytes(key).saturating_add(std::mem::size_of::<Value>()))
+                .sum(),
+            Object::MapIter(map, _, order) => map
+                .keys()
+                .map(|key| key_bytes(key).saturating_add(std::mem::size_of::<Value>()))
+                .sum::<usize>()
+                .saturating_add(order.iter().map(key_bytes).sum()),
+            Object::BitSet(words) => words.len().saturating_mul(std::mem::size_of::<u64>()),
+            Object::Buffer(value) => value.len(),
+            Object::ByteBuf(bytes) => bytes.len(),
+            Object::SystemRef(name) => name.len(),
+            Object::WorldFork(_) => 0,
+        }
+    }
+
     pub fn trace(&self, marked: &mut HashSet<usize>) {
         match self {
             Object::List(list) => {

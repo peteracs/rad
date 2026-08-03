@@ -1,0 +1,5 @@
+---
+source: ../../tests/fixtures/causal-constraints\valid_candidate_view.rad
+exit_code: 0
+---
+4

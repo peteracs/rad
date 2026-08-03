@@ -57,9 +57,13 @@ pub(crate) fn opcode_effect(op: Op) -> OpcodeEffect {
 
         Call => OpcodeEffect::DynamicCall,
         Return | Try => OpcodeEffect::FrameExit,
-        BeginSettlement | EndSettlement | ProposeIntent | StageCandidate => {
-            OpcodeEffect::SettlementKernel
-        }
+        BeginSettlement
+        | EndSettlement
+        | ProposeIntent
+        | StageCandidate
+        | ReadBaseComponent
+        | ReadCandidateComponent
+        | RequireConstraint => OpcodeEffect::SettlementKernel,
 
         Const | Pop | PopN | Dup | Add | Sub | Mul | Div | Mod | Neg | Eq | Neq | Lt | Gt | Lte
         | Gte | Not | And | Or | GetGlobal | GetLocal | GetLocal2 | GetUpvalue | Jump

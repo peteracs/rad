@@ -24,6 +24,7 @@ fn decl_name(decl: &Decl) -> Option<&str> {
         Decl::Intent(i) => Some(&i.name),
         Decl::Law(l) => Some(&l.name),
         Decl::Resolver(r) => Some(&r.name),
+        Decl::Constraint(c) => Some(&c.name),
         Decl::Entity(e) => Some(&e.name),
         Decl::State(s) => Some(&s.name),
         Decl::System(s) => Some(&s.name),
@@ -47,6 +48,7 @@ fn decl_is_pub(decl: &Decl) -> bool {
         Decl::Intent(i) => i.is_pub,
         Decl::Law(l) => l.is_pub,
         Decl::Resolver(r) => r.is_pub,
+        Decl::Constraint(c) => c.is_pub,
         Decl::Entity(e) => e.is_pub,
         Decl::State(s) => s.is_pub,
         Decl::System(s) => s.is_pub,
@@ -164,6 +166,13 @@ pub(crate) enum CausalContext {
         intent: String,
         key_param: String,
     },
+    Constraint {
+        name: String,
+        attached_component: String,
+        subject_param: String,
+        proposed_param: String,
+        watches: HashSet<String>,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -182,6 +191,11 @@ pub(crate) struct LawType {
 pub(crate) struct ResolverOwner {
     pub(crate) name: String,
     pub(crate) span: Span,
+}
+#[derive(Debug, Clone)]
+pub(crate) struct ConstraintType {
+    pub(crate) attached_component: String,
+    pub(crate) watches: HashSet<String>,
 }
 #[derive(Debug, Clone)]
 pub(crate) struct FunctionSig {
@@ -220,6 +234,7 @@ pub struct Checker {
     pub(crate) intents: HashMap<String, IntentType>,
     pub(crate) laws: HashMap<String, LawType>,
     pub(crate) resolvers: HashMap<String, Vec<ResolverOwner>>,
+    pub(crate) constraints: HashMap<String, ConstraintType>,
     pub(crate) proposed_intents: HashSet<String>,
     pub(crate) state_machines: HashMap<String, StateMachineType>,
     pub(crate) systems: HashMap<String, SystemType>,
@@ -440,6 +455,7 @@ impl Checker {
             intents: HashMap::new(),
             laws: HashMap::new(),
             resolvers: HashMap::new(),
+            constraints: HashMap::new(),
             proposed_intents: HashSet::new(),
             state_machines: HashMap::new(),
             systems: HashMap::new(),
@@ -706,6 +722,11 @@ impl Checker {
                         let mut resolver = r.clone();
                         resolver.name = mangled.clone();
                         self.register_resolver(&resolver);
+                    }
+                    Decl::Constraint(c) => {
+                        let mut constraint = c.clone();
+                        constraint.name = mangled.clone();
+                        self.register_constraint(&constraint);
                     }
                     Decl::State(s) => {
                         if let Some(canonical) = self.find_canonical_type_name(s.span.file, &orig) {

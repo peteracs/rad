@@ -1,0 +1,9 @@
+---
+source: ../../tests/fixtures/causal-constraints\watched_mismatch.rad
+exit_code: 1
+---
+
+---stderr---
+Error: Settlement rejected: 1 violation(s), 0 evaluation failure(s)
+  - ConsistentMotion(0): motion.mismatch
+No world state was changed.

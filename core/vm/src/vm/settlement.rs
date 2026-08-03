@@ -8,6 +8,7 @@
 use super::*;
 use crate::value::{ComponentData, Value};
 use crate::world::{World, WorldSnapshot};
+use sha2::Digest;
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
@@ -26,12 +27,20 @@ pub struct ResolverRuntimeInfo {
 }
 
 #[derive(Clone, Debug)]
+pub struct ConstraintRuntimeInfo {
+    pub(crate) name: String,
+    pub(crate) attached_component: String,
+    pub(crate) watches: Arc<Vec<String>>,
+    pub(crate) global_slot: u16,
+}
+
+#[derive(Clone, Debug)]
 pub(crate) struct Proposal {
     pub(crate) id: u64,
     pub(crate) intent: String,
     pub(crate) key: u32,
     pub(crate) payload: Value,
-    pub(crate) canonical: String,
+    pub(crate) canonical: Vec<u8>,
     pub(crate) law: String,
     pub(crate) source_line: u32,
 }
@@ -60,6 +69,14 @@ pub(crate) struct ActiveResolution {
     pub(crate) writes: Vec<CandidateWrite>,
 }
 
+#[derive(Clone, Debug)]
+pub(crate) struct ActiveConstraint {
+    pub(crate) identity: crate::constraint_types::ConstraintIdentity,
+    pub(crate) subject: u32,
+    pub(crate) violations: Vec<crate::constraint_types::ConstraintViolation>,
+    pub(crate) overflowed: bool,
+}
+
 #[derive(Clone)]
 pub(crate) struct SettlementContext {
     pub(crate) settlement_id: u64,
@@ -71,6 +88,7 @@ pub(crate) struct SettlementContext {
     pub(crate) proposals: Vec<Proposal>,
     pub(crate) patches: Vec<ResolutionPatch>,
     pub(crate) active: Option<ActiveResolution>,
+    pub(crate) active_constraint: Option<ActiveConstraint>,
     pub(crate) next_proposal_id: u64,
 }
 
@@ -144,10 +162,10 @@ impl VM {
     /// Enforce the public VM invariant that no execution result can expose an
     /// unfinished settlement. Errors keep their original diagnostic; a
     /// successful escape is a compiler/bytecode fault and becomes an error.
-    pub(crate) fn enforce_settlement_balance<T>(
-        &mut self,
-        result: Result<T, String>,
-    ) -> Result<T, String> {
+    pub(crate) fn enforce_settlement_balance<T, E>(&mut self, result: Result<T, E>) -> Result<T, E>
+    where
+        E: From<String>,
+    {
         if self.settlement.is_none() {
             return result;
         }
@@ -155,7 +173,8 @@ impl VM {
         match result {
             Ok(_) => Err(
                 "Internal VM error: unbalanced settlement at public execution boundary; transaction was aborted"
-                    .to_string(),
+                    .to_string()
+                    .into(),
             ),
             Err(error) => Err(error),
         }
@@ -180,6 +199,7 @@ impl VM {
             proposals: Vec::new(),
             patches: Vec::new(),
             active: None,
+            active_constraint: None,
             next_proposal_id: 1,
         });
         Ok(())
@@ -232,11 +252,8 @@ impl VM {
                     intent_name, info.key_field
                 )
             })?;
-        let canonical = {
-            let mut encoded = String::new();
-            crate::wire::encode_value_into(&payload, &mut encoded)?;
-            encoded
-        };
+        let canonical = crate::canonical_value::internal_bytes(&payload, &limits)
+            .map_err(|error| error.to_string())?;
         let law = self.current_chunk().name.clone();
         let context = self.settlement.as_mut().ok_or_else(|| {
             format!(
@@ -246,6 +263,9 @@ impl VM {
         })?;
         if context.active.is_some() {
             return Err("Resolvers cannot propose another intent in v0".to_string());
+        }
+        if context.active_constraint.is_some() {
+            return Err("Constraints cannot propose intents".to_string());
         }
         let id = context.next_proposal_id;
         context.next_proposal_id += 1;
@@ -290,6 +310,9 @@ impl VM {
             .settlement
             .as_mut()
             .ok_or_else(|| "`next` is only valid while resolving a settlement".to_string())?;
+        if context.active_constraint.is_some() {
+            return Err("Constraints cannot stage candidate writes".to_string());
+        }
         let active = context
             .active
             .as_mut()
@@ -317,7 +340,404 @@ impl VM {
         Ok(())
     }
 
-    pub(crate) fn finish_settlement(&mut self) -> Result<(), String> {
+    pub(crate) fn read_constraint_component(
+        &mut self,
+        entity: Value,
+        component: &str,
+        candidate: bool,
+    ) -> Result<Value, String> {
+        let entity = entity
+            .as_entity_id()
+            .ok_or_else(|| "constraint read expected an entity subject".to_string())?;
+        self.sandbox_check_read(component)?;
+        let context = self
+            .settlement
+            .as_ref()
+            .ok_or_else(|| "constraint read requires an active settlement".to_string())?;
+        let active = context
+            .active_constraint
+            .as_ref()
+            .ok_or_else(|| "constraint read is only valid while a constraint runs".to_string())?;
+        if active.subject != entity {
+            return Err(format!(
+                "constraint `{}` may only read subject {}",
+                active.identity.qualified_name, active.subject
+            ));
+        }
+        let data = if candidate {
+            context
+                .patches
+                .iter()
+                .flat_map(|patch| patch.writes.iter())
+                .find(|write| write.entity == entity && write.component.type_name == component)
+                .map(|write| write.component.clone())
+                .or_else(|| context.base.get_component(entity, component))
+        } else {
+            context.base.get_component(entity, component)
+        };
+        Ok(match data {
+            Some(data) => Value::component(&mut self.gc, data.type_name, data.layout, data.values),
+            None => Value::NIL,
+        })
+    }
+
+    pub(crate) fn require_constraint(
+        &mut self,
+        condition: Value,
+        code: String,
+        source_line: u32,
+    ) -> Result<(), String> {
+        let valid = condition
+            .as_bool()
+            .ok_or_else(|| "constraint requirement must evaluate to bool".to_string())?;
+        if valid {
+            return Ok(());
+        }
+        let (subject, attached_component) = self
+            .settlement
+            .as_ref()
+            .and_then(|context| context.active_constraint.as_ref())
+            .map(|active| (active.subject, active.identity.attached_component.clone()))
+            .ok_or_else(|| "`require` is only valid while a constraint runs".to_string())?;
+        let candidate_detail = Self::candidate_component(
+            self.settlement.as_ref().expect("active settlement"),
+            subject,
+            &attached_component,
+        )
+        .and_then(|component| {
+            crate::host_value::export_component_data(component, &self.causal_value_limits).ok()
+        })
+        .map(crate::constraint_types::RejectionValue::Visible)
+        .unwrap_or(crate::constraint_types::RejectionValue::Redacted);
+        let per_invocation_limit = self
+            .constraint_limit_profile
+            .max_violations_per_invocation();
+        let active = self
+            .settlement
+            .as_mut()
+            .and_then(|context| context.active_constraint.as_mut())
+            .ok_or_else(|| "`require` is only valid while a constraint runs".to_string())?;
+        if active.violations.len() >= per_invocation_limit {
+            active.overflowed = true;
+            return Ok(());
+        }
+        let occurrence = active
+            .violations
+            .iter()
+            .filter(|violation| violation.code == code)
+            .count() as u32
+            + 1;
+        active
+            .violations
+            .push(crate::constraint_types::ConstraintViolation {
+                constraint: active.identity.clone(),
+                subject: active.subject,
+                code,
+                occurrence,
+                source_line,
+                details: BTreeMap::from([("candidate".into(), candidate_detail)]),
+            });
+        Ok(())
+    }
+
+    fn candidate_component(
+        context: &SettlementContext,
+        entity: u32,
+        component: &str,
+    ) -> Option<ComponentData> {
+        context
+            .patches
+            .iter()
+            .flat_map(|patch| patch.writes.iter())
+            .find(|write| write.entity == entity && write.component.type_name == component)
+            .map(|write| write.component.clone())
+            .or_else(|| context.base.get_component(entity, component))
+    }
+
+    pub(crate) fn constraint_capabilities(
+        &self,
+    ) -> crate::constraint_types::RejectionCapabilityMetadata {
+        match &self.sandbox_caps {
+            Some(capabilities) => {
+                let readable_components = capabilities
+                    .readable_components
+                    .iter()
+                    .cloned()
+                    .collect::<std::collections::BTreeSet<_>>();
+                let profile_id = format!(
+                    "sandbox:{}",
+                    hex::encode(sha2::Sha256::digest(
+                        readable_components
+                            .iter()
+                            .cloned()
+                            .collect::<Vec<_>>()
+                            .join("\0")
+                            .as_bytes()
+                    ))
+                );
+                crate::constraint_types::RejectionCapabilityMetadata {
+                    profile_id,
+                    origins_visible: capabilities.may_read_all(),
+                    readable_components,
+                }
+            }
+            None => crate::constraint_types::RejectionCapabilityMetadata {
+                profile_id: "trusted".into(),
+                readable_components: std::collections::BTreeSet::from(["*".into()]),
+                origins_visible: true,
+            },
+        }
+    }
+
+    fn evaluate_candidate_constraints(
+        &mut self,
+    ) -> Result<(), std::sync::Arc<crate::constraint_types::SettlementRejection>> {
+        use crate::constraint_types::{
+            ConstraintEvaluationFailure, ConstraintIdentity, ConstraintViolation,
+            EphemeralCausalExplanation, RejectionProposalOrigin, RejectionValue,
+            SettlementRejection,
+        };
+
+        let staged = self
+            .settlement
+            .as_ref()
+            .expect("constraint phase requires settlement")
+            .patches
+            .iter()
+            .flat_map(|patch| patch.writes.iter())
+            .map(|write| (write.entity, write.component.type_name.clone()))
+            .collect::<std::collections::BTreeSet<_>>();
+        let registry = self.constraint_registry.as_ref().clone();
+        let mut selected = std::collections::BTreeSet::new();
+        for constraint in &registry {
+            for (entity, component) in &staged {
+                if component != &constraint.attached_component
+                    && !constraint.watches.contains(component)
+                {
+                    continue;
+                }
+                let exists = Self::candidate_component(
+                    self.settlement.as_ref().unwrap(),
+                    *entity,
+                    &constraint.attached_component,
+                )
+                .is_some();
+                if exists {
+                    selected.insert((constraint.name.clone(), *entity));
+                }
+            }
+        }
+
+        let by_name = registry
+            .into_iter()
+            .map(|constraint| (constraint.name.clone(), constraint))
+            .collect::<BTreeMap<_, _>>();
+        let mut violations: Vec<ConstraintViolation> = Vec::new();
+        let mut evaluation_failures = Vec::new();
+        for (name, subject) in &selected {
+            let constraint = by_name
+                .get(name)
+                .expect("selected constraint must be registered");
+            let identity = ConstraintIdentity {
+                qualified_name: constraint.name.clone(),
+                attached_component: constraint.attached_component.clone(),
+            };
+            let Some(proposed) = Self::candidate_component(
+                self.settlement.as_ref().unwrap(),
+                *subject,
+                &constraint.attached_component,
+            ) else {
+                continue;
+            };
+            let Some(callee) = self.globals.get(constraint.global_slot as usize).copied() else {
+                evaluation_failures.push(ConstraintEvaluationFailure {
+                    constraint: identity,
+                    subject: *subject,
+                    code: "constraint.not_initialized".into(),
+                    message: "compiled constraint global is missing".into(),
+                    source_line: 0,
+                });
+                continue;
+            };
+            self.settlement.as_mut().unwrap().active_constraint = Some(ActiveConstraint {
+                identity: identity.clone(),
+                subject: *subject,
+                violations: Vec::new(),
+                overflowed: false,
+            });
+            let subject_value = Value::from_entity_id(&mut self.gc, *subject);
+            let proposed_value = Value::component(
+                &mut self.gc,
+                proposed.type_name,
+                proposed.layout,
+                proposed.values,
+            );
+            let frame_depth = self.frames.len();
+            let stack_depth = self.stack.len();
+            let next_frame_id = self.next_frame_id;
+            let saved_fuel = self.fuel;
+            let saved_mem_limit = self.mem_limit;
+            let invocation_fuel = self
+                .constraint_limit_profile
+                .fuel_per_invocation()
+                .min(saved_fuel);
+            self.fuel = invocation_fuel;
+            self.mem_limit = saved_mem_limit.min(
+                self.gc.bytes_allocated().saturating_add(
+                    self.constraint_limit_profile
+                        .max_heap_bytes_per_invocation(),
+                ),
+            );
+            let result = self.call_value(&callee, vec![subject_value, proposed_value]);
+            let remaining_fuel = self.fuel;
+            let consumed = invocation_fuel.saturating_sub(remaining_fuel);
+            self.fuel = if saved_fuel == u64::MAX {
+                u64::MAX
+            } else {
+                saved_fuel.saturating_sub(consumed)
+            };
+            self.mem_limit = saved_mem_limit;
+            if result.is_err() {
+                self.frames.truncate(frame_depth);
+                self.stack.truncate(stack_depth);
+                self.next_frame_id = next_frame_id;
+            }
+            let active = self
+                .settlement
+                .as_mut()
+                .and_then(|context| context.active_constraint.take())
+                .expect("constraint invocation must retain its active context");
+            match result {
+                Ok(_) if active.overflowed => {
+                    evaluation_failures.push(ConstraintEvaluationFailure {
+                        constraint: identity,
+                        subject: *subject,
+                        code: "constraint.invocation_violation_limit".into(),
+                        message: format!(
+                            "constraint exceeded {} violations",
+                            self.constraint_limit_profile
+                                .max_violations_per_invocation()
+                        ),
+                        source_line: 0,
+                    });
+                }
+                Ok(_) => violations.extend(active.violations),
+                Err(error) => {
+                    evaluation_failures.push(ConstraintEvaluationFailure {
+                        constraint: identity,
+                        subject: *subject,
+                        code: if error.contains("memory limit") {
+                            "constraint.memory_exhausted".into()
+                        } else if error.contains("fuel") || error.contains("Budget exhausted") {
+                            "constraint.fuel_exhausted".into()
+                        } else {
+                            "constraint.evaluation_failed".into()
+                        },
+                        message: error,
+                        source_line: 0,
+                    });
+                }
+            }
+        }
+
+        if violations.len()
+            > self
+                .constraint_limit_profile
+                .max_violations_per_settlement()
+        {
+            violations.clear();
+            evaluation_failures.push(ConstraintEvaluationFailure {
+                constraint: ConstraintIdentity {
+                    qualified_name: "<settlement>".into(),
+                    attached_component: "<all>".into(),
+                },
+                subject: 0,
+                code: "constraint.settlement_violation_limit".into(),
+                message: format!(
+                    "settlement exceeded {} violations",
+                    self.constraint_limit_profile
+                        .max_violations_per_settlement()
+                ),
+                source_line: 0,
+            });
+        }
+        if violations.is_empty() && evaluation_failures.is_empty() {
+            return Ok(());
+        }
+
+        let context = self.settlement.as_ref().unwrap();
+        let mut base_world = World::new();
+        base_world.restore(context.base.clone());
+        let explanation = EphemeralCausalExplanation {
+            proposal_origins: context
+                .proposals
+                .iter()
+                .map(|proposal| RejectionProposalOrigin {
+                    law: proposal.law.clone(),
+                    source_line: proposal.source_line,
+                    payload: crate::host_value::export_value(&proposal.payload)
+                        .map(RejectionValue::Visible)
+                        .unwrap_or(RejectionValue::Redacted),
+                })
+                .collect(),
+        };
+        let trusted_capabilities = crate::constraint_types::RejectionCapabilityMetadata {
+            profile_id: "internal".into(),
+            readable_components: std::collections::BTreeSet::from(["*".into()]),
+            origins_visible: true,
+        };
+        let mut rejection = SettlementRejection {
+            settlement_id: context.settlement_id,
+            base_world_digest: base_world.content_digest(),
+            applicable_constraints: selected
+                .iter()
+                .filter_map(|(name, _)| by_name.get(name))
+                .map(|constraint| ConstraintIdentity {
+                    qualified_name: constraint.name.clone(),
+                    attached_component: constraint.attached_component.clone(),
+                })
+                .collect(),
+            violations,
+            evaluation_failures,
+            explanation,
+            limit_profile_fingerprint: self.constraint_limit_profile.fingerprint(),
+            capabilities: trusted_capabilities,
+        };
+        rejection.canonicalize();
+        let rejection = rejection.redacted_for(self.constraint_capabilities());
+        let encoded_size = rejection
+            .canonical_bytes(&self.constraint_limit_profile)
+            .len();
+        if encoded_size > self.constraint_limit_profile.max_serialized_outcome_bytes() {
+            let mut bounded = SettlementRejection {
+                settlement_id: rejection.settlement_id,
+                base_world_digest: rejection.base_world_digest,
+                applicable_constraints: rejection.applicable_constraints,
+                violations: Vec::new(),
+                evaluation_failures: vec![ConstraintEvaluationFailure {
+                    constraint: ConstraintIdentity {
+                        qualified_name: "<settlement>".into(),
+                        attached_component: "<all>".into(),
+                    },
+                    subject: 0,
+                    code: "constraint.outcome_byte_limit".into(),
+                    message: format!(
+                        "canonical rejection is {encoded_size} bytes with a limit of {}",
+                        self.constraint_limit_profile.max_serialized_outcome_bytes()
+                    ),
+                    source_line: 0,
+                }],
+                explanation: EphemeralCausalExplanation::default(),
+                limit_profile_fingerprint: rejection.limit_profile_fingerprint,
+                capabilities: rejection.capabilities,
+            };
+            bounded.canonicalize();
+            return Err(std::sync::Arc::new(bounded));
+        }
+        Err(std::sync::Arc::new(rejection))
+    }
+
+    pub(crate) fn finish_settlement(&mut self) -> Result<(), crate::constraint_types::VmFailure> {
         self.ensure_current_frame_owns_settlement("EndSettlement")?;
         let result = self.resolve_and_commit_settlement();
         if result.is_err() {
@@ -372,7 +792,13 @@ impl VM {
         Err(message)
     }
 
-    fn resolve_and_commit_settlement(&mut self) -> Result<(), String> {
+    fn resolve_and_commit_settlement(&mut self) -> Result<(), crate::constraint_types::VmFailure> {
+        #[allow(non_snake_case)]
+        fn Err<T, E: Into<crate::constraint_types::VmFailure>>(
+            error: E,
+        ) -> Result<T, crate::constraint_types::VmFailure> {
+            Result::Err(error.into())
+        }
         let proposals = self
             .settlement
             .as_ref()
@@ -423,7 +849,7 @@ impl VM {
                 proposal_ids,
                 writes: Vec::new(),
             });
-            if let Err(error) = self.call_value(&callee, vec![key_value, list]) {
+            if let Result::Err(error) = self.call_value(&callee, vec![key_value, list]) {
                 self.settlement.as_mut().unwrap().active = None;
                 return Err(format!(
                     "Settlement aborted while resolver `{}` handled {}({}): {}\nNo world state was changed.",
@@ -474,8 +900,16 @@ impl VM {
             }
         }
 
+        let _ = context;
+        if let Result::Err(rejection) = self.evaluate_candidate_constraints() {
+            return Result::Err(crate::constraint_types::VmFailure::SettlementRejected(
+                rejection,
+            ));
+        }
+
         // Apply into a CoW candidate world. The live world and ledger remain
         // untouched until every write succeeds.
+        let context = self.settlement.as_ref().unwrap();
         let base = context.base.clone();
         let mut candidate = World::new();
         candidate.restore(base);

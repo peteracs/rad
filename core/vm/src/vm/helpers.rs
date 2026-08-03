@@ -97,12 +97,15 @@ pub(crate) fn binary_add(gc: &mut GcHeap, a: Value, b: Value) -> Result<Value, S
 /// Element-wise tuple math — the vector dialect. `(a, b) + (c, d)` is
 /// `(a+c, b+d)`; a scalar on either side broadcasts: `dir * speed`,
 /// `2.0 * v`, `v / n`. Arity mismatches are loud errors.
-fn tuple_elementwise(
+fn tuple_elementwise<F>(
     gc: &mut GcHeap,
     a: &Value,
     b: &Value,
-    op: fn(&mut GcHeap, Value, Value) -> Result<Value, String>,
-) -> Result<Option<Value>, String> {
+    mut op: F,
+) -> Result<Option<Value>, String>
+where
+    F: FnMut(&mut GcHeap, Value, Value) -> Result<Value, String>,
+{
     let a_items = a.as_tuple().cloned();
     let b_items = b.as_tuple().cloned();
     match (a_items, b_items) {
@@ -160,7 +163,12 @@ pub(crate) fn binary_sub(gc: &mut GcHeap, a: Value, b: Value) -> Result<Value, S
     ))
 }
 
-pub(crate) fn binary_mul(gc: &mut GcHeap, a: Value, b: Value) -> Result<Value, String> {
+pub(crate) fn binary_mul(
+    gc: &mut GcHeap,
+    a: Value,
+    b: Value,
+    allocation_limit: usize,
+) -> Result<Value, String> {
     if let (Some(i), Some(j)) = (a.as_int(), b.as_int()) {
         let result = i
             .checked_mul(j)
@@ -176,15 +184,29 @@ pub(crate) fn binary_mul(gc: &mut GcHeap, a: Value, b: Value) -> Result<Value, S
         if n < 0 {
             return Ok(Value::from_string(gc, String::new()));
         }
+        let bytes = s.len().checked_mul(n as usize).ok_or_else(|| {
+            "Budget exhausted: memory limit exceeded by string repetition".to_string()
+        })?;
+        if gc.bytes_allocated().saturating_add(bytes) > allocation_limit {
+            return Err("Budget exhausted: memory limit exceeded by string repetition".into());
+        }
         return Ok(Value::from_string(gc, s.repeat(n as usize)));
     }
     if let (Some(n), Some(s)) = (a.as_int(), b.as_str()) {
         if n < 0 {
             return Ok(Value::from_string(gc, String::new()));
         }
+        let bytes = s.len().checked_mul(n as usize).ok_or_else(|| {
+            "Budget exhausted: memory limit exceeded by string repetition".to_string()
+        })?;
+        if gc.bytes_allocated().saturating_add(bytes) > allocation_limit {
+            return Err("Budget exhausted: memory limit exceeded by string repetition".into());
+        }
         return Ok(Value::from_string(gc, s.repeat(n as usize)));
     }
-    if let Some(out) = tuple_elementwise(gc, &a, &b, binary_mul)? {
+    if let Some(out) = tuple_elementwise(gc, &a, &b, |gc, left, right| {
+        binary_mul(gc, left, right, allocation_limit)
+    })? {
         return Ok(out);
     }
     Err(format!(

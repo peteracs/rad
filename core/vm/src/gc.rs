@@ -67,6 +67,7 @@ struct GcEntry {
     ptr: *mut u8,
     drop_fn: unsafe fn(*mut u8),
     layout: std::alloc::Layout,
+    accounted_size: usize,
 }
 
 unsafe fn drop_typed<T>(ptr: *mut u8) {
@@ -85,14 +86,20 @@ impl GcHeap {
     /// Allocate a `T` on the GC heap.  Returns a raw pointer to `T`.
     /// The GC owns the allocation; callers must **never** free it.
     pub fn alloc<T>(&mut self, value: T) -> *mut T {
+        self.alloc_accounted(value, 0)
+    }
+
+    fn alloc_accounted<T>(&mut self, value: T, retained_bytes: usize) -> *mut T {
         let ptr = Box::into_raw(Box::new(value));
         let layout = std::alloc::Layout::new::<T>();
+        let accounted_size = layout.size().saturating_add(retained_bytes);
         self.objects.push(GcEntry {
             ptr: ptr as *mut u8,
             drop_fn: drop_typed::<T>,
             layout,
+            accounted_size,
         });
-        self.bytes_allocated += layout.size();
+        self.bytes_allocated = self.bytes_allocated.saturating_add(accounted_size);
         ptr
     }
 
@@ -123,7 +130,7 @@ impl GcHeap {
                     (entry.drop_fn)(entry.ptr);
                     std::alloc::dealloc(entry.ptr, entry.layout);
                 }
-                bytes_freed += entry.layout.size();
+                bytes_freed = bytes_freed.saturating_add(entry.accounted_size);
                 swept += 1;
                 false
             }
@@ -154,7 +161,8 @@ impl GcHeap {
 
 impl crate::value::Allocator for GcHeap {
     fn alloc_object(&mut self, obj: crate::value::Object) -> *mut crate::value::Object {
-        self.alloc(obj)
+        let retained_bytes = obj.accounted_heap_bytes();
+        self.alloc_accounted(obj, retained_bytes)
     }
 }
 

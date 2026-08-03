@@ -173,6 +173,7 @@ impl EscapeAnalyzer {
                     self.visit_expr(expr);
                 }
             }
+            Stmt::Require(s) => self.visit_expr(&s.condition),
             Stmt::Break(_) | Stmt::Continue(_) | Stmt::OnceGuardPass(_) | Stmt::Error(_) => {}
         }
     }

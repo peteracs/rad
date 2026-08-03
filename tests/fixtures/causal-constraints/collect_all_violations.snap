@@ -1,0 +1,10 @@
+---
+source: ../../tests/fixtures/causal-constraints\collect_all_violations.rad
+exit_code: 1
+---
+
+---stderr---
+Error: Settlement rejected: 2 violation(s), 0 evaluation failure(s)
+  - OddPosition(0): position.even_forbidden
+  - WorldBounds(0): position.above_max
+No world state was changed.

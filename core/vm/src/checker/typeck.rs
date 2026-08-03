@@ -210,6 +210,7 @@ impl Checker {
             Decl::Intent(i) => self.check_intent_decl(i),
             Decl::Law(l) => self.check_law_decl(l),
             Decl::Resolver(r) => self.check_resolver_decl(r),
+            Decl::Constraint(c) => self.check_constraint_decl(c),
             Decl::Entity(e) => self.check_entity_decl(e),
             Decl::State(s) => self.check_state_decl(s),
             Decl::System(s) => self.check_system_decl(s),
@@ -1053,6 +1054,7 @@ impl Checker {
             Stmt::Settle(s) => self.check_settle_stmt(s),
             Stmt::Propose(s) => self.check_propose_stmt(s),
             Stmt::Next(s) => self.check_next_stmt(s),
+            Stmt::Require(s) => self.check_require_stmt(s),
             Stmt::Match(s) => {
                 self.check_match_stmt(s);
             }
@@ -3503,6 +3505,9 @@ impl Checker {
                     resolved_callee_name.as_deref()
                 };
                 if let Some(name) = callee_name_ref {
+                    if let Some(ty) = self.check_constraint_read_call(name, args, span) {
+                        return ty;
+                    }
                     self.check_law_call_context(name, span);
                     if let Some(sys) = self.systems.get(name).cloned() {
                         if !sys.is_pub && is_cross_file(sys.file_id, span.file) {

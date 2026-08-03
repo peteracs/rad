@@ -1,0 +1,6 @@
+---
+source: ../../tests/fixtures/causal-constraints\watched_complete_patch.rad
+exit_code: 0
+---
+7
+7

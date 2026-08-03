@@ -24,6 +24,7 @@ impl Compiler {
             Decl::Intent(i) => self.compile_intent_decl(i),
             Decl::Law(l) => self.compile_law_decl(l),
             Decl::Resolver(r) => self.compile_resolver_decl(r),
+            Decl::Constraint(c) => self.compile_constraint_decl(c),
             Decl::Entity(e) => self.compile_entity_decl(e),
             Decl::State(s) => self.compile_state_decl(s),
             Decl::System(s) => self.compile_system_decl(s),

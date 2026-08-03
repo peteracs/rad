@@ -58,7 +58,7 @@ assert_only_changed(before, after, [Health]) would fail here:
 | Record & replay | `rad app.rad --record trace.radr`, `rad replay` |
 | Time-travel debugging | `rad replay trace.radr --serve` (`goto_frame`, `diff_frames`, `why`) |
 | Retroactive edits | `rad replay trace.radr --with fixed.rad` |
-| Causal settlements (experimental) | `intent`, `law`, `resolver`, `settle`, `why()` fan-in |
+| Causal settlements (experimental) | `intent`, `law`, `resolver`, `constraint`, `settle`, atomic commit/rejection, `why()` fan-in |
 
 `simulate_par` is bit-identical for the same inputs at any thread count — each
 fork's RNG seed is derived from `(seed, index)` via a SplitMix64 finalizer. A
@@ -119,8 +119,9 @@ and known limits are in the [Introduction](docs/src/introduction.md#status).
 - [Language guarantees](docs/src/reference/guarantees.md) — behavioral contracts with maturity labels
 - [Language spec](docs/src/reference/spec.md)
 - [Causal Laws guide](docs/src/guide/causal-laws.md) — experimental typed intents and atomic settlements
+- [Candidate Constraints guide](docs/src/guide/candidate-constraints.md) — order-independent validation of complete candidate patches
 - [RFC-0001](docs/rfcs/0001-causal-settlements.md) — normative v0 semantics
-- [RFC-0002 draft](docs/rfcs/0002-candidate-constraints.md) — validation-only candidate constraints
+- [RFC-0002](docs/rfcs/0002-candidate-constraints.md) — validation-only candidate constraints
 - [Performance](docs/src/reference/performance.md)
 - [Contributing](docs/src/project/contributing.md)
 - [Repository map](docs/src/project/repo-map.md)

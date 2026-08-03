@@ -19,6 +19,8 @@ experimental syntax will never change internally.
 | `causal/settlement_end_to_end` | Production parser-independent VM call through atomic commit and provenance. |
 | `causal/provenance/why_render` | Bounded causal fan-in explanation rendering. |
 | `causal/provenance/wire_encode` | Full retained provenance closure encoding. |
+| `causal/constraints/accepted` | Candidate selection and two successful validation-only constraints. |
+| `causal/constraints/rejected_and_encoded` | Atomic rejection plus exact canonical structured encoding. |
 
 The suite sweeps `1`, `10`, `100`, `1,000`, and `10,000` proposals. Provenance
 rendering and wire encoding use `1`, `100`, and `10,000` to keep the regular CI

@@ -1567,12 +1567,18 @@ between same-browser tabs by default, or a real WebSocket relay
 machines join the same session — the relay is dumb fan-out; every
 semantic stays in the VM.
 
-`runtime_features()` reports `"causal_laws": 1` when the embedder can compile
-RFC-0001 syntax. It also reports `"host_values": 1` and the active
+`runtime_features()` reports `"causal_laws": 1` and
+`"causal_constraints": 1` when the embedder can compile RFC-0001/RFC-0002
+syntax. It also reports `"host_values": 1` and the active
 `causal_value_limits` profile (`max_depth`, `max_nodes`,
 `max_encoded_bytes`, and `max_collection_items`). WASM hosts opt in by
 checking those markers before providing a Causal Laws program; the native CLI
 uses `--experimental-laws`.
+
+The `constraint_limits` object contains the version and fingerprint plus
+per-invocation fuel/heap limits, violation caps, and the exact canonical
+rejection byte cap. Browser hosts can call `compile_and_run_result_json()` for
+a tagged `settlement_rejected`, `runtime_error`, or `host_fault` result.
 
 Rust embedders exchange [`FrozenValue`](../../../core/vm/src/host_value.rs)
 trees with the VM. A `ValueHandle<'vm>` may inspect one imported or global

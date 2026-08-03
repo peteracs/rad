@@ -138,6 +138,7 @@ pub enum Decl {
     Intent(IntentDecl),
     Law(LawDecl),
     Resolver(ResolverDecl),
+    Constraint(ConstraintDecl),
     Entity(EntityDecl),
     State(StateDecl),
     System(SystemDecl),
@@ -163,6 +164,7 @@ impl Decl {
             Decl::Intent(i) => Some(&i.span),
             Decl::Law(l) => Some(&l.span),
             Decl::Resolver(r) => Some(&r.span),
+            Decl::Constraint(c) => Some(&c.span),
             Decl::Entity(e) => Some(&e.span),
             Decl::State(s) => Some(&s.span),
             Decl::System(s) => Some(&s.span),
@@ -352,6 +354,20 @@ pub struct ResolverDecl {
     pub body: Block,
 }
 
+/// A validation-only invariant over one complete settlement candidate.
+#[derive(Debug, Clone)]
+pub struct ConstraintDecl {
+    pub id: NodeId,
+    pub span: Span,
+    pub name: String,
+    pub is_pub: bool,
+    pub component_name: String,
+    pub subject_param: String,
+    pub proposed_param: String,
+    pub watches: Vec<String>,
+    pub body: Block,
+}
+
 /// Schema migration (list item #5): `migrate Health(old) { return Health { … } }`.
 /// Invoked by `load_world` when a persisted component/resource shape differs
 /// from the declared one. `param_name` binds the stored fields as a
@@ -462,6 +478,7 @@ pub enum Stmt {
     Settle(SettleStmt),
     Propose(ProposeStmt),
     Next(NextStmt),
+    Require(RequireStmt),
     Match(MatchStmt),
     Expr(ExprStmt),
     OnceGuardPass(Span),
@@ -486,6 +503,7 @@ impl Stmt {
             Stmt::Settle(s) => &s.span,
             Stmt::Propose(s) => &s.span,
             Stmt::Next(s) => &s.span,
+            Stmt::Require(s) => &s.span,
             Stmt::Match(s) => &s.span,
             Stmt::Expr(s) => &s.span,
             Stmt::OnceGuardPass(span) => span,
@@ -516,6 +534,14 @@ pub struct NextStmt {
     pub entity: Expr,
     pub component_name: String,
     pub fields: Vec<(String, Expr)>,
+}
+
+#[derive(Debug, Clone)]
+pub struct RequireStmt {
+    pub id: NodeId,
+    pub span: Span,
+    pub condition: Expr,
+    pub code: String,
 }
 
 #[derive(Debug, Clone)]

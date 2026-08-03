@@ -528,6 +528,26 @@ impl Compiler {
                 }
             }
             Expr::Call(callee, args, span) => {
+                if let Expr::Ident(read_kind, _) = callee.as_ref() {
+                    if matches!(read_kind.as_str(), "base" | "candidate") && args.len() == 2 {
+                        if let Expr::Ident(component, _) = &args[1] {
+                            self.compile_expr(&args[0])?;
+                            let component = self.resolve_canonical_name(component);
+                            let index =
+                                self.add_constant_gc(|gc| Value::from_string(gc, component));
+                            self.emit_op(
+                                if read_kind == "base" {
+                                    Op::ReadBaseComponent
+                                } else {
+                                    Op::ReadCandidateComponent
+                                },
+                                span.line,
+                            );
+                            self.emit_u16(index, span.line);
+                            return Ok(());
+                        }
+                    }
+                }
                 if self.release && args.len() == 1 {
                     let mut is_debug_trace = false;
                     if let Expr::Ident(name, _) = callee.as_ref() {
