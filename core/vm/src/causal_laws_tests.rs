@@ -4,6 +4,7 @@ use crate::causality::CausalityLedger;
 use crate::checker::{Checker, CheckerOptions};
 use crate::compiler::Compiler;
 use crate::lexer::Lexer;
+use crate::opcode::{Chunk, Op};
 use crate::parser::Parser;
 use crate::replay::TraceReplayer;
 use crate::sandbox::SandboxCaps;
@@ -11,11 +12,30 @@ use crate::settlement_reference::{
     settle_reference, ReferenceComponent, ReferenceProposal, ReferenceResolver, ReferenceValue,
     ReferenceWorld, ReferenceWrite,
 };
+use crate::value::{FnValue, Value};
 use crate::vm::VM;
 use std::collections::{BTreeMap, HashSet};
 use std::sync::Arc;
 
 const FEATURE: &str = "causal_laws";
+
+fn check_causal_source(source: &str) -> Vec<crate::checker::TypeError> {
+    let mut lexer = Lexer::new(source);
+    let (tokens, lex_errors) = lexer.tokenize();
+    assert!(lex_errors.is_empty(), "lex errors: {lex_errors:?}");
+    let mut parser = Parser::new(tokens);
+    let program = parser.parse();
+    assert!(
+        parser.errors().is_empty(),
+        "parse errors: {:?}",
+        parser.errors()
+    );
+    let mut checker = Checker::new_with_options(CheckerOptions {
+        features: vec![FEATURE.to_string()],
+        ..CheckerOptions::default()
+    });
+    checker.check(&program)
+}
 
 #[test]
 fn causal_syntax_is_rejected_without_the_experimental_feature() {
@@ -38,6 +58,144 @@ resolver ResolveDamage for Damage(target, proposals) {}
             .any(|error| error.message.contains("RAD Causal Laws is experimental")),
         "gate-off check must teach users to pass --experimental-laws: {errors:?}"
     );
+}
+
+#[test]
+fn break_and_continue_cannot_escape_to_a_loop_outside_settlement() {
+    let errors = check_causal_source(
+        r#"
+while true {
+    settle { break }
+}
+while true {
+    settle { continue }
+}
+"#,
+    );
+    assert!(
+        errors
+            .iter()
+            .any(|error| error.message == "`break` cannot cross a settlement boundary"),
+        "missing break boundary diagnostic: {errors:?}"
+    );
+    assert!(
+        errors
+            .iter()
+            .any(|error| error.message == "`continue` cannot cross a settlement boundary"),
+        "missing continue boundary diagnostic: {errors:?}"
+    );
+}
+
+#[test]
+fn loops_wholly_inside_settlement_keep_break_and_continue() {
+    let source = r#"
+settle {
+    while true { break }
+    let mut count = 0
+    while count < 2 {
+        count = count + 1
+        continue
+    }
+}
+"#;
+    let errors = check_causal_source(source);
+    assert!(
+        errors.is_empty(),
+        "settlement-local loop control must remain legal: {errors:?}"
+    );
+    let mut vm = compile_vm(source);
+    vm.run(0).expect("settlement-local loops must execute");
+    assert!(vm.settlement.is_none());
+}
+
+#[test]
+fn compiler_rejects_cross_settlement_loop_escape_without_checker_output() {
+    let source = "while true { settle { break } }";
+    let mut lexer = Lexer::new(source);
+    let (tokens, lex_errors) = lexer.tokenize();
+    assert!(lex_errors.is_empty());
+    let mut parser = Parser::new(tokens);
+    let program = parser.parse();
+    assert!(parser.errors().is_empty());
+    let error = Compiler::new()
+        .with_features(vec![FEATURE.to_string()])
+        .compile(&program)
+        .expect_err("compiler must defend against a bypassed checker");
+    assert_eq!(error.message, "`break` cannot cross a settlement boundary");
+}
+
+fn unbalanced_chunk(name: &str) -> Chunk {
+    let mut chunk = Chunk::new(name);
+    chunk.write_op(Op::BeginSettlement, 1);
+    chunk.write_const(Value::NIL, 1);
+    chunk.write_op(Op::Return, 1);
+    chunk
+}
+
+fn balanced_return_chunk(name: &str) -> Chunk {
+    let mut chunk = Chunk::new(name);
+    chunk.write_const(Value::NIL, 1);
+    chunk.write_op(Op::Return, 1);
+    chunk
+}
+
+#[test]
+fn malformed_top_level_bytecode_cannot_return_with_active_settlement() {
+    let mut vm = VM::new();
+    let before_world = vm.get_world().content_digest();
+    let before_writes = vm.causality_ledger().writes.len();
+    let before_settlements = vm.causality_ledger().settlements.len();
+    let broken = vm.load_chunk(unbalanced_chunk("unbalanced-main"));
+
+    let error = vm
+        .run(broken)
+        .expect_err("successful escape past EndSettlement must become a fault");
+    assert!(error.contains("unbalanced settlement"), "{error}");
+    assert_eq!(vm.get_world().content_digest(), before_world);
+    assert_eq!(vm.causality_ledger().writes.len(), before_writes);
+    assert_eq!(vm.causality_ledger().settlements.len(), before_settlements);
+    assert!(vm.settlement.is_none());
+
+    let valid = vm.load_chunk(balanced_return_chunk("valid-main"));
+    vm.run(valid).expect("same VM must remain reusable");
+    assert!(vm.settlement.is_none());
+}
+
+#[test]
+fn malformed_host_function_cannot_return_with_active_settlement() {
+    let mut vm = VM::new();
+    let before_world = vm.get_world().content_digest();
+    let before_settlements = vm.causality_ledger().settlements.len();
+    let broken_chunk = vm.load_chunk(unbalanced_chunk("unbalanced-host-call"));
+    let broken = Value::from_fn(
+        vm.gc_mut(),
+        FnValue {
+            name: "unbalanced".to_string(),
+            arity: 0,
+            chunk_id: broken_chunk,
+        },
+    );
+
+    let error = vm
+        .call_value(&broken, Vec::new())
+        .expect_err("host-call escape past EndSettlement must become a fault");
+    assert!(error.contains("unbalanced settlement"), "{error}");
+    assert_eq!(vm.get_world().content_digest(), before_world);
+    assert_eq!(vm.causality_ledger().settlements.len(), before_settlements);
+    assert!(vm.settlement.is_none());
+
+    let valid_chunk = vm.load_chunk(balanced_return_chunk("valid-host-call"));
+    let valid = Value::from_fn(
+        vm.gc_mut(),
+        FnValue {
+            name: "valid".to_string(),
+            arity: 0,
+            chunk_id: valid_chunk,
+        },
+    );
+    vm.call_value(&valid, Vec::new())
+        .expect("same host VM must remain reusable");
+    assert!(vm.settlement.is_none());
 }
 
 fn compile_vm(source: &str) -> VM {

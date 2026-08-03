@@ -1,0 +1,6 @@
+// flags: --experimental-laws
+// expect-runtime-error: `break` cannot cross a settlement boundary
+
+while true {
+    settle { break }
+}

@@ -58,6 +58,7 @@ pub(crate) struct FnScope {
     pub(crate) locals: Vec<Local>,
     pub(crate) upvalues: Vec<Upvalue>,
     pub(crate) scope_depth: usize,
+    pub(crate) settlement_depth: usize,
     pub(crate) loop_contexts: Vec<LoopCtx>,
     pub(crate) last_get_local: std::collections::HashMap<u16, usize>,
     pub(crate) unique_locals: std::collections::HashSet<String>,
@@ -72,6 +73,7 @@ pub(crate) struct FnScope {
 
 pub(crate) struct LoopCtx {
     pub(crate) loop_depth: usize,
+    pub(crate) settlement_depth: usize,
     pub(crate) loop_start: usize,
     pub(crate) break_holes: Vec<usize>,
     pub(crate) continue_holes: Vec<usize>,
@@ -299,6 +301,7 @@ impl Compiler {
             locals: Vec::new(),
             upvalues: Vec::new(),
             scope_depth: 0,
+            settlement_depth: 0,
             loop_contexts: Vec::new(),
             last_get_local: HashMap::new(),
             unique_locals: std::collections::HashSet::new(),
@@ -595,6 +598,7 @@ impl Compiler {
             locals: Vec::new(),
             upvalues: Vec::new(),
             scope_depth: 1,
+            settlement_depth: 0,
             loop_contexts: Vec::new(),
             last_get_local: HashMap::new(),
             unique_locals: std::collections::HashSet::new(),

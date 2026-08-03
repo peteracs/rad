@@ -573,8 +573,10 @@ impl Compiler {
         self.mark_label_here();
 
         let loop_depth = self.current().scope_depth;
+        let settlement_depth = self.current().settlement_depth;
         self.current().loop_contexts.push(LoopCtx {
             loop_depth,
+            settlement_depth,
             loop_start,
             break_holes: Vec::new(),
             continue_holes: Vec::new(),
@@ -720,8 +722,10 @@ impl Compiler {
         let loop_start = self.current_offset();
         self.mark_label_here();
         let loop_depth = self.current().scope_depth;
+        let settlement_depth = self.current().settlement_depth;
         self.current().loop_contexts.push(LoopCtx {
             loop_depth,
+            settlement_depth,
             loop_start,
             break_holes: Vec::new(),
             continue_holes: Vec::new(),
@@ -845,8 +849,10 @@ impl Compiler {
         let body_start = self.current_offset();
         self.mark_label_here();
         let loop_depth = self.current().scope_depth;
+        let settlement_depth = self.current().settlement_depth;
         self.current().loop_contexts.push(LoopCtx {
             loop_depth,
+            settlement_depth,
             loop_start: body_start,
             break_holes: Vec::new(),
             continue_holes: Vec::new(),
@@ -969,8 +975,10 @@ impl Compiler {
         let loop_start = self.current_offset();
         self.mark_label_here();
         let loop_depth = self.current().scope_depth;
+        let settlement_depth = self.current().settlement_depth;
         self.current().loop_contexts.push(LoopCtx {
             loop_depth,
+            settlement_depth,
             loop_start,
             break_holes: Vec::new(),
             continue_holes: Vec::new(),
@@ -1112,16 +1120,24 @@ impl Compiler {
 
     fn compile_break(&mut self, b: &BreakStmt) -> Result<(), CompileError> {
         let line = b.span.line;
-        let loop_depth = self
+        let current_settlement_depth = self.current().settlement_depth;
+        let (loop_depth, target_settlement_depth) = self
             .current()
             .loop_contexts
             .last()
-            .map(|ctx| ctx.loop_depth)
+            .map(|ctx| (ctx.loop_depth, ctx.settlement_depth))
             .ok_or_else(|| CompileError {
                 message: "'break' used outside of a loop".into(),
                 line,
                 col: b.span.col,
             })?;
+        if target_settlement_depth != current_settlement_depth {
+            return Err(CompileError {
+                message: "`break` cannot cross a settlement boundary".into(),
+                line,
+                col: b.span.col,
+            });
+        }
 
         // Perform writebacks for the current loop before breaking
         let writebacks = self
@@ -1159,16 +1175,24 @@ impl Compiler {
 
     fn compile_continue(&mut self, c: &ContinueStmt) -> Result<(), CompileError> {
         let line = c.span.line;
-        let loop_depth = self
+        let current_settlement_depth = self.current().settlement_depth;
+        let (loop_depth, target_settlement_depth) = self
             .current()
             .loop_contexts
             .last()
-            .map(|ctx| ctx.loop_depth)
+            .map(|ctx| (ctx.loop_depth, ctx.settlement_depth))
             .ok_or_else(|| CompileError {
                 message: "'continue' used outside of a loop".into(),
                 line,
                 col: c.span.col,
             })?;
+        if target_settlement_depth != current_settlement_depth {
+            return Err(CompileError {
+                message: "`continue` cannot cross a settlement boundary".into(),
+                line,
+                col: c.span.col,
+            });
+        }
 
         // Perform writebacks for the current loop before continuing
         let writebacks = self

@@ -1,0 +1,7 @@
+---
+source: tests/fixtures/causal-laws\break_crosses_settlement.rad
+exit_code: 1
+---
+
+---stderr---
+Error: `break` cannot cross a settlement boundary

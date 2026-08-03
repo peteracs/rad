@@ -145,6 +145,11 @@ pub(crate) struct Scope {
     pub(crate) in_pipeline: bool,
     pub(crate) in_async: bool,
     pub(crate) in_loop: bool,
+    /// Number of lexical `settle` boundaries containing this scope.
+    pub(crate) settlement_depth: usize,
+    /// Set only on the scope that introduces a loop. `break` and `continue`
+    /// target the innermost such scope and may not cross a settlement depth.
+    pub(crate) loop_target_settlement_depth: Option<usize>,
     pub(crate) effect_context: EffectSet,
     pub(crate) causal_context: CausalContext,
 }
@@ -194,6 +199,8 @@ impl Scope {
             in_pipeline: false,
             in_async: false,
             in_loop: false,
+            settlement_depth: 0,
+            loop_target_settlement_depth: None,
             effect_context: EffectSet::unrestricted(),
             causal_context: CausalContext::None,
         }

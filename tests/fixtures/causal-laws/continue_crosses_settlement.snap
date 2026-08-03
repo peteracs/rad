@@ -1,0 +1,7 @@
+---
+source: tests/fixtures/causal-laws\continue_crosses_settlement.rad
+exit_code: 1
+---
+
+---stderr---
+Error: `continue` cannot cross a settlement boundary

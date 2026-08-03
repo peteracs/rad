@@ -79,7 +79,10 @@ impl Compiler {
     pub(crate) fn compile_settle(&mut self, stmt: &SettleStmt) -> Result<(), CompileError> {
         self.require_causal_feature(&stmt.span)?;
         self.emit_op(Op::BeginSettlement, stmt.span.line);
-        self.compile_body(&stmt.body.stmts)?;
+        self.current().settlement_depth += 1;
+        let body_result = self.compile_body(&stmt.body.stmts);
+        self.current().settlement_depth -= 1;
+        body_result?;
         self.emit_op(Op::EndSettlement, stmt.span.line);
         Ok(())
     }

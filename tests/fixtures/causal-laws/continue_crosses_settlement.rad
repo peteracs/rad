@@ -1,0 +1,6 @@
+// flags: --experimental-laws
+// expect-runtime-error: `continue` cannot cross a settlement boundary
+
+while true {
+    settle { continue }
+}

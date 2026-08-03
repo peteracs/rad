@@ -82,6 +82,26 @@ impl VM {
         self.settlement = None;
     }
 
+    /// Enforce the public VM invariant that no execution result can expose an
+    /// unfinished settlement. Errors keep their original diagnostic; a
+    /// successful escape is a compiler/bytecode fault and becomes an error.
+    pub(crate) fn enforce_settlement_balance<T>(
+        &mut self,
+        result: Result<T, String>,
+    ) -> Result<T, String> {
+        if self.settlement.is_none() {
+            return result;
+        }
+        self.abort_settlement();
+        match result {
+            Ok(_) => Err(
+                "Internal VM error: unbalanced settlement at public execution boundary; transaction was aborted"
+                    .to_string(),
+            ),
+            Err(error) => Err(error),
+        }
+    }
+
     pub(crate) fn begin_settlement(&mut self) -> Result<(), String> {
         if self.settlement.is_some() {
             return Err("nested settlements are not allowed".to_string());

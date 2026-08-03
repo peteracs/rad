@@ -1,0 +1,11 @@
+// flags: --experimental-laws
+// Settlement-local break and continue are valid and produce no output.
+
+settle {
+    while true { break }
+    let mut count = 0
+    while count < 2 {
+        count = count + 1
+        continue
+    }
+}

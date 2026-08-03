@@ -113,14 +113,37 @@ constraint WithinWorldBounds for Position(subject, proposed) {
 }
 ```
 
-A constraint is attached to one component type. Its parameters are:
+A constraint is attached to one component type and may explicitly watch other
+same-entity component types:
+
+```rad
+constraint ValidMotion
+    for Position(subject, proposed)
+    watches Velocity, MovementMode
+{
+    // ...
+}
+```
+
+Its parameters are:
 
 - `subject`, whose type is `entity`; and
 - `proposed`, whose type is the attached component.
 
-The runtime invokes it once for every staged candidate write of that component.
-Staging a value identical to the base value still counts as a candidate write
-and therefore runs the constraint.
+The attached component plus every `watches` component form the constraint's
+trigger set. The runtime invokes the constraint once for a subject when any
+trigger component is staged and the attached component exists in the complete
+candidate world. The `proposed` parameter is the attached component's candidate
+value, including base fallback when only a watched component triggered the
+invocation.
+
+Every watched component type must be visible in the defining module. The
+checker rejects duplicate watched types and rejects listing the attached
+component again in `watches`.
+
+Staging a value identical to its base value still triggers validation. If two
+or more trigger components are staged for one subject, the constraint is still
+selected exactly once.
 
 In v0, a constraint must be declared in the module that defines its component.
 Several named constraints may be declared for one component because they do
@@ -154,13 +177,13 @@ snapshot, just as it does inside a resolver.
 ### Candidate view
 
 Constraints receive their attached candidate component directly and may inspect
-other components through a contextual read:
+declared watched components through a contextual read:
 
 ```rad
 candidate(subject, Velocity)
 ```
 
-`candidate(entity, Component)` has type `option<Component>` and reads the
+`candidate(subject, Component)` has type `option<Component>` and reads the
 immutable candidate world:
 
 ```text
@@ -171,8 +194,15 @@ otherwise:
 ```
 
 It never reads a partially validated result because constraints cannot modify
-the view. Direct candidate lookup is supported in v0; candidate ECS queries,
-candidate resource reads, and structural candidate changes are not.
+the view. In v0, the entity expression must be the constraint's `subject`
+parameter, and the component must be either the attached type or listed in
+`watches`. Cross-entity candidate reads, implicit dependency inference,
+candidate ECS queries, candidate resource reads, and structural candidate
+changes are not supported.
+
+Explicit watches are mandatory even when the checker could infer a direct read.
+This keeps trigger dependencies visible when values are passed through helper
+functions and prevents a helper refactor from silently changing selection.
 
 Normal `get`, `require`, queries, and readonly helpers continue to read `base`.
 The distinct `candidate(...)` spelling makes future-state reads visible during
@@ -181,7 +211,10 @@ review and in effect diagnostics.
 Example:
 
 ```rad
-constraint MovingBodyRemainsFinite for Position(subject, proposed) {
+constraint MovingBodyRemainsFinite
+    for Position(subject, proposed)
+    watches Velocity
+{
     let future_velocity = expect(
         candidate(subject, Velocity),
         "MovingBodyRemainsFinite requires Velocity",
@@ -261,8 +294,14 @@ constraint WithinWorldBounds for Position(subject, proposed) {
     require proposed.y <=  1000.0 else "position.y_above_world_max"
 }
 
-constraint NonPenetration for Position(subject, proposed) {
-    let collider = require(subject, Collider)
+constraint NonPenetration
+    for Position(subject, proposed)
+    watches Collider
+{
+    let collider = expect(
+        candidate(subject, Collider),
+        "NonPenetration requires Collider",
+    )
     require not overlaps_static_world(proposed, collider)
         else "position.penetrates_static_world"
 }
@@ -309,15 +348,34 @@ constraint from observing an incoherent or unauthorized candidate.
 The candidate view is a read-only overlay. Implementations do not need to clone
 or mutate a temporary world before validation.
 
-### Constraint selection
+### Constraint selection and watched dependencies
 
-For each `(entity, component type)` in the patch, the runtime selects every
-constraint declared for that component type. Each selected constraint runs
-exactly once with that entity and staged component value.
+Each constraint statically declares:
 
-Constraints are not invoked for untouched components. RFC-0002 therefore
-validates transitions, not every pre-existing fact in the world. A separate
-world-audit operation, if useful, requires another RFC.
+```text
+attached component
++ zero or more same-entity watched components
+= trigger set
+```
+
+For every entity with at least one trigger component in the patch, the runtime
+selects that constraint exactly once if its attached component exists in the
+complete candidate world. The attached `proposed` value comes from the
+candidate overlay even when only a watched component was staged.
+
+For example, a `ValidMotion for Position watches Velocity` constraint runs when
+either `Position`, `Velocity`, or both are staged for the subject. If only
+`Velocity` changes, it receives base-fallback `Position` as `proposed` and the
+staged `Velocity` through `candidate(subject, Velocity)`.
+
+Constraints are not invoked when none of their trigger components changed.
+RFC-0002 therefore validates declared transition dependencies, not every
+pre-existing fact in the world. A separate world-audit operation, if useful,
+requires another RFC.
+
+Watch dependencies are restricted to the current subject. Cross-entity watches
+would require reverse indexes, invalidation fan-out, capability rules, and a
+bounded selection contract; they require a later RFC.
 
 The runtime may enumerate patch entries and constraints in a canonical internal
 order for reproducible resource use and diagnostics. That order is unobservable
@@ -340,10 +398,15 @@ No constraint can observe:
 - a filtered patch containing only its attached component; or
 - world state committed by the same settlement.
 
-Pure and readonly helper functions may be called. They continue to read base.
-Candidate components may be passed to pure helpers as ordinary values.
-`candidate(...)` itself is contextual and may only appear directly inside a
-constraint body in v0; candidate-aware helper effects are deferred.
+Constraint-safe RAD bytecode helpers may be called. Readonly ECS helpers
+continue to read base and are accepted only when their complete transitive call
+graph satisfies the constraint-safe effect contract below. Candidate components
+may be passed to safe helpers as ordinary values. `candidate(...)` itself is
+contextual and may only appear directly inside a constraint body in v0;
+candidate-aware helper effects are deferred.
+
+The checker requires each candidate component type to appear in the declaration's
+trigger set and requires the lookup entity to be the exact `subject` parameter.
 
 ### Effect rules
 
@@ -358,7 +421,9 @@ It may:
 - read base ECS facts;
 - read the immutable candidate overlay;
 - perform local deterministic computation;
-- call `pure fn` and `readonly fn` helpers;
+- call RAD bytecode helpers whose complete transitive effect set is
+  constraint-safe;
+- call builtins from a small versioned deterministic-pure whitelist;
 - execute local control flow; and
 - report violations through contextual `require` statements.
 
@@ -374,11 +439,29 @@ use randomness or clock time
 call async code
 call a law, resolver, or constraint
 call settle
+call arbitrary native or FFI code
+mutate a global or captured binding
+spawn a task or retain hidden host state
 ```
 
 Forbidden effects are rejected statically and transitively with the complete
-effect call chain. Runtime checks remain defense in depth for malformed or
-untrusted bytecode.
+effect call chain. `readonly` alone is not sufficient: native registrations and
+helpers must be proven to belong to the constraint-safe call closure. Arbitrary
+native and FFI calls are deferred from v0 even if a host labels them readonly.
+
+List iteration preserves list order. Map and set iteration inside a constraint
+uses canonical stable-key order; collection types without a defined canonical
+iteration are rejected by the checker. Branching may not depend on allocation,
+hash-table, registration, or host callback order.
+
+Local values may be transformed during evaluation, but no mutation may survive
+outside the invocation's isolated frame/stack checkpoint. Runtime checks remain
+defense in depth for malformed or untrusted bytecode. The observational
+invariant is:
+
+> After a constraint invocation, the VM is identical to its pre-invocation
+> state except for isolated fuel accounting and the returned structured
+> outcome.
 
 ### Structured violations
 
@@ -429,22 +512,69 @@ not tie-breakers. Opaque record or allocation identifiers are never sorting
 inputs. Byte-identical duplicate violations preserve multiplicity and are
 semantically indistinguishable from one another.
 
-### Evaluation failures
+### Outcomes and deterministic resource contract
+
+Each selected invocation returns exactly one semantic outcome:
+
+```rust
+enum ConstraintOutcome {
+    Valid,
+    Violations(Vec<ConstraintViolation>),
+    EvaluationFailure(ConstraintEvaluationFailure),
+}
+```
+
+Settlement validation then returns:
+
+```rust
+enum ValidationResult {
+    Accepted,
+    Rejected(SettlementRejection),
+    HostAborted(HostFault),
+}
+```
+
+Every invocation receives an isolated deterministic resource contract:
+
+```text
+fuel_per_invocation
+max_violations_per_invocation
+max_violations_per_settlement
+max_serialized_outcome_bytes
+```
+
+All limits are finite, immutable for the settlement, exposed through the
+runtime capability profile, and included in attempt-replay metadata. Hosts may
+choose a supported profile before execution; changing it creates a different
+attempt contract rather than a nondeterministic replay of the same attempt.
 
 A constraint can fail while evaluating—for example, a base `require(entity,
-Component)` may find a missing component. Since constraint effects are read-only,
-the runtime evaluates every independently selected constraint and collects both
-ordinary violations and evaluation failures before deciding the result.
+Component)` may find a missing component. Ordinary errors and per-invocation
+fuel exhaustion become canonical `EvaluationFailure` records. When an
+invocation exceeds its violation-count or byte limit, its partial output is
+discarded and replaced by one stable output-limit evaluation failure.
 
-Evaluation failures are structured separately from violated requirements and
-are canonically ordered by entity, component, qualified constraint name, source
-span, and stable error code. They always abort the settlement.
+The runtime evaluates every independently selected invocation within its own
+contract and collects both violations and evaluation failures. Outcomes are
+canonically sorted only after evaluation. If the settlement-wide count or byte
+limit is exceeded, no order-dependent prefix is exposed; the rejection contains
+one aggregate limit failure plus stable total counts.
 
-This avoids making “the first failing constraint” depend on execution order.
+Process cancellation, allocator failure, VM termination, or another true
+host-fatal condition produces `HostAborted`. A host-fatal result exposes no
+partial violation or evaluation-failure collection. Candidate state and durable
+provenance remain unchanged for `Rejected` and `HostAborted` alike.
+
+Evaluation failures are canonically ordered by entity, component, qualified
+constraint name, source span, and stable error code. This makes “collect all”
+mean:
+
+> Collect every semantic outcome from every selected invocation that runs
+> inside the declared deterministic resource contract.
 
 ### Atomic abort and VM reuse
 
-If any violation or evaluation failure exists:
+If validation is rejected or host-aborted:
 
 ```text
 world == pre-settlement world
@@ -453,7 +583,9 @@ active settlement == none when the public execution boundary returns
 ```
 
 Transient proposals, patches, candidate views, and constraint outcomes are
-discarded. A failed constraint must not poison a reused VM.
+discarded. A rejected or host-aborted constraint phase must not poison a reused
+VM. Host-fatal process termination is the sole case where reuse cannot be
+promised because the VM no longer returns control.
 
 ### Ephemeral failed-transition explanation
 
@@ -480,13 +612,87 @@ Settlement rejected: 2 constraint violations
      code: position.penetrates_static_world
 ```
 
-Hosts may inspect structured outcomes and render a bounded tree. RAD source in
-v0 observes the normal settlement runtime error; catchable constraint results
-or durable failed-transaction history require separate design.
+Hosts inspect structured outcomes and may render a bounded tree. Catchable
+in-language rejection values and durable failed-transaction history remain
+outside v0.
 
 Repeated common proposal ancestry is collapsed, and large fan-in uses the same
 bounded presentation policy as `why()`. Retention lasts only as long as the
 returned error value or host response.
+
+### Typed host failure boundary
+
+A rejected candidate is not a VM bug or host failure. New detailed embedding
+entry points return a typed boundary:
+
+```rust
+pub enum VmFailure {
+    SettlementRejected(Arc<SettlementRejection>),
+    Runtime(RuntimeError),
+    Host(HostFault),
+}
+
+pub fn run_detailed(...) -> Result<(), VmFailure>;
+pub fn call_value_detailed(...) -> Result<Value, VmFailure>;
+```
+
+Existing string APIs remain compatibility wrappers:
+
+```rust
+pub fn run(...) -> Result<(), String> {
+    run_detailed(...).map_err(|failure| failure.render())
+}
+```
+
+They do not store a mutable `last_rejection()` side channel. The structured
+rejection is owned by the returned error, which remains safe under nested host
+calls, callbacks, and future concurrency.
+
+WASM and JSON host surfaces expose a tagged object after capability filtering:
+
+```json
+{
+  "kind": "settlement_rejected",
+  "violations": [],
+  "evaluation_failures": [],
+  "why": {}
+}
+```
+
+`Runtime` represents language/bytecode execution faults;
+`SettlementRejected` represents a successfully evaluated but inadmissible
+candidate; and `Host` represents cancellation, allocation, process, or other
+host-fatal failure.
+
+### Capability-filtered rejection rendering
+
+The runtime maintains an internal canonical rejection for trusted settlement
+machinery, then derives a recipient-specific rendered rejection:
+
+```text
+internal canonical rejection
+        ↓ capability filter
+deterministic rendered rejection
+```
+
+Constraint evaluation itself uses the settlement's read capability context. An
+unauthorized `candidate(...)` or base read becomes a stable ACL evaluation
+failure without exposing the value. A trusted invariant may also possess more
+authority than the sandbox or debugger receiving its rejection; the recipient
+never receives values or proposal origins outside its rendering capability.
+
+Redaction uses stable placeholders:
+
+```text
+candidate value: <redacted>
+proposal source: <redacted-origin>
+```
+
+The filtered renderer re-canonicalizes on visible metadata and stable redacted
+tokens, so hidden payloads cannot influence exposed ordering. Multiplicity is
+preserved, but secret values, source identity, lengths beyond declared bounded
+counts, and hidden canonical sort keys are not leaked. Redaction changes only
+presentation, never validation or the internal accept/reject result.
 
 ## Ordering is deliberately absent
 
@@ -521,29 +727,70 @@ systems, schedules, handlers, events, forks, simulation, direct mutation, and
 
 Additional rules:
 
-- constraints run only for candidate writes staged by a settlement;
+- constraints are selected only from trigger-component writes staged by a
+  settlement;
 - legacy writes outside a settlement do not invoke constraints;
-- a handler may invoke a settlement and receives its constraint failure in the
-  same way as another settlement runtime error;
+- a handler may invoke a settlement and receives a typed
+  `SettlementRejected`, distinct from a runtime or host failure;
 - constraints cannot emit events, so a failed settlement never leaks events;
-- replay deterministically reconstructs successful constraint decisions and
-  reproduces failed outcomes without committing provenance;
+- ledger replay deterministically reconstructs successful committed constraint
+  decisions only;
 - forks and simulation use the same constraint registry as their source VM;
 - candidate reads and candidate write origins obey sandbox read/write ACLs;
 - `settle` does not flush events before or after validation;
 - nested settlements and parallel worker settlements remain rejected; and
 - the frozen C backend does not parse or execute constraint syntax.
 
+### Ledger replay versus attempt replay
+
+RFC-0002 defines two distinct replay products:
+
+```text
+Ledger replay:
+    reproduces committed authoritative transitions only.
+
+Attempt replay:
+    re-executes one versioned input/event request against the same base-world
+    digest and deterministic runtime profile, producing the same commit or
+    structured rejection.
+```
+
+A rejected settlement is absent from the durable ledger and therefore cannot
+be reconstructed from ledger provenance alone. Attempt replay consumes an
+explicit non-authoritative attempt record containing at least:
+
+```text
+source/module version hashes
+base-world digest
+input or exact event request
+runtime feature and constraint-limit profile
+capability profile identity
+```
+
+The debugger or test harness may serialize an ephemeral rejection beside that
+attempt record for comparison. Neither the attempt record nor rejection becomes
+an authoritative committed-world event. Equivalence compares canonical typed
+outcomes while ignoring opaque allocation and record identifiers.
+
 Once implemented, capability negotiation reports:
 
 ```json
 {
   "causal_laws": 1,
-  "causal_constraints": 1
+  "causal_constraints": 1,
+  "constraint_limits": {
+    "fuel_per_invocation": 100000,
+    "max_violations_per_invocation": 256,
+    "max_violations_per_settlement": 4096,
+    "max_serialized_outcome_bytes": 1048576
+  }
 }
 ```
 
-A host must not infer constraint support solely from `causal_laws`.
+A host must not infer constraint support solely from `causal_laws`. The numeric
+values above are the proposed default v0 profile; an implementation may expose
+another supported finite profile, but it must advertise and freeze that profile
+before settlement execution and include it in attempt replay.
 
 ## Compile-time diagnostics
 
@@ -560,6 +807,19 @@ help: compute the final candidate in the owning resolver, or reject it with
 
 ```text
 Error: `candidate` is only valid inside a constraint
+```
+
+```text
+Error: constraint `ValidMotion` reads candidate `Velocity` without declaring
+`watches Velocity`
+
+Candidate dependencies must be explicit so trigger selection remains stable.
+```
+
+```text
+Error: candidate reads in v0 must target constraint subject `subject`
+
+Cross-entity candidate dependencies require a later RFC.
 ```
 
 ```text
@@ -604,9 +864,13 @@ or resolver stages. Concepts are equivalent to:
 ConstraintRegistry
 CandidateView
 ConstraintInvocation
+ConstraintLimits
+ConstraintOutcome
 ConstraintViolation
 ConstraintEvaluationError
 SettlementRejection
+VmFailure
+AttemptRecord
 ```
 
 Responsibilities remain separated:
@@ -616,7 +880,11 @@ Responsibilities remain separated:
 - a dedicated constraint runtime module selects invocations and collects
   deterministic outcomes;
 - `CandidateView` owns read-only sparse-overlay lookup;
-- the diagnostic renderer owns ephemeral rejected-transition trees; and
+- each invocation owns an isolated frame/stack checkpoint, fuel budget, local
+  outcome buffer, and capability context;
+- the typed host boundary owns rejection/runtime/host failure separation;
+- the capability renderer owns filtered ephemeral rejected-transition trees;
+- attempt replay owns non-authoritative rejection reproduction; and
 - the durable causality ledger remains unchanged for failed settlements.
 
 Do not implement validation by letting constraints mutate a temporary world or
@@ -651,6 +919,12 @@ ephemeral explanation.
 A constraint reads a second component staged by the same settlement and sees
 its candidate value, while ordinary `get` sees its base value.
 
+### Watched-component triggering
+
+`ValidMotion for Position watches Velocity` runs when only `Velocity` is
+staged, receives base-fallback candidate `Position`, and runs once—not twice—
+when both `Position` and `Velocity` are staged.
+
 ### Atomic failure
 
 On violation or constraint evaluation error:
@@ -665,13 +939,17 @@ same VM can execute a later valid settlement
 ### Event bridge and replay
 
 A handler-triggered settlement retains event ancestry on success. A rejected
-settlement returns ephemeral proposal ancestry, commits no ledger records, and
-replays to the same canonical rejection modulo opaque IDs.
+settlement returns ephemeral proposal ancestry and commits no ledger records.
+Ledger replay reproduces commits; attempt replay reproduces the same canonical
+rejection from the same versioned request, base digest, limits, and capability
+profile, modulo opaque IDs.
 
 ### Sandbox
 
-Candidate reads excluded by the read ACL and candidate writes excluded by the
-write ACL both fail closed without changing the fork.
+Candidate reads excluded by the execution read ACL and candidate writes
+excluded by the write ACL both fail closed without changing the fork. A
+recipient with narrower rendering capability receives useful stable codes and
+redacted placeholders without hidden candidate or proposal payloads.
 
 ## Semantic fixtures
 
@@ -681,14 +959,21 @@ Before runtime implementation, fixtures must specify:
 - constraints declared on foreign components;
 - every forbidden direct and transitive effect;
 - base reads versus complete candidate reads;
+- attached-component and watched-component triggering;
+- one invocation when several watched triggers are staged;
 - multiple constraints on one component;
 - canonical multiple-violation ordering;
 - duplicate violation preservation;
-- runtime evaluation failures;
+- ordinary evaluation failure collection;
+- isolated per-invocation fuel exhaustion;
+- per-invocation and settlement-wide violation/output caps;
+- host-fatal abort with no partial outcomes;
+- constraint-safe helper/builtin closure and native-call rejection;
 - atomic abort and VM reuse;
 - feature-gate rejection;
-- replay equivalence; and
-- sandbox read/write ACL behavior.
+- ledger replay versus failed-attempt replay equivalence;
+- sandbox read/write ACL behavior; and
+- deterministic capability redaction of values and origins.
 
 The fixtures and RFC form the semantic contract. No runtime shortcut may
 weaken them to declaration-order evaluation or first-error-wins behavior.
@@ -721,21 +1006,34 @@ checks.
 
 Add an immutable sparse overlay and a dedicated constraint evaluator after
 candidate conflict/ACL validation but before candidate world application.
-Collect all outcomes, canonicalize them, and commit only when the collection is
-empty.
+Select attached and watched triggers once per subject. Run every invocation
+with an isolated frame/stack checkpoint, deterministic fuel budget, local
+bounded outcome buffer, and capability context. Collect all semantic outcomes,
+canonicalize them, and commit only when the collection is empty. No constraint
+may observe another invocation's progress or outcome.
 
 ### Milestone D — Diagnostics and host surfaces
 
-Add structured ephemeral settlement rejection to CLI, sandbox, replay, WASM,
-and wire host boundaries. Bound rendering while retaining the full returned
-structure for its ephemeral lifetime. Do not add failed outcomes to `why()` or
-the durable ledger.
+Add typed `SettlementRejected`, `RuntimeError`, and `HostFault` boundaries to
+CLI, sandbox, attempt replay, WASM, and wire hosts, with string compatibility
+wrappers. Apply deterministic capability filtering before returning rejection
+data. Bound rendering while retaining the authorized full structure for its
+ephemeral lifetime. Do not add failed outcomes to `why()` or the durable ledger,
+and do not add a mutable `last_rejection` side channel.
 
 ### Milestone E — Dogfood and release gate
 
 Complete the movement project, permutation/property tests, failure injection,
 fuzzing, and benchmarks. Publish under `--experimental-laws` only after all
 acceptance criteria pass.
+
+The required permutation property is:
+
+```text
+same base + same proposal multiset + same selected constraints + same limits
+    ⇒ same world digest or same canonical structured rejection,
+       independent of declaration and execution order
+```
 
 ## Performance requirements
 
@@ -745,9 +1043,13 @@ Measure separately:
 candidate overlay lookup
 constraint selection
 constraint execution
+watched-trigger selection and deduplication
+isolated invocation checkpoint/fuel accounting
 violation allocation
 canonical violation sorting
 ephemeral explanation rendering
+capability-filtered rendering
+attempt-replay encoding
 successful commit after validation
 failed settlement cleanup
 ```
@@ -757,7 +1059,9 @@ Sweep:
 ```text
 1, 10, 100, 1,000, 10,000 candidate writes
 one versus many constraints per component
+one versus many watched triggers per subject
 zero versus many violations
+ordinary failure versus fuel/output-limit failure
 base fallback versus staged candidate lookup
 small versus large proposal fan-in origins
 ```
@@ -770,7 +1074,9 @@ archetypes remain shared.
 
 - Component-defining modules gain responsibility for stable invariants.
 - Complete candidate lookups add runtime and checker complexity.
+- Explicit watches add declaration maintenance but make invalidation auditable.
 - Collecting every violation costs more than first-error short-circuiting.
+- Isolated fuel and outcome buffers cost more than one shared validation budget.
 - Ephemeral fan-in explanations can be large without bounded rendering.
 - Transition-only validation does not prove that old worlds are globally valid.
 - Validation without repair may require applications to propose a different
@@ -826,11 +1132,16 @@ beyond validation of one completed patch.
 - resolver reads of candidate state;
 - fixed-point or multi-round evaluation;
 - candidate ECS queries or candidate resource reads;
+- cross-entity candidate reads or watches;
+- inferred watch dependencies;
 - global/keyless constraints;
 - constraints on untouched world state;
 - structural changes, spawn, or despawn;
 - parallel constraint execution guarantees;
 - catchable in-language settlement rejection values;
+- arbitrary native or FFI calls from constraints;
+- shared order-sensitive fuel or output budgets;
+- mutable `last_rejection` host side channels;
 - durable failed-transaction provenance;
 - GPU lowering or AOT optimization; and
 - support in the frozen C backend.
@@ -843,42 +1154,53 @@ inputs and outputs are immutable, but RFC-0002 does not promise it.
 The experimental feature is complete only when:
 
 1. Every constraint reads the same immutable base and complete candidate view.
-2. No constraint can write, propose, emit, perform I/O, or use nondeterminism.
-3. Constraint declaration and execution order cannot alter commit or rejection.
-4. Every applicable constraint is evaluated; failures are not first-error-wins.
-5. Violations and evaluation failures have canonical structured ordering.
-6. `candidate(...)` returns staged values with base fallback and cannot observe
-   partial patches.
-7. Any violation or evaluation failure leaves world and durable ledger
-   byte-identical to their pre-settlement state.
-8. Every public failure return leaves no active settlement, and the VM remains
-   reusable.
-9. Successful settlements preserve RFC-0001 provenance unchanged.
-10. Failed settlements expose bounded ephemeral causal explanations and commit
-    no provenance.
-11. Replay reconstructs equivalent success or rejection outcomes.
-12. Sandbox read/write ACLs cannot be bypassed through candidate validation.
-13. Existing RAD programs, snapshots, and causal settlements behave unchanged.
-14. Memory remains proportional to candidate writes, selected constraints, and
-    outcomes; untouched archetypes are not deep-cloned.
+2. Attached plus explicitly watched same-entity components form the trigger set;
+   staging several triggers still invokes the constraint once per subject.
+3. No constraint can write, propose, emit, perform I/O, mutate persistent VM
+   state, call arbitrary native code, or use nondeterminism.
+4. Constraint declaration and execution order cannot alter commit or rejection.
+5. Every applicable constraint is evaluated within an isolated deterministic
+   resource contract; failures are not first-error-wins.
+6. Violations and evaluation failures have canonical structured ordering, and
+   limit failures expose no order-dependent partial prefix.
+7. `candidate(...)` is restricted to the subject and declared trigger types,
+   returns staged values with base fallback, and cannot observe partial patches.
+8. Any rejection or host abort leaves world and durable ledger byte-identical
+   to their pre-settlement state.
+9. Every public failure return leaves no active settlement, and the VM remains
+   reusable whenever the host returns control.
+10. Successful settlements preserve RFC-0001 provenance unchanged.
+11. Failed settlements return typed, bounded ephemeral causal explanations and
+    commit no provenance or mutable side-channel state.
+12. Ledger replay reconstructs commits; attempt replay reconstructs canonical
+    rejection from the same versioned request, base digest, limits, and caps.
+13. Sandbox read/write ACLs cannot be bypassed, and narrower recipients receive
+    deterministic redaction without hidden-value ordering leaks.
+14. Existing RAD programs, snapshots, and causal settlements behave unchanged.
+15. Memory remains proportional to candidate writes, selected constraints, and
+    bounded outcomes; untouched archetypes are not deep-cloned.
 
 The product thesis to protect is:
 
 > A constraint is not another resolver or schedule stage. It is an independent
 > judgment over one complete causal candidate.
 
-## Unresolved questions
+## Draft review status
 
-The following remain open during RFC review and must be resolved before the
-semantic fixtures are accepted:
+The initial semantic blockers are resolved normatively in this draft:
 
-1. Should the contextual read be named `candidate`, `future`, or `proposed`?
-2. Should v0 expose optional static human messages in addition to stable codes?
-3. Should candidate reads be restricted to the current entity initially?
-4. Which host API shape best preserves structured ephemeral rejection without
-   changing existing string-based embedding calls?
-5. Should constraint evaluation collect all runtime failures, or stop only for
-   resource exhaustion and other host-fatal conditions?
+1. `candidate` is the v0 contextual read spelling.
+2. Stable violation codes are the v0 user-authored payload; optional human
+   messages are deferred.
+3. Candidate reads and explicit watches are same-entity only.
+4. Typed detailed host failures coexist with string compatibility wrappers.
+5. Every semantic invocation uses isolated limits and returns an outcome;
+   true host-fatal faults expose no partial collection.
+6. Ledger replay covers commits, while attempt replay covers rejections.
+7. Internal rejection data is capability-filtered and deterministically
+   redacted for each recipient.
 
-These questions may refine surface syntax and host representation. They must
-not weaken the immutable-input, canonical-output, no-ordering semantics.
+RFC-0002 remains **Draft** until its executable semantic fixtures, limit-profile
+handshake, typed host API prototype, and sandbox redaction fixtures are reviewed.
+Acceptance does not depend on adding projection, priorities, fixed points, or
+parallel execution; all remain out of scope.

@@ -3130,10 +3130,14 @@ impl VM {
         let stack_depth = self.stack.len();
         let owns_execution_boundary = frame_depth == 0;
         let result = self.call_value_inner(callee, args);
+        let result = if owns_execution_boundary {
+            self.enforce_settlement_balance(result)
+        } else {
+            result
+        };
         if result.is_err() && owns_execution_boundary {
             self.frames.truncate(frame_depth);
             self.stack.truncate(stack_depth);
-            self.abort_settlement();
         }
         result
     }

@@ -1,0 +1,4 @@
+---
+source: tests/fixtures/causal-laws\settlement_local_loop_control.rad
+exit_code: 0
+---

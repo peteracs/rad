@@ -1956,6 +1956,7 @@ impl Checker {
         self.push_scope();
         if let Some(scope) = self.scopes.last_mut() {
             scope.in_loop = true;
+            scope.loop_target_settlement_depth = Some(scope.settlement_depth);
         }
         self.check_block(&stmt.body);
         self.pop_scope();
@@ -1991,6 +1992,7 @@ impl Checker {
                 self.push_scope();
                 if let Some(scope) = self.scopes.last_mut() {
                     scope.in_loop = true;
+                    scope.loop_target_settlement_depth = Some(scope.settlement_depth);
                 }
 
                 if let Some(filter) = &q.filter {
@@ -2091,6 +2093,7 @@ impl Checker {
         self.push_scope();
         if let Some(scope) = self.scopes.last_mut() {
             scope.in_loop = true;
+            scope.loop_target_settlement_depth = Some(scope.settlement_depth);
         }
 
         if stmt.bindings.len() == 1 {
@@ -2195,23 +2198,55 @@ impl Checker {
     }
 
     fn check_break(&mut self, stmt: &BreakStmt) {
-        let in_loop = self.scopes.iter().rev().any(|s| s.in_loop);
-        if !in_loop {
+        let scope_floor = self.anon_fn_scope_bases.last().copied().unwrap_or(0);
+        let target_depth = self.scopes[scope_floor..]
+            .iter()
+            .rev()
+            .find_map(|scope| scope.loop_target_settlement_depth);
+        let Some(target_depth) = target_depth else {
             self.error(
                 &stmt.span,
                 "'break' used outside of a loop".to_string(),
                 None,
             );
+            return;
+        };
+        let current_depth = self.scopes.last().unwrap().settlement_depth;
+        if target_depth != current_depth {
+            self.error(
+                &stmt.span,
+                "`break` cannot cross a settlement boundary".to_string(),
+                Some(
+                    "Move the loop inside `settle`, or move the control flow outside it"
+                        .to_string(),
+                ),
+            );
         }
     }
 
     fn check_continue(&mut self, stmt: &ContinueStmt) {
-        let in_loop = self.scopes.iter().rev().any(|s| s.in_loop);
-        if !in_loop {
+        let scope_floor = self.anon_fn_scope_bases.last().copied().unwrap_or(0);
+        let target_depth = self.scopes[scope_floor..]
+            .iter()
+            .rev()
+            .find_map(|scope| scope.loop_target_settlement_depth);
+        let Some(target_depth) = target_depth else {
             self.error(
                 &stmt.span,
                 "'continue' used outside of a loop".to_string(),
                 None,
+            );
+            return;
+        };
+        let current_depth = self.scopes.last().unwrap().settlement_depth;
+        if target_depth != current_depth {
+            self.error(
+                &stmt.span,
+                "`continue` cannot cross a settlement boundary".to_string(),
+                Some(
+                    "Move the loop inside `settle`, or move the control flow outside it"
+                        .to_string(),
+                ),
             );
         }
     }

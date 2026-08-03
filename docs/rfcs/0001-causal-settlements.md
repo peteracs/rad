@@ -283,6 +283,15 @@ dispatch, replay, and sandbox execution. Internal resolver calls retain the
 context only until their owning settlement boundary converts the failure into
 an atomic abort. A VM remains reusable after a failed law or resolver.
 
+Structured control flow may not escape a settlement before `EndSettlement`.
+`return` is rejected, and `break` or `continue` is legal only when its target
+loop was introduced at the same settlement depth. Loops wholly inside a
+settlement retain ordinary local `break` and `continue` behavior. As a runtime
+backstop, any public execution boundary that would otherwise return success
+with an active settlement aborts it and returns an internal unbalanced-
+settlement fault. Source code is never silently committed or silently accepted
+after crossing the boundary.
+
 Memory cost is proportional to proposals and touched candidate columns;
 untouched archetypes are not deep-cloned.
 
@@ -427,8 +436,10 @@ The experimental feature is complete only when:
 8. event ancestry remains connected;
 9. replay reconstructs the same causal result;
 10. sandbox ACLs cannot be bypassed;
-11. existing RAD programs and tests remain unchanged; and
-12. untouched archetypes stay shared by copy-on-write.
+11. existing RAD programs and tests remain unchanged;
+12. untouched archetypes stay shared by copy-on-write; and
+13. `return`, `break`, and `continue` cannot escape an unfinished settlement;
+    malformed bytecode that does so faults, aborts, and leaves the VM reusable.
 
 > A settlement is not another schedule. It is a declaration that several
 > causes are simultaneous, and that one explicit semantic owner determines

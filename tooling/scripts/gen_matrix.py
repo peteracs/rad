@@ -2,9 +2,11 @@ import csv
 import os
 import subprocess
 import time
-from datetime import datetime
+from datetime import UTC, datetime
 
-REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+REPO_ROOT = os.path.dirname(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+)
 EXAMPLES_DIR = os.path.join(REPO_ROOT, "examples")
 REPORTS_DIR = os.path.join(REPO_ROOT, "reports")
 RAD_CLI_NAME = "rad.exe" if os.name == "nt" else "rad"
@@ -14,7 +16,7 @@ def main():
     if not os.path.exists(RAD_CLI):
         print(f"Error: {RAD_CLI} not found.")
         print("Please build the VM first: cargo build -p rad-vm --release")
-        return
+        return 2
 
     os.makedirs(REPORTS_DIR, exist_ok=True)
 
@@ -66,7 +68,7 @@ def main():
     md_path = os.path.join(REPORTS_DIR, "examples_matrix_latest.md")
     passed = sum(1 for r in results if r["Status"] == "PASS")
     total = len(results)
-    now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+    now = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
 
     with open(md_path, "w", encoding="utf-8") as f:
         f.write(f"# Example Matrix ({now})\n\n")
@@ -81,6 +83,7 @@ def main():
 
     print(f"\nDone! Passed {passed}/{total}.")
     print(f"Reports saved to {REPORTS_DIR}/")
+    return 0 if passed == total else 1
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

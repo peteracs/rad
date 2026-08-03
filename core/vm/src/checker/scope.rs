@@ -11,6 +11,10 @@ impl Checker {
             in_pipeline: prev.in_pipeline,
             in_async: prev.in_async,
             in_loop: prev.in_loop,
+            settlement_depth: prev.settlement_depth,
+            // Loop targets are lexical boundaries, not inherited flags.
+            // Nested scopes find the nearest target by walking outward.
+            loop_target_settlement_depth: None,
             effect_context: prev.effect_context.clone(),
             causal_context: prev.causal_context.clone(),
         };

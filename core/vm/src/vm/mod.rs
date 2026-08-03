@@ -1175,6 +1175,7 @@ impl VM {
                 self.runtime_error(e)
             }
         });
+        let result = self.enforce_settlement_balance(result);
         if result.is_err() {
             // BeginSettlement and EndSettlement are separate bytecodes. A
             // body/law failure can bypass EndSettlement, so every public run

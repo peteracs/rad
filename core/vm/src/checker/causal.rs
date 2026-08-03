@@ -336,6 +336,7 @@ impl Checker {
             let scope = self.scopes.last_mut().unwrap();
             scope.effect_context = EffectSet::single(Effect::ReadECS);
             scope.causal_context = CausalContext::Settlement;
+            scope.settlement_depth += 1;
         }
         self.check_block(&stmt.body);
         self.pop_scope();
