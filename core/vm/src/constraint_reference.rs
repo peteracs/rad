@@ -8,7 +8,7 @@
 use crate::constraint_types::{
     CandidateKey, CandidateView, ConstraintEvaluationFailure, ConstraintIdentity,
     ConstraintLimitProfile, ConstraintOutcome, EphemeralCausalExplanation,
-    RejectionCapabilityMetadata, SettlementRejection,
+    RejectionCapabilityMetadata, RejectionValue, SettlementRejection,
 };
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -130,6 +130,25 @@ pub fn settle_constraints_reference(
         return Ok(());
     }
 
+    let candidate_details = violations
+        .iter()
+        .map(|violation| violation.candidate.clone())
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .filter_map(|key| {
+            let value = view.candidate(&key)?.clone();
+            let readable = capabilities.readable_components.contains("*")
+                || capabilities.readable_components.contains(&key.component);
+            Some((
+                key,
+                if readable {
+                    RejectionValue::Visible(value)
+                } else {
+                    RejectionValue::Redacted
+                },
+            ))
+        })
+        .collect();
     let mut rejection = SettlementRejection {
         settlement_id,
         base_world_digest: base_world_digest.into(),
@@ -139,6 +158,7 @@ pub fn settle_constraints_reference(
             .collect(),
         violations,
         evaluation_failures,
+        candidate_details,
         explanation,
         limit_profile_fingerprint: profile.fingerprint(),
         capabilities,
@@ -150,7 +170,7 @@ pub fn settle_constraints_reference(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::constraint_types::{ConstraintViolation, RejectionValue, RuntimeError};
+    use crate::constraint_types::{ConstraintViolation, RuntimeError};
     use crate::host_value::FrozenValue;
     use crate::CausalValueLimits;
 
@@ -175,7 +195,7 @@ mod tests {
             code: code.into(),
             occurrence,
             source_line: 10,
-            details: BTreeMap::from([("candidate".into(), RejectionValue::Redacted)]),
+            candidate: key("Position"),
         }
     }
 

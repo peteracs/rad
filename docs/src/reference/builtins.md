@@ -1576,9 +1576,18 @@ checking those markers before providing a Causal Laws program; the native CLI
 uses `--experimental-laws`.
 
 The `constraint_limits` object contains the version and fingerprint plus
-per-invocation fuel/heap limits, violation caps, and the exact canonical
-rejection byte cap. Browser hosts can call `compile_and_run_result_json()` for
-a tagged `settlement_rejected`, `runtime_error`, or `host_fault` result.
+per-invocation fuel/heap limits, the separately reserved aggregate fuel/heap
+envelope, violation caps, and the exact canonical rejection byte cap. The
+profile's value limits are the same limits shown in `causal_value_limits`;
+setting either host profile updates the single transaction value domain.
+Browser hosts can call `compile_and_run_result_json()` for a tagged
+`settlement_rejected`, `runtime_error`, or `host_fault` result.
+
+Rejection candidate values are frozen once per `(entity, component)` and
+referenced by violations. Canonical bytes are produced through a bounded
+writer. Capability rendering replaces hidden origins as a whole, including
+law/resolver/intent identity and source metadata, instead of exposing a name
+with only its payload removed.
 
 Rust embedders exchange [`FrozenValue`](../../../core/vm/src/host_value.rs)
 trees with the VM. A `ValueHandle<'vm>` may inspect one imported or global

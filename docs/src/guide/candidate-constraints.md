@@ -80,6 +80,12 @@ an isolated deterministic fuel and heap budget. Fuel exhaustion, memory
 exhaustion, or another ordinary evaluation fault becomes an evaluation
 failure; it does not suppress independent invocations.
 
+The runtime reserves a separate aggregate fuel/heap envelope before the first
+selected invocation runs. If the complete invocation set cannot fit that host
+envelope, validation returns a typed host fault before exposing any partial
+outcome. One versioned value-limit profile governs proposal capture, candidate
+capture, rejection details, and canonical rejection output.
+
 Any violation or evaluation failure rejects the whole settlement:
 
 ```text
@@ -100,13 +106,23 @@ render the same typed result as text. Browser hosts can use
 Rejected attempts are not authoritative ledger entries. `call_global_attempt`
 can retain a pointer-free failed-attempt recipe, and `replay_failed_attempt`
 re-executes it only when the base digest, request, capability profile, and
-limit-profile fingerprint match.
+limit-profile fingerprint match. It also requires the same compiled-program,
+runtime-feature, and constraint-registry digests. Opaque settlement record IDs
+are diagnostic only and do not participate in semantic equality.
+
+Candidate details are frozen once per `(entity, component)` and shared by all
+violations that reference that candidate. Canonical rejection encoding writes
+through a bounded sink; it never constructs an oversized JSON tree merely to
+measure it. If the envelope is exceeded, RAD returns one bounded aggregate
+limit outcome.
 
 ## Capabilities and redaction
 
 RAD builds one internal rejection and renders it through the recipient's
 component-read and origin capabilities. Values outside that grant become a
-stable redaction tag. Hidden values never influence visible ordering.
+stable redaction tag. When origins are hidden, the law, resolver, intent,
+source location, payload, length, and hidden sort identity are all replaced by
+opaque bounded placeholders. Hidden values never influence visible ordering.
 
 ## Complete movement example
 

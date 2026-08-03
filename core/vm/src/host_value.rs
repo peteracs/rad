@@ -28,6 +28,7 @@ use crate::causal_value::{CausalValueError, CausalValueLimits};
 use crate::gc::GcHeap;
 use crate::value::{ComponentData, MapKey, MapStorage, Object, Value};
 use crate::vm::VM;
+use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, HashMap};
 use std::fmt;
 use std::marker::PhantomData;
@@ -601,6 +602,9 @@ impl VM {
         };
 
         let base_world_digest = self.world.content_digest();
+        let program_digest = self.program_digest();
+        let runtime_feature_fingerprint = self.runtime_feature_fingerprint();
+        let constraint_registry_digest = self.constraint_registry_digest();
         match self.call_global_detailed(name, args) {
             Ok(value) => Ok(SettlementAttemptOutcome::Committed(value)),
             Err(crate::constraint_types::VmFailure::SettlementRejected(rejection)) => Ok(
@@ -609,6 +613,9 @@ impl VM {
                     function: name.to_string(),
                     arguments: args.to_vec(),
                     base_world_digest,
+                    program_digest,
+                    runtime_feature_fingerprint,
+                    constraint_registry_digest,
                     limit_profile_fingerprint: rejection.limit_profile_fingerprint.clone(),
                     capabilities: rejection.capabilities.clone(),
                     rejection,
@@ -657,6 +664,24 @@ impl VM {
                 "constraint limit profile does not match the recorded attempt".into(),
             ));
         }
+        if self.program_digest() != attempt.program_digest {
+            return Err(fail(
+                "attempt.program_mismatch",
+                "compiled program does not match the recorded attempt".into(),
+            ));
+        }
+        if self.runtime_feature_fingerprint() != attempt.runtime_feature_fingerprint {
+            return Err(fail(
+                "attempt.runtime_features_mismatch",
+                "runtime feature set does not match the recorded attempt".into(),
+            ));
+        }
+        if self.constraint_registry_digest() != attempt.constraint_registry_digest {
+            return Err(fail(
+                "attempt.constraint_registry_mismatch",
+                "constraint registry does not match the recorded attempt".into(),
+            ));
+        }
         let actual_capabilities = self.constraint_capabilities();
         if actual_capabilities != attempt.capabilities {
             return Err(fail(
@@ -674,12 +699,14 @@ impl VM {
             }
             Err(other) => return Err(other),
         };
-        if replayed.capabilities != attempt.capabilities
-            || replayed.canonical_bytes(&self.constraint_limit_profile)
-                != attempt
-                    .rejection
-                    .canonical_bytes(&self.constraint_limit_profile)
-        {
+        let replayed_bytes = replayed
+            .canonical_bytes(&self.constraint_limit_profile)
+            .map_err(|error| fail("attempt.rejection_encoding_failed", error.to_string()))?;
+        let expected_bytes = attempt
+            .rejection
+            .canonical_bytes(&self.constraint_limit_profile)
+            .map_err(|error| fail("attempt.rejection_encoding_failed", error.to_string()))?;
+        if replayed.capabilities != attempt.capabilities || replayed_bytes != expected_bytes {
             return Err(fail(
                 "attempt.rejection_mismatch",
                 "replayed attempt produced a different canonical rejection".into(),
@@ -720,6 +747,8 @@ impl VM {
 
     pub fn set_causal_value_limits(&mut self, limits: CausalValueLimits) {
         self.causal_value_limits = limits;
+        self.constraint_limit_profile
+            .synchronize_value_limits(limits);
     }
 
     pub fn constraint_limit_profile(&self) -> &crate::constraint_types::ConstraintLimitProfile {
@@ -730,7 +759,71 @@ impl VM {
         &mut self,
         profile: crate::constraint_types::ConstraintLimitProfile,
     ) {
+        self.causal_value_limits = profile.value_limits();
         self.constraint_limit_profile = profile;
+    }
+
+    fn program_digest(&self) -> String {
+        let mut digest = Sha256::new();
+        digest.update(b"rad-compiled-program/v1\0");
+        for chunk in self.chunks.iter() {
+            digest.update((chunk.name().len() as u64).to_le_bytes());
+            digest.update(chunk.name().as_bytes());
+            digest.update((chunk.code().len() as u64).to_le_bytes());
+            digest.update(chunk.code());
+            for constant in chunk.constants() {
+                if constant.is_nil() {
+                    digest.update(b"nil\0");
+                } else if let Some(value) = constant.as_bool() {
+                    digest.update([b'b', value as u8]);
+                } else if let Some(value) = constant.as_int() {
+                    digest.update(b"i");
+                    digest.update(value.to_le_bytes());
+                } else if let Some(value) = constant.as_float() {
+                    digest.update(b"f");
+                    digest.update(value.to_bits().to_le_bytes());
+                } else if let Some(value) = constant.as_str() {
+                    digest.update(b"s");
+                    digest.update((value.len() as u64).to_le_bytes());
+                    digest.update(value.as_bytes());
+                } else if let Some(function) = constant.as_fn() {
+                    digest.update(b"F");
+                    digest.update(function.name.as_bytes());
+                    digest.update([function.arity]);
+                    digest.update((function.chunk_id as u64).to_le_bytes());
+                } else {
+                    digest.update(b"o");
+                    digest.update(constant.type_name().as_bytes());
+                }
+            }
+        }
+        hex::encode(digest.finalize())
+    }
+
+    fn constraint_registry_digest(&self) -> String {
+        let mut digest = Sha256::new();
+        digest.update(b"rad-constraint-registry/v1\0");
+        for constraint in self.constraint_registry.iter() {
+            digest.update(constraint.name.as_bytes());
+            digest.update([0]);
+            digest.update(constraint.attached_component.as_bytes());
+            digest.update([0]);
+            for watch in constraint.watches.iter() {
+                digest.update(watch.as_bytes());
+                digest.update([0]);
+            }
+            digest.update(constraint.global_slot.to_le_bytes());
+        }
+        hex::encode(digest.finalize())
+    }
+
+    fn runtime_feature_fingerprint(&self) -> String {
+        let descriptor = format!(
+            "rad-runtime/v1;crate={};causal_laws=1;candidate_constraints=1;constraint_profile={}",
+            env!("CARGO_PKG_VERSION"),
+            self.constraint_limit_profile.version()
+        );
+        hex::encode(Sha256::digest(descriptor.as_bytes()))
     }
 }
 

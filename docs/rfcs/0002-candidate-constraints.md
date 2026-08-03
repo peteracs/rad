@@ -469,20 +469,21 @@ Each failed requirement produces a value conceptually equivalent to:
 
 ```text
 ConstraintViolation {
-    settlement_id
     constraint_name
     component_type
     entity
     code
     requirement_source_span
-    candidate_write_origin
+    candidate_key
 }
 ```
 
-`candidate_write_origin` refers ephemerally to the resolver and proposal fan-in
-that staged the rejected component. The violation renderer can therefore say
-both which invariant failed and which simultaneous causes produced the invalid
-candidate.
+`candidate_key` references one rejection-level candidate detail and one
+ephemeral causal explanation. The detail is frozen at most once for each
+`(entity, component type)`, no matter how many requirements reject it. Its
+explanation follows the one resolution patch that staged the component and
+therefore contains only that resolver's proposal fan-in, not every proposal in
+the settlement.
 
 Violation codes are user-authored semantic identifiers. Constraint name,
 component type, entity, and source span are runtime metadata and are not exposed
@@ -542,6 +543,8 @@ max_heap_bytes_per_invocation
 max_violations_per_invocation
 max_violations_per_settlement
 max_serialized_outcome_bytes
+max_aggregate_fuel
+max_aggregate_heap_bytes
 ```
 
 All limits are finite, immutable for the settlement, exposed through the
@@ -550,6 +553,19 @@ serialized-outcome limit measures the exact canonical UTF-8 rejection bytes,
 including escaping and delimiters. Hosts may choose a supported profile before
 execution; changing it creates a different attempt contract rather than a
 nondeterministic replay of the same attempt.
+
+Proposal capture, candidate capture, violation details, explanations, and
+canonical rejection output use one synchronized transaction value-limit
+domain. A host cannot configure a causal value that is legal to capture but
+illegal merely because rejection encoding silently applies a narrower value
+profile.
+
+The aggregate limits are a process-safety envelope, not a shared semantic
+meter. Before any invocation runs, the runtime checks the complete selected set
+against that envelope. Failure returns `HostAborted` without exposing a partial
+collection. Inside the reservation, every invocation receives exactly its own
+declared fuel and heap allowance; earlier execution cannot consume a later
+invocation's contract.
 
 A constraint can fail while evaluating—for example, a base `require(entity,
 Component)` may find a missing component. Ordinary errors and per-invocation
@@ -561,7 +577,10 @@ The runtime evaluates every independently selected invocation within its own
 contract and collects both violations and evaluation failures. Outcomes are
 canonically sorted only after evaluation. If the settlement-wide count or byte
 limit is exceeded, no order-dependent prefix is exposed; the rejection contains
-one aggregate limit failure plus stable total counts.
+one bounded aggregate limit failure. Candidate values are retained once per
+candidate key and violations reference them. Proposal origins are bounded and
+filtered to the candidate's owning patch. Canonical output is written directly
+through a bounded sink rather than building an oversized JSON tree first.
 
 Process cancellation, allocator failure, VM termination, or another true
 host-fatal condition produces `HostAborted`. A host-fatal result exposes no
@@ -622,6 +641,9 @@ outside v0.
 Repeated common proposal ancestry is collapsed, and large fan-in uses the same
 bounded presentation policy as `why()`. Retention lasts only as long as the
 returned error value or host response.
+
+`settlement_id` and other opaque runtime record identities may be retained for
+diagnostics, but they are excluded from canonical semantic rejection bytes.
 
 ### Typed host failure boundary
 
@@ -697,6 +719,10 @@ preserved, but secret values, source identity, lengths beyond declared bounded
 counts, and hidden canonical sort keys are not leaked. Redaction changes only
 presentation, never validation or the internal accept/reject result.
 
+When origins are not visible, the renderer hides the origin as one unit. It
+does not expose the producing law, resolver, intent, source location, payload,
+payload length, or an internal sort identity.
+
 ## Ordering is deliberately absent
 
 The language must not support:
@@ -764,9 +790,11 @@ explicit non-authoritative attempt record containing at least:
 
 ```text
 source/module version hashes
+compiled-program digest
+constraint-registry digest
 base-world digest
 input or exact event request
-runtime feature and constraint-limit profile
+runtime-feature fingerprint and constraint-limit profile
 capability profile identity
 ```
 
@@ -782,10 +810,12 @@ Once implemented, capability negotiation reports:
   "causal_laws": 1,
   "causal_constraints": 1,
   "constraint_limits": {
-    "version": 1,
+    "version": 2,
     "fingerprint": "<sha256>",
     "fuel_per_invocation": 100000,
     "max_heap_bytes_per_invocation": 1048576,
+    "max_aggregate_fuel": 1000000000,
+    "max_aggregate_heap_bytes": 1073741824,
     "max_violations_per_invocation": 256,
     "max_violations_per_settlement": 4096,
     "max_serialized_outcome_bytes": 1048576
@@ -1212,6 +1242,16 @@ host surface returns typed `VmFailure` values; WASM returns tagged rejection
 JSON; and capability-redaction, failed-attempt replay, permutation, fuel,
 atomicity, and reusable-VM regressions are part of the implementation suite.
 The movement vertical slice is in `projects/dogfood/causal-constraints/`.
+
+The experimental implementation additionally uses one synchronized
+transaction value-limit domain; preflights a separate aggregate host envelope;
+gives each invocation an independent semantic fuel/heap meter; freezes each
+rejected candidate detail once; streams canonical rejection bytes into an
+exact bounded writer; emits a real `HostAborted` route; redacts origin identity
+as one opaque value; follows only candidate-specific proposal fan-in; and binds
+attempt replay to compiled-program, runtime-feature, constraint-registry,
+limit-profile, capability, base-world, and request identities. Opaque
+settlement IDs do not participate in semantic rejection equality.
 
 Projection, priorities, fixed points, and parallel constraint execution remain
 out of scope and require follow-on RFCs.

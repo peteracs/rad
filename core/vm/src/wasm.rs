@@ -85,6 +85,8 @@ impl RadRuntime {
                 "fingerprint": constraint_limits.fingerprint(),
                 "fuel_per_invocation": constraint_limits.fuel_per_invocation(),
                 "max_heap_bytes_per_invocation": constraint_limits.max_heap_bytes_per_invocation(),
+                "max_aggregate_fuel": constraint_limits.max_aggregate_fuel(),
+                "max_aggregate_heap_bytes": constraint_limits.max_aggregate_heap_bytes(),
                 "max_violations_per_invocation": constraint_limits.max_violations_per_invocation(),
                 "max_violations_per_settlement": constraint_limits.max_violations_per_settlement(),
                 "max_serialized_outcome_bytes": constraint_limits.max_serialized_outcome_bytes()
@@ -178,10 +180,28 @@ impl RadRuntime {
             })
             .to_string(),
             Err(crate::constraint_types::VmFailure::SettlementRejected(rejection)) => {
-                let mut value: serde_json::Value = serde_json::from_slice(
-                    &rejection.canonical_bytes(self.vm.constraint_limit_profile()),
-                )
-                .expect("canonical rejection JSON");
+                let bytes = match rejection.canonical_bytes(self.vm.constraint_limit_profile()) {
+                    Ok(bytes) => bytes,
+                    Err(error) => {
+                        return serde_json::json!({
+                            "kind": "host_fault",
+                            "code": "constraint.rejection_encoding_failed",
+                            "message": error.to_string(),
+                        })
+                        .to_string();
+                    }
+                };
+                let mut value: serde_json::Value = match serde_json::from_slice(&bytes) {
+                    Ok(value) => value,
+                    Err(error) => {
+                        return serde_json::json!({
+                            "kind": "host_fault",
+                            "code": "constraint.rejection_json_invalid",
+                            "message": error.to_string(),
+                        })
+                        .to_string();
+                    }
+                };
                 if let Some(object) = value.as_object_mut() {
                     object.insert(
                         "kind".into(),
@@ -1331,6 +1351,10 @@ print(require(hero, Health).hp)
         assert_eq!(
             features["causal_value_limits"]["max_encoded_bytes"],
             8 * 1024 * 1024
+        );
+        assert_eq!(
+            features["constraint_limits"]["max_aggregate_fuel"],
+            crate::constraint_types::ConstraintLimitProfile::HARD_MAX_AGGREGATE_FUEL
         );
     }
 

@@ -117,7 +117,7 @@ fn attempt() { settle { Push(hero) } }
     assert_eq!(rejection.violations.len(), 1);
     assert_eq!(rejection.violations[0].code, "position.too_large");
     assert!(matches!(
-        &rejection.violations[0].details["candidate"],
+        &rejection.candidate_details[&rejection.violations[0].candidate],
         rad_vm::constraint_types::RejectionValue::Visible(_)
     ));
 }

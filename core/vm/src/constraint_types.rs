@@ -8,9 +8,10 @@ use crate::{CausalValueError, CausalValueLimits};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
+use std::io::Write;
 use std::sync::Arc;
 
-pub const CONSTRAINT_LIMIT_PROFILE_VERSION: u32 = 1;
+pub const CONSTRAINT_LIMIT_PROFILE_VERSION: u32 = 2;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ConstraintLimitProfile {
@@ -20,6 +21,8 @@ pub struct ConstraintLimitProfile {
     max_violations_per_invocation: usize,
     max_violations_per_settlement: usize,
     max_serialized_outcome_bytes: usize,
+    max_aggregate_fuel: u64,
+    max_aggregate_heap_bytes: usize,
 }
 
 impl ConstraintLimitProfile {
@@ -29,6 +32,8 @@ impl ConstraintLimitProfile {
     pub const HARD_MAX_VIOLATIONS_PER_SETTLEMENT: usize = 65_536;
     pub const MIN_SERIALIZED_OUTCOME_BYTES: usize = 1_024;
     pub const HARD_MAX_SERIALIZED_OUTCOME_BYTES: usize = 16 * 1024 * 1024;
+    pub const HARD_MAX_AGGREGATE_FUEL: u64 = 1_000_000_000;
+    pub const HARD_MAX_AGGREGATE_HEAP_BYTES: usize = 1024 * 1024 * 1024;
 
     pub fn try_new(
         value_limits: CausalValueLimits,
@@ -48,6 +53,8 @@ impl ConstraintLimitProfile {
             max_violations_per_invocation,
             max_violations_per_settlement,
             max_serialized_outcome_bytes,
+            max_aggregate_fuel: Self::HARD_MAX_AGGREGATE_FUEL,
+            max_aggregate_heap_bytes: Self::HARD_MAX_AGGREGATE_HEAP_BYTES,
         };
         profile.validate()?;
         Ok(profile)
@@ -77,13 +84,55 @@ impl ConstraintLimitProfile {
         self.max_serialized_outcome_bytes
     }
 
+    pub fn max_aggregate_fuel(&self) -> u64 {
+        self.max_aggregate_fuel
+    }
+
+    pub fn max_aggregate_heap_bytes(&self) -> usize {
+        self.max_aggregate_heap_bytes
+    }
+
+    /// Keep proposal, candidate, and rejection values in one limit domain.
+    pub fn with_value_limits(
+        mut self,
+        value_limits: CausalValueLimits,
+    ) -> Result<Self, ConstraintProfileError> {
+        value_limits
+            .validate_profile()
+            .map_err(ConstraintProfileError::ValueLimits)?;
+        self.value_limits = value_limits;
+        self.validate()?;
+        Ok(self)
+    }
+
+    pub(crate) fn synchronize_value_limits(&mut self, value_limits: CausalValueLimits) {
+        // `CausalValueLimits` can only be constructed through validated
+        // builders. The remaining profile fields are unchanged, so replacing
+        // this one value domain cannot invalidate the profile.
+        self.value_limits = value_limits;
+        debug_assert!(self.validate().is_ok());
+    }
+
+    /// Configure the process-safety envelope reserved before any selected
+    /// constraint runs. Invocation meters remain independent inside it.
+    pub fn with_aggregate_limits(
+        mut self,
+        max_aggregate_fuel: u64,
+        max_aggregate_heap_bytes: usize,
+    ) -> Result<Self, ConstraintProfileError> {
+        self.max_aggregate_fuel = max_aggregate_fuel;
+        self.max_aggregate_heap_bytes = max_aggregate_heap_bytes;
+        self.validate()?;
+        Ok(self)
+    }
+
     pub fn version(&self) -> u32 {
         CONSTRAINT_LIMIT_PROFILE_VERSION
     }
 
     pub fn fingerprint(&self) -> String {
         let canonical = format!(
-            "constraint-limits/v{};depth={};nodes={};value_bytes={};items={};fuel={};heap_bytes={};per_invocation={};per_settlement={};outcome_bytes={}",
+            "constraint-limits/v{};depth={};nodes={};value_bytes={};items={};fuel={};heap_bytes={};per_invocation={};per_settlement={};outcome_bytes={};aggregate_fuel={};aggregate_heap_bytes={}",
             self.version(),
             self.value_limits.max_depth(),
             self.value_limits.max_nodes(),
@@ -94,6 +143,8 @@ impl ConstraintLimitProfile {
             self.max_violations_per_invocation,
             self.max_violations_per_settlement,
             self.max_serialized_outcome_bytes,
+            self.max_aggregate_fuel,
+            self.max_aggregate_heap_bytes,
         );
         hex::encode(Sha256::digest(canonical.as_bytes()))
     }
@@ -124,6 +175,26 @@ impl ConstraintLimitProfile {
             self.max_serialized_outcome_bytes as u64,
             Self::HARD_MAX_SERIALIZED_OUTCOME_BYTES as u64,
         )?;
+        validate_limit(
+            "max_aggregate_fuel",
+            self.max_aggregate_fuel,
+            Self::HARD_MAX_AGGREGATE_FUEL,
+        )?;
+        validate_limit(
+            "max_aggregate_heap_bytes",
+            self.max_aggregate_heap_bytes as u64,
+            Self::HARD_MAX_AGGREGATE_HEAP_BYTES as u64,
+        )?;
+        if self.max_aggregate_fuel < self.fuel_per_invocation {
+            return Err(ConstraintProfileError::Inconsistent {
+                message: "aggregate fuel is smaller than one invocation contract".into(),
+            });
+        }
+        if self.max_aggregate_heap_bytes < self.max_heap_bytes_per_invocation {
+            return Err(ConstraintProfileError::Inconsistent {
+                message: "aggregate heap is smaller than one invocation contract".into(),
+            });
+        }
         if self.max_serialized_outcome_bytes < Self::MIN_SERIALIZED_OUTCOME_BYTES {
             return Err(ConstraintProfileError::Inconsistent {
                 message: format!(
@@ -251,7 +322,8 @@ pub struct ConstraintViolation {
     pub code: String,
     pub occurrence: u32,
     pub source_line: u32,
-    pub details: BTreeMap<String, RejectionValue>,
+    /// One shared entry in `SettlementRejection::candidate_details`.
+    pub candidate: CandidateKey,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -276,16 +348,28 @@ pub enum RejectionValue {
     Redacted,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum RejectionProposalOrigin {
+    Visible {
+        law: String,
+        source_line: u32,
+        payload: FrozenValue,
+    },
+    /// Deliberately carries no hidden identity, size, location, or sort key.
+    Redacted,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RejectionProposalOrigin {
-    pub law: String,
-    pub source_line: u32,
-    pub payload: RejectionValue,
+pub struct CandidateCausalExplanation {
+    pub resolver: String,
+    pub intent: String,
+    pub intent_key: u32,
+    pub proposal_origins: Vec<RejectionProposalOrigin>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct EphemeralCausalExplanation {
-    pub proposal_origins: Vec<RejectionProposalOrigin>,
+    pub candidates: BTreeMap<CandidateKey, CandidateCausalExplanation>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -302,12 +386,15 @@ pub struct SettlementRejection {
     pub applicable_constraints: Vec<ConstraintIdentity>,
     pub violations: Vec<ConstraintViolation>,
     pub evaluation_failures: Vec<ConstraintEvaluationFailure>,
+    /// Each rejected candidate is frozen at most once regardless of how many
+    /// requirements refer to it.
+    pub candidate_details: BTreeMap<CandidateKey, RejectionValue>,
     pub explanation: EphemeralCausalExplanation,
     pub limit_profile_fingerprint: String,
     pub capabilities: RejectionCapabilityMetadata,
 }
 
-pub const SETTLEMENT_ATTEMPT_RECORD_VERSION: u32 = 1;
+pub const SETTLEMENT_ATTEMPT_RECORD_VERSION: u32 = 2;
 
 /// Pointer-free recipe and expected result for replaying one rejected host
 /// call. Ledger replay remains commit-only; this record belongs to a debugger
@@ -318,6 +405,9 @@ pub struct FailedSettlementAttempt {
     pub function: String,
     pub arguments: Vec<FrozenValue>,
     pub base_world_digest: String,
+    pub program_digest: String,
+    pub runtime_feature_fingerprint: String,
+    pub constraint_registry_digest: String,
     pub limit_profile_fingerprint: String,
     pub capabilities: RejectionCapabilityMetadata,
     pub rejection: Arc<SettlementRejection>,
@@ -327,6 +417,96 @@ pub struct FailedSettlementAttempt {
 pub enum SettlementAttemptOutcome {
     Committed(FrozenValue),
     Rejected(Arc<FailedSettlementAttempt>),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ValidationResult {
+    Accepted,
+    Rejected(Arc<SettlementRejection>),
+    HostAborted(HostFault),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RejectionEncodingError {
+    Value(CausalValueError),
+    OutcomeByteLimit { limit: usize },
+    Serialization(String),
+}
+
+impl fmt::Display for RejectionEncodingError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Value(error) => error.fmt(formatter),
+            Self::OutcomeByteLimit { limit } => {
+                write!(
+                    formatter,
+                    "canonical rejection exceeds the {limit}-byte limit"
+                )
+            }
+            Self::Serialization(message) => formatter.write_str(message),
+        }
+    }
+}
+
+impl std::error::Error for RejectionEncodingError {}
+
+struct BoundedCanonicalWriter {
+    bytes: Vec<u8>,
+    limit: usize,
+    exceeded: bool,
+}
+
+impl BoundedCanonicalWriter {
+    fn new(limit: usize) -> Self {
+        Self {
+            bytes: Vec::with_capacity(limit.min(16 * 1024)),
+            limit,
+            exceeded: false,
+        }
+    }
+
+    fn raw(&mut self, value: &[u8]) -> Result<(), RejectionEncodingError> {
+        self.write_all(value).map_err(|error| {
+            if self.exceeded {
+                RejectionEncodingError::OutcomeByteLimit { limit: self.limit }
+            } else {
+                RejectionEncodingError::Serialization(error.to_string())
+            }
+        })
+    }
+
+    fn json<T: serde::Serialize>(&mut self, value: &T) -> Result<(), RejectionEncodingError> {
+        serde_json::to_writer(&mut *self, value).map_err(|error| {
+            if self.exceeded {
+                RejectionEncodingError::OutcomeByteLimit { limit: self.limit }
+            } else {
+                RejectionEncodingError::Serialization(error.to_string())
+            }
+        })
+    }
+
+    fn finish(self) -> Result<Vec<u8>, RejectionEncodingError> {
+        if self.exceeded {
+            Err(RejectionEncodingError::OutcomeByteLimit { limit: self.limit })
+        } else {
+            Ok(self.bytes)
+        }
+    }
+}
+
+impl Write for BoundedCanonicalWriter {
+    fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+        if bytes.len() > self.limit.saturating_sub(self.bytes.len()) {
+            self.exceeded = true;
+            return Err(std::io::Error::other("canonical rejection byte limit"));
+        }
+        self.bytes.extend_from_slice(bytes);
+        Ok(bytes.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
 }
 
 impl SettlementRejection {
@@ -357,13 +537,9 @@ impl SettlementRejection {
                 right.source_line,
             ))
         });
-        self.explanation.proposal_origins.sort_by(|left, right| {
-            (&left.law, &left.payload, left.source_line).cmp(&(
-                &right.law,
-                &right.payload,
-                right.source_line,
-            ))
-        });
+        for explanation in self.explanation.candidates.values_mut() {
+            explanation.proposal_origins.sort();
+        }
     }
 
     pub fn redacted_for(&self, capabilities: RejectionCapabilityMetadata) -> Self {
@@ -372,16 +548,18 @@ impl SettlementRejection {
                 || capabilities.readable_components.contains(component)
         };
         let mut rendered = self.clone();
-        for violation in &mut rendered.violations {
-            if !may_read(&violation.constraint.attached_component) {
-                for value in violation.details.values_mut() {
-                    *value = RejectionValue::Redacted;
-                }
+        for (candidate, value) in &mut rendered.candidate_details {
+            if !may_read(&candidate.component) {
+                *value = RejectionValue::Redacted;
             }
         }
         if !capabilities.origins_visible {
-            for origin in &mut rendered.explanation.proposal_origins {
-                origin.payload = RejectionValue::Redacted;
+            for explanation in rendered.explanation.candidates.values_mut() {
+                explanation.resolver = "<redacted-origin>".into();
+                explanation.intent = "<redacted-origin>".into();
+                for origin in &mut explanation.proposal_origins {
+                    *origin = RejectionProposalOrigin::Redacted;
+                }
             }
         }
         rendered.capabilities = capabilities;
@@ -395,99 +573,160 @@ impl SettlementRejection {
     /// declaration between files or lines cannot change the rejection.
     /// Visible RAD values embed their own canonical encoding; redaction uses
     /// one stable tagged placeholder.
-    pub fn canonical_bytes(&self, profile: &ConstraintLimitProfile) -> Vec<u8> {
+    pub fn canonical_bytes(
+        &self,
+        profile: &ConstraintLimitProfile,
+    ) -> Result<Vec<u8>, RejectionEncodingError> {
+        fn identity(
+            writer: &mut BoundedCanonicalWriter,
+            value: &ConstraintIdentity,
+        ) -> Result<(), RejectionEncodingError> {
+            writer.raw(b"{\"attached_component\":")?;
+            writer.json(&value.attached_component)?;
+            writer.raw(b",\"qualified_name\":")?;
+            writer.json(&value.qualified_name)?;
+            writer.raw(b"}")
+        }
+        fn candidate_key(
+            writer: &mut BoundedCanonicalWriter,
+            value: &CandidateKey,
+        ) -> Result<(), RejectionEncodingError> {
+            writer.raw(b"{\"component\":")?;
+            writer.json(&value.component)?;
+            writer.raw(b",\"entity\":")?;
+            writer.json(&value.entity)?;
+            writer.raw(b"}")
+        }
+        fn frozen(
+            writer: &mut BoundedCanonicalWriter,
+            value: &FrozenValue,
+            profile: &ConstraintLimitProfile,
+        ) -> Result<(), RejectionEncodingError> {
+            let limit = profile
+                .value_limits()
+                .max_encoded_bytes()
+                .min(profile.max_serialized_outcome_bytes());
+            let limits = profile
+                .value_limits()
+                .with_max_encoded_bytes(limit)
+                .map_err(RejectionEncodingError::Value)?;
+            let bytes = value
+                .canonical_bytes(&limits)
+                .map_err(RejectionEncodingError::Value)?;
+            writer.raw(&bytes)
+        }
         fn rejection_value(
+            writer: &mut BoundedCanonicalWriter,
             value: &RejectionValue,
-            limits: &CausalValueLimits,
-        ) -> serde_json::Value {
+            profile: &ConstraintLimitProfile,
+        ) -> Result<(), RejectionEncodingError> {
             match value {
-                RejectionValue::Visible(value) => {
-                    let bytes = value
-                        .canonical_bytes(limits)
-                        .expect("accepted rejection values are already causally bounded");
-                    serde_json::from_slice(&bytes)
-                        .expect("FrozenValue canonical encoding is valid JSON")
-                }
-                RejectionValue::Redacted => serde_json::json!({"redacted": true}),
+                RejectionValue::Visible(value) => frozen(writer, value, profile),
+                RejectionValue::Redacted => writer.raw(b"{\"redacted\":true}"),
             }
         }
-        let constraints = self
-            .applicable_constraints
-            .iter()
-            .map(|identity| {
-                serde_json::json!({
-                    "attached_component": identity.attached_component,
-                    "qualified_name": identity.qualified_name,
-                })
-            })
-            .collect::<Vec<_>>();
-        let violations = self
-            .violations
-            .iter()
-            .map(|violation| {
-                let details = violation
-                    .details
-                    .iter()
-                    .map(|(name, value)| {
-                        (
-                            name.clone(),
-                            rejection_value(value, &profile.value_limits()),
-                        )
-                    })
-                    .collect::<serde_json::Map<_, _>>();
-                serde_json::json!({
-                    "code": violation.code,
-                    "constraint": {
-                        "attached_component": violation.constraint.attached_component,
-                        "qualified_name": violation.constraint.qualified_name,
-                    },
-                    "details": details,
-                    "occurrence": violation.occurrence,
-                    "subject": violation.subject,
-                })
-            })
-            .collect::<Vec<_>>();
-        let failures = self
-            .evaluation_failures
-            .iter()
-            .map(|failure| {
-                serde_json::json!({
-                    "code": failure.code,
-                    "constraint": {
-                        "attached_component": failure.constraint.attached_component,
-                        "qualified_name": failure.constraint.qualified_name,
-                    },
-                    "message": failure.message,
-                    "subject": failure.subject,
-                })
-            })
-            .collect::<Vec<_>>();
-        let origins = self
-            .explanation
-            .proposal_origins
-            .iter()
-            .map(|origin| {
-                serde_json::json!({
-                    "law": origin.law,
-                    "payload": rejection_value(&origin.payload, &profile.value_limits()),
-                })
-            })
-            .collect::<Vec<_>>();
-        serde_json::to_vec(&serde_json::json!({
-            "applicable_constraints": constraints,
-            "base_world_digest": self.base_world_digest,
-            "capabilities": {
-                "origins_visible": self.capabilities.origins_visible,
-                "profile_id": self.capabilities.profile_id,
-                "readable_components": self.capabilities.readable_components,
-            },
-            "evaluation_failures": failures,
-            "explanation": { "proposal_origins": origins },
-            "limit_profile_fingerprint": self.limit_profile_fingerprint,
-            "settlement_id": self.settlement_id,
-            "violations": violations,
-        }))
-        .expect("pointer-free rejection contract must serialize")
+
+        let mut writer = BoundedCanonicalWriter::new(profile.max_serialized_outcome_bytes());
+        writer.raw(b"{\"applicable_constraints\":[")?;
+        for (index, constraint) in self.applicable_constraints.iter().enumerate() {
+            if index > 0 {
+                writer.raw(b",")?;
+            }
+            identity(&mut writer, constraint)?;
+        }
+        writer.raw(b"],\"base_world_digest\":")?;
+        writer.json(&self.base_world_digest)?;
+        writer.raw(b",\"candidate_details\":[")?;
+        for (index, (key, value)) in self.candidate_details.iter().enumerate() {
+            if index > 0 {
+                writer.raw(b",")?;
+            }
+            writer.raw(b"{\"key\":")?;
+            candidate_key(&mut writer, key)?;
+            writer.raw(b",\"value\":")?;
+            rejection_value(&mut writer, value, profile)?;
+            writer.raw(b"}")?;
+        }
+        writer.raw(b"],\"capabilities\":{\"origins_visible\":")?;
+        writer.json(&self.capabilities.origins_visible)?;
+        writer.raw(b",\"profile_id\":")?;
+        writer.json(&self.capabilities.profile_id)?;
+        writer.raw(b",\"readable_components\":[")?;
+        for (index, component) in self.capabilities.readable_components.iter().enumerate() {
+            if index > 0 {
+                writer.raw(b",")?;
+            }
+            writer.json(component)?;
+        }
+        writer.raw(b"]},\"evaluation_failures\":[")?;
+        for (index, failure) in self.evaluation_failures.iter().enumerate() {
+            if index > 0 {
+                writer.raw(b",")?;
+            }
+            writer.raw(b"{\"code\":")?;
+            writer.json(&failure.code)?;
+            writer.raw(b",\"constraint\":")?;
+            identity(&mut writer, &failure.constraint)?;
+            writer.raw(b",\"message\":")?;
+            writer.json(&failure.message)?;
+            writer.raw(b",\"subject\":")?;
+            writer.json(&failure.subject)?;
+            writer.raw(b"}")?;
+        }
+        writer.raw(b"],\"explanation\":{\"candidates\":[")?;
+        for (index, (key, explanation)) in self.explanation.candidates.iter().enumerate() {
+            if index > 0 {
+                writer.raw(b",")?;
+            }
+            writer.raw(b"{\"intent\":")?;
+            writer.json(&explanation.intent)?;
+            writer.raw(b",\"intent_key\":")?;
+            writer.json(&explanation.intent_key)?;
+            writer.raw(b",\"key\":")?;
+            candidate_key(&mut writer, key)?;
+            writer.raw(b",\"proposal_origins\":[")?;
+            for (origin_index, origin) in explanation.proposal_origins.iter().enumerate() {
+                if origin_index > 0 {
+                    writer.raw(b",")?;
+                }
+                match origin {
+                    RejectionProposalOrigin::Visible { law, payload, .. } => {
+                        writer.raw(b"{\"law\":")?;
+                        writer.json(law)?;
+                        writer.raw(b",\"payload\":")?;
+                        frozen(&mut writer, payload, profile)?;
+                        writer.raw(b"}")?;
+                    }
+                    RejectionProposalOrigin::Redacted => {
+                        writer.raw(b"{\"redacted_origin\":true}")?;
+                    }
+                }
+            }
+            writer.raw(b"],\"resolver\":")?;
+            writer.json(&explanation.resolver)?;
+            writer.raw(b"}")?;
+        }
+        writer.raw(b"]},\"limit_profile_fingerprint\":")?;
+        writer.json(&self.limit_profile_fingerprint)?;
+        writer.raw(b",\"violations\":[")?;
+        for (index, violation) in self.violations.iter().enumerate() {
+            if index > 0 {
+                writer.raw(b",")?;
+            }
+            writer.raw(b"{\"candidate\":")?;
+            candidate_key(&mut writer, &violation.candidate)?;
+            writer.raw(b",\"code\":")?;
+            writer.json(&violation.code)?;
+            writer.raw(b",\"constraint\":")?;
+            identity(&mut writer, &violation.constraint)?;
+            writer.raw(b",\"occurrence\":")?;
+            writer.json(&violation.occurrence)?;
+            writer.raw(b",\"subject\":")?;
+            writer.json(&violation.subject)?;
+            writer.raw(b"}")?;
+        }
+        writer.raw(b"]}")?;
+        writer.finish()
     }
 
     pub fn render(&self) -> String {
@@ -617,5 +856,90 @@ mod tests {
         assert_eq!(view.base(&position), Some(&FrozenValue::Int(1)));
         assert_eq!(view.candidate(&position), Some(&FrozenValue::Int(3)));
         assert_eq!(view.candidate(&velocity), Some(&FrozenValue::Int(2)));
+    }
+
+    #[test]
+    fn canonical_rejection_encoding_is_fallible_under_a_narrow_output_profile() {
+        let key = CandidateKey {
+            entity: 7,
+            component: "Data".into(),
+        };
+        let profile =
+            ConstraintLimitProfile::try_new(CausalValueLimits::default(), 100, 1024, 16, 32, 1024)
+                .unwrap();
+        let rejection = SettlementRejection {
+            settlement_id: 99,
+            base_world_digest: "base".into(),
+            applicable_constraints: vec![ConstraintIdentity {
+                qualified_name: "Bounds".into(),
+                attached_component: "Data".into(),
+            }],
+            violations: vec![ConstraintViolation {
+                constraint: ConstraintIdentity {
+                    qualified_name: "Bounds".into(),
+                    attached_component: "Data".into(),
+                },
+                subject: 7,
+                code: "data.too_large".into(),
+                occurrence: 1,
+                source_line: 1,
+                candidate: key.clone(),
+            }],
+            evaluation_failures: Vec::new(),
+            candidate_details: BTreeMap::from([(
+                key,
+                RejectionValue::Visible(FrozenValue::String("x".repeat(2048))),
+            )]),
+            explanation: EphemeralCausalExplanation::default(),
+            limit_profile_fingerprint: profile.fingerprint(),
+            capabilities: RejectionCapabilityMetadata {
+                profile_id: "test".into(),
+                readable_components: BTreeSet::from(["*".into()]),
+                origins_visible: true,
+            },
+        };
+        assert!(matches!(
+            rejection.canonical_bytes(&profile),
+            Err(RejectionEncodingError::Value(
+                CausalValueError::EncodedByteLimit { .. }
+            )) | Err(RejectionEncodingError::OutcomeByteLimit { .. })
+        ));
+    }
+
+    #[test]
+    fn opaque_settlement_ids_do_not_change_semantic_rejection_bytes() {
+        let profile = ConstraintLimitProfile::default();
+        let mut first = SettlementRejection {
+            settlement_id: 1,
+            base_world_digest: "base".into(),
+            applicable_constraints: Vec::new(),
+            violations: Vec::new(),
+            evaluation_failures: vec![ConstraintEvaluationFailure {
+                constraint: ConstraintIdentity {
+                    qualified_name: "Bounds".into(),
+                    attached_component: "Position".into(),
+                },
+                subject: 7,
+                code: "constraint.evaluation_failed".into(),
+                message: "failed".into(),
+                source_line: 12,
+            }],
+            candidate_details: BTreeMap::new(),
+            explanation: EphemeralCausalExplanation::default(),
+            limit_profile_fingerprint: profile.fingerprint(),
+            capabilities: RejectionCapabilityMetadata {
+                profile_id: "trusted".into(),
+                readable_components: BTreeSet::from(["*".into()]),
+                origins_visible: true,
+            },
+        };
+        let mut second = first.clone();
+        second.settlement_id = 999;
+        first.canonicalize();
+        second.canonicalize();
+        assert_eq!(
+            first.canonical_bytes(&profile).unwrap(),
+            second.canonical_bytes(&profile).unwrap()
+        );
     }
 }

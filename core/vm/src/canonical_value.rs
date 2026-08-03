@@ -263,6 +263,18 @@ impl Encoder {
         Ok(())
     }
 
+    fn raw_component(
+        &mut self,
+        component: &crate::value::ComponentData,
+    ) -> Result<(), CausalValueError> {
+        self.text("{\"c\":[");
+        self.escaped(&component.type_name);
+        self.byte(b',');
+        self.raw_fields(component.layout.iter().zip(component.values.iter()))?;
+        self.text("]}");
+        Ok(())
+    }
+
     fn raw(&mut self, value: &Value) -> Result<(), CausalValueError> {
         if value.is_nil() {
             self.text("null");
@@ -312,11 +324,7 @@ impl Encoder {
                     self.text("]}");
                 }
                 Some(Object::Component(component)) => {
-                    self.text("{\"c\":[");
-                    self.escaped(&component.type_name);
-                    self.byte(b',');
-                    self.raw_fields(component.layout.iter().zip(component.values.iter()))?;
-                    self.text("]}");
+                    self.raw_component(component)?;
                 }
                 Some(Object::State(value)) => {
                     self.text("{\"state\":[");
@@ -417,6 +425,15 @@ pub(crate) fn internal_bytes(
 ) -> Result<Vec<u8>, CausalValueError> {
     let mut encoder = Encoder::new(limits.max_encoded_bytes());
     encoder.raw(value)?;
+    encoder.finish()
+}
+
+pub(crate) fn component_bytes(
+    component: &crate::value::ComponentData,
+    limits: &CausalValueLimits,
+) -> Result<Vec<u8>, CausalValueError> {
+    let mut encoder = Encoder::new(limits.max_encoded_bytes());
+    encoder.raw_component(component)?;
     encoder.finish()
 }
 

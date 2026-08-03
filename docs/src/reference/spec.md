@@ -1897,6 +1897,14 @@ ordered. Zero outcomes permit the atomic commit; any outcome rejects the patch
 without changing the live world or durable provenance. Constraints have no
 ordering, priorities, projection, correction, or first-error semantics.
 
+Per-invocation fuel and heap meters are independent. A separate aggregate host
+envelope is reserved before validation, so one constraint cannot consume the
+semantic contract promised to another. Proposal, candidate, and rejection
+values share one versioned value-limit domain. Candidate details are retained
+once per rejected `(entity, component)` and canonical rejection bytes are
+emitted through an exact bounded writer. Host-budget and encoding failures use
+the typed host-fault path and expose no partial constraint result.
+
 The complete v0 syntax, static restrictions, interoperability rules, and
 non-goals are specified by [RFC-0001](https://github.com/peteracs/rad/blob/main/docs/rfcs/0001-causal-settlements.md)
 and [RFC-0002](https://github.com/peteracs/rad/blob/main/docs/rfcs/0002-candidate-constraints.md),

@@ -287,7 +287,7 @@ fn malformed_host_function_cannot_return_with_active_settlement() {
     assert!(vm.settlement.is_none());
 }
 
-fn compile_vm(source: &str) -> VM {
+pub(crate) fn compile_vm(source: &str) -> VM {
     let mut lexer = Lexer::new(source);
     let (tokens, lex_errors) = lexer.tokenize();
     assert!(lex_errors.is_empty(), "lex errors: {lex_errors:?}");
@@ -458,7 +458,7 @@ fn attempt() { settle { Push(hero) } }
         panic!("typed rejection expected")
     };
     assert!(matches!(
-        rejection.violations[0].details["candidate"],
+        rejection.candidate_details[&rejection.violations[0].candidate],
         crate::constraint_types::RejectionValue::Visible(_)
     ));
     let capabilities = crate::constraint_types::RejectionCapabilityMetadata {
@@ -469,21 +469,72 @@ fn attempt() { settle { Push(hero) } }
     let first = rejection.redacted_for(capabilities.clone());
     let second = rejection.redacted_for(capabilities);
     assert!(matches!(
-        first.violations[0].details["candidate"],
+        first.candidate_details[&first.violations[0].candidate],
         crate::constraint_types::RejectionValue::Redacted
     ));
     assert!(first
         .explanation
-        .proposal_origins
-        .iter()
+        .candidates
+        .values()
+        .flat_map(|candidate| candidate.proposal_origins.iter())
         .all(|origin| matches!(
-            origin.payload,
-            crate::constraint_types::RejectionValue::Redacted
+            origin,
+            crate::constraint_types::RejectionProposalOrigin::Redacted
         )));
     assert_eq!(
         first.canonical_bytes(vm.constraint_limit_profile()),
         second.canonical_bytes(vm.constraint_limit_profile())
     );
+    let encoded = first
+        .canonical_bytes(vm.constraint_limit_profile())
+        .expect("redacted rejection encodes");
+    let encoded = String::from_utf8(encoded).unwrap();
+    assert!(!encoded.contains("Push"));
+    assert!(!encoded.contains("ResolveMove"));
+    assert!(!encoded.contains("\"Move\""));
+}
+
+#[test]
+fn failed_attempt_replay_rejects_a_different_compiled_program() {
+    fn source(limit: i64) -> String {
+        format!(
+            r#"
+component Position {{ x: int = 0 }}
+intent Move {{ key target: entity }}
+law Push(target: entity) {{ propose Move {{ target: target }} }}
+resolver ResolveMove for Move(target, proposals) {{ next(target, Position {{ x: 20 }}) }}
+constraint Bounds for Position(subject, proposed) {{
+    require proposed.x <= {limit} else "position.too_large"
+}}
+entity hero {{ Position {{}} }}
+fn attempt() {{ settle {{ Push(hero) }} }}
+"#
+        )
+    }
+
+    let mut original = compile_vm(&source(10));
+    original.run(0).expect("initialize original program");
+    let attempt = match original.call_global_attempt("attempt", &[]).unwrap() {
+        crate::constraint_types::SettlementAttemptOutcome::Rejected(attempt) => attempt,
+        other => panic!("expected rejected attempt, got {other:?}"),
+    };
+
+    let mut changed = compile_vm(&source(11));
+    changed.run(0).expect("initialize changed program");
+    assert_eq!(
+        original.get_world().content_digest(),
+        changed.get_world().content_digest()
+    );
+    let before = changed.observable_state_signature();
+    let failure = changed.replay_failed_attempt(&attempt).unwrap_err();
+    assert!(matches!(
+        failure,
+        crate::constraint_types::VmFailure::Host(crate::constraint_types::HostFault {
+            ref code,
+            ..
+        }) if code == "attempt.program_mismatch"
+    ));
+    assert_eq!(before, changed.observable_state_signature());
 }
 
 #[test]
@@ -582,6 +633,7 @@ fn attempt() {{ settle {{ Push(hero) }} }}
     assert!(
         rejection
             .canonical_bytes(vm.constraint_limit_profile())
+            .expect("bounded rejection encoding")
             .len()
             <= 1024,
         "bounded fallback itself must fit the configured exact byte cap"

@@ -28,6 +28,8 @@ pub mod compiler_abi;
 #[cfg(test)]
 mod composition_tests;
 #[cfg(test)]
+mod constraint_hardening_tests;
+#[cfg(test)]
 mod determinism;
 pub mod ffi;
 pub mod formatter;
