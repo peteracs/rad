@@ -103,10 +103,23 @@ pub(crate) fn optimize_ecs_function_block(block: &Block) -> Block {
 }
 
 pub(crate) fn optimize_block(block: &Block) -> Block {
-    Block {
-        id: block.id,
-        span: block.span.clone(),
-        stmts: block.stmts.iter().map(optimize_stmt).collect(),
+    // `egg` measures saturation with `quanta`, whose x86 clock detection uses
+    // inline `cpuid` assembly. Miri cannot interpret inline assembly. Keeping
+    // the source block is semantics-preserving and lets the soundness suite
+    // exercise compilation plus the typed host boundary under Miri rather
+    // than excluding those tests.
+    #[cfg(miri)]
+    {
+        block.clone()
+    }
+
+    #[cfg(not(miri))]
+    {
+        Block {
+            id: block.id,
+            span: block.span.clone(),
+            stmts: block.stmts.iter().map(optimize_stmt).collect(),
+        }
     }
 }
 
