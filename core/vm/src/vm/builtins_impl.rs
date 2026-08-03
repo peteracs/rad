@@ -4305,7 +4305,7 @@ impl VM {
                 return Err(format!(
                     "fork_apply: delta was made against a different base \
                      (base digest {}… != local {}…) — apply deltas in order",
-                    &claimed_bdig[..12.min(claimed_bdig.len())],
+                    crate::radpack::preview(claimed_bdig, 12),
                     &local_bdig[..12]
                 ));
             }

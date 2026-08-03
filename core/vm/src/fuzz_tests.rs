@@ -409,6 +409,38 @@ fn report_finding(target: &str, input: &str) -> String {
 }
 
 #[test]
+fn fork_apply_unicode_base_digest_is_an_error_not_a_panic() {
+    let corpus = grow_corpus(0x5eed_cafe);
+    let (tag, body) = split_payload(&corpus.delta).expect("generated delta payload");
+    assert_eq!(tag, "RADDELTA1");
+
+    let mut body: serde_json::Value = serde_json::from_str(&body).expect("generated delta JSON");
+    // Byte 12 lies inside this final two-byte character. A direct `[..12]`
+    // diagnostic preview used to panic before fork_apply could return Err.
+    body["bdig"] = serde_json::Value::String(format!("{}Ļ", "a".repeat(11)));
+    let mutant = reseal(
+        &tag,
+        &serde_json::to_string(&body).expect("mutated delta JSON"),
+    );
+
+    let decoder = format!("{}\nlet _ready = 1", DECLS);
+    let mut vm = fresh_vm(&decoder);
+    let base_bytes = Value::from_string(vm.gc_mut(), corpus.base_bytes);
+    let base = vm
+        .call_builtin(Builtin::ForkFromBytes, vec![base_bytes])
+        .expect("fork_from_bytes returns a Result");
+    let base = unwrap_ok(&base);
+    let mutant = Value::from_string(vm.gc_mut(), mutant);
+    let result = vm
+        .call_builtin(Builtin::ForkApply, vec![base, mutant])
+        .expect("fork_apply returns a Result");
+    let result = result.as_sum_type().expect("fork_apply Result");
+    assert_eq!(result.variant, "Err");
+    let message = format!("{}", result.fields["message"]);
+    assert!(message.contains("different base"), "got: {message}");
+}
+
+#[test]
 fn fuzz_decode_paths_never_panic() {
     // read side: fuzz tests run in parallel with each other but never
     // overlap a leak-lab slope measurement (we are the loudest allocator
