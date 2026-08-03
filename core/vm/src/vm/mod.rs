@@ -33,7 +33,7 @@ use io_pool::IoPool;
 pub struct EventLogEntry {
     pub tick: u64,
     pub event_name: String,
-    pub payload: Value,
+    pub(crate) payload: Value,
 }
 
 /// A capture cell is a GC-managed mutable slot.
@@ -63,6 +63,7 @@ pub(crate) struct VmSharedState {
     pub(crate) rng_state: u64,
     pub(crate) suppress_output: bool,
     pub(crate) profile_copies: bool,
+    pub(crate) causal_value_limits: crate::CausalValueLimits,
 }
 
 pub struct CallFrame {
@@ -86,7 +87,7 @@ pub(crate) type SystemSignature = Vec<(String, bool, String)>;
 /// storage before they are applied to global state.
 pub struct WorkerResult {
     pub cmds: Vec<EcsCommand>,
-    pub evts: Vec<(String, Value, u64)>,
+    pub(crate) evts: Vec<(String, Value, u64)>,
 }
 
 unsafe impl Send for WorkerResult {}
@@ -152,7 +153,7 @@ pub(crate) enum NetHandle {
 pub struct VM {
     pub(crate) chunks: Arc<Vec<SealedChunk>>,
     pub(crate) stack: Vec<Value>,
-    pub globals: Vec<Value>,
+    pub(crate) globals: Vec<Value>,
     pub global_names: Arc<Vec<String>>,
     pub(crate) frames: Vec<CallFrame>,
     pub(crate) next_frame_id: u64,
@@ -164,6 +165,7 @@ pub struct VM {
     pub(crate) resolver_registry: Arc<HashMap<String, ResolverRuntimeInfo>>,
     pub(crate) settlement: Option<SettlementContext>,
     pub(crate) next_settlement_id: u64,
+    pub(crate) causal_value_limits: crate::CausalValueLimits,
     /// Schema migrations (#5): component/resource name → compiled
     /// `migrate X(old)` chunk, invoked by `load_world` on shape drift.
     pub(crate) migrations: HashMap<String, MigrationEntry>,
@@ -451,6 +453,7 @@ impl VM {
             rng_state: self.rng_state,
             suppress_output: self.suppress_output,
             profile_copies: self.profile_copies,
+            causal_value_limits: self.causal_value_limits,
         }
     }
 
@@ -470,6 +473,7 @@ impl VM {
             resolver_registry: shared.resolver_registry,
             settlement: None,
             next_settlement_id: 1,
+            causal_value_limits: shared.causal_value_limits,
             migrations: HashMap::new(),
             events_current: Vec::new(),
             events_next: Vec::new(),
@@ -595,6 +599,7 @@ impl VM {
             resolver_registry: Arc::new(HashMap::new()),
             settlement: None,
             next_settlement_id: 1,
+            causal_value_limits: crate::CausalValueLimits::default(),
             migrations: HashMap::new(),
             events_current: Vec::new(),
             events_next: Vec::new(),
@@ -867,7 +872,7 @@ impl VM {
     /// rad program had executed `emit Name { .. }` — so `why()` answers for
     /// host-pushed events too, and the next `flush_events()` dispatches it
     /// on the same frame clock.
-    pub fn enqueue_event(&mut self, payload: Value) -> Result<(), String> {
+    pub(crate) fn enqueue_event(&mut self, payload: Value) -> Result<(), String> {
         let event_name = payload.type_name().to_string();
         if !self.event_handlers.contains_key(&event_name)
             && !self.component_layouts.contains_key(&event_name)
@@ -1012,11 +1017,7 @@ impl VM {
     /// prove their ownership or lifetime. Compiler/WASM bundles use the
     /// explicit owning-heap path below.
     pub fn load_verified_chunk(&mut self, chunk: Chunk) -> Result<usize, crate::VerificationError> {
-        if let Some(index) = chunk
-            .constants()
-            .iter()
-            .position(|value| value.as_object().is_some())
-        {
+        if let Some(index) = chunk.constants().iter().position(Value::is_heap_object_tag) {
             return Err(crate::VerificationError::at(
                 &chunk,
                 0,
@@ -1093,7 +1094,7 @@ impl VM {
     /// Borrow this VM’s [`GcHeap`] to build [`Value`]s from host/embedder code (e.g. arguments to
     /// [`Self::call_value`]). All such values must live on this heap before entering the VM.
     #[inline]
-    pub fn gc_mut(&mut self) -> &mut GcHeap {
+    pub(crate) fn gc_mut(&mut self) -> &mut GcHeap {
         &mut self.gc
     }
 

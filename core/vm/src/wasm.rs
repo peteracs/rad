@@ -70,6 +70,13 @@ impl RadRuntime {
             "version": env!("CARGO_PKG_VERSION"),
             "session": 2,
             "causal_laws": 1,
+            "host_values": 1,
+            "causal_value_limits": {
+                "max_depth": 128,
+                "max_nodes": 100000,
+                "max_encoded_bytes": 8388608,
+                "max_collection_items": 100000
+            },
             "features": [
                 "streaming-session",
                 "render-delta",
@@ -1036,7 +1043,7 @@ fn render_model_code(model: &str) -> f32 {
     }
 }
 
-/// Bytecode chunk plus a scratch [`GcHeap`] holding any heap constants (`from_int` / `from_string`,
+/// Bytecode chunk plus an internal scratch `GcHeap` holding heap constants (`from_int` / `from_string`,
 /// etc.). On [`RadRuntime::load_and_run`], that heap is **merged** into the VM heap before the
 /// chunk is installed, so constant pointers stay valid.
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
@@ -1256,6 +1263,12 @@ print(require(hero, Health).hp)
         let features: serde_json::Value =
             serde_json::from_str(&rt.runtime_features()).expect("feature JSON");
         assert_eq!(features["causal_laws"], 1);
+        assert_eq!(features["host_values"], 1);
+        assert_eq!(features["causal_value_limits"]["max_depth"], 128);
+        assert_eq!(
+            features["causal_value_limits"]["max_encoded_bytes"],
+            8 * 1024 * 1024
+        );
     }
 
     #[test]

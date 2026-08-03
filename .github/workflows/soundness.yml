@@ -29,6 +29,25 @@ permissions:
   contents: read
 
 jobs:
+  miri-host-values:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Install nightly Miri
+        uses: dtolnay/rust-toolchain@4fd1da8b0805d2d2e936788875a7d65dbd677dc2 # nightly
+        with:
+          toolchain: nightly
+          components: miri
+      - name: Cache cargo registry
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-miri-${{ hashFiles('Cargo.lock') }}
+      - name: Miri public value ownership boundary
+        run: cargo +nightly miri test -p rad-vm --test public_value_api --no-default-features
+
   fuzz-gate:
     runs-on: ubuntu-latest
     steps:

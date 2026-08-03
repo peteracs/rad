@@ -159,7 +159,7 @@ pub struct ResolverChunkInfo {
 }
 
 pub struct CompileResult {
-    pub chunks: Vec<Chunk>,
+    pub(crate) chunks: Vec<Chunk>,
     pub systems: Vec<SystemChunkInfo>,
     pub handlers: Vec<HandlerChunkInfo>,
     pub migrations: Vec<MigrationChunkInfo>,
@@ -187,7 +187,7 @@ pub struct CompileResult {
     pub global_names: Vec<String>,
     pub warnings: Vec<CompileWarning>,
     /// Heap allocations for constants embedded in chunks (merged into VM on load).
-    pub gc: GcHeap,
+    pub(crate) gc: GcHeap,
 }
 
 impl std::fmt::Debug for CompileResult {

@@ -194,7 +194,10 @@ impl VM {
         // A proposal is a transaction-owned immutable value.  The source may
         // alias a constant, global, capture, ECS field, or another local; copy
         // its complete value graph before canonicalizing or retaining it.
-        let payload = payload.freeze_causal(&mut self.gc)?;
+        let limits = self.causal_value_limits;
+        let payload = payload
+            .freeze_causal(&mut self.gc, &limits)
+            .map_err(|error| error.to_string())?;
         let info = self
             .intent_registry
             .get(intent_name)
@@ -268,7 +271,10 @@ impl VM {
             .ok_or_else(|| "`next` target must be an entity".to_string())?;
         // Candidate values cross the same capture boundary as proposals.
         // Keep staged state detached from any mutable source alias.
-        let component = component.freeze_causal(&mut self.gc)?;
+        let limits = self.causal_value_limits;
+        let component = component
+            .freeze_causal(&mut self.gc, &limits)
+            .map_err(|error| error.to_string())?;
         let data = component
             .into_component()
             .ok_or_else(|| "`next` value must be a component".to_string())?;

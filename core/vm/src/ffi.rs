@@ -1,7 +1,7 @@
 //! Native dynamic library bridge (`rad_extension_init`).
 //!
 //! C callbacks cannot carry a Rust `&mut GcHeap`, so heap allocations during plugin init use a
-//! thread-local [`FFI_GC`]. When [`load_plugin`] returns, that arena is **merged** into the VM
+//! thread-local `FFI_GC`. When [`load_plugin`] returns, that arena is **merged** into the VM
 //! `merge_into` heap so any `Value`s produced by `make_*` live in the same arena as the rest of
 //! the VM. Do not interpret raw `u64` handles as valid after a different VM or plugin load unless
 //! their heap has been merged.

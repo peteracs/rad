@@ -474,7 +474,7 @@ fn decode_map_key(karr: &[serde_json::Value]) -> Result<MapKey, String> {
 }
 
 /// Append the canonical wire encoding of `v` to `out`.
-pub fn encode_value_into(v: &Value, out: &mut String) -> Result<(), String> {
+pub(crate) fn encode_value_into(v: &Value, out: &mut String) -> Result<(), String> {
     if v.is_nil() {
         out.push_str("null");
         return Ok(());
@@ -605,7 +605,7 @@ pub fn encode_value_into(v: &Value, out: &mut String) -> Result<(), String> {
 
 /// Decode one wire value into the given allocator (gc heap for transient
 /// values, `PersistentStore` for values that live in snapshots).
-pub fn decode_value(gc: &mut dyn Allocator, j: &serde_json::Value) -> Result<Value, String> {
+pub(crate) fn decode_value(gc: &mut dyn Allocator, j: &serde_json::Value) -> Result<Value, String> {
     use serde_json::Value as Json;
     let bad = |what: &str| format!("wire codec: malformed {} node: {}", what, j);
     match j {

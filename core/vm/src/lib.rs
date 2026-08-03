@@ -5,7 +5,9 @@ mod bytecode_verifier;
 pub use bytecode_verifier::VerificationError;
 mod bytecode_effects;
 mod causal_value;
+pub use causal_value::{CausalValueError, CausalValueLimits};
 pub mod causality;
+pub mod host_value;
 pub mod merge;
 pub mod radpack;
 pub mod wire;
@@ -27,7 +29,7 @@ pub mod ffi;
 pub mod formatter;
 #[cfg(test)]
 mod fuzz_tests;
-pub mod gc;
+pub(crate) mod gc;
 #[cfg(test)]
 mod index_tests;
 #[cfg(test)]
@@ -62,7 +64,7 @@ pub mod scaffold;
 pub mod settlement_reference;
 pub mod snapshot;
 pub mod types;
-pub mod value;
+pub(crate) mod value;
 pub mod vm;
 pub mod wasm;
 pub mod wasm_binary_emit;

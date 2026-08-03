@@ -423,7 +423,11 @@ ResolverRegistry
 CandidatePatch
 ```
 
-Experimental runtimes report `{ "causal_laws": 1 }`.
+Experimental runtimes report `{ "causal_laws": 1, "host_values": 1 }` plus
+the deterministic `causal_value_limits` profile. Proposal and candidate graphs
+are validated before copying: cycles are rejected, depth/node/item/encoded-byte
+budgets are enforced, and repeated DAG edges are charged using tree-expansion
+semantics.
 
 ## Dogfood vertical slice
 
@@ -474,7 +478,11 @@ The experimental feature is complete only when:
     executable verification certificate; and
 17. no heap object reachable before `BeginSettlement` can be changed through
     an in-place alias before atomic commit, while captured proposals and
-    candidates remain detached from their source values.
+    candidates remain detached from their source values;
+18. cyclic or over-limit proposal/candidate graphs abort without changing the
+    world or durable ledger, and the same VM remains reusable; and
+19. the public Rust embedding API cannot expose an unlifetimed GC pointer:
+    hosts use owned frozen values or handles borrowed from one live VM.
 
 > A settlement is not another schedule. It is a declaration that several
 > causes are simultaneous, and that one explicit semantic owner determines

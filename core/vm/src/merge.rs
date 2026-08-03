@@ -187,7 +187,7 @@ impl std::fmt::Display for MergeConflict {
 /// run?" has no honest pick-a-side.
 #[derive(Default)]
 pub struct Resolutions {
-    pub fields: HashMap<(Option<u32>, String, String), Value>,
+    pub(crate) fields: HashMap<(Option<u32>, String, String), Value>,
     pub renames: HashMap<u32, Option<String>>,
 }
 
@@ -198,13 +198,13 @@ pub struct MergeOutcome {
     /// Merged in-flight event queue: base's pending events, then ours'
     /// post-fork emissions, then theirs' (reference-rewritten). Never
     /// silently dropped — that was the composition hole.
-    pub events: Vec<(String, Value, u64)>,
+    pub(crate) events: Vec<(String, Value, u64)>,
     /// Causality emit ids, parallel to `events`.
     pub emit_ids: Vec<u64>,
     /// Merged delayed (`emit … after`) timers: unchanged sides defer to
     /// the changed one; both changed differently is a conflict (timers
     /// age, so prefix logic does not apply).
-    pub delayed: Vec<(i64, String, Value, u64)>,
+    pub(crate) delayed: Vec<(i64, String, Value, u64)>,
 }
 
 #[derive(Clone)]
@@ -423,7 +423,7 @@ fn merge_name(
     }
 }
 
-pub fn merge_worlds(
+pub(crate) fn merge_worlds(
     base_snap: &WorldSnapshot,
     ours_snap: &WorldSnapshot,
     theirs_snap: &WorldSnapshot,

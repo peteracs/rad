@@ -11,8 +11,8 @@
 //! **Phase G:** Self-hosted C emit (`emit_c.rad`) lowers `system::…` exprs to strings for
 //! `rad_dispatch_system`; the Rad LSP resolves `system::` paths for hover and go-to-definition.
 //!
-//! [`Builtin::Simulate`](crate::value::Builtin::Simulate) remains the canonical runtime spelling;
-//! [`callee_name`](callee_name) matches its [`Builtin::name`](crate::value::Builtin::name).
+//! Internal `Builtin::Simulate` remains the canonical runtime spelling;
+//! [`callee_name`] matches the built-in's canonical name.
 
 use crate::ast::Expr;
 use crate::value::Builtin;
@@ -56,8 +56,8 @@ pub fn is_expr_call(callee: &Expr, args: &[Expr]) -> bool {
     matches!(callee, Expr::Ident(n, _) if is_named_call(n, args.len()))
 }
 
-/// Build the qualified name used with [`crate::checker::Checker::resolve_canonical_name`] /
-/// [`crate::compiler::Compiler::resolve_canonical_name`]: first segment may be a module alias;
+/// Build the qualified name used by the checker and compiler's internal
+/// canonical-name resolution: the first segment may be a module alias;
 /// further segments join with `.` (e.g. `a::b::c` → `a.b.c`).
 #[inline]
 pub fn system_ref_qualified_string(path: &[String]) -> String {

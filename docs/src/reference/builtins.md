@@ -1568,8 +1568,22 @@ machines join the same session — the relay is dumb fan-out; every
 semantic stays in the VM.
 
 `runtime_features()` reports `"causal_laws": 1` when the embedder can compile
-RFC-0001 syntax. WASM hosts opt in by checking that marker before providing a
-Causal Laws program; the native CLI uses `--experimental-laws`.
+RFC-0001 syntax. It also reports `"host_values": 1` and the active
+`causal_value_limits` profile (`max_depth`, `max_nodes`,
+`max_encoded_bytes`, and `max_collection_items`). WASM hosts opt in by
+checking those markers before providing a Causal Laws program; the native CLI
+uses `--experimental-laws`.
+
+Rust embedders exchange [`FrozenValue`](../../../core/vm/src/host_value.rs)
+trees with the VM. A `ValueHandle<'vm>` may inspect one imported or global
+value while its VM is borrowed, but cannot outlive that VM. The NaN-boxed raw
+value and GC heap are deliberately crate-private. This prevents a heap pointer
+from surviving its owner or being mutably aliased by copying a machine word.
+
+Causal proposal and candidate capture uses the same limit profile. Cycles are
+rejected. Shared acyclic subgraphs are serialized as trees and every repeated
+edge is charged again, matching the canonical provenance representation. A
+limit failure aborts the settlement without committing world or ledger state.
 
 ```js
 const runtime = new RadRuntime()

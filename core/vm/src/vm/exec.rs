@@ -3197,7 +3197,7 @@ impl VM {
         Ok((hi << 8) | lo)
     }
 
-    pub fn call_value(&mut self, callee: &Value, args: Vec<Value>) -> Result<Value, String> {
+    pub(crate) fn call_value(&mut self, callee: &Value, args: Vec<Value>) -> Result<Value, String> {
         // A host call starts with no active frames and owns any settlement it
         // opens. If execution escapes before EndSettlement, unwind it here.
         // Nested VM calls (notably resolver invocation) preserve both their

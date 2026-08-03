@@ -13,11 +13,14 @@
 //! not inputs.
 //!
 //! Trace format (JSONL, one object per line):
-//!   header  {"t":"header","version":1,"source":...,"source_hash":...,"seed":...}
-//!   io      {"t":"io","f":<frame>,"s":<seq>,"b":<builtin>,"a":<args digest>,
-//!            "r":<tagged result>}            (or "e":<error> when it failed)
-//!   frame   {"t":"frame","n":<frame just ended>,"fuel":<remaining, if metered>}
-//!   end     {"t":"end","world":<content digest at exit (or crash) point>}
+//!
+//! ```text
+//! header  {"t":"header","version":1,"source":...,"source_hash":...,"seed":...}
+//! io      {"t":"io","f":<frame>,"s":<seq>,"b":<builtin>,"a":<args digest>,
+//!          "r":<tagged result>}            (or "e":<error> when it failed)
+//! frame   {"t":"frame","n":<frame just ended>,"fuel":<remaining, if metered>}
+//! end     {"t":"end","world":<content digest at exit (or crash) point>}
+//! ```
 //!
 //! Traces are self-contained: the header embeds the full merged source, so
 //! `rad replay trace.radr` needs nothing else on disk. `source_hash` is an
@@ -84,7 +87,7 @@ pub fn is_replay_managed(b: Builtin) -> bool {
 
 /// Digest of builtin arguments, used purely for divergence detection.
 /// Relies on `Display` being deterministic (guaranteed by `determinism.rs`).
-pub fn args_digest(args: &[Value]) -> String {
+pub(crate) fn args_digest(args: &[Value]) -> String {
     let mut hasher = blake3::Hasher::new();
     for a in args {
         hasher.update(format!("{}", a).as_bytes());
@@ -167,7 +170,7 @@ fn json_to_map_key(karr: &[serde_json::Value]) -> Result<MapKey, String> {
     }
 }
 
-pub fn encode_value(v: &Value) -> Result<serde_json::Value, String> {
+pub(crate) fn encode_value(v: &Value) -> Result<serde_json::Value, String> {
     use serde_json::json;
     if v.is_nil() {
         return Ok(json!({"t": "nil"}));
@@ -231,7 +234,7 @@ pub fn encode_value(v: &Value) -> Result<serde_json::Value, String> {
     ))
 }
 
-pub fn decode_value(gc: &mut GcHeap, j: &serde_json::Value) -> Result<Value, String> {
+pub(crate) fn decode_value(gc: &mut GcHeap, j: &serde_json::Value) -> Result<Value, String> {
     let tag = j
         .get("t")
         .and_then(|t| t.as_str())
@@ -421,7 +424,7 @@ pub struct ReplayReport {
     /// value after its FIFO queue was exhausted.
     pub reused_reads: usize,
     /// Retro mode only: pure-output write calls the recording never
-    /// performed, replayed as virtualized no-ops (see [`ReplayMode::Retro`]).
+    /// performed, replayed as virtualized no-ops (retro replay mode).
     pub virtual_writes: usize,
 }
 
@@ -576,7 +579,7 @@ impl TraceReplayer {
         })
     }
 
-    /// Switch to retroactive mode (see [`ReplayMode::Retro`]): recorded io
+    /// Switch to retroactive mode: recorded io
     /// becomes an args-keyed oracle so *edited* source can be replayed
     /// against the original session's inputs.
     pub fn into_retro(mut self) -> Self {

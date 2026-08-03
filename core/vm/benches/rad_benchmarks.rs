@@ -6,6 +6,7 @@ use std::path::PathBuf;
 
 use rad_vm::checker::{Checker, CheckerOptions};
 use rad_vm::compiler::Compiler;
+use rad_vm::host_value::FrozenValue;
 use rad_vm::lexer::Lexer;
 use rad_vm::module_loader::load_program_with_uses;
 use rad_vm::parser::Parser;
@@ -13,7 +14,6 @@ use rad_vm::settlement_reference::{
     settle_reference, ReferenceProposal, ReferenceResolver, ReferenceValue, ReferenceWorld,
     ReferenceWrite,
 };
-use rad_vm::value::Value;
 use rad_vm::vm::VM;
 
 fn examples_dir() -> PathBuf {
@@ -181,7 +181,7 @@ fn attack(count: int) {
 }
 "#;
 
-fn causal_vm() -> (VM, Value) {
+fn causal_vm() -> VM {
     let mut lexer = Lexer::new(CAUSAL_SOURCE);
     let tokens = lexer.tokenize().0;
     let mut parser = Parser::new(tokens);
@@ -204,25 +204,18 @@ fn causal_vm() -> (VM, Value) {
     vm.load_compile_result(result);
     vm.run(0).expect("initialize causal benchmark");
     vm.set_causality_retention_cap(10_100);
-    let slot = vm
-        .global_names
-        .iter()
-        .position(|name| name == "attack")
-        .expect("attack global");
-    let attack = vm.globals[slot];
-    (vm, attack)
+    vm
 }
 
 fn bench_causal_settlement(c: &mut Criterion) {
     let mut group = c.benchmark_group("causal/settlement_end_to_end");
     group.sample_size(10);
     for count in [1i64, 10, 100, 1_000, 10_000] {
-        let (mut vm, attack) = causal_vm();
+        let mut vm = causal_vm();
         group.throughput(Throughput::Elements(count as u64));
         group.bench_with_input(BenchmarkId::from_parameter(count), &count, |b, &count| {
             b.iter(|| {
-                let count = Value::from_int(vm.gc_mut(), black_box(count));
-                vm.call_value(&attack, vec![count])
+                vm.call_global("attack", &[FrozenValue::Int(black_box(count))])
                     .expect("benchmark settlement")
             })
         });
@@ -310,9 +303,9 @@ fn bench_causal_reference_and_provenance(c: &mut Criterion) {
     let mut provenance = c.benchmark_group("causal/provenance");
     provenance.sample_size(10);
     for count in [1i64, 100, 10_000] {
-        let (mut vm, attack) = causal_vm();
-        let count_value = Value::from_int(vm.gc_mut(), count);
-        vm.call_value(&attack, vec![count_value]).unwrap();
+        let mut vm = causal_vm();
+        vm.call_global("attack", &[FrozenValue::Int(count)])
+            .unwrap();
         provenance.bench_with_input(BenchmarkId::new("why_render", count), &count, |b, _| {
             b.iter(|| {
                 vm.causality_ledger().explain_named(

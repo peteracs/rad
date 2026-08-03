@@ -14,6 +14,7 @@ use crate::settlement_reference::{
 };
 use crate::value::{FnValue, Value};
 use crate::vm::VM;
+use crate::CausalValueLimits;
 use std::collections::{BTreeMap, HashSet};
 use std::sync::Arc;
 
@@ -336,6 +337,120 @@ fn compile_vm_with_alias(source: &str, alias: &str, module_source: &str) -> VM {
     vm.suppress_output();
     vm.load_compile_result(result);
     vm
+}
+
+#[test]
+fn bounded_proposal_capture_aborts_atomically_and_vm_is_reusable() {
+    let source = format!(
+        r#"
+component Data {{ text: str = "before" }}
+intent Payload {{ key target: entity, text: str }}
+law Capture(target: entity, text: str) {{
+    propose Payload {{ target: target, text: text }}
+}}
+resolver ResolvePayload for Payload(target, proposals) {{
+    next(target, Data {{ text: proposals[0].text }})
+}}
+entity hero {{ Data {{}} }}
+fn attempt() {{
+    settle {{ Capture(hero, "{}") }}
+}}
+"#,
+        "x".repeat(256)
+    );
+    let mut vm = compile_vm(&source);
+    vm.run(0).expect("initialize program");
+    vm.set_causal_value_limits(CausalValueLimits {
+        max_encoded_bytes: 64,
+        ..CausalValueLimits::default()
+    });
+    let before = vm.observable_state_signature();
+    let error = vm
+        .call_global("attempt", &[])
+        .expect_err("oversized proposal must fail");
+    assert!(error.contains("exceeding the 64-byte limit"), "{error}");
+    assert_eq!(vm.observable_state_signature(), before);
+    assert!(vm.settlement.is_none());
+
+    vm.set_causal_value_limits(CausalValueLimits::default());
+    vm.call_global("attempt", &[])
+        .expect("same VM must accept a later bounded settlement");
+    assert_ne!(vm.observable_state_signature(), before);
+}
+
+#[test]
+fn bounded_candidate_capture_aborts_atomically_and_vm_is_reusable() {
+    let source = format!(
+        r#"
+component Data {{ text: str = "before" }}
+intent Pulse {{ key target: entity }}
+law Send(target: entity) {{ propose Pulse {{ target: target }} }}
+resolver ResolvePulse for Pulse(target, proposals) {{
+    next(target, Data {{ text: "{}" }})
+}}
+entity hero {{ Data {{}} }}
+fn attempt() {{ settle {{ Send(hero) }} }}
+"#,
+        "y".repeat(256)
+    );
+    let mut vm = compile_vm(&source);
+    vm.run(0).expect("initialize program");
+    vm.set_causal_value_limits(CausalValueLimits {
+        max_encoded_bytes: 96,
+        ..CausalValueLimits::default()
+    });
+    let before = vm.observable_state_signature();
+    let error = vm
+        .call_global("attempt", &[])
+        .expect_err("oversized candidate must fail");
+    assert!(error.contains("exceeding the 96-byte limit"), "{error}");
+    assert_eq!(vm.observable_state_signature(), before);
+    assert!(vm.settlement.is_none());
+
+    vm.set_causal_value_limits(CausalValueLimits::default());
+    vm.call_global("attempt", &[])
+        .expect("same VM must accept a later bounded candidate");
+    assert_ne!(vm.observable_state_signature(), before);
+}
+
+#[test]
+fn cyclic_proposal_capture_aborts_without_partial_state_and_vm_is_reusable() {
+    let source = r#"
+intent Payload { key target: entity, data: any }
+law Capture(target: entity, data: any) {
+    propose Payload { target: target, data: data }
+}
+resolver ResolvePayload for Payload(target, proposals) {}
+entity hero {}
+fn attempt(data: any) { settle { Capture(hero, data) } }
+"#;
+    let mut vm = compile_vm(source);
+    vm.run(0).expect("initialize program");
+    let slot = vm
+        .global_names
+        .iter()
+        .position(|name| name == "attempt")
+        .expect("attempt global");
+    let attempt = vm.globals[slot];
+
+    let mut cycle = Value::list(vm.gc_mut(), Vec::new());
+    let alias = cycle;
+    let Some(crate::value::Object::List(values)) = cycle.as_object_mut() else {
+        panic!("list expected");
+    };
+    values.push(alias);
+
+    let before = vm.observable_state_signature();
+    let error = vm
+        .call_value(&attempt, vec![cycle])
+        .expect_err("cyclic proposal graph must fail");
+    assert_eq!(error, "causal value graph contains a cycle");
+    assert_eq!(vm.observable_state_signature(), before);
+    assert!(vm.settlement.is_none());
+
+    let valid = Value::list(vm.gc_mut(), vec![Value::NIL]);
+    vm.call_value(&attempt, vec![valid])
+        .expect("same VM must accept a later acyclic proposal");
 }
 
 fn damage_source(calls: &[&str]) -> String {

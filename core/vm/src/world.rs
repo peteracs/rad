@@ -78,7 +78,7 @@ impl Drop for ValueColumn {
     }
 }
 
-/// Resource storage with the same ownership discipline as [`ValueColumn`]:
+/// Resource storage with the same ownership discipline as internal `ValueColumn` storage:
 /// every entry exclusively owns its (persisted) values — clone retains,
 /// drop releases, and inserting releases the displaced entry. Without this,
 /// `set_resource` leaked the previous payload on every call; with a
@@ -221,7 +221,7 @@ impl SoAColumn {
 
     /// Iterate a single field across all rows (for future direct-field iteration).
     #[allow(dead_code)]
-    pub fn field_slice(&self, field_index: usize) -> &[Value] {
+    pub(crate) fn field_slice(&self, field_index: usize) -> &[Value] {
         self.fields[field_index].as_slice()
     }
 }
@@ -230,7 +230,7 @@ impl SoAColumn {
 pub struct Archetype {
     type_set: Vec<TypeId>,
     pub entities: Arc<Vec<u32>>,
-    pub columns: HashMap<TypeId, SoAColumn>,
+    pub(crate) columns: HashMap<TypeId, SoAColumn>,
     entity_row: Arc<HashMap<u32, usize>>,
 }
 
@@ -520,7 +520,7 @@ impl World {
     /// load). The incremental path (`insert_entity_with_id` + N×
     /// `add_component`) costs N archetype migrations, each copying every
     /// already-attached row; this costs one row push.
-    pub fn insert_entity_with_components(
+    pub(crate) fn insert_entity_with_components(
         &mut self,
         eid: u32,
         name: Option<&str>,
@@ -569,7 +569,7 @@ impl World {
     /// Attach a batch of components to a live entity in **one archetype
     /// hop** (vs one hop per component via `add_component`). Replaced
     /// components release their persistent payloads like `add_component`.
-    pub fn add_components_bulk(&mut self, eid: u32, components: Vec<ComponentData>) -> bool {
+    pub(crate) fn add_components_bulk(&mut self, eid: u32, components: Vec<ComponentData>) -> bool {
         let Some(&old_aid) = self.entity_archetype.get(&eid) else {
             return false;
         };
@@ -650,7 +650,7 @@ impl World {
         }
     }
 
-    pub fn add_component(&mut self, eid: u32, mut data: ComponentData) -> bool {
+    pub(crate) fn add_component(&mut self, eid: u32, mut data: ComponentData) -> bool {
         if !self.entity_archetype.contains_key(&eid) {
             return false;
         }
@@ -702,13 +702,13 @@ impl World {
         true
     }
 
-    pub fn get_component(&self, eid: u32, ctype: &str) -> Option<ComponentData> {
+    pub(crate) fn get_component(&self, eid: u32, ctype: &str) -> Option<ComponentData> {
         let &aid = self.entity_archetype.get(&eid)?;
         let tid = self.type_id_lookup(ctype)?;
         self.archetypes[aid as usize].get_component(eid, tid)
     }
 
-    pub fn set_component(&mut self, eid: u32, data: ComponentData) -> bool {
+    pub(crate) fn set_component(&mut self, eid: u32, data: ComponentData) -> bool {
         self.add_component(eid, data)
     }
 
@@ -811,7 +811,7 @@ impl World {
             .unwrap_or(false)
     }
 
-    pub fn index_lookup(&self, ctype: &str, field: &str, value: Value) -> Option<u32> {
+    pub(crate) fn index_lookup(&self, ctype: &str, field: &str, value: Value) -> Option<u32> {
         let value_key = IndexValue::from_value(&value)?;
         let key = IndexKey {
             type_name: ctype.to_string(),
@@ -829,7 +829,7 @@ impl World {
 
     /// Every entity whose indexed `ctype.field` equals `value`, sorted by
     /// id — the deterministic multi-match query ("all open tickets").
-    pub fn index_lookup_all(&self, ctype: &str, field: &str, value: Value) -> Vec<u32> {
+    pub(crate) fn index_lookup_all(&self, ctype: &str, field: &str, value: Value) -> Vec<u32> {
         let Some(value_key) = IndexValue::from_value(&value) else {
             return Vec::new();
         };
@@ -890,11 +890,11 @@ impl World {
         result
     }
 
-    pub fn get_resource(&self, name: &str) -> Option<ComponentData> {
+    pub(crate) fn get_resource(&self, name: &str) -> Option<ComponentData> {
         self.resources.get(name).cloned()
     }
 
-    pub fn set_resource(&mut self, name: &str, mut data: ComponentData) {
+    pub(crate) fn set_resource(&mut self, name: &str, mut data: ComponentData) {
         Value::persist_component_data(&mut data);
         self.set_resource_owned(name, data);
     }
@@ -906,7 +906,7 @@ impl World {
         Arc::make_mut(&mut self.resources).insert_owned(name.to_string(), data);
     }
 
-    pub fn init_resource(&mut self, name: &str, mut data: ComponentData) {
+    pub(crate) fn init_resource(&mut self, name: &str, mut data: ComponentData) {
         if self.resources.contains_key(name) {
             return;
         }
@@ -914,13 +914,13 @@ impl World {
         Arc::make_mut(&mut self.resources).insert_owned(name.to_string(), data);
     }
 
-    pub fn iter_archetypes(&self) -> impl Iterator<Item = &Archetype> {
-        self.archetypes.iter()
-    }
-
     /// Collect all values for a single field of a component type across every
     /// archetype that contains the component.  Returns a flat `Vec<Value>`.
-    pub fn get_column_values(&self, ctype: &str, field_index: usize) -> Result<Vec<Value>, String> {
+    pub(crate) fn get_column_values(
+        &self,
+        ctype: &str,
+        field_index: usize,
+    ) -> Result<Vec<Value>, String> {
         let tid = self
             .type_id_lookup(ctype)
             .ok_or_else(|| format!("LoadColumn: unknown component `{}`", ctype))?;
@@ -954,7 +954,7 @@ impl World {
         ids
     }
 
-    pub fn components_on_entity(&self, eid: u32) -> Vec<ComponentData> {
+    pub(crate) fn components_on_entity(&self, eid: u32) -> Vec<ComponentData> {
         let Some(&aid) = self.entity_archetype.get(&eid) else {
             return Vec::new();
         };
@@ -966,23 +966,6 @@ impl World {
         for &tid in &arch.type_set {
             if let Some(col) = arch.columns.get(&tid) {
                 out.push(col.get(row));
-            }
-        }
-        out
-    }
-
-    pub fn entity_components(&self, gc: &mut crate::gc::GcHeap, eid: u32) -> Vec<Value> {
-        let Some(&aid) = self.entity_archetype.get(&eid) else {
-            return Vec::new();
-        };
-        let arch = &self.archetypes[aid as usize];
-        let Some(&row) = arch.entity_row.get(&eid) else {
-            return Vec::new();
-        };
-        let mut out = Vec::new();
-        for &tid in &arch.type_set {
-            if let Some(col) = arch.columns.get(&tid) {
-                out.push(Value::from_component_data(gc, col.get(row)));
             }
         }
         out
@@ -1152,7 +1135,7 @@ pub struct WorldSnapshot {
     /// snapshot. Payloads are persisted on capture. `fork()` fills this,
     /// `commit()` restores it, `simulate()`/sandbox guests seed from it,
     /// and `merge_forks` three-way merges it.
-    pub events: Arc<Vec<(String, Value, u64)>>,
+    pub(crate) events: Arc<Vec<(String, Value, u64)>>,
     /// Causality emit-record ids, parallel to `events` (provenance survives
     /// the fork/commit roundtrip).
     pub emit_ids: Arc<Vec<u64>>,
@@ -1160,7 +1143,7 @@ pub struct WorldSnapshot {
     /// event, payload, emit_id)`. Same principle as `events` — timers are
     /// program state; a snapshot that drops them loses every scheduled
     /// respawn, and the emit id keeps timer causality intact.
-    pub delayed: Arc<Vec<(i64, String, Value, u64)>>,
+    pub(crate) delayed: Arc<Vec<(i64, String, Value, u64)>>,
     /// Foreign provenance riding the snapshot: set by `fork_from_bytes`
     /// (the sender's ledger closure), carried through `merge_forks`, and
     /// ingested into the local ledger by `commit()`. `None` for local forks
@@ -1182,7 +1165,7 @@ impl WorldSnapshot {
     /// untouched. Backs `fork_with`: seed a speculative candidate off a fork
     /// without committing to (mutating) the live world (dogfood feature seq
     /// 150). Copy-on-write — only the resource map's `Arc` is cloned.
-    pub fn with_resource(&self, name: &str, mut data: ComponentData) -> WorldSnapshot {
+    pub(crate) fn with_resource(&self, name: &str, mut data: ComponentData) -> WorldSnapshot {
         Value::persist_component_data(&mut data);
         let mut snap = self.clone();
         Arc::make_mut(&mut snap.resources).insert_owned(name.to_string(), data);
@@ -1230,7 +1213,7 @@ impl WorldSnapshot {
     }
 
     /// Components of one entity in this frozen frame.
-    pub fn components_of(&self, eid: u32) -> Vec<ComponentData> {
+    pub(crate) fn components_of(&self, eid: u32) -> Vec<ComponentData> {
         let Some(&aid) = self.entity_archetype.get(&eid) else {
             return Vec::new();
         };
@@ -1421,13 +1404,13 @@ impl WorldSnapshot {
         }
     }
 
-    pub fn get_component(&self, eid: u32, ctype: &str) -> Option<ComponentData> {
+    pub(crate) fn get_component(&self, eid: u32, ctype: &str) -> Option<ComponentData> {
         let &aid = self.entity_archetype.get(&eid)?;
         let tid = self.type_registry.get(ctype).copied()?;
         self.archetypes[aid as usize].get_component(eid, tid)
     }
 
-    pub fn get_resource(&self, name: &str) -> Option<ComponentData> {
+    pub(crate) fn get_resource(&self, name: &str) -> Option<ComponentData> {
         self.resources.get(name).cloned()
     }
 

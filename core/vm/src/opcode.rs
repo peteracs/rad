@@ -362,7 +362,7 @@ impl ChunkBuilder {
         None
     }
 
-    pub fn add_constant(&mut self, value: crate::value::Value) -> u16 {
+    pub(crate) fn add_constant(&mut self, value: crate::value::Value) -> u16 {
         if let Some(key) = self.make_key(&value) {
             if let Some(&idx) = self.dedup.get(&key) {
                 return idx;
@@ -395,7 +395,7 @@ impl ChunkBuilder {
         ((self.code[offset] as u16) << 8) | (self.code[offset + 1] as u16)
     }
 
-    pub fn write_const(&mut self, value: crate::value::Value, line: u32) {
+    pub(crate) fn write_const(&mut self, value: crate::value::Value, line: u32) {
         let idx = self.add_constant(value);
         self.write_op(Op::Const, line);
         self.write_u16(idx, line);
@@ -405,7 +405,7 @@ impl ChunkBuilder {
         &self.code
     }
 
-    pub fn constants(&self) -> &[crate::value::Value] {
+    pub(crate) fn constants(&self) -> &[crate::value::Value] {
         &self.constants
     }
 

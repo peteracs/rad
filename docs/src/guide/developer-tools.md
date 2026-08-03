@@ -93,7 +93,20 @@ The flag has negligible overhead when no copies occur. Combine with `let unique`
 
 ### Embedding the VM from Rust
 
-If you drive [`VM`](../../../core/vm/src/vm/mod.rs) from a native renderer or game host, heap-backed [`Value`](../../../core/vm/src/value.rs)s passed to [`call_value`](../../../core/vm/src/vm/mod.rs) must be allocated on that VM’s [`GcHeap`](../../../core/vm/src/gc.rs) (or any [`Allocator`](../../../core/vm/src/value.rs) the VM exposes for host construction). Use [`VM::gc_mut()`](../../../core/vm/src/vm/mod.rs) with the `Value::from_*(&mut heap, …)` constructors. ECS world columns use **persistent** storage (`Arc<Object>` managed by `ValueColumn` retain/release) for component field values written via `set`/`spawn`; strings are `Arc<str>` for O(1) air-gap copies. That path is separate from the closure backup collector. See [Architecture → Semantics notes](../reference/architecture.md).
+If you drive [`VM`](../../../core/vm/src/vm/mod.rs) from a native renderer or
+game host, exchange owned
+[`FrozenValue`](../../../core/vm/src/host_value.rs) trees through
+`import_value`, `call_global`, `export_global`, `component_value`,
+`resource_value`, and `enqueue_frozen_event`.
+`ValueHandle<'vm>` provides a read-only borrowed view that cannot outlive its
+VM. The NaN-boxed runtime `Value`, its raw object pointers, and `GcHeap` are
+crate-private; native hosts never allocate into or dereference that heap.
+
+ECS world columns still use **persistent** storage (`Arc<Object>` managed by
+`ValueColumn` retain/release) for component field values written by RAD code;
+strings are `Arc<str>` for O(1) internal air-gap copies. That internal path is
+separate from the host value boundary and closure backup collector. See
+[Architecture → Semantics notes](../reference/architecture.md).
 
 ### Frozen C backend
 

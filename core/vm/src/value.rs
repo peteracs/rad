@@ -7,7 +7,7 @@ use crate::gc;
 
 /// Object-safe allocator trait implemented by both `GcHeap` (backup collector)
 /// and `BumpArena` (ephemeral per-system allocator).
-pub trait Allocator {
+pub(crate) trait Allocator {
     fn alloc_object(&mut self, obj: Object) -> *mut Object;
     fn pointer_tag(&self) -> u64 {
         0
@@ -18,7 +18,7 @@ pub trait Allocator {
 ///
 /// Backing objects are created as `Arc<Object>` and encoded in `Value` with a
 /// dedicated persistent pointer tag. They are not traced by VM GC.
-pub struct PersistentStore;
+pub(crate) struct PersistentStore;
 
 impl Allocator for PersistentStore {
     // `Object` is deliberately not `Send`/`Sync`: the store is confined to one
@@ -455,6 +455,23 @@ const INT_PAYLOAD_MASK: u64 = INT_TAG_BIT - 1; // 0x00007FFF_FFFFFFFF
 const INLINE_INT_MIN: i64 = -(1i64 << 46); // -70_368_744_177_664
 const INLINE_INT_MAX: i64 = (1i64 << 46) - 1; //  70_368_744_177_663
 
+/// A floating NaN representation that is outside every RAD boxed-tag family.
+///
+/// `Value::from_float` canonicalizes all NaNs to this exact pattern.  That is
+/// part of the representation's safety boundary: arbitrary IEEE NaN payloads
+/// must never be mistaken for GC pointers merely because their high bits
+/// overlap RAD's private NaN-box tags.
+const CANONICAL_FLOAT_NAN: u64 = 0x7FF8_0000_0000_0000;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ValueTag {
+    Float,
+    Nil,
+    Bool,
+    Int,
+    Object,
+}
+
 impl Value {
     pub const NIL: Value = Value(QNAN | TAG_NIL);
     pub const TRUE: Value = Value(QNAN | TAG_TRUE);
@@ -462,7 +479,11 @@ impl Value {
 
     #[inline(always)]
     pub fn from_float(f: f64) -> Self {
-        Value(f.to_bits())
+        if f.is_nan() {
+            Value(CANONICAL_FLOAT_NAN)
+        } else {
+            Value(f.to_bits())
+        }
     }
 
     #[inline(always)]
@@ -496,7 +517,7 @@ impl Value {
     /// heap [`Object::BigInt`]. Prefer [`Self::int`] in tests and hot paths when `n` is known to
     /// be in range; use this when `n` may be arbitrary.
     #[inline(always)]
-    pub fn from_int(alloc: &mut dyn Allocator, n: i64) -> Self {
+    pub(crate) fn from_int(alloc: &mut dyn Allocator, n: i64) -> Self {
         if (INLINE_INT_MIN..=INLINE_INT_MAX).contains(&n) {
             Self::int(n)
         } else {
@@ -504,7 +525,7 @@ impl Value {
         }
     }
 
-    pub fn from_string(alloc: &mut dyn Allocator, s: String) -> Self {
+    pub(crate) fn from_string(alloc: &mut dyn Allocator, s: String) -> Self {
         Self::from_object(alloc, Object::Str(Arc::from(s)))
     }
 
@@ -522,12 +543,37 @@ impl Value {
 
     #[inline(always)]
     fn is_inline_int(&self) -> bool {
-        (self.0 & (QNAN | SIGN_BIT | INT_TAG_BIT)) == (QNAN | SIGN_BIT | INT_TAG_BIT)
+        self.tag() == ValueTag::Int
     }
 
     #[inline(always)]
     fn is_object(&self) -> bool {
-        (self.0 & (QNAN | SIGN_BIT)) == (QNAN | SIGN_BIT) && !self.is_inline_int()
+        self.tag() == ValueTag::Object
+    }
+
+    /// Classify a value exclusively from its bits.  This function never
+    /// dereferences an object payload and is therefore safe to use at raw
+    /// bytecode and wire ingress boundaries.
+    #[inline(always)]
+    pub(crate) fn tag(&self) -> ValueTag {
+        if self.0 == Self::NIL.0 {
+            ValueTag::Nil
+        } else if self.0 == Self::TRUE.0 || self.0 == Self::FALSE.0 {
+            ValueTag::Bool
+        } else if (self.0 & (QNAN | SIGN_BIT | INT_TAG_BIT)) == (QNAN | SIGN_BIT | INT_TAG_BIT) {
+            ValueTag::Int
+        } else if (self.0 & (QNAN | SIGN_BIT)) == (QNAN | SIGN_BIT) {
+            ValueTag::Object
+        } else {
+            ValueTag::Float
+        }
+    }
+
+    /// Pure tag test for host-supplied constants.  Unlike `as_object`, this
+    /// cannot touch a forged or foreign pointer.
+    #[inline(always)]
+    pub(crate) fn is_heap_object_tag(&self) -> bool {
+        self.tag() == ValueTag::Object
     }
 
     #[inline(always)]
@@ -538,6 +584,13 @@ impl Value {
     #[inline(always)]
     fn object_data_ptr(&self) -> *mut Object {
         ((self.0 & PTR_MASK) & !PERSISTENT_PTR_TAG) as *mut Object
+    }
+
+    /// Stable identity for one live heap object, including persistent-store
+    /// objects. Used only while the owning heap/store is known to remain live.
+    #[inline(always)]
+    pub(crate) fn object_identity(&self) -> Option<usize> {
+        self.is_object().then(|| self.object_data_ptr() as usize)
     }
 
     /// Increment refcount for persistent `Arc<Object>`-backed values.
@@ -576,7 +629,7 @@ impl Value {
 
     #[inline(always)]
     pub fn is_float(&self) -> bool {
-        (self.0 & QNAN) != QNAN || self.0 == f64::to_bits(f64::NAN)
+        self.tag() == ValueTag::Float
     }
 
     #[inline(always)]
@@ -600,7 +653,7 @@ impl Value {
     }
 
     #[inline(always)]
-    pub fn as_object(&self) -> Option<&Object> {
+    pub(crate) fn as_object(&self) -> Option<&Object> {
         if self.is_object() {
             if self.is_persistent_object() {
                 persist_audit::on_read(self.object_data_ptr() as usize);
@@ -613,7 +666,7 @@ impl Value {
     }
 
     #[inline(always)]
-    pub fn as_object_mut(&mut self) -> Option<&mut Object> {
+    pub(crate) fn as_object_mut(&mut self) -> Option<&mut Object> {
         if self.is_object() {
             let ptr = self.object_data_ptr();
             Some(unsafe { &mut *ptr })
@@ -624,7 +677,7 @@ impl Value {
 
     /// Return the raw pointer to the heap Object (for GC tracing).
     #[inline(always)]
-    pub fn object_ptr(&self) -> Option<usize> {
+    pub(crate) fn object_ptr(&self) -> Option<usize> {
         if self.is_object() && !self.is_persistent_object() {
             Some(self.object_data_ptr() as usize)
         } else {
@@ -755,7 +808,7 @@ impl Value {
         })
     }
 
-    pub fn tuple(alloc: &mut dyn Allocator, items: Vec<Value>) -> Self {
+    pub(crate) fn tuple(alloc: &mut dyn Allocator, items: Vec<Value>) -> Self {
         Self::from_object(alloc, Object::Tuple(items))
     }
 
@@ -766,19 +819,19 @@ impl Value {
         })
     }
 
-    pub fn list(alloc: &mut dyn Allocator, items: Vec<Value>) -> Self {
+    pub(crate) fn list(alloc: &mut dyn Allocator, items: Vec<Value>) -> Self {
         Self::from_object(alloc, Object::List(RadList::new(items)))
     }
 
-    pub fn map(alloc: &mut dyn Allocator, entries: MapStorage) -> Self {
+    pub(crate) fn map(alloc: &mut dyn Allocator, entries: MapStorage) -> Self {
         Self::from_object(alloc, Object::Map(entries))
     }
 
-    pub fn bitset(alloc: &mut dyn Allocator, words: Vec<u64>) -> Self {
+    pub(crate) fn bitset(alloc: &mut dyn Allocator, words: Vec<u64>) -> Self {
         Self::from_object(alloc, Object::BitSet(words))
     }
 
-    pub fn buffer(alloc: &mut dyn Allocator, s: String) -> Self {
+    pub(crate) fn buffer(alloc: &mut dyn Allocator, s: String) -> Self {
         Self::from_object(alloc, Object::Buffer(s))
     }
 
@@ -789,7 +842,7 @@ impl Value {
         })
     }
 
-    pub fn bytebuf(alloc: &mut dyn Allocator, bytes: Vec<u8>) -> Self {
+    pub(crate) fn bytebuf(alloc: &mut dyn Allocator, bytes: Vec<u8>) -> Self {
         Self::from_object(alloc, Object::ByteBuf(bytes))
     }
 
@@ -800,7 +853,7 @@ impl Value {
         })
     }
 
-    pub fn world_fork(
+    pub(crate) fn world_fork(
         alloc: &mut dyn Allocator,
         snapshot: std::sync::Arc<crate::world::WorldSnapshot>,
     ) -> Self {
@@ -808,7 +861,7 @@ impl Value {
     }
 
     /// Canonical (checker-resolved) name of a declared `system`, for `simulate` schedules.
-    pub fn system_ref(alloc: &mut dyn Allocator, resolved_name: String) -> Self {
+    pub(crate) fn system_ref(alloc: &mut dyn Allocator, resolved_name: String) -> Self {
         Self::from_object(alloc, Object::SystemRef(resolved_name))
     }
 
@@ -826,7 +879,7 @@ impl Value {
         })
     }
 
-    pub fn component(
+    pub(crate) fn component(
         alloc: &mut dyn Allocator,
         type_name: String,
         layout: Arc<Vec<String>>,
@@ -842,7 +895,7 @@ impl Value {
         )
     }
 
-    pub fn sum_type(
+    pub(crate) fn sum_type(
         alloc: &mut dyn Allocator,
         type_name: String,
         variant: String,
@@ -858,27 +911,27 @@ impl Value {
         )
     }
 
-    pub fn from_fn(alloc: &mut dyn Allocator, f: FnValue) -> Self {
+    pub(crate) fn from_fn(alloc: &mut dyn Allocator, f: FnValue) -> Self {
         Self::from_object(alloc, Object::Fn(f))
     }
 
-    pub fn from_closure(alloc: &mut dyn Allocator, c: ClosureValue) -> Self {
+    pub(crate) fn from_closure(alloc: &mut dyn Allocator, c: ClosureValue) -> Self {
         Self::from_object(alloc, Object::Closure(c))
     }
 
-    pub fn from_cell(alloc: &mut dyn Allocator, cell: *mut gc::CaptureCell) -> Self {
+    pub(crate) fn from_cell(alloc: &mut dyn Allocator, cell: *mut gc::CaptureCell) -> Self {
         Self::from_object(alloc, Object::Cell(cell))
     }
 
-    pub fn from_builtin(alloc: &mut dyn Allocator, b: Builtin) -> Self {
+    pub(crate) fn from_builtin(alloc: &mut dyn Allocator, b: Builtin) -> Self {
         Self::from_object(alloc, Object::BuiltinFn(b))
     }
 
-    pub fn from_native_fn(alloc: &mut dyn Allocator, info: NativeFnInfo) -> Self {
+    pub(crate) fn from_native_fn(alloc: &mut dyn Allocator, info: NativeFnInfo) -> Self {
         Self::from_object(alloc, Object::NativeFn(info))
     }
 
-    pub fn to_raw(&self) -> u64 {
+    pub(crate) fn to_raw(self) -> u64 {
         self.0
     }
 
@@ -893,27 +946,19 @@ impl Value {
         Self(raw)
     }
 
-    pub fn from_entity_id(alloc: &mut dyn Allocator, id: u32) -> Self {
+    pub(crate) fn from_entity_id(alloc: &mut dyn Allocator, id: u32) -> Self {
         Self::from_object(alloc, Object::EntityId(id))
     }
 
-    pub fn from_task(alloc: &mut dyn Allocator, id: u64) -> Self {
+    pub(crate) fn from_task(alloc: &mut dyn Allocator, id: u64) -> Self {
         Self::from_object(alloc, Object::Task(id))
     }
 
-    pub fn from_state(alloc: &mut dyn Allocator, machine: String, state: String) -> Self {
+    pub(crate) fn from_state(alloc: &mut dyn Allocator, machine: String, state: String) -> Self {
         Self::from_object(alloc, Object::State(StateInst { machine, state }))
     }
 
-    pub fn from_state_inst(alloc: &mut dyn Allocator, s: StateInst) -> Self {
-        Self::from_object(alloc, Object::State(s))
-    }
-
-    pub fn from_sum_type_inst(alloc: &mut dyn Allocator, st: SumTypeInst) -> Self {
-        Self::from_object(alloc, Object::SumType(st))
-    }
-
-    pub fn from_component_data(alloc: &mut dyn Allocator, mut c: ComponentData) -> Self {
+    pub(crate) fn from_component_data(alloc: &mut dyn Allocator, mut c: ComponentData) -> Self {
         for v in c.values.iter_mut() {
             if v.is_object() {
                 *v = v.deep_copy(alloc);
@@ -922,11 +967,15 @@ impl Value {
         Self::from_object(alloc, Object::Component(c))
     }
 
-    pub fn from_rad_list(alloc: &mut dyn Allocator, list: RadList) -> Self {
+    pub(crate) fn from_rad_list(alloc: &mut dyn Allocator, list: RadList) -> Self {
         Self::from_object(alloc, Object::List(list))
     }
 
-    pub fn map_iter(alloc: &mut dyn Allocator, map_storage: MapStorage, keys: Vec<MapKey>) -> Self {
+    pub(crate) fn map_iter(
+        alloc: &mut dyn Allocator,
+        map_storage: MapStorage,
+        keys: Vec<MapKey>,
+    ) -> Self {
         Self::from_object(
             alloc,
             Object::MapIter(map_storage, std::cell::Cell::new(0), keys),
@@ -1023,46 +1072,10 @@ impl Value {
         self.to_string()
     }
 
-    pub fn to_json(&self) -> String {
-        if let Some(s) = self.as_str() {
-            return format!("\"{}\"", s.replace("\"", "\\\""));
-        }
-        if let Some(b) = self.as_bool() {
-            return if b {
-                "true".to_string()
-            } else {
-                "false".to_string()
-            };
-        }
-        if let Some(i) = self.as_int() {
-            return i.to_string();
-        }
-        if let Some(f) = self.as_float() {
-            return f.to_string();
-        }
-        if self.is_nil() {
-            return "null".to_string();
-        }
-        if let Some(l) = self.as_list() {
-            let items: Vec<String> = l.iter().map(|v| v.to_json()).collect();
-            return format!("[{}]", items.join(","));
-        }
-        if let Some(m) = self.as_map() {
-            let mut items = Vec::new();
-            for (k, v) in m.iter() {
-                if let crate::value::MapKey::Str(s) = k {
-                    items.push(format!("\"{}\":{}", s.replace("\"", "\\\""), v.to_json()));
-                }
-            }
-            return format!("{{{}}}", items.join(","));
-        }
-        format!("\"{}\"", self.print_display().replace("\"", "\\\""))
-    }
-
     /// Deep-copy a value into the given allocator. Inline values (int, float,
     /// bool, nil) are returned unchanged. Heap objects are recursively cloned
     /// so the returned value is backed entirely by allocations in `target`.
-    pub fn deep_copy(&self, target: &mut dyn Allocator) -> Self {
+    pub(crate) fn deep_copy(&self, target: &mut dyn Allocator) -> Self {
         if !self.is_object() {
             return *self;
         }
@@ -1125,7 +1138,7 @@ impl Value {
     /// as-is — only paths that actually contain a remapped id are rebuilt
     /// (into `target`). Map keys are rewritten too: `MapKey::Entity` is a
     /// reference like any other.
-    pub fn rewrite_entity_ids(
+    pub(crate) fn rewrite_entity_ids(
         &self,
         remap: &HashMap<u32, u32>,
         target: &mut dyn Allocator,
@@ -1228,7 +1241,7 @@ impl Value {
     /// Rebuilt values are allocated in `target` (typically the VM gc heap;
     /// they are persisted when the payload enters a world), as in the
     /// `load_world` decode path (world merge, #7).
-    pub fn rewrite_component_entity_ids(
+    pub(crate) fn rewrite_component_entity_ids(
         data: &mut ComponentData,
         remap: &HashMap<u32, u32>,
         target: &mut dyn Allocator,
@@ -1242,7 +1255,7 @@ impl Value {
     }
 
     /// Deep-copy all values in a `ComponentData` into the given allocator.
-    pub fn deep_copy_component_data(data: &mut ComponentData, target: &mut dyn Allocator) {
+    pub(crate) fn deep_copy_component_data(data: &mut ComponentData, target: &mut dyn Allocator) {
         for val in data.values.iter_mut() {
             if val.is_object() {
                 *val = val.deep_copy(target);
@@ -1252,7 +1265,7 @@ impl Value {
 
     /// Deep-copy all values in a `ComponentData` into the persistent store.
     /// This is the standard path for values entering the ECS world.
-    pub fn persist_component_data(data: &mut ComponentData) {
+    pub(crate) fn persist_component_data(data: &mut ComponentData) {
         Self::deep_copy_component_data(data, &mut PersistentStore);
     }
 
@@ -1265,7 +1278,7 @@ impl Value {
 
     /// Trace this value for GC.  If it is a heap object, insert its pointer
     /// into `marked` and recursively trace any values it contains.
-    pub fn trace(&self, marked: &mut HashSet<usize>) {
+    pub(crate) fn trace(&self, marked: &mut HashSet<usize>) {
         if let Some(ptr) = self.object_ptr() {
             if marked.insert(ptr) {
                 if let Some(obj) = self.as_object() {
@@ -2251,7 +2264,7 @@ impl Builtin {
 pub struct ComponentData {
     pub type_name: String,
     pub layout: Arc<Vec<String>>,
-    pub values: Vec<Value>,
+    pub(crate) values: Vec<Value>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -2264,7 +2277,7 @@ pub struct StateInst {
 pub struct SumTypeInst {
     pub type_name: String,
     pub variant: String,
-    pub fields: HashMap<String, Value>,
+    pub(crate) fields: HashMap<String, Value>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -2312,17 +2325,6 @@ pub enum PipelineOp {
     Filter,
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub struct PipelineStep {
-    pub op: PipelineOp,
-    pub func_const_idx: u16,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct FusedPipelineDef {
-    pub steps: Vec<PipelineStep>,
-}
-
 impl fmt::Display for ComponentData {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{} {{", display_type_name(&self.type_name))?;
@@ -2344,7 +2346,7 @@ impl fmt::Display for ComponentData {
 
 #[cfg(test)]
 mod tests {
-    use super::Builtin;
+    use super::{Builtin, Value, ValueTag, CANONICAL_FLOAT_NAN};
     use std::collections::HashSet;
 
     #[test]
@@ -2356,6 +2358,45 @@ mod tests {
                 "duplicate builtin registration: {}",
                 builtin.name()
             );
+        }
+    }
+
+    #[test]
+    fn every_float_nan_is_canonical_and_never_object_tagged() {
+        let reserved_and_ieee_patterns = [
+            0x7FF0_0000_0000_0001,
+            0x7FF8_0000_0000_0000,
+            0x7FFC_0000_0000_0000,
+            0x7FFF_FFFF_FFFF_FFFF,
+            0xFFF0_0000_0000_0001,
+            0xFFF8_0000_0000_0000,
+            0xFFFC_0000_0000_0000,
+            0xFFFC_0000_0000_0001,
+            0xFFFC_7FFF_FFFF_FFFF,
+            0xFFFC_8000_0000_0000,
+            0xFFFF_FFFF_FFFF_FFFF,
+        ];
+
+        for bits in reserved_and_ieee_patterns {
+            let input = f64::from_bits(bits);
+            assert!(input.is_nan(), "test pattern {bits:#018x} must be NaN");
+            let value = Value::from_float(input);
+            assert_eq!(value.to_raw(), CANONICAL_FLOAT_NAN, "input {bits:#018x}");
+            assert_eq!(value.tag(), ValueTag::Float, "input {bits:#018x}");
+            assert!(value.is_float(), "input {bits:#018x}");
+            assert!(!value.is_heap_object_tag(), "input {bits:#018x}");
+            assert!(value.as_float().is_some_and(f64::is_nan));
+        }
+
+        let zero = std::hint::black_box(0.0_f64);
+        for arithmetic_nan in [
+            zero / zero,
+            f64::INFINITY - f64::INFINITY,
+            (-1.0_f64).sqrt(),
+        ] {
+            let value = Value::from_float(arithmetic_nan);
+            assert_eq!(value.to_raw(), CANONICAL_FLOAT_NAN);
+            assert_eq!(value.tag(), ValueTag::Float);
         }
     }
 }
