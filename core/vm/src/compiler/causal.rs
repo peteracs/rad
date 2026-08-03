@@ -80,7 +80,12 @@ impl Compiler {
         self.require_causal_feature(&stmt.span)?;
         self.emit_op(Op::BeginSettlement, stmt.span.line);
         self.current().settlement_depth += 1;
+        // A settlement is a lexical block even when it appears at top level.
+        // Keeping its bindings in frame-local slots lets the runtime forbid
+        // all ordinary global mutation while causal execution is active.
+        self.begin_scope();
         let body_result = self.compile_body(&stmt.body.stmts);
+        self.end_scope(stmt.span.line);
         self.current().settlement_depth -= 1;
         body_result?;
         self.emit_op(Op::EndSettlement, stmt.span.line);

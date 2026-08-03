@@ -267,6 +267,7 @@ pub struct Chunk {
     dedup: HashMap<ConstKey, u16>,
     str_dedup: HashMap<String, u32>,
     next_str_id: u32,
+    pub(crate) verification: Option<std::sync::Arc<crate::bytecode_verifier::VerifiedChunk>>,
 }
 
 impl Chunk {
@@ -279,10 +280,12 @@ impl Chunk {
             dedup: HashMap::new(),
             str_dedup: HashMap::new(),
             next_str_id: 0,
+            verification: None,
         }
     }
 
     pub fn write(&mut self, byte: u8, line: u32) {
+        self.verification = None;
         self.code.push(byte);
         self.lines.push(line);
     }

@@ -53,7 +53,7 @@ The LSP seeds the overlay with **all open file buffers** (by filesystem path) pl
 
 ## VM bytecode heaps (related)
 
-The Phase 3 **compiler** guest is separate from Rad **user** bytecode loaded in the browser or in `RadRuntime`. User chunks built with a scratch heap (e.g. `WasmChunk` in `core/vm/src/wasm.rs`) must be loaded with **`load_chunk_with_gc`** so constants merge into the VM's `GcHeap`. See the [architecture guide](architecture.md) for the VM memory model.
+The Phase 3 **compiler** guest is separate from Rad **user** bytecode loaded in the browser or in `RadRuntime`. User chunks built with a scratch heap (e.g. `WasmChunk` in `core/vm/src/wasm.rs`) must be loaded with **`load_verified_chunk_with_gc`** so the chunk is verified before execution and its constants merge into the VM's `GcHeap`. See the [architecture guide](architecture.md) for the VM memory model.
 
 ## Recovery note (`core/vm/src/main.rs`)
 

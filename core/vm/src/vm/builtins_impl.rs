@@ -20,6 +20,7 @@ impl VM {
         builtin: Builtin,
         args: Vec<Value>,
     ) -> Result<Value, String> {
+        self.enforce_settlement_builtin(builtin)?;
         if self.sandbox_caps.is_some() && !crate::sandbox::builtin_allowed_in_sandbox(builtin) {
             return Err(format!(
                 "sandbox: builtin '{}' is not permitted under the capability grant",
@@ -5765,7 +5766,9 @@ impl VM {
             let v = Value::from_int(&mut self.gc, from_version);
             self.push(v);
         }
+        let frame_id = self.allocate_frame_id();
         self.frames.push(crate::vm::CallFrame {
+            frame_id,
             chunk_id: entry.chunk_id,
             ip: 0,
             stack_base,

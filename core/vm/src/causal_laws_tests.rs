@@ -145,18 +145,20 @@ fn malformed_top_level_bytecode_cannot_return_with_active_settlement() {
     let before_world = vm.get_world().content_digest();
     let before_writes = vm.causality_ledger().writes.len();
     let before_settlements = vm.causality_ledger().settlements.len();
-    let broken = vm.load_chunk(unbalanced_chunk("unbalanced-main"));
+    let broken = vm.load_unchecked_chunk(unbalanced_chunk("unbalanced-main"));
 
     let error = vm
         .run(broken)
         .expect_err("successful escape past EndSettlement must become a fault");
-    assert!(error.contains("unbalanced settlement"), "{error}");
+    assert!(error.contains("would leave settlement"), "{error}");
     assert_eq!(vm.get_world().content_digest(), before_world);
     assert_eq!(vm.causality_ledger().writes.len(), before_writes);
     assert_eq!(vm.causality_ledger().settlements.len(), before_settlements);
     assert!(vm.settlement.is_none());
 
-    let valid = vm.load_chunk(balanced_return_chunk("valid-main"));
+    let valid = vm
+        .load_verified_chunk(balanced_return_chunk("valid-main"))
+        .expect("balanced chunk should verify");
     vm.run(valid).expect("same VM must remain reusable");
     assert!(vm.settlement.is_none());
 }
@@ -166,7 +168,7 @@ fn malformed_host_function_cannot_return_with_active_settlement() {
     let mut vm = VM::new();
     let before_world = vm.get_world().content_digest();
     let before_settlements = vm.causality_ledger().settlements.len();
-    let broken_chunk = vm.load_chunk(unbalanced_chunk("unbalanced-host-call"));
+    let broken_chunk = vm.load_unchecked_chunk(unbalanced_chunk("unbalanced-host-call"));
     let broken = Value::from_fn(
         vm.gc_mut(),
         FnValue {
@@ -179,12 +181,14 @@ fn malformed_host_function_cannot_return_with_active_settlement() {
     let error = vm
         .call_value(&broken, Vec::new())
         .expect_err("host-call escape past EndSettlement must become a fault");
-    assert!(error.contains("unbalanced settlement"), "{error}");
+    assert!(error.contains("would leave settlement"), "{error}");
     assert_eq!(vm.get_world().content_digest(), before_world);
     assert_eq!(vm.causality_ledger().settlements.len(), before_settlements);
     assert!(vm.settlement.is_none());
 
-    let valid_chunk = vm.load_chunk(balanced_return_chunk("valid-host-call"));
+    let valid_chunk = vm
+        .load_verified_chunk(balanced_return_chunk("valid-host-call"))
+        .expect("balanced chunk should verify");
     let valid = Value::from_fn(
         vm.gc_mut(),
         FnValue {

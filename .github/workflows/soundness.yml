@@ -82,9 +82,11 @@ jobs:
           RUSTFLAGS: "-Zsanitizer=address"
           ASAN_OPTIONS: "detect_leaks=0"
         run: |
-          cargo +nightly test -p rad-vm --release \
-            -Zbuild-std --target x86_64-unknown-linux-gnu \
-            composition radpack merge -- --nocapture
+          for filter in composition radpack merge; do
+            cargo +nightly test -p rad-vm --release \
+              -Zbuild-std --target x86_64-unknown-linux-gnu \
+              "$filter" -- --nocapture
+          done
       - name: Upload findings (if any)
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7

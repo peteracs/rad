@@ -1,6 +1,9 @@
 pub mod arena;
 pub mod ast;
 pub mod builtins;
+mod bytecode_verifier;
+pub use bytecode_verifier::VerificationError;
+mod bytecode_effects;
 pub mod causality;
 pub mod merge;
 pub mod radpack;
@@ -8,6 +11,8 @@ pub mod wire;
 
 #[cfg(test)]
 mod bench_tests;
+#[cfg(test)]
+mod bytecode_boundary_tests;
 #[cfg(test)]
 mod causal_laws_tests;
 pub mod checker;

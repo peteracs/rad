@@ -223,6 +223,7 @@ impl VM {
 
             let op_byte = self.read_byte()?;
             let op = Op::from_byte(op_byte)?;
+            self.enforce_settlement_opcode(op)?;
             if self.op_profile {
                 self.op_counts[op_byte as usize] += 1;
             }
@@ -448,6 +449,7 @@ impl VM {
                 }
                 Op::SetLocal => {
                     let off = self.read_u16()? as usize;
+                    self.reject_captured_local_mutation(off, "SetLocal")?;
                     let base = self.current_frame().stack_base;
                     let idx = base + off;
                     let val = self.pop()?;
@@ -463,6 +465,7 @@ impl VM {
                 }
                 Op::MoveLocal => {
                     let off = self.read_u16()? as usize;
+                    self.reject_captured_local_mutation(off, "MoveLocal")?;
                     let base = self.current_frame().stack_base;
                     let idx = base + off;
                     let slot = self
@@ -566,20 +569,20 @@ impl VM {
                 // constant-rhs fusions: the Const dispatch folded away.
                 Op::EqConst => {
                     let idx = self.read_u16()? as usize;
-                    let b = self.current_chunk().constants[idx];
+                    let b = helpers::constant_value(self.current_chunk(), idx)?;
                     let a = self.pop()?;
                     self.push(Value::from_bool(helpers::values_equal(&a, &b)));
                 }
                 Op::NeqConst => {
                     let idx = self.read_u16()? as usize;
-                    let b = self.current_chunk().constants[idx];
+                    let b = helpers::constant_value(self.current_chunk(), idx)?;
                     let a = self.pop()?;
                     self.push(Value::from_bool(!helpers::values_equal(&a, &b)));
                 }
                 Op::EqConstJF => {
                     let idx = self.read_u16()? as usize;
                     let target = self.read_u16()? as usize;
-                    let b = self.current_chunk().constants[idx];
+                    let b = helpers::constant_value(self.current_chunk(), idx)?;
                     let a = self.pop()?;
                     if !helpers::values_equal(&a, &b) {
                         self.current_frame_mut().ip = target;
@@ -588,7 +591,7 @@ impl VM {
                 Op::NeqConstJF => {
                     let idx = self.read_u16()? as usize;
                     let target = self.read_u16()? as usize;
-                    let b = self.current_chunk().constants[idx];
+                    let b = helpers::constant_value(self.current_chunk(), idx)?;
                     let a = self.pop()?;
                     if helpers::values_equal(&a, &b) {
                         self.current_frame_mut().ip = target;
@@ -597,7 +600,7 @@ impl VM {
                 Op::ConstArith => {
                     let idx = self.read_u16()? as usize;
                     let arith = self.read_byte()?;
-                    let b = self.current_chunk().constants[idx];
+                    let b = helpers::constant_value(self.current_chunk(), idx)?;
                     let a = self.pop()?;
                     let out = match Op::from_byte(arith)? {
                         Op::Add => helpers::binary_add(&mut self.gc, a, b)?,
@@ -619,17 +622,26 @@ impl VM {
                 Op::IncLocal => {
                     let slot = self.read_u16()? as usize;
                     let idx = self.read_u16()? as usize;
-                    let k = self.current_chunk().constants[idx];
+                    self.reject_captured_local_mutation(slot, "IncLocal")?;
+                    let k = helpers::constant_value(self.current_chunk(), idx)?;
                     let base = self.current_frame().stack_base;
-                    let slot_val = &mut self.stack[base + slot];
+                    let stack_index = base
+                        .checked_add(slot)
+                        .ok_or_else(|| format!("Invalid local offset {}", slot))?;
+                    let slot_val = *self
+                        .stack
+                        .get(stack_index)
+                        .ok_or_else(|| format!("Invalid local offset {}", slot))?;
                     if let Some(cell) = slot_val.as_cell() {
                         let cur = unsafe { (*cell).get() };
                         let out = helpers::binary_add(&mut self.gc, cur, k)?;
                         unsafe { (*cell).set(out) };
                     } else {
-                        let cur = *slot_val;
-                        let out = helpers::binary_add(&mut self.gc, cur, k)?;
-                        self.stack[base + slot] = out;
+                        let out = helpers::binary_add(&mut self.gc, slot_val, k)?;
+                        *self
+                            .stack
+                            .get_mut(stack_index)
+                            .ok_or_else(|| format!("Invalid local offset {}", slot))? = out;
                     }
                 }
                 Op::JumpBack => {
@@ -648,15 +660,32 @@ impl VM {
                     let cur_slot = self.read_u16()? as usize;
                     let end_slot = self.read_u16()? as usize;
                     let delta = self.read_u16()? as usize;
+                    self.reject_captured_local_mutation(cur_slot, "ForRangeNext")?;
                     let base = self.current_frame().stack_base;
-                    let cur = self.stack[base + cur_slot]
+                    let cur_index = base
+                        .checked_add(cur_slot)
+                        .ok_or_else(|| format!("Invalid local offset {}", cur_slot))?;
+                    let end_index = base
+                        .checked_add(end_slot)
+                        .ok_or_else(|| format!("Invalid local offset {}", end_slot))?;
+                    let cur = self
+                        .stack
+                        .get(cur_index)
+                        .ok_or_else(|| format!("Invalid local offset {}", cur_slot))?
                         .as_int()
                         .ok_or_else(|| "ForRangeNext: loop counter is not an int".to_string())?;
-                    let end = self.stack[base + end_slot]
+                    let end = self
+                        .stack
+                        .get(end_index)
+                        .ok_or_else(|| format!("Invalid local offset {}", end_slot))?
                         .as_int()
                         .ok_or_else(|| "ForRangeNext: loop bound is not an int".to_string())?;
                     let next = cur + 1;
-                    self.stack[base + cur_slot] = Value::from_int(&mut self.gc, next);
+                    let next_value = Value::from_int(&mut self.gc, next);
+                    *self
+                        .stack
+                        .get_mut(cur_index)
+                        .ok_or_else(|| format!("Invalid local offset {}", cur_slot))? = next_value;
                     if next < end {
                         self.charge_fuel()?;
                         self.maybe_gc();
@@ -685,6 +714,7 @@ impl VM {
                 }
                 Op::Yield => {}
                 Op::Return => {
+                    self.guard_frame_exit("Return")?;
                     let result = self.pop()?;
                     let frame = self.frames.pop().ok_or("Frame stack underflow")?;
                     if let Some(writeback) = &frame.system_writeback {
@@ -803,6 +833,7 @@ impl VM {
                                 let inner = st.fields.get("value").cloned().unwrap_or(Value::NIL);
                                 self.push(inner);
                             } else if st.variant == "Err" {
+                                self.guard_frame_exit("Try propagation")?;
                                 let frame = self.frames.pop().ok_or("Frame stack underflow")?;
                                 if let Some(writeback) = &frame.system_writeback {
                                     for (slot, ctype) in &writeback.mutable_params {
@@ -885,6 +916,7 @@ impl VM {
                                 let inner = st.fields.get("value").cloned().unwrap_or(Value::NIL);
                                 self.push(inner);
                             } else if st.variant == "None" {
+                                self.guard_frame_exit("Try propagation")?;
                                 let frame = self.frames.pop().ok_or("Frame stack underflow")?;
                                 if let Some(writeback) = &frame.system_writeback {
                                     for (slot, ctype) in &writeback.mutable_params {
@@ -1108,7 +1140,10 @@ impl VM {
                     let slot = self.read_u16()? as usize;
                     let idx_val = self.pop()?;
                     let base = self.current_frame().stack_base;
-                    let slot_val = self.stack[base + slot];
+                    let slot_val = *self
+                        .stack
+                        .get(base.saturating_add(slot))
+                        .ok_or_else(|| format!("Invalid local offset {}", slot))?;
                     let obj = if let Some(cell) = slot_val.as_cell() {
                         unsafe { (*cell).get() }
                     } else {
@@ -1120,13 +1155,19 @@ impl VM {
                     let slot = self.read_u16()? as usize;
                     let idx_slot = self.read_u16()? as usize;
                     let base = self.current_frame().stack_base;
-                    let slot_val = self.stack[base + slot];
+                    let slot_val = *self
+                        .stack
+                        .get(base.saturating_add(slot))
+                        .ok_or_else(|| format!("Invalid local offset {}", slot))?;
                     let obj = if let Some(cell) = slot_val.as_cell() {
                         unsafe { (*cell).get() }
                     } else {
                         slot_val
                     };
-                    let idx_raw = self.stack[base + idx_slot];
+                    let idx_raw = *self
+                        .stack
+                        .get(base.saturating_add(idx_slot))
+                        .ok_or_else(|| format!("Invalid local offset {}", idx_slot))?;
                     let idx_val = if let Some(cell) = idx_raw.as_cell() {
                         unsafe { (*cell).get() }
                     } else {
@@ -1464,9 +1505,13 @@ impl VM {
                 // push item (top), then ListPushLocal <slot> — so pop item, then mutate list at slot.
                 Op::ListPushLocal => {
                     let slot = self.read_u16()? as usize;
+                    self.reject_captured_local_mutation(slot, "ListPushLocal")?;
                     let elem = self.pop()?;
                     let base = self.current_frame().stack_base;
-                    let slot_val = &mut self.stack[base + slot];
+                    let slot_val = self
+                        .stack
+                        .get_mut(base.saturating_add(slot))
+                        .ok_or_else(|| format!("Invalid local offset {}", slot))?;
 
                     let mut list_val = if let Some(cell) = slot_val.as_cell() {
                         unsafe { (*cell).get() }
@@ -1497,11 +1542,15 @@ impl VM {
                 // already guarantees.
                 Op::ListSetLocal => {
                     let slot = self.read_u16()? as usize;
+                    self.reject_captured_local_mutation(slot, "ListSetLocal")?;
                     let val = self.pop()?;
                     let idx_val = self.pop()?;
                     let idx = helpers::index_as_usize(&idx_val)?;
                     let base = self.current_frame().stack_base;
-                    let slot_val = &mut self.stack[base + slot];
+                    let slot_val = self
+                        .stack
+                        .get_mut(base.saturating_add(slot))
+                        .ok_or_else(|| format!("Invalid local offset {}", slot))?;
 
                     let mut list_val = if let Some(cell) = slot_val.as_cell() {
                         unsafe { (*cell).get() }
@@ -1613,6 +1662,14 @@ impl VM {
                 }
 
                 Op::Halt => {
+                    if self.settlement.is_some() {
+                        self.guard_frame_exit("Halt")?;
+                        self.abort_settlement();
+                        return Err(
+                            "Internal VM error: Halt cannot execute while a settlement is active"
+                                .to_string(),
+                        );
+                    }
                     self.frames.clear();
                     return Ok(());
                 }
@@ -1647,7 +1704,9 @@ impl VM {
             let slen = self.stack.len();
             self.stack.remove(slen - 1);
             let stack_base = self.stack.len() - argc_us;
+            let frame_id = self.allocate_frame_id();
             self.frames.push(CallFrame {
+                frame_id,
                 chunk_id,
                 ip: 0,
                 stack_base,
@@ -1675,7 +1734,9 @@ impl VM {
             let slen = self.stack.len();
             self.stack.remove(slen - 1);
             let stack_base = self.stack.len() - argc_us;
+            let frame_id = self.allocate_frame_id();
             self.frames.push(CallFrame {
+                frame_id,
                 chunk_id,
                 ip: 0,
                 stack_base,
@@ -1693,6 +1754,12 @@ impl VM {
             let result = self.call_builtin(builtin, args)?;
             self.push(result);
         } else if let Some(native) = callee.as_native_fn() {
+            if self.settlement.is_some() {
+                return Err(
+                    "Settlement effect firewall: native/FFI calls are forbidden while a settlement is active"
+                        .to_string(),
+                );
+            }
             let slen = self.stack.len();
             self.stack.remove(slen - 1);
             let mut args = Vec::with_capacity(argc_us);
@@ -2197,7 +2264,9 @@ impl VM {
                 }
             }
 
+            let frame_id = self.allocate_frame_id();
             self.frames.push(CallFrame {
+                frame_id,
                 chunk_id: filter_chunk_id,
                 ip: 0,
                 stack_base,
@@ -2386,7 +2455,9 @@ impl VM {
         }
         let saved_depth = self.frames.len();
         let stack_base = self.stack.len();
+        let frame_id = self.allocate_frame_id();
         self.frames.push(CallFrame {
+            frame_id,
             chunk_id: guard_chunk_id,
             ip: 0,
             stack_base,
@@ -2761,7 +2832,9 @@ impl VM {
                     self.push(Value::NIL);
                 }
                 self.push(event_data);
+                let frame_id = self.allocate_frame_id();
                 self.frames.push(CallFrame {
+                    frame_id,
                     chunk_id,
                     ip: 0,
                     stack_base,
@@ -2885,7 +2958,9 @@ impl VM {
                     mutable_resources.push(((info.params.len() + idx) as u16, rtype.clone()));
                 }
             }
+            let frame_id = self.allocate_frame_id();
             self.frames.push(CallFrame {
+                frame_id,
                 chunk_id: info.chunk_id,
                 ip: 0,
                 stack_base,
@@ -3128,6 +3203,7 @@ impl VM {
         // runtime call chain before aborting.
         let frame_depth = self.frames.len();
         let stack_depth = self.stack.len();
+        let next_frame_id_before = self.next_frame_id;
         let owns_execution_boundary = frame_depth == 0;
         let result = self.call_value_inner(callee, args);
         let result = if owns_execution_boundary {
@@ -3138,6 +3214,7 @@ impl VM {
         if result.is_err() && owns_execution_boundary {
             self.frames.truncate(frame_depth);
             self.stack.truncate(stack_depth);
+            self.next_frame_id = next_frame_id_before;
         }
         result
     }
@@ -3159,7 +3236,9 @@ impl VM {
                 self.push(arg);
             }
             let stack_base = self.stack.len() - args_len;
+            let frame_id = self.allocate_frame_id();
             self.frames.push(CallFrame {
+                frame_id,
                 chunk_id: fv.chunk_id,
                 ip: 0,
                 stack_base,
@@ -3178,7 +3257,9 @@ impl VM {
                 self.push(arg);
             }
             let stack_base = self.stack.len() - args_len;
+            let frame_id = self.allocate_frame_id();
             self.frames.push(CallFrame {
+                frame_id,
                 chunk_id: cv.chunk_id,
                 ip: 0,
                 stack_base,
@@ -3190,6 +3271,12 @@ impl VM {
         } else if let Some(builtin) = callee.as_builtin() {
             self.call_builtin(builtin, args)
         } else if let Some(native) = callee.as_native_fn() {
+            if self.settlement.is_some() {
+                return Err(
+                    "Settlement effect firewall: native/FFI calls are forbidden while a settlement is active"
+                        .to_string(),
+                );
+            }
             let raw_args: Vec<u64> = args.iter().map(|v| v.to_raw()).collect();
             let result_raw = unsafe { (native.func)(raw_args.as_ptr(), raw_args.len()) };
             if let Some(err) = crate::ffi::take_native_error() {

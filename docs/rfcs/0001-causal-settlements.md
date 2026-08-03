@@ -292,6 +292,25 @@ with an active settlement aborts it and returns an internal unbalanced-
 settlement fault. Source code is never silently committed or silently accepted
 after crossing the boundary.
 
+Every bytecode chunk is verified before any of its instructions execute. The
+verifier decodes complete instruction boundaries, checks jump targets, and
+requires one exact settlement-region state at every control-flow join. Control
+flow cannot enter or leave a settlement region, nest `BeginSettlement`, reach
+an unmatched `EndSettlement`, or terminate while a settlement is active. The
+verified proof is cached on the immutable chunk; the unchecked loader exists
+only in VM tests.
+
+At runtime, a settlement also records its owning frame, chunk, begin
+instruction, and unique settlement identity. Only that owner may execute its
+`EndSettlement`. An exhaustive opcode-effect table and the existing builtin
+effect metadata form a second defense: while a settlement is active, ordinary
+bytecode cannot mutate globals or captured state, perform durable ECS/resource
+writes, run event or schedule work, perform I/O/output, advance RNG/clock state,
+create tasks, or call native/FFI code. Settlement blocks compile their lexical
+bindings into frame-local slots even at top level. Thus malformed or compiler-
+corrupted bytecode cannot turn a skipped settlement boundary into a partial
+live-world mutation.
+
 Memory cost is proportional to proposals and touched candidate columns;
 untouched archetypes are not deep-cloned.
 
@@ -439,7 +458,10 @@ The experimental feature is complete only when:
 11. existing RAD programs and tests remain unchanged;
 12. untouched archetypes stay shared by copy-on-write; and
 13. `return`, `break`, and `continue` cannot escape an unfinished settlement;
-    malformed bytecode that does so faults, aborts, and leaves the VM reusable.
+14. every loaded chunk has a deterministic verified control-flow proof; and
+15. malformed bytecode cannot close another frame's settlement or perform a
+    durable effect while one is active, and every rejected attempt leaves the
+    VM reusable.
 
 > A settlement is not another schedule. It is a declaration that several
 > causes are simultaneous, and that one explicit semantic owner determines

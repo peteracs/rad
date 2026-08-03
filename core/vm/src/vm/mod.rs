@@ -66,6 +66,7 @@ pub struct VmSharedState {
 }
 
 pub struct CallFrame {
+    pub(crate) frame_id: u64,
     pub(crate) chunk_id: usize,
     pub(crate) ip: usize,
     pub(crate) stack_base: usize,
@@ -154,6 +155,7 @@ pub struct VM {
     pub globals: Vec<Value>,
     pub global_names: Arc<Vec<String>>,
     pub(crate) frames: Vec<CallFrame>,
+    pub(crate) next_frame_id: u64,
     pub(crate) world: World,
     pub state_machines: Arc<HashMap<String, HashMap<String, Vec<StateTransitionInfo>>>>,
     pub event_handlers: Arc<HashMap<String, Vec<HandlerEntry>>>,
@@ -161,6 +163,7 @@ pub struct VM {
     pub(crate) intent_registry: Arc<HashMap<String, IntentRuntimeInfo>>,
     pub(crate) resolver_registry: Arc<HashMap<String, ResolverRuntimeInfo>>,
     pub(crate) settlement: Option<SettlementContext>,
+    pub(crate) next_settlement_id: u64,
     /// Schema migrations (#5): component/resource name → compiled
     /// `migrate X(old)` chunk, invoked by `load_world` on shape drift.
     pub(crate) migrations: HashMap<String, MigrationEntry>,
@@ -421,6 +424,20 @@ impl VM {
         Self::from_shared_state(shared)
     }
 
+    #[inline]
+    pub(crate) fn allocate_frame_id(&mut self) -> u64 {
+        let id = self.next_frame_id;
+        self.next_frame_id = self.next_frame_id.wrapping_add(1).max(1);
+        id
+    }
+
+    #[inline]
+    pub(crate) fn allocate_settlement_id(&mut self) -> u64 {
+        let id = self.next_settlement_id;
+        self.next_settlement_id = self.next_settlement_id.wrapping_add(1).max(1);
+        id
+    }
+
     pub fn shared_state(&self) -> VmSharedState {
         VmSharedState {
             chunks: self.chunks.clone(),
@@ -442,13 +459,21 @@ impl VM {
         }
     }
 
-    pub fn from_shared_state(shared: VmSharedState) -> Self {
+    pub(crate) fn from_shared_state(shared: VmSharedState) -> Self {
+        assert!(
+            shared
+                .chunks
+                .iter()
+                .all(|chunk| chunk.verification.is_some()),
+            "internal shared VM state contained unverified bytecode"
+        );
         VM {
             chunks: shared.chunks,
             stack: Vec::with_capacity(1024),
             globals: shared.globals,
             global_names: shared.global_names,
             frames: Vec::with_capacity(256),
+            next_frame_id: 1,
             world: World::new(),
             state_machines: shared.state_machines,
             event_handlers: shared.event_handlers,
@@ -456,6 +481,7 @@ impl VM {
             intent_registry: shared.intent_registry,
             resolver_registry: shared.resolver_registry,
             settlement: None,
+            next_settlement_id: 1,
             migrations: HashMap::new(),
             events_current: Vec::new(),
             events_next: Vec::new(),
@@ -518,7 +544,7 @@ impl VM {
         }
     }
 
-    pub fn sync_from_shared(&mut self, shared: &VmSharedState) {
+    pub(crate) fn sync_from_shared(&mut self, shared: &VmSharedState) {
         // Arc identity, not length: two different programs can have the same
         // chunk count, and a pooled worker VM must never run one program's
         // schedule against another program's system table.
@@ -572,6 +598,7 @@ impl VM {
             globals,
             global_names: Arc::new(global_names),
             frames: Vec::new(),
+            next_frame_id: 1,
             world: World::new(),
             state_machines: Arc::new(HashMap::new()),
             event_handlers: Arc::new(HashMap::new()),
@@ -579,6 +606,7 @@ impl VM {
             intent_registry: Arc::new(HashMap::new()),
             resolver_registry: Arc::new(HashMap::new()),
             settlement: None,
+            next_settlement_id: 1,
             migrations: HashMap::new(),
             events_current: Vec::new(),
             events_next: Vec::new(),
@@ -988,21 +1016,68 @@ impl VM {
         }
     }
 
-    /// Append bytecode. Any heap-backed values in `chunk.constants` must already live on **this**
-    /// VM's [`GcHeap`] (same as `self.gc`). If constants were allocated on a separate heap (e.g.
-    /// [`crate::wasm::WasmChunk`]), call [`Self::load_chunk_with_gc`] instead.
-    pub fn load_chunk(&mut self, chunk: Chunk) -> usize {
+    /// Verify and append host-supplied bytecode. No instruction from an
+    /// invalid chunk can execute.
+    ///
+    /// Any heap-backed values in `chunk.constants` must already live on
+    /// **this** VM's [`GcHeap`] (same as `self.gc`). If constants were
+    /// allocated on a separate heap (e.g. [`crate::wasm::WasmChunk`]), call
+    /// [`Self::load_verified_chunk_with_gc`] instead.
+    pub fn load_verified_chunk(
+        &mut self,
+        mut chunk: Chunk,
+    ) -> Result<usize, crate::VerificationError> {
+        if chunk.verification.is_none() {
+            let proof = crate::bytecode_verifier::verify_chunk(&chunk)?;
+            chunk.verification = Some(Arc::new(proof));
+        }
         let v = Arc::make_mut(&mut self.chunks);
         let id = v.len();
         v.push(chunk);
-        id
+        debug_assert!(v[id]
+            .verification
+            .as_ref()
+            .is_some_and(|proof| proof.instruction_count > 0));
+        Ok(id)
     }
 
-    /// Merge `chunk_gc` into this VM's heap, then [`Self::load_chunk`]. Use when `chunk` was built
-    /// with its own arena (playground / `WasmChunk`); keeps constant pointers valid.
-    pub fn load_chunk_with_gc(&mut self, chunk: Chunk, chunk_gc: GcHeap) -> usize {
+    /// Compatibility spelling for [`Self::load_verified_chunk`].
+    pub fn load_chunk(&mut self, chunk: Chunk) -> Result<usize, crate::VerificationError> {
+        self.load_verified_chunk(chunk)
+    }
+
+    /// Verify bytecode before merging its separate constant heap, then append
+    /// both atomically from the embedder's perspective.
+    pub fn load_verified_chunk_with_gc(
+        &mut self,
+        mut chunk: Chunk,
+        chunk_gc: GcHeap,
+    ) -> Result<usize, crate::VerificationError> {
+        if chunk.verification.is_none() {
+            let proof = crate::bytecode_verifier::verify_chunk(&chunk)?;
+            chunk.verification = Some(Arc::new(proof));
+        }
         self.gc.merge(chunk_gc);
-        self.load_chunk(chunk)
+        self.load_verified_chunk(chunk)
+    }
+
+    /// Compatibility spelling for [`Self::load_verified_chunk_with_gc`].
+    pub fn load_chunk_with_gc(
+        &mut self,
+        chunk: Chunk,
+        chunk_gc: GcHeap,
+    ) -> Result<usize, crate::VerificationError> {
+        self.load_verified_chunk_with_gc(chunk, chunk_gc)
+    }
+
+    /// Runtime-defense tests deliberately bypass the host verifier. This is
+    /// never compiled into a production library.
+    #[cfg(test)]
+    pub(crate) fn load_unchecked_chunk(&mut self, chunk: Chunk) -> usize {
+        let chunks = Arc::make_mut(&mut self.chunks);
+        let id = chunks.len();
+        chunks.push(chunk);
+        id
     }
 
     /// Borrow this VM’s [`GcHeap`] to build [`Value`]s from host/embedder code (e.g. arguments to
@@ -1012,7 +1087,17 @@ impl VM {
         &mut self.gc
     }
 
-    pub fn load_compile_result(&mut self, result: CompileResult) {
+    pub fn load_compile_result(&mut self, mut result: CompileResult) {
+        // Verify the complete compiler product before mutating VM registries
+        // or merging its heap. Compiler corruption is an internal fault; host
+        // supplied chunks use the fallible load_verified_chunk API above.
+        for chunk in &mut result.chunks {
+            if chunk.verification.is_none() {
+                let proof = crate::bytecode_verifier::verify_chunk(chunk)
+                    .unwrap_or_else(|error| panic!("compiler produced invalid bytecode: {error}"));
+                chunk.verification = Some(Arc::new(proof));
+            }
+        }
         self.gc.merge(result.gc);
         {
             let intents = Arc::make_mut(&mut self.intent_registry);
@@ -1138,7 +1223,8 @@ impl VM {
             self.globals.resize(self.global_names.len(), Value::NIL);
         }
         for chunk in result.chunks {
-            self.load_chunk(chunk);
+            self.load_verified_chunk(chunk)
+                .expect("pre-verified compiler chunk must remain valid");
         }
     }
 
@@ -1146,6 +1232,11 @@ impl VM {
         if chunk_id >= self.chunks.len() {
             return Err(format!("Invalid chunk id {}", chunk_id));
         }
+        // A previous public boundary must already have enforced this
+        // invariant. Restore transaction-local state defensively instead of
+        // merely dropping a stale context if an internal caller violated it.
+        self.abort_settlement();
+        let next_frame_id_before = self.next_frame_id;
         crate::value::set_profile_copy_context(self.profile_copies, 0);
         self.frames.clear();
         self.print_buffer.clear();
@@ -1153,7 +1244,6 @@ impl VM {
         self.events_current.clear();
         self.events_next.clear();
         self.events_processing.clear();
-        self.settlement = None;
         self.emit_ids_current.clear();
         self.emit_ids_next.clear();
         self.tasks.clear();
@@ -1161,7 +1251,9 @@ impl VM {
         self.pending_io.clear();
         self.in_async_context = false;
         let stack_base = self.stack.len();
+        let frame_id = self.allocate_frame_id();
         self.frames.push(CallFrame {
+            frame_id,
             chunk_id,
             ip: 0,
             stack_base,
@@ -1183,6 +1275,7 @@ impl VM {
             self.abort_settlement();
             self.frames.clear();
             self.stack.truncate(stack_base);
+            self.next_frame_id = next_frame_id_before;
         }
         crate::value::set_profile_copy_context(false, 0);
         if self.op_profile {
@@ -1239,5 +1332,67 @@ impl VM {
 impl Default for VM {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+impl VM {
+    /// Complete stable-enough signature for adversarial transaction tests.
+    /// Pointer identities inside Values are deliberately rendered only while
+    /// comparing one reused VM before/after a fault.
+    pub(crate) fn observable_state_signature(&self) -> String {
+        let mut pending_io: Vec<u64> = self.pending_io.keys().copied().collect();
+        pending_io.sort_unstable();
+        let frames = self
+            .frames
+            .iter()
+            .map(|frame| {
+                (
+                    frame.frame_id,
+                    frame.chunk_id,
+                    frame.ip,
+                    frame.stack_base,
+                    frame.captures.as_ref().map(|captures| captures.len()),
+                    frame.system_writeback.is_some(),
+                )
+            })
+            .collect::<Vec<_>>();
+        format!(
+            "chunks={};world={};ledger={:?};events={:?}|{:?}|{:?}|{:?};emit_ids={:?}|{:?};globals={:?};output={:?}|{:?};rng={};tasks={:?};next_task={};pending_io={:?};async={};timeline={};event_log={:?};commands={:?};settlement={};next_frame={};next_settlement={};frames={:?};stack={:?};sandbox={:?}|{:?}|{:?}|{};trace={:?}|{};cause={:?}|{};once={}",
+            self.chunks.len(),
+            self.world.content_digest(),
+            self.ledger,
+            self.events_current,
+            self.events_next,
+            self.events_processing,
+            self.delayed_events,
+            self.emit_ids_current,
+            self.emit_ids_next,
+            self.globals,
+            self.print_buffer,
+            self.eprint_buffer,
+            self.rng_state,
+            self.tasks,
+            self.next_task_id,
+            pending_io,
+            self.in_async_context,
+            self.timeline.len(),
+            self.event_log,
+            self.command_buffer,
+            self.settlement.is_some(),
+            self.next_frame_id,
+            self.next_settlement_id,
+            frames,
+            self.stack,
+            self.sandbox_input_json,
+            self.sandbox_output_json,
+            self.last_sandbox_output_json,
+            self.last_sandbox_fuel_spent,
+            self.current_trace_id,
+            self.next_trace_id,
+            self.current_cause,
+            self.causality_frame,
+            self.once_guard_passed,
+        )
     }
 }

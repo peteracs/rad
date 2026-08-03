@@ -62,6 +62,10 @@ pub(crate) struct ActiveResolution {
 
 #[derive(Clone)]
 pub(crate) struct SettlementContext {
+    pub(crate) settlement_id: u64,
+    pub(crate) owner_frame_id: u64,
+    pub(crate) owner_chunk_id: usize,
+    pub(crate) begin_ip: usize,
     pub(crate) base: WorldSnapshot,
     pub(crate) origin: crate::causality::Cause,
     pub(crate) proposals: Vec<Proposal>,
@@ -71,6 +75,56 @@ pub(crate) struct SettlementContext {
 }
 
 impl VM {
+    pub(crate) fn enforce_settlement_opcode(&self, op: crate::opcode::Op) -> Result<(), String> {
+        if self.settlement.is_none() {
+            return Ok(());
+        }
+        if let crate::bytecode_effects::OpcodeEffect::Forbidden(effect) =
+            crate::bytecode_effects::opcode_effect(op)
+        {
+            return Err(format!(
+                "Settlement effect firewall: opcode {:?} cannot perform {} while a settlement is active",
+                op, effect
+            ));
+        }
+        Ok(())
+    }
+
+    pub(crate) fn enforce_settlement_builtin(&self, builtin: Builtin) -> Result<(), String> {
+        if self.settlement.is_none() {
+            return Ok(());
+        }
+        if let Some(effect) = crate::bytecode_effects::forbidden_builtin_effect(builtin) {
+            return Err(format!(
+                "Settlement effect firewall: builtin `{}` cannot access {} while a settlement is active",
+                builtin.name(), effect
+            ));
+        }
+        Ok(())
+    }
+
+    pub(crate) fn reject_captured_local_mutation(
+        &self,
+        slot: usize,
+        operation: &str,
+    ) -> Result<(), String> {
+        if self.settlement.is_none() {
+            return Ok(());
+        }
+        let index = self.current_frame().stack_base.saturating_add(slot);
+        if self
+            .stack
+            .get(index)
+            .is_some_and(|value| value.as_cell().is_some())
+        {
+            return Err(format!(
+                "Settlement effect firewall: {} cannot mutate captured local slot {}",
+                operation, slot
+            ));
+        }
+        Ok(())
+    }
+
     /// Discard an in-flight causal transaction without touching the live
     /// world or committed provenance ledger.
     ///
@@ -79,7 +133,12 @@ impl VM {
     /// that boundary: `finish_settlement` remains responsible for aborting
     /// errors raised while the candidate patch is being built.
     pub(crate) fn abort_settlement(&mut self) {
-        self.settlement = None;
+        if let Some(context) = self.settlement.take() {
+            // Only one settlement can be active. Its runtime ownership token
+            // was never externally committed, so an abort can safely return
+            // the allocator to the pre-attempt state as part of atomic unwind.
+            self.next_settlement_id = context.settlement_id;
+        }
     }
 
     /// Enforce the public VM invariant that no execution result can expose an
@@ -106,7 +165,16 @@ impl VM {
         if self.settlement.is_some() {
             return Err("nested settlements are not allowed".to_string());
         }
+        let (owner_frame_id, owner_chunk_id, begin_ip) = {
+            let frame = self.current_frame();
+            (frame.frame_id, frame.chunk_id, frame.ip.saturating_sub(1))
+        };
+        let settlement_id = self.allocate_settlement_id();
         self.settlement = Some(SettlementContext {
+            settlement_id,
+            owner_frame_id,
+            owner_chunk_id,
+            begin_ip,
             base: self.world.snapshot(),
             origin: self.current_cause.clone(),
             proposals: Vec::new(),
@@ -237,11 +305,58 @@ impl VM {
     }
 
     pub(crate) fn finish_settlement(&mut self) -> Result<(), String> {
+        self.ensure_current_frame_owns_settlement("EndSettlement")?;
         let result = self.resolve_and_commit_settlement();
         if result.is_err() {
             self.abort_settlement();
         }
         result
+    }
+
+    pub(crate) fn ensure_current_frame_owns_settlement(
+        &self,
+        operation: &str,
+    ) -> Result<(), String> {
+        let context = self
+            .settlement
+            .as_ref()
+            .ok_or_else(|| format!("{} without an active settlement", operation))?;
+        let frame = self.current_frame();
+        if frame.frame_id != context.owner_frame_id || frame.chunk_id != context.owner_chunk_id {
+            return Err(format!(
+                "Internal VM error: {} in frame {} chunk {} cannot close settlement {} owned by frame {} chunk {} (began at byte {})",
+                operation,
+                frame.frame_id,
+                frame.chunk_id,
+                context.settlement_id,
+                context.owner_frame_id,
+                context.owner_chunk_id,
+                context.begin_ip
+            ));
+        }
+        Ok(())
+    }
+
+    /// A settlement owner must reach its matching EndSettlement. Callees may
+    /// return normally while the caller's transaction remains active.
+    pub(crate) fn guard_frame_exit(&mut self, operation: &str) -> Result<(), String> {
+        let Some(context) = self.settlement.as_ref() else {
+            return Ok(());
+        };
+        let frame = self.current_frame();
+        if frame.frame_id != context.owner_frame_id {
+            return Ok(());
+        }
+        let message = format!(
+            "Internal VM error: {} would leave settlement {} opened by frame {} chunk {} at byte {}; transaction was aborted",
+            operation,
+            context.settlement_id,
+            context.owner_frame_id,
+            context.owner_chunk_id,
+            context.begin_ip
+        );
+        self.abort_settlement();
+        Err(message)
     }
 
     fn resolve_and_commit_settlement(&mut self) -> Result<(), String> {

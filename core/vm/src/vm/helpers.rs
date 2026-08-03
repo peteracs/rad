@@ -2,6 +2,14 @@ use crate::gc::GcHeap;
 use crate::opcode::Chunk;
 use crate::value::Value;
 
+pub(crate) fn constant_value(chunk: &Chunk, idx: usize) -> Result<Value, String> {
+    chunk
+        .constants
+        .get(idx)
+        .copied()
+        .ok_or_else(|| format!("Invalid constant index {}", idx))
+}
+
 pub(crate) fn constant_string(chunk: &Chunk, idx: usize) -> Result<String, String> {
     match chunk.constants.get(idx) {
         Some(v) => v.as_str().map(|s| s.to_string()).ok_or_else(|| {
