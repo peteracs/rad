@@ -38,18 +38,22 @@ pub(crate) fn opcode_effect(op: Op) -> OpcodeEffect {
         OnceGuardPass => OpcodeEffect::Forbidden("handler state mutation"),
         Halt => OpcodeEffect::Forbidden("VM termination"),
 
-        SetLocal
-        | MoveLocal
-        | IncLocal
-        | ForRangeNext
-        | ListPushLocal
+        SetLocal | MoveLocal | IncLocal | ForRangeNext => OpcodeEffect::LocalMutation,
+
+        // A local slot establishes locality of the pointer, not uniqueness of
+        // the referenced GC object.  Every true in-place/interior mutation is
+        // therefore forbidden until causal regions have allocation epochs and
+        // alias-aware ownership.  Functional SetIndex/SetField remain safe:
+        // they produce replacement values rather than modifying an alias.
+        ListPushLocal
         | ListSetLocal
         | BitsetSetInplace
         | BitsetClearInplace
         | BufferAppendInplace
         | ByteBufSetU8Inplace
         | ByteBufSetU32LeInplace
-        | ByteBufSetI32LeInplace => OpcodeEffect::LocalMutation,
+        | ByteBufSetI32LeInplace
+        | IterNext => OpcodeEffect::Forbidden("interior heap mutation"),
 
         Call => OpcodeEffect::DynamicCall,
         Return | Try => OpcodeEffect::FrameExit,
@@ -63,12 +67,13 @@ pub(crate) fn opcode_effect(op: Op) -> OpcodeEffect {
         | SetIndex | EcsGet | EcsHas | EcsQuery | MakeState | Transition | MakeVariant
         | MatchState | IsVariant | Pipe | Len | TypeOf | Break | Closure | MakeMap
         | GetFieldSlot | SetFieldSlot | MakeCompSlot | QueryFilter | QueryProject | MakeTuple
-        | Unpack | GetIter | IterNext | VecAdd | VecSub | VecMul | VecDiv | VecMod | VecNeg
-        | VecNot | VecEq | VecNeq | VecLt | VecGt | VecLte | VecGte | VecFilter | VecSelect
-        | LoadColumn | VecBroadcast | PopCheckErr | LogicalLoad | MaterializeAoS | ConcatN
-        | BitAnd | BitOr | BitXor | ListGetLocal | ListGetLL | EqJF | NeqJF | LtJF | LteJF
-        | GtJF | GteJF | EqConst | NeqConst | EqConstJF | NeqConstJF | ConstArith | Shl | Shr
-        | BitNot => OpcodeEffect::CausalSafe,
+        | Unpack | GetIter | VecAdd | VecSub | VecMul | VecDiv | VecMod | VecNeg | VecNot
+        | VecEq | VecNeq | VecLt | VecGt | VecLte | VecGte | VecFilter | VecSelect | LoadColumn
+        | VecBroadcast | PopCheckErr | LogicalLoad | MaterializeAoS | ConcatN | BitAnd | BitOr
+        | BitXor | ListGetLocal | ListGetLL | EqJF | NeqJF | LtJF | LteJF | GtJF | GteJF
+        | EqConst | NeqConst | EqConstJF | NeqConstJF | ConstArith | Shl | Shr | BitNot => {
+            OpcodeEffect::CausalSafe
+        }
     }
 }
 

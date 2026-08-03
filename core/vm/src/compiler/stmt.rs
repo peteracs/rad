@@ -236,11 +236,12 @@ impl Compiler {
                                     let is_bytebuf_setter = fn_name == "bytebuf_set_u8"
                                         || fn_name == "bytebuf_set_u32_le"
                                         || fn_name == "bytebuf_set_i32_le";
-                                    if ((fn_name == "bitset_set"
-                                        || fn_name == "bitset_clear"
-                                        || fn_name == "buffer_append")
-                                        && args.len() == 1
-                                        || is_bytebuf_setter && args.len() == 2)
+                                    if !self.in_causal_region()
+                                        && ((fn_name == "bitset_set"
+                                            || fn_name == "bitset_clear"
+                                            || fn_name == "buffer_append")
+                                            && args.len() == 1
+                                            || is_bytebuf_setter && args.len() == 2)
                                         && self.current().unique_locals.contains(name)
                                     {
                                         self.compile_expr(left)?;
@@ -282,7 +283,8 @@ impl Compiler {
                                 || (is_bytebuf_setter && args.len() == 3)
                             {
                                 if let Expr::Ident(arg_name, _) = &args[0] {
-                                    if arg_name == name
+                                    if !self.in_causal_region()
+                                        && arg_name == name
                                         && self.current().unique_locals.contains(name)
                                     {
                                         if fn_name == "push" {
@@ -394,7 +396,7 @@ impl Compiler {
                 // single indexed write. Uniqueness guarantees no aliases, so
                 // in-place is observationally identical — and O(1).
                 if let Expr::Ident(name, _) = obj.as_ref() {
-                    if self.current().unique_locals.contains(name) {
+                    if !self.in_causal_region() && self.current().unique_locals.contains(name) {
                         if let Some(slot) = self.resolve_local(name) {
                             self.compile_expr(idx)?;
                             self.compile_expr(&a.value)?;
@@ -650,6 +652,15 @@ impl Compiler {
         } else {
             f
         };
+
+        if self.in_causal_region() && f.bindings.len() == 2 {
+            return Err(CompileError {
+                message: "two-binding map iteration is not available in causal execution v0; iterate keys and index the map"
+                    .to_string(),
+                line,
+                col: f.span.col,
+            });
+        }
 
         self.begin_scope();
 

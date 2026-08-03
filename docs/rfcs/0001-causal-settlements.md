@@ -298,7 +298,11 @@ requires one exact settlement-region state at every control-flow join. Control
 flow cannot enter or leave a settlement region, nest `BeginSettlement`, reach
 an unmatched `EndSettlement`, or terminate while a settlement is active. The
 verified proof is cached on the immutable chunk; the unchecked loader exists
-only in VM tests.
+only in VM tests. Mutable `ChunkBuilder` values never carry a proof. Verification
+consumes a builder and produces a private-content `SealedChunk`, so cloning a
+loaded artifact and returning to construction form discards the certificate and
+requires verification again. Public raw-builder ingress accepts immediate
+constants only; heap-backed constants must arrive with their owning GC bundle.
 
 At runtime, a settlement also records its owning frame, chunk, begin
 instruction, and unique settlement identity. Only that owner may execute its
@@ -307,7 +311,11 @@ effect metadata form a second defense: while a settlement is active, ordinary
 bytecode cannot mutate globals or captured state, perform durable ECS/resource
 writes, run event or schedule work, perform I/O/output, advance RNG/clock state,
 create tasks, or call native/FFI code. Settlement blocks compile their lexical
-bindings into frame-local slots even at top level. Thus malformed or compiler-
+bindings into frame-local slots even at top level. A local slot does not prove
+ownership of its referenced heap object, so all in-place list, bitset, buffer,
+byte-buffer, and iterator mutation is forbidden in causal regions. The compiler
+uses functional replacement lowering there, and proposal/candidate capture
+deep-copies its value graph before retention. Thus malformed or compiler-
 corrupted bytecode cannot turn a skipped settlement boundary into a partial
 live-world mutation.
 
@@ -461,7 +469,12 @@ The experimental feature is complete only when:
 14. every loaded chunk has a deterministic verified control-flow proof; and
 15. malformed bytecode cannot close another frame's settlement or perform a
     durable effect while one is active, and every rejected attempt leaves the
-    VM reusable.
+    VM reusable;
+16. changing code, operands, constants, or line metadata cannot preserve an
+    executable verification certificate; and
+17. no heap object reachable before `BeginSettlement` can be changed through
+    an in-place alias before atomic commit, while captured proposals and
+    candidates remain detached from their source values.
 
 > A settlement is not another schedule. It is a declaration that several
 > causes are simultaneous, and that one explicit semantic owner determines

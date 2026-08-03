@@ -113,6 +113,128 @@ fn verifier_rejects_world_mutation_after_a_jump_over_end_before_loading() {
 }
 
 #[test]
+fn cached_verification_cannot_be_laundered_onto_mutated_chunk_contents() {
+    let mut vm = VM::new();
+    let id = vm
+        .load_verified_chunk(valid_return("certificate-source"))
+        .expect("source chunk should verify");
+    let shared = vm.shared_state();
+    let mut forged = shared.chunks[id].to_builder();
+    forged.code = vec![u8::MAX];
+    forged.lines = vec![1];
+
+    let error = vm
+        .load_verified_chunk(forged)
+        .expect_err("mutated bytes must not retain an executable certificate");
+    assert!(error.message.contains("Invalid opcode"), "{error}");
+}
+
+#[test]
+fn every_verification_relevant_chunk_mutation_requires_a_fresh_proof() {
+    fn rejected(vm: &mut VM, source: &crate::opcode::SealedChunk, mutate: impl FnOnce(&mut Chunk)) {
+        let before = vm.shared_state().chunks.len();
+        let mut forged = source.to_builder();
+        mutate(&mut forged);
+        assert!(
+            vm.load_verified_chunk(forged).is_err(),
+            "mutated construction artifact unexpectedly executed"
+        );
+        assert_eq!(vm.shared_state().chunks.len(), before);
+    }
+
+    let mut vm = VM::new();
+    let mut source = Chunk::new("certificate-mutation-source");
+    source.write_const(Value::NIL, 1);
+    source.write_op(Op::Return, 1);
+    let id = vm.load_verified_chunk(source).expect("source must verify");
+    let sealed = vm.shared_state().chunks[id].clone();
+
+    rejected(&mut vm, &sealed, |chunk| chunk.code[0] = u8::MAX);
+    rejected(&mut vm, &sealed, |chunk| {
+        chunk.code[1] = u8::MAX;
+        chunk.code[2] = u8::MAX;
+    });
+    rejected(&mut vm, &sealed, |chunk| chunk.constants.clear());
+    rejected(&mut vm, &sealed, |chunk| {
+        chunk.code.pop();
+        chunk.lines.pop();
+    });
+    rejected(&mut vm, &sealed, |chunk| {
+        chunk.lines.pop();
+    });
+}
+
+#[test]
+fn safe_raw_chunk_ingress_rejects_unowned_heap_constants() {
+    let mut vm = VM::new();
+    let heap_value = Value::from_string(vm.gc_mut(), "owned-but-untyped".to_string());
+    let mut chunk = Chunk::new("raw-heap-constant");
+    chunk.write_const(heap_value, 1);
+    chunk.write_op(Op::Return, 1);
+
+    let before = vm.shared_state().chunks.len();
+    let error = vm
+        .load_verified_chunk(chunk)
+        .expect_err("safe raw ingress cannot prove heap ownership");
+    assert!(error.message.contains("owning GC bundle"), "{error}");
+    assert_eq!(vm.shared_state().chunks.len(), before);
+}
+
+#[test]
+fn causal_inplace_buffer_mutation_cannot_modify_a_constant_alias() {
+    let mut vm = VM::new();
+    let buffer = Value::buffer(vm.gc_mut(), "seed".to_string());
+    let suffix = Value::from_string(vm.gc_mut(), "-mutated".to_string());
+    let mut chunk = Chunk::new("constant-alias-mutation");
+    chunk.write_op(Op::BeginSettlement, 1);
+    chunk.write_const(buffer, 1);
+    chunk.write_const(suffix, 1);
+    chunk.write_op(Op::BufferAppendInplace, 1);
+    chunk.write_op(Op::Pop, 1);
+    chunk.write_op(Op::EndSettlement, 1);
+    chunk.write_const(Value::NIL, 1);
+    chunk.write_op(Op::Return, 1);
+    let id = vm
+        .load_vm_owned_chunk(chunk)
+        .expect("balanced probe should verify");
+
+    let error = call_chunk(&mut vm, id, "constant-alias")
+        .expect_err("causal in-place heap mutation must be firewalled");
+    assert!(error.contains("interior heap mutation"), "{error}");
+    assert_eq!(buffer.as_buffer().map(String::as_str), Some("seed"));
+}
+
+#[test]
+fn every_interior_mutation_opcode_is_firewalled_in_causal_regions() {
+    let cases = [
+        ("list-push", Op::ListPushLocal, vec![0, 0]),
+        ("list-set", Op::ListSetLocal, vec![0, 0]),
+        ("bitset-set", Op::BitsetSetInplace, vec![]),
+        ("bitset-clear", Op::BitsetClearInplace, vec![]),
+        ("buffer-append", Op::BufferAppendInplace, vec![]),
+        ("bytebuf-u8", Op::ByteBufSetU8Inplace, vec![]),
+        ("bytebuf-u32", Op::ByteBufSetU32LeInplace, vec![]),
+        ("bytebuf-i32", Op::ByteBufSetI32LeInplace, vec![]),
+        ("iterator-progress", Op::IterNext, vec![2]),
+    ];
+    for (name, op, operands) in cases {
+        let mut vm = VM::new();
+        let chunk = vm
+            .load_verified_chunk(balanced_effect_chunk(name, op, &operands))
+            .expect("balanced mutation probe should verify");
+        let callee = callable(&mut vm, chunk, name);
+        seed_observable_state(&mut vm);
+        let before = vm.observable_state_signature();
+        let error = vm
+            .call_value(&callee, Vec::new())
+            .expect_err("interior mutation must be rejected before execution");
+        assert!(error.contains("interior heap mutation"), "{name}: {error}");
+        assert_eq!(vm.observable_state_signature(), before, "{name}");
+        assert_reusable(&mut vm);
+    }
+}
+
+#[test]
 fn unchecked_escape_hits_effect_firewall_before_world_mutation() {
     let cases = [
         ("spawn", Op::EcsSpawn, vec![0, 0, 0, 0]),
@@ -169,7 +291,7 @@ fn callee_cannot_close_a_caller_owned_settlement() {
         },
     );
     let caller = vm
-        .load_verified_chunk(caller_chunk("caller-owner", callee, None))
+        .load_vm_owned_chunk(caller_chunk("caller-owner", callee, None))
         .expect("caller chunk is structurally valid");
     let caller = callable(&mut vm, caller, "caller-owner");
     seed_observable_state(&mut vm);
@@ -197,7 +319,7 @@ fn callee_return_keeps_caller_settlement_active_and_firewalled() {
         },
     );
     let caller = vm
-        .load_verified_chunk(caller_chunk(
+        .load_vm_owned_chunk(caller_chunk(
             "caller-mutates-after-callee",
             callee,
             Some((Op::EcsSpawn, &[0, 0, 0, 0])),
@@ -271,7 +393,7 @@ fn rng_builtin_is_rejected_before_advancing_rng_state() {
     chunk.write_const(Value::NIL, 1);
     chunk.write_op(Op::Return, 1);
     let id = vm
-        .load_verified_chunk(chunk)
+        .load_vm_owned_chunk(chunk)
         .expect("rng firewall probe should verify");
     let callee = callable(&mut vm, id, "rng-firewall");
     seed_observable_state(&mut vm);
@@ -313,5 +435,44 @@ fn fuzz_bytecode_verifier_never_panics_or_changes_its_answer() {
             "verifier result changed for case {case}: {first:?} vs {second:?}"
         );
         assert_eq!(first.err(), second.err());
+    }
+}
+
+#[test]
+fn fuzz_raw_chunk_and_constant_ingress_never_panics() {
+    let iterations = std::env::var("RAD_FUZZ_ITERS")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .unwrap_or(2_000);
+    let mut state = 0x51ea_1edc_a11a_5eed_u64;
+    for case in 0..iterations {
+        let mut next = || {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            state
+        };
+        let mut chunk = Chunk::new(&format!("ingress-fuzz-{case}"));
+        for _ in 0..((next() as usize) & 0x3f) {
+            chunk.code.push(next() as u8);
+            if next() & 7 != 0 {
+                chunk.lines.push((next() & 0xffff) as u32);
+            }
+        }
+        for _ in 0..((next() as usize) & 0x0f) {
+            let value = match next() & 3 {
+                0 => Value::NIL,
+                1 => Value::from_bool(next() & 1 == 1),
+                2 => Value::from_float(f64::from_bits(next())),
+                _ => Value::from_int(&mut crate::value::PersistentStore, (next() as i32) as i64),
+            };
+            chunk.constants.push(value);
+        }
+
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let mut vm = VM::new();
+            vm.load_verified_chunk(chunk)
+        }));
+        assert!(result.is_ok(), "raw ingress panicked for case {case}");
     }
 }

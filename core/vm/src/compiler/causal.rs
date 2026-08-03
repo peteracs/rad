@@ -27,7 +27,8 @@ impl Compiler {
     pub(crate) fn compile_law_decl(&mut self, decl: &LawDecl) -> Result<(), CompileError> {
         self.require_causal_feature(&decl.span)?;
         let name = self.resolve_canonical_name(&decl.name);
-        self.compile_fn_decl(&FnDecl {
+        self.causal_lowering_depth += 1;
+        let result = self.compile_fn_decl(&FnDecl {
             id: decl.id,
             span: decl.span.clone(),
             name,
@@ -41,7 +42,9 @@ impl Compiler {
             is_pure: false,
             is_async: false,
             effects: vec!["readonly".to_string()],
-        })
+        });
+        self.causal_lowering_depth -= 1;
+        result
     }
 
     pub(crate) fn compile_resolver_decl(
@@ -52,7 +55,8 @@ impl Compiler {
         let resolver_name = self.resolve_canonical_name(&decl.name);
         let intent_name = self.resolve_canonical_name(&decl.intent_name);
         let hidden_name = format!("__resolver__{}", resolver_name);
-        self.compile_fn_decl(&FnDecl {
+        self.causal_lowering_depth += 1;
+        let compile_result = self.compile_fn_decl(&FnDecl {
             id: decl.id,
             span: decl.span.clone(),
             name: hidden_name.clone(),
@@ -66,7 +70,9 @@ impl Compiler {
             is_pure: false,
             is_async: false,
             effects: vec!["readonly".to_string()],
-        })?;
+        });
+        self.causal_lowering_depth -= 1;
+        compile_result?;
         let global_slot = self.ensure_global_slot(&hidden_name);
         self.resolvers.push(ResolverChunkInfo {
             name: resolver_name,

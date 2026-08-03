@@ -23,7 +23,7 @@ use std::net::{TcpListener, TcpStream, UdpSocket};
 use crate::arena::BumpArena;
 use crate::compiler::{CompileResult, StateTransitionInfo};
 use crate::gc::GcHeap;
-use crate::opcode::Chunk;
+use crate::opcode::{Chunk, SealedChunk};
 use crate::value::{Builtin, Value};
 use crate::world::{World, WorldSnapshot};
 #[cfg(not(target_arch = "wasm32"))]
@@ -44,25 +44,25 @@ pub(crate) type CaptureCell = *mut crate::gc::CaptureCell;
 pub type ComponentFieldTypes = Arc<HashMap<String, Arc<Vec<(String, crate::types::Ty)>>>>;
 
 #[derive(Clone)]
-pub struct VmSharedState {
-    pub chunks: Arc<Vec<Chunk>>,
-    pub globals: Vec<Value>,
-    pub global_names: Arc<Vec<String>>,
-    pub state_machines: Arc<HashMap<String, HashMap<String, Vec<StateTransitionInfo>>>>,
-    pub event_handlers: Arc<HashMap<String, Vec<HandlerEntry>>>,
-    pub systems: Arc<HashMap<String, SystemRuntimeInfo>>,
-    pub intent_registry: Arc<HashMap<String, IntentRuntimeInfo>>,
-    pub resolver_registry: Arc<HashMap<String, ResolverRuntimeInfo>>,
-    pub component_layouts: Arc<HashMap<String, Arc<Vec<String>>>>,
-    pub component_field_types: ComponentFieldTypes,
+pub(crate) struct VmSharedState {
+    pub(crate) chunks: Arc<Vec<SealedChunk>>,
+    pub(crate) globals: Vec<Value>,
+    pub(crate) global_names: Arc<Vec<String>>,
+    pub(crate) state_machines: Arc<HashMap<String, HashMap<String, Vec<StateTransitionInfo>>>>,
+    pub(crate) event_handlers: Arc<HashMap<String, Vec<HandlerEntry>>>,
+    pub(crate) systems: Arc<HashMap<String, SystemRuntimeInfo>>,
+    pub(crate) intent_registry: Arc<HashMap<String, IntentRuntimeInfo>>,
+    pub(crate) resolver_registry: Arc<HashMap<String, ResolverRuntimeInfo>>,
+    pub(crate) component_layouts: Arc<HashMap<String, Arc<Vec<String>>>>,
+    pub(crate) component_field_types: ComponentFieldTypes,
     /// Declared schema versions (`component X v2`), nonzero entries only
     /// (dogfood feature seq 69 IDEA 03).
-    pub component_versions: Arc<HashMap<String, u32>>,
-    pub variant_layouts: Arc<HashMap<(String, String), Vec<String>>>,
-    pub transient_resources: Arc<HashSet<String>>,
-    pub rng_state: u64,
-    pub suppress_output: bool,
-    pub profile_copies: bool,
+    pub(crate) component_versions: Arc<HashMap<String, u32>>,
+    pub(crate) variant_layouts: Arc<HashMap<(String, String), Vec<String>>>,
+    pub(crate) transient_resources: Arc<HashSet<String>>,
+    pub(crate) rng_state: u64,
+    pub(crate) suppress_output: bool,
+    pub(crate) profile_copies: bool,
 }
 
 pub struct CallFrame {
@@ -150,7 +150,7 @@ pub(crate) enum NetHandle {
 }
 
 pub struct VM {
-    pub(crate) chunks: Arc<Vec<Chunk>>,
+    pub(crate) chunks: Arc<Vec<SealedChunk>>,
     pub(crate) stack: Vec<Value>,
     pub globals: Vec<Value>,
     pub global_names: Arc<Vec<String>>,
@@ -419,11 +419,6 @@ impl VM {
         unsafe { self.gc.sweep(&marked) }
     }
 
-    pub fn fork_for_worker(&self) -> Self {
-        let shared = self.shared_state();
-        Self::from_shared_state(shared)
-    }
-
     #[inline]
     pub(crate) fn allocate_frame_id(&mut self) -> u64 {
         let id = self.next_frame_id;
@@ -438,7 +433,7 @@ impl VM {
         id
     }
 
-    pub fn shared_state(&self) -> VmSharedState {
+    pub(crate) fn shared_state(&self) -> VmSharedState {
         VmSharedState {
             chunks: self.chunks.clone(),
             globals: self.globals.clone(),
@@ -460,13 +455,6 @@ impl VM {
     }
 
     pub(crate) fn from_shared_state(shared: VmSharedState) -> Self {
-        assert!(
-            shared
-                .chunks
-                .iter()
-                .all(|chunk| chunk.verification.is_some()),
-            "internal shared VM state contained unverified bytecode"
-        );
         VM {
             chunks: shared.chunks,
             stack: Vec::with_capacity(1024),
@@ -1019,55 +1007,77 @@ impl VM {
     /// Verify and append host-supplied bytecode. No instruction from an
     /// invalid chunk can execute.
     ///
-    /// Any heap-backed values in `chunk.constants` must already live on
-    /// **this** VM's [`GcHeap`] (same as `self.gc`). If constants were
-    /// allocated on a separate heap (e.g. [`crate::wasm::WasmChunk`]), call
-    /// [`Self::load_verified_chunk_with_gc`] instead.
-    pub fn load_verified_chunk(
-        &mut self,
-        mut chunk: Chunk,
-    ) -> Result<usize, crate::VerificationError> {
-        if chunk.verification.is_none() {
-            let proof = crate::bytecode_verifier::verify_chunk(&chunk)?;
-            chunk.verification = Some(Arc::new(proof));
+    /// This safe raw-builder ingress accepts only immediate constants. Heap
+    /// values carry untyped GC pointers, so accepting them here could not
+    /// prove their ownership or lifetime. Compiler/WASM bundles use the
+    /// explicit owning-heap path below.
+    pub fn load_verified_chunk(&mut self, chunk: Chunk) -> Result<usize, crate::VerificationError> {
+        if let Some(index) = chunk
+            .constants()
+            .iter()
+            .position(|value| value.as_object().is_some())
+        {
+            return Err(crate::VerificationError::at(
+                &chunk,
+                0,
+                format!(
+                    "heap-backed constant {index} requires an owning GC bundle; raw chunk loading accepts immediate constants only"
+                ),
+            ));
         }
+        let chunk = chunk.verify_and_seal()?;
+        Ok(self.load_chunk(chunk))
+    }
+
+    /// Internal ingress for chunks whose constants were allocated directly
+    /// in this VM's heap (tests and VM-owned construction only).
+    #[cfg(test)]
+    pub(crate) fn load_vm_owned_chunk(
+        &mut self,
+        chunk: Chunk,
+    ) -> Result<usize, crate::VerificationError> {
+        let chunk = chunk.verify_and_seal()?;
+        Ok(self.load_chunk(chunk))
+    }
+
+    /// Append an immutable proof-bearing artifact. The bytes and proof cannot
+    /// be separated or mutated through the public type.
+    pub(crate) fn load_chunk(&mut self, chunk: SealedChunk) -> usize {
         let v = Arc::make_mut(&mut self.chunks);
         let id = v.len();
         v.push(chunk);
-        debug_assert!(v[id]
-            .verification
-            .as_ref()
-            .is_some_and(|proof| proof.instruction_count > 0));
-        Ok(id)
-    }
-
-    /// Compatibility spelling for [`Self::load_verified_chunk`].
-    pub fn load_chunk(&mut self, chunk: Chunk) -> Result<usize, crate::VerificationError> {
-        self.load_verified_chunk(chunk)
+        debug_assert!(v[id].instruction_count() > 0);
+        id
     }
 
     /// Verify bytecode before merging its separate constant heap, then append
     /// both atomically from the embedder's perspective.
-    pub fn load_verified_chunk_with_gc(
-        &mut self,
-        mut chunk: Chunk,
-        chunk_gc: GcHeap,
-    ) -> Result<usize, crate::VerificationError> {
-        if chunk.verification.is_none() {
-            let proof = crate::bytecode_verifier::verify_chunk(&chunk)?;
-            chunk.verification = Some(Arc::new(proof));
-        }
-        self.gc.merge(chunk_gc);
-        self.load_verified_chunk(chunk)
-    }
-
-    /// Compatibility spelling for [`Self::load_verified_chunk_with_gc`].
-    pub fn load_chunk_with_gc(
+    /// # Safety
+    ///
+    /// Every heap-backed value reachable from `chunk.constants` must be owned
+    /// by `chunk_gc`. Passing unrelated storage can leave dangling raw object
+    /// pointers after the source allocator is dropped.
+    pub unsafe fn load_verified_chunk_with_gc(
         &mut self,
         chunk: Chunk,
         chunk_gc: GcHeap,
     ) -> Result<usize, crate::VerificationError> {
-        self.load_verified_chunk_with_gc(chunk, chunk_gc)
+        let chunk = chunk.verify_and_seal()?;
+        self.gc.merge(chunk_gc);
+        Ok(self.load_chunk(chunk))
+    }
+
+    /// Compatibility spelling for [`Self::load_verified_chunk_with_gc`].
+    /// # Safety
+    ///
+    /// See [`Self::load_verified_chunk_with_gc`].
+    pub unsafe fn load_chunk_with_gc(
+        &mut self,
+        chunk: Chunk,
+        chunk_gc: GcHeap,
+    ) -> Result<usize, crate::VerificationError> {
+        // SAFETY: forwarded contract is identical to this function's.
+        unsafe { self.load_verified_chunk_with_gc(chunk, chunk_gc) }
     }
 
     /// Runtime-defense tests deliberately bypass the host verifier. This is
@@ -1076,7 +1086,7 @@ impl VM {
     pub(crate) fn load_unchecked_chunk(&mut self, chunk: Chunk) -> usize {
         let chunks = Arc::make_mut(&mut self.chunks);
         let id = chunks.len();
-        chunks.push(chunk);
+        chunks.push(SealedChunk::from_unchecked_for_test(chunk));
         id
     }
 
@@ -1091,13 +1101,14 @@ impl VM {
         // Verify the complete compiler product before mutating VM registries
         // or merging its heap. Compiler corruption is an internal fault; host
         // supplied chunks use the fallible load_verified_chunk API above.
-        for chunk in &mut result.chunks {
-            if chunk.verification.is_none() {
-                let proof = crate::bytecode_verifier::verify_chunk(chunk)
-                    .unwrap_or_else(|error| panic!("compiler produced invalid bytecode: {error}"));
-                chunk.verification = Some(Arc::new(proof));
-            }
-        }
+        let sealed_chunks = std::mem::take(&mut result.chunks)
+            .into_iter()
+            .map(|chunk| {
+                chunk
+                    .verify_and_seal()
+                    .unwrap_or_else(|error| panic!("compiler produced invalid bytecode: {error}"))
+            })
+            .collect::<Vec<_>>();
         self.gc.merge(result.gc);
         {
             let intents = Arc::make_mut(&mut self.intent_registry);
@@ -1222,9 +1233,8 @@ impl VM {
         if self.globals.len() < self.global_names.len() {
             self.globals.resize(self.global_names.len(), Value::NIL);
         }
-        for chunk in result.chunks {
-            self.load_verified_chunk(chunk)
-                .expect("pre-verified compiler chunk must remain valid");
+        for chunk in sealed_chunks {
+            self.load_chunk(chunk);
         }
     }
 

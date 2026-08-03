@@ -122,9 +122,9 @@ impl RadRuntime {
     pub fn load_and_run(&mut self, chunk: WasmChunk) -> Result<String, String> {
         self.output.clear();
         self.vm.print_buffer.clear();
-        let cid = self
-            .vm
-            .load_verified_chunk_with_gc(chunk.inner, chunk.gc)
+        // SAFETY: WasmChunk owns the exact heap used for every heap-backed
+        // constant in `inner`, and both are consumed together here.
+        let cid = unsafe { self.vm.load_verified_chunk_with_gc(chunk.inner, chunk.gc) }
             .map_err(|error| error.to_string())?;
 
         match self.vm.run(cid) {

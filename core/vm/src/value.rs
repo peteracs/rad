@@ -882,7 +882,14 @@ impl Value {
         self.0
     }
 
-    pub fn from_raw(raw: u64) -> Self {
+    /// Reconstruct a value from its raw ABI representation.
+    ///
+    /// # Safety
+    ///
+    /// Object-tagged values contain a raw GC pointer. The caller must prove
+    /// that the pointer was produced by RAD, remains live, and belongs to the
+    /// heap used by every subsequent operation on the returned value.
+    pub unsafe fn from_raw_unchecked(raw: u64) -> Self {
         Self(raw)
     }
 

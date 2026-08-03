@@ -92,7 +92,8 @@ unsafe extern "C" fn api_make_string(s: *const c_char) -> u64 {
 
 #[cfg(not(target_arch = "wasm32"))]
 unsafe extern "C" fn api_as_int(v: u64, out: *mut i64) -> bool {
-    let val = Value::from_raw(v);
+    // SAFETY: C callers may only pass handles produced by this RAD ABI.
+    let val = unsafe { Value::from_raw_unchecked(v) };
     if let Some(i) = val.as_int() {
         if !out.is_null() {
             *out = i;
@@ -105,7 +106,8 @@ unsafe extern "C" fn api_as_int(v: u64, out: *mut i64) -> bool {
 
 #[cfg(not(target_arch = "wasm32"))]
 unsafe extern "C" fn api_as_float(v: u64, out: *mut f64) -> bool {
-    let val = Value::from_raw(v);
+    // SAFETY: C callers may only pass handles produced by this RAD ABI.
+    let val = unsafe { Value::from_raw_unchecked(v) };
     if let Some(f) = val.as_float() {
         if !out.is_null() {
             *out = f;
@@ -118,7 +120,8 @@ unsafe extern "C" fn api_as_float(v: u64, out: *mut f64) -> bool {
 
 #[cfg(not(target_arch = "wasm32"))]
 unsafe extern "C" fn api_as_bool(v: u64, out: *mut bool) -> bool {
-    let val = Value::from_raw(v);
+    // SAFETY: C callers may only pass handles produced by this RAD ABI.
+    let val = unsafe { Value::from_raw_unchecked(v) };
     if let Some(b) = val.as_bool() {
         if !out.is_null() {
             *out = b;
@@ -131,7 +134,8 @@ unsafe extern "C" fn api_as_bool(v: u64, out: *mut bool) -> bool {
 
 #[cfg(not(target_arch = "wasm32"))]
 unsafe extern "C" fn api_as_string_ptr(v: u64) -> *const c_char {
-    let val = Value::from_raw(v);
+    // SAFETY: C callers may only pass handles produced by this RAD ABI.
+    let val = unsafe { Value::from_raw_unchecked(v) };
     if let Some(s) = val.as_str() {
         s.as_ptr() as *const c_char
     } else {
@@ -141,7 +145,8 @@ unsafe extern "C" fn api_as_string_ptr(v: u64) -> *const c_char {
 
 #[cfg(not(target_arch = "wasm32"))]
 unsafe extern "C" fn api_as_string_len(v: u64) -> usize {
-    let val = Value::from_raw(v);
+    // SAFETY: C callers may only pass handles produced by this RAD ABI.
+    let val = unsafe { Value::from_raw_unchecked(v) };
     if let Some(s) = val.as_str() {
         s.len()
     } else {

@@ -258,21 +258,64 @@ impl Op {
     }
 }
 
+/// Mutable bytecode construction artifact. A builder never carries an
+/// executable verification certificate; cloning or editing it therefore
+/// cannot launder an earlier proof onto new bytes.
 #[derive(Clone, Debug)]
-pub struct Chunk {
-    pub code: Vec<u8>,
-    pub constants: Vec<crate::value::Value>,
-    pub lines: Vec<u32>,
-    pub name: String,
+pub struct ChunkBuilder {
+    pub(crate) code: Vec<u8>,
+    pub(crate) constants: Vec<crate::value::Value>,
+    pub(crate) lines: Vec<u32>,
+    pub(crate) name: String,
     dedup: HashMap<ConstKey, u16>,
     str_dedup: HashMap<String, u32>,
     next_str_id: u32,
-    pub(crate) verification: Option<std::sync::Arc<crate::bytecode_verifier::VerifiedChunk>>,
 }
 
-impl Chunk {
+/// Backward-compatible source name for the mutable construction artifact.
+/// VM storage and execution use [`SealedChunk`], never `Chunk`.
+pub type Chunk = ChunkBuilder;
+
+/// Immutable executable bytecode and its inseparable structural proof.
+#[derive(Clone, Debug)]
+pub struct SealedChunk {
+    inner: std::sync::Arc<ChunkBuilder>,
+    proof: std::sync::Arc<crate::bytecode_verifier::VerifiedChunk>,
+}
+
+impl std::ops::Deref for SealedChunk {
+    type Target = ChunkBuilder;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+
+impl SealedChunk {
+    /// Return a mutable construction copy. The verification proof is
+    /// deliberately discarded, so loading the result always reverifies it.
+    pub fn to_builder(&self) -> ChunkBuilder {
+        (*self.inner).clone()
+    }
+
+    pub fn instruction_count(&self) -> usize {
+        self.proof.instruction_count
+    }
+
+    #[cfg(test)]
+    pub(crate) fn from_unchecked_for_test(chunk: ChunkBuilder) -> Self {
+        Self {
+            inner: std::sync::Arc::new(chunk),
+            proof: std::sync::Arc::new(crate::bytecode_verifier::VerifiedChunk {
+                instruction_count: 0,
+            }),
+        }
+    }
+}
+
+impl ChunkBuilder {
     pub fn new(name: &str) -> Self {
-        Chunk {
+        ChunkBuilder {
             code: Vec::new(),
             constants: Vec::new(),
             lines: Vec::new(),
@@ -280,12 +323,10 @@ impl Chunk {
             dedup: HashMap::new(),
             str_dedup: HashMap::new(),
             next_str_id: 0,
-            verification: None,
         }
     }
 
     pub fn write(&mut self, byte: u8, line: u32) {
-        self.verification = None;
         self.code.push(byte);
         self.lines.push(line);
     }
@@ -358,5 +399,31 @@ impl Chunk {
         let idx = self.add_constant(value);
         self.write_op(Op::Const, line);
         self.write_u16(idx, line);
+    }
+
+    pub fn code(&self) -> &[u8] {
+        &self.code
+    }
+
+    pub fn constants(&self) -> &[crate::value::Value] {
+        &self.constants
+    }
+
+    pub fn lines(&self) -> &[u32] {
+        &self.lines
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub(crate) fn verify_and_seal(
+        self,
+    ) -> Result<SealedChunk, crate::bytecode_verifier::VerificationError> {
+        let proof = crate::bytecode_verifier::verify_chunk(&self)?;
+        Ok(SealedChunk {
+            inner: std::sync::Arc::new(self),
+            proof: std::sync::Arc::new(proof),
+        })
     }
 }

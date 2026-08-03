@@ -1772,7 +1772,9 @@ impl VM {
             if let Some(err) = crate::ffi::take_native_error() {
                 return Err(err);
             }
-            self.push(Value::from_raw(result_raw));
+            // SAFETY: the native ABI contract requires returned raw object
+            // values to remain owned by the registered native-value heap.
+            self.push(unsafe { Value::from_raw_unchecked(result_raw) });
         } else {
             return Err(format!("Not callable: {}", callee.type_name()));
         }
@@ -3282,7 +3284,9 @@ impl VM {
             if let Some(err) = crate::ffi::take_native_error() {
                 return Err(err);
             }
-            Ok(Value::from_raw(result_raw))
+            // SAFETY: the native ABI contract requires returned raw object
+            // values to remain owned by the registered native-value heap.
+            Ok(unsafe { Value::from_raw_unchecked(result_raw) })
         } else {
             Err(format!("Not callable: {}", callee.type_name()))
         }

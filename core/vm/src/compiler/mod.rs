@@ -260,8 +260,14 @@ pub struct Compiler {
     /// Pipeline loop-fusion is only stack-safe where the operand stack
     /// is empty (statement roots). Granted by the statement compiler,
     /// consumed by the immediate expression; nested expressions never
-    /// see it. The vectorized path is exempt (global accumulator).
+    /// see it. The vectorized path uses a global accumulator and is therefore
+    /// disabled while causal lowering is active.
     pub(crate) allow_pipe_fusion: bool,
+    /// Function bodies declared as laws/resolvers are compiled outside the
+    /// lexical `settle` block that eventually invokes them.  This depth keeps
+    /// causal lowering conservative in those bodies as well: no optimizer may
+    /// emit an opcode that performs in-place heap/interior mutation.
+    pub(crate) causal_lowering_depth: usize,
 }
 
 impl Compiler {
@@ -353,7 +359,15 @@ impl Compiler {
             declared_systems: std::collections::HashSet::new(),
             checker_output: None,
             allow_pipe_fusion: false,
+            causal_lowering_depth: 0,
         }
+    }
+
+    pub(crate) fn in_causal_region(&self) -> bool {
+        self.functions
+            .last()
+            .is_some_and(|scope| scope.settlement_depth > 0)
+            || self.causal_lowering_depth > 0
     }
 
     pub fn with_release(mut self, release: bool) -> Self {

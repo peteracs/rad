@@ -16,7 +16,7 @@ pub struct VerificationError {
 }
 
 impl VerificationError {
-    fn at(chunk: &Chunk, offset: usize, message: impl Into<String>) -> Self {
+    pub(crate) fn at(chunk: &Chunk, offset: usize, message: impl Into<String>) -> Self {
         Self {
             chunk: chunk.name.clone(),
             offset,

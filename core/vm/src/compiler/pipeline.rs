@@ -114,9 +114,23 @@ impl Compiler {
         }
 
         // We have the final item in `item_slot`. Push it to the result list.
-        self.emit_get_local(item_slot, line);
-        self.emit_op(Op::ListPushLocal, line);
-        self.emit_u16(result_slot, line);
+        if self.in_causal_region() {
+            // Functional append: causal execution cannot infer ownership from
+            // a local pointer slot, so it must never emit ListPushLocal.
+            self.emit_get_local(result_slot, line);
+            self.emit_get_local(item_slot, line);
+            let push_slot = self.ensure_global_slot("push");
+            self.emit_op(Op::GetGlobal, line);
+            self.emit_u16(push_slot, line);
+            self.emit_op(Op::Call, line);
+            self.emit_byte(2, line);
+            self.emit_op(Op::SetLocal, line);
+            self.emit_u16(result_slot, line);
+        } else {
+            self.emit_get_local(item_slot, line);
+            self.emit_op(Op::ListPushLocal, line);
+            self.emit_u16(result_slot, line);
+        }
 
         // Patch skip holes (from filter)
         let continue_target = self.current_offset();

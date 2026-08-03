@@ -4,6 +4,7 @@ pub mod builtins;
 mod bytecode_verifier;
 pub use bytecode_verifier::VerificationError;
 mod bytecode_effects;
+mod causal_value;
 pub mod causality;
 pub mod merge;
 pub mod radpack;

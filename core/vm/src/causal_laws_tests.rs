@@ -109,6 +109,78 @@ settle {
 }
 
 #[test]
+fn causal_lowering_uses_functional_values_instead_of_inplace_heap_ops() {
+    let source = r#"
+settle {
+    let unique mut xs = []
+    xs = push(xs, 1)
+    xs[0] = 2
+    let mapped = xs |> map(fn(value) { value + 1 })
+    let _ = mapped[0]
+}
+"#;
+    let mut vm = compile_vm(source);
+    vm.run(0)
+        .expect("causal scratch computation must use functional lowering");
+    for op in [
+        Op::ListPushLocal,
+        Op::ListSetLocal,
+        Op::BitsetSetInplace,
+        Op::BitsetClearInplace,
+        Op::BufferAppendInplace,
+        Op::ByteBufSetU8Inplace,
+        Op::ByteBufSetU32LeInplace,
+        Op::ByteBufSetI32LeInplace,
+        Op::IterNext,
+    ] {
+        assert_eq!(
+            vm.op_counts[op as usize], 0,
+            "causal compiler executed forbidden opcode {op:?}"
+        );
+    }
+}
+
+#[test]
+fn causal_lowering_rejects_heap_backed_map_iterators() {
+    let source = r#"
+settle {
+    let values = { "a": 1 }
+    for key, value in values {
+        let _ = key
+        let _ = value
+    }
+}
+"#;
+    let mut lexer = Lexer::new(source);
+    let (tokens, lex_errors) = lexer.tokenize();
+    assert!(lex_errors.is_empty(), "lex errors: {lex_errors:?}");
+    let mut parser = Parser::new(tokens);
+    let program = parser.parse();
+    assert!(
+        parser.errors().is_empty(),
+        "parse errors: {:?}",
+        parser.errors()
+    );
+    let mut checker = Checker::new_with_options(CheckerOptions {
+        features: vec![FEATURE.to_string()],
+        ..CheckerOptions::default()
+    });
+    let errors = checker.check(&program);
+    assert!(errors.is_empty(), "check errors: {errors:?}");
+    let error = Compiler::new()
+        .with_checker_output(checker.output())
+        .with_features(vec![FEATURE.to_string()])
+        .compile(&program)
+        .expect_err("causal map iterator needs mutable heap cursor state");
+    assert!(
+        error
+            .message
+            .contains("two-binding map iteration is not available in causal execution v0"),
+        "{error:?}"
+    );
+}
+
+#[test]
 fn compiler_rejects_cross_settlement_loop_escape_without_checker_output() {
     let source = "while true { settle { break } }";
     let mut lexer = Lexer::new(source);

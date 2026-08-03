@@ -506,7 +506,7 @@ impl Compiler {
             Expr::Pipe(_, _, span) => {
                 let line = span.line;
                 if let Some((source, steps)) = Self::try_collect_fusable_pipe(expr) {
-                    if Self::can_vectorize_pipeline(&steps) {
+                    if !self.in_causal_region() && Self::can_vectorize_pipeline(&steps) {
                         // safe anywhere: accumulator is a global slot
                         self.compile_vectorized_pipeline(source, &steps, line)?;
                     } else if pipe_fusion_ok {
