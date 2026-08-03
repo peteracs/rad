@@ -50,7 +50,9 @@ impl Parser {
         if self.check_ident_text("next") && self.peek_at(1).ty == TokenType::LParen {
             return self.parse_next();
         }
-        if self.check_ident_text("require") {
+        if self.check_ident_text("require")
+            && (self.constraint_depth > 0 || self.peek_at(1).ty != TokenType::LParen)
+        {
             return self.parse_require();
         }
         if self.check(TokenType::Let) {

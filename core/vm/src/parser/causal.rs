@@ -117,7 +117,10 @@ impl Parser {
                 self.advance();
             }
         }
-        let body = self.parse_block()?;
+        self.constraint_depth += 1;
+        let body = self.parse_block();
+        self.constraint_depth -= 1;
+        let body = body?;
         Ok(ConstraintDecl {
             id: self.next_id(),
             span,

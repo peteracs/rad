@@ -31,6 +31,7 @@ pub struct Parser {
     file_id: Option<FileId>,
     options: ParserOptions,
     suppress_braced_init: bool,
+    constraint_depth: usize,
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -52,6 +53,7 @@ impl Parser {
             file_id: None,
             options: ParserOptions::default(),
             suppress_braced_init: false,
+            constraint_depth: 0,
         }
     }
 
