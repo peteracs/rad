@@ -7028,37 +7028,13 @@ pub(crate) fn bi_slice(gc: &mut GcHeap, mut args: Vec<Value>) -> Result<Value, S
 }
 
 pub(crate) fn bi_range(gc: &mut GcHeap, args: Vec<Value>) -> Result<Value, String> {
-    if args.is_empty() {
-        return Err("range() requires at least 1 argument".into());
-    }
-    let (start, end, step) = match args.len() {
-        1 => (0i64, args[0].as_int().ok_or("range() expects int")?, 1i64),
-        2 => (
-            args[0].as_int().ok_or("range() expects int")?,
-            args[1].as_int().ok_or("range() expects int")?,
-            1i64,
-        ),
-        _ => (
-            args[0].as_int().ok_or("range() expects int")?,
-            args[1].as_int().ok_or("range() expects int")?,
-            args[2].as_int().ok_or("range() expects int")?,
-        ),
-    };
-    if step == 0 {
-        return Err("range() step cannot be zero".into());
-    }
+    let plan = super::range_plan::RangePlan::from_args(&args)?;
     let mut result = Vec::new();
-    let mut i = start;
-    if step > 0 {
-        while i < end {
-            result.push(Value::from_int(gc, i));
-            i += step;
-        }
-    } else {
-        while i > end {
-            result.push(Value::from_int(gc, i));
-            i += step;
-        }
+    result
+        .try_reserve_exact(plan.count)
+        .map_err(|_| "range() result is too large to allocate".to_string())?;
+    for index in 0..plan.count {
+        result.push(Value::from_int(gc, plan.value_at(index)?));
     }
     Ok(Value::list(gc, result))
 }

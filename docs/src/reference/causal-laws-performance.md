@@ -112,3 +112,12 @@ deltas alone missed. Callback helpers including `find`, `max_by`, `min_by`, and
 `reduce` remain unavailable in constraints until their native materialization
 cost has the same mechanical upper-bound evidence; ordinary RAD code is
 unchanged.
+
+Whitelist admission comes from a proof registry: every entry names its proof
+class and boundary-suite identity. Fixed/text-scan and dynamic proof classes
+must each have complete peak-allocation cases, so adding a whitelist entry
+without test coverage fails the registry suite. `range` is planned once with
+checked widened arithmetic; pricing and execution consume the same exact
+element count, and execution generates that many values rather than using an
+overflow-prone incremental loop. Boundary plans cover `i64::MIN`, `i64::MAX`,
+and `step = i64::MIN` in normal and release soundness gates.

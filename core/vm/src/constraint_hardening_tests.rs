@@ -622,3 +622,101 @@ fn observational_attempt_replay_fails_closed_on_host_effects() {
         .expect_err("observational replay must not execute host effects");
     assert!(error.contains("irreversible host effect"), "{error}");
 }
+
+#[test]
+fn failed_attempt_replay_preserves_main_timeline_emit_after_semantics() {
+    let source = r#"
+event Ping {}
+component Position { x: int = 0 }
+intent Move { key target: entity, amount: int }
+law Push(target: entity) { propose Move { target: target, amount: 1 } }
+resolver ResolveMove for Move(target, proposals) {
+    next(target, Position { x: proposals[0].amount })
+}
+constraint Reject for Position(subject, proposed) {
+    require false else "position.rejected"
+}
+entity hero { Position {} }
+fn attempt() {
+    emit Ping {} after 1
+    settle { Push(hero) }
+}
+"#;
+    let mut vm = compile_vm(source);
+    vm.run(0).expect("initialize replay-role program");
+    let crate::constraint_types::SettlementAttemptOutcome::Rejected(attempt) = vm
+        .call_global_attempt("attempt", &[])
+        .expect("main-timeline emit-after must reach the rejecting settlement")
+    else {
+        panic!("attempt must reject")
+    };
+    assert_eq!(vm.delayed_events.len(), 1);
+    let parent_before_replay = vm.observable_state_signature();
+
+    let replayed = vm
+        .replay_failed_attempt(&attempt)
+        .expect("replay must retain main-timeline event semantics");
+    assert_eq!(
+        replayed
+            .canonical_bytes(vm.constraint_limit_profile())
+            .unwrap(),
+        attempt
+            .rejection
+            .canonical_bytes(vm.constraint_limit_profile())
+            .unwrap()
+    );
+    assert_eq!(parent_before_replay, vm.observable_state_signature());
+}
+
+#[test]
+fn public_attempt_recording_rejects_worker_execution_role() {
+    let main = VM::new_with_seed(7);
+    let mut worker = VM::from_shared_state(main.shared_state());
+    let error = worker
+        .call_global_attempt("missing", &[])
+        .expect_err("worker attempts are not authoritative replay roots");
+    assert!(error.to_string().contains("main-timeline"), "{error}");
+}
+
+#[test]
+fn checkpoint_digest_tracks_replay_semantic_execution_fields() {
+    let source = r#"
+event Ping {}
+on Ping once(e) {}
+"#;
+    let mut vm = compile_vm(source);
+    vm.run(0)
+        .expect("initialize checkpoint sensitivity program");
+    let baseline = vm.attempt_checkpoint_digest();
+
+    vm.is_worker = true;
+    assert_ne!(baseline, vm.attempt_checkpoint_digest());
+    vm.is_worker = false;
+
+    vm.serial_schedule = true;
+    assert_ne!(baseline, vm.attempt_checkpoint_digest());
+    vm.serial_schedule = false;
+
+    vm.trace_timeline = true;
+    assert_ne!(baseline, vm.attempt_checkpoint_digest());
+    vm.trace_timeline = false;
+
+    vm.current_trace_id = Some(41);
+    assert_ne!(baseline, vm.attempt_checkpoint_digest());
+    vm.current_trace_id = None;
+
+    vm.in_simulation_fork = 1;
+    assert_ne!(baseline, vm.attempt_checkpoint_digest());
+    vm.in_simulation_fork = 0;
+
+    vm.emit_ids_current.push(7);
+    assert_ne!(baseline, vm.attempt_checkpoint_digest());
+    vm.emit_ids_current.clear();
+    vm.emit_ids_next.push(8);
+    assert_ne!(baseline, vm.attempt_checkpoint_digest());
+    vm.emit_ids_next.clear();
+
+    let handlers = std::sync::Arc::make_mut(&mut vm.event_handlers);
+    handlers.get_mut("Ping").unwrap()[0].fired = true;
+    assert_ne!(baseline, vm.attempt_checkpoint_digest());
+}

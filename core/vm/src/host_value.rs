@@ -798,23 +798,30 @@ impl VM {
     }
 
     pub(crate) fn detached_attempt_replay_vm(&self) -> Result<VM, String> {
+        let state = crate::vm::attempt_replay::AttemptReplayState::capture(self);
+        self.detached_attempt_replay_vm_from(&state)
+    }
+
+    pub(crate) fn detached_attempt_replay_vm_from(
+        &self,
+        state: &crate::vm::attempt_replay::AttemptReplayState,
+    ) -> Result<VM, String> {
         let mut replay = VM::from_shared_state(self.shared_state());
 
         // Clone every mutable heap root as one graph. This preserves sharing
         // and cycles inside the child while replacing every closure capture
         // cell. Constant pools are included because a malformed or legacy
         // pre-settlement path must not mutate a parent-owned constant alias.
-        let layout = self.replay_root_layout();
-        let roots = layout.roots;
-        let chunk_constant_counts = layout.chunk_constant_counts;
-        let completed_tasks = layout.completed_tasks;
+        let roots = state.root_layout.roots.clone();
+        let chunk_constant_counts = state.root_layout.chunk_constant_counts.clone();
+        let completed_tasks = state.root_layout.completed_tasks.clone();
 
         let cloned =
             crate::vm::replay_clone::VmForkCloneContext::new(&mut replay.gc).clone_roots(&roots)?;
         let mut cloned = cloned.into_iter();
-        replay.globals = cloned.by_ref().take(self.globals.len()).collect();
-        let mut child_chunks = Vec::with_capacity(self.chunks.len());
-        for (chunk, constant_count) in self.chunks.iter().zip(chunk_constant_counts) {
+        replay.globals = cloned.by_ref().take(state.global_count).collect();
+        let mut child_chunks = Vec::with_capacity(state.chunks.len());
+        for (chunk, constant_count) in state.chunks.iter().zip(chunk_constant_counts) {
             let constants = cloned.by_ref().take(constant_count).collect::<Vec<_>>();
             child_chunks.push(
                 chunk.reseal_with_constants(constants).map_err(|error| {
@@ -829,39 +836,29 @@ impl VM {
                 .next()
                 .ok_or_else(|| "replay graph clone produced too few values".to_string())
         };
-        replay.events_current = self
+        replay.events_current = state
             .events_current
             .iter()
-            .map(|(name, _, id)| Ok((name.clone(), next_value()?, *id)))
+            .map(|(name, id)| Ok((name.clone(), next_value()?, *id)))
             .collect::<Result<Vec<_>, String>>()?;
-        replay.events_next = self
+        replay.events_next = state
             .events_next
             .iter()
-            .map(|(name, _, id)| Ok((name.clone(), next_value()?, *id)))
+            .map(|(name, id)| Ok((name.clone(), next_value()?, *id)))
             .collect::<Result<Vec<_>, String>>()?;
-        replay.events_processing = self
+        replay.events_processing = state
             .events_processing
             .iter()
-            .map(|(name, _, id)| Ok((name.clone(), next_value()?, *id)))
+            .map(|(name, id)| Ok((name.clone(), next_value()?, *id)))
             .collect::<Result<Vec<_>, String>>()?;
-        replay.delayed_events = self
+        replay.delayed_events = state
             .delayed_events
             .iter()
-            .map(|(delay, name, _, id)| Ok((*delay, name.clone(), next_value()?, *id)))
+            .map(|(delay, name, id)| Ok((*delay, name.clone(), next_value()?, *id)))
             .collect::<Result<Vec<_>, String>>()?;
-        replay.event_log = self
-            .event_log
-            .iter()
-            .map(|entry| {
-                Ok(crate::vm::EventLogEntry {
-                    tick: entry.tick,
-                    event_name: entry.event_name.clone(),
-                    payload: next_value()?,
-                })
-            })
-            .collect::<Result<Vec<_>, String>>()?;
+        replay.event_log = state.rebuild_event_log(&mut next_value)?;
 
-        replay.tasks = self.tasks.clone();
+        replay.tasks = state.tasks.clone();
         for (id, _) in completed_tasks {
             let task = replay
                 .tasks
@@ -873,36 +870,7 @@ impl VM {
             return Err("replay graph clone produced unexpected extra values".into());
         }
 
-        replay.world.restore(self.world.snapshot());
-        replay.next_frame_id = self.next_frame_id;
-        replay.next_settlement_id = self.next_settlement_id;
-        replay.indexed_decl = self.indexed_decl.clone();
-        replay.migrations = self.migrations.clone();
-        replay.sandbox_caps = self.sandbox_caps.clone();
-        replay.sys_args = self.sys_args.clone();
-        replay.print_buffer = self.print_buffer.clone();
-        replay.eprint_buffer = self.eprint_buffer.clone();
-        replay.trace_timeline = self.trace_timeline;
-        replay.trace_patch = self.trace_patch.clone();
-        replay.timeline = self.timeline.clone();
-        replay.fuel = self.fuel;
-        replay.mem_limit = self.mem_limit;
-        replay.rng_state = self.rng_state;
-        replay.current_cause = self.current_cause.clone();
-        replay.causality_frame = self.causality_frame;
-        replay.ledger = self.ledger.clone();
-        replay.emit_ids_current = self.emit_ids_current.clone();
-        replay.emit_ids_next = self.emit_ids_next.clone();
-        replay.next_task_id = self.next_task_id;
-        replay.current_trace_id = self.current_trace_id;
-        replay.next_trace_id = self.next_trace_id;
-        replay.in_simulation_fork = self.in_simulation_fork;
-        replay.sandbox_input_json = self.sandbox_input_json.clone();
-        replay.sandbox_output_json = self.sandbox_output_json.clone();
-        replay.last_sandbox_output_json = self.last_sandbox_output_json.clone();
-        replay.last_sandbox_fuel_spent = self.last_sandbox_fuel_spent;
-        replay.once_guard_passed = self.once_guard_passed;
-        replay.serial_schedule = self.serial_schedule;
+        state.apply_to(&mut replay);
         replay.suppress_output = true;
         replay.observational_attempt_replay = true;
         Ok(replay)

@@ -52,6 +52,16 @@ jobs:
           cargo +nightly miri test -p rad-vm
           replay_graph_preserves_child_aliases_cycles_and_shared_captures
           --no-default-features -- --nocapture
+      - name: Miri checked range boundary
+        run: >-
+          cargo +nightly miri test -p rad-vm
+          boundary_ranges_are_finite_and_exact
+          --no-default-features -- --nocapture
+      - name: Miri replay execution role
+        run: >-
+          cargo +nightly miri test -p rad-vm
+          failed_attempt_replay_preserves_main_timeline_emit_after_semantics
+          --no-default-features -- --nocapture
 
   fuzz-gate:
     runs-on: ubuntu-latest
@@ -73,6 +83,13 @@ jobs:
         env:
           RAD_FUZZ_ITERS: "2000"
         run: cargo test -p rad-vm --release fuzz_ -- --nocapture
+      - name: Release-mode checked range and replay boundary
+        run: |
+          timeout 60s cargo test -p rad-vm --release \
+            range_plan::tests -- --nocapture
+          cargo test -p rad-vm --release \
+            failed_attempt_replay_preserves_main_timeline_emit_after_semantics \
+            -- --nocapture
       - name: Upload findings (if any)
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -114,6 +131,13 @@ jobs:
           cargo +nightly test -p rad-vm --release \
             -Zbuild-std --target x86_64-unknown-linux-gnu \
             replay_graph_preserves_child_aliases_cycles_and_shared_captures \
+            -- --nocapture
+          cargo +nightly test -p rad-vm --release \
+            -Zbuild-std --target x86_64-unknown-linux-gnu \
+            range_plan::tests -- --nocapture
+          cargo +nightly test -p rad-vm --release \
+            -Zbuild-std --target x86_64-unknown-linux-gnu \
+            failed_attempt_replay_preserves_main_timeline_emit_after_semantics \
             -- --nocapture
       - name: Upload findings (if any)
         if: failure()

@@ -14,42 +14,82 @@ pub(crate) struct BuiltinResourceCharge {
     pub(crate) heap: usize,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum NativeProofClass {
+    Fixed,
+    Filled,
+    Range,
+    Bitset,
+    Replace,
+    TextScan,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct NativeContract {
+    builtin: Builtin,
+    proof_id: &'static str,
+    proof_class: NativeProofClass,
+}
+
+macro_rules! native_contracts {
+    ($(($builtin:ident, $proof:literal, $class:ident)),+ $(,)?) => {
+        const NATIVE_CONTRACTS: &[NativeContract] = &[
+            $(NativeContract {
+                builtin: Builtin::$builtin,
+                proof_id: $proof,
+                proof_class: NativeProofClass::$class,
+            }),+
+        ];
+    };
+}
+
+// Admission is generated from proof records rather than a second whitelist.
+// Adding a constraint-safe native therefore requires a named proof class and
+// makes the boundary/peak/work suite fail until that class supplies cases.
+native_contracts!(
+    (Filled, "filled.v1", Filled),
+    (Range, "range.checked-plan.v2", Range),
+    (BitsetNew, "bitset.fixed.v1", Fixed),
+    (BitsetSet, "bitset.resize.v2", Bitset),
+    (BitsetClear, "bitset.clone.v2", Bitset),
+    (Replace, "replace.utf8.v2", Replace),
+    (Abs, "numeric.fixed.v1", Fixed),
+    (Sign, "numeric.fixed.v1", Fixed),
+    (Min, "numeric.fixed.v1", Fixed),
+    (Max, "numeric.fixed.v1", Fixed),
+    (Chr, "unicode.scalar.v1", Fixed),
+    (Ord, "unicode.scalar.v1", Fixed),
+    (IntDiv, "numeric.fixed.v1", Fixed),
+    (Popcount, "bit.fixed.v1", Fixed),
+    (Ctz, "bit.fixed.v1", Fixed),
+    (Shl, "bit.fixed.v1", Fixed),
+    (Shr, "bit.fixed.v1", Fixed),
+    (Clamp, "numeric.fixed.v1", Fixed),
+    (Round, "float.fixed.v1", Fixed),
+    (Floor, "float.fixed.v1", Fixed),
+    (Ceil, "float.fixed.v1", Fixed),
+    (Sqrt, "float.fixed.v1", Fixed),
+    (Pow, "float.libm.v1", Fixed),
+    (ByteAt, "bytes.fixed.v1", Fixed),
+    (ByteLen, "bytes.fixed.v1", Fixed),
+    (BitsetHas, "bitset.fixed.v1", Fixed),
+    (Len, "collection.scan.v1", TextScan),
+    (StartsWith, "text.scan.v1", TextScan),
+    (EndsWith, "text.scan.v1", TextScan),
+);
+
+fn native_contract(builtin: Builtin) -> Option<&'static NativeContract> {
+    NATIVE_CONTRACTS
+        .iter()
+        .find(|contract| contract.builtin == builtin)
+}
+
 /// Closed RFC-0002 native whitelist. Admission is intentionally independent
 /// of argument shape: an unsupported builtin cannot smuggle itself through a
 /// cheap error branch and then receive different legal arguments at runtime.
+#[cfg(test)]
 fn has_mechanically_checked_contract(builtin: Builtin) -> bool {
-    matches!(
-        builtin,
-        Builtin::Filled
-            | Builtin::Range
-            | Builtin::BitsetNew
-            | Builtin::BitsetSet
-            | Builtin::BitsetClear
-            | Builtin::Replace
-            | Builtin::Abs
-            | Builtin::Sign
-            | Builtin::Min
-            | Builtin::Max
-            | Builtin::Chr
-            | Builtin::Ord
-            | Builtin::IntDiv
-            | Builtin::Popcount
-            | Builtin::Ctz
-            | Builtin::Shl
-            | Builtin::Shr
-            | Builtin::Clamp
-            | Builtin::Round
-            | Builtin::Floor
-            | Builtin::Ceil
-            | Builtin::Sqrt
-            | Builtin::Pow
-            | Builtin::ByteAt
-            | Builtin::ByteLen
-            | Builtin::BitsetHas
-            | Builtin::Len
-            | Builtin::StartsWith
-            | Builtin::EndsWith
-    )
+    native_contract(builtin).is_some()
 }
 
 /// Price constraint-safe builtins before they execute. Builtins with an
@@ -61,12 +101,14 @@ pub(crate) fn builtin_resource_charge(
     builtin: Builtin,
     args: &[Value],
 ) -> Result<BuiltinResourceCharge, String> {
-    if !has_mechanically_checked_contract(builtin) {
+    let Some(contract) = native_contract(builtin) else {
         return Err(format!(
             "constraint builtin '{}' has no mechanically verified native resource upper bound",
             builtin.name()
         ));
-    }
+    };
+    debug_assert!(!contract.proof_id.is_empty());
+    let _proof_class = contract.proof_class;
     let object = std::mem::size_of::<Object>();
     let values = |count: usize| {
         count
@@ -108,33 +150,16 @@ pub(crate) fn builtin_resource_charge(
             sized(count.max(1), values(count))
         }
         Builtin::Range => {
-            let ints = args.iter().map(Value::as_int).collect::<Option<Vec<_>>>();
-            ints.and_then(|ints| {
-                let (start, end, step) = match ints.as_slice() {
-                    [end] => (0i128, *end as i128, 1i128),
-                    [start, end] => (*start as i128, *end as i128, 1i128),
-                    [start, end, step, ..] => (*start as i128, *end as i128, *step as i128),
-                    _ => return None,
-                };
-                if step == 0 {
-                    return None;
-                }
-                let distance = if step > 0 {
-                    end.saturating_sub(start)
-                } else {
-                    start.saturating_sub(end)
-                };
-                let count = if distance <= 0 {
-                    0
-                } else {
-                    usize::try_from((distance - 1) / step.abs() + 1).unwrap_or(usize::MAX)
-                };
-                Some(sized(
-                    count.max(1),
-                    values(count).saturating_add(count.saturating_mul(object)),
-                ))
-            })
-            .unwrap_or_else(fixed)
+            let plan = super::range_plan::RangePlan::from_args(args)?;
+            // Every generated i64 may leave the immediate NaN-box range and
+            // become a GC BigInt with its own limb allocation. Charge a
+            // deliberately conservative fixed envelope per element in
+            // addition to the result Vec and list object.
+            let integer_object = object.saturating_mul(4).saturating_add(128);
+            sized(
+                plan.count.max(1),
+                values(plan.count).saturating_add(plan.count.saturating_mul(integer_object)),
+            )
         }
         Builtin::ByteBufNew => {
             let count = count_arg(0).unwrap_or(0);
@@ -700,7 +725,10 @@ impl ConstraintOutcomeMeter {
 
 #[cfg(test)]
 mod resource_contract_tests {
-    use super::{builtin_resource_charge, has_mechanically_checked_contract};
+    use super::{
+        builtin_resource_charge, has_mechanically_checked_contract, NativeProofClass,
+        NATIVE_CONTRACTS,
+    };
     use crate::gc::GcHeap;
     use crate::leak_lab::measure_peak_bytes;
     use crate::value::{Builtin, Object, Value};
@@ -749,6 +777,10 @@ mod resource_contract_tests {
             .map(Builtin::name)
             .collect::<BTreeSet<_>>();
         assert_eq!(actual, expected);
+        assert_eq!(NATIVE_CONTRACTS.len(), expected.len());
+        assert!(NATIVE_CONTRACTS
+            .iter()
+            .all(|contract| !contract.proof_id.is_empty()));
     }
 
     #[test]
@@ -773,6 +805,7 @@ mod resource_contract_tests {
     #[test]
     fn admitted_dynamic_contracts_dominate_measured_native_peak() {
         let mut gc = GcHeap::new();
+        let mut covered = BTreeSet::new();
 
         let filled_args = vec![Value::int(16_384), Value::int(7)];
         let filled_quote = builtin_resource_charge(Builtin::Filled, &filled_args).unwrap();
@@ -783,6 +816,7 @@ mod resource_contract_tests {
             filled_quote.heap
         );
         let _ = filled;
+        covered.insert(Builtin::Filled.name());
 
         let range_args = vec![Value::int(0), Value::int(16_384)];
         let range_quote = builtin_resource_charge(Builtin::Range, &range_args).unwrap();
@@ -793,6 +827,26 @@ mod resource_contract_tests {
             range_quote.heap
         );
         let _ = range;
+        covered.insert(Builtin::Range.name());
+
+        for values in [
+            [i64::MAX - 1, i64::MAX, 2],
+            [i64::MIN + 1, i64::MIN, -2],
+            [i64::MAX, i64::MIN, i64::MIN],
+        ] {
+            let range_args = values
+                .into_iter()
+                .map(|value| Value::from_int(&mut gc, value))
+                .collect::<Vec<_>>();
+            let quote = builtin_resource_charge(Builtin::Range, &range_args).unwrap();
+            let (result, peak) = measure_peak_bytes(|| bi_range(&mut gc, range_args).unwrap());
+            assert!(
+                peak <= quote.heap,
+                "boundary range: {peak} > {}",
+                quote.heap
+            );
+            assert_eq!(result.as_list().unwrap().len() as u64, quote.fuel);
+        }
 
         let bitset = Value::bitset(&mut gc, vec![u64::MAX; 4_096]);
         let bitset_args = vec![bitset, Value::int(65_536)];
@@ -805,6 +859,19 @@ mod resource_contract_tests {
             bitset_quote.heap
         );
         let _ = bitset_result;
+        covered.insert(Builtin::BitsetSet.name());
+
+        let clear_args = vec![bitset, Value::int(0)];
+        let clear_quote = builtin_resource_charge(Builtin::BitsetClear, &clear_args).unwrap();
+        let (clear_result, clear_peak) =
+            measure_peak_bytes(|| bi_bitset_clear(&mut gc, clear_args).unwrap());
+        assert!(
+            clear_peak <= clear_quote.heap,
+            "bitset_clear: {clear_peak} > {}",
+            clear_quote.heap
+        );
+        let _ = clear_result;
+        covered.insert(Builtin::BitsetClear.name());
 
         let replace_args = vec![
             Value::from_string(&mut gc, "a".repeat(8_192)),
@@ -820,6 +887,22 @@ mod resource_contract_tests {
             replace_quote.heap
         );
         let _ = replace_result;
+        covered.insert(Builtin::Replace.name());
+
+        let required = NATIVE_CONTRACTS
+            .iter()
+            .filter(|contract| {
+                !matches!(
+                    contract.proof_class,
+                    NativeProofClass::Fixed | NativeProofClass::TextScan
+                )
+            })
+            .map(|contract| contract.builtin.name())
+            .collect::<BTreeSet<_>>();
+        assert_eq!(
+            covered, required,
+            "every dynamic proof class needs a peak case"
+        );
     }
 
     #[test]
@@ -861,6 +944,25 @@ mod resource_contract_tests {
             (Builtin::StartsWith, vec![text, prefix]),
             (Builtin::EndsWith, vec![text, suffix]),
         ];
+
+        let covered = cases
+            .iter()
+            .map(|(builtin, _)| builtin.name())
+            .collect::<BTreeSet<_>>();
+        let required = NATIVE_CONTRACTS
+            .iter()
+            .filter(|contract| {
+                matches!(
+                    contract.proof_class,
+                    NativeProofClass::Fixed | NativeProofClass::TextScan
+                )
+            })
+            .map(|contract| contract.builtin.name())
+            .collect::<BTreeSet<_>>();
+        assert_eq!(
+            covered, required,
+            "every fixed proof record needs a boundary case"
+        );
 
         for (builtin, args) in cases {
             let quote = builtin_resource_charge(builtin, &args).unwrap();

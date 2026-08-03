@@ -4,6 +4,7 @@ pub(crate) use builtins_impl::value_to_json;
 mod constraint_runtime;
 mod exec;
 mod helpers;
+mod range_plan;
 pub(crate) mod replay_clone;
 mod settlement;
 pub(crate) use settlement::{

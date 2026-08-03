@@ -126,6 +126,14 @@ compiled-program, runtime-feature, and constraint-registry identities. Opaque
 settlement record IDs are diagnostic only and do not participate in semantic
 equality.
 
+Public attempt recording is an authoritative main-timeline operation; worker
+and simulation-fork VMs are rejected as checkpoint roots. The detached replay
+shell preserves the source gameplay execution role independently from its
+observational safety flag. Checkpoint identity also covers scheduler mode,
+trace state, emit ancestry IDs, simulation depth, and every event handler's
+`once`/fired state, so portable replay cannot silently substitute worker or
+otherwise semantically different execution state.
+
 Candidate details are frozen once per `(entity, component)` and shared by all
 violations that reference that candidate. One settlement outcome meter charges
 violations, failures, metadata, details, and origins before retaining them.

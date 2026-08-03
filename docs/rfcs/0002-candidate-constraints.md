@@ -576,6 +576,15 @@ the existing input size as well as requested growth (including source clones
 and empty-pattern string expansion); a helper whose upper bound is not yet
 proved fails closed instead of running under an estimate.
 
+Admission is generated from a native-proof registry. Each admitted builtin has
+a named proof class and boundary-suite identity; no independent whitelist may
+drift away from those records. `range` pricing and execution normatively share
+one checked `RangePlan { start, step, count }`. Planning uses widened checked
+arithmetic, rejects an unrepresentable count before allocation, and validates
+the final generated value. Execution emits exactly `count` values by checked
+index arithmetic. An open-ended `i += step` loop is forbidden because signed
+overflow would invalidate termination and the quoted resource bound.
+
 A constraint can fail while evaluating—for example, a base `require(entity,
 Component)` may find a missing component. Ordinary errors and per-invocation
 fuel exhaustion become canonical `EvaluationFailure` records. When an
@@ -808,6 +817,14 @@ payloads, event-log payloads, and completed-task values participate in the
 same clone context. Native/FFI calls and irreversible host-effect builtins fail
 closed during observational replay.
 
+Attempt recording is accepted only at a quiescent authoritative main-timeline
+boundary. Worker and simulation-fork VMs are not portable attempt roots in
+RFC-0002. The replay shell restores the source gameplay execution role before
+running the request, then independently enables observational safeguards such
+as output suppression and irreversible-host-effect denial. Observational mode
+must never obtain worker scheduling or event semantics merely because worker
+construction machinery was reused internally.
+
 The in-process checkpoint is captured before the attempted request executes.
 This distinction is normative: a request may update a global or captured cell
 before entering `settle`, and replay must still begin from that original value.
@@ -815,6 +832,14 @@ before entering `settle`, and replay must still begin from that original value.
 `FailedSettlementAttempt` recipe. Portable replay requires a separately
 supplied checkpoint whose canonical digest matches the recipe; it never falls
 back to cloning the authoritative VM's current post-attempt state.
+
+One captured `AttemptReplayState` drives both detached-child construction and
+checkpoint hashing. It includes execution role, serial scheduling, trace and
+simulation state, current/next emit IDs, handler fired bits, world/provenance,
+limits, sandbox state, and the remaining replay-semantic counters and buffers.
+Mutation-sensitivity regressions require each such field to change checkpoint
+identity. Observational-only safety flags are explicitly nonsemantic and are
+applied after the gameplay state is restored.
 
 A rejected settlement is absent from the durable ledger and therefore cannot
 be reconstructed from ledger provenance alone. Attempt replay consumes an
@@ -1303,6 +1328,12 @@ host call. Recorded replay forks only that seed; portable replay requires a
 matching canonical checkpoint digest. Replay graph cloning is node/byte
 bounded, and cycle-breaking placeholders are re-accounted to the populated
 object's retained size before the child is exposed.
+
+The final execution-context closure preserves main-timeline semantics in the
+observational child (including delayed-event behavior), rejects worker attempt
+roots, and derives replay copying and checkpoint identity from the same
+`AttemptReplayState`. Native admission is proof-registry-driven, while the
+checked shared range plan makes boundary stepping total and count-bounded.
 
 Projection, priorities, fixed points, and parallel constraint execution remain
 out of scope and require follow-on RFCs.

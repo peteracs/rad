@@ -404,7 +404,7 @@ pub struct SettlementRejection {
     pub capabilities: RejectionCapabilityMetadata,
 }
 
-pub const SETTLEMENT_ATTEMPT_RECORD_VERSION: u32 = 4;
+pub const SETTLEMENT_ATTEMPT_RECORD_VERSION: u32 = 5;
 
 /// Pointer-free recipe and expected result for replaying one rejected host
 /// call. Ledger replay remains commit-only; this record belongs to a debugger
