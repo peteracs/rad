@@ -101,6 +101,8 @@ game host, exchange owned
 `ValueHandle<'vm>` provides a read-only borrowed view that cannot outlive its
 VM. The NaN-boxed runtime `Value`, its raw object pointers, and `GcHeap` are
 crate-private; native hosts never allocate into or dereference that heap.
+Deterministic or isolated hosts can construct the VM with
+`VM::new_with_seed(seed)` so initialization never consults host time.
 
 ECS world columns still use **persistent** storage (`Arc<Object>` managed by
 `ValueColumn` retain/release) for component field values written by RAD code;

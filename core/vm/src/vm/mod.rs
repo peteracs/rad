@@ -577,6 +577,15 @@ impl VM {
     }
 
     pub fn new() -> Self {
+        Self::new_with_seed(Self::initial_rng_seed())
+    }
+
+    /// Construct a VM without consulting host time for its initial RNG seed.
+    ///
+    /// This is the deterministic embedding entry point for tests, replay
+    /// harnesses, and isolated interpreters such as Miri. A zero seed is
+    /// normalized to the same non-zero fallback used by `set_random_seed`.
+    pub fn new_with_seed(seed: u64) -> Self {
         let mut gc = GcHeap::new();
         let mut globals = Vec::new();
         let mut global_names = Vec::new();
@@ -621,7 +630,7 @@ impl VM {
             indexed_decl: Arc::new(HashMap::new()),
             timeline: Vec::new(),
             event_log: Vec::new(),
-            rng_state: Self::initial_rng_seed(),
+            rng_state: Self::normalize_random_seed(seed),
             tasks: HashMap::new(),
             next_task_id: 1,
             pending_io: HashMap::new(),
@@ -971,12 +980,16 @@ impl VM {
         }
     }
 
-    pub(crate) fn set_random_seed(&mut self, seed: u64) {
-        self.rng_state = if seed == 0 {
+    fn normalize_random_seed(seed: u64) -> u64 {
+        if seed == 0 {
             0xD1B5_4A32_D192_ED03
         } else {
             seed
-        };
+        }
+    }
+
+    pub(crate) fn set_random_seed(&mut self, seed: u64) {
+        self.rng_state = Self::normalize_random_seed(seed);
     }
 
     pub(crate) fn next_random_u64(&mut self) -> u64 {
