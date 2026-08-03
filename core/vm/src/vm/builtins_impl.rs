@@ -8252,9 +8252,16 @@ impl VM {
 
         #[cfg(not(target_arch = "wasm32"))]
         {
-            let (functions, lib) = crate::ffi::load_plugin(path, &mut self.gc)?;
+            let (functions, lib, manifest) = crate::ffi::load_plugin(path, &mut self.gc)?;
 
             self.loaded_libraries.push(lib);
+            let manifests = std::sync::Arc::make_mut(&mut self.native_extension_manifests);
+            if !manifests
+                .iter()
+                .any(|loaded| loaded.digest() == manifest.digest())
+            {
+                manifests.push(manifest);
+            }
 
             let mut map = MapStorage::new();
             for (name, info) in functions {

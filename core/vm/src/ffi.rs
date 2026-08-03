@@ -9,6 +9,8 @@
 use crate::gc::GcHeap;
 use crate::value::NativeFnInfo;
 use crate::value::Value;
+#[cfg(not(target_arch = "wasm32"))]
+use sha2::{Digest, Sha256};
 use std::cell::RefCell;
 #[cfg(not(target_arch = "wasm32"))]
 use std::ffi::{c_char, c_void, CStr};
@@ -21,6 +23,134 @@ thread_local! {
 }
 
 pub type NativeFnPtr = unsafe extern "C" fn(args: *const u64, argc: usize) -> u64;
+pub type LoadedPlugin<L> = (
+    Vec<(String, NativeFnInfo)>,
+    L,
+    std::sync::Arc<NativeExtensionManifest>,
+);
+
+pub const RAD_EXTENSION_ABI_VERSION: u32 = 1;
+pub const NATIVE_RESOURCE_CONTRACT_VERSION: u32 = 0;
+
+/// Stable, pointer-free identity of one loaded native implementation.
+///
+/// ABI v1 does not yet let a library self-declare a package version or
+/// fine-grained effects, so those facts are represented honestly: the binary
+/// content digest is authoritative, the version is absent, and the extension
+/// is conservatively classified as host-effecting and constraint-unsafe.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NativeExtensionManifest {
+    extension_id: String,
+    extension_version: Option<String>,
+    abi_version: u32,
+    content_digest: String,
+    target: String,
+    exported_functions: std::sync::Arc<[(String, u32)]>,
+    declared_effects: std::sync::Arc<[String]>,
+    resource_contract_version: u32,
+    digest: String,
+}
+
+impl NativeExtensionManifest {
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(crate) fn from_binary(path: &Path, bytes: &[u8], exports: &[(String, u32)]) -> Self {
+        let extension_id = path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("<unnamed-extension>")
+            .to_string();
+        let content_digest = hex::encode(Sha256::digest(bytes));
+        let target = format!("{}-{}", std::env::consts::ARCH, std::env::consts::OS);
+        let mut exported_functions = exports.to_vec();
+        exported_functions.sort();
+        let declared_effects = vec!["native.host".to_string()];
+
+        let mut out =
+            crate::canonical::CanonicalWriter::with_domain("rad-native-extension-manifest/v1");
+        out.text(&extension_id);
+        out.optional_text(None);
+        out.u32(RAD_EXTENSION_ABI_VERSION);
+        out.text(&content_digest);
+        out.text(&target);
+        out.usize(exported_functions.len());
+        for (name, arity) in &exported_functions {
+            out.text(name);
+            out.u32(*arity);
+        }
+        out.usize(declared_effects.len());
+        for effect in &declared_effects {
+            out.text(effect);
+        }
+        out.u32(NATIVE_RESOURCE_CONTRACT_VERSION);
+        let digest = hex::encode(Sha256::digest(out.finish()));
+
+        Self {
+            extension_id,
+            extension_version: None,
+            abi_version: RAD_EXTENSION_ABI_VERSION,
+            content_digest,
+            target,
+            exported_functions: exported_functions.into(),
+            declared_effects: declared_effects.into(),
+            resource_contract_version: NATIVE_RESOURCE_CONTRACT_VERSION,
+            digest,
+        }
+    }
+
+    pub fn extension_id(&self) -> &str {
+        &self.extension_id
+    }
+
+    pub fn extension_version(&self) -> Option<&str> {
+        self.extension_version.as_deref()
+    }
+
+    pub fn abi_version(&self) -> u32 {
+        self.abi_version
+    }
+
+    pub fn content_digest(&self) -> &str {
+        &self.content_digest
+    }
+
+    pub fn target(&self) -> &str {
+        &self.target
+    }
+
+    pub fn exported_functions(&self) -> &[(String, u32)] {
+        &self.exported_functions
+    }
+
+    pub fn declared_effects(&self) -> &[String] {
+        &self.declared_effects
+    }
+
+    pub fn resource_contract_version(&self) -> u32 {
+        self.resource_contract_version
+    }
+
+    pub fn digest(&self) -> &str {
+        &self.digest
+    }
+
+    pub(crate) fn encode_manifest(&self, out: &mut crate::canonical::CanonicalWriter) {
+        out.text(&self.extension_id);
+        out.optional_text(self.extension_version.as_deref());
+        out.u32(self.abi_version);
+        out.text(&self.content_digest);
+        out.text(&self.target);
+        out.usize(self.exported_functions.len());
+        for (name, arity) in self.exported_functions.iter() {
+            out.text(name);
+            out.u32(*arity);
+        }
+        out.usize(self.declared_effects.len());
+        for effect in self.declared_effects.iter() {
+            out.text(effect);
+        }
+        out.u32(self.resource_contract_version);
+    }
+}
 
 #[cfg(not(target_arch = "wasm32"))]
 #[repr(C)]
@@ -208,7 +338,7 @@ unsafe extern "C" fn api_as_string_len(v: u64) -> usize {
 
 #[cfg(not(target_arch = "wasm32"))]
 struct RegistrationContext {
-    functions: Vec<(String, NativeFnInfo)>,
+    functions: Vec<(String, NativeFnPtr, u32)>,
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -223,21 +353,14 @@ unsafe extern "C" fn api_register_fn(
     }
     let context = &mut *(ctx as *mut RegistrationContext);
     let name_str = CStr::from_ptr(name).to_string_lossy().into_owned();
-    context.functions.push((
-        name_str.clone(),
-        NativeFnInfo {
-            name: name_str,
-            func,
-            arity,
-        },
-    ));
+    context.functions.push((name_str, func, arity));
 }
 
 #[cfg(not(target_arch = "wasm32"))]
 pub fn load_plugin(
     path: &str,
     merge_into: &mut GcHeap,
-) -> Result<(Vec<(String, NativeFnInfo)>, libloading::Library), String> {
+) -> Result<LoadedPlugin<libloading::Library>, String> {
     unsafe {
         let requested = Path::new(path);
         let platform_path = if requested.extension().is_none() {
@@ -247,8 +370,28 @@ pub fn load_plugin(
             None
         };
         let resolved: PathBuf = platform_path.unwrap_or_else(|| requested.to_path_buf());
+        let binary = std::fs::read(&resolved).map_err(|error| {
+            format!(
+                "Failed to fingerprint plugin '{}': {}",
+                resolved.display(),
+                error
+            )
+        })?;
         let lib = libloading::Library::new(&resolved)
             .map_err(|e| format!("Failed to load plugin '{}': {}", resolved.display(), e))?;
+        let loaded_binary = std::fs::read(&resolved).map_err(|error| {
+            format!(
+                "Failed to seal loaded plugin '{}': {}",
+                resolved.display(),
+                error
+            )
+        })?;
+        if loaded_binary != binary {
+            return Err(format!(
+                "Plugin '{}' changed while it was being loaded",
+                resolved.display()
+            ));
+        }
 
         type InitFn = unsafe extern "C" fn(*const RadPluginApi);
         let init_fn: libloading::Symbol<InitFn> = lib
@@ -278,15 +421,35 @@ pub fn load_plugin(
         init_fn(&api);
 
         drain_native_values_into(merge_into);
+        let exports = context
+            .functions
+            .iter()
+            .map(|(name, _, arity)| (name.clone(), *arity))
+            .collect::<Vec<_>>();
+        let manifest = std::sync::Arc::new(NativeExtensionManifest::from_binary(
+            &resolved,
+            &loaded_binary,
+            &exports,
+        ));
+        let functions = context
+            .functions
+            .into_iter()
+            .map(|(name, func, arity)| {
+                let info = NativeFnInfo {
+                    name: name.clone(),
+                    func,
+                    arity,
+                    extension: std::sync::Arc::clone(&manifest),
+                };
+                (name, info)
+            })
+            .collect();
 
-        Ok((context.functions, lib))
+        Ok((functions, lib, manifest))
     }
 }
 
 #[cfg(target_arch = "wasm32")]
-pub fn load_plugin(
-    _path: &str,
-    _merge_into: &mut GcHeap,
-) -> Result<(Vec<(String, NativeFnInfo)>, ()), String> {
+pub fn load_plugin(_path: &str, _merge_into: &mut GcHeap) -> Result<LoadedPlugin<()>, String> {
     Err("Plugins are not supported on wasm32".to_string())
 }

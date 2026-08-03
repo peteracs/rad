@@ -6,14 +6,14 @@ use crate::value::{ComponentData, Value};
 type ArchetypeId = u32;
 type TypeId = u32;
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 struct IndexKey {
     type_name: String,
     field_name: String,
     value: IndexValue,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 enum IndexValue {
     Int(i64),
     Str(String),
@@ -1153,13 +1153,312 @@ pub struct WorldSnapshot {
     /// under, when it came out of the simulate family (`simulate_par`,
     /// `simulate_many`, `simulate_seeded`). `fork_seed()` reads it, making a
     /// single outlier rollout reproducible in isolation (dogfood feature seq
-    /// 150). Local-only debug metadata: never serialized to the wire, never
-    /// part of a digest, and cleared by `with_resource` (an overridden copy
-    /// is a new candidate, not the rollout's output).
+    /// 150). Local-only debug metadata: never serialized to the world wire or
+    /// included in the content digest, but included in operational replay
+    /// identity because `fork_seed()` makes it observable. Cleared by
+    /// `with_resource` (an overridden copy is a new candidate, not the
+    /// rollout's output).
     pub rollout_seed: Option<u64>,
 }
 
+/// Versioned sink for the complete execution-relevant state of a
+/// [`WorldSnapshot`]. The snapshot owns the inventory; replay hashing and
+/// `WorldFork` graph identity only supply the sink. This prevents the restore
+/// and identity paths from growing independent, renderer-shaped field lists.
+pub(crate) trait OperationalWorldEncoder {
+    fn byte(&mut self, value: u8);
+    fn u32(&mut self, value: u32);
+    fn u64(&mut self, value: u64);
+    fn i64(&mut self, value: i64);
+    fn usize(&mut self, value: usize);
+    fn bool(&mut self, value: bool);
+    fn text(&mut self, value: &str);
+    fn value(&mut self, value: Value);
+
+    fn optional_u64(&mut self, value: Option<u64>) {
+        self.bool(value.is_some());
+        if let Some(value) = value {
+            self.u64(value);
+        }
+    }
+
+    fn optional_u32(&mut self, value: Option<u32>) {
+        self.bool(value.is_some());
+        if let Some(value) = value {
+            self.u32(value);
+        }
+    }
+
+    fn optional_text(&mut self, value: Option<&str>) {
+        self.bool(value.is_some());
+        if let Some(value) = value {
+            self.text(value);
+        }
+    }
+}
+
 impl WorldSnapshot {
+    /// Encode the complete operational world state in one deterministic
+    /// inventory. Unlike [`WorldSnapshot::snapshot_json_like`], this is not a
+    /// presentation format: it includes allocator/type state, exact storage
+    /// topology, derived indexes, queued work, provenance, and observable
+    /// rollout metadata because each can change future execution.
+    pub(crate) fn encode_operational_checkpoint(&self, out: &mut impl OperationalWorldEncoder) {
+        use crate::causality::{Cause, WriteKind};
+
+        fn cause(out: &mut impl OperationalWorldEncoder, cause: &Cause) {
+            match cause {
+                Cause::Main => out.byte(0),
+                Cause::System { name } => {
+                    out.byte(1);
+                    out.text(name);
+                }
+                Cause::Handler { event, emit_id } => {
+                    out.byte(2);
+                    out.text(event);
+                    out.u64(*emit_id);
+                }
+            }
+        }
+
+        fn write_kind(out: &mut impl OperationalWorldEncoder, kind: WriteKind) {
+            out.byte(match kind {
+                WriteKind::Set => 0,
+                WriteKind::Spawn => 1,
+                WriteKind::Despawn => 2,
+                WriteKind::Remove => 3,
+                WriteKind::Resource => 4,
+            });
+        }
+
+        fn component(out: &mut impl OperationalWorldEncoder, data: &ComponentData) {
+            out.text(&data.type_name);
+            out.usize(data.layout.len());
+            for field in data.layout.iter() {
+                out.text(field);
+            }
+            out.usize(data.values.len());
+            for value in &data.values {
+                out.value(*value);
+            }
+        }
+
+        out.text("rad-operational-world/v1");
+        out.u32(self.next_id);
+        out.usize(self.free_ids.len());
+        for id in &self.free_ids {
+            out.u32(*id);
+        }
+
+        let mut names = self.name_to_id.iter().collect::<Vec<_>>();
+        names.sort_by(|left, right| left.0.cmp(right.0));
+        out.usize(names.len());
+        for (name, id) in names {
+            out.text(name);
+            out.u32(*id);
+        }
+        let mut ids = self.id_to_name.iter().collect::<Vec<_>>();
+        ids.sort_by_key(|(id, _)| **id);
+        out.usize(ids.len());
+        for (id, name) in ids {
+            out.u32(*id);
+            out.text(name);
+        }
+
+        let mut types = self.type_registry.iter().collect::<Vec<_>>();
+        types.sort_by(|left, right| left.0.cmp(right.0));
+        out.usize(types.len());
+        for (name, id) in types {
+            out.text(name);
+            out.u32(*id);
+        }
+        out.u32(self.next_type_id);
+
+        out.usize(self.archetypes.len());
+        for archetype in &self.archetypes {
+            out.usize(archetype.type_set.len());
+            for type_id in &archetype.type_set {
+                out.u32(*type_id);
+            }
+            out.usize(archetype.entities.len());
+            for entity in archetype.entities.iter() {
+                out.u32(*entity);
+            }
+            let mut columns = archetype.columns.iter().collect::<Vec<_>>();
+            columns.sort_by_key(|(type_id, _)| **type_id);
+            out.usize(columns.len());
+            for (type_id, column) in columns {
+                out.u32(*type_id);
+                out.text(&column.type_name);
+                out.usize(column.layout.len());
+                for field in column.layout.iter() {
+                    out.text(field);
+                }
+                out.usize(column.fields.len());
+                for values in &column.fields {
+                    out.usize(values.len());
+                    for value in values.as_slice() {
+                        out.value(*value);
+                    }
+                }
+            }
+            let mut rows = archetype.entity_row.iter().collect::<Vec<_>>();
+            rows.sort_by_key(|(entity, _)| **entity);
+            out.usize(rows.len());
+            for (entity, row) in rows {
+                out.u32(*entity);
+                out.usize(*row);
+            }
+        }
+
+        let mut archetype_map = self.archetype_map.iter().collect::<Vec<_>>();
+        archetype_map.sort_by(|left, right| left.0.cmp(right.0));
+        out.usize(archetype_map.len());
+        for (types, archetype) in archetype_map {
+            out.usize(types.len());
+            for type_id in types {
+                out.u32(*type_id);
+            }
+            out.u32(*archetype);
+        }
+        let mut entity_archetypes = self.entity_archetype.iter().collect::<Vec<_>>();
+        entity_archetypes.sort_by_key(|(entity, _)| **entity);
+        out.usize(entity_archetypes.len());
+        for (entity, archetype) in entity_archetypes {
+            out.u32(*entity);
+            out.u32(*archetype);
+        }
+
+        let mut indexed_fields = self.indexed_fields.iter().collect::<Vec<_>>();
+        indexed_fields.sort_by(|left, right| left.0.cmp(right.0));
+        out.usize(indexed_fields.len());
+        for (component_name, fields) in indexed_fields {
+            out.text(component_name);
+            let mut fields = fields.iter().collect::<Vec<_>>();
+            fields.sort();
+            out.usize(fields.len());
+            for field in fields {
+                out.text(field);
+            }
+        }
+        let mut indices = self.indices.iter().collect::<Vec<_>>();
+        indices.sort_by(|left, right| left.0.cmp(right.0));
+        out.usize(indices.len());
+        for (key, entities) in indices {
+            out.text(&key.type_name);
+            out.text(&key.field_name);
+            match &key.value {
+                IndexValue::Int(value) => {
+                    out.byte(0);
+                    out.i64(*value);
+                }
+                IndexValue::Str(value) => {
+                    out.byte(1);
+                    out.text(value);
+                }
+                IndexValue::Bool(value) => {
+                    out.byte(2);
+                    out.bool(*value);
+                }
+                IndexValue::Entity(value) => {
+                    out.byte(3);
+                    out.u32(*value);
+                }
+                IndexValue::Float(bits) => {
+                    out.byte(4);
+                    out.u64(*bits);
+                }
+            }
+            out.usize(entities.len());
+            for entity in entities {
+                out.u32(*entity);
+            }
+        }
+
+        let mut resources = self.resources.iter().collect::<Vec<_>>();
+        resources.sort_by(|left, right| left.0.cmp(right.0));
+        out.usize(resources.len());
+        for (name, data) in resources {
+            out.text(name);
+            component(out, data);
+        }
+
+        out.usize(self.events.len());
+        for (name, payload, trace_id) in self.events.iter() {
+            out.text(name);
+            out.value(*payload);
+            out.u64(*trace_id);
+        }
+        out.usize(self.emit_ids.len());
+        for emit_id in self.emit_ids.iter() {
+            out.u64(*emit_id);
+        }
+        out.usize(self.delayed.len());
+        for (delay, name, payload, emit_id) in self.delayed.iter() {
+            out.i64(*delay);
+            out.text(name);
+            out.value(*payload);
+            out.u64(*emit_id);
+        }
+
+        out.bool(self.provenance.is_some());
+        if let Some(provenance) = &self.provenance {
+            out.text(&provenance.origin);
+            out.usize(provenance.writes.len());
+            for write in &provenance.writes {
+                out.u64(write.frame);
+                out.optional_u32(write.entity);
+                out.optional_text(write.entity_name.as_deref());
+                out.text(&write.component);
+                out.text(&write.value);
+                write_kind(out, write.kind);
+                cause(out, &write.by);
+                out.optional_text(write.origin.as_deref());
+                out.optional_u64(write.resolution_id);
+            }
+            out.usize(provenance.emits.len());
+            for emit in &provenance.emits {
+                out.u64(emit.id);
+                out.text(&emit.event);
+                out.u64(emit.frame);
+                out.text(&emit.payload);
+                cause(out, &emit.by);
+                out.optional_text(emit.origin.as_deref());
+            }
+            out.usize(provenance.settlements.len());
+            for settlement in &provenance.settlements {
+                out.u64(settlement.id);
+                out.u64(settlement.frame);
+                cause(out, &settlement.by);
+            }
+            out.usize(provenance.proposals.len());
+            for proposal in &provenance.proposals {
+                out.u64(proposal.id);
+                out.u64(proposal.settlement_id);
+                out.text(&proposal.intent);
+                out.u32(proposal.key);
+                out.text(&proposal.payload);
+                out.text(&proposal.law);
+                out.u32(proposal.source_line);
+            }
+            out.usize(provenance.resolutions.len());
+            for resolution in &provenance.resolutions {
+                out.u64(resolution.id);
+                out.u64(resolution.settlement_id);
+                out.text(&resolution.intent);
+                out.u32(resolution.key);
+                out.text(&resolution.resolver);
+                out.usize(resolution.proposal_ids.len());
+                for proposal_id in &resolution.proposal_ids {
+                    out.u64(*proposal_id);
+                }
+            }
+        }
+        // rollout_seed is excluded from content digests and wire snapshots,
+        // but included here because fork_seed() makes it observable.
+        out.optional_u64(self.rollout_seed);
+    }
+
     /// Return a copy of this snapshot with resource `name` set to `data`,
     /// leaving entities, in-flight events, delayed timers, and provenance
     /// untouched. Backs `fork_with`: seed a speculative candidate off a fork
@@ -1390,6 +1689,9 @@ impl WorldSnapshot {
 
     pub fn trace(&self, marked: &mut HashSet<usize>) {
         for (_, payload, _) in self.events.iter() {
+            payload.trace(marked);
+        }
+        for (_, _, payload, _) in self.delayed.iter() {
             payload.trace(marked);
         }
         for archetype in &self.archetypes {
@@ -1720,18 +2022,41 @@ impl World {
     }
 
     pub fn restore(&mut self, snapshot: WorldSnapshot) {
-        self.next_id = snapshot.next_id;
-        self.free_ids = snapshot.free_ids;
-        self.name_to_id = snapshot.name_to_id;
-        self.id_to_name = snapshot.id_to_name;
-        self.type_registry = snapshot.type_registry;
-        self.next_type_id = snapshot.next_type_id;
-        self.archetypes = snapshot.archetypes;
-        self.archetype_map = snapshot.archetype_map;
-        self.entity_archetype = snapshot.entity_archetype;
-        self.indexed_fields = snapshot.indexed_fields;
-        self.indices = snapshot.indices;
-        self.resources = snapshot.resources;
+        // Keep this exhaustive: adding execution-relevant snapshot state must
+        // force an explicit restore policy as well as an operational-encoding
+        // policy. VM-owned queues/provenance are restored by their owning VM
+        // boundary, not by `World`.
+        let WorldSnapshot {
+            next_id,
+            free_ids,
+            name_to_id,
+            id_to_name,
+            type_registry,
+            next_type_id,
+            archetypes,
+            archetype_map,
+            entity_archetype,
+            indexed_fields,
+            indices,
+            resources,
+            events: _,
+            emit_ids: _,
+            delayed: _,
+            provenance: _,
+            rollout_seed: _,
+        } = snapshot;
+        self.next_id = next_id;
+        self.free_ids = free_ids;
+        self.name_to_id = name_to_id;
+        self.id_to_name = id_to_name;
+        self.type_registry = type_registry;
+        self.next_type_id = next_type_id;
+        self.archetypes = archetypes;
+        self.archetype_map = archetype_map;
+        self.entity_archetype = entity_archetype;
+        self.indexed_fields = indexed_fields;
+        self.indices = indices;
+        self.resources = resources;
     }
 }
 

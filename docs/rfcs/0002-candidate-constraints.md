@@ -1350,5 +1350,22 @@ roots, and derives replay copying and checkpoint identity from the same
 `AttemptReplayState`. Native admission is proof-registry-driven, while the
 checked shared range plan makes boundary stepping total and count-bounded.
 
+Portable replay uses a versioned operational-world encoder rather than the
+renderer/content view. That single `WorldSnapshot` inventory covers entity and
+type allocators, exact archetype and index state, resources, queued and delayed
+event payloads, emit identities, foreign provenance, and observable rollout
+seed state. It is reused for the attempt world, timeline snapshots, and
+`WorldFork` graph fingerprints. `World::content_digest()` remains intentionally
+content-only and is not proof of execution-checkpoint equivalence.
+
+Native extension implementations are content-addressed through a versioned
+manifest containing extension identity, optional package version, extension
+ABI, binary digest, target, exported names/arities, conservative effects, and
+resource-contract version. Compiled-program and replay-root identity bind the
+manifest/export identity rather than a process-local function pointer. ABI-v1
+extensions cannot self-declare package versions or pure effects, so those
+fields remain explicitly absent/conservative and observational replay keeps
+its native-effect firewall.
+
 Projection, priorities, fixed points, and parallel constraint execution remain
 out of scope and require follow-on RFCs.

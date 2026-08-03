@@ -8,6 +8,7 @@
 
 use crate::gc::{CaptureCell, GcHeap};
 use crate::value::{ClosureValue, MapKey, Object, RadList, Value};
+use crate::world::{OperationalWorldEncoder, WorldSnapshot};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -219,6 +220,7 @@ impl GraphFingerprinter {
             }
             Object::NativeFn(native) => {
                 self.digest.update(b"N");
+                self.bytes(native.extension.digest().as_bytes());
                 self.bytes(native.name.as_bytes());
                 self.digest.update(native.arity.to_le_bytes());
             }
@@ -251,24 +253,12 @@ impl GraphFingerprinter {
             }
             Object::WorldFork(snapshot) => {
                 self.digest.update(b"W");
-                self.bytes(snapshot.snapshot_json_like().as_bytes());
-                self.digest
-                    .update((snapshot.emit_ids.len() as u64).to_le_bytes());
-                for emit_id in snapshot.emit_ids.iter() {
-                    self.digest.update(emit_id.to_le_bytes());
-                }
-                self.digest
-                    .update(snapshot.rollout_seed.unwrap_or(0).to_le_bytes());
+                snapshot.encode_operational_checkpoint(self);
             }
         }
     }
 
-    fn finish(mut self, roots: &[Value]) -> String {
-        self.digest.update(b"rad-replay-graph/v1\0");
-        self.digest.update((roots.len() as u64).to_le_bytes());
-        for root in roots {
-            self.value(*root);
-        }
+    fn finish_pending(mut self) -> String {
         let mut index = 0;
         while index < self.pending.len() {
             match self.pending[index] {
@@ -282,6 +272,56 @@ impl GraphFingerprinter {
         }
         hex::encode(self.digest.finalize())
     }
+
+    fn finish(mut self, roots: &[Value]) -> String {
+        self.digest.update(b"rad-replay-graph/v2\0");
+        self.digest.update((roots.len() as u64).to_le_bytes());
+        for root in roots {
+            self.value(*root);
+        }
+        self.finish_pending()
+    }
+
+    fn finish_world(mut self, snapshot: &WorldSnapshot) -> String {
+        self.digest
+            .update(b"rad-operational-world-fingerprint/v1\0");
+        snapshot.encode_operational_checkpoint(&mut self);
+        self.finish_pending()
+    }
+}
+
+impl OperationalWorldEncoder for GraphFingerprinter {
+    fn byte(&mut self, value: u8) {
+        self.digest.update([value]);
+    }
+
+    fn u32(&mut self, value: u32) {
+        self.digest.update(value.to_le_bytes());
+    }
+
+    fn u64(&mut self, value: u64) {
+        self.digest.update(value.to_le_bytes());
+    }
+
+    fn i64(&mut self, value: i64) {
+        self.digest.update(value.to_le_bytes());
+    }
+
+    fn usize(&mut self, value: usize) {
+        self.digest.update((value as u64).to_le_bytes());
+    }
+
+    fn bool(&mut self, value: bool) {
+        self.digest.update([value as u8]);
+    }
+
+    fn text(&mut self, value: &str) {
+        self.bytes(value.as_bytes());
+    }
+
+    fn value(&mut self, value: Value) {
+        GraphFingerprinter::value(self, value);
+    }
 }
 
 /// Canonical content-and-topology identity for replay-visible VM roots.
@@ -289,6 +329,12 @@ impl GraphFingerprinter {
 /// discovery, never by allocator address.
 pub(crate) fn fingerprint_roots(roots: &[Value]) -> String {
     GraphFingerprinter::new().finish(roots)
+}
+
+/// Canonical identity of the complete execution-relevant world snapshot.
+/// This deliberately differs from the renderer/content digest.
+pub(crate) fn fingerprint_world_snapshot(snapshot: &WorldSnapshot) -> String {
+    GraphFingerprinter::new().finish_world(snapshot)
 }
 
 pub(crate) struct VmForkCloneContext<'a> {
@@ -520,5 +566,84 @@ impl<'a> VmForkCloneContext<'a> {
             let value = unsafe { (**source).get() };
             unsafe { (**target).set(self.rewrite(value)) };
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{fingerprint_roots, fingerprint_world_snapshot};
+    use crate::causality::WireProvenance;
+    use crate::gc::GcHeap;
+    use crate::value::Value;
+    use crate::world::World;
+    use std::collections::HashMap;
+    use std::sync::Arc;
+
+    #[test]
+    fn operational_world_identity_includes_hidden_allocator_and_type_state() {
+        let baseline = World::new().snapshot();
+        let visible = baseline.snapshot_json_like();
+        let digest = fingerprint_world_snapshot(&baseline);
+
+        let mut next_id = baseline.clone();
+        next_id.next_id = 41;
+        assert_eq!(visible, next_id.snapshot_json_like());
+        assert_ne!(digest, fingerprint_world_snapshot(&next_id));
+
+        let mut free_ids = baseline.clone();
+        free_ids.free_ids = vec![7, 3];
+        assert_eq!(visible, free_ids.snapshot_json_like());
+        let free_digest = fingerprint_world_snapshot(&free_ids);
+        assert_ne!(digest, free_digest);
+        free_ids.free_ids.reverse();
+        assert_ne!(free_digest, fingerprint_world_snapshot(&free_ids));
+
+        let mut types = baseline.clone();
+        types.type_registry = Arc::new(HashMap::from([("HiddenType".to_string(), 9)]));
+        types.next_type_id = 10;
+        assert_eq!(visible, types.snapshot_json_like());
+        assert_ne!(digest, fingerprint_world_snapshot(&types));
+    }
+
+    #[test]
+    fn world_fork_identity_includes_events_timers_provenance_and_seed() {
+        fn root_fingerprint(snapshot: crate::world::WorldSnapshot) -> String {
+            let mut gc = GcHeap::new();
+            let root = Value::world_fork(&mut gc, Arc::new(snapshot));
+            fingerprint_roots(&[root])
+        }
+
+        let baseline = World::new().snapshot();
+        let visible = baseline.snapshot_json_like();
+        let digest = root_fingerprint(baseline.clone());
+
+        let mut event = baseline.clone();
+        event.events = Arc::new(vec![("Ping".to_string(), Value::int(1), 11)]);
+        assert_eq!(visible, event.snapshot_json_like());
+        let event_digest = root_fingerprint(event.clone());
+        assert_ne!(digest, event_digest);
+        event.events = Arc::new(vec![("Ping".to_string(), Value::int(2), 11)]);
+        assert_ne!(event_digest, root_fingerprint(event));
+
+        let mut delayed = baseline.clone();
+        delayed.delayed = Arc::new(vec![(3, "Later".to_string(), Value::int(2), 12)]);
+        assert_eq!(visible, delayed.snapshot_json_like());
+        let delayed_digest = root_fingerprint(delayed.clone());
+        assert_ne!(digest, delayed_digest);
+        delayed.delayed = Arc::new(vec![(4, "Later".to_string(), Value::int(2), 12)]);
+        assert_ne!(delayed_digest, root_fingerprint(delayed));
+
+        let mut provenance = baseline.clone();
+        provenance.provenance = Some(Arc::new(WireProvenance {
+            origin: "remote-a".to_string(),
+            ..WireProvenance::default()
+        }));
+        assert_eq!(visible, provenance.snapshot_json_like());
+        assert_ne!(digest, root_fingerprint(provenance));
+
+        let mut seeded = baseline;
+        seeded.rollout_seed = Some(99);
+        assert_eq!(visible, seeded.snapshot_json_like());
+        assert_ne!(digest, root_fingerprint(seeded));
     }
 }

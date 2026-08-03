@@ -307,7 +307,9 @@ impl AttemptReplayState {
             }
         }
 
-        out.text(&self.world.snapshot_json_like());
+        out.text(&super::replay_clone::fingerprint_world_snapshot(
+            &self.world,
+        ));
         out.u64(self.rng_state);
         out.u64(self.fuel);
         out.usize(self.mem_limit);
@@ -329,7 +331,7 @@ impl AttemptReplayState {
         }
         out.usize(self.timeline.len());
         for snapshot in &self.timeline {
-            out.text(&snapshot.snapshot_json_like());
+            out.text(&super::replay_clone::fingerprint_world_snapshot(snapshot));
         }
         self.ledger.encode_checkpoint(out);
         crate::causality::CausalityLedger::encode_cause_checkpoint(&self.current_cause, out);
@@ -491,7 +493,7 @@ impl VM {
         &self,
         state: &AttemptReplayState,
     ) -> Vec<u8> {
-        let mut out = crate::canonical::CanonicalWriter::with_domain("rad-attempt-checkpoint/v3");
+        let mut out = crate::canonical::CanonicalWriter::with_domain("rad-attempt-checkpoint/v4");
         state.encode_checkpoint(&mut out);
         out.text(&self.program_digest());
         out.text(&self.runtime_feature_fingerprint());

@@ -1475,6 +1475,10 @@ pub struct NativeFnInfo {
     pub name: String,
     pub func: crate::ffi::NativeFnPtr,
     pub arity: u32,
+    /// Content-addressed identity of the library implementation that owns
+    /// this export. Function pointers are process-local and never enter
+    /// portable program or replay identity.
+    pub extension: std::sync::Arc<crate::ffi::NativeExtensionManifest>,
 }
 
 pub enum Object {

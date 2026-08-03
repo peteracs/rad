@@ -503,6 +503,98 @@ fn alternate() { return 42 }
 }
 
 #[test]
+fn portable_attempt_replay_rejects_hidden_allocator_drift_before_execution() {
+    let source = r#"
+component Position { x: int = 0 }
+intent Move { key target: entity }
+law Push(target: entity) { propose Move { target: target } }
+resolver ResolveMove for Move(target, proposals) { next(target, Position { x: 9 }) }
+constraint Reject for Position(subject, proposed) {
+    require false else "position.rejected"
+}
+let mut attempt_runs = 0
+fn attempt() {
+    attempt_runs = attempt_runs + 1
+    let spawned = spawn(Position {})
+    settle { Push(spawned) }
+}
+"#;
+    let mut recorder = compile_vm(source);
+    recorder.run(0).expect("initialize recorded program");
+    let crate::constraint_types::SettlementAttemptOutcome::Rejected(recorded) = recorder
+        .call_global_attempt("attempt", &[])
+        .expect("record portable rejection")
+    else {
+        panic!("attempt must reject")
+    };
+
+    let mut supplied = compile_vm(source);
+    supplied.run(0).expect("initialize supplied checkpoint");
+    let visible_before = supplied.world.snapshot_json_like();
+    let mut altered = supplied.world.snapshot();
+    altered.free_ids = vec![42];
+    supplied.world.restore(altered);
+    assert_eq!(visible_before, supplied.world.snapshot_json_like());
+
+    let runs_slot = supplied
+        .global_names
+        .iter()
+        .position(|name| name == "attempt_runs")
+        .unwrap();
+    assert_eq!(supplied.globals[runs_slot].as_int(), Some(0));
+    let error = supplied
+        .replay_portable_failed_attempt(&recorded.portable_recipe())
+        .expect_err("allocator drift must fail before replay execution");
+    assert!(matches!(
+        error,
+        crate::constraint_types::VmFailure::Host(crate::constraint_types::HostFault {
+            ref code,
+            ..
+        }) if code == "attempt.checkpoint_mismatch"
+    ));
+    assert_eq!(supplied.globals[runs_slot].as_int(), Some(0));
+}
+
+#[test]
+fn matching_operational_checkpoint_replays_same_spawned_candidate() {
+    let source = r#"
+component Position { x: int = 0 }
+intent Move { key target: entity }
+law Push(target: entity) { propose Move { target: target } }
+resolver ResolveMove for Move(target, proposals) { next(target, Position { x: 9 }) }
+constraint Reject for Position(subject, proposed) {
+    require false else "position.rejected"
+}
+fn attempt() {
+    let spawned = spawn(Position {})
+    settle { Push(spawned) }
+}
+"#;
+    let mut recorder = compile_vm(source);
+    recorder.run(0).expect("initialize recorded program");
+    let crate::constraint_types::SettlementAttemptOutcome::Rejected(recorded) = recorder
+        .call_global_attempt("attempt", &[])
+        .expect("record portable rejection")
+    else {
+        panic!("attempt must reject")
+    };
+
+    let mut supplied = compile_vm(source);
+    supplied.run(0).expect("initialize matching checkpoint");
+    let actual = supplied
+        .replay_portable_failed_attempt(&recorded.portable_recipe())
+        .expect("matching operational checkpoint must replay");
+    let expected_bytes = recorded
+        .rejection
+        .canonical_bytes(&supplied.constraint_limit_profile)
+        .expect("encode expected rejection");
+    let actual_bytes = actual
+        .canonical_bytes(&supplied.constraint_limit_profile)
+        .expect("encode replay rejection");
+    assert_eq!(expected_bytes, actual_bytes);
+}
+
+#[test]
 fn failed_attempt_replay_does_not_mutate_parent_capture_cells() {
     let source = r#"
 component Position { x: int = 0 }

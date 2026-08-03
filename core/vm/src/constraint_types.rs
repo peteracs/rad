@@ -404,9 +404,10 @@ pub struct SettlementRejection {
     pub capabilities: RejectionCapabilityMetadata,
 }
 
-/// Version 6 binds the canonical compiled-program manifest and v3 checkpoint
-/// encoding, including the exact global symbol-to-slot mapping.
-pub const SETTLEMENT_ATTEMPT_RECORD_VERSION: u32 = 6;
+/// Version 7 binds compiled-program manifest v2 and operational-world
+/// checkpoint encoding, including hidden allocator, event/timer, provenance,
+/// rollout, and native-extension implementation identity.
+pub const SETTLEMENT_ATTEMPT_RECORD_VERSION: u32 = 7;
 
 /// Pointer-free recipe and expected result for replaying one rejected host
 /// call. Ledger replay remains commit-only; this record belongs to a debugger

@@ -11,7 +11,7 @@ use sha2::{Digest, Sha256};
 
 pub const COMPILER_SEMANTIC_VERSION: u32 = 1;
 pub const BYTECODE_SEMANTIC_VERSION: u32 = 1;
-pub const PROGRAM_MANIFEST_VERSION: u32 = 1;
+pub const PROGRAM_MANIFEST_VERSION: u32 = 2;
 
 /// Immutable canonical description of the executable program installed in a
 /// VM. Runtime values, handler `fired` bits, and other attempt state belong to
@@ -24,7 +24,7 @@ pub struct CompiledProgramManifest {
 
 impl CompiledProgramManifest {
     pub(crate) fn capture(vm: &VM) -> Self {
-        let mut out = CanonicalWriter::with_domain("rad-compiled-program-manifest/v1");
+        let mut out = CanonicalWriter::with_domain("rad-compiled-program-manifest/v2");
         out.u32(PROGRAM_MANIFEST_VERSION);
         out.u32(COMPILER_SEMANTIC_VERSION);
         out.u32(BYTECODE_SEMANTIC_VERSION);
@@ -208,6 +208,16 @@ impl CompiledProgramManifest {
             }
         }
 
+        // Native implementations are executable program input. Bind their
+        // content-addressed manifests rather than process-local function
+        // pointers or name/arity alone.
+        let mut extensions = vm.native_extension_manifests.iter().collect::<Vec<_>>();
+        extensions.sort_by(|left, right| left.digest().cmp(right.digest()));
+        out.usize(extensions.len());
+        for extension in extensions {
+            extension.encode_manifest(&mut out);
+        }
+
         let canonical_bytes: std::sync::Arc<[u8]> = out.finish().into();
         let digest = hex::encode(Sha256::digest(&canonical_bytes));
         Self {
@@ -314,6 +324,18 @@ mod tests {
         );
         changed(&vm, &digest);
 
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let (mut vm, digest) = baseline();
+            let extension = crate::ffi::NativeExtensionManifest::from_binary(
+                std::path::Path::new("generic-extension.bin"),
+                b"implementation-a",
+                &[("transform".into(), 1)],
+            );
+            Arc::make_mut(&mut vm.native_extension_manifests).push(Arc::new(extension));
+            changed(&vm, &digest);
+        }
+
         let (mut vm, digest) = baseline();
         vm.program_source_identity = Some(Arc::from("source-graph-a"));
         changed(&vm, &digest);
@@ -388,5 +410,25 @@ mod tests {
             },
         );
         changed(&vm, &digest);
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn native_extension_binary_content_is_part_of_program_identity() {
+        fn with_extension(bytes: &[u8]) -> String {
+            let mut vm = VM::new_with_seed(7);
+            let extension = crate::ffi::NativeExtensionManifest::from_binary(
+                std::path::Path::new("generic-extension.bin"),
+                bytes,
+                &[("transform".into(), 1)],
+            );
+            Arc::make_mut(&mut vm.native_extension_manifests).push(Arc::new(extension));
+            vm.compiled_program_manifest().digest().to_string()
+        }
+
+        assert_ne!(
+            with_extension(b"implementation-a"),
+            with_extension(b"implementation-b")
+        );
     }
 }

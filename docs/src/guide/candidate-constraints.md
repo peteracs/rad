@@ -134,6 +134,26 @@ Swapping two names while leaving global values untouched is therefore a
 different program and is rejected before portable replay runs. Checkpoint
 identity uses an explicit versioned encoding rather than diagnostic formatting.
 
+Portable identity distinguishes three deliberately different digests:
+
+- the world content digest covers visible entities, components, and resources;
+- the operational world digest additionally covers allocator/type state,
+  archetype and index state, event/timer payloads, provenance, and observable
+  rollout metadata; and
+- the attempt checkpoint digest combines that operational world with the
+  complete VM execution context and compiled-program manifest.
+
+Replay validation uses the operational form. The renderer-oriented content
+digest is never accepted as proof that two worlds will execute identically.
+`WorldFork` values and timeline snapshots use the same operational encoder, so
+hidden allocator or queued-event differences change their replay identity.
+
+Loaded native extensions are content-addressed. Their binary digest, ABI,
+target, exports, declared effect class, and resource-contract version are
+bound into program identity, while process-local function pointers are not.
+ABI-v1 extensions have no self-declared package version and are conservatively
+treated as host-effecting and constraint-unsafe.
+
 Public attempt recording is an authoritative main-timeline operation; worker
 and simulation-fork VMs are rejected as checkpoint roots. The detached replay
 shell preserves the source gameplay execution role independently from its

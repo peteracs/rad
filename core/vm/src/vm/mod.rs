@@ -66,6 +66,7 @@ pub(crate) struct VmSharedState {
     pub(crate) intent_registry: Arc<HashMap<String, IntentRuntimeInfo>>,
     pub(crate) resolver_registry: Arc<HashMap<String, ResolverRuntimeInfo>>,
     pub(crate) constraint_registry: Arc<Vec<ConstraintRuntimeInfo>>,
+    pub(crate) native_extension_manifests: Arc<Vec<Arc<crate::ffi::NativeExtensionManifest>>>,
     pub(crate) component_layouts: Arc<HashMap<String, Arc<Vec<String>>>>,
     pub(crate) component_field_types: ComponentFieldTypes,
     /// Declared schema versions (`component X v2`), nonzero entries only
@@ -182,6 +183,7 @@ pub struct VM {
     pub(crate) intent_registry: Arc<HashMap<String, IntentRuntimeInfo>>,
     pub(crate) resolver_registry: Arc<HashMap<String, ResolverRuntimeInfo>>,
     pub(crate) constraint_registry: Arc<Vec<ConstraintRuntimeInfo>>,
+    pub(crate) native_extension_manifests: Arc<Vec<Arc<crate::ffi::NativeExtensionManifest>>>,
     pub(crate) settlement: Option<SettlementContext>,
     pub(crate) next_settlement_id: u64,
     pub(crate) causal_value_limits: crate::CausalValueLimits,
@@ -376,6 +378,13 @@ impl VM {
         CompiledProgramManifest::capture(self)
     }
 
+    /// Content-addressed manifests for native implementations installed in
+    /// this executable program. The returned slice is immutable; loading or
+    /// replacing an implementation produces a new program identity.
+    pub fn native_extension_manifests(&self) -> &[Arc<crate::ffi::NativeExtensionManifest>] {
+        &self.native_extension_manifests
+    }
+
     #[inline(always)]
     pub fn get_world_mut(&mut self) -> &mut World {
         &mut self.world
@@ -485,6 +494,7 @@ impl VM {
             intent_registry: self.intent_registry.clone(),
             resolver_registry: self.resolver_registry.clone(),
             constraint_registry: self.constraint_registry.clone(),
+            native_extension_manifests: self.native_extension_manifests.clone(),
             component_layouts: self.component_layouts.clone(),
             component_field_types: self.component_field_types.clone(),
             component_versions: self.component_versions.clone(),
@@ -514,6 +524,7 @@ impl VM {
             intent_registry: shared.intent_registry,
             resolver_registry: shared.resolver_registry,
             constraint_registry: shared.constraint_registry,
+            native_extension_manifests: shared.native_extension_manifests,
             settlement: None,
             next_settlement_id: 1,
             causal_value_limits: shared.causal_value_limits,
@@ -617,6 +628,7 @@ impl VM {
         // 3 runs; allocation-shape dependent, which is why a str field
         // modulated it).
         self.globals = shared.globals.clone();
+        self.native_extension_manifests = Arc::clone(&shared.native_extension_manifests);
         self.suppress_output = shared.suppress_output;
         self.profile_copies = shared.profile_copies;
         self.constraint_limit_profile = shared.constraint_limit_profile.clone();
@@ -662,6 +674,7 @@ impl VM {
             intent_registry: Arc::new(HashMap::new()),
             resolver_registry: Arc::new(HashMap::new()),
             constraint_registry: Arc::new(Vec::new()),
+            native_extension_manifests: Arc::new(Vec::new()),
             settlement: None,
             next_settlement_id: 1,
             causal_value_limits: crate::CausalValueLimits::default(),
