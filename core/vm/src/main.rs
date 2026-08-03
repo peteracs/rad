@@ -1013,7 +1013,10 @@ fn main() {
         // Traces are self-contained: compile the embedded merged source.
         // No checker pass — the program already ran once to produce this.
         let source = replayer.source().to_string();
-        let mut lexer = rad_vm::lexer::Lexer::new(&source);
+        let trace_features = replayer.features().to_vec();
+        let trace_layout = replayer.source_layout().clone();
+        let mut lexer = rad_vm::lexer::Lexer::new_with_source_layout(&source, &trace_layout)
+            .expect("trace parser validated the source layout");
         let tokens = lexer.tokenize().0;
         let mut parser = rad_vm::parser::Parser::new(tokens);
         let program = parser.parse();
@@ -1023,7 +1026,10 @@ fn main() {
             }
             process::exit(1);
         }
-        let compile_result = match Compiler::new().compile(&program) {
+        let compile_result = match Compiler::new()
+            .with_features(trace_features)
+            .compile(&program)
+        {
             Ok(c) => c,
             Err(e) => {
                 eprintln!("Error compiling embedded source: {}", e.message);
@@ -1193,11 +1199,20 @@ fn main() {
     };
 
     let parser_options = ParserOptions { compat_v0_5_dx };
-    let (program, source, had_imports, source_map, module_fingerprints, aliases, parse_errors) =
-        match load_program_with_source_map_and_options(&filepath, parser_options) {
+    let (
+        program,
+        source,
+        source_layout,
+        had_imports,
+        source_map,
+        module_fingerprints,
+        aliases,
+        parse_errors,
+    ) = match load_program_with_source_map_and_options(&filepath, parser_options) {
             Ok(r) => (
                 r.program,
                 r.merged_source,
+                r.source_layout,
                 r.had_imports,
                 r.source_map,
                 r.module_fingerprints,
@@ -1290,7 +1305,7 @@ fn main() {
     let compiler = Compiler::new()
         .with_checker_output(checker_output)
         .with_aliases(aliases)
-        .with_features(features);
+        .with_features(features.clone());
     let compile_result = match compiler.compile(&program) {
         Ok(c) => c,
         Err(e) => {
@@ -1309,7 +1324,7 @@ fn main() {
     if record.is_some() {
         // Hash the merged source (module graph included): a trace must only
         // replay against the exact program that produced it.
-        vm.enable_recording(&source);
+        vm.enable_recording_with_source_layout(&source, &features, &source_layout);
     }
     vm.load_compile_result(compile_result);
 
@@ -1354,13 +1369,20 @@ fn retroactive_replay(trace_text: &str, new_path: &str, force: bool) {
         }
     };
     let original_source = baseline.source().to_string();
-    let mut vm_a = match compile_into_vm(&original_source, "embedded source") {
-        Ok(vm) => vm,
-        Err(e) => {
-            eprintln!("Error: {}", e);
-            process::exit(1);
-        }
-    };
+    let trace_features = baseline.features().to_vec();
+    let trace_layout = baseline.source_layout().clone();
+    let mut vm_a = match compile_into_vm_with_features(
+        &original_source,
+        "embedded source",
+        &trace_features,
+        &trace_layout,
+    ) {
+            Ok(vm) => vm,
+            Err(e) => {
+                eprintln!("Error: {}", e);
+                process::exit(1);
+            }
+        };
     vm_a.suppress_output();
     vm_a.enable_replay(baseline);
     let baseline_err = vm_a.run(0).err();
@@ -1399,7 +1421,10 @@ fn retroactive_replay(trace_text: &str, new_path: &str, force: bool) {
         }
         process::exit(1);
     }
-    let compile_result = match Compiler::new().compile(&loaded.program) {
+    let compile_result = match Compiler::new()
+        .with_features(trace_features)
+        .compile(&loaded.program)
+    {
         Ok(c) => c,
         Err(e) => {
             eprintln!(
@@ -1640,8 +1665,14 @@ fn execute_test_command(test_dir: &str) {
     }
 }
 
-fn compile_into_vm(source: &str, what: &str) -> Result<VM, String> {
-    let mut lexer = rad_vm::lexer::Lexer::new(source);
+fn compile_into_vm_with_features(
+    source: &str,
+    what: &str,
+    features: &[String],
+    source_layout: &rad_vm::source_bundle::SourceLayout,
+) -> Result<VM, String> {
+    let mut lexer = rad_vm::lexer::Lexer::new_with_source_layout(source, source_layout)
+        .map_err(|error| format!("{} has an invalid source layout: {error}", what))?;
     let tokens = lexer.tokenize().0;
     let mut parser = rad_vm::parser::Parser::new(tokens);
     let program = parser.parse();
@@ -1649,6 +1680,7 @@ fn compile_into_vm(source: &str, what: &str) -> Result<VM, String> {
         return Err(format!("{} failed to parse: {}", what, e.message));
     }
     let compile_result = Compiler::new()
+        .with_features(features.to_vec())
         .compile(&program)
         .map_err(|e| format!("{} failed to compile: {}", what, e.message))?;
     let mut vm = VM::new();

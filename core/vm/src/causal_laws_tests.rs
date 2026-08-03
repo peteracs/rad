@@ -1493,7 +1493,7 @@ emit CombatFrame { source: attacker, target: hero }
 flush_events()
 "#;
     let mut recorded = compile_vm(source);
-    recorded.enable_recording(source);
+    recorded.enable_recording_with_features(source, &["causal_laws".to_string()]);
     recorded.run(0).expect("recorded settlement");
     let digest = recorded.get_world().content_digest();
     let why = recorded
@@ -1505,6 +1505,7 @@ flush_events()
     let trace = recorded.take_trace().expect("recorded trace");
 
     let replayer = TraceReplayer::parse(&trace, false).expect("parse trace");
+    assert_eq!(replayer.features(), &[String::from("causal_laws")]);
     let mut replayed = compile_vm(replayer.source());
     replayed.enable_replay(replayer);
     replayed.run(0).expect("replayed settlement");

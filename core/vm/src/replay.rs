@@ -15,7 +15,8 @@
 //! Trace format (JSONL, one object per line):
 //!
 //! ```text
-//! header  {"t":"header","version":1,"source":...,"source_hash":...,"seed":...}
+//! header  {"t":"header","version":1,"source":...,"source_hash":...,
+//!          "features":[...],"feature_hash":...,"seed":...}
 //! io      {"t":"io","f":<frame>,"s":<seq>,"b":<builtin>,"a":<args digest>,
 //!          "r":<tagged result>}            (or "e":<error> when it failed)
 //! frame   {"t":"frame","n":<frame just ended>,"fuel":<remaining, if metered>}
@@ -31,6 +32,7 @@
 //! loudly instead of returning a result from a timeline that never happened.
 
 use crate::gc::GcHeap;
+use crate::source_bundle::{SourceLayout, SOURCE_LAYOUT_VERSION};
 use crate::value::{Builtin, MapKey, MapStorage, Value};
 use std::collections::HashMap;
 
@@ -121,6 +123,23 @@ pub(crate) fn args_digest(args: &[Value]) -> String {
 
 pub fn source_hash(source: &str) -> String {
     blake3::hash(source.as_bytes()).to_hex().to_string()
+}
+
+fn canonical_features(features: &[String]) -> Vec<String> {
+    let mut features = features.to_vec();
+    features.sort();
+    features.dedup();
+    features
+}
+
+fn feature_hash(features: &[String]) -> String {
+    let mut digest = blake3::Hasher::new();
+    digest.update(b"rad-trace-features/v1\0");
+    for feature in canonical_features(features) {
+        digest.update(feature.as_bytes());
+        digest.update(&[0]);
+    }
+    digest.finalize().to_hex().to_string()
 }
 
 // ---------------------------------------------------------------------------
@@ -357,11 +376,38 @@ pub struct TraceRecorder {
 
 impl TraceRecorder {
     pub fn new(source: &str, seed: u64) -> Self {
+        Self::new_with_features(source, seed, &[])
+    }
+
+    pub fn new_with_features(source: &str, seed: u64, features: &[String]) -> Self {
+        Self::new_with_features_and_layout(
+            source,
+            seed,
+            features,
+            &SourceLayout::default(),
+        )
+    }
+
+    pub fn new_with_features_and_layout(
+        source: &str,
+        seed: u64,
+        features: &[String],
+        source_layout: &SourceLayout,
+    ) -> Self {
+        let features = canonical_features(features);
+        let source_layout_hash = source_layout
+            .digest(source)
+            .expect("recording source layout must describe its source");
         let header = serde_json::json!({
             "t": "header",
             "version": TRACE_VERSION,
             "source": source,
             "source_hash": source_hash(source),
+            "features": features,
+            "feature_hash": feature_hash(&features),
+            "source_layout_version": SOURCE_LAYOUT_VERSION,
+            "source_layout": source_layout,
+            "source_layout_hash": source_layout_hash,
             "seed": seed,
         });
         Self {
@@ -482,6 +528,8 @@ enum ReplayMode {
 
 pub struct TraceReplayer {
     source: String,
+    source_layout: SourceLayout,
+    features: Vec<String>,
     seed: u64,
     records: Vec<IoRecord>,
     /// First record index of each frame — the frame-indexed cursor that
@@ -548,6 +596,59 @@ impl TraceReplayer {
                     .into(),
             );
         }
+        let source_layout = match header.get("source_layout") {
+            None => SourceLayout::default(),
+            Some(value) => serde_json::from_value::<SourceLayout>(value.clone())
+                .map_err(|error| format!("trace source layout is invalid: {error}"))?,
+        };
+        source_layout
+            .validate(&source)
+            .map_err(|error| format!("trace source layout is invalid: {error}"))?;
+        if let Some(version) = header.get("source_layout_version") {
+            if version.as_u64() != Some(SOURCE_LAYOUT_VERSION as u64) && !force {
+                return Err(format!(
+                    "unsupported trace source layout version {}; expected {}",
+                    version, SOURCE_LAYOUT_VERSION
+                ));
+            }
+        }
+        if let Some(recorded_layout_hash) =
+            header.get("source_layout_hash").and_then(|value| value.as_str())
+        {
+            if source_layout.digest(&source)? != recorded_layout_hash && !force {
+                return Err(
+                    "trace integrity check failed: source layout does not match source_layout_hash. Use --force to replay it anyway."
+                        .into(),
+                );
+            }
+        } else if !source_layout.sections.is_empty() && !force {
+            return Err("trace source layout is not protected by a source_layout_hash".into());
+        }
+        let features = match header.get("features") {
+            None => Vec::new(),
+            Some(value) => value
+                .as_array()
+                .ok_or("trace header features must be an array")?
+                .iter()
+                .map(|feature| {
+                    feature
+                        .as_str()
+                        .map(str::to_string)
+                        .ok_or("trace header feature names must be strings")
+                })
+                .collect::<Result<Vec<_>, _>>()?,
+        };
+        let features = canonical_features(&features);
+        if let Some(recorded_feature_hash) = header.get("feature_hash").and_then(|v| v.as_str()) {
+            if feature_hash(&features) != recorded_feature_hash && !force {
+                return Err(
+                    "trace integrity check failed: features do not match feature_hash. Use --force to replay it anyway."
+                        .into(),
+                );
+            }
+        } else if !features.is_empty() && !force {
+            return Err("trace feature list is not protected by a feature_hash".into());
+        }
         let seed = header["seed"].as_u64().ok_or("trace header has no seed")?;
 
         let mut records = Vec::new();
@@ -588,6 +689,8 @@ impl TraceReplayer {
         }
         Ok(Self {
             source,
+            source_layout,
+            features,
             seed,
             records,
             frame_starts,
@@ -600,6 +703,14 @@ impl TraceReplayer {
             capture_timeline: false,
             timeline: Vec::new(),
         })
+    }
+
+    pub fn features(&self) -> &[String] {
+        &self.features
+    }
+
+    pub fn source_layout(&self) -> &SourceLayout {
+        &self.source_layout
     }
 
     /// Switch to retroactive mode: recorded io
@@ -952,6 +1063,7 @@ mod tests {
         assert_eq!(lines[0]["version"], 1);
         assert_eq!(lines[0]["seed"], 7);
         assert_eq!(lines[0]["source_hash"], source_hash(&src));
+        assert_eq!(lines[0]["features"], serde_json::json!([]));
 
         let ios: Vec<&serde_json::Value> = lines.iter().filter(|l| l["t"] == "io").collect();
         let names: Vec<&str> = ios.iter().map(|l| l["b"].as_str().unwrap()).collect();
@@ -980,6 +1092,27 @@ mod tests {
         let frames: Vec<&serde_json::Value> = lines.iter().filter(|l| l["t"] == "frame").collect();
         assert_eq!(frames.len(), 1);
         assert_eq!(frames[0]["n"], 0);
+    }
+
+    #[test]
+    fn trace_preserves_and_authenticates_language_features() {
+        let features = vec!["causal_laws".to_string()];
+        let recorder = TraceRecorder::new_with_features("settle {}", 7, &features);
+        let trace = recorder.to_jsonl();
+        let parsed = TraceReplayer::parse(&trace, false).expect("feature-bearing trace");
+        assert_eq!(parsed.features(), features);
+
+        let mut lines = trace.lines();
+        let mut header: serde_json::Value =
+            serde_json::from_str(lines.next().unwrap()).expect("header json");
+        header["features"] = serde_json::json!([]);
+        let tampered = std::iter::once(header.to_string())
+            .chain(lines.map(str::to_string))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let error = TraceReplayer::parse(&tampered, false)
+            .expect_err("feature tampering must invalidate the trace");
+        assert!(error.contains("feature_hash"), "{error}");
     }
 
     #[test]

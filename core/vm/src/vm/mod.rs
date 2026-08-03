@@ -522,7 +522,12 @@ impl VM {
             pending_io: HashMap::new(),
             in_async_context: false,
             #[cfg(not(target_arch = "wasm32"))]
-            io_pool: IoPool::new(1),
+            // Worker VMs are effect-isolated and may not perform I/O. Keeping
+            // this disabled also matters on Windows: WORKER_VM is thread-local
+            // to a Rayon thread, and joining a nested I/O thread from that
+            // TLS destructor can race process teardown and abort after an
+            // otherwise successful simulate_par() run.
+            io_pool: IoPool::disabled(),
             #[cfg(not(target_arch = "wasm32"))]
             loaded_libraries: Vec::new(),
             #[cfg(not(target_arch = "wasm32"))]
@@ -704,6 +709,34 @@ impl VM {
     /// trace seed, so call this before `run` and after any seed override.
     pub fn enable_recording(&mut self, source: &str) {
         self.recorder = Some(crate::replay::TraceRecorder::new(source, self.rng_state));
+    }
+
+    /// Record the exact language-feature contract needed to compile the
+    /// embedded source again. The feature list is canonicalized and protected
+    /// by its own trace-header digest.
+    pub fn enable_recording_with_features(&mut self, source: &str, features: &[String]) {
+        self.recorder = Some(crate::replay::TraceRecorder::new_with_features(
+            source,
+            self.rng_state,
+            features,
+        ));
+    }
+
+    /// Record a self-contained multi-module source bundle. The authenticated
+    /// layout is data, not a lexer convention, so arbitrary comments cannot
+    /// alter replay locations.
+    pub fn enable_recording_with_source_layout(
+        &mut self,
+        source: &str,
+        features: &[String],
+        source_layout: &crate::source_bundle::SourceLayout,
+    ) {
+        self.recorder = Some(crate::replay::TraceRecorder::new_with_features_and_layout(
+            source,
+            self.rng_state,
+            features,
+            source_layout,
+        ));
     }
 
     /// Finish recording and return the trace as JSONL, if recording was on.

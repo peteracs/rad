@@ -61,6 +61,23 @@ impl IoPool {
         let _ = self.tx.send(Message::Run(job));
         result_rx
     }
+
+    /// Construct a pool that owns no worker threads.
+    ///
+    /// Parallel/simulation worker VMs are not allowed to perform I/O, so
+    /// giving every Rayon worker a nested OS thread was both wasteful and, on
+    /// Windows process teardown, unsound operationally: a thread-local worker
+    /// VM could try to join its nested I/O thread while the runtime was
+    /// already destroying process threads. The standard library then aborts
+    /// with `threads should not terminate unexpectedly`.
+    pub fn disabled() -> Self {
+        Self::new(0)
+    }
+
+    #[cfg(test)]
+    pub fn worker_count(&self) -> usize {
+        self.workers.len()
+    }
 }
 
 impl Drop for IoPool {
@@ -71,5 +88,16 @@ impl Drop for IoPool {
         for worker in self.workers.drain(..) {
             let _ = worker.join();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::IoPool;
+
+    #[test]
+    fn disabled_pool_owns_no_threads() {
+        let pool = IoPool::disabled();
+        assert_eq!(pool.worker_count(), 0);
     }
 }

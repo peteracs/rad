@@ -71,7 +71,10 @@ impl ReplayServer {
         let io_records = replayer.io_record_count();
 
         let source = replayer.source().to_string();
-        let mut lexer = Lexer::new(&source);
+        let features = replayer.features().to_vec();
+        let source_layout = replayer.source_layout().clone();
+        let mut lexer = Lexer::new_with_source_layout(&source, &source_layout)
+            .map_err(|error| format!("trace source layout is invalid: {error}"))?;
         let tokens = lexer.tokenize().0;
         let mut parser = Parser::new(tokens);
         let program = parser.parse();
@@ -79,6 +82,7 @@ impl ReplayServer {
             return Err(format!("embedded source failed to parse: {}", e.message));
         }
         let compile_result = Compiler::new()
+            .with_features(features)
             .compile(&program)
             .map_err(|e| format!("embedded source failed to compile: {}", e.message))?;
 

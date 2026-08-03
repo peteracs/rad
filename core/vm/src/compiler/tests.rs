@@ -3940,4 +3940,27 @@ if (x) { return ${n}; }
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("non-finite"));
     }
+
+    #[test]
+    fn self_referential_record_assignment_survives_getlocal2_fusion() {
+        let output = run_source(
+            r#"
+            component SearchState {
+                items: list = []
+                depth: int = 0
+            }
+
+            fn rebuild(items: list<int>, depth: int) -> SearchState {
+                return SearchState { items: items, depth: depth }
+            }
+
+            let mut candidate = SearchState { items: [], depth: 0 }
+            let items = push(candidate.items, 7)
+            candidate = rebuild(items, candidate.depth + 1)
+            print(candidate.depth)
+            print(candidate.items)
+        "#,
+        );
+        assert_eq!(output, vec!["1", "[7]"]);
+    }
 }

@@ -12,6 +12,7 @@ use crate::manifest::parse_rad_toml;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::manifest::RadManifest;
 use crate::parser::{Parser, ParserOptions};
+use crate::source_bundle::SourceLayout;
 
 #[derive(Debug, Clone)]
 pub struct ModuleLoadError {
@@ -25,6 +26,7 @@ pub struct ModuleLoadError {
 pub struct LoadResult {
     pub program: Program,
     pub merged_source: String,
+    pub source_layout: SourceLayout,
     pub had_imports: bool,
     pub source_map: SourceMap,
     pub module_fingerprints: Vec<ModuleFingerprint>,
@@ -409,10 +411,9 @@ pub fn load_program_with_overrides(
                     visited: HashSet::new(),
                     parsed_files: HashMap::new(),
                     symbols: HashMap::new(),
-                    file_offsets: HashMap::new(),
                     merged: Vec::new(),
                     merged_source: String::new(),
-                    line_cursor: 1,
+                    source_layout: SourceLayout::default(),
                     had_imports: false,
                     source_map: SourceMap::new(),
                     parser_options,
@@ -438,6 +439,7 @@ pub fn load_program_with_overrides(
                         declarations: ctx.merged,
                     },
                     merged_source: ctx.merged_source,
+                    source_layout: ctx.source_layout,
                     had_imports: ctx.had_imports,
                     source_map: ctx.source_map,
                     module_fingerprints: ctx.module_fingerprints,
@@ -453,10 +455,9 @@ pub fn load_program_with_overrides(
         visited: HashSet::new(),
         parsed_files: HashMap::new(),
         symbols: HashMap::new(),
-        file_offsets: HashMap::new(),
         merged: Vec::new(),
         merged_source: String::new(),
-        line_cursor: 1,
+        source_layout: SourceLayout::default(),
         had_imports: false,
         source_map: SourceMap::new(),
         parser_options,
@@ -481,6 +482,7 @@ pub fn load_program_with_overrides(
             declarations: ctx.merged,
         },
         merged_source: ctx.merged_source,
+        source_layout: ctx.source_layout,
         had_imports: ctx.had_imports,
         source_map: ctx.source_map,
         module_fingerprints: ctx.module_fingerprints,
@@ -500,10 +502,9 @@ struct LoadContext {
     visited: HashSet<PathBuf>,
     parsed_files: HashMap<PathBuf, ParsedFile>,
     symbols: HashMap<String, SymbolDef>,
-    file_offsets: HashMap<PathBuf, u32>,
     merged: Vec<Decl>,
     merged_source: String,
-    line_cursor: u32,
+    source_layout: SourceLayout,
     had_imports: bool,
     source_map: SourceMap,
     parser_options: ParserOptions,
@@ -690,21 +691,15 @@ fn parse_pass(path: &Path, ctx: &mut LoadContext, lock_path_label: &str) -> Resu
         sha256_hex: Some(sha256_hex_of(source.as_bytes())),
     });
 
-    if !ctx.file_offsets.contains_key(path) {
-        if !ctx.merged_source.is_empty() {
-            ctx.merged_source.push('\n');
-            ctx.line_cursor += 1;
-        }
-
-        ctx.merged_source
-            .push_str(&format!("// -- {} --\n", path.to_string_lossy()));
-        ctx.line_cursor += 1;
-        ctx.file_offsets.insert(path.to_path_buf(), ctx.line_cursor);
-
-        let rendered_source = normalize_file_source_for_merge(&source);
-        ctx.merged_source.push_str(&rendered_source);
-        ctx.line_cursor += rendered_source.lines().count() as u32;
+    if !ctx.merged_source.is_empty() {
+        ctx.merged_source.push('\n');
     }
+    ctx.source_layout.push(
+        ctx.merged_source.len(),
+        path.to_string_lossy().to_string(),
+    );
+    let rendered_source = normalize_file_source_for_merge(&source);
+    ctx.merged_source.push_str(&rendered_source);
 
     let mut lexer = Lexer::new(&source);
     let (tokens, lex_errors) = lexer.tokenize();
@@ -1211,7 +1206,7 @@ mod tests {
     }
 
     #[test]
-    fn merged_source_contains_module_markers() {
+    fn merged_source_has_structured_module_boundaries() {
         let dir = mk_temp_dir();
         fs::write(dir.join("a.rad"), "fn a() { return 1 }\n").unwrap();
         fs::write(
@@ -1219,11 +1214,17 @@ mod tests {
             "use \"a.rad\"\nfn main() -> nil { print(a()) }\n",
         )
         .unwrap();
-        let (_program, merged_source, had_imports) =
-            load_program_with_uses(dir.join("main.rad").to_str().unwrap()).unwrap();
-        assert!(had_imports);
-        assert!(merged_source.contains("// -- "));
-        assert!(merged_source.contains("a.rad"));
+        let result =
+            load_program_with_source_map(dir.join("main.rad").to_str().unwrap()).unwrap();
+        assert!(result.had_imports);
+        assert!(!result.merged_source.contains("// -- "));
+        assert_eq!(result.source_layout.sections.len(), 2);
+        assert!(result
+            .source_layout
+            .sections
+            .iter()
+            .any(|section| section.name.ends_with("a.rad")));
+        result.source_layout.validate(&result.merged_source).unwrap();
     }
 
     #[test]
@@ -1274,9 +1275,10 @@ mod tests {
         )
         .unwrap();
 
-        let (_program, merged_source, _had_imports) =
-            load_program_with_uses(dir.join("main.rad").to_str().unwrap()).unwrap();
-        assert!(!merged_source.contains("\n\n\n// -- "));
+        let result =
+            load_program_with_source_map(dir.join("main.rad").to_str().unwrap()).unwrap();
+        assert!(!result.merged_source.contains("\n\n\n"));
+        assert_eq!(result.source_layout.sections.len(), 3);
     }
 
     #[test]

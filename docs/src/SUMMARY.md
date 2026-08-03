@@ -60,6 +60,8 @@
 - [Radtrack](./examples/radtrack.md)
 - [Radoku](./examples/radoku.md)
 - [Radtactics](./examples/radtactics.md)
+- [Frankl Union-Closed-Family Search](./examples/frankl-search.md)
+- [Collatz Structural Laboratory](./examples/collatz-lab.md)
 
 # Project
 

@@ -63,6 +63,13 @@ These examples demonstrate Rad's first-class world forking feature — fork the 
 |---|---|
 | `complex_dag_ci_orchestrator.rad` | DAG-style CI build orchestrator: typed components/resource, `query { Task }` + `require`, guarded `on` handlers, named `phase`s, `enumerate` / `find` / `max_by` / `min_by`, `update()` sugar, release state machine — stress-tests current DX extensions |
 
+## Computational mathematics dogfood
+
+| Project | What it demonstrates |
+|---|---|
+| [`frankl-search`](./frankl-search.md) | Native exact Boolean-lattice kernels, deterministic family-distinct `simulate_many()` search at the first open ground-set size, Causal Laws/constraints/`why()`/replay, exhaustive `N=4` audit, and independently verified JSON certificates |
+| [`collatz-lab`](./collatz-lab.md) | Pruned affine residue trees, exact odd-cycle equations, eight COW universes, Causal Laws/constraints/`why()`/replay, and a VM-independent certificate verifier that explains the form of any possible Collatz counterexample |
+
 ## "Cursed" examples (pushing the language to its limits)
 
 | Example | What it demonstrates |

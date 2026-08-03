@@ -1,0 +1,641 @@
+// Frankl's union-closed sets conjecture: deterministic N=13 search dogfood.
+
+use "../native-math-kernels/math_kernels.rad"
+//
+// This is a witness search, not a proof procedure.  Each candidate is the
+// exact union closure of a bounded generator basis.  A compact beam is
+// explored through simulate_many(); the native Boolean-lattice kernel keeps
+// full 8192-member families out of speculative world state.
+// The resulting family is written as a machine-checkable certificate.
+
+use "structure_lib.rad"
+
+let UNIVERSE = 13
+let FULL_SET = 8191 // (1 << 13) - 1
+let GENERATOR_SLOTS = 32
+let GENERATIONS = 64
+let CHILDREN_PER_PARENT = 16
+let BEAM_WIDTH = 8
+let LOCAL_TRIALS_PER_FORK = 32
+let SEARCH_SEED = 1979
+let MIN_COUNTEREXAMPLE_SIZE = 51
+let CERTIFICATE_PATH = "projects/dogfood/frankl-search/out/latest.json"
+
+resource Candidate {
+    generators: list = [
+        8191, 1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096,
+    ],
+    frequencies: list = [],
+    member_sets: int = 0,
+    max_frequency: int = 0,
+    margin: int = 0,
+    separating: bool = false,
+    family_signature: int = 0,
+    generation: int = 0,
+}
+
+resource SearchConfig {
+    local_trials_per_fork: int = 32
+}
+
+// Per-rollout telemetry is reset with fork_with() before every speculative
+// batch, so the live world receives an exact, non-overlapping landscape count
+// rather than double-counting inherited history.
+resource BatchTelemetry {
+    evaluated: int = 0
+    negative: int = 0
+    equality: int = 0
+    positive: int = 0
+    nonseparating: int = 0
+    minimum_positive_margin: int = 999999999
+    near_generators: list = []
+    near_frequencies: list = []
+    near_members: int = 0
+    near_signature: int = 0
+    smallest_family: int = 999999999
+    largest_family: int = 0
+}
+
+component SearchEvidence {
+    member_sets: int = 0
+    max_frequency: int = 0
+    margin: int = 0
+    union_closed: bool = false
+    covers_universe: bool = false
+    separating: bool = false
+    regenerated: bool = false
+    counterexample: bool = false
+}
+
+intent CertifySearch {
+    key target: entity
+    member_sets: int
+    max_frequency: int
+    margin: int
+    union_closed: bool
+    covers_universe: bool
+    separating: bool
+    regenerated: bool
+    counterexample: bool
+}
+
+law SubmitSearchEvidence(
+    target: entity,
+    member_sets: int,
+    max_frequency: int,
+    margin: int,
+    union_closed: bool,
+    covers_universe: bool,
+    separating: bool,
+    regenerated: bool,
+    counterexample: bool,
+) {
+    propose CertifySearch {
+        target: target,
+        member_sets: member_sets,
+        max_frequency: max_frequency,
+        margin: margin,
+        union_closed: union_closed,
+        covers_universe: covers_universe,
+        separating: separating,
+        regenerated: regenerated,
+        counterexample: counterexample,
+    }
+}
+
+resolver ResolveSearchEvidence for CertifySearch(target, proposals) {
+    let proposal = proposals[0]
+    next(target, SearchEvidence {
+        member_sets: proposal.member_sets,
+        max_frequency: proposal.max_frequency,
+        margin: proposal.margin,
+        union_closed: proposal.union_closed,
+        covers_universe: proposal.covers_universe,
+        separating: proposal.separating,
+        regenerated: proposal.regenerated,
+        counterexample: proposal.counterexample,
+    })
+}
+
+constraint ValidSearchEvidence for SearchEvidence(subject, proposed) {
+    require proposed.member_sets >= MIN_COUNTEREXAMPLE_SIZE
+        else "frankl.family_below_open_search_bound"
+    require proposed.margin == proposed.max_frequency * 2 - proposed.member_sets
+        else "frankl.inconsistent_margin"
+    require proposed.union_closed else "frankl.not_union_closed"
+    require proposed.covers_universe else "frankl.incomplete_ground_set"
+    require proposed.separating else "frankl.nonseparating_family"
+    require proposed.regenerated else "frankl.generator_certificate_mismatch"
+}
+
+entity search_judge { SearchEvidence {} }
+
+// Reference implementation retained for differential checks. The hot search
+// uses or_closure()/or_closure_stats(), implemented as a general finite
+// join-semilattice kernel in the VM.
+fn union_closure(gens: list<int>) -> list<int> {
+    let mut present = bitset_new()
+    present = bitset_set(present, 0)
+    let mut family = [0]
+
+    for generator in gens {
+        let before = len(family)
+        for i in range(before) {
+            let joined = family[i] | generator
+            if not bitset_has(present, joined) {
+                present = bitset_set(present, joined)
+                family = push(family, joined)
+            }
+        }
+    }
+
+    return sort(family)
+}
+
+fn element_frequencies(family: list<int>, universe: int) -> list<int> {
+    let mut counts = []
+    for element in range(universe) {
+        let bit = shl(1, element)
+        let mut count = 0
+        for member in family {
+            if (member & bit) != 0 {
+                count = count + 1
+            }
+        }
+        counts = push(counts, count)
+    }
+    return counts
+}
+
+fn analyze(gens: list<int>, generation: int) -> Candidate {
+    let stats = lattice_profile(gens, UNIVERSE)
+    let member_sets = stats["size"]
+    let frequencies = stats["frequencies"]
+    let maximum = max_int(frequencies)
+    return Candidate {
+        generators: gens,
+        frequencies: frequencies,
+        member_sets: member_sets,
+        max_frequency: maximum,
+        margin: maximum * 2 - member_sets,
+        separating: stats["separating"],
+        family_signature: stats["signature"],
+        generation: generation,
+    }
+}
+
+// Compare exact fractions.  A smaller maximum element frequency is better;
+// on equality retain the larger family, then the lexicographically smaller
+// sorted family through the stable rollout scan below.
+fn is_better(a: Candidate, b: Candidate) -> bool {
+    if a.separating != b.separating {
+        return a.separating
+    }
+    let a_large_enough = a.member_sets >= MIN_COUNTEREXAMPLE_SIZE
+    let b_large_enough = b.member_sets >= MIN_COUNTEREXAMPLE_SIZE
+    if a_large_enough != b_large_enough {
+        return a_large_enough
+    }
+    if not a_large_enough and a.member_sets != b.member_sets {
+        return a.member_sets > b.member_sets
+    }
+    let left = a.max_frequency * b.member_sets
+    let right = b.max_frequency * a.member_sets
+    if left != right {
+        return left < right
+    }
+    if a.member_sets != b.member_sets {
+        return a.member_sets > b.member_sets
+    }
+    return a.margin < b.margin
+}
+
+// Only the generator basis mutates.  Candidate state is recomputed from
+// scratch, which makes stale closure/frequency data impossible.
+system ExploreBatch(candidate: mut Candidate, config: SearchConfig, telemetry: mut BatchTelemetry) {
+    let base = candidate.generators
+    let mut batch_best = candidate
+    let mut found_distinct = false
+    let mut negative = 0
+    let mut equality = 0
+    let mut positive = 0
+    let mut nonseparating = 0
+    let mut minimum_positive_margin = 999999999
+    let mut near_generators = []
+    let mut near_frequencies = []
+    let mut near_members = 0
+    let mut near_signature = 0
+    let mut smallest_family = 999999999
+    let mut largest_family = 0
+    for trial in range(config.local_trials_per_fork) {
+        let mut gens = base
+        // Deterministic seeded restarts keep the beam from collapsing around
+        // the first equality family. Slot zero is always the full-set join.
+        if rand_int(0, 15) == 0 {
+            for index in range(1, len(gens)) {
+                gens[index] = rand_int(1, FULL_SET - 1)
+            }
+        } else {
+            let edits = rand_int(1, 6)
+            for _edit in range(edits) {
+                let index = rand_int(1, len(gens) - 1)
+                if rand_int(0, 7) == 0 {
+                    let source = rand_int(1, len(gens) - 1)
+                    gens[index] = gens[source]
+                } else {
+                    gens[index] = rand_int(1, FULL_SET - 1)
+                }
+            }
+        }
+        let explored = analyze(gens, candidate.generation + 1)
+        if explored.margin < 0 {
+            negative = negative + 1
+        } else if explored.margin == 0 {
+            equality = equality + 1
+        } else {
+            positive = positive + 1
+            if explored.margin < minimum_positive_margin
+                or (explored.margin == minimum_positive_margin and explored.member_sets > near_members) {
+                minimum_positive_margin = explored.margin
+                near_generators = explored.generators
+                near_frequencies = explored.frequencies
+                near_members = explored.member_sets
+                near_signature = explored.family_signature
+            }
+        }
+        if not explored.separating {
+            nonseparating = nonseparating + 1
+        }
+        if explored.member_sets < smallest_family {
+            smallest_family = explored.member_sets
+        }
+        if explored.member_sets > largest_family {
+            largest_family = explored.member_sets
+        }
+        let distinct = explored.family_signature != candidate.family_signature
+            or explored.member_sets != candidate.member_sets
+            or explored.frequencies != candidate.frequencies
+        // Do not let a different basis for the same family suppress all
+        // exploration merely because the parent is an equality case.
+        if distinct and (not found_distinct or is_better(explored, batch_best)) {
+            batch_best = explored
+            found_distinct = true
+        } else if trial == 0 and not found_distinct {
+            batch_best = explored
+        }
+    }
+    candidate = batch_best
+    telemetry = BatchTelemetry {
+        evaluated: config.local_trials_per_fork,
+        negative: negative,
+        equality: equality,
+        positive: positive,
+        nonseparating: nonseparating,
+        minimum_positive_margin: minimum_positive_margin,
+        near_generators: near_generators,
+        near_frequencies: near_frequencies,
+        near_members: near_members,
+        near_signature: near_signature,
+        smallest_family: smallest_family,
+        largest_family: largest_family,
+    }
+}
+
+fn closure_is_sound(family: list<int>) -> bool {
+    return lattice_is_closed(family)
+}
+
+fn basis_is_irredundant(gens: list<int>, family: list<int>) -> bool {
+    for drop in range(len(gens)) {
+        let mut smaller = []
+        for i in range(len(gens)) {
+            if i != drop {
+                smaller = push(smaller, gens[i])
+            }
+        }
+        if lattice_closure(smaller) == family {
+            return false
+        }
+    }
+    return true
+}
+
+fn irredundant_basis(gens: list<int>) -> list<int> {
+    let target = lattice_closure(gens)
+    let mut basis = gens
+    let mut index = len(basis) - 1
+    while index >= 0 {
+        let mut smaller = []
+        for i in range(len(basis)) {
+            if i != index {
+                smaller = push(smaller, basis[i])
+            }
+        }
+        if lattice_closure(smaller) == target {
+            basis = smaller
+        }
+        index = index - 1
+    }
+    return basis
+}
+
+fn is_separating(family: list<int>, universe: int) -> bool {
+    for left in range(universe) {
+        for right in range(left + 1, universe) {
+            let left_bit = shl(1, left)
+            let right_bit = shl(1, right)
+            let mut separated = false
+            for member in family {
+                if ((member & left_bit) != 0) != ((member & right_bit) != 0) {
+                    separated = true
+                    break
+                }
+            }
+            if not separated {
+                return false
+            }
+        }
+    }
+    return true
+}
+
+fn same_family(left: world_fork, right: world_fork) -> bool {
+    let a = peek_resource(left, Candidate) |> unwrap
+    let b = peek_resource(right, Candidate) |> unwrap
+    return a.family_signature == b.family_signature
+        and a.member_sets == b.member_sets
+        and a.frequencies == b.frequencies
+}
+
+// Insert one fork into a compact, sorted, generator-distinct beam. Keeping
+// only summaries in each fork prevents COW cloning of complete set families.
+fn beam_insert(beam: list<world_fork>, candidate_fork: world_fork, limit: int) -> list<world_fork> {
+    for existing in beam {
+        if same_family(existing, candidate_fork) {
+            return beam
+        }
+    }
+
+    let candidate = peek_resource(candidate_fork, Candidate) |> unwrap
+    let mut result = []
+    let mut inserted = false
+    for existing in beam {
+        let current = peek_resource(existing, Candidate) |> unwrap
+        if not inserted and is_better(candidate, current) {
+            result = push(result, candidate_fork)
+            inserted = true
+        }
+        result = push(result, existing)
+    }
+    if not inserted {
+        result = push(result, candidate_fork)
+    }
+    if len(result) > limit {
+        result = drop_last(result)
+    }
+    return result
+}
+
+fn main() -> nil {
+    let argv = sys_args()
+    let mut generations = GENERATIONS
+    let mut children_per_parent = CHILDREN_PER_PARENT
+    let mut beam_width = BEAM_WIDTH
+    let mut local_trials_per_fork = LOCAL_TRIALS_PER_FORK
+    let mut generator_slots = GENERATOR_SLOTS
+    let mut run_pairwise_rad_audit = true
+    if len(argv) >= 1 {
+        generations = int(argv[0])
+    }
+    if len(argv) >= 2 {
+        children_per_parent = int(argv[1])
+    }
+    if len(argv) >= 3 {
+        if argv[2] == "quick" {
+            run_pairwise_rad_audit = false
+        } else {
+            beam_width = int(argv[2])
+        }
+    }
+    if len(argv) >= 4 {
+        if argv[3] == "quick" {
+            run_pairwise_rad_audit = false
+        } else {
+            local_trials_per_fork = int(argv[3])
+        }
+    }
+    if len(argv) >= 5 {
+        if argv[4] == "quick" {
+            run_pairwise_rad_audit = false
+        } else {
+            generator_slots = int(argv[4])
+        }
+    }
+    if len(argv) >= 6 and argv[5] == "quick" {
+        run_pairwise_rad_audit = false
+    }
+    assert(generations > 0, "generations must be positive")
+    assert(children_per_parent > 0, "children per parent must be positive")
+    assert(beam_width > 0, "beam width must be positive")
+    assert(local_trials_per_fork > 0, "local trials per fork must be positive")
+    assert(generator_slots >= 14, "at least the full set and 13 singleton generators are required")
+
+    let mut initial_generators = res(Candidate).generators
+    while len(initial_generators) < generator_slots {
+        initial_generators = push(initial_generators, FULL_SET)
+    }
+    let initial = analyze(initial_generators, 0)
+    set_resource(Candidate, initial)
+    set_resource(SearchConfig, SearchConfig { local_trials_per_fork: local_trials_per_fork })
+
+    let live_before = world_digest()
+    let root = fork()
+    let mut population = [root]
+    let mut best_fork = root
+    let mut best = initial
+    let mut candidates_evaluated = 1
+    let mut negative_evaluated = 0
+    let mut equality_evaluated = 1
+    let mut positive_evaluated = 0
+    let mut nonseparating_evaluated = 0
+    let mut minimum_positive_margin = 999999999
+    let mut near_generators = []
+    let mut near_frequencies = []
+    let mut near_members = 0
+    let mut near_signature = 0
+    let mut smallest_family_seen = initial.member_sets
+    let mut largest_family_seen = initial.member_sets
+
+    print("Frankl search: deterministic generator-basis heuristic")
+    print(f"universe={UNIVERSE} first-open-size=true generator_slots={generator_slots}")
+    print(f"initial family={best.member_sets} max={best.max_frequency}/{best.member_sets} margin={best.margin}")
+
+    for generation in range(generations) {
+        let mut inputs = []
+        for parent in population {
+            for _child in range(children_per_parent) {
+                inputs = push(inputs, fork_with(parent, BatchTelemetry {}))
+            }
+        }
+        let futures = simulate_many(
+            inputs,
+            [system::ExploreBatch],
+            1,
+            SEARCH_SEED + generation * 1009,
+        )
+        candidates_evaluated = candidates_evaluated + len(futures) * local_trials_per_fork
+
+        for future in futures {
+            let telemetry = peek_resource(future, BatchTelemetry) |> unwrap
+            negative_evaluated = negative_evaluated + telemetry.negative
+            equality_evaluated = equality_evaluated + telemetry.equality
+            positive_evaluated = positive_evaluated + telemetry.positive
+            nonseparating_evaluated = nonseparating_evaluated + telemetry.nonseparating
+            if telemetry.minimum_positive_margin < minimum_positive_margin
+                or (telemetry.minimum_positive_margin == minimum_positive_margin
+                    and telemetry.near_members > near_members) {
+                minimum_positive_margin = telemetry.minimum_positive_margin
+                near_generators = telemetry.near_generators
+                near_frequencies = telemetry.near_frequencies
+                near_members = telemetry.near_members
+                near_signature = telemetry.near_signature
+            }
+            if telemetry.smallest_family < smallest_family_seen {
+                smallest_family_seen = telemetry.smallest_family
+            }
+            if telemetry.largest_family > largest_family_seen {
+                largest_family_seen = telemetry.largest_family
+            }
+        }
+
+        let mut next_population = []
+        for incumbent in population {
+            next_population = beam_insert(next_population, incumbent, beam_width)
+        }
+        for future in futures {
+            next_population = beam_insert(next_population, future, beam_width)
+        }
+
+        population = next_population
+        best_fork = population[0]
+        best = peek_resource(best_fork, Candidate) |> unwrap
+        if generation == 0 or (generation + 1) % 4 == 0 {
+            print(f"generation={generation + 1} trials={candidates_evaluated} beam={len(population)} family={best.member_sets} max={best.max_frequency}/{best.member_sets} margin={best.margin}")
+        }
+    }
+
+    let best_family = lattice_closure(best.generators)
+    let certificate_basis = irredundant_basis(best.generators)
+    let frankl_holds = best.max_frequency * 2 >= best.member_sets
+    let counterexample = not frankl_holds
+    // The incremental constructor is union-closed by induction. The default
+    // run additionally performs the quadratic pair audit in RAD; CI's quick
+    // mode leaves that audit to the independent Python verifier.
+    let mut sound = true
+    if run_pairwise_rad_audit {
+        sound = closure_is_sound(best_family)
+    }
+    let covers_universe = family_union(best_family) == FULL_SET
+    let regenerated = lattice_closure(certificate_basis) == best_family
+    let reference_regenerated = union_closure(certificate_basis) == best_family
+    let native_frequencies = lattice_frequencies(best_family, UNIVERSE)
+    let reference_frequencies = element_frequencies(best_family, UNIVERSE)
+    let irredundant = basis_is_irredundant(certificate_basis, best_family)
+    let separating = is_separating(best_family, UNIVERSE)
+
+    assert(sound, "candidate family must be union-closed")
+    assert(covers_universe, "candidate must use all 13 ground elements")
+    assert(regenerated, "generator basis must reproduce the family")
+    assert(reference_regenerated, "native closure must match the RAD reference closure")
+    assert(native_frequencies == best.frequencies, "native frequency kernel must match search summary")
+    assert(reference_frequencies == best.frequencies, "native frequency kernel must match RAD reference")
+    let search_world_unchanged = world_digest() == live_before
+    assert(search_world_unchanged, "speculative search must not mutate the live world")
+
+    // The finalist metadata crosses one real World-Law boundary: one law
+    // proposes it, one resolver owns the candidate write, constraints validate
+    // it against the complete patch, and why() records the accepted cause.
+    settle {
+        SubmitSearchEvidence(
+            search_judge,
+            best.member_sets,
+            best.max_frequency,
+            best.margin,
+            sound,
+            covers_universe,
+            separating,
+            regenerated and reference_regenerated,
+            counterexample,
+        )
+    }
+    let evidence = require(search_judge, SearchEvidence)
+    assert(evidence.member_sets == best.member_sets, "settled evidence must match finalist")
+    let evidence_why = why(search_judge, SearchEvidence)
+
+    let near_family = lattice_closure(near_generators)
+    let near_deleted = complement_family(near_family, UNIVERSE)
+    let near_deleted_surpluses = deletion_majority_surpluses(near_deleted, UNIVERSE)
+    assert(lattice_is_closed(near_family), "closest positive family must be union-closed")
+    assert(lattice_frequencies(near_family, UNIVERSE) == near_frequencies, "closest positive frequencies must regenerate")
+    assert(min_int(near_deleted_surpluses) == 0 - minimum_positive_margin, "dual surplus must negate the Frankl margin")
+
+    let certificate: map<str, any> = {
+        "schema": "rad.frankl-search-certificate.v1",
+        "claim_scope": "heuristic-generator-basis-search",
+        "universe_size": UNIVERSE,
+        "full_set_mask": FULL_SET,
+        "generators": certificate_basis,
+        "family": best_family,
+        "frequencies": best.frequencies,
+        "member_sets": best.member_sets,
+        "max_frequency": best.max_frequency,
+        "frankl_holds": frankl_holds,
+        "counterexample": counterexample,
+        "union_closed": sound,
+        "covers_universe": covers_universe,
+        "basis_irredundant": irredundant,
+        "separating": separating,
+        "known_minimum_counterexample_sets": MIN_COUNTEREXAMPLE_SIZE,
+        "candidates_evaluated": candidates_evaluated,
+        "negative_candidates": negative_evaluated,
+        "equality_candidates": equality_evaluated,
+        "positive_candidates": positive_evaluated,
+        "nonseparating_candidates": nonseparating_evaluated,
+        "minimum_positive_margin": minimum_positive_margin,
+        "closest_positive_generators": near_generators,
+        "closest_positive_family": near_family,
+        "closest_positive_frequencies": near_frequencies,
+        "closest_positive_members": near_members,
+        "closest_positive_signature": near_signature,
+        "closest_positive_rank_histogram": rank_histogram(near_family, UNIVERSE),
+        "closest_positive_deleted_size": len(near_deleted),
+        "closest_positive_deleted_surpluses": near_deleted_surpluses,
+        "smallest_family_seen": smallest_family_seen,
+        "largest_family_seen": largest_family_seen,
+        "generations": generations,
+        "children_per_parent": children_per_parent,
+        "beam_width": beam_width,
+        "local_trials_per_fork": local_trials_per_fork,
+        "generator_slots": generator_slots,
+        "search_seed": SEARCH_SEED,
+        "result_world_digest": world_digest(best_fork),
+        "winning_rollout_seed": fork_seed(best_fork),
+        "live_world_unchanged": search_world_unchanged,
+        "rad_pairwise_audit": run_pairwise_rad_audit,
+        "evidence_world_digest": world_digest(),
+        "evidence_why": evidence_why,
+    }
+
+    create_dir("projects/dogfood/frankl-search/out")
+    write_file(CERTIFICATE_PATH, json_stringify(certificate))
+
+    print(f"evaluated={candidates_evaluated}")
+    print(f"landscape negative={negative_evaluated} equality={equality_evaluated} positive={positive_evaluated} nonseparating={nonseparating_evaluated}")
+    print(f"landscape min_positive_margin={minimum_positive_margin} family_size_range={smallest_family_seen}..{largest_family_seen}")
+    print(f"closest_positive={max_int(near_frequencies)}/{near_members} dual_min={min_int(near_deleted_surpluses)}")
+    print(f"best family={best.member_sets} max={best.max_frequency}/{best.member_sets} margin={best.margin}")
+    print(f"counterexample={counterexample} union_closed={sound} universe_covered={covers_universe}")
+    print(f"basis_irredundant={irredundant} separating={separating} digest={world_digest(best_fork)}")
+    print(evidence_why)
+    print(f"certificate={CERTIFICATE_PATH}")
+}

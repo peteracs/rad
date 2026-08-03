@@ -1,0 +1,502 @@
+// Collatz structural laboratory.
+//
+// This does not confuse a finite computation with a proof of the conjecture.
+// It computes exact certificates for the only two possible counterexample
+// shapes: a nontrivial positive cycle, or a coherent residue path that avoids
+// every certified first descent.
+
+use "collatz_lib.rad"
+use "../native-math-kernels/math_kernels.rad"
+
+let DEPTH = 26
+let VERIFIED_POWER = 71
+let LANE_COUNT = 8
+let CYCLE_ODD_STEPS = 10
+let CYCLE_TOTAL_DIVISIONS = 24
+let OUTPUT_PATH = "projects/dogfood/collatz-lab/out/certificate.json"
+
+resource ResidueUniverse {
+    lane_index: int = 0
+    lane_count: int = 1
+    depth: int = 0
+    verified_power: int = 0
+    classes: int = 0
+    residue_sum: int = 0
+    pruned_classes: int = 0
+    survivor_classes: int = 0
+    contracting_survivors: int = 0
+    noncontracting_survivors: int = 0
+    expanded_nodes: int = 0
+    max_odd_steps: int = 0
+    max_odd_residue: int = 0
+    max_threshold: str = "0"
+    max_threshold_residue: int = 0
+    prune_histogram: list = []
+    survivor_odd_histogram: list = []
+    survivor_sample: list = []
+    signature: int = 0
+    audited: bool = false
+}
+
+pure fn residue_universe(stats: map<str, any>, verified_power: int) -> ResidueUniverse {
+    return ResidueUniverse {
+        lane_index: stats["lane_index"],
+        lane_count: stats["lane_count"],
+        depth: stats["depth"],
+        verified_power: verified_power,
+        classes: stats["classes"],
+        residue_sum: int(stats["residue_sum"]),
+        pruned_classes: stats["pruned_classes"],
+        survivor_classes: stats["survivor_classes"],
+        contracting_survivors: stats["contracting_survivors"],
+        noncontracting_survivors: stats["noncontracting_survivors"],
+        expanded_nodes: stats["expanded_nodes"],
+        max_odd_steps: stats["max_odd_steps"],
+        max_odd_residue: stats["max_odd_residue"],
+        max_threshold: stats["max_threshold"],
+        max_threshold_residue: stats["max_threshold_residue"],
+        prune_histogram: stats["prune_histogram"],
+        survivor_odd_histogram: stats["survivor_odd_histogram"],
+        survivor_sample: stats["survivor_sample"],
+        signature: stats["signature"],
+        audited: false,
+    }
+}
+
+system AuditResidueUniverse(universe: mut ResidueUniverse) {
+    assert(universe.lane_count > 0, "lane count must be positive")
+    let lane_bits = ctz(universe.lane_count)
+    let expected_classes = shl(1, universe.depth - lane_bits)
+    assert(universe.lane_index >= 0 and universe.lane_index < universe.lane_count, "lane index out of range")
+    assert(universe.classes == expected_classes, "lane class count mismatch")
+    assert(
+        universe.pruned_classes + universe.survivor_classes == universe.classes,
+        "lane partition mismatch",
+    )
+    assert(
+        universe.contracting_survivors + universe.noncontracting_survivors
+            == universe.survivor_classes,
+        "lane survivor slope partition mismatch",
+    )
+    assert(sum_ints(universe.prune_histogram) == universe.pruned_classes, "lane prune histogram mismatch")
+    assert(
+        sum_ints(universe.survivor_odd_histogram) == universe.survivor_classes,
+        "lane survivor histogram mismatch",
+    )
+    universe.audited = true
+}
+
+component StructuralEvidence {
+    depth: int = 0
+    verified_power: int = 0
+    lane_count: int = 0
+    classes: int = 0
+    residue_sum: int = 0
+    pruned_classes: int = 0
+    survivor_classes: int = 0
+    contracting_survivors: int = 0
+    noncontracting_survivors: int = 0
+    expanded_nodes: int = 0
+    max_odd_steps: int = 0
+    max_odd_residue: int = 0
+    prune_histogram: list = []
+    survivor_odd_histogram: list = []
+    survivor_sample: list = []
+    lane_signatures: list = []
+    cycle_words: int = 0
+    positive_cycle_denominators: int = 0
+    divisible_cycle_candidates: int = 0
+    exact_cycle_words: int = 0
+    nontrivial_cycle_words: int = 0
+    trivial_cycle_words: int = 0
+    first_nontrivial_start: str = "0"
+    first_nontrivial_valuations: list = []
+    closest_cycle_q: int = 0
+    closest_cycle_divisions: int = 0
+    closest_cycle_gap: str = "0"
+    cycle_signature: int = 0
+}
+
+intent StructuralFinding {
+    key target: entity
+    kind: str
+    lane_index: int
+    depth: int
+    verified_power: int
+    classes: int
+    residue_sum: int
+    pruned_classes: int
+    survivor_classes: int
+    contracting_survivors: int
+    noncontracting_survivors: int
+    expanded_nodes: int
+    max_odd_steps: int
+    max_odd_residue: int
+    prune_histogram: list
+    survivor_odd_histogram: list
+    survivor_sample: list
+    signature: int
+    cycle_words: int
+    positive_cycle_denominators: int
+    divisible_cycle_candidates: int
+    exact_cycle_words: int
+    nontrivial_cycle_words: int
+    trivial_cycle_words: int
+    first_nontrivial_start: str
+    first_nontrivial_valuations: list
+    closest_cycle_q: int
+    closest_cycle_divisions: int
+    closest_cycle_gap: str
+    cycle_signature: int
+}
+
+law SubmitResidueUniverse(target: entity, lane: ResidueUniverse) {
+    propose StructuralFinding {
+        target: target,
+        kind: "residue-lane",
+        lane_index: lane.lane_index,
+        depth: lane.depth,
+        verified_power: lane.verified_power,
+        classes: lane.classes,
+        residue_sum: lane.residue_sum,
+        pruned_classes: lane.pruned_classes,
+        survivor_classes: lane.survivor_classes,
+        contracting_survivors: lane.contracting_survivors,
+        noncontracting_survivors: lane.noncontracting_survivors,
+        expanded_nodes: lane.expanded_nodes,
+        max_odd_steps: lane.max_odd_steps,
+        max_odd_residue: lane.max_odd_residue,
+        prune_histogram: lane.prune_histogram,
+        survivor_odd_histogram: lane.survivor_odd_histogram,
+        survivor_sample: lane.survivor_sample,
+        signature: lane.signature,
+        cycle_words: 0,
+        positive_cycle_denominators: 0,
+        divisible_cycle_candidates: 0,
+        exact_cycle_words: 0,
+        nontrivial_cycle_words: 0,
+        trivial_cycle_words: 0,
+        first_nontrivial_start: "0",
+        first_nontrivial_valuations: [],
+        closest_cycle_q: 0,
+        closest_cycle_divisions: 0,
+        closest_cycle_gap: "0",
+        cycle_signature: 0,
+    }
+}
+
+law SubmitCycleStudy(target: entity, cycle: any) {
+    propose StructuralFinding {
+        target: target,
+        kind: "cycle-box",
+        lane_index: -1,
+        depth: 0,
+        verified_power: 0,
+        classes: 0,
+        residue_sum: 0,
+        pruned_classes: 0,
+        survivor_classes: 0,
+        contracting_survivors: 0,
+        noncontracting_survivors: 0,
+        expanded_nodes: 0,
+        max_odd_steps: 0,
+        max_odd_residue: 0,
+        prune_histogram: [],
+        survivor_odd_histogram: [],
+        survivor_sample: [],
+        signature: 0,
+        cycle_words: cycle["words_tested"],
+        positive_cycle_denominators: cycle["positive_denominators"],
+        divisible_cycle_candidates: cycle["divisible_candidates"],
+        exact_cycle_words: cycle["exact_cycle_words"],
+        nontrivial_cycle_words: cycle["nonunit_cycle_words"],
+        trivial_cycle_words: cycle["unit_cycle_words"],
+        first_nontrivial_start: cycle["first_nonunit_start"],
+        first_nontrivial_valuations: cycle["first_nonunit_valuations"],
+        closest_cycle_q: cycle["closest_q"],
+        closest_cycle_divisions: cycle["closest_divisions"],
+        closest_cycle_gap: cycle["closest_gap"],
+        cycle_signature: cycle["signature"],
+    }
+}
+
+resolver ResolveStructuralFindings for StructuralFinding(target, proposals) {
+    let mut depth = 0
+    let mut verified_power = 0
+    let mut lane_count = 0
+    let mut classes = 0
+    let mut residue_sum = 0
+    let mut pruned_classes = 0
+    let mut survivor_classes = 0
+    let mut contracting_survivors = 0
+    let mut noncontracting_survivors = 0
+    let mut expanded_nodes = 0
+    let mut max_odd_steps = 0
+    let mut max_odd_residue = 0
+    let mut prune_histogram = zeros(DEPTH + 1)
+    let mut survivor_odd_histogram = zeros(DEPTH + 1)
+    let mut survivor_sample = []
+    let mut lane_signatures = []
+    let mut cycle_words = 0
+    let mut positive_cycle_denominators = 0
+    let mut divisible_cycle_candidates = 0
+    let mut exact_cycle_words = 0
+    let mut nontrivial_cycle_words = 0
+    let mut trivial_cycle_words = 0
+    let mut first_nontrivial_start = "0"
+    let mut first_nontrivial_valuations = []
+    let mut closest_cycle_q = 0
+    let mut closest_cycle_divisions = 0
+    let mut closest_cycle_gap = "0"
+    let mut cycle_signature = 0
+
+    for proposal in proposals {
+        if proposal.kind == "residue-lane" {
+            depth = proposal.depth
+            verified_power = proposal.verified_power
+            lane_count = lane_count + 1
+            classes = classes + proposal.classes
+            residue_sum = residue_sum + proposal.residue_sum
+            pruned_classes = pruned_classes + proposal.pruned_classes
+            survivor_classes = survivor_classes + proposal.survivor_classes
+            contracting_survivors = contracting_survivors + proposal.contracting_survivors
+            noncontracting_survivors = noncontracting_survivors + proposal.noncontracting_survivors
+            expanded_nodes = expanded_nodes + proposal.expanded_nodes
+            if proposal.max_odd_steps > max_odd_steps
+                or (proposal.max_odd_steps == max_odd_steps and proposal.max_odd_residue < max_odd_residue) {
+                max_odd_steps = proposal.max_odd_steps
+                max_odd_residue = proposal.max_odd_residue
+            }
+            prune_histogram = add_vectors(prune_histogram, proposal.prune_histogram)
+            survivor_odd_histogram = add_vectors(survivor_odd_histogram, proposal.survivor_odd_histogram)
+            survivor_sample = extend(survivor_sample, proposal.survivor_sample)
+            lane_signatures = push(lane_signatures, proposal.signature)
+        } else {
+            cycle_words = proposal.cycle_words
+            positive_cycle_denominators = proposal.positive_cycle_denominators
+            divisible_cycle_candidates = proposal.divisible_cycle_candidates
+            exact_cycle_words = proposal.exact_cycle_words
+            nontrivial_cycle_words = proposal.nontrivial_cycle_words
+            trivial_cycle_words = proposal.trivial_cycle_words
+            first_nontrivial_start = proposal.first_nontrivial_start
+            first_nontrivial_valuations = proposal.first_nontrivial_valuations
+            closest_cycle_q = proposal.closest_cycle_q
+            closest_cycle_divisions = proposal.closest_cycle_divisions
+            closest_cycle_gap = proposal.closest_cycle_gap
+            cycle_signature = proposal.cycle_signature
+        }
+    }
+
+    next(target, StructuralEvidence {
+        depth: depth,
+        verified_power: verified_power,
+        lane_count: lane_count,
+        classes: classes,
+        residue_sum: residue_sum,
+        pruned_classes: pruned_classes,
+        survivor_classes: survivor_classes,
+        contracting_survivors: contracting_survivors,
+        noncontracting_survivors: noncontracting_survivors,
+        expanded_nodes: expanded_nodes,
+        max_odd_steps: max_odd_steps,
+        max_odd_residue: max_odd_residue,
+        prune_histogram: prune_histogram,
+        survivor_odd_histogram: survivor_odd_histogram,
+        survivor_sample: sort(survivor_sample),
+        lane_signatures: sort(lane_signatures),
+        cycle_words: cycle_words,
+        positive_cycle_denominators: positive_cycle_denominators,
+        divisible_cycle_candidates: divisible_cycle_candidates,
+        exact_cycle_words: exact_cycle_words,
+        nontrivial_cycle_words: nontrivial_cycle_words,
+        trivial_cycle_words: trivial_cycle_words,
+        first_nontrivial_start: first_nontrivial_start,
+        first_nontrivial_valuations: first_nontrivial_valuations,
+        closest_cycle_q: closest_cycle_q,
+        closest_cycle_divisions: closest_cycle_divisions,
+        closest_cycle_gap: closest_cycle_gap,
+        cycle_signature: cycle_signature,
+    })
+}
+
+constraint ExactStructuralPartition for StructuralEvidence(subject, proposed) {
+    let expected_classes = shl(1, proposed.depth)
+    let expected_sum = int_div(expected_classes * (expected_classes - 1), 2)
+    require proposed.lane_count == LANE_COUNT else "collatz.lane_count"
+    require proposed.classes == expected_classes else "collatz.residue_cube_incomplete"
+    require proposed.residue_sum == expected_sum else "collatz.residue_sum_mismatch"
+    require proposed.pruned_classes + proposed.survivor_classes == proposed.classes
+        else "collatz.residue_partition_mismatch"
+    require proposed.contracting_survivors + proposed.noncontracting_survivors
+        == proposed.survivor_classes
+        else "collatz.survivor_slope_partition_mismatch"
+    require sum_ints(proposed.prune_histogram) == proposed.pruned_classes
+        else "collatz.prune_histogram_mismatch"
+    require sum_ints(proposed.survivor_odd_histogram) == proposed.survivor_classes
+        else "collatz.survivor_histogram_mismatch"
+    require len(proposed.lane_signatures) == LANE_COUNT
+        else "collatz.lane_signature_count"
+    require proposed.exact_cycle_words
+        == proposed.trivial_cycle_words + proposed.nontrivial_cycle_words
+        else "collatz.cycle_partition_mismatch"
+    require proposed.cycle_words > 0 else "collatz.cycle_box_empty"
+    require proposed.max_odd_steps == proposed.depth
+        else "collatz.missing_all_odd_branch"
+    require proposed.max_odd_residue == shl(1, proposed.depth) - 1
+        else "collatz.wrong_all_odd_residue"
+    require first_nonzero_index(proposed.survivor_odd_histogram)
+        == minimum_noncontracting_odd_steps(proposed.depth)
+        else "collatz.survivor_below_critical_odd_count"
+}
+
+entity forward_judge { StructuralEvidence {} }
+entity reverse_judge { StructuralEvidence {} }
+
+event StudyCompleted {
+    classes: int
+    survivors: int
+    nontrivial_cycles: int
+}
+
+resource StudyJournal { summary: str = "not-run" }
+
+on StudyCompleted(evt) {
+    set_resource(StudyJournal, StudyJournal {
+        summary: f"{evt.classes} residue classes; {evt.survivors} survivor cylinders; {evt.nontrivial_cycles} nontrivial cycle words"
+    })
+}
+
+fn submit_all(target: entity, lanes: list, cycle: any, reverse_order: bool) -> nil {
+    settle {
+        if reverse_order {
+            for index in range(len(lanes)) {
+                SubmitResidueUniverse(target, lanes[len(lanes) - index - 1])
+            }
+        } else {
+            for lane in lanes {
+                SubmitResidueUniverse(target, lane)
+            }
+        }
+        SubmitCycleStudy(target, cycle)
+    }
+    return nil
+}
+
+fn main() -> nil {
+    let program_args = sys_args()
+    let output_path = if len(program_args) > 0 { program_args[0] } else { OUTPUT_PATH }
+    let live_before = world_digest()
+    // Native computation happens once through the generic extension boundary.
+    // The extension parallelizes the independent lanes internally; the
+    // returned facts then enter isolated RAD universes for language-level
+    // audit before they may participate in a causal settlement.
+    let raw_profiles = affine_residue_profiles(3, 1, DEPTH, VERIFIED_POWER, LANE_COUNT)
+    let root = fork()
+    let mut candidates = []
+    for profile in raw_profiles {
+        candidates = push(candidates, fork_with(root, residue_universe(profile, VERIFIED_POWER)))
+    }
+
+    let started = clock()
+    let futures = simulate_many(candidates, [system::AuditResidueUniverse], 1, 1937)
+    let residue_seconds = clock() - started
+    assert(world_digest() == live_before, "speculative residue universes mutated the live world")
+    let mut lanes = []
+    for future in futures {
+        let lane = peek_resource(future, ResidueUniverse) |> unwrap
+        assert(lane.audited, "speculative lane audit did not complete")
+        lanes = push(lanes, lane)
+    }
+
+    let cycle_started = clock()
+    let cycle = affine_cycle_summary(3, 1, CYCLE_ODD_STEPS, CYCLE_TOTAL_DIVISIONS)
+    let cycle_seconds = clock() - cycle_started
+
+    // Same multiset, opposite producer order: state and structural evidence
+    // must agree because the resolver sees canonical proposals, not call order.
+    submit_all(forward_judge, lanes, cycle, false)
+    submit_all(reverse_judge, lanes, cycle, true)
+    let evidence = require(forward_judge, StructuralEvidence)
+    let reversed = require(reverse_judge, StructuralEvidence)
+    assert(evidence == reversed, "proposal order changed structural evidence")
+
+    // The visible 2-adic obstruction: 2^d-1 follows d consecutive odd
+    // shortcut steps. It looks maximally dangerous locally, yet this concrete
+    // positive integer eventually crosses below itself.
+    let all_odd_start = shl(1, DEPTH) - 1
+    let escape = first_descent(all_odd_start, 10000)
+    let valuations = syracuse_valuations(all_odd_start, 64)
+    assert(escape[1] < all_odd_start, "all-odd finite shadow did not descend")
+    assert(collatz_shortcut(-1) == -1, "the all-odd 2-adic limit is not fixed")
+
+    emit StudyCompleted {
+        classes: evidence.classes,
+        survivors: evidence.survivor_classes,
+        nontrivial_cycles: evidence.nontrivial_cycle_words,
+    }
+    flush_events()
+
+    let certificate: map<str, any> = {
+        "schema": "rad.collatz-structural-certificate.v1",
+        "map": "T(n)=n/2 if even, (3n+1)/2 if odd",
+        "residue_depth": DEPTH,
+        "verified_convergence_floor": "2^71",
+        "lane_count": LANE_COUNT,
+        "classes": evidence.classes,
+        "residue_sum": evidence.residue_sum,
+        "pruned_classes": evidence.pruned_classes,
+        "survivor_classes": evidence.survivor_classes,
+        "survivor_fraction": float(evidence.survivor_classes) / float(evidence.classes),
+        "contracting_survivors": evidence.contracting_survivors,
+        "noncontracting_survivors": evidence.noncontracting_survivors,
+        "expanded_nodes": evidence.expanded_nodes,
+        "prune_histogram": evidence.prune_histogram,
+        "survivor_curve": survivor_curve(evidence.prune_histogram, DEPTH),
+        "survivor_odd_histogram": evidence.survivor_odd_histogram,
+        "min_survivor_odd_steps": first_nonzero_index(evidence.survivor_odd_histogram),
+        "critical_min_odd_steps": minimum_noncontracting_odd_steps(DEPTH),
+        "survivor_sample": evidence.survivor_sample,
+        "lane_signatures": evidence.lane_signatures,
+        "all_odd_residue": evidence.max_odd_residue,
+        "all_odd_prefix_steps": evidence.max_odd_steps,
+        "all_odd_first_descent_steps": escape[0],
+        "all_odd_first_descent_terminal": escape[1],
+        "all_odd_peak": escape[2],
+        "all_odd_odd_steps_to_descent": escape[3],
+        "all_odd_syracuse_valuations": valuations,
+        "two_adic_all_odd_limit": "-1",
+        "two_adic_limit_is_positive": false,
+        "cycle_max_odd_steps": CYCLE_ODD_STEPS,
+        "cycle_max_total_divisions": CYCLE_TOTAL_DIVISIONS,
+        "cycle_words": evidence.cycle_words,
+        "positive_cycle_denominators": evidence.positive_cycle_denominators,
+        "divisible_cycle_candidates": evidence.divisible_cycle_candidates,
+        "exact_cycle_words": evidence.exact_cycle_words,
+        "trivial_cycle_words": evidence.trivial_cycle_words,
+        "nontrivial_cycle_words": evidence.nontrivial_cycle_words,
+        "first_nontrivial_start": evidence.first_nontrivial_start,
+        "first_nontrivial_valuations": evidence.first_nontrivial_valuations,
+        "closest_cycle_q": evidence.closest_cycle_q,
+        "closest_cycle_divisions": evidence.closest_cycle_divisions,
+        "closest_cycle_gap": evidence.closest_cycle_gap,
+        "cycle_signature": evidence.cycle_signature,
+        "proposal_order_independent": evidence == reversed,
+        "speculation_left_live_world_unchanged": true,
+        "evidence_why": why(forward_judge, StructuralEvidence),
+        "journal_why": why_resource(StudyJournal),
+    }
+    create_dir("projects/dogfood/collatz-lab/out")
+    write_file(output_path, json_stringify(certificate))
+
+    print("Collatz structural laboratory")
+    print(f"residue classes={evidence.classes} pruned={evidence.pruned_classes} survivors={evidence.survivor_classes}")
+    print(f"kernel expanded={evidence.expanded_nodes} nodes instead of tracing {evidence.classes} starts independently")
+    print(f"all-odd shadow n={all_odd_start}: peak={escape[2]}, descends after {escape[0]} shortcut steps with {escape[3]} odd steps")
+    print(f"cycle valuation words={evidence.cycle_words} nontrivial exact cycles={evidence.nontrivial_cycle_words}")
+    print(f"timing residue={residue_seconds}s cycle={cycle_seconds}s")
+    print(why(forward_judge, StructuralEvidence))
+    print(why_resource(StudyJournal))
+    print(f"certificate={output_path}")
+}
+
+main()

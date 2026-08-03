@@ -1,0 +1,15 @@
+// Generic extension smoke test. This intentionally exercises the public
+// load_extension() boundary without importing either mathematical dogfood.
+
+let kernels = load_extension("projects/dogfood/native-math-kernels/out/rad_dogfood_math_kernels")
+let batch: pure fn(int, int, int, int, int) -> str = kernels["affine_residue_profiles_json"]
+let encoded = batch(5, 3, 8, 12, 4)
+let profiles = json_parse(encoded) |> unwrap
+
+assert(len(profiles) == 4, "generic affine batch did not return one profile per lane")
+let mut classes = 0
+for profile in profiles {
+    classes = classes + profile["classes"]
+}
+assert(classes == 256, "lane partition mismatch")
+print("native math extension smoke: ok")

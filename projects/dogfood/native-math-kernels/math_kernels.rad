@@ -1,0 +1,113 @@
+// Thin RAD adapter for the project-owned native extension.
+//
+// The VM provides only the generic load_extension/json bridge. Algorithms,
+// limits, names, and output schemas remain owned by this dogfood project.
+
+let MATH_KERNELS = load_extension("projects/dogfood/native-math-kernels/out/rad_dogfood_math_kernels")
+
+// A loaded extension is intentionally `any` until its adapter declares a
+// callable contract.  These symbols are deterministic, allocation-bounded
+// functions over scalar/JSON values, so the project adapter narrows them to
+// pure function values before any worker or causal code can call them.
+let LATTICE_CLOSURE_JSON: pure fn(str) -> str = MATH_KERNELS["lattice_closure_json"]
+let LATTICE_PROFILE_JSON: pure fn(str, int) -> str = MATH_KERNELS["lattice_profile_json"]
+let LATTICE_FREQUENCIES_JSON: pure fn(str, int) -> str = MATH_KERNELS["lattice_frequencies_json"]
+let LATTICE_IS_CLOSED_JSON: pure fn(str) -> str = MATH_KERNELS["lattice_is_closed_json"]
+let LATTICE_VIOLATION_COUNT_JSON: pure fn(str, int) -> str = MATH_KERNELS["lattice_violation_count_json"]
+let LATTICE_DELETABLE_JSON: pure fn(str, int) -> str = MATH_KERNELS["lattice_deletable_json"]
+let LATTICE_DELETION_PROFILE_JSON: pure fn(str, int) -> str = MATH_KERNELS["lattice_deletion_profile_json"]
+let AFFINE_RESIDUE_PROFILE_JSON: pure fn(int, int, int, int, int, int) -> str = MATH_KERNELS["affine_residue_profile_json"]
+let AFFINE_RESIDUE_PROFILES_JSON: pure fn(int, int, int, int, int) -> str = MATH_KERNELS["affine_residue_profiles_json"]
+let AFFINE_CYCLE_PROFILE_JSON: pure fn(int, int, int, int) -> str = MATH_KERNELS["affine_cycle_profile_json"]
+
+pure fn decode_kernel_result(encoded: str, operation: str) -> any {
+    let decoded = json_parse(encoded)
+    assert(is_some(decoded), f"{operation} returned invalid JSON")
+    return unwrap(decoded)
+}
+
+pub pure fn lattice_closure(members: list<int>) -> list<int> {
+    let encoded = LATTICE_CLOSURE_JSON(json_stringify(members))
+    return decode_kernel_result(encoded, "lattice_closure")
+}
+
+pub pure fn lattice_profile(members: list<int>, width: int) -> map<str, any> {
+    let encoded = LATTICE_PROFILE_JSON(json_stringify(members), width)
+    return decode_kernel_result(encoded, "lattice_profile")
+}
+
+pub pure fn lattice_frequencies(members: list<int>, width: int) -> list<int> {
+    let encoded = LATTICE_FREQUENCIES_JSON(json_stringify(members), width)
+    return decode_kernel_result(encoded, "lattice_frequencies")
+}
+
+pub pure fn lattice_is_closed(members: list<int>) -> bool {
+    let encoded = LATTICE_IS_CLOSED_JSON(json_stringify(members))
+    return decode_kernel_result(encoded, "lattice_is_closed")
+}
+
+pub pure fn lattice_violation_count(members: list<int>, width: int) -> int {
+    let encoded = LATTICE_VIOLATION_COUNT_JSON(json_stringify(members), width)
+    return decode_kernel_result(encoded, "lattice_violation_count")
+}
+
+pub pure fn lattice_deletable(members: list<int>, width: int) -> list<int> {
+    let encoded = LATTICE_DELETABLE_JSON(json_stringify(members), width)
+    return decode_kernel_result(encoded, "lattice_deletable")
+}
+
+pub pure fn lattice_deletion_profile(deleted: list<int>, width: int) -> map<str, any> {
+    let encoded = LATTICE_DELETION_PROFILE_JSON(json_stringify(deleted), width)
+    return decode_kernel_result(encoded, "lattice_deletion_profile")
+}
+
+pub pure fn affine_residue_profile(
+    multiplier: int,
+    addend: int,
+    depth: int,
+    verified_power: int,
+    lane_index: int,
+    lane_count: int,
+) -> map<str, any> {
+    let encoded = AFFINE_RESIDUE_PROFILE_JSON(
+        multiplier,
+        addend,
+        depth,
+        verified_power,
+        lane_index,
+        lane_count,
+    )
+    return decode_kernel_result(encoded, "affine_residue_profile")
+}
+
+pub pure fn affine_residue_profiles(
+    multiplier: int,
+    addend: int,
+    depth: int,
+    verified_power: int,
+    lane_count: int,
+) -> list<map<str, any>> {
+    let encoded = AFFINE_RESIDUE_PROFILES_JSON(
+        multiplier,
+        addend,
+        depth,
+        verified_power,
+        lane_count,
+    )
+    return decode_kernel_result(encoded, "affine_residue_profiles")
+}
+
+pub pure fn affine_cycle_summary(
+    multiplier: int,
+    addend: int,
+    max_odd_steps: int,
+    max_total_divisions: int,
+) -> map<str, any> {
+    let encoded = AFFINE_CYCLE_PROFILE_JSON(
+        multiplier,
+        addend,
+        max_odd_steps,
+        max_total_divisions,
+    )
+    return decode_kernel_result(encoded, "affine_cycle_profile")
+}

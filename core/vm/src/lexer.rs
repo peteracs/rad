@@ -1,5 +1,7 @@
 use std::fmt;
 
+use crate::source_bundle::SourceLayout;
+
 mod decl;
 mod expr;
 mod stmt;
@@ -192,6 +194,8 @@ pub struct Lexer<'a> {
     pos: usize,
     line: u32,
     col: u32,
+    line_directives: Vec<(usize, u32, u32)>,
+    next_line_directive: usize,
     pub preserve_comments: bool,
     pub(crate) mode_stack: Vec<LexerMode>,
 }
@@ -211,8 +215,42 @@ impl<'a> Lexer<'a> {
             pos: 0,
             line,
             col,
+            line_directives: Vec::new(),
+            next_line_directive: 0,
             preserve_comments: false,
             mode_stack: vec![LexerMode::Normal],
+        }
+    }
+
+    /// Lex concatenated source using explicit, authenticated unit boundaries.
+    /// Source comments remain ordinary comments and never affect locations.
+    pub fn new_with_source_layout(
+        source: &'a str,
+        layout: &SourceLayout,
+    ) -> Result<Self, String> {
+        layout.validate(source)?;
+        let mut lexer = Self::new(source);
+        lexer.line_directives = layout
+            .sections
+            .iter()
+            .map(|section| (section.byte_offset, section.line, section.column))
+            .collect();
+        lexer.apply_line_directives();
+        Ok(lexer)
+    }
+
+    pub(crate) fn apply_line_directives(&mut self) {
+        while let Some((offset, line, column)) = self
+            .line_directives
+            .get(self.next_line_directive)
+            .copied()
+        {
+            if offset != self.pos {
+                break;
+            }
+            self.line = line;
+            self.col = column;
+            self.next_line_directive += 1;
         }
     }
 
@@ -237,6 +275,31 @@ mod tests {
         assert_eq!(tokens[3].ty, TokenType::Int);
         assert_eq!(tokens[3].value.as_int(), Some(42));
         assert_eq!(tokens[4].ty, TokenType::Eof);
+    }
+
+    #[test]
+    fn structured_layout_restores_module_local_lines() {
+        let source = "let first = 1\nlet second = 2\n";
+        let mut layout = SourceLayout::single("first.rad");
+        layout.push("let first = 1\n".len(), "second.rad");
+        let tokens = Lexer::new_with_source_layout(source, &layout)
+            .unwrap()
+            .tokenize()
+            .0;
+        let lets = tokens
+            .iter()
+            .filter(|token| token.ty == TokenType::Let)
+            .map(|token| token.line)
+            .collect::<Vec<_>>();
+        assert_eq!(lets, vec![1, 1]);
+
+        let ordinary = Lexer::new(source).tokenize().0;
+        let ordinary_lines = ordinary
+            .iter()
+            .filter(|token| token.ty == TokenType::Let)
+            .map(|token| token.line)
+            .collect::<Vec<_>>();
+        assert_eq!(ordinary_lines, vec![1, 2]);
     }
 
     #[test]

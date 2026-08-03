@@ -23,6 +23,7 @@ impl<'a> Lexer<'a> {
         } else {
             self.col += 1;
         }
+        self.apply_line_directives();
         ch
     }
 

@@ -57,6 +57,25 @@ jobs:
         run: cargo test -p rad-vm --verbose
       - name: Playground smoke (WASM compile_and_run)
         run: cargo test -p rad-vm compile_and_run_playground --verbose
+      - name: Project-owned native math kernels
+        run: |
+          cargo test --manifest-path projects/dogfood/native-math-kernels/Cargo.toml
+          sh projects/dogfood/native-math-kernels/build.sh release
+      - name: Frankl computational-mathematics dogfood
+        run: |
+          cargo run -p rad-vm --bin rad -- projects/dogfood/frankl-search/exhaustive_n4.rad
+          cargo run -p rad-vm --bin rad -- projects/dogfood/frankl-search/search.rad --experimental-laws --record projects/dogfood/frankl-search/out/ci.radr -- 1 4 2 1 24 quick
+          target/debug/rad replay projects/dogfood/frankl-search/out/ci.radr
+          python3 -m unittest discover -s projects/dogfood/frankl-search -p 'test_*.py' -v
+          python3 projects/dogfood/frankl-search/verify_certificate.py projects/dogfood/frankl-search/out/latest.json
+          python3 -O projects/dogfood/frankl-search/verify_certificate.py projects/dogfood/frankl-search/out/latest.json
+          cargo run -p rad-vm --bin rad -- projects/dogfood/frankl-search/cyclic_universes.rad --experimental-laws
+          python3 projects/dogfood/frankl-search/verify_structure.py projects/dogfood/frankl-search/out/cyclic-universes.json --quick
+      - name: Collatz structural dogfood
+        run: |
+          cargo run -p rad-vm --bin rad -- projects/dogfood/collatz-lab/main.rad --experimental-laws --record projects/dogfood/collatz-lab/out/ci.radr
+          target/debug/rad replay projects/dogfood/collatz-lab/out/ci.radr
+          python3 projects/dogfood/collatz-lab/verify_certificate.py projects/dogfood/collatz-lab/out/certificate.json --report projects/dogfood/collatz-lab/out/ci-verification.json
 
   ordinary-snapshots:
     runs-on: ubuntu-latest

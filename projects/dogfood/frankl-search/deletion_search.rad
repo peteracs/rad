@@ -1,0 +1,403 @@
+// Frankl search by legal deletion from the full Boolean cube.
+
+use "../native-math-kernels/math_kernels.rad"
+//
+// Unlike generator mutation, every intermediate family is union-closed.
+// `or_deletable_members` returns exactly the members whose removal cannot
+// expose a missing union.  Thus every fork is a valid mathematical world and
+// the search asks only whether its deletion frequencies can all become strict
+// majorities.
+
+use "structure_lib.rad"
+
+let WIDTH = 13
+let CUBE_SIZE = 8192
+let MIN_FAMILY_SIZE = 51
+let NEAR_MAX_FAMILY_SIZE = 4096
+let OUTPUT_PATH = "projects/dogfood/frankl-search/out/deletion-near.json"
+
+resource DeletionCandidate {
+    deleted: list = []
+    family_size: int = 8192
+    frequencies: list = []
+    deletion_surpluses: list = []
+    frontier: list = []
+    margin: int = 0
+    depth: int = 0
+    separating: bool = true
+}
+
+resource DeletionConfig {
+    rollout_steps: int = 8
+    choices_per_step: int = 24
+}
+
+component DeletionCertificate {
+    family_size: int = 0
+    margin: int = 0
+    union_closed: bool = false
+    exact_partition: bool = false
+    deletion_count: int = 0
+    covers_universe: bool = false
+    separating: bool = false
+}
+
+intent DeletionEvidence {
+    key target: entity
+    family_size: int
+    margin: int
+    union_closed: bool
+    exact_partition: bool
+    deletion_count: int
+    covers_universe: bool
+    separating: bool
+}
+
+law SubmitDeletionEvidence(
+    target: entity,
+    family_size: int,
+    margin: int,
+    union_closed: bool,
+    exact_partition: bool,
+    deletion_count: int,
+    covers_universe: bool,
+    separating: bool,
+) {
+    propose DeletionEvidence {
+        target: target,
+        family_size: family_size,
+        margin: margin,
+        union_closed: union_closed,
+        exact_partition: exact_partition,
+        deletion_count: deletion_count,
+        covers_universe: covers_universe,
+        separating: separating,
+    }
+}
+
+resolver ResolveDeletionEvidence for DeletionEvidence(target, proposals) {
+    let p = proposals[0]
+    next(target, DeletionCertificate {
+        family_size: p.family_size,
+        margin: p.margin,
+        union_closed: p.union_closed,
+        exact_partition: p.exact_partition,
+        deletion_count: p.deletion_count,
+        covers_universe: p.covers_universe,
+        separating: p.separating,
+    })
+}
+
+constraint ValidDeletionCertificate for DeletionCertificate(subject, proposed) {
+    require proposed.family_size >= MIN_FAMILY_SIZE
+        else "frankl.deletion.family_too_small"
+    require proposed.union_closed
+        else "frankl.deletion.not_union_closed"
+    require proposed.exact_partition
+        else "frankl.deletion.partition_mismatch"
+    require proposed.covers_universe
+        else "frankl.deletion.incomplete_ground_set"
+    require proposed.separating
+        else "frankl.deletion.nonseparating"
+}
+
+entity deletion_judge { DeletionCertificate {} }
+
+fn complement_from_deleted(deleted: list<int>) -> list<int> {
+    let mut removed = bitset_new()
+    for member in deleted {
+        removed = bitset_set(removed, member)
+    }
+    let mut family = []
+    for member in range(CUBE_SIZE) {
+        if not bitset_has(removed, member) {
+            family = push(family, member)
+        }
+    }
+    return family
+}
+
+fn candidate_from(deleted: list<int>, depth: int) -> DeletionCandidate {
+    let state = lattice_deletion_profile(deleted, WIDTH)
+    let family_size = state["family_size"]
+    let frequencies = state["frequencies"]
+    let surpluses = state["surpluses"]
+    return DeletionCandidate {
+        deleted: deleted,
+        family_size: family_size,
+        frequencies: frequencies,
+        deletion_surpluses: surpluses,
+        // The kernel has already intersected algebraic deletability with the
+        // exact same-entity witnesses needed to preserve ground-set coverage
+        // and coordinate separation.  Keeping this as one generic profile
+        // avoids recomputing a full zeta transform for every rejected child.
+        frontier: state["effective_frontier"],
+        margin: max_int(frequencies) * 2 - family_size,
+        depth: depth,
+        separating: state["separating"],
+    }
+}
+
+fn legal_frontier(frontier: list<int>) -> list<int> {
+    let mut result = []
+    for member in frontier {
+        // Keep the empty set: adjoining it never hurts Frankl's inequality,
+        // and it provides a canonical representative of each family.
+        if member != 0 {
+            result = push(result, member)
+        }
+    }
+    return result
+}
+
+fn margin_after(candidate: DeletionCandidate, removed: int) -> int {
+    let mut maximum = 0
+    for bit in range(WIDTH) {
+        let count = candidate.frequencies[bit]
+            - (if (removed & shl(1, bit)) != 0 { 1 } else { 0 })
+        if count > maximum {
+            maximum = count
+        }
+    }
+    return maximum * 2 - (candidate.family_size - 1)
+}
+
+fn surplus_profile_after(candidate: DeletionCandidate, removed: int) -> list<int> {
+    let mut profile = []
+    for bit in range(WIDTH) {
+        let old = candidate.deletion_surpluses[bit]
+        let next = old + (if (removed & shl(1, bit)) != 0 { 1 } else { -1 })
+        profile = push(profile, next)
+    }
+    return sort(profile)
+}
+
+fn profile_better(left: list<int>, right: list<int>) -> bool {
+    for index in range(len(left)) {
+        if left[index] != right[index] {
+            return left[index] > right[index]
+        }
+    }
+    return false
+}
+
+system ExploreLegalDeletions(candidate: mut DeletionCandidate, config: DeletionConfig) {
+    assert(typeof(candidate) != "nil", "deletion candidate resource missing")
+    assert(typeof(config) != "nil", "deletion config resource missing")
+    for _step in range(config.rollout_steps) {
+        if candidate.family_size <= MIN_FAMILY_SIZE {
+            break
+        }
+        let frontier = legal_frontier(candidate.frontier)
+        if len(frontier) == 0 {
+            break
+        }
+        // rand_int is intentionally direct in the speculative system: RAD
+        // assigns each rollout a deterministic fork seed.
+        let mut removed = frontier[rand_int(0, len(frontier) - 1)]
+        let mut best_margin = margin_after(candidate, removed)
+        let mut best_profile = surplus_profile_after(candidate, removed)
+        let trials = min(config.choices_per_step, len(frontier))
+        let start = rand_int(0, len(frontier) - 1)
+        for trial in range(trials) {
+            let member = frontier[(start + trial) % len(frontier)]
+            let margin = margin_after(candidate, member)
+            let profile = surplus_profile_after(candidate, member)
+            if margin < best_margin
+                or (margin == best_margin and profile_better(profile, best_profile)) {
+                removed = member
+                best_margin = margin
+                best_profile = profile
+            }
+        }
+        let deleted = push(candidate.deleted, removed)
+        let next_depth = candidate.depth + 1
+        candidate = candidate_from(deleted, next_depth)
+    }
+}
+
+fn better(left: DeletionCandidate, right: DeletionCandidate) -> bool {
+    if left.separating != right.separating {
+        return left.separating
+    }
+    if left.margin != right.margin {
+        return left.margin < right.margin
+    }
+    let left_profile = sort(left.deletion_surpluses)
+    let right_profile = sort(right.deletion_surpluses)
+    if left_profile != right_profile {
+        return profile_better(left_profile, right_profile)
+    }
+    return len(left.frontier) > len(right.frontier)
+}
+
+fn same_candidate(left: DeletionCandidate, right: DeletionCandidate) -> bool {
+    return left.deleted == right.deleted
+}
+
+fn insert_beam(
+    beam: list<world_fork>,
+    candidate_fork: world_fork,
+    width: int,
+) -> list<world_fork> {
+    let candidate = peek_resource(candidate_fork, DeletionCandidate) |> unwrap
+    for existing in beam {
+        let current = peek_resource(existing, DeletionCandidate) |> unwrap
+        if same_candidate(candidate, current) {
+            return beam
+        }
+    }
+    let mut result = []
+    let mut inserted = false
+    for existing in beam {
+        let current = peek_resource(existing, DeletionCandidate) |> unwrap
+        if not inserted and better(candidate, current) {
+            result = push(result, candidate_fork)
+            inserted = true
+        }
+        result = push(result, existing)
+    }
+    if not inserted {
+        result = push(result, candidate_fork)
+    }
+    if len(result) > width {
+        result = drop_last(result)
+    }
+    return result
+}
+
+fn partition_is_exact(candidate: DeletionCandidate) -> bool {
+    if candidate.family_size + len(candidate.deleted) != CUBE_SIZE {
+        return false
+    }
+    let rebuilt = complement_from_deleted(candidate.deleted)
+    return len(rebuilt) == candidate.family_size
+}
+
+fn main() -> nil {
+    let argv = sys_args()
+    let generations = if len(argv) > 0 { int(argv[0]) } else { 64 }
+    let beam_width = if len(argv) > 1 { int(argv[1]) } else { 8 }
+    let children = if len(argv) > 2 { int(argv[2]) } else { 8 }
+    let rollout_steps = if len(argv) > 3 { int(argv[3]) } else { 8 }
+    let choices = if len(argv) > 4 { int(argv[4]) } else { 24 }
+    let target_family_size = if len(argv) > 6 { int(argv[6]) } else { 0 }
+    let output_path = if len(argv) > 7 { argv[7] } else { OUTPUT_PATH }
+    assert(generations > 0 and beam_width > 0 and children > 0, "positive search dimensions required")
+
+    let mut initial_deleted = []
+    if len(argv) > 5 and argv[5] != "-" {
+        let parsed = json_parse(read_file(argv[5]))
+        assert(is_some(parsed), "resume certificate must contain valid JSON")
+        let document = unwrap(parsed)
+        assert(document["width"] == WIDTH, "resume certificate width mismatch")
+        initial_deleted = document["deleted"]
+    }
+    let initial = candidate_from(initial_deleted, len(initial_deleted))
+    set_resource(DeletionCandidate, initial)
+    set_resource(DeletionConfig, DeletionConfig {
+        rollout_steps: rollout_steps,
+        choices_per_step: choices,
+    })
+    let live_digest = world_digest()
+    let root = fork()
+    let mut beam = [root]
+    let mut evaluated = 1
+    let mut have_near = false
+    let mut near_fork = root
+    let mut near_margin = 999999999
+    let mut have_target = false
+    let mut target_fork = root
+
+    print("Frankl legal-deletion search")
+    print(f"initial family={initial.family_size} frontier={len(initial.frontier)} margin={initial.margin}")
+    for generation in range(generations) {
+        let mut inputs = []
+        for parent in beam {
+            for _child in range(children) {
+                inputs = push(inputs, parent)
+            }
+        }
+        let futures = simulate_many(
+            inputs,
+            [system::ExploreLegalDeletions],
+            1,
+            1979 + generation * 1009,
+        )
+        evaluated = evaluated + len(futures)
+        let mut next = []
+        for future in futures {
+            next = insert_beam(next, future, beam_width)
+        }
+        beam = next
+        let best = peek_resource(beam[0], DeletionCandidate) |> unwrap
+        if best.family_size <= NEAR_MAX_FAMILY_SIZE and best.margin < near_margin {
+            have_near = true
+            near_fork = beam[0]
+            near_margin = best.margin
+        }
+        if target_family_size > 0 and not have_target
+            and best.family_size <= target_family_size {
+            have_target = true
+            target_fork = beam[0]
+        }
+        if generation == 0 or (generation + 1) % 4 == 0 {
+            print(f"generation={generation + 1} depth={best.depth} family={best.family_size} margin={best.margin} min_dual={min_int(best.deletion_surpluses)} frontier={len(best.frontier)}")
+        }
+    }
+
+    let terminal = peek_resource(beam[0], DeletionCandidate) |> unwrap
+    let best = if have_target {
+        peek_resource(target_fork, DeletionCandidate) |> unwrap
+    } else if have_near {
+        peek_resource(near_fork, DeletionCandidate) |> unwrap
+    } else {
+        terminal
+    }
+    assert(world_digest() == live_digest, "speculation mutated the live world")
+    let finalist_family = complement_from_deleted(best.deleted)
+    let closed = lattice_is_closed(finalist_family)
+    let partition = partition_is_exact(best)
+    let covers = min_int(best.frequencies) > 0
+    let separating = best.separating and family_is_separating(finalist_family, WIDTH)
+    let viable_frontier = legal_frontier(best.frontier)
+    settle {
+        SubmitDeletionEvidence(
+            deletion_judge,
+            best.family_size,
+            best.margin,
+            closed,
+            partition,
+            len(best.deleted),
+            covers,
+            separating,
+        )
+    }
+    print(f"evaluated={evaluated} depth={best.depth} family={best.family_size} margin={best.margin}")
+    print(f"deletion_surpluses={best.deletion_surpluses}")
+    print(f"rank_histogram={rank_histogram(best.deleted, WIDTH)}")
+    print(f"frontier={len(best.frontier)} viable_frontier={len(viable_frontier)} union_closed={closed} covers={covers} separating={separating} counterexample={best.margin < 0 and covers and separating}")
+    print(why(deletion_judge, DeletionCertificate))
+    let document = {
+        "kind": "rad.frankl.legal-deletion.v1",
+        "width": WIDTH,
+        "evaluated_worlds": evaluated,
+        "deleted": best.deleted,
+        "family_size": best.family_size,
+        "frequencies": best.frequencies,
+        "deletion_surpluses": best.deletion_surpluses,
+        "rank_histogram": rank_histogram(best.deleted, WIDTH),
+        "margin": best.margin,
+        "frontier": best.frontier,
+        "viable_frontier": viable_frontier,
+        "union_closed": closed,
+        "covers_universe": covers,
+        "separating": separating,
+        "counterexample": best.margin < 0 and covers and separating,
+        "terminal_depth": terminal.depth,
+        "terminal_family_size": terminal.family_size,
+        "terminal_margin": terminal.margin,
+    }
+    write_file(output_path, json_stringify(document))
+    print(f"certificate={output_path}")
+}

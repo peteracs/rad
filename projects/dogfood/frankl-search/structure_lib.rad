@@ -1,0 +1,152 @@
+// Shared exact helpers for the Frankl structural experiments.
+//
+// Masks represent subsets of [width].  Rotation acts transitively on the
+// coordinates, so a family generated from complete rotation orbits has equal
+// element frequencies.  That turns Frankl's maximum-frequency predicate into
+// the simpler average-set-size predicate for this exact symmetry class.
+
+pub pure fn rotate_mask(mask: int, width: int) -> int {
+    let full = shl(1, width) - 1
+    return ((mask << 1) & full) | (mask >> (width - 1))
+}
+
+pub pure fn rotation_orbit(mask: int, width: int) -> list<int> {
+    let mut result = []
+    let mut current = mask
+    for _step in range(width) {
+        if not contains(result, current) {
+            result = push(result, current)
+        }
+        current = rotate_mask(current, width)
+    }
+    return sort(result)
+}
+
+pub pure fn canonical_rotation(mask: int, width: int) -> int {
+    let orbit = rotation_orbit(mask, width)
+    return orbit[0]
+}
+
+// For prime width 13, every nonempty non-full orbit has size 13.  Returning
+// one canonical mask per orbit avoids evaluating the same symmetric universe
+// under 13 different labels.
+pub pure fn necklace_representatives(width: int) -> list<int> {
+    let full = shl(1, width) - 1
+    let mut representatives = []
+    for mask in range(1, full) {
+        if canonical_rotation(mask, width) == mask {
+            representatives = push(representatives, mask)
+        }
+    }
+    return representatives
+}
+
+pub pure fn max_int(items: list<int>) -> int {
+    let mut answer = 0
+    for value in items {
+        if value > answer {
+            answer = value
+        }
+    }
+    return answer
+}
+
+pub pure fn min_int(items: list<int>) -> int {
+    assert(len(items) > 0, "min_int requires a nonempty list")
+    let mut answer = items[0]
+    for value in items {
+        if value < answer {
+            answer = value
+        }
+    }
+    return answer
+}
+
+pub pure fn family_union(family: list<int>) -> int {
+    let mut answer = 0
+    for member in family {
+        answer = answer | member
+    }
+    return answer
+}
+
+pub pure fn complement_family(family: list<int>, width: int) -> list<int> {
+    let mut present = bitset_new()
+    for member in family {
+        present = bitset_set(present, member)
+    }
+    let mut complement = []
+    for mask in range(shl(1, width)) {
+        if not bitset_has(present, mask) {
+            complement = push(complement, mask)
+        }
+    }
+    return complement
+}
+
+pub pure fn rank_histogram(family: list<int>, width: int) -> list<int> {
+    let mut histogram = []
+    for _rank in range(width + 1) {
+        histogram = push(histogram, 0)
+    }
+    for member in family {
+        let mut rank = 0
+        for bit in range(width) {
+            if (member & shl(1, bit)) != 0 {
+                rank = rank + 1
+            }
+        }
+        histogram[rank] = histogram[rank] + 1
+    }
+    return histogram
+}
+
+// If D is the complement of F inside the full Boolean cube, then
+//
+//   F is a strict Frankl counterexample
+//       iff every element occurs in strictly more than |D|/2 members of D.
+//
+// The returned surplus is 2*d_i-|D| for each element.  All entries must be
+// positive for the frequency half of a counterexample.
+pub pure fn deletion_majority_surpluses(deleted: list<int>, width: int) -> list<int> {
+    let frequencies = lattice_frequencies(deleted, width)
+    let mut result = []
+    for frequency in frequencies {
+        result = push(result, frequency * 2 - len(deleted))
+    }
+    return result
+}
+
+pub pure fn high_rank_family(width: int, minimum_rank: int) -> list<int> {
+    let mut result = []
+    for mask in range(shl(1, width)) {
+        let mut rank = 0
+        for bit in range(width) {
+            if (mask & shl(1, bit)) != 0 {
+                rank = rank + 1
+            }
+        }
+        if rank >= minimum_rank {
+            result = push(result, mask)
+        }
+    }
+    return result
+}
+
+pub pure fn family_is_separating(family: list<int>, width: int) -> bool {
+    for left in range(width) {
+        for right in range(left + 1, width) {
+            let mut witnessed = false
+            for member in family {
+                if (((member >> left) & 1) != 0) != (((member >> right) & 1) != 0) {
+                    witnessed = true
+                    break
+                }
+            }
+            if not witnessed {
+                return false
+            }
+        }
+    }
+    return true
+}

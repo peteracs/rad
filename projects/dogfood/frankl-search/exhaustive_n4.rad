@@ -1,0 +1,69 @@
+// Exhaustively verify Frankl's conjecture for every family over [4].
+// A family is a 16-bit integer whose bit s records whether subset-mask s is
+// present.  There are 2^16 = 65,536 labeled families, so this is genuinely
+// exhaustive (unlike search.rad's N=13 heuristic).
+
+let UNIVERSE = 4
+let SUBSET_COUNT = 16
+let FAMILY_COUNT = 65536
+
+fn has_member(family_bits: int, member: int) -> bool {
+    return (family_bits & shl(1, member)) != 0
+}
+
+fn is_union_closed(family_bits: int) -> bool {
+    for left in range(SUBSET_COUNT) {
+        if not has_member(family_bits, left) {
+            continue
+        }
+        for right in range(SUBSET_COUNT) {
+            if has_member(family_bits, right) and not has_member(family_bits, left | right) {
+                return false
+            }
+        }
+    }
+    return true
+}
+
+fn frankl_holds(family_bits: int) -> bool {
+    let members = popcount(family_bits)
+    if members == 0 or family_bits == 1 {
+        return true
+    }
+    for element in range(UNIVERSE) {
+        let element_bit = shl(1, element)
+        let mut frequency = 0
+        for member in range(SUBSET_COUNT) {
+            if has_member(family_bits, member) and (member & element_bit) != 0 {
+                frequency = frequency + 1
+            }
+        }
+        if frequency * 2 >= members {
+            return true
+        }
+    }
+    return false
+}
+
+fn main() -> nil {
+    let mut union_closed = 0
+    let mut nontrivial = 0
+    let mut violations = 0
+    for family in range(FAMILY_COUNT) {
+        if is_union_closed(family) {
+            union_closed = union_closed + 1
+            if family != 0 and family != 1 {
+                nontrivial = nontrivial + 1
+                if not frankl_holds(family) {
+                    violations = violations + 1
+                }
+            }
+        }
+    }
+
+    print(f"families_checked={FAMILY_COUNT}")
+    print(f"union_closed={union_closed}")
+    print(f"nontrivial_union_closed={nontrivial}")
+    print(f"counterexamples={violations}")
+    assert(violations == 0, "Frankl counterexample found on four elements")
+}

@@ -138,6 +138,13 @@ match udp_recv_bytebuf_timeout(socket, 1200, 0) {
 | `load_extension(path)` | Native-only plugin bridge. Loads a dynamic library and returns a map of exported native functions; unsupported in WASM. |
 | `gc_collect()` | Run the VM backup cycle collector and return the number of swept objects. This does not manage ECS world storage, which is handled by `Arc` reference counts. |
 
+`load_extension()` is the generic boundary for project-owned acceleration.
+Domain algorithms do not become VM builtins: an extension registers named
+scalar functions, and a project adapter may exchange canonical JSON when it
+needs structured inputs or outputs. Values constructed through the extension
+ABI are adopted by the calling VM before the native call returns. Native calls
+remain forbidden inside causal regions and observational attempt replay.
+
 ## Type Conversion
 
 | Function | Description |

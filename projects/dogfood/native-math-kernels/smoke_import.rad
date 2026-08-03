@@ -1,0 +1,11 @@
+// Replay smoke for an extension hidden behind an imported RAD adapter.
+
+use "math_kernels.rad"
+
+let profiles = affine_residue_profiles(5, 3, 8, 12, 4)
+let mut classes = 0
+for profile in profiles {
+    classes = classes + profile["classes"]
+}
+assert(classes == 256, "imported adapter lane partition mismatch")
+print("imported native math extension smoke: ok")

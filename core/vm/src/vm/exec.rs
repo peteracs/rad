@@ -1904,14 +1904,8 @@ impl VM {
                 args.push(self.pop()?);
             }
             args.reverse();
-            let raw_args: Vec<u64> = args.iter().map(|v| v.to_raw()).collect();
-            let result_raw = unsafe { (native.func)(raw_args.as_ptr(), raw_args.len()) };
-            if let Some(err) = crate::ffi::take_native_error() {
-                return Err(err);
-            }
-            // SAFETY: the native ABI contract requires returned raw object
-            // values to remain owned by the registered native-value heap.
-            self.push(unsafe { Value::from_raw_unchecked(result_raw) });
+            let result = crate::ffi::invoke_native(native, &args, &mut self.gc)?;
+            self.push(result);
         } else {
             return Err(format!("Not callable: {}", callee.type_name()));
         }
@@ -3451,14 +3445,7 @@ impl VM {
                         .to_string(),
                 );
             }
-            let raw_args: Vec<u64> = args.iter().map(|v| v.to_raw()).collect();
-            let result_raw = unsafe { (native.func)(raw_args.as_ptr(), raw_args.len()) };
-            if let Some(err) = crate::ffi::take_native_error() {
-                return Err(err);
-            }
-            // SAFETY: the native ABI contract requires returned raw object
-            // values to remain owned by the registered native-value heap.
-            Ok(unsafe { Value::from_raw_unchecked(result_raw) })
+            crate::ffi::invoke_native(native, &args, &mut self.gc).map_err(Into::into)
         } else {
             Err(format!("Not callable: {}", callee.type_name()))
         }
@@ -4327,6 +4314,12 @@ mod scheduling_tests {
 
         // Worker pooled while `g` was 1...
         let mut worker = crate::vm::VM::from_shared_state(vm.shared_state());
+        #[cfg(not(target_arch = "wasm32"))]
+        assert_eq!(
+            worker.io_pool.worker_count(),
+            0,
+            "parallel worker VMs must not own nested I/O threads"
+        );
         // ...main rebinding makes a new value current (the old one would be
         // garbage on the main heap)...
         let new_val = crate::value::Value::from_int(&mut vm.gc, 42);

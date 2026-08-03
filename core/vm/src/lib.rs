@@ -69,6 +69,7 @@ pub mod scaffold;
 #[doc(hidden)]
 pub mod settlement_reference;
 pub mod snapshot;
+pub mod source_bundle;
 pub mod types;
 pub(crate) mod value;
 pub mod vm;

@@ -22,6 +22,7 @@ enum NativeProofClass {
     Bitset,
     Replace,
     TextScan,
+    TypeName,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -76,6 +77,7 @@ native_contracts!(
     (Len, "collection.scan.v1", TextScan),
     (StartsWith, "text.scan.v1", TextScan),
     (EndsWith, "text.scan.v1", TextScan),
+    (TypeOf, "type-name.dynamic.v1", TypeName),
 );
 
 fn native_contract(builtin: Builtin) -> Option<&'static NativeContract> {
@@ -532,6 +534,25 @@ pub(crate) fn builtin_resource_charge(
                     .saturating_add(128),
             )
         }
+        Builtin::TypeOf => {
+            // `type_name` creates one temporary host String and `bi_typeof`
+            // copies it into a GC string. Component/state/sum names are
+            // dynamic, so price from the resolved name instead of a fixed
+            // tag length. The factor and fixed slack dominate both strings
+            // plus their object/allocation headers.
+            let bytes = args
+                .first()
+                .map(Value::type_name)
+                .map(|name| name.len())
+                .unwrap_or(0);
+            sized(
+                bytes.max(1),
+                bytes
+                    .saturating_mul(4)
+                    .saturating_add(object.saturating_mul(2))
+                    .saturating_add(256),
+            )
+        }
         Builtin::Len
         | Builtin::Sum
         | Builtin::Product
@@ -545,7 +566,6 @@ pub(crate) fn builtin_resource_charge(
         | Builtin::RemoveKey
         | Builtin::Merge
         | Builtin::Sort
-        | Builtin::TypeOf
         | Builtin::IndexOf => {
             return Err(format!(
                 "constraint builtin '{}' has no proven native resource upper bound",
@@ -733,9 +753,10 @@ mod resource_contract_tests {
     use crate::leak_lab::measure_peak_bytes;
     use crate::value::{Builtin, Object, Value};
     use crate::vm::builtins_impl::{
-        bi_bitset_clear, bi_bitset_set, bi_filled, bi_range, bi_replace,
+        bi_bitset_clear, bi_bitset_set, bi_filled, bi_range, bi_replace, bi_typeof,
     };
     use std::collections::BTreeSet;
+    use std::sync::Arc;
 
     #[test]
     fn constraint_native_whitelist_is_closed_and_enumerated() {
@@ -769,6 +790,7 @@ mod resource_contract_tests {
             "sign",
             "sqrt",
             "starts_with",
+            "typeof",
         ]);
         let actual = Builtin::ALL
             .iter()
@@ -888,6 +910,24 @@ mod resource_contract_tests {
         );
         let _ = replace_result;
         covered.insert(Builtin::Replace.name());
+
+        let component = Value::component(
+            &mut gc,
+            "VeryLongReplayComponent".repeat(512),
+            Arc::new(Vec::new()),
+            Vec::new(),
+        );
+        let typeof_args = vec![component];
+        let typeof_quote = builtin_resource_charge(Builtin::TypeOf, &typeof_args).unwrap();
+        let (typeof_result, typeof_peak) =
+            measure_peak_bytes(|| bi_typeof(&mut gc, typeof_args).unwrap());
+        assert!(
+            typeof_peak <= typeof_quote.heap,
+            "typeof: {typeof_peak} > {}",
+            typeof_quote.heap
+        );
+        let _ = typeof_result;
+        covered.insert(Builtin::TypeOf.name());
 
         let required = NATIVE_CONTRACTS
             .iter()
@@ -1099,7 +1139,6 @@ mod resource_contract_tests {
             Builtin::Merge,
             Builtin::RemoveKey,
             Builtin::Sort,
-            Builtin::TypeOf,
             Builtin::IndexOf,
             Builtin::GroupBy,
         ] {

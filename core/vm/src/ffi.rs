@@ -13,6 +13,8 @@ use crate::value::Value;
 use std::cell::RefCell;
 #[cfg(not(target_arch = "wasm32"))]
 use std::ffi::{c_char, c_void, CStr};
+#[cfg(not(target_arch = "wasm32"))]
+use std::path::{Path, PathBuf};
 
 #[cfg(not(target_arch = "wasm32"))]
 thread_local! {
@@ -46,6 +48,44 @@ thread_local! {
 
 pub fn take_native_error() -> Option<String> {
     NATIVE_ERROR.with(|e| e.borrow_mut().take())
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn drain_native_values_into(target: &mut GcHeap) {
+    FFI_GC.with(|heap| {
+        let mut drained = GcHeap::new();
+        std::mem::swap(&mut *heap.borrow_mut(), &mut drained);
+        target.merge(drained);
+    });
+}
+
+/// Invoke a registered extension function and adopt every heap value it
+/// produced into the calling VM before returning.
+///
+/// The extension ABI intentionally exposes scalar constructors instead of a
+/// VM pointer. Those constructors allocate in a thread-local transfer arena;
+/// this function is the single ownership boundary that drains that arena into
+/// the current VM for both successful and failed calls.
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) fn invoke_native(
+    native: &NativeFnInfo,
+    args: &[Value],
+    target: &mut GcHeap,
+) -> Result<Value, String> {
+    // Clear an error left by a misbehaving earlier extension before invoking
+    // the next function on this thread.
+    let _ = take_native_error();
+    let raw_args = args.iter().map(|value| value.to_raw()).collect::<Vec<_>>();
+    let result_raw = unsafe { (native.func)(raw_args.as_ptr(), raw_args.len()) };
+    let error = take_native_error();
+    drain_native_values_into(target);
+    if let Some(error) = error {
+        return Err(error);
+    }
+    // SAFETY: the ABI requires results to be immediate values or values made
+    // through the supplied constructors. The latter were just adopted by
+    // `target`, so the returned handle is now owned by this VM.
+    Ok(unsafe { Value::from_raw_unchecked(result_raw) })
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -187,8 +227,21 @@ pub fn load_plugin(
     merge_into: &mut GcHeap,
 ) -> Result<(Vec<(String, NativeFnInfo)>, libloading::Library), String> {
     unsafe {
-        let lib =
-            libloading::Library::new(path).map_err(|e| format!("Failed to load plugin: {}", e))?;
+        let requested = Path::new(path);
+        let platform_path = if requested.extension().is_none() {
+            let candidate = requested.with_extension(std::env::consts::DLL_EXTENSION);
+            candidate.exists().then_some(candidate)
+        } else {
+            None
+        };
+        let resolved: PathBuf = platform_path.unwrap_or_else(|| requested.to_path_buf());
+        let lib = libloading::Library::new(&resolved).map_err(|e| {
+            format!(
+                "Failed to load plugin '{}': {}",
+                resolved.display(),
+                e
+            )
+        })?;
 
         type InitFn = unsafe extern "C" fn(*const RadPluginApi);
         let init_fn: libloading::Symbol<InitFn> = lib
@@ -217,11 +270,7 @@ pub fn load_plugin(
 
         init_fn(&api);
 
-        FFI_GC.with(|g| {
-            let mut drained = GcHeap::new();
-            std::mem::swap(&mut *g.borrow_mut(), &mut drained);
-            merge_into.merge(drained);
-        });
+        drain_native_values_into(merge_into);
 
         Ok((context.functions, lib))
     }

@@ -1,0 +1,105 @@
+// Exact small arithmetic helpers kept in RAD so the native bulk kernel is
+// independently exercised by ordinary language code.
+
+pub pure fn add_vectors(left: list<int>, right: list<int>) -> list<int> {
+    assert(len(left) == len(right), "histogram lengths differ")
+    let mut result = []
+    for index in range(len(left)) {
+        result = push(result, left[index] + right[index])
+    }
+    return result
+}
+
+pub pure fn zeros(count: int) -> list<int> {
+    let mut result = []
+    for _index in range(count) {
+        result = push(result, 0)
+    }
+    return result
+}
+
+pub pure fn sum_ints(items: list<int>) -> int {
+    let mut total = 0
+    for value in items {
+        total = total + value
+    }
+    return total
+}
+
+pub pure fn first_nonzero_index(items: list<int>) -> int {
+    for index in range(len(items)) {
+        if items[index] != 0 {
+            return index
+        }
+    }
+    return -1
+}
+
+pub pure fn minimum_noncontracting_odd_steps(depth: int) -> int {
+    let target = shl(1, depth)
+    let mut coefficient = 1
+    let mut odd_steps = 0
+    while coefficient < target {
+        coefficient = coefficient * 3
+        odd_steps = odd_steps + 1
+    }
+    return odd_steps
+}
+
+pub pure fn survivor_curve(prune_histogram: list<int>, depth: int) -> list<int> {
+    let mut remaining_leaves = shl(1, depth)
+    let mut result = []
+    for current_depth in range(1, depth + 1) {
+        remaining_leaves = remaining_leaves - prune_histogram[current_depth]
+        result = push(
+            result,
+            int_div(remaining_leaves, shl(1, depth - current_depth)),
+        )
+    }
+    return result
+}
+
+// Shortcut map: one division by two is folded into every odd step.
+pub pure fn collatz_shortcut(value: int) -> int {
+    if value % 2 == 0 {
+        return int_div(value, 2)
+    }
+    return int_div(3 * value + 1, 2)
+}
+
+// Returns (steps until strict descent, terminal, peak, odd steps).  This is
+// intentionally written in RAD, not delegated to the kernel.
+pub pure fn first_descent(start: int, step_limit: int) -> any {
+    assert(start > 1, "first_descent needs start > 1")
+    let mut value = start
+    let mut peak = start
+    let mut odd_steps = 0
+    let mut steps = 0
+    while value >= start and steps < step_limit {
+        if value % 2 != 0 {
+            odd_steps = odd_steps + 1
+        }
+        value = collatz_shortcut(value)
+        if value > peak {
+            peak = value
+        }
+        steps = steps + 1
+    }
+    return (steps, value, peak, odd_steps)
+}
+
+// Odd-only Syracuse valuations v2(3n+1). A divergent counterexample would
+// need their long-run average to stay at or below log_2(3), while the usual
+// geometric heuristic has mean 2.
+pub pure fn syracuse_valuations(start: int, count: int) -> list<int> {
+    assert(start > 0 and start % 2 != 0, "valuation trace needs a positive odd start")
+    let mut result = []
+    let mut value = start
+    while len(result) < count and value != 1 {
+        let expanded = 3 * value + 1
+        let valuation = ctz(expanded)
+        result = push(result, valuation)
+        value = shr(expanded, valuation)
+    }
+    return result
+}

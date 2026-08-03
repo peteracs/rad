@@ -64,6 +64,13 @@ impl Compiler {
                     // MoveLocal rewriting must never touch a fused pair.
                     let scope = self.current();
                     scope.last_get_local.retain(|_, ip| *ip != len - 3);
+                    // The current slot is now the second operand of GetLocal2,
+                    // so it has no independently rewritable instruction. A
+                    // stale read from an earlier expression must not survive:
+                    // assignment lowering could otherwise rewrite that older
+                    // read to MoveLocal and clear the slot before this fused
+                    // read executes.
+                    scope.last_get_local.remove(&slot);
                     scope.prev_instr_start = len - 3;
                     return;
                 }

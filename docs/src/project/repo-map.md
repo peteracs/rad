@@ -32,6 +32,7 @@ serve different jobs:
 | `core/vm/src/vm/` | Bytecode execution and builtin implementation. |
 | `core/vm/src/{parser,checker,compiler}/causal.rs`, `core/vm/src/vm/settlement.rs` | Experimental RFC-0001/RFC-0002 Causal Laws front end, settlement kernel, and candidate validation. |
 | `core/vm/src/{constraint_types,constraint_reference}.rs` | Pointer-free rejection contracts, versioned limits, attempt replay data, and the pure constraint oracle. |
+| `core/vm/src/boolean_lattice.rs` | Exact finite OR-closure, frequency, separation, signature, and closure-audit kernels used by computational-mathematics workloads. |
 | `core/vm/src/causality/settlement.rs` | Settlement/proposal/resolution fan-in provenance and `why()` rendering. |
 | `core/vm/src/value.rs`, `core/vm/src/world.rs` | Runtime values and ECS world storage. |
 | `core/c-backend/` | Frozen legacy C backend, with source, runtime, old harnesses, and reproductions kept out of normal health checks. |
@@ -70,6 +71,8 @@ dogfood projects, but they are not the language implementation.
 | `projects/dogfood/` | Larger dogfood applications and feature stress projects. |
 | `projects/dogfood/causal-laws/` | RFC-0001 damage settlement vertical slice. |
 | `projects/dogfood/causal-constraints/` | RFC-0002 movement validation commit/rejection dogfood. |
+| `projects/dogfood/frankl-search/` | Computational-mathematics dogfood: exhaustive small case, deterministic `N=13` generator search, exact cyclic-universe/deletion-obstruction study, causal explanations, and independent certificate verifiers. |
+| `projects/dogfood/collatz-lab/` | Structural Collatz dogfood: pruned affine residue universes, exact cycle-word equations, Causal Laws/constraints/causality/replay, and a Python-bigint certificate verifier. |
 | `projects/moba-rad/` | Networked MOBA dogfood stack: RAD authority server, Rust WebTransport edge proxy, and browser client. The authority owns all game rules; the proxy forwards opaque datagrams and must stay dumb. |
 | `projects/playground/` | Browser hosts, interactive demos, relay, JS session tests, and public playground shell. |
 | `projects/playground/demos/` | Standalone browser visual prototypes and their local assets. |
