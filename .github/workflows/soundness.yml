@@ -47,6 +47,11 @@ jobs:
           key: ${{ runner.os }}-miri-${{ hashFiles('Cargo.lock') }}
       - name: Miri public value ownership boundary
         run: cargo +nightly miri test -p rad-vm --test public_value_api --no-default-features
+      - name: Miri observational replay capture graph
+        run: >-
+          cargo +nightly miri test -p rad-vm
+          replay_graph_preserves_child_aliases_cycles_and_shared_captures
+          --no-default-features -- --nocapture
 
   fuzz-gate:
     runs-on: ubuntu-latest
@@ -106,6 +111,10 @@ jobs:
               -Zbuild-std --target x86_64-unknown-linux-gnu \
               "$filter" -- --nocapture
           done
+          cargo +nightly test -p rad-vm --release \
+            -Zbuild-std --target x86_64-unknown-linux-gnu \
+            replay_graph_preserves_child_aliases_cycles_and_shared_captures \
+            -- --nocapture
       - name: Upload findings (if any)
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7

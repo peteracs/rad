@@ -1891,9 +1891,9 @@ impl VM {
             let result = self.call_builtin(builtin, args)?;
             self.push(result);
         } else if let Some(native) = callee.as_native_fn() {
-            if self.settlement.is_some() {
+            if self.settlement.is_some() || self.observational_attempt_replay {
                 return Err(
-                    "Settlement effect firewall: native/FFI calls are forbidden while a settlement is active"
+                    "Effect firewall: native/FFI calls are forbidden during causal or observational replay execution"
                         .to_string(),
                 );
             }
@@ -1919,6 +1919,9 @@ impl VM {
     }
 
     pub(crate) fn exec_async_call(&mut self) -> Result<(), String> {
+        if self.observational_attempt_replay {
+            return Err("attempt replay: async/task execution is disabled".into());
+        }
         let argc = self.read_byte()?;
         let argc_us = argc as usize;
         if self.stack.len() < argc_us + 1 {
@@ -3442,9 +3445,9 @@ impl VM {
         } else if let Some(builtin) = callee.as_builtin() {
             self.call_builtin(builtin, args).map_err(Into::into)
         } else if let Some(native) = callee.as_native_fn() {
-            if self.settlement.is_some() {
+            if self.settlement.is_some() || self.observational_attempt_replay {
                 return Err(
-                    "Settlement effect firewall: native/FFI calls are forbidden while a settlement is active"
+                    "Effect firewall: native/FFI calls are forbidden during causal or observational replay execution"
                         .to_string(),
                 );
             }

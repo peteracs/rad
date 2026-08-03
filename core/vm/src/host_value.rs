@@ -692,7 +692,9 @@ impl VM {
         // Attempt replay is observational debugging, never an authoritative
         // transition. Execute against a detached child timeline and discard
         // it even if the program unexpectedly commits or faults.
-        let mut replay_vm = self.detached_attempt_replay_vm();
+        let mut replay_vm = self
+            .detached_attempt_replay_vm()
+            .map_err(|message| fail("attempt.replay_fork_failed", message))?;
         let replayed = match replay_vm.call_global_detailed(&attempt.function, &attempt.arguments) {
             Err(VmFailure::SettlementRejected(rejection)) => rejection,
             Ok(_) => {
@@ -719,17 +721,112 @@ impl VM {
         Ok(replayed)
     }
 
-    fn detached_attempt_replay_vm(&self) -> VM {
+    pub(crate) fn detached_attempt_replay_vm(&self) -> Result<VM, String> {
         let mut replay = VM::from_shared_state(self.shared_state());
 
-        // Globals may contain heap aggregates. Copy them into the child heap
-        // so even legacy pre-settlement code cannot mutate an alias owned by
-        // the authoritative VM while the attempt is being inspected.
-        replay.globals = self
-            .globals
+        // Clone every mutable heap root as one graph. This preserves sharing
+        // and cycles inside the child while replacing every closure capture
+        // cell. Constant pools are included because a malformed or legacy
+        // pre-settlement path must not mutate a parent-owned constant alias.
+        let mut roots = self.globals.clone();
+        let chunk_constant_counts = self
+            .chunks
             .iter()
-            .map(|value| value.deep_copy(&mut replay.gc))
-            .collect();
+            .map(|chunk| {
+                roots.extend_from_slice(chunk.constants());
+                chunk.constants().len()
+            })
+            .collect::<Vec<_>>();
+        for (_, payload, _) in &self.events_current {
+            roots.push(*payload);
+        }
+        for (_, payload, _) in &self.events_next {
+            roots.push(*payload);
+        }
+        for (_, payload, _) in &self.events_processing {
+            roots.push(*payload);
+        }
+        for (_, _, payload, _) in &self.delayed_events {
+            roots.push(*payload);
+        }
+        for entry in &self.event_log {
+            roots.push(entry.payload);
+        }
+        let mut completed_tasks = self
+            .tasks
+            .iter()
+            .filter_map(|(id, task)| match task.status {
+                crate::vm::TaskStatus::Completed(value) => Some((*id, value)),
+                crate::vm::TaskStatus::Ready | crate::vm::TaskStatus::Failed(_) => None,
+            })
+            .collect::<Vec<_>>();
+        completed_tasks.sort_by_key(|(id, _)| *id);
+        roots.extend(completed_tasks.iter().map(|(_, value)| *value));
+
+        let cloned =
+            crate::vm::replay_clone::VmForkCloneContext::new(&mut replay.gc).clone_roots(&roots);
+        let mut cloned = cloned.into_iter();
+        replay.globals = cloned.by_ref().take(self.globals.len()).collect();
+        let mut child_chunks = Vec::with_capacity(self.chunks.len());
+        for (chunk, constant_count) in self.chunks.iter().zip(chunk_constant_counts) {
+            let constants = cloned.by_ref().take(constant_count).collect::<Vec<_>>();
+            child_chunks.push(
+                chunk.reseal_with_constants(constants).map_err(|error| {
+                    format!("replay constant graph failed verification: {error}")
+                })?,
+            );
+        }
+        replay.chunks = Arc::new(child_chunks);
+
+        let mut next_value = || {
+            cloned
+                .next()
+                .ok_or_else(|| "replay graph clone produced too few values".to_string())
+        };
+        replay.events_current = self
+            .events_current
+            .iter()
+            .map(|(name, _, id)| Ok((name.clone(), next_value()?, *id)))
+            .collect::<Result<Vec<_>, String>>()?;
+        replay.events_next = self
+            .events_next
+            .iter()
+            .map(|(name, _, id)| Ok((name.clone(), next_value()?, *id)))
+            .collect::<Result<Vec<_>, String>>()?;
+        replay.events_processing = self
+            .events_processing
+            .iter()
+            .map(|(name, _, id)| Ok((name.clone(), next_value()?, *id)))
+            .collect::<Result<Vec<_>, String>>()?;
+        replay.delayed_events = self
+            .delayed_events
+            .iter()
+            .map(|(delay, name, _, id)| Ok((*delay, name.clone(), next_value()?, *id)))
+            .collect::<Result<Vec<_>, String>>()?;
+        replay.event_log = self
+            .event_log
+            .iter()
+            .map(|entry| {
+                Ok(crate::vm::EventLogEntry {
+                    tick: entry.tick,
+                    event_name: entry.event_name.clone(),
+                    payload: next_value()?,
+                })
+            })
+            .collect::<Result<Vec<_>, String>>()?;
+
+        replay.tasks = self.tasks.clone();
+        for (id, _) in completed_tasks {
+            let task = replay
+                .tasks
+                .get_mut(&id)
+                .ok_or_else(|| format!("replay task {id} disappeared while cloning"))?;
+            task.status = crate::vm::TaskStatus::Completed(next_value()?);
+        }
+        if cloned.next().is_some() {
+            return Err("replay graph clone produced unexpected extra values".into());
+        }
+
         replay.world.restore(self.world.snapshot());
         replay.indexed_decl = self.indexed_decl.clone();
         replay.migrations = self.migrations.clone();
@@ -741,7 +838,19 @@ impl VM {
         replay.current_cause = self.current_cause.clone();
         replay.causality_frame = self.causality_frame;
         replay.ledger = self.ledger.clone();
-        replay
+        replay.emit_ids_current = self.emit_ids_current.clone();
+        replay.emit_ids_next = self.emit_ids_next.clone();
+        replay.next_task_id = self.next_task_id;
+        replay.current_trace_id = self.current_trace_id;
+        replay.next_trace_id = self.next_trace_id;
+        replay.sandbox_input_json = self.sandbox_input_json.clone();
+        replay.sandbox_output_json = self.sandbox_output_json.clone();
+        replay.last_sandbox_output_json = self.last_sandbox_output_json.clone();
+        replay.last_sandbox_fuel_spent = self.last_sandbox_fuel_spent;
+        replay.once_guard_passed = self.once_guard_passed;
+        replay.suppress_output = true;
+        replay.observational_attempt_replay = true;
+        Ok(replay)
     }
 
     pub fn enqueue_frozen_event(&mut self, payload: &FrozenValue) -> Result<(), String> {

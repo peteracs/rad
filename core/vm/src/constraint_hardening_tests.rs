@@ -2,6 +2,7 @@
 
 use crate::causal_laws_tests::compile_vm;
 use crate::host_value::FrozenValue;
+use crate::value::{Builtin, Value};
 use crate::vm::VM;
 use crate::CausalValueLimits;
 
@@ -144,7 +145,7 @@ fn ping() { }
     assert!(rejection.candidate_details.is_empty());
     assert_eq!(
         rejection.evaluation_failures[0].code,
-        "constraint.settlement_outcome_limit"
+        "constraint.invocation_violation_limit"
     );
     assert!(
         rejection
@@ -442,4 +443,142 @@ fn attempt() { settle { Push(hero) } }
         }) if code == "attempt.unexpected_commit"
     ));
     assert_eq!(before, vm.observable_state_signature());
+}
+
+#[test]
+fn failed_attempt_replay_does_not_mutate_parent_capture_cells() {
+    let source = r#"
+component Position { x: int = 0 }
+intent Move { key target: entity }
+law Push(target: entity) { propose Move { target: target } }
+resolver ResolveMove for Move(target, proposals) { next(target, Position { x: 9 }) }
+constraint Reject for Position(subject, proposed) {
+    require false else "position.rejected"
+}
+fn make_counter() {
+    let mut count = 0
+    return fn() {
+        count = count + 1
+        return count
+    }
+}
+let counter = make_counter()
+entity hero { Position {} }
+fn attempt() {
+    counter()
+    settle { Push(hero) }
+}
+fn read_counter() { return counter() }
+"#;
+    let mut vm = compile_vm(source);
+    vm.run(0).expect("initialize capture replay program");
+    let crate::constraint_types::SettlementAttemptOutcome::Rejected(attempt) = vm
+        .call_global_attempt("attempt", &[])
+        .expect("record rejection after first counter increment")
+    else {
+        panic!("initial attempt must reject")
+    };
+
+    vm.replay_failed_attempt(&attempt)
+        .expect("replay must reproduce rejection in a detached graph");
+    assert_eq!(
+        vm.call_global("read_counter", &[])
+            .expect("read parent counter"),
+        FrozenValue::Int(2),
+        "replay must increment only the child capture cell"
+    );
+}
+
+#[test]
+fn replay_graph_preserves_child_aliases_cycles_and_shared_captures() {
+    let source = r#"
+fn make_pair() {
+    let mut count = 0
+    let reader = fn() { return count }
+    let writer = fn() {
+        count = count + 1
+        return count
+    }
+    return [reader, writer]
+}
+let pair = make_pair()
+let reader = pair[0]
+let writer = pair[1]
+let shared = [42]
+let aliases = [shared, shared]
+fn make_cycle() {
+    let mut holder: any = nil
+    let cycle = fn() { return holder }
+    holder = cycle
+    return cycle
+}
+let cycle = make_cycle()
+fn read_counter() { return reader() }
+fn write_counter() { return writer() }
+"#;
+    let mut parent = compile_vm(source);
+    parent.run(0).expect("initialize replay graph program");
+    let mut child = parent
+        .detached_attempt_replay_vm()
+        .expect("clone cyclic replay graph");
+
+    assert_eq!(
+        child.call_global("write_counter", &[]).unwrap(),
+        FrozenValue::Int(1)
+    );
+    assert_eq!(
+        child.call_global("read_counter", &[]).unwrap(),
+        FrozenValue::Int(1),
+        "child reader and writer must share the rewritten capture cell"
+    );
+    assert_eq!(
+        parent.call_global("read_counter", &[]).unwrap(),
+        FrozenValue::Int(0),
+        "child capture mutation must not reach the parent"
+    );
+
+    let slot = |vm: &VM, name: &str| {
+        vm.global_names
+            .iter()
+            .position(|candidate| candidate == name)
+            .unwrap()
+    };
+    let parent_aliases = parent.globals[slot(&parent, "aliases")];
+    let child_aliases = child.globals[slot(&child, "aliases")];
+    let parent_items = parent_aliases.as_list().unwrap();
+    let child_items = child_aliases.as_list().unwrap();
+    assert_eq!(
+        child_items.get(0).unwrap().object_identity(),
+        child_items.get(1).unwrap().object_identity(),
+        "shared child DAG edges must remain shared"
+    );
+    assert_ne!(
+        parent_items.get(0).unwrap().object_identity(),
+        child_items.get(0).unwrap().object_identity(),
+        "child DAG nodes must not point into the parent heap"
+    );
+
+    let parent_cycle = parent.globals[slot(&parent, "cycle")];
+    let child_cycle = child.globals[slot(&child, "cycle")];
+    let parent_capture = parent_cycle.as_closure().unwrap().captures[0];
+    let child_capture = child_cycle.as_closure().unwrap().captures[0];
+    assert_ne!(parent_capture, child_capture);
+    assert_eq!(
+        unsafe { (*child_capture).get() }.object_identity(),
+        child_cycle.object_identity(),
+        "the self-cycle must close over the child closure"
+    );
+}
+
+#[test]
+fn observational_attempt_replay_fails_closed_on_host_effects() {
+    let parent = VM::new_with_seed(7);
+    let mut child = parent
+        .detached_attempt_replay_vm()
+        .expect("construct observational replay VM");
+
+    let error = child
+        .call_builtin(Builtin::SleepMs, vec![Value::int(0)])
+        .expect_err("observational replay must not execute host effects");
+    assert!(error.contains("irreversible host effect"), "{error}");
 }

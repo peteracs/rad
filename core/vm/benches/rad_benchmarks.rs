@@ -238,6 +238,9 @@ fn bench_candidate_constraints(c: &mut Criterion) {
         let mut value = 0i64;
         b.iter(|| {
             value = (value + 1) % 10_000;
+            if value == 13 {
+                value += 1;
+            }
             accepted
                 .call_global("accepted", &[FrozenValue::Int(black_box(value))])
                 .expect("accepted candidate")

@@ -85,6 +85,29 @@ pub fn is_replay_managed(b: Builtin) -> bool {
     )
 }
 
+/// Effects that an observational failed-attempt replay must never execute.
+/// Unlike ledger replay there is no recorded I/O tape for this one request,
+/// so fail closed instead of touching the host. VM-local world/global/event
+/// effects remain legal because the entire child is discarded.
+pub(crate) fn is_observational_attempt_effect(b: Builtin) -> bool {
+    use Builtin::*;
+    is_replay_managed(b)
+        || matches!(
+            b,
+            Print
+                | Eprint
+                | WriteStdout
+                | WriteStderr
+                | FlushStdout
+                | DebugTrace
+                | Log
+                | Metric
+                | SleepMs
+                | SandboxRun
+                | LoadExtension
+        )
+}
+
 /// Digest of builtin arguments, used purely for divergence detection.
 /// Relies on `Display` being deterministic (guaranteed by `determinism.rs`).
 pub(crate) fn args_digest(args: &[Value]) -> String {

@@ -79,12 +79,13 @@ it in `watches` is a compile-time error.
 Constraints collect all bounded semantic outcomes. Each invocation receives
 an isolated deterministic fuel and heap budget. Every bytecode operation and
 audited native builtin is charged by its work; aggregate constructors and
-native collection operations preflight retained and temporary storage. An
-unaudited native helper fails closed. Each invocation uses a disposable GC
-heap, so previous invocations cannot consume its allowance and its allocations
-are reclaimed before the next constraint starts. Fuel exhaustion, memory
-exhaustion, or another ordinary evaluation fault becomes an evaluation
-failure; it does not suppress independent invocations.
+native collection operations preflight retained and peak temporary storage
+from their actual inputs. A helper without a conservative, tested upper bound
+fails closed. Each invocation uses a disposable GC heap, so previous
+invocations cannot consume its allowance and its allocations are reclaimed
+before the next constraint starts. Fuel exhaustion, memory exhaustion, or
+another ordinary evaluation fault becomes an evaluation failure; it does not
+suppress independent invocations.
 
 The runtime reserves a separate aggregate fuel/heap envelope before the first
 selected invocation runs. If the complete invocation set cannot fit that host
@@ -127,8 +128,12 @@ order-dependent prefix.
 
 Attempt replay is observational. It executes the recorded call in a detached
 child VM and discards that child for every result, including an unexpected
-commit. Replaying a failed attempt therefore cannot mutate the authoritative
-world being inspected.
+commit. Its graph-aware fork rewrites closure captures to child-owned cells,
+preserves shared aliases and cycles within the child, and clones globals,
+sealed constants, queued event payloads, event-log payloads, and completed task
+values through one identity map. Native/FFI and irreversible host effects are
+disabled in this mode. Replaying a failed attempt therefore cannot mutate the
+authoritative VM or host being inspected.
 
 ## Capabilities and redaction
 

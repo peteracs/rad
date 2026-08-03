@@ -3,6 +3,7 @@ pub(crate) use builtins_impl::value_to_json;
 mod constraint_runtime;
 mod exec;
 mod helpers;
+pub(crate) mod replay_clone;
 mod settlement;
 pub(crate) use settlement::{
     ConstraintRuntimeInfo, IntentRuntimeInfo, ResolverRuntimeInfo, SettlementContext,
@@ -291,6 +292,10 @@ pub struct VM {
     /// Replay mode: when set, replay-managed builtins consume the trace
     /// instead of executing — a replay never re-fires io.
     pub(crate) replayer: Option<crate::replay::TraceReplayer>,
+    /// True only in the discarded child used for failed-attempt replay.
+    /// Native/FFI and irreversible host effects are disabled there even
+    /// before the replayed request reaches its settlement.
+    pub(crate) observational_attempt_replay: bool,
     /// Causality (#4): provenance ledger of main-timeline writes and emits.
     pub(crate) ledger: crate::causality::CausalityLedger,
     /// Who is currently executing — top-level code, a system, or a handler.
@@ -541,6 +546,7 @@ impl VM {
             serial_schedule: false,
             recorder: None,
             replayer: None,
+            observational_attempt_replay: false,
             ledger: crate::causality::CausalityLedger::default(),
             current_cause: crate::causality::Cause::Main,
             causality_frame: 0,
@@ -681,6 +687,7 @@ impl VM {
             serial_schedule: false,
             recorder: None,
             replayer: None,
+            observational_attempt_replay: false,
             ledger: crate::causality::CausalityLedger::default(),
             current_cause: crate::causality::Cause::Main,
             causality_frame: 0,

@@ -85,7 +85,10 @@ pub(crate) fn builtin_resource_charge(
                 } else {
                     usize::try_from((distance - 1) / step.abs() + 1).unwrap_or(usize::MAX)
                 };
-                Some(sized(count.max(1), values(count)))
+                Some(sized(
+                    count.max(1),
+                    values(count).saturating_add(count.saturating_mul(object)),
+                ))
             })
             .unwrap_or_else(fixed)
         }
@@ -125,90 +128,269 @@ pub(crate) fn builtin_resource_charge(
         Builtin::ByteBufFromList => list_len(0)
             .map(|count| sized(count.max(1), values(count)))
             .unwrap_or_else(fixed),
-        Builtin::BitsetNew | Builtin::BitsetSet | Builtin::BitsetClear => count_arg(1)
-            .or_else(|| count_arg(0))
-            .map(|bit| {
-                let bytes = bit
-                    .saturating_div(64)
-                    .saturating_add(1)
-                    .saturating_mul(std::mem::size_of::<u64>())
-                    .saturating_mul(2)
-                    .saturating_add(object);
-                sized(bit.saturating_div(64).saturating_add(1), bytes)
-            })
-            .unwrap_or_else(fixed),
+        Builtin::BitsetNew => fixed(),
+        Builtin::BitsetSet | Builtin::BitsetClear => {
+            let existing_words = args.first().and_then(Value::as_bitset).map(Vec::len);
+            let bit = args.get(1).and_then(Value::as_int);
+            match (existing_words, bit) {
+                (Some(_), Some(bit)) if bit < 0 => fixed(),
+                (Some(existing_words), Some(bit)) => {
+                    let required_words = usize::try_from(bit)
+                        .unwrap_or(usize::MAX)
+                        .saturating_div(64)
+                        .saturating_add(1);
+                    let target_words = if matches!(builtin, Builtin::BitsetSet)
+                        && required_words > existing_words
+                    {
+                        let mut capacity = existing_words.max(8);
+                        while capacity < required_words {
+                            let next = capacity.saturating_mul(2);
+                            if next == capacity {
+                                capacity = usize::MAX;
+                                break;
+                            }
+                            capacity = next;
+                        }
+                        capacity
+                    } else {
+                        existing_words
+                    };
+                    // `into_bitset` first clones the source Vec. Growth may
+                    // then hold that clone and the resized buffer at once;
+                    // the final GC Object is a third independently accounted
+                    // allocation. Quote their conservative peak together.
+                    let word = std::mem::size_of::<u64>();
+                    let heap = existing_words
+                        .saturating_mul(word)
+                        .saturating_add(target_words.saturating_mul(word))
+                        .saturating_add(object);
+                    sized(existing_words.saturating_add(target_words).max(1), heap)
+                }
+                _ => fixed(),
+            }
+        }
         Builtin::Replace => {
-            let source = text_len(0).unwrap_or(0);
-            let from = text_len(1).unwrap_or(0).max(1);
-            let to = text_len(2).unwrap_or(0);
-            let bytes = source
-                .saturating_div(from)
-                .saturating_mul(to.max(from))
-                .saturating_mul(2)
-                .saturating_add(object);
-            sized(source.max(1), bytes)
-        }
-        Builtin::Push
-        | Builtin::Pop
-        | Builtin::PopLast
-        | Builtin::DropLast
-        | Builtin::DropFirst
-        | Builtin::Sort
-        | Builtin::Reverse
-        | Builtin::Slice
-        | Builtin::Map
-        | Builtin::Filter => {
-            let count = collection_len(0).unwrap_or(1);
-            let work = if matches!(builtin, Builtin::Sort) {
-                count.saturating_mul((usize::BITS - count.max(1).leading_zeros()) as usize)
-            } else {
-                count
+            let source = args.first().and_then(Value::as_str);
+            let from = args.get(1).and_then(Value::as_str);
+            let to = args.get(2).and_then(Value::as_str);
+            let Some((source, from, to)) = source.zip(from).zip(to).map(|((a, b), c)| (a, b, c))
+            else {
+                return Ok(fixed());
             };
-            sized(work.max(1), values(count))
+            let matches_upper = if from.is_empty() {
+                source.len().saturating_add(1)
+            } else {
+                source.len().saturating_div(from.len())
+            };
+            // If replacement shrinks a match, the largest result is the
+            // no-match source. If it expands a match, applying the maximum
+            // possible non-overlapping match count is the upper bound.
+            let output = source
+                .len()
+                .saturating_add(matches_upper.saturating_mul(to.len().saturating_sub(from.len())));
+            // `str::replace` builds a temporary String; importing that String
+            // into Object::Str allocates the retained Arc<str> separately.
+            let bytes = output.saturating_mul(2).saturating_add(object);
+            sized(source.len().saturating_add(matches_upper).max(1), bytes)
         }
-        Builtin::Append | Builtin::Extend => {
-            let count = collection_len(0)
-                .unwrap_or(0)
-                .saturating_add(collection_len(1).unwrap_or(0));
+        Builtin::Push => {
+            if let Some(source) = args.first().and_then(Value::as_str) {
+                let appended = text_len(1).unwrap_or(0);
+                let output = source.len().saturating_add(appended);
+                sized(
+                    output.max(1),
+                    output.saturating_mul(2).saturating_add(object),
+                )
+            } else {
+                let count = list_len(0).unwrap_or(1).saturating_add(1);
+                sized(count.max(1), values(count))
+            }
+        }
+        Builtin::Pop | Builtin::PopLast | Builtin::DropLast | Builtin::DropFirst => {
+            if let Some(source) = args.first().and_then(Value::as_str) {
+                sized(
+                    source.len().max(1),
+                    source.len().saturating_mul(2).saturating_add(object),
+                )
+            } else {
+                let count = list_len(0).unwrap_or(1);
+                sized(count.max(1), values(count))
+            }
+        }
+        Builtin::Reverse => {
+            if let Some(source) = args.first().and_then(Value::as_str) {
+                sized(
+                    source.len().max(1),
+                    source.len().saturating_mul(2).saturating_add(object),
+                )
+            } else {
+                let count = list_len(0).unwrap_or(1);
+                sized(count.max(1), values(count))
+            }
+        }
+        Builtin::Slice => {
+            let count = collection_len(0).unwrap_or(1);
             sized(count.max(1), values(count))
         }
-        Builtin::Keys | Builtin::Values => {
+        Builtin::Map | Builtin::Filter => {
             let count = collection_len(0).unwrap_or(1);
-            sized(count, count.saturating_mul(256).saturating_add(object))
-        }
-        Builtin::Entries | Builtin::Enumerate | Builtin::Zip => {
-            let count = collection_len(0)
-                .unwrap_or(1)
-                .min(collection_len(1).unwrap_or(usize::MAX));
+            let string_materialization = if args.first().and_then(Value::as_str).is_some() {
+                count.saturating_mul(object.saturating_add(32))
+            } else {
+                0
+            };
             sized(
                 count.max(1),
-                count.saturating_mul(512).saturating_add(object),
+                values(count).saturating_add(string_materialization),
             )
         }
-        Builtin::SetAt | Builtin::RemoveKey => {
-            let count = collection_len(0).unwrap_or(1);
-            sized(count, count.saturating_mul(256).saturating_add(object))
+        Builtin::Append | Builtin::Extend => {
+            match (
+                args.first().and_then(Value::as_list),
+                args.first().and_then(Value::as_str),
+                args.get(1).and_then(Value::as_list),
+                args.get(1).and_then(Value::as_str),
+            ) {
+                (Some(left), _, Some(right), _) => {
+                    let count = left.len().saturating_add(right.len());
+                    sized(count.max(1), values(count))
+                }
+                (Some(left), _, _, Some(right)) => {
+                    let chars_upper = right.len();
+                    let count = left.len().saturating_add(chars_upper);
+                    sized(
+                        count.max(1),
+                        values(count)
+                            .saturating_add(chars_upper.saturating_mul(object.saturating_add(32)))
+                            .saturating_add(object),
+                    )
+                }
+                (_, Some(left), _, Some(right)) => {
+                    let output = left.len().saturating_add(right.len());
+                    sized(
+                        output.max(1),
+                        output.saturating_mul(2).saturating_add(object),
+                    )
+                }
+                // Rendering an arbitrary list into one String requires a
+                // graph-aware display bound that v0 deliberately lacks.
+                (_, Some(_), Some(_), _) => {
+                    return Err(
+                        "constraint builtin 'append' cannot prove string output from list values"
+                            .into(),
+                    )
+                }
+                _ => fixed(),
+            }
         }
-        Builtin::Merge => {
-            let count = collection_len(0)
-                .unwrap_or(0)
-                .saturating_add(collection_len(1).unwrap_or(0));
+        Builtin::Values => match args.first() {
+            Some(value) if value.as_map().is_some() => {
+                let count = value.as_map().map(|map| map.len()).unwrap_or(0);
+                sized(count.max(1), values(count))
+            }
+            Some(value) if value.as_component().is_some() => {
+                let component = value.as_component().unwrap();
+                let names = component
+                    .layout
+                    .iter()
+                    .map(|name| name.len().saturating_add(std::mem::size_of::<String>()))
+                    .fold(0usize, usize::saturating_add);
+                sized(
+                    component.values.len().max(1),
+                    values(component.values.len()).saturating_add(names),
+                )
+            }
+            Some(value) if value.as_sum_type().is_some() => {
+                let sum = value.as_sum_type().unwrap();
+                let names = sum
+                    .fields
+                    .keys()
+                    .map(|name| name.len().saturating_add(std::mem::size_of::<String>()))
+                    .fold(0usize, usize::saturating_add);
+                sized(
+                    sum.fields.len().max(1),
+                    values(sum.fields.len()).saturating_add(names),
+                )
+            }
+            _ => fixed(),
+        },
+        Builtin::Enumerate | Builtin::Zip => {
+            let left = collection_len(0).unwrap_or(1);
+            let right = if matches!(builtin, Builtin::Zip) {
+                collection_len(1).unwrap_or(1)
+            } else {
+                0
+            };
+            let count = if matches!(builtin, Builtin::Zip) {
+                left.min(right)
+            } else {
+                left
+            };
+            let string_nodes = args
+                .iter()
+                .take(if matches!(builtin, Builtin::Zip) {
+                    2
+                } else {
+                    1
+                })
+                .filter_map(Value::as_str)
+                .map(str::len)
+                .fold(0usize, usize::saturating_add)
+                .saturating_mul(object.saturating_add(32));
             sized(
                 count.max(1),
-                count.saturating_mul(256).saturating_add(object),
+                count
+                    .saturating_mul(object.saturating_add(64))
+                    .saturating_add(values(left.saturating_add(right).saturating_add(count)))
+                    .saturating_add(string_nodes),
             )
+        }
+        Builtin::SetAt if args.first().is_some_and(|value| value.as_list().is_some()) => {
+            let count = list_len(0).unwrap_or(1);
+            sized(count.max(1), values(count))
         }
         Builtin::Split | Builtin::Chars => {
-            let count = text_len(0).unwrap_or(1);
-            sized(count, count.saturating_mul(256).saturating_add(object))
+            let source = args.first().and_then(Value::as_str);
+            let Some(source) = source else {
+                return Ok(fixed());
+            };
+            let parts_upper = if matches!(builtin, Builtin::Chars) {
+                source.len()
+            } else {
+                args.get(1)
+                    .and_then(Value::as_str)
+                    .map(|delimiter| {
+                        if delimiter.is_empty() {
+                            // `str::split("")` includes both boundary
+                            // segments in addition to every character.
+                            source.len().saturating_add(2)
+                        } else {
+                            source
+                                .len()
+                                .saturating_div(delimiter.len())
+                                .saturating_add(1)
+                        }
+                    })
+                    .unwrap_or(1)
+            };
+            let heap = source
+                .len()
+                .saturating_mul(2)
+                .saturating_add(parts_upper.saturating_mul(object.saturating_add(32)))
+                .saturating_add(values(parts_upper));
+            sized(source.len().saturating_add(parts_upper).max(1), heap)
         }
         Builtin::Trim | Builtin::SubstringBytes | Builtin::ToUpper | Builtin::ToLower => {
             let count = text_len(0).unwrap_or(1);
-            sized(count, count.saturating_mul(8).saturating_add(object))
+            sized(count, count.saturating_mul(16).saturating_add(object))
         }
+        // Callback-produced keys make a pre-execution peak bound impossible
+        // without metering the native map builder incrementally. Keep this
+        // helper outside the constraint-safe whitelist until that exists.
         Builtin::GroupBy => {
-            let count = collection_len(0).unwrap_or(1);
-            sized(count, count.saturating_mul(512).saturating_add(object))
+            return Err(
+                "constraint builtin 'group_by' has no proven peak-allocation contract".into(),
+            )
         }
         Builtin::MapOr => sized(2, object.saturating_mul(2)),
         Builtin::Reduce
@@ -229,16 +411,23 @@ pub(crate) fn builtin_resource_charge(
             )
         }
         Builtin::GenInt | Builtin::GenFloat => sized(100, values(100)),
-        Builtin::GenStr => sized(21, 4096),
+        Builtin::GenStr => sized(
+            21,
+            values(21)
+                .saturating_add(21usize.saturating_mul(object))
+                .saturating_add(420),
+        ),
         Builtin::GenBool => sized(2, values(2)),
         Builtin::GenList => {
             let count = list_len(0).unwrap_or(1);
             let expanded = count.saturating_mul(count.saturating_add(1)) / 2;
-            sized(expanded.max(1), values(expanded))
+            sized(
+                expanded.max(1),
+                values(expanded).saturating_add(count.saturating_add(1).saturating_mul(object)),
+            )
         }
         Builtin::BufferNew => fixed(),
-        Builtin::TypeOf
-        | Builtin::Abs
+        Builtin::Abs
         | Builtin::Sign
         | Builtin::Min
         | Builtin::Max
@@ -267,16 +456,33 @@ pub(crate) fn builtin_resource_charge(
         | Builtin::ByteBufGetI32Le => fixed(),
         Builtin::Int | Builtin::Float | Builtin::TryInt | Builtin::TryFloat => {
             let count = text_len(0).unwrap_or(1);
-            sized(count, object.saturating_add(128))
+            sized(
+                count,
+                count
+                    .saturating_mul(2)
+                    .saturating_add(object)
+                    .saturating_add(128),
+            )
         }
         Builtin::Len
         | Builtin::Sum
         | Builtin::Product
-        | Builtin::IndexOf
         | Builtin::StartsWith
         | Builtin::EndsWith => {
             let count = collection_len(0).unwrap_or(1);
             sized(count, object.saturating_add(128))
+        }
+        Builtin::Keys
+        | Builtin::Entries
+        | Builtin::RemoveKey
+        | Builtin::Merge
+        | Builtin::Sort
+        | Builtin::TypeOf
+        | Builtin::IndexOf => {
+            return Err(format!(
+                "constraint builtin '{}' has no proven native resource upper bound",
+                builtin.name()
+            ))
         }
         _ => {
             return Err(format!(
@@ -446,5 +652,145 @@ impl ConstraintOutcomeMeter {
 
     pub(crate) fn overflowed(&self) -> bool {
         self.overflowed
+    }
+}
+
+#[cfg(test)]
+mod resource_contract_tests {
+    use super::builtin_resource_charge;
+    use crate::gc::GcHeap;
+    use crate::value::{Builtin, Object, Value};
+    use crate::vm::builtins_impl::{bi_bitset_clear, bi_bitset_set, bi_replace};
+
+    #[test]
+    fn bitset_clear_quote_includes_the_existing_vector_clone() {
+        let mut gc = GcHeap::new();
+        let words = 16_384usize;
+        let bitset = Value::bitset(&mut gc, vec![u64::MAX; words]);
+        let quote = builtin_resource_charge(Builtin::BitsetClear, &[bitset, Value::int(0)])
+            .expect("bitset_clear is audited");
+
+        assert!(
+            quote.heap
+                >= words
+                    .saturating_mul(std::mem::size_of::<u64>())
+                    .saturating_add(std::mem::size_of::<Object>()),
+            "the quote must cover cloning the complete existing bitset"
+        );
+    }
+
+    #[test]
+    fn empty_pattern_replace_quote_covers_the_replacement_output() {
+        let mut gc = GcHeap::new();
+        let source = Value::from_string(&mut gc, String::new());
+        let pattern = Value::from_string(&mut gc, String::new());
+        let replacement_text = "x".repeat(32_768);
+        let replacement = Value::from_string(&mut gc, replacement_text.clone());
+        let quote = builtin_resource_charge(Builtin::Replace, &[source, pattern, replacement])
+            .expect("replace is audited");
+
+        assert!(
+            quote.heap
+                >= replacement_text
+                    .len()
+                    .saturating_mul(2)
+                    .saturating_add(std::mem::size_of::<Object>()),
+            "the quote must cover Rust's temporary String and the retained RAD string"
+        );
+    }
+
+    #[test]
+    fn bitset_growth_quote_covers_source_clone_and_resized_result() {
+        let mut gc = GcHeap::new();
+        let words = 257usize;
+        let target_bit = 65_536i64;
+        let bitset = Value::bitset(&mut gc, vec![u64::MAX; words]);
+        let args = [bitset, Value::int(target_bit)];
+        let quote =
+            builtin_resource_charge(Builtin::BitsetSet, &args).expect("bitset_set is audited");
+        let before = gc.bytes_allocated();
+        bi_bitset_set(&mut gc, args.to_vec()).unwrap();
+        assert!(gc.bytes_allocated().saturating_sub(before) <= quote.heap);
+        assert!(
+            quote.heap
+                >= words
+                    .saturating_mul(std::mem::size_of::<u64>())
+                    .saturating_add(
+                        usize::try_from(target_bit)
+                            .unwrap()
+                            .saturating_div(64)
+                            .saturating_add(1)
+                            .saturating_mul(std::mem::size_of::<u64>()),
+                    )
+        );
+    }
+
+    #[test]
+    fn shrinking_replace_quote_keeps_the_no_match_source_as_upper_bound() {
+        let mut gc = GcHeap::new();
+        let source_text = "x".repeat(32_769);
+        let args = [
+            Value::from_string(&mut gc, source_text.clone()),
+            Value::from_string(&mut gc, "absent-pattern".into()),
+            Value::from_string(&mut gc, String::new()),
+        ];
+        let quote = builtin_resource_charge(Builtin::Replace, &args).expect("replace is audited");
+        assert!(
+            quote.heap
+                >= source_text
+                    .len()
+                    .saturating_mul(2)
+                    .saturating_add(std::mem::size_of::<Object>())
+        );
+    }
+
+    #[test]
+    fn audited_quotes_dominate_retained_allocation_across_boundaries() {
+        for words in [0usize, 1, 8, 257, 16_384] {
+            let mut gc = GcHeap::new();
+            let bitset = Value::bitset(&mut gc, vec![u64::MAX; words]);
+            let args = [bitset, Value::int(0)];
+            let quote = builtin_resource_charge(Builtin::BitsetClear, &args).unwrap();
+            let before = gc.bytes_allocated();
+            bi_bitset_clear(&mut gc, args.to_vec()).unwrap();
+            assert!(gc.bytes_allocated().saturating_sub(before) <= quote.heap);
+        }
+
+        for (source, pattern, replacement) in [
+            ("", "", "x".repeat(4096)),
+            ("ééé", "", "界".repeat(256)),
+            ("aaaaaa", "aa", "replacement".repeat(64)),
+            ("unchanged", "missing", "x".repeat(1024)),
+        ] {
+            let mut gc = GcHeap::new();
+            let args = [
+                Value::from_string(&mut gc, source.to_string()),
+                Value::from_string(&mut gc, pattern.to_string()),
+                Value::from_string(&mut gc, replacement),
+            ];
+            let quote = builtin_resource_charge(Builtin::Replace, &args).unwrap();
+            let before = gc.bytes_allocated();
+            bi_replace(&mut gc, args.to_vec()).unwrap();
+            assert!(gc.bytes_allocated().saturating_sub(before) <= quote.heap);
+        }
+    }
+
+    #[test]
+    fn native_helpers_without_proven_bounds_fail_closed() {
+        let mut gc = GcHeap::new();
+        let empty = Value::map(&mut gc, Default::default());
+        for builtin in [
+            Builtin::Keys,
+            Builtin::Entries,
+            Builtin::Merge,
+            Builtin::RemoveKey,
+            Builtin::Sort,
+            Builtin::TypeOf,
+            Builtin::IndexOf,
+            Builtin::GroupBy,
+        ] {
+            let error = builtin_resource_charge(builtin, &[empty]).unwrap_err();
+            assert!(error.contains("no proven"), "{builtin:?}: {error}");
+        }
     }
 }

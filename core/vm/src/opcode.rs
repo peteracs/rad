@@ -305,6 +305,23 @@ impl SealedChunk {
         self.proof.instruction_count
     }
 
+    /// Rebuild this immutable artifact with graph-cloned constants. Attempt
+    /// replay uses this to ensure the child owns every heap object reachable
+    /// from its constant pools; structural verification is repeated because
+    /// certificates never transfer to independently allocated artifacts.
+    pub(crate) fn reseal_with_constants(
+        &self,
+        constants: Vec<crate::value::Value>,
+    ) -> Result<Self, crate::bytecode_verifier::VerificationError> {
+        let mut builder = self.to_builder();
+        debug_assert_eq!(builder.constants.len(), constants.len());
+        builder.constants = constants;
+        builder.dedup.clear();
+        builder.str_dedup.clear();
+        builder.next_str_id = 0;
+        builder.verify_and_seal()
+    }
+
     #[cfg(test)]
     pub(crate) fn from_unchecked_for_test(chunk: ChunkBuilder) -> Self {
         Self {

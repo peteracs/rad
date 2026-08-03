@@ -20,6 +20,14 @@ impl VM {
         builtin: Builtin,
         args: Vec<Value>,
     ) -> Result<Value, String> {
+        if self.observational_attempt_replay
+            && crate::replay::is_observational_attempt_effect(builtin)
+        {
+            return Err(format!(
+                "attempt replay: builtin '{}' has an irreversible host effect",
+                builtin.name()
+            ));
+        }
         self.enforce_settlement_builtin(builtin)?;
         self.meter_constraint_builtin(builtin, &args)?;
         if self.sandbox_caps.is_some() && !crate::sandbox::builtin_allowed_in_sandbox(builtin) {

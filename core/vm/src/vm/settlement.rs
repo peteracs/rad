@@ -73,8 +73,64 @@ pub(crate) struct ActiveResolution {
 pub(crate) struct ActiveConstraint {
     pub(crate) identity: crate::constraint_types::ConstraintIdentity,
     pub(crate) subject: u32,
-    pub(crate) violations: Vec<crate::constraint_types::ConstraintViolation>,
+    violations: Vec<ActiveConstraintViolation>,
+    occurrences: BTreeMap<String, u32>,
+    retained_bytes: usize,
+    max_retained_bytes: usize,
     pub(crate) overflowed: bool,
+}
+
+#[derive(Clone, Debug)]
+struct ActiveConstraintViolation {
+    code: String,
+    occurrence: u32,
+    source_line: u32,
+}
+
+impl ActiveConstraint {
+    fn record_violation(&mut self, code: String, source_line: u32) -> Result<(), String> {
+        const MAX_CODE_BYTES: usize = 128;
+        if code.is_empty() || code.len() > MAX_CODE_BYTES {
+            return Err(format!(
+                "constraint violation code must contain 1..={MAX_CODE_BYTES} bytes"
+            ));
+        }
+        let first_occurrence = !self.occurrences.contains_key(&code);
+        let bytes = std::mem::size_of::<ActiveConstraintViolation>()
+            .saturating_add(code.len())
+            .saturating_add(if first_occurrence { code.len() } else { 0 });
+        if bytes > self.max_retained_bytes.saturating_sub(self.retained_bytes) {
+            self.overflowed = true;
+            return Ok(());
+        }
+        let occurrence = self.occurrences.entry(code.clone()).or_insert(0);
+        *occurrence = occurrence.saturating_add(1);
+        self.retained_bytes = self.retained_bytes.saturating_add(bytes);
+        self.violations.push(ActiveConstraintViolation {
+            code,
+            occurrence: *occurrence,
+            source_line,
+        });
+        Ok(())
+    }
+
+    fn into_violations(self) -> Vec<crate::constraint_types::ConstraintViolation> {
+        let candidate = crate::constraint_types::CandidateKey {
+            entity: self.subject,
+            component: self.identity.attached_component.clone(),
+        };
+        self.violations
+            .into_iter()
+            .map(|violation| crate::constraint_types::ConstraintViolation {
+                constraint: self.identity.clone(),
+                subject: self.subject,
+                code: violation.code,
+                occurrence: violation.occurrence,
+                source_line: violation.source_line,
+                candidate: candidate.clone(),
+            })
+            .collect()
+    }
 }
 
 #[derive(Clone)]
@@ -401,12 +457,6 @@ impl VM {
         if valid {
             return Ok(());
         }
-        let (subject, attached_component) = self
-            .settlement
-            .as_ref()
-            .and_then(|context| context.active_constraint.as_ref())
-            .map(|active| (active.subject, active.identity.attached_component.clone()))
-            .ok_or_else(|| "`require` is only valid while a constraint runs".to_string())?;
         let per_invocation_limit = self
             .constraint_limit_profile
             .max_violations_per_invocation();
@@ -419,26 +469,7 @@ impl VM {
             active.overflowed = true;
             return Ok(());
         }
-        let occurrence = active
-            .violations
-            .iter()
-            .filter(|violation| violation.code == code)
-            .count() as u32
-            + 1;
-        active
-            .violations
-            .push(crate::constraint_types::ConstraintViolation {
-                constraint: active.identity.clone(),
-                subject: active.subject,
-                code,
-                occurrence,
-                source_line,
-                candidate: crate::constraint_types::CandidateKey {
-                    entity: subject,
-                    component: attached_component,
-                },
-            });
-        Ok(())
+        active.record_violation(code, source_line)
     }
 
     fn candidate_component(
@@ -592,6 +623,9 @@ impl VM {
                 identity: identity.clone(),
                 subject: *subject,
                 violations: Vec::new(),
+                occurrences: BTreeMap::new(),
+                retained_bytes: 0,
+                max_retained_bytes: self.constraint_limit_profile.max_serialized_outcome_bytes(),
                 overflowed: false,
             });
             let frame_depth = self.frames.len();
@@ -677,15 +711,15 @@ impl VM {
                             subject: *subject,
                             code: "constraint.invocation_violation_limit".into(),
                             message: format!(
-                                "constraint exceeded {} violations",
-                                self.constraint_limit_profile
-                                    .max_violations_per_invocation()
+                                "constraint exceeded its {}-violation or {}-byte local outcome allowance",
+                                self.constraint_limit_profile.max_violations_per_invocation(),
+                                self.constraint_limit_profile.max_serialized_outcome_bytes(),
                             ),
                             source_line: 0,
                         },
                     );
                 }
-                Ok(_) => outcome_meter.retain_violations(&mut violations, active.violations),
+                Ok(_) => outcome_meter.retain_violations(&mut violations, active.into_violations()),
                 Err(error) => {
                     outcome_meter.retain_failure(
                         &mut evaluation_failures,

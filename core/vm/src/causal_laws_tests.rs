@@ -309,7 +309,7 @@ pub(crate) fn compile_vm(source: &str) -> VM {
         .with_features(vec![FEATURE.to_string()])
         .compile(&program)
         .expect("compile causal source");
-    let mut vm = VM::new();
+    let mut vm = VM::new_with_seed(7);
     vm.suppress_output();
     vm.load_compile_result(result);
     vm

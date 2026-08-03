@@ -88,3 +88,17 @@ cargo test -p rad-vm provenance_fan_in_wire_growth_is_linear_and_default_renderi
   for a lower benchmark number.
 - Report wire size alongside render time: bounded `why()` output must not hide
   unbounded retained provenance accidentally.
+
+## Constraint native-cost contracts
+
+Constraint execution prices every bytecode opcode. A native builtin is a
+separate proof boundary: its preflight quote must conservatively cover native
+work and peak temporary-plus-retained allocation for the concrete arguments.
+The boundary suite includes empty-pattern replacement, large existing bitsets,
+UTF-8 strings, and near-limit collection shapes. Helpers whose bound depends
+on unpriced rendering, callback-produced keys, or other unaudited data remain
+unavailable in constraints and fail before native work or allocation begins.
+
+The post-invocation heap check is defense in depth, not the primary meter. New
+constraint-safe builtins must add a resource-contract test with their pricing
+rule; benchmark improvements never justify weakening that upper bound.

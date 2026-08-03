@@ -569,7 +569,12 @@ invocation's contract. Fuel is charged at every dispatched constraint opcode,
 including straight-line basic blocks. Each invocation allocates into a fresh
 throw-away GC heap; variable-size aggregate constructors preflight temporary
 and retained storage, every opcode performs a retained-heap backstop check, and
-the heap is discarded before the next invocation begins.
+the heap is discarded before the next invocation begins. Native builtins are
+admitted only when their preflight quote is a conservative upper bound for
+both native work and peak temporary-plus-retained allocation. The quote uses
+the existing input size as well as requested growth (including source clones
+and empty-pattern string expansion); a helper whose upper bound is not yet
+proved fails closed instead of running under an estimate.
 
 A constraint can fail while evaluating—for example, a base `require(entity,
 Component)` may find a missing component. Ordinary errors and per-invocation
@@ -794,7 +799,14 @@ Attempt replay:
 
 Attempt replay is observational: it executes in a detached child VM and always
 discards that child. A mismatch, host abort, runtime fault, or unexpected
-commit cannot mutate the authoritative VM being inspected.
+commit cannot mutate the authoritative VM being inspected. The fork is a
+graph clone rather than an independent tree copy: object and capture-cell
+identity are memoized, closures have every capture pointer rewritten to a
+child-owned cell, shared aliases stay shared inside the child, and cycles close
+only over child storage. Replay-visible globals, sealed constants, queued event
+payloads, event-log payloads, and completed-task values participate in the
+same clone context. Native/FFI calls and irreversible host-effect builtins fail
+closed during observational replay.
 
 A rejected settlement is absent from the durable ledger and therefore cannot
 be reconstructed from ledger provenance alone. Attempt replay consumes an
@@ -1266,7 +1278,14 @@ limit-profile, capability, base-world, and request identities. Opaque
 settlement IDs do not participate in semantic rejection equality. Constraint
 fuel is charged per opcode, invocation allocations use disposable heaps,
 settlement outcomes are metered before retention, and replay runs only on a
-discarded child timeline.
+discarded, graph-isolated child timeline. Child closures rewrite captures onto
+child-owned cells while preserving internal sharing and cycles; replay-visible
+constant, event, and task roots are cloned in the same graph. Irreversible host
+effects fail closed. Constraint-safe native builtins use conservative work and
+peak-allocation quotes derived from their actual inputs, while helpers without
+a proved upper bound remain unavailable in constraints. Invocation-local
+violation retention also has an independent byte meter before results reach
+the settlement-wide outcome meter.
 
 Projection, priorities, fixed points, and parallel constraint execution remain
 out of scope and require follow-on RFCs.
