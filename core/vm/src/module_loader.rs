@@ -373,6 +373,48 @@ pub fn load_program_with_overrides(
     parser_options: ParserOptions,
     file_overrides: &HashMap<PathBuf, String>,
 ) -> Result<LoadResult, Vec<ModuleLoadError>> {
+    load_program_with_resolved_overrides(
+        entry_path,
+        parser_options,
+        file_overrides,
+        &HashMap::new(),
+        false,
+    )
+}
+
+/// Rebuild the original module graph from authenticated sources embedded in
+/// a replay trace. Import targets come from the bundle, so replay does not
+/// need to rediscover or fetch source files.
+pub fn load_program_from_source_bundle(
+    source: &str,
+    layout: &SourceLayout,
+    parser_options: ParserOptions,
+) -> Result<LoadResult, Vec<ModuleLoadError>> {
+    let bundle = layout.files(source).map_err(|message| {
+        vec![ModuleLoadError {
+            filepath: "<source bundle>".to_string(),
+            source: source.to_string(),
+            message,
+            line: 1,
+            col: 1,
+        }]
+    })?;
+    load_program_with_resolved_overrides(
+        &bundle.entry.to_string_lossy(),
+        parser_options,
+        &bundle.files,
+        &bundle.imports,
+        true,
+    )
+}
+
+fn load_program_with_resolved_overrides(
+    entry_path: &str,
+    parser_options: ParserOptions,
+    file_overrides: &HashMap<PathBuf, String>,
+    resolved_imports: &HashMap<(PathBuf, String), PathBuf>,
+    hermetic: bool,
+) -> Result<LoadResult, Vec<ModuleLoadError>> {
     let entry = normalize_path(Path::new(entry_path));
     let entry_dir = entry
         .parent()
@@ -382,20 +424,22 @@ pub fn load_program_with_overrides(
     #[cfg(not(target_arch = "wasm32"))]
     let mut manifest = RadManifest::default();
     let mut manifest_errors: Vec<ModuleLoadError> = Vec::new();
-    if let Ok(content) = fs::read_to_string(&rad_toml_path) {
-        match parse_rad_toml(&content) {
-            #[cfg(not(target_arch = "wasm32"))]
-            Ok(m) => manifest = m,
-            #[cfg(target_arch = "wasm32")]
-            Ok(_) => {}
-            Err(e) => {
-                manifest_errors.push(ModuleLoadError {
-                    filepath: rad_toml_path.to_string_lossy().to_string(),
-                    source: String::new(),
-                    message: format!("invalid rad.toml: {e}"),
-                    line: 1,
-                    col: 1,
-                });
+    if !hermetic {
+        if let Ok(content) = fs::read_to_string(&rad_toml_path) {
+            match parse_rad_toml(&content) {
+                #[cfg(not(target_arch = "wasm32"))]
+                Ok(m) => manifest = m,
+                #[cfg(target_arch = "wasm32")]
+                Ok(_) => {}
+                Err(e) => {
+                    manifest_errors.push(ModuleLoadError {
+                        filepath: rad_toml_path.to_string_lossy().to_string(),
+                        source: String::new(),
+                        message: format!("invalid rad.toml: {e}"),
+                        line: 1,
+                        col: 1,
+                    });
+                }
             }
         }
     }
@@ -403,52 +447,57 @@ pub fn load_program_with_overrides(
     #[cfg(not(target_arch = "wasm32"))]
     let lock_path = entry_dir.join("forge.lock");
     #[cfg(not(target_arch = "wasm32"))]
-    let lockfile = match fs::read_to_string(&lock_path) {
-        Ok(content) => match LockFile::parse(&content) {
-            Ok(l) => Some(l),
-            Err(e) => {
-                let ctx = LoadContext {
-                    visited: HashSet::new(),
-                    parsed_files: HashMap::new(),
-                    symbols: HashMap::new(),
-                    merged: Vec::new(),
-                    merged_source: String::new(),
-                    source_layout: SourceLayout::default(),
-                    had_imports: false,
-                    source_map: SourceMap::new(),
-                    parser_options,
-                    module_fingerprints: Vec::new(),
-                    aliases: HashMap::new(),
-                    file_overrides: file_overrides.clone(),
-                    errors: vec![ModuleLoadError {
-                        filepath: lock_path.to_string_lossy().to_string(),
-                        source: String::new(),
-                        message: format!("invalid forge.lock: {e}"),
-                        line: 1,
-                        col: 1,
-                    }],
-                    #[cfg(not(target_arch = "wasm32"))]
-                    lockfile: None,
-                    #[cfg(not(target_arch = "wasm32"))]
-                    manifest: manifest.clone(),
-                };
-                let mut errs = ctx.errors;
-                errs.extend(manifest_errors);
-                return Ok(LoadResult {
-                    program: Program {
-                        declarations: ctx.merged,
-                    },
-                    merged_source: ctx.merged_source,
-                    source_layout: ctx.source_layout,
-                    had_imports: ctx.had_imports,
-                    source_map: ctx.source_map,
-                    module_fingerprints: ctx.module_fingerprints,
-                    aliases: ctx.aliases,
-                    errors: errs,
-                });
-            }
-        },
-        Err(_) => None,
+    let lockfile = if hermetic {
+        None
+    } else {
+        match fs::read_to_string(&lock_path) {
+            Ok(content) => match LockFile::parse(&content) {
+                Ok(l) => Some(l),
+                Err(e) => {
+                    let ctx = LoadContext {
+                        visited: HashSet::new(),
+                        parsed_files: HashMap::new(),
+                        symbols: HashMap::new(),
+                        merged: Vec::new(),
+                        merged_source: String::new(),
+                        source_layout: SourceLayout::default(),
+                        had_imports: false,
+                        source_map: SourceMap::new(),
+                        parser_options,
+                        module_fingerprints: Vec::new(),
+                        aliases: HashMap::new(),
+                        file_overrides: file_overrides.clone(),
+                        resolved_imports: resolved_imports.clone(),
+                        errors: vec![ModuleLoadError {
+                            filepath: lock_path.to_string_lossy().to_string(),
+                            source: String::new(),
+                            message: format!("invalid forge.lock: {e}"),
+                            line: 1,
+                            col: 1,
+                        }],
+                        #[cfg(not(target_arch = "wasm32"))]
+                        lockfile: None,
+                        #[cfg(not(target_arch = "wasm32"))]
+                        manifest: manifest.clone(),
+                    };
+                    let mut errs = ctx.errors;
+                    errs.extend(manifest_errors);
+                    return Ok(LoadResult {
+                        program: Program {
+                            declarations: ctx.merged,
+                        },
+                        merged_source: ctx.merged_source,
+                        source_layout: ctx.source_layout,
+                        had_imports: ctx.had_imports,
+                        source_map: ctx.source_map,
+                        module_fingerprints: ctx.module_fingerprints,
+                        aliases: ctx.aliases,
+                        errors: errs,
+                    });
+                }
+            },
+            Err(_) => None,
+        }
     };
 
     let mut ctx = LoadContext {
@@ -464,6 +513,7 @@ pub fn load_program_with_overrides(
         module_fingerprints: Vec::new(),
         aliases: HashMap::new(),
         file_overrides: file_overrides.clone(),
+        resolved_imports: resolved_imports.clone(),
         errors: Vec::new(),
         #[cfg(not(target_arch = "wasm32"))]
         lockfile,
@@ -511,6 +561,7 @@ struct LoadContext {
     module_fingerprints: Vec<ModuleFingerprint>,
     aliases: HashMap<String, Vec<Decl>>,
     file_overrides: HashMap<PathBuf, String>,
+    resolved_imports: HashMap<(PathBuf, String), PathBuf>,
     errors: Vec<ModuleLoadError>,
     /// Parsed `forge.lock` next to the entry, if present and valid.
     #[cfg(not(target_arch = "wasm32"))]
@@ -643,16 +694,26 @@ fn fetch_remote_module_to_cache(url: &str, _ctx: &LoadContext) -> Result<PathBuf
     ))
 }
 
-/// Resolve a `use` path: local file relative to `parent`, or HTTP(S) URL fetched into `~/.rad/cache/`.
+/// Resolve a `use` path from its importing source unit. Authenticated replay
+/// bundles provide the exact target; ordinary loads fall back to filesystem
+/// or remote resolution.
 fn resolve_module_path(
-    parent: &Path,
+    importer: &Path,
     use_path: &str,
     ctx: &LoadContext,
 ) -> Result<PathBuf, String> {
+    if let Some(target) = ctx
+        .resolved_imports
+        .get(&(importer.to_path_buf(), use_path.to_string()))
+    {
+        return Ok(target.clone());
+    }
     if is_remote_url(use_path) {
         fetch_remote_module_to_cache(use_path, ctx)
     } else {
-        Ok(normalize_path(&parent.join(use_path)))
+        Ok(normalize_path(
+            &importer.parent().unwrap_or(Path::new(".")).join(use_path),
+        ))
     }
 }
 
@@ -694,10 +755,8 @@ fn parse_pass(path: &Path, ctx: &mut LoadContext, lock_path_label: &str) -> Resu
     if !ctx.merged_source.is_empty() {
         ctx.merged_source.push('\n');
     }
-    ctx.source_layout.push(
-        ctx.merged_source.len(),
-        path.to_string_lossy().to_string(),
-    );
+    ctx.source_layout
+        .push(ctx.merged_source.len(), lock_path_label.to_string());
     let rendered_source = normalize_file_source_for_merge(&source);
     ctx.merged_source.push_str(&rendered_source);
 
@@ -737,11 +796,11 @@ fn parse_pass(path: &Path, ctx: &mut LoadContext, lock_path_label: &str) -> Resu
         },
     );
 
-    let parent = path.parent().unwrap_or(Path::new("."));
+    let section_index = ctx.source_layout.sections.len().saturating_sub(1);
     for decl in &program.declarations {
         if let Decl::Use(u) = decl {
             ctx.had_imports = true;
-            let child = match resolve_module_path(parent, &u.path, ctx) {
+            let child = match resolve_module_path(path, &u.path, ctx) {
                 Ok(p) => p,
                 Err(msg) => {
                     ctx.errors.push(ModuleLoadError {
@@ -754,7 +813,10 @@ fn parse_pass(path: &Path, ctx: &mut LoadContext, lock_path_label: &str) -> Resu
                     continue;
                 }
             };
-            if !is_remote_url(&u.path) && !child.exists() {
+            if !is_remote_url(&u.path)
+                && !child.exists()
+                && !ctx.file_overrides.contains_key(&child)
+            {
                 ctx.errors.push(ModuleLoadError {
                     filepath: path.to_string_lossy().to_string(),
                     source: source.clone(),
@@ -769,6 +831,19 @@ fn parse_pass(path: &Path, ctx: &mut LoadContext, lock_path_label: &str) -> Resu
             } else {
                 child.to_string_lossy().into_owned()
             };
+            if let Err(message) =
+                ctx.source_layout
+                    .add_import(section_index, u.path.clone(), child_label.clone())
+            {
+                ctx.errors.push(ModuleLoadError {
+                    filepath: path.to_string_lossy().to_string(),
+                    source: source.clone(),
+                    message,
+                    line: u.span.line,
+                    col: u.span.col,
+                });
+                continue;
+            }
             let _ = parse_pass(&child, ctx, &child_label);
         }
     }
@@ -780,11 +855,10 @@ fn merge_pass(entry_path: &Path, ctx: &mut LoadContext) -> Result<(), ()> {
     bare_targets.insert(entry_path.to_path_buf());
 
     for parsed in ctx.parsed_files.values() {
-        let parent = parsed.path.parent().unwrap_or(Path::new("."));
         for decl in &parsed.decls {
             if let Decl::Use(u) = decl {
                 if u.alias.is_none() {
-                    match resolve_module_path(parent, &u.path, ctx) {
+                    match resolve_module_path(&parsed.path, &u.path, ctx) {
                         Ok(child) => {
                             bare_targets.insert(child);
                         }
@@ -823,13 +897,12 @@ fn merge_pass(entry_path: &Path, ctx: &mut LoadContext) -> Result<(), ()> {
             Some(p) => p.clone(),
             None => return Err(()),
         };
-        let parent = path.parent().unwrap_or(Path::new("."));
 
         let mut has_error = false;
 
         for decl in &parsed.decls {
             if let Decl::Use(u) = decl {
-                match resolve_module_path(parent, &u.path, ctx) {
+                match resolve_module_path(path, &u.path, ctx) {
                     Ok(child) => {
                         if dfs(&child, ctx, bare_targets, visited, entry_path).is_err() {
                             has_error = true;
@@ -919,12 +992,11 @@ fn alias_pass(ctx: &mut LoadContext) -> Result<(), ()> {
             Some(p) => p.clone(),
             None => continue,
         };
-        let parent = path.parent().unwrap_or(Path::new("."));
 
         for decl in &parsed.decls {
             if let Decl::Use(u) = decl {
                 if let Some(alias) = &u.alias {
-                    let child = match resolve_module_path(parent, &u.path, ctx) {
+                    let child = match resolve_module_path(&parsed.path, &u.path, ctx) {
                         Ok(p) => p,
                         Err(msg) => {
                             ctx.errors.push(ModuleLoadError {
@@ -1214,8 +1286,7 @@ mod tests {
             "use \"a.rad\"\nfn main() -> nil { print(a()) }\n",
         )
         .unwrap();
-        let result =
-            load_program_with_source_map(dir.join("main.rad").to_str().unwrap()).unwrap();
+        let result = load_program_with_source_map(dir.join("main.rad").to_str().unwrap()).unwrap();
         assert!(result.had_imports);
         assert!(!result.merged_source.contains("// -- "));
         assert_eq!(result.source_layout.sections.len(), 2);
@@ -1224,7 +1295,68 @@ mod tests {
             .sections
             .iter()
             .any(|section| section.name.ends_with("a.rad")));
-        result.source_layout.validate(&result.merged_source).unwrap();
+        result
+            .source_layout
+            .validate(&result.merged_source)
+            .unwrap();
+    }
+
+    #[test]
+    fn authenticated_source_bundle_reconstructs_module_order_and_private_scope() {
+        let dir = mk_temp_dir();
+        fs::write(
+            dir.join("bare.rad"),
+            "let hidden = 41\npub fn answer() -> int { return hidden + 1 }\n",
+        )
+        .unwrap();
+        fs::write(
+            dir.join("aliased.rad"),
+            "let hidden = 8\npub fn answer() -> int { return hidden + 1 }\n",
+        )
+        .unwrap();
+        fs::write(
+            dir.join("main.rad"),
+            "use \"bare.rad\"\nuse \"aliased.rad\" as other\nfn main() -> nil { print(answer()) print(other.answer()) }\n",
+        )
+        .unwrap();
+
+        let recorded =
+            load_program_with_source_map(dir.join("main.rad").to_str().unwrap()).unwrap();
+        let mut direct_checker = Checker::new_with_options(CheckerOptions::default());
+        direct_checker.set_aliases(recorded.aliases.clone());
+        let direct_errors = direct_checker.check(&recorded.program);
+        assert!(direct_errors.is_empty(), "{direct_errors:?}");
+        let direct_compile = Compiler::new()
+            .with_checker_output(direct_checker.output())
+            .with_aliases(recorded.aliases.clone())
+            .compile(&recorded.program)
+            .expect("compile original module graph");
+        let mut direct_vm = VM::new();
+        direct_vm.load_compile_result(direct_compile);
+        direct_vm.run(0).expect("run original module graph");
+        assert_eq!(direct_vm.print_buffer, vec!["42", "9"]);
+
+        let replayed = load_program_from_source_bundle(
+            &recorded.merged_source,
+            &recorded.source_layout,
+            ParserOptions::default(),
+        )
+        .unwrap();
+        assert!(replayed.errors.is_empty(), "{:?}", replayed.errors);
+
+        let mut replay_checker = Checker::new_with_options(CheckerOptions::default());
+        replay_checker.set_aliases(replayed.aliases.clone());
+        let replay_errors = replay_checker.check(&replayed.program);
+        assert!(replay_errors.is_empty(), "{replay_errors:?}");
+        let compile_result = Compiler::new()
+            .with_checker_output(replay_checker.output())
+            .with_aliases(replayed.aliases)
+            .compile(&replayed.program)
+            .expect("compile reconstructed module graph");
+        let mut vm = VM::new();
+        vm.load_compile_result(compile_result);
+        vm.run(0).expect("run reconstructed module graph");
+        assert_eq!(vm.print_buffer, vec!["42", "9"]);
     }
 
     #[test]
@@ -1275,8 +1407,7 @@ mod tests {
         )
         .unwrap();
 
-        let result =
-            load_program_with_source_map(dir.join("main.rad").to_str().unwrap()).unwrap();
+        let result = load_program_with_source_map(dir.join("main.rad").to_str().unwrap()).unwrap();
         assert!(!result.merged_source.contains("\n\n\n"));
         assert_eq!(result.source_layout.sections.len(), 3);
     }

@@ -194,6 +194,11 @@ pub struct CompileResult {
     pub component_versions: HashMap<String, u32>,
     pub variant_layouts: HashMap<(String, String), Vec<String>>,
     pub global_names: Vec<String>,
+    /// Canonical identity of the source/module graph that produced this
+    /// artifact. Bytecode-only embedders may leave this absent; normal CLI
+    /// and replay compilation install the authenticated `SourceLayout`
+    /// digest so portable program identity also binds module resolution.
+    pub program_source_identity: Option<String>,
     pub warnings: Vec<CompileWarning>,
     /// Heap allocations for constants embedded in chunks (merged into VM on load).
     pub(crate) gc: GcHeap,
@@ -211,6 +216,7 @@ impl std::fmt::Debug for CompileResult {
             .field("component_layouts", &self.component_layouts)
             .field("variant_layouts", &self.variant_layouts)
             .field("global_names", &self.global_names)
+            .field("program_source_identity", &self.program_source_identity)
             .field("warnings", &self.warnings)
             .field("gc", &"<GcHeap>")
             .finish()
@@ -240,6 +246,7 @@ pub struct Compiler {
     pub(crate) spread_lengths: HashMap<crate::ast::Span, usize>,
     pub(crate) global_slots: HashMap<String, u16>,
     pub(crate) global_names: Vec<String>,
+    pub(crate) program_source_identity: Option<String>,
     pub(crate) module_aliases: HashMap<String, HashMap<String, String>>,
     pub(crate) alias_decls: HashMap<String, Vec<Decl>>,
     pub(crate) current_alias_scope: Option<HashMap<String, String>>,
@@ -355,6 +362,7 @@ impl Compiler {
             spread_lengths: HashMap::new(),
             global_slots,
             global_names,
+            program_source_identity: None,
             module_aliases: HashMap::new(),
             alias_decls: HashMap::new(),
             current_alias_scope: None,
@@ -391,6 +399,14 @@ impl Compiler {
         self
     }
 
+    /// Bind the compiler product to the authenticated source/module graph
+    /// that produced it. This identity is semantic metadata for portable
+    /// replay; it never changes bytecode generation.
+    pub fn with_program_source_identity(mut self, identity: impl Into<String>) -> Self {
+        self.program_source_identity = Some(identity.into());
+        self
+    }
+
     pub fn with_aliases(mut self, aliases: HashMap<String, Vec<Decl>>) -> Self {
         for (alias_name, decls) in &aliases {
             let mut pub_map = HashMap::new();
@@ -406,6 +422,30 @@ impl Compiler {
         }
         self.alias_decls = aliases;
         self
+    }
+
+    fn register_alias_local_names(
+        names: &mut HashMap<String, String>,
+        alias_name: &str,
+        decl: &Decl,
+    ) {
+        if let Some(name) = Self::decl_name_static(decl) {
+            names.insert(name.to_string(), format!("__mod_{}__{}", alias_name, name));
+            return;
+        }
+        match decl {
+            Decl::Stmt(Stmt::Let(binding)) => {
+                for name in &binding.names {
+                    names.insert(name.clone(), format!("__mod_{}__{}", alias_name, name));
+                }
+            }
+            Decl::Stmt(Stmt::LetElse(binding)) => {
+                if let Some(name) = binding.primary_binding_name() {
+                    names.insert(name.clone(), format!("__mod_{}__{}", alias_name, name));
+                }
+            }
+            _ => {}
+        }
     }
 
     fn decl_name_static(decl: &Decl) -> Option<&str> {
@@ -573,9 +613,7 @@ impl Compiler {
         for (alias_name, decls) in &alias_decls {
             let mut all_names: HashMap<String, String> = HashMap::new();
             for d in decls {
-                if let Some(name) = Self::decl_name_static(d) {
-                    all_names.insert(name.to_string(), format!("__mod_{}__{}", alias_name, name));
-                }
+                Self::register_alias_local_names(&mut all_names, alias_name, d);
             }
             self.current_alias_scope = Some(all_names.clone());
             for d in decls {
@@ -940,6 +978,7 @@ impl Compiler {
             component_versions: std::mem::take(&mut self.component_versions),
             variant_layouts,
             global_names: self.global_names,
+            program_source_identity: self.program_source_identity,
             warnings: std::mem::take(&mut self.warnings),
             gc: std::mem::take(&mut self.gc),
         })

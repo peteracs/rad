@@ -42,7 +42,8 @@ pub pure fn necklace_representatives(width: int) -> list<int> {
 }
 
 pub pure fn max_int(items: list<int>) -> int {
-    let mut answer = 0
+    assert(len(items) > 0, "max_int requires a nonempty list")
+    let mut answer = items[0]
     for value in items {
         if value > answer {
             answer = value

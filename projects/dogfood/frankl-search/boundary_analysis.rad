@@ -1,0 +1,220 @@
+// Explain the structural obstruction at a near-Frankl deletion boundary.
+
+use "../native-math-kernels/math_kernels.rad"
+use "structure_lib.rad"
+
+let DEFAULT_CERTIFICATE = "projects/dogfood/frankl-search/out/deletion-2048.json"
+
+component ChainLiftCertificate {
+    base_width: int = 0
+    missing_core_sets: int = 0
+    special_sets: int = 0
+    all_specials_cover_base: bool = false
+    removed_incidence: int = 0
+    added_incidence: int = 0
+    strict_base_coordinates: int = 0
+    frankl_margin: int = 0
+    template_obstructed: bool = false
+}
+
+intent CoordinateBalance {
+    key target: entity
+    coordinate: int
+    removed_occurrences: int
+    added_occurrences: int
+    base_width: int
+    missing_core_sets: int
+    special_sets: int
+    all_specials_cover_base: bool
+    frankl_margin: int
+}
+
+law SubmitCoordinateBalance(
+    target: entity,
+    coordinate: int,
+    removed_occurrences: int,
+    added_occurrences: int,
+    base_width: int,
+    missing_core_sets: int,
+    special_sets: int,
+    all_specials_cover_base: bool,
+    frankl_margin: int,
+) {
+    propose CoordinateBalance {
+        target: target,
+        coordinate: coordinate,
+        removed_occurrences: removed_occurrences,
+        added_occurrences: added_occurrences,
+        base_width: base_width,
+        missing_core_sets: missing_core_sets,
+        special_sets: special_sets,
+        all_specials_cover_base: all_specials_cover_base,
+        frankl_margin: frankl_margin,
+    }
+}
+
+resolver ResolveCoordinateBalance for CoordinateBalance(target, proposals) {
+    let first = proposals[0]
+    let mut removed_incidence = 0
+    let mut added_incidence = 0
+    let mut strict_coordinates = 0
+    for proposal in proposals {
+        removed_incidence = removed_incidence + proposal.removed_occurrences
+        added_incidence = added_incidence + proposal.added_occurrences
+        if proposal.removed_occurrences > proposal.added_occurrences {
+            strict_coordinates = strict_coordinates + 1
+        }
+    }
+    let same_size_lift = first.missing_core_sets == first.special_sets
+    next(target, ChainLiftCertificate {
+        base_width: first.base_width,
+        missing_core_sets: first.missing_core_sets,
+        special_sets: first.special_sets,
+        all_specials_cover_base: first.all_specials_cover_base,
+        removed_incidence: removed_incidence,
+        added_incidence: added_incidence,
+        strict_base_coordinates: strict_coordinates,
+        frankl_margin: first.frankl_margin,
+        // In a same-size lift, every special set containing the full base
+        // contributes t incidences to every base coordinate.  The t removed
+        // subsets contain at most base_width*t incidences total, so they
+        // cannot contribute at least t+1 to every coordinate.
+        template_obstructed: same_size_lift and first.all_specials_cover_base,
+    })
+}
+
+constraint ValidChainLiftCertificate for ChainLiftCertificate(subject, proposed) {
+    require proposed.base_width > 0
+        else "frankl.boundary.empty_base"
+    require proposed.missing_core_sets == proposed.special_sets
+        else "frankl.boundary.not_same_size_lift"
+    require proposed.all_specials_cover_base
+        else "frankl.boundary.special_misses_base"
+    require proposed.template_obstructed
+        else "frankl.boundary.obstruction_not_established"
+}
+
+entity boundary_judge { ChainLiftCertificate {} }
+
+fn bits_except(width: int, excluded: list<int>) -> list<int> {
+    let mut result = []
+    for bit in range(width) {
+        if not contains(excluded, bit) {
+            result = push(result, bit)
+        }
+    }
+    return result
+}
+
+fn mask_for_bits(bits: list<int>) -> int {
+    let mut result = 0
+    for bit in bits {
+        result = result | shl(1, bit)
+    }
+    return result
+}
+
+fn pack_mask(mask: int, bits: list<int>) -> int {
+    let mut result = 0
+    for index in range(len(bits)) {
+        if (mask & shl(1, bits[index])) != 0 {
+            result = result | shl(1, index)
+        }
+    }
+    return result
+}
+
+fn occurrences(masks: list<int>, coordinate: int) -> int {
+    let mut result = 0
+    for value in masks {
+        if (value & shl(1, coordinate)) != 0 {
+            result = result + 1
+        }
+    }
+    return result
+}
+
+fn main() -> nil {
+    let argv = sys_args()
+    let path = if len(argv) > 0 { argv[0] } else { DEFAULT_CERTIFICATE }
+    let parsed = json_parse(read_file(path))
+    assert(is_some(parsed), "certificate must contain valid JSON")
+    let document = unwrap(parsed)
+    let width = document["width"]
+    let deleted = document["deleted"]
+    let family = complement_family(deleted, width)
+    let frequencies = lattice_frequencies(family, width)
+
+    let ordered_frequencies = sort(frequencies)
+    let mut rare_count = 0
+    for count in range(1, width + 1) {
+        if ordered_frequencies[count - 1] <= count {
+            rare_count = count
+        } else {
+            break
+        }
+    }
+    let mut rare = []
+    for bit in range(width) {
+        if frequencies[bit] <= rare_count {
+            rare = push(rare, bit)
+        }
+    }
+    let base_bits = bits_except(width, rare)
+    let rare_mask = mask_for_bits(rare)
+    let mut core = []
+    let mut special = []
+    for member in family {
+        if (member & rare_mask) == 0 {
+            core = push(core, member)
+        } else {
+            special = push(special, member)
+        }
+    }
+
+    let mut projected_core = bitset_new()
+    for member in core {
+        projected_core = bitset_set(projected_core, pack_mask(member, base_bits))
+    }
+    let mut missing = []
+    for packed in range(shl(1, len(base_bits))) {
+        if not bitset_has(projected_core, packed) {
+            missing = push(missing, packed)
+        }
+    }
+    let base_union = family_union(core)
+    let mut specials_cover_base = true
+    for member in special {
+        if (member & base_union) != base_union {
+            specials_cover_base = false
+        }
+    }
+
+    settle {
+        for index in range(len(base_bits)) {
+            let original_bit = base_bits[index]
+            SubmitCoordinateBalance(
+                boundary_judge,
+                original_bit,
+                occurrences(missing, index),
+                occurrences(special, original_bit),
+                len(base_bits),
+                len(missing),
+                len(special),
+                specials_cover_base,
+                document["margin"],
+            )
+        }
+    }
+
+    let certificate = get(boundary_judge, ChainLiftCertificate) |> unwrap
+    print("Frankl boundary structure")
+    print(f"family={len(family)} base_width={len(base_bits)} rare_coordinates={rare}")
+    print(f"core={len(core)} special={special} missing_projected_core={missing}")
+    print(f"frequencies={frequencies} margin={document["margin"]}")
+    print(f"removed_incidence={certificate.removed_incidence} added_incidence={certificate.added_incidence} strict_base_coordinates={certificate.strict_base_coordinates}/{certificate.base_width}")
+    print("obstruction=same-size power-set lift cannot make every base coordinate a strict minority")
+    print(why(boundary_judge, ChainLiftCertificate))
+}
+
+main()

@@ -62,6 +62,26 @@ fn decl_is_pub(decl: &Decl) -> bool {
     }
 }
 
+fn register_alias_local_names(names: &mut HashMap<String, String>, alias_name: &str, decl: &Decl) {
+    if let Some(name) = decl_name(decl) {
+        names.insert(name.to_string(), format!("__mod_{}__{}", alias_name, name));
+        return;
+    }
+    match decl {
+        Decl::Stmt(Stmt::Let(binding)) => {
+            for name in &binding.names {
+                names.insert(name.clone(), format!("__mod_{}__{}", alias_name, name));
+            }
+        }
+        Decl::Stmt(Stmt::LetElse(binding)) => {
+            if let Some(name) = binding.primary_binding_name() {
+                names.insert(name.clone(), format!("__mod_{}__{}", alias_name, name));
+            }
+        }
+        _ => {}
+    }
+}
+
 pub(super) fn format_type_expr(te: &TypeExpr) -> String {
     match te {
         TypeExpr::Named(s) => s.clone(),
@@ -660,9 +680,7 @@ impl Checker {
         for (alias_name, decls) in &alias_decls {
             let mut all_names: HashMap<String, String> = HashMap::new();
             for d in decls {
-                if let Some(name) = decl_name(d) {
-                    all_names.insert(name.to_string(), format!("__mod_{}__{}", alias_name, name));
-                }
+                register_alias_local_names(&mut all_names, alias_name, d);
             }
             self.current_alias_redirects = Some(all_names.clone());
             for d in decls {
@@ -819,9 +837,7 @@ impl Checker {
         for (alias_name, decls) in &alias_decls {
             let mut all_names: HashMap<String, String> = HashMap::new();
             for d in decls {
-                if let Some(name) = decl_name(d) {
-                    all_names.insert(name.to_string(), format!("__mod_{}__{}", alias_name, name));
-                }
+                register_alias_local_names(&mut all_names, alias_name, d);
             }
             self.current_alias_redirects = Some(all_names.clone());
             // Top-level lets of the aliased module first: its fns/systems
@@ -830,11 +846,43 @@ impl Checker {
             // already in scope — the module may also be imported bare, and
             // re-defining would fire a spurious same-scope shadow warning.
             for d in decls {
-                if let Decl::Stmt(Stmt::Let(l)) = d {
-                    let already_defined = l.names.first().is_some_and(|n| self.lookup(n).is_some());
-                    if !already_defined {
-                        self.check_decl(d);
+                match d {
+                    Decl::Stmt(Stmt::Let(binding)) => {
+                        let mut mapped = binding.clone();
+                        mapped.names = binding
+                            .names
+                            .iter()
+                            .map(|name| {
+                                all_names.get(name).cloned().unwrap_or_else(|| name.clone())
+                            })
+                            .collect();
+                        let already_defined = mapped
+                            .names
+                            .first()
+                            .is_some_and(|name| self.lookup(name).is_some());
+                        if !already_defined {
+                            self.check_decl(&Decl::Stmt(Stmt::Let(mapped)));
+                        }
                     }
+                    Decl::Stmt(Stmt::LetElse(binding)) => {
+                        let mut mapped = binding.clone();
+                        if let Some(name) = binding.primary_binding_name() {
+                            if let Some(mangled) = all_names.get(&name) {
+                                if mapped.pattern_bindings.is_empty() {
+                                    mapped.bindings = vec![mangled.clone()];
+                                } else if mapped.pattern_bindings.len() == 1 {
+                                    mapped.pattern_bindings[0].name = mangled.clone();
+                                }
+                            }
+                        }
+                        let already_defined = mapped
+                            .primary_binding_name()
+                            .is_some_and(|name| self.lookup(&name).is_some());
+                        if !already_defined {
+                            self.check_decl(&Decl::Stmt(Stmt::LetElse(mapped)));
+                        }
+                    }
+                    _ => {}
                 }
             }
             for d in decls {

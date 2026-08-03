@@ -20,7 +20,8 @@
 //! io      {"t":"io","f":<frame>,"s":<seq>,"b":<builtin>,"a":<args digest>,
 //!          "r":<tagged result>}            (or "e":<error> when it failed)
 //! frame   {"t":"frame","n":<frame just ended>,"fuel":<remaining, if metered>}
-//! end     {"t":"end","world":<content digest at exit (or crash) point>}
+//! end     {"t":"end","world":<content digest>,"outcome":{"ok":true}}
+//!         or `"outcome":{"error":<deterministic runtime error>}`
 //! ```
 //!
 //! Traces are self-contained: the header embeds the full merged source, so
@@ -380,12 +381,7 @@ impl TraceRecorder {
     }
 
     pub fn new_with_features(source: &str, seed: u64, features: &[String]) -> Self {
-        Self::new_with_features_and_layout(
-            source,
-            seed,
-            features,
-            &SourceLayout::default(),
-        )
+        Self::new_with_features_and_layout(source, seed, features, &SourceLayout::default())
     }
 
     pub fn new_with_features_and_layout(
@@ -457,6 +453,19 @@ impl TraceRecorder {
             .push(serde_json::json!({"t": "end", "world": world_digest}).to_string());
     }
 
+    /// Record both the final world and whether execution returned normally.
+    /// A matching world is insufficient when replay crashes before performing
+    /// any writes, so current traces authenticate the terminal outcome too.
+    pub fn record_end_with_outcome(&mut self, world_digest: &str, error: Option<&str>) {
+        let outcome = match error {
+            Some(message) => serde_json::json!({"error": message}),
+            None => serde_json::json!({"ok": true}),
+        };
+        self.lines.push(
+            serde_json::json!({"t": "end", "world": world_digest, "outcome": outcome}).to_string(),
+        );
+    }
+
     pub fn to_jsonl(&self) -> String {
         let mut out = self.lines.join("\n");
         out.push('\n');
@@ -489,6 +498,8 @@ pub struct ReplayReport {
     pub leftover_io: usize,
     /// `None` when the trace carried no end record.
     pub end_digest_match: Option<bool>,
+    /// `None` for vintage traces that did not record terminal success/error.
+    pub end_outcome_match: Option<bool>,
     /// Retro mode only: reads served by repeating a key's last recorded
     /// value after its FIFO queue was exhausted.
     pub reused_reads: usize,
@@ -542,6 +553,8 @@ pub struct TraceReplayer {
     /// index a replay can stop at (`--to-frame` range check).
     total_frames: u64,
     end_world_digest: Option<String>,
+    /// Outer `None` means a vintage trace; inner `None` means success.
+    end_error: Option<Option<String>>,
     mode: ReplayMode,
     /// Time travel: when enabled, the VM pushes a CoW world snapshot at
     /// every main-timeline frame boundary. `timeline[k]` is the world at the
@@ -612,8 +625,9 @@ impl TraceReplayer {
                 ));
             }
         }
-        if let Some(recorded_layout_hash) =
-            header.get("source_layout_hash").and_then(|value| value.as_str())
+        if let Some(recorded_layout_hash) = header
+            .get("source_layout_hash")
+            .and_then(|value| value.as_str())
         {
             if source_layout.digest(&source)? != recorded_layout_hash && !force {
                 return Err(
@@ -654,6 +668,7 @@ impl TraceReplayer {
         let mut records = Vec::new();
         let mut frame_starts = std::collections::BTreeMap::new();
         let mut end_world_digest = None;
+        let mut end_error = None;
         let mut total_frames = 0u64;
         for (i, line) in lines.enumerate() {
             let j: serde_json::Value = serde_json::from_str(line)
@@ -677,6 +692,18 @@ impl TraceReplayer {
                 Some("frame") => total_frames += 1,
                 Some("end") => {
                     end_world_digest = j["world"].as_str().map(|s| s.to_string());
+                    if let Some(outcome) = j.get("outcome") {
+                        end_error =
+                            if outcome.get("ok").and_then(|value| value.as_bool()) == Some(true) {
+                                Some(None)
+                            } else if let Some(message) =
+                                outcome.get("error").and_then(|value| value.as_str())
+                            {
+                                Some(Some(message.to_string()))
+                            } else {
+                                return Err("trace end record has malformed outcome".to_string());
+                            };
+                    }
                 }
                 other => {
                     return Err(format!(
@@ -699,6 +726,7 @@ impl TraceReplayer {
             stop_at_frame: None,
             total_frames,
             end_world_digest,
+            end_error,
             mode: ReplayMode::Strict,
             capture_timeline: false,
             timeline: Vec::new(),
@@ -914,11 +942,23 @@ impl TraceReplayer {
     }
 
     pub fn report(&self, world_digest: &str) -> ReplayReport {
+        self.report_with_outcome(world_digest, None)
+    }
+
+    pub fn report_with_outcome(
+        &self,
+        world_digest: &str,
+        replay_error: Option<&str>,
+    ) -> ReplayReport {
         ReplayReport {
             frames_replayed: self.current_frame,
             io_replayed: self.cursor,
             leftover_io: self.records.len() - self.cursor,
             end_digest_match: self.end_world_digest.as_ref().map(|d| d == world_digest),
+            end_outcome_match: self
+                .end_error
+                .as_ref()
+                .map(|expected| expected.as_deref() == replay_error),
             reused_reads: match &self.mode {
                 ReplayMode::Strict => 0,
                 ReplayMode::Retro { reused, .. } => *reused,
@@ -1113,6 +1153,25 @@ mod tests {
         let error = TraceReplayer::parse(&tampered, false)
             .expect_err("feature tampering must invalidate the trace");
         assert!(error.contains("feature_hash"), "{error}");
+    }
+
+    #[test]
+    fn terminal_outcome_is_verified_independently_of_world_digest() {
+        let mut recorder = TraceRecorder::new("nil", 7);
+        recorder.record_end_with_outcome("unchanged", None);
+        let trace = recorder.to_jsonl();
+        let replayer = TraceReplayer::parse(&trace, false).expect("trace");
+        let report = replayer.report_with_outcome("unchanged", Some("unexpected crash"));
+        assert_eq!(report.end_digest_match, Some(true));
+        assert_eq!(report.end_outcome_match, Some(false));
+
+        let replayer = TraceReplayer::parse(&trace, false).expect("trace");
+        assert_eq!(
+            replayer
+                .report_with_outcome("unchanged", None)
+                .end_outcome_match,
+            Some(true)
+        );
     }
 
     #[test]

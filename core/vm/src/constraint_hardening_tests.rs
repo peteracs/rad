@@ -452,6 +452,57 @@ fn attempt() { settle { Push(hero) } }
 }
 
 #[test]
+fn portable_attempt_replay_binds_global_names_to_exact_slots() {
+    let source = r#"
+component Position { x: int = 0 }
+intent Move { key target: entity }
+law Push(target: entity) { propose Move { target: target } }
+resolver ResolveMove for Move(target, proposals) { next(target, Position { x: 9 }) }
+constraint Reject for Position(subject, proposed) {
+    require false else "position.rejected"
+}
+entity hero { Position {} }
+fn attempt() { settle { Push(hero) } }
+fn alternate() { return 42 }
+"#;
+    let mut recorder = compile_vm(source);
+    recorder.run(0).expect("initialize recorded program");
+    let crate::constraint_types::SettlementAttemptOutcome::Rejected(recorded) = recorder
+        .call_global_attempt("attempt", &[])
+        .expect("record portable rejection")
+    else {
+        panic!("attempt must reject")
+    };
+
+    let mut supplied = compile_vm(source);
+    supplied.run(0).expect("initialize supplied checkpoint");
+    let attempt_slot = supplied
+        .global_names
+        .iter()
+        .position(|name| name == "attempt")
+        .unwrap();
+    let alternate_slot = supplied
+        .global_names
+        .iter()
+        .position(|name| name == "alternate")
+        .unwrap();
+    std::sync::Arc::make_mut(&mut supplied.global_names).swap(attempt_slot, alternate_slot);
+
+    let before = supplied.observable_state_signature();
+    let error = supplied
+        .replay_portable_failed_attempt(&recorded.portable_recipe())
+        .expect_err("changed global symbol mapping must fail before replay");
+    assert!(matches!(
+        error,
+        crate::constraint_types::VmFailure::Host(crate::constraint_types::HostFault {
+            ref code,
+            ..
+        }) if code == "attempt.program_mismatch"
+    ));
+    assert_eq!(before, supplied.observable_state_signature());
+}
+
+#[test]
 fn failed_attempt_replay_does_not_mutate_parent_capture_cells() {
     let source = r#"
 component Position { x: int = 0 }

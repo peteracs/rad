@@ -19,6 +19,9 @@ impl RangePlan {
         if args.is_empty() {
             return Err("range() requires at least 1 argument".into());
         }
+        if args.len() > 3 {
+            return Err("range() accepts at most 3 arguments".into());
+        }
         let integer = |index: usize| {
             args[index]
                 .as_int()
@@ -104,6 +107,7 @@ mod tests {
         assert_eq!(plan(&[10, 0, 1]).unwrap().count, 0);
         assert_eq!(plan(&[0, 10, -1]).unwrap().count, 0);
         assert!(plan(&[0, 10, 0]).unwrap_err().contains("zero"));
+        assert!(plan(&[0, 10, 1, 99]).unwrap_err().contains("at most 3"));
     }
 
     #[test]

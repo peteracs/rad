@@ -74,6 +74,8 @@
 - [Roadmap](./project/roadmap.md)
 - [RFC Process](./project/rfcs.md)
 - [RFC Template](./project/rfc-template.md)
+- [RFC-0001: Causal Settlements](./rfcs/0001-causal-settlements.md)
+- [RFC-0002: Candidate Constraints](./rfcs/0002-candidate-constraints.md)
 - [Validation: Adversarial Round 2](./project/adversarial-round2-findings.md)
 - [Validation: Push Limits Bug Log](./project/push-limits-bug-log.md)
 - [Validation: Push Limits Case Index](./project/push-limits-case-index.md)

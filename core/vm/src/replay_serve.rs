@@ -32,10 +32,14 @@ use std::sync::Arc;
 
 use serde_json::{json, Value as Json};
 
+#[cfg(test)]
 use crate::compiler::Compiler;
+#[cfg(test)]
 use crate::lexer::Lexer;
+#[cfg(test)]
 use crate::parser::Parser;
 use crate::replay::TraceReplayer;
+#[cfg(test)]
 use crate::vm::VM;
 use crate::world::{World, WorldSnapshot};
 
@@ -73,34 +77,28 @@ impl ReplayServer {
         let source = replayer.source().to_string();
         let features = replayer.features().to_vec();
         let source_layout = replayer.source_layout().clone();
-        let mut lexer = Lexer::new_with_source_layout(&source, &source_layout)
-            .map_err(|error| format!("trace source layout is invalid: {error}"))?;
-        let tokens = lexer.tokenize().0;
-        let mut parser = Parser::new(tokens);
-        let program = parser.parse();
-        if let Some(e) = parser.errors().first() {
-            return Err(format!("embedded source failed to parse: {}", e.message));
-        }
-        let compile_result = Compiler::new()
-            .with_features(features)
-            .compile(&program)
-            .map_err(|e| format!("embedded source failed to compile: {}", e.message))?;
-
-        let mut vm = VM::new();
+        let mut vm = crate::replay_compile::compile_trace_vm(
+            &source,
+            "embedded source",
+            &features,
+            &source_layout,
+        )?;
         vm.suppress_output();
         vm.enable_replay(replayer);
-        vm.load_compile_result(compile_result);
         let run_error = vm.run(0).err();
         let ledger = vm.take_causality_ledger();
         let (timeline, report) = vm
-            .finish_replay_session()
+            .finish_replay_session_with_outcome(run_error.as_deref())
             .expect("replayer was installed above");
+        let verified = report
+            .end_digest_match
+            .map(|digest_matches| digest_matches && report.end_outcome_match.unwrap_or(true));
 
         Ok(ReplayServer {
             timeline,
             current: 0,
             io_records,
-            verified: report.end_digest_match,
+            verified,
             run_error,
             ledger,
         })

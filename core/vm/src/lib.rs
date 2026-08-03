@@ -4,6 +4,7 @@ pub mod builtins;
 mod bytecode_verifier;
 pub use bytecode_verifier::VerificationError;
 mod bytecode_effects;
+mod canonical;
 mod canonical_value;
 mod causal_value;
 pub use causal_value::{CausalValueError, CausalValueLimits};
@@ -62,6 +63,8 @@ pub mod parser;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod play;
 pub mod replay;
+#[doc(hidden)]
+pub mod replay_compile;
 pub mod replay_serve;
 pub mod sandbox;
 pub mod sandbox_serve;

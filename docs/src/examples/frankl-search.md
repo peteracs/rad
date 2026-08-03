@@ -96,6 +96,79 @@ short of the strict deleted-majority condition. The certificate includes this
 complete near-miss, its generator basis, frequencies, rank histogram, and dual
 surplus vector; the independent verifier regenerates and checks it.
 
+## Legal-deletion search and causal explanation
+
+`deletion_search.rad` searches a complementary construction space in which
+**every speculative world is union-closed**. Starting from the full Boolean
+cube, it removes a member only when no pair of remaining proper parents has
+that member as its union. The native extension maintains the generic state
+
+```text
+surviving members
+subset counts
+exact-OR witness counts
+coordinate frequencies
+coordinate-separation witnesses
+```
+
+incrementally. Removing one member updates the exact-union counts by scanning
+only pairs containing that member, rather than rebuilding the OR zeta/Mobius
+transform. The kernel contains no Frankl-specific names or verdicts: RAD owns
+the fork seeds, objective selection, beam/Pareto archive, COW worlds, causal
+settlement, validation constraints, and `why()` explanation.
+
+The full 6,144-deletion trajectory to a 2,048-set family fell from 13.67
+seconds with per-step transform rebuilding to 1.04 seconds with the
+incremental kernel. A 3,017-world fork campaign reached the same boundary in
+5.14 seconds; the earlier deep broad run took roughly 188 seconds. Native
+prefix tests compare every incremental profile with the independent full
+transform.
+
+The search repeatedly finds this staircase:
+
+```text
+family size    best margin    rare coordinates
+4096                 +2              1
+2048                 +4              2
+1024                 +6              3
+ 512                 +8              4
+```
+
+At size 2,048, one independently verified representative is isomorphic to
+
+```text
+(P(S) - {{a}, {a,b}})
+    union {S union {u}, S union {u,v}},    |S| = 11.
+```
+
+Its frequencies are eleven values between 1,024 and 1,026 plus the rare
+frequencies 2 and 1; the exact Frankl margin is `+4`. The family is
+union-closed and separating. `boundary_analysis.rad` recognizes the more
+general power-set-plus-chain form and settles one coordinate-balance proposal
+per base coordinate, so `why()` renders the complete fan-in.
+
+The resulting obstruction applies to the whole template, not just this
+representative. If `t` core sets are removed and replaced by `t` rare-tagged
+sets, closure forces every added set to contain the full base union. Every
+base coordinate therefore gains `t` incidences. Making all base coordinates
+strict minorities would require the removed sets to contain each coordinate
+more than `t` times, requiring more than `|S|*t` incidences. But `t` subsets
+of `S` contain at most `|S|*t` incidences. Thus this attractive near-boundary
+shape can never cross Frankl's half threshold.
+
+`verify_deletion.py` independently reconstructs the full family from the raw
+deletion list, recomputes exact OR-convolution counts, frequencies, separation
+witnesses, the algebraic deletion frontier, and a SHA-256 family digest. The
+saved 2,048-set boundary is union-closed and separating, has exact margin
+`+4`, and has 20 effective legal continuations.
+
+The Pareto dogfood also keeps fixed density/objective regimes in separate
+universes. At size 2,048 it exposes the tradeoff rather than hiding it behind
+one score: the near-Frankl world has margin `+4` but a coordinate of frequency
+1; a 40%-density world has margin about `+250`; uniformly balanced worlds are
+farther away still. Current-score dominance is deliberately not used across
+regimes because different legal frontiers have different futures.
+
 ## Multi-million campaign
 
 The wider campaign used 24-, 32-, and 48-generator lanes. Each lane evaluated

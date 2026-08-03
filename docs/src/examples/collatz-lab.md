@@ -49,11 +49,12 @@ The depth-26 certificate is:
 | Tree nodes actually expanded | 2,454,892 |
 
 This replaced per-start interpreted tracing with a domain-general affine
-parity kernel and whole-subtree pruning. Warm optimized end-to-end tests ran
-the entire RAD study twice (record plus deterministic replay) in 1.1–1.6
-seconds; that includes parsing, constraints, provenance, certificate
-construction, and the 4.54-million-word cycle search, not just the residue
-kernel.
+parity kernel and whole-subtree pruning. On the Windows development host, one
+debug-CLI study completed in about 0.9 seconds; the parallel residue kernel
+itself took roughly 1–2 ms and the exact 4.54-million-word cycle kernel about
+0.28 seconds. Parsing, constraints, provenance, and certificate generation
+make up the remainder. These are development observations, not portable
+benchmark guarantees.
 
 ## Why the survivors look dangerous
 
@@ -125,6 +126,27 @@ The same findings are submitted in forward and reverse order and must produce
 identical components. `verify_certificate.py` then recomputes the residue
 tree, all-odd escape, and all 4.54 million cycle words using Python big
 integers and no RAD code.
+
+## Kernel boundary and dogfood findings
+
+No Collatz rule is implemented in `core/vm`. The reusable arithmetic lives in
+the project-owned `native-math-kernels` extension and is parameterized by an
+odd affine map `(multiplier, addend)`. The VM changes discovered by this
+dogfood are domain-neutral:
+
+- extensionless plugin paths resolve to a platform-suffixed binary, preventing
+  Windows, Linux, and macOS artifacts from overwriting one another in a shared
+  workspace;
+- replay reconstructs the authenticated module graph, including dependency
+  initialization order and private module state, instead of flattening imports
+  into one source file;
+- replay verifies terminal success or failure independently of the final world
+  digest, so an early replay crash cannot masquerade as success merely because
+  neither execution wrote world state.
+
+The repository gates `core/` against problem-specific names; the Collatz and
+Frankl vocabulary belongs only to documentation, dogfood, and project-owned
+adapters.
 
 ## Scope
 

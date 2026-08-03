@@ -925,62 +925,7 @@ impl VM {
     }
 
     pub(crate) fn program_digest(&self) -> String {
-        let mut digest = Sha256::new();
-        digest.update(b"rad-compiled-program/v2\0");
-        digest.update(b"bytecode-semantics/1\0compiler-semantics/1\0");
-        for chunk in self.chunks.iter() {
-            digest.update((chunk.name().len() as u64).to_le_bytes());
-            digest.update(chunk.name().as_bytes());
-            digest.update((chunk.code().len() as u64).to_le_bytes());
-            digest.update(chunk.code());
-            digest.update((chunk.constants().len() as u64).to_le_bytes());
-            for constant in chunk.constants() {
-                if constant.is_nil() {
-                    digest.update(b"nil\0");
-                } else if let Some(value) = constant.as_bool() {
-                    digest.update([b'b', value as u8]);
-                } else if let Some(value) = constant.as_int() {
-                    digest.update(b"i");
-                    digest.update(value.to_le_bytes());
-                } else if let Some(value) = constant.as_float() {
-                    digest.update(b"f");
-                    digest.update(value.to_bits().to_le_bytes());
-                } else if let Some(value) = constant.as_str() {
-                    digest.update(b"s");
-                    digest.update((value.len() as u64).to_le_bytes());
-                    digest.update(value.as_bytes());
-                } else if let Some(function) = constant.as_fn() {
-                    digest.update(b"F");
-                    digest.update(function.name.as_bytes());
-                    digest.update([function.arity]);
-                    digest.update((function.chunk_id as u64).to_le_bytes());
-                } else if let Ok(frozen) = export_value(constant) {
-                    digest.update(b"v");
-                    match frozen.canonical_bytes(&self.causal_value_limits) {
-                        Ok(bytes) => {
-                            digest.update((bytes.len() as u64).to_le_bytes());
-                            digest.update(bytes);
-                        }
-                        Err(error) => {
-                            // Sealed programs with constants outside the
-                            // host-value profile remain distinguishable and
-                            // fail closed for replay identity.
-                            let rendered = error.to_string();
-                            digest.update(b"invalid\0");
-                            digest.update((rendered.len() as u64).to_le_bytes());
-                            digest.update(rendered.as_bytes());
-                        }
-                    }
-                } else {
-                    digest.update(b"o");
-                    digest.update(constant.type_name().as_bytes());
-                    let rendered = constant.print_display();
-                    digest.update((rendered.len() as u64).to_le_bytes());
-                    digest.update(rendered.as_bytes());
-                }
-            }
-        }
-        hex::encode(digest.finalize())
+        self.compiled_program_manifest().digest().to_string()
     }
 
     pub(crate) fn constraint_registry_digest(&self) -> String {
@@ -1002,8 +947,11 @@ impl VM {
 
     pub(crate) fn runtime_feature_fingerprint(&self) -> String {
         let descriptor = format!(
-            "rad-runtime/v2;crate={};compiler_semantics=1;bytecode_semantics=1;causal_laws=1;candidate_constraints=1;constraint_profile={};target={}",
+            "rad-runtime/v3;crate={};compiler_semantics={};bytecode_semantics={};program_manifest={};causal_laws=1;candidate_constraints=1;constraint_profile={};target={}",
             env!("CARGO_PKG_VERSION"),
+            crate::vm::COMPILER_SEMANTIC_VERSION,
+            crate::vm::BYTECODE_SEMANTIC_VERSION,
+            crate::vm::PROGRAM_MANIFEST_VERSION,
             self.constraint_limit_profile.version(),
             std::env::consts::ARCH,
         );

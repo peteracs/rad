@@ -571,7 +571,11 @@ throw-away GC heap; variable-size aggregate constructors preflight temporary
 and retained storage, every opcode performs a retained-heap backstop check, and
 the heap is discarded before the next invocation begins. Native builtins are
 admitted only when their preflight quote is a conservative upper bound for
-both native work and peak temporary-plus-retained allocation. The quote uses
+both deterministic native cost and peak temporary-plus-retained allocation.
+Native fuel is an abstract semantic cost unit, not a promise to count CPU
+instructions or wall-clock cycles: an audited constant-time call costs one
+unit, while input-sized calls use a checked cost derived from their shared
+execution plan. The quote uses
 the existing input size as well as requested growth (including source clones
 and empty-pattern string expansion); a helper whose upper bound is not yet
 proved fails closed instead of running under an estimate.
@@ -840,6 +844,17 @@ limits, sandbox state, and the remaining replay-semantic counters and buffers.
 Mutation-sensitivity regressions require each such field to change checkpoint
 identity. Observational-only safety flags are explicitly nonsemantic and are
 applied after the gameplay state is restored.
+
+Checkpoint identity is encoded with a versioned canonical binary writer. It
+must not depend on Rust `Debug` rendering. The compiled-program portion is a
+canonical `CompiledProgramManifest` that binds sealed bytecode and constant
+graphs, source-line tables, the authenticated source-unit/import-graph
+identity, the exact global-name-to-slot mapping, state
+machines, event-handler definitions, systems and schedule metadata,
+intent/resolver/constraint ownership, schemas and versions, indexes,
+transients, and migrations. These semantic tables are private after loading;
+changing any of them creates a different manifest digest. Portable replay
+rejects a manifest mismatch before executing an instruction.
 
 A rejected settlement is absent from the durable ledger and therefore cannot
 be reconstructed from ledger provenance alone. Attempt replay consumes an

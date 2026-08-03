@@ -326,6 +326,42 @@ pub(crate) fn residue_lane_profile(
     Ok(profile)
 }
 
+/// Analyze every low-bit lane concurrently and return results in canonical
+/// lane-index order. Input validation happens before any worker is spawned.
+pub(crate) fn residue_lane_profiles(
+    multiplier: u64,
+    addend: u64,
+    depth: u32,
+    verified_power: u32,
+    lane_count: u64,
+) -> Result<Vec<ResidueLaneProfile>, String> {
+    checked_inputs(multiplier, addend, depth, verified_power, 0, lane_count)?;
+    std::thread::scope(|scope| {
+        let handles = (0..lane_count)
+            .map(|lane_index| {
+                scope.spawn(move || {
+                    residue_lane_profile(
+                        multiplier,
+                        addend,
+                        depth,
+                        verified_power,
+                        lane_index,
+                        lane_count,
+                    )
+                })
+            })
+            .collect::<Vec<_>>();
+        handles
+            .into_iter()
+            .map(|handle| {
+                handle
+                    .join()
+                    .map_err(|_| "affine residue worker panicked".to_string())?
+            })
+            .collect()
+    })
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct CycleProfile {
     pub words_tested: u64,
@@ -586,6 +622,28 @@ mod tests {
             p.pruned_classes + p.survivor_classes == p.classes
                 && p.contracting_survivors + p.noncontracting_survivors == p.survivor_classes
         }));
+    }
+
+    #[test]
+    fn concurrent_batch_matches_canonical_sequential_lanes() {
+        let sequential = (0..8)
+            .map(|lane| residue_lane_profile(5, 3, 14, 18, lane, 8).unwrap())
+            .collect::<Vec<_>>();
+        let concurrent = residue_lane_profiles(5, 3, 14, 18, 8).unwrap();
+        assert_eq!(concurrent.len(), sequential.len());
+        for (actual, expected) in concurrent.iter().zip(&sequential) {
+            assert_eq!(actual.lane_index, expected.lane_index);
+            assert_eq!(actual.classes, expected.classes);
+            assert_eq!(actual.residue_sum, expected.residue_sum);
+            assert_eq!(actual.pruned_classes, expected.pruned_classes);
+            assert_eq!(actual.survivor_classes, expected.survivor_classes);
+            assert_eq!(actual.prune_depth_histogram, expected.prune_depth_histogram);
+            assert_eq!(
+                actual.survivor_odd_histogram,
+                expected.survivor_odd_histogram
+            );
+            assert_eq!(actual.signature, expected.signature);
+        }
     }
 
     #[test]

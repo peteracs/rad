@@ -498,5 +498,3 @@ fn main() -> nil {
     print(why_resource(StudyJournal))
     print(f"certificate={output_path}")
 }
-
-main()

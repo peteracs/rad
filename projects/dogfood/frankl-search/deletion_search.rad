@@ -25,11 +25,17 @@ resource DeletionCandidate {
     margin: int = 0
     depth: int = 0
     separating: bool = true
+    regime: int = 0
 }
 
 resource DeletionConfig {
     rollout_steps: int = 8
     choices_per_step: int = 24
+    minimum_density_per_mille: int = 0
+    objective: str = "max_min"
+    regime: int = 0
+    forced_member: int = -1
+    operation: str = "delete"
 }
 
 component DeletionCertificate {
@@ -119,6 +125,14 @@ fn complement_from_deleted(deleted: list<int>) -> list<int> {
 
 fn candidate_from(deleted: list<int>, depth: int) -> DeletionCandidate {
     let state = lattice_deletion_profile(deleted, WIDTH)
+    return candidate_from_state(deleted, state, depth)
+}
+
+fn candidate_from_state(
+    deleted: list<int>,
+    state: map<str, any>,
+    depth: int,
+) -> DeletionCandidate {
     let family_size = state["family_size"]
     let frequencies = state["frequencies"]
     let surpluses = state["surpluses"]
@@ -135,41 +149,32 @@ fn candidate_from(deleted: list<int>, depth: int) -> DeletionCandidate {
         margin: max_int(frequencies) * 2 - family_size,
         depth: depth,
         separating: state["separating"],
+        regime: 0,
     }
 }
 
-fn legal_frontier(frontier: list<int>) -> list<int> {
+fn legal_frontier(
+    candidate: DeletionCandidate,
+    minimum_density_per_mille: int,
+) -> list<int> {
     let mut result = []
-    for member in frontier {
+    for member in candidate.frontier {
         // Keep the empty set: adjoining it never hurts Frankl's inequality,
         // and it provides a canonical representative of each family.
-        if member != 0 {
+        let mut dense_enough = true
+        for bit in range(WIDTH) {
+            let next_frequency = candidate.frequencies[bit]
+                - (if (member & shl(1, bit)) != 0 { 1 } else { 0 })
+            if next_frequency * 1000
+                < (candidate.family_size - 1) * minimum_density_per_mille {
+                dense_enough = false
+            }
+        }
+        if member != 0 and dense_enough {
             result = push(result, member)
         }
     }
     return result
-}
-
-fn margin_after(candidate: DeletionCandidate, removed: int) -> int {
-    let mut maximum = 0
-    for bit in range(WIDTH) {
-        let count = candidate.frequencies[bit]
-            - (if (removed & shl(1, bit)) != 0 { 1 } else { 0 })
-        if count > maximum {
-            maximum = count
-        }
-    }
-    return maximum * 2 - (candidate.family_size - 1)
-}
-
-fn surplus_profile_after(candidate: DeletionCandidate, removed: int) -> list<int> {
-    let mut profile = []
-    for bit in range(WIDTH) {
-        let old = candidate.deletion_surpluses[bit]
-        let next = old + (if (removed & shl(1, bit)) != 0 { 1 } else { -1 })
-        profile = push(profile, next)
-    }
-    return sort(profile)
 }
 
 fn profile_better(left: list<int>, right: list<int>) -> bool {
@@ -184,44 +189,57 @@ fn profile_better(left: list<int>, right: list<int>) -> bool {
 system ExploreLegalDeletions(candidate: mut DeletionCandidate, config: DeletionConfig) {
     assert(typeof(candidate) != "nil", "deletion candidate resource missing")
     assert(typeof(config) != "nil", "deletion config resource missing")
-    for _step in range(config.rollout_steps) {
-        if candidate.family_size <= MIN_FAMILY_SIZE {
-            break
-        }
-        let frontier = legal_frontier(candidate.frontier)
-        if len(frontier) == 0 {
-            break
-        }
-        // rand_int is intentionally direct in the speculative system: RAD
-        // assigns each rollout a deterministic fork seed.
-        let mut removed = frontier[rand_int(0, len(frontier) - 1)]
-        let mut best_margin = margin_after(candidate, removed)
-        let mut best_profile = surplus_profile_after(candidate, removed)
-        let trials = min(config.choices_per_step, len(frontier))
-        let start = rand_int(0, len(frontier) - 1)
-        for trial in range(trials) {
-            let member = frontier[(start + trial) % len(frontier)]
-            let margin = margin_after(candidate, member)
-            let profile = surplus_profile_after(candidate, member)
-            if margin < best_margin
-                or (margin == best_margin and profile_better(profile, best_profile)) {
-                removed = member
-                best_margin = margin
-                best_profile = profile
-            }
-        }
-        let deleted = push(candidate.deleted, removed)
-        let next_depth = candidate.depth + 1
-        candidate = candidate_from(deleted, next_depth)
+    // One explicitly seeded native call owns the dense incremental witness
+    // tables for the whole rollout. RAD still owns the speculative world,
+    // seed, branching, selection, and COW lifetime.
+    let state = if config.forced_member >= 0 {
+        lattice_apply_deletion(candidate.deleted, WIDTH, config.forced_member)
+    } else if config.operation == "exchange" {
+        lattice_exchange_rollout(
+            candidate.deleted,
+            WIDTH,
+            config.rollout_steps,
+            config.choices_per_step,
+            rand_int(1, 2147483647),
+            config.objective,
+            config.minimum_density_per_mille,
+        )
+    } else {
+        lattice_deletion_rollout(
+            candidate.deleted,
+            WIDTH,
+            min(config.rollout_steps, candidate.family_size - MIN_FAMILY_SIZE),
+            config.choices_per_step,
+            rand_int(1, 2147483647),
+            config.objective,
+            config.minimum_density_per_mille,
+        )
     }
+    let deleted = state["deleted"]
+    let next_depth = if config.operation == "exchange" {
+        candidate.depth + config.rollout_steps
+    } else {
+        len(deleted)
+    }
+    let mut next = candidate_from_state(deleted, state, next_depth)
+    next.regime = config.regime
+    candidate = next
 }
 
 fn better(left: DeletionCandidate, right: DeletionCandidate) -> bool {
     if left.separating != right.separating {
         return left.separating
     }
+    if left.family_size != right.family_size {
+        return left.family_size < right.family_size
+    }
     if left.margin != right.margin {
         return left.margin < right.margin
+    }
+    let left_peak = max_int(left.deletion_surpluses)
+    let right_peak = max_int(right.deletion_surpluses)
+    if left_peak != right_peak {
+        return left_peak < right_peak
     }
     let left_profile = sort(left.deletion_surpluses)
     let right_profile = sort(right.deletion_surpluses)
@@ -232,7 +250,41 @@ fn better(left: DeletionCandidate, right: DeletionCandidate) -> bool {
 }
 
 fn same_candidate(left: DeletionCandidate, right: DeletionCandidate) -> bool {
-    return left.deleted == right.deleted
+    return left.deleted == right.deleted and left.regime == right.regime
+}
+
+fn dominates(left: DeletionCandidate, right: DeletionCandidate) -> bool {
+    // A shallower world has not paid the same deletion budget and cannot
+    // dominate a deeper one merely because its raw margins are smaller.
+    if left.family_size != right.family_size or left.regime != right.regime {
+        return false
+    }
+    let left_peak = max_int(left.deletion_surpluses)
+    let right_peak = max_int(right.deletion_surpluses)
+    return left.margin <= right.margin and left_peak <= right_peak
+        and (left.margin < right.margin or left_peak < right_peak)
+}
+
+fn insert_pareto(
+    beam: list<world_fork>,
+    candidate_fork: world_fork,
+    width: int,
+) -> list<world_fork> {
+    let candidate = peek_resource(candidate_fork, DeletionCandidate) |> unwrap
+    for existing in beam {
+        let current = peek_resource(existing, DeletionCandidate) |> unwrap
+        if same_candidate(candidate, current) or dominates(current, candidate) {
+            return beam
+        }
+    }
+    let mut survivors = []
+    for existing in beam {
+        let current = peek_resource(existing, DeletionCandidate) |> unwrap
+        if not dominates(candidate, current) {
+            survivors = insert_beam(survivors, existing, width)
+        }
+    }
+    return insert_beam(survivors, candidate_fork, width)
 }
 
 fn insert_beam(
@@ -283,6 +335,14 @@ fn main() -> nil {
     let choices = if len(argv) > 4 { int(argv[4]) } else { 24 }
     let target_family_size = if len(argv) > 6 { int(argv[6]) } else { 0 }
     let output_path = if len(argv) > 7 { argv[7] } else { OUTPUT_PATH }
+    let minimum_density = if len(argv) > 8 { int(argv[8]) } else { 0 }
+    let objective = if len(argv) > 9 { argv[9] } else { "max_min" }
+    let selection = if len(argv) > 10 { argv[10] } else { "ordered" }
+    let operation = if len(argv) > 11 { argv[11] } else { "delete" }
+    assert(
+        operation == "delete" or operation == "exchange",
+        "operation must be delete or exchange",
+    )
     assert(generations > 0 and beam_width > 0 and children > 0, "positive search dimensions required")
 
     let mut initial_deleted = []
@@ -298,10 +358,34 @@ fn main() -> nil {
     set_resource(DeletionConfig, DeletionConfig {
         rollout_steps: rollout_steps,
         choices_per_step: choices,
+        minimum_density_per_mille: minimum_density,
+        objective: objective,
+        regime: 0,
+        forced_member: -1,
+        operation: operation,
     })
     let live_digest = world_digest()
     let root = fork()
-    let mut beam = [root]
+    let mut beam = if selection == "pareto" { [] } else { [root] }
+    if selection == "pareto" {
+        for regime in range(10) {
+            let portfolio_density = (regime % 5) * 100
+            let portfolio_objective = if regime < 5 {
+                "max_min"
+            } else {
+                "max_min_low_peak"
+            }
+            beam = push(beam, fork_with(root, DeletionConfig {
+                rollout_steps: rollout_steps,
+                choices_per_step: choices,
+                minimum_density_per_mille: portfolio_density,
+                objective: portfolio_objective,
+                regime: regime,
+                forced_member: -1,
+                operation: operation,
+            }))
+        }
+    }
     let mut evaluated = 1
     let mut have_near = false
     let mut near_fork = root
@@ -309,13 +393,32 @@ fn main() -> nil {
     let mut have_target = false
     let mut target_fork = root
 
-    print("Frankl legal-deletion search")
+    print(f"Frankl OR-closed search operation={operation}")
     print(f"initial family={initial.family_size} frontier={len(initial.frontier)} margin={initial.margin}")
     for generation in range(generations) {
         let mut inputs = []
         for parent in beam {
-            for _child in range(children) {
-                inputs = push(inputs, parent)
+            if selection == "expand" {
+                let parent_candidate = peek_resource(parent, DeletionCandidate) |> unwrap
+                let parent_config = peek_resource(parent, DeletionConfig) |> unwrap
+                for member in legal_frontier(
+                    parent_candidate,
+                    parent_config.minimum_density_per_mille,
+                ) {
+                    inputs = push(inputs, fork_with(parent, DeletionConfig {
+                        rollout_steps: 1,
+                        choices_per_step: 1,
+                        minimum_density_per_mille: parent_config.minimum_density_per_mille,
+                        objective: parent_config.objective,
+                        regime: parent_config.regime,
+                        forced_member: member,
+                        operation: parent_config.operation,
+                    }))
+                }
+            } else {
+                for _child in range(children) {
+                    inputs = push(inputs, parent)
+                }
             }
         }
         let futures = simulate_many(
@@ -327,7 +430,11 @@ fn main() -> nil {
         evaluated = evaluated + len(futures)
         let mut next = []
         for future in futures {
-            next = insert_beam(next, future, beam_width)
+            next = if selection == "pareto" {
+                insert_pareto(next, future, beam_width)
+            } else {
+                insert_beam(next, future, beam_width)
+            }
         }
         beam = next
         let best = peek_resource(beam[0], DeletionCandidate) |> unwrap
@@ -360,7 +467,7 @@ fn main() -> nil {
     let partition = partition_is_exact(best)
     let covers = min_int(best.frequencies) > 0
     let separating = best.separating and family_is_separating(finalist_family, WIDTH)
-    let viable_frontier = legal_frontier(best.frontier)
+    let viable_frontier = legal_frontier(best, minimum_density)
     settle {
         SubmitDeletionEvidence(
             deletion_judge,
@@ -377,8 +484,13 @@ fn main() -> nil {
     print(f"deletion_surpluses={best.deletion_surpluses}")
     print(f"rank_histogram={rank_histogram(best.deleted, WIDTH)}")
     print(f"frontier={len(best.frontier)} viable_frontier={len(viable_frontier)} union_closed={closed} covers={covers} separating={separating} counterexample={best.margin < 0 and covers and separating}")
+    print("terminal_world_spectrum:")
+    for world in beam {
+        let candidate = peek_resource(world, DeletionCandidate) |> unwrap
+        print(f"  regime={candidate.regime} family={candidate.family_size} margin={candidate.margin} min_frequency={min_int(candidate.frequencies)} peak_dual={max_int(candidate.deletion_surpluses)} frontier={len(candidate.frontier)}")
+    }
     print(why(deletion_judge, DeletionCertificate))
-    let document = {
+    let document: map<str, any> = {
         "kind": "rad.frankl.legal-deletion.v1",
         "width": WIDTH,
         "evaluated_worlds": evaluated,
@@ -394,6 +506,7 @@ fn main() -> nil {
         "covers_universe": covers,
         "separating": separating,
         "counterexample": best.margin < 0 and covers and separating,
+        "search_operation": operation,
         "terminal_depth": terminal.depth,
         "terminal_family_size": terminal.family_size,
         "terminal_margin": terminal.margin,

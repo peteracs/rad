@@ -13,6 +13,11 @@ pub(crate) use settlement::{
 #[cfg(not(target_arch = "wasm32"))]
 mod io_pool;
 mod parallel;
+mod program_manifest;
+pub use program_manifest::CompiledProgramManifest;
+pub(crate) use program_manifest::{
+    BYTECODE_SEMANTIC_VERSION, COMPILER_SEMANTIC_VERSION, PROGRAM_MANIFEST_VERSION,
+};
 
 #[cfg(test)]
 mod builtins_tests;
@@ -54,6 +59,7 @@ pub(crate) struct VmSharedState {
     pub(crate) chunks: Arc<Vec<SealedChunk>>,
     pub(crate) globals: Vec<Value>,
     pub(crate) global_names: Arc<Vec<String>>,
+    pub(crate) program_source_identity: Option<Arc<str>>,
     pub(crate) state_machines: Arc<HashMap<String, HashMap<String, Vec<StateTransitionInfo>>>>,
     pub(crate) event_handlers: Arc<HashMap<String, Vec<HandlerEntry>>>,
     pub(crate) systems: Arc<HashMap<String, SystemRuntimeInfo>>,
@@ -162,13 +168,17 @@ pub struct VM {
     pub(crate) chunks: Arc<Vec<SealedChunk>>,
     pub(crate) stack: Vec<Value>,
     pub(crate) globals: Vec<Value>,
-    pub global_names: Arc<Vec<String>>,
+    pub(crate) global_names: Arc<Vec<String>>,
+    /// Authenticated identity of the source units and resolved import graph
+    /// that produced the installed program. Kept immutable with the shared
+    /// executable tables and included in the compiled-program manifest.
+    pub(crate) program_source_identity: Option<Arc<str>>,
     pub(crate) frames: Vec<CallFrame>,
     pub(crate) next_frame_id: u64,
     pub(crate) world: World,
-    pub state_machines: Arc<HashMap<String, HashMap<String, Vec<StateTransitionInfo>>>>,
-    pub event_handlers: Arc<HashMap<String, Vec<HandlerEntry>>>,
-    pub systems: Arc<HashMap<String, SystemRuntimeInfo>>,
+    pub(crate) state_machines: Arc<HashMap<String, HashMap<String, Vec<StateTransitionInfo>>>>,
+    pub(crate) event_handlers: Arc<HashMap<String, Vec<HandlerEntry>>>,
+    pub(crate) systems: Arc<HashMap<String, SystemRuntimeInfo>>,
     pub(crate) intent_registry: Arc<HashMap<String, IntentRuntimeInfo>>,
     pub(crate) resolver_registry: Arc<HashMap<String, ResolverRuntimeInfo>>,
     pub(crate) constraint_registry: Arc<Vec<ConstraintRuntimeInfo>>,
@@ -206,7 +216,7 @@ pub struct VM {
     /// run recomputes from the edited past. (frame, entity, component,
     /// field, value as JSON scalar.)
     pub trace_patch: Option<(u64, String, String, String, String)>,
-    pub component_layouts: Arc<HashMap<String, Arc<Vec<String>>>>,
+    pub(crate) component_layouts: Arc<HashMap<String, Arc<Vec<String>>>>,
     /// Declared field types per component/resource (checker-derived; empty
     /// on checker-less compiles). The deserialization boundary validates
     /// loaded/migrated rows against these so persisted type drift is a loud
@@ -217,7 +227,7 @@ pub struct VM {
     /// `load_world` hands the save's value to `migrate X(old, from_version)`
     /// (dogfood feature seq 69 IDEA 03).
     pub(crate) component_versions: Arc<HashMap<String, u32>>,
-    pub variant_layouts: Arc<HashMap<(String, String), Vec<String>>>,
+    pub(crate) variant_layouts: Arc<HashMap<(String, String), Vec<String>>>,
     /// `transient resource` names — schema-level (like `indexed_decl`),
     /// excluded from world_digest()/save_world(): command tapes, derived
     /// caches, spatial indexes. Forks/commits still carry their values.
@@ -355,6 +365,17 @@ pub struct SystemRuntimeInfo {
 }
 
 impl VM {
+    /// Immutable global symbol table in exact slot order.
+    pub fn global_symbols(&self) -> &[String] {
+        self.global_names.as_slice()
+    }
+
+    /// Capture the canonical immutable identity of the currently installed
+    /// executable program. Runtime values are intentionally excluded.
+    pub fn compiled_program_manifest(&self) -> CompiledProgramManifest {
+        CompiledProgramManifest::capture(self)
+    }
+
     #[inline(always)]
     pub fn get_world_mut(&mut self) -> &mut World {
         &mut self.world
@@ -457,6 +478,7 @@ impl VM {
             chunks: self.chunks.clone(),
             globals: self.globals.clone(),
             global_names: self.global_names.clone(),
+            program_source_identity: self.program_source_identity.clone(),
             state_machines: self.state_machines.clone(),
             event_handlers: self.event_handlers.clone(),
             systems: self.systems.clone(),
@@ -482,6 +504,7 @@ impl VM {
             stack: Vec::with_capacity(1024),
             globals: shared.globals,
             global_names: shared.global_names,
+            program_source_identity: shared.program_source_identity,
             frames: Vec::with_capacity(256),
             next_frame_id: 1,
             world: World::new(),
@@ -571,6 +594,7 @@ impl VM {
         if !Arc::ptr_eq(&self.chunks, &shared.chunks) {
             self.chunks = Arc::clone(&shared.chunks);
             self.global_names = Arc::clone(&shared.global_names);
+            self.program_source_identity = shared.program_source_identity.clone();
             self.state_machines = Arc::clone(&shared.state_machines);
             self.event_handlers = Arc::clone(&shared.event_handlers);
             self.systems = Arc::clone(&shared.systems);
@@ -628,6 +652,7 @@ impl VM {
             stack: Vec::new(),
             globals,
             global_names: Arc::new(global_names),
+            program_source_identity: None,
             frames: Vec::new(),
             next_frame_id: 1,
             world: World::new(),
@@ -743,9 +768,13 @@ impl VM {
     /// Appends the end record (world digest at exit or crash point) that
     /// replay verifies itself against.
     pub fn take_trace(&mut self) -> Option<String> {
+        self.take_trace_with_outcome(None)
+    }
+
+    pub fn take_trace_with_outcome(&mut self, error: Option<&str>) -> Option<String> {
         let digest = self.world.content_digest();
         self.recorder.take().map(|mut r| {
-            r.record_end(&digest);
+            r.record_end_with_outcome(&digest, error);
             r.to_jsonl()
         })
     }
@@ -763,8 +792,17 @@ impl VM {
 
     /// Finish replay and report how faithfully the trace was consumed.
     pub fn finish_replay(&mut self) -> Option<crate::replay::ReplayReport> {
+        self.finish_replay_with_outcome(None)
+    }
+
+    pub fn finish_replay_with_outcome(
+        &mut self,
+        error: Option<&str>,
+    ) -> Option<crate::replay::ReplayReport> {
         let digest = self.world.content_digest();
-        self.replayer.take().map(|r| r.report(&digest))
+        self.replayer
+            .take()
+            .map(|r| r.report_with_outcome(&digest, error))
     }
 
     /// The causality ledger (#4): provenance of every main-timeline write.
@@ -997,12 +1035,22 @@ impl VM {
         Vec<std::sync::Arc<crate::world::WorldSnapshot>>,
         crate::replay::ReplayReport,
     )> {
+        self.finish_replay_session_with_outcome(None)
+    }
+
+    pub fn finish_replay_session_with_outcome(
+        &mut self,
+        error: Option<&str>,
+    ) -> Option<(
+        Vec<std::sync::Arc<crate::world::WorldSnapshot>>,
+        crate::replay::ReplayReport,
+    )> {
         let end_snap = self.world.snapshot();
         let digest = self.world.content_digest();
-        self.replayer.take().map(|mut r| {
-            r.push_timeline_snapshot(end_snap);
-            let timeline = r.take_timeline();
-            (timeline, r.report(&digest))
+        self.replayer.take().map(|mut replayer| {
+            replayer.push_timeline_snapshot(end_snap);
+            let timeline = replayer.take_timeline();
+            (timeline, replayer.report_with_outcome(&digest, error))
         })
     }
 
@@ -1322,6 +1370,7 @@ impl VM {
             tr.extend(result.transient_resources);
         }
         self.global_names = Arc::new(result.global_names);
+        self.program_source_identity = result.program_source_identity.map(Arc::from);
         if self.globals.len() < self.global_names.len() {
             self.globals.resize(self.global_names.len(), Value::NIL);
         }

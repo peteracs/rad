@@ -61,6 +61,12 @@ jobs:
         run: |
           cargo test --manifest-path projects/dogfood/native-math-kernels/Cargo.toml
           sh projects/dogfood/native-math-kernels/build.sh release
+      - name: Mathematical dogfoods do not leak into the VM kernel
+        run: |
+          if grep -rEi 'collatz|frankl|union.?closed|hailstone|3n.?\+.?1' core --include='*.rs' --include='*.rad'; then
+            echo "Problem-specific mathematics belongs in project extensions, not core/." >&2
+            exit 1
+          fi
       - name: Frankl computational-mathematics dogfood
         run: |
           cargo run -p rad-vm --bin rad -- projects/dogfood/frankl-search/exhaustive_n4.rad
@@ -278,4 +284,3 @@ jobs:
       - name: RAD authority smoke suites
         run: npm test
         working-directory: projects/moba-rad/server
-

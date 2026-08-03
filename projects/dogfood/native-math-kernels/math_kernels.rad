@@ -16,6 +16,9 @@ let LATTICE_IS_CLOSED_JSON: pure fn(str) -> str = MATH_KERNELS["lattice_is_close
 let LATTICE_VIOLATION_COUNT_JSON: pure fn(str, int) -> str = MATH_KERNELS["lattice_violation_count_json"]
 let LATTICE_DELETABLE_JSON: pure fn(str, int) -> str = MATH_KERNELS["lattice_deletable_json"]
 let LATTICE_DELETION_PROFILE_JSON: pure fn(str, int) -> str = MATH_KERNELS["lattice_deletion_profile_json"]
+let LATTICE_DELETION_ROLLOUT_JSON: pure fn(str, int, int, int, int, str, int) -> str = MATH_KERNELS["lattice_deletion_rollout_json"]
+let LATTICE_APPLY_DELETION_JSON: pure fn(str, int, int) -> str = MATH_KERNELS["lattice_apply_deletion_json"]
+let LATTICE_EXCHANGE_ROLLOUT_JSON: pure fn(str, int, int, int, int, str, int) -> str = MATH_KERNELS["lattice_exchange_rollout_json"]
 let AFFINE_RESIDUE_PROFILE_JSON: pure fn(int, int, int, int, int, int) -> str = MATH_KERNELS["affine_residue_profile_json"]
 let AFFINE_RESIDUE_PROFILES_JSON: pure fn(int, int, int, int, int) -> str = MATH_KERNELS["affine_residue_profiles_json"]
 let AFFINE_CYCLE_PROFILE_JSON: pure fn(int, int, int, int) -> str = MATH_KERNELS["affine_cycle_profile_json"]
@@ -59,6 +62,61 @@ pub pure fn lattice_deletable(members: list<int>, width: int) -> list<int> {
 pub pure fn lattice_deletion_profile(deleted: list<int>, width: int) -> map<str, any> {
     let encoded = LATTICE_DELETION_PROFILE_JSON(json_stringify(deleted), width)
     return decode_kernel_result(encoded, "lattice_deletion_profile")
+}
+
+pub pure fn lattice_deletion_rollout(
+    deleted: list<int>,
+    width: int,
+    steps: int,
+    choices_per_step: int,
+    seed: int,
+    objective: str,
+    minimum_density_per_mille: int,
+) -> map<str, any> {
+    let encoded = LATTICE_DELETION_ROLLOUT_JSON(
+        json_stringify(deleted),
+        width,
+        steps,
+        choices_per_step,
+        seed,
+        objective,
+        minimum_density_per_mille,
+    )
+    return decode_kernel_result(encoded, "lattice_deletion_rollout")
+}
+
+pub pure fn lattice_apply_deletion(
+    deleted: list<int>,
+    width: int,
+    member: int,
+) -> map<str, any> {
+    let encoded = LATTICE_APPLY_DELETION_JSON(
+        json_stringify(deleted),
+        width,
+        member,
+    )
+    return decode_kernel_result(encoded, "lattice_apply_deletion")
+}
+
+pub pure fn lattice_exchange_rollout(
+    deleted: list<int>,
+    width: int,
+    steps: int,
+    choices_per_step: int,
+    seed: int,
+    objective: str,
+    minimum_density_per_mille: int,
+) -> map<str, any> {
+    let encoded = LATTICE_EXCHANGE_ROLLOUT_JSON(
+        json_stringify(deleted),
+        width,
+        steps,
+        choices_per_step,
+        seed,
+        objective,
+        minimum_density_per_mille,
+    )
+    return decode_kernel_result(encoded, "lattice_exchange_rollout")
 }
 
 pub pure fn affine_residue_profile(

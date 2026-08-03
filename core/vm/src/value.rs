@@ -931,6 +931,7 @@ impl Value {
         Self::from_object(alloc, Object::NativeFn(info))
     }
 
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     pub(crate) fn to_raw(self) -> u64 {
         self.0
     }

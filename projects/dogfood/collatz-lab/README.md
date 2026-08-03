@@ -46,10 +46,13 @@ Or use `run.ps1` after building the release binary.
 - CLI record/replay checks deterministic execution.
 - `verify_certificate.py` recomputes the mathematics without importing RAD.
 
-In warm optimized library tests, a recorded run plus a full replay completed
-in 1.1–1.6 seconds. The independent Python verifier is intentionally much slower:
-it re-enumerates the complete residue cube and cycle box with Python big
-integers instead of trusting RAD's pruning kernel.
+On the Windows development host, the debug CLI completed one full RAD study
+in about 0.9 seconds. Inside that run the parallel residue kernel took roughly
+1–2 ms and the exact 4.54-million-word cycle kernel roughly 0.28 seconds. The
+independent Python verifier is intentionally much slower: it re-enumerates the
+complete residue cube and cycle box with Python big integers instead of
+trusting RAD's pruning kernel. These are development measurements, not a
+portable benchmark claim.
 
 ## Current exact certificate
 

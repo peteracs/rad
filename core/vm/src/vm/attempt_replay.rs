@@ -203,154 +203,167 @@ impl AttemptReplayState {
             .collect()
     }
 
-    fn digest_into(&self, digest: &mut Sha256) {
-        fn bytes(digest: &mut Sha256, value: &[u8]) {
-            digest.update((value.len() as u64).to_le_bytes());
-            digest.update(value);
-        }
-        fn text(digest: &mut Sha256, value: &str) {
-            bytes(digest, value.as_bytes());
-        }
-
-        digest.update([match self.execution_role {
+    fn encode_checkpoint(&self, out: &mut crate::canonical::CanonicalWriter) {
+        out.byte(match self.execution_role {
             ExecutionRole::Main => 0,
             ExecutionRole::Worker => 1,
             ExecutionRole::SimulationFork => 2,
-        }]);
-        digest.update(self.in_simulation_fork.to_le_bytes());
-        digest.update([
-            self.serial_schedule as u8,
-            self.trace_timeline as u8,
-            self.once_guard_passed as u8,
-        ]);
-        digest.update(self.current_trace_id.unwrap_or(0).to_le_bytes());
-        digest.update([self.current_trace_id.is_some() as u8]);
-        digest.update(self.next_trace_id.to_le_bytes());
-        digest.update((self.emit_ids_current.len() as u64).to_le_bytes());
+        });
+        out.u32(self.in_simulation_fork);
+        out.bool(self.serial_schedule);
+        out.bool(self.trace_timeline);
+        out.bool(self.once_guard_passed);
+        out.optional_u64(self.current_trace_id);
+        out.u64(self.next_trace_id);
+        out.usize(self.emit_ids_current.len());
         for emit_id in &self.emit_ids_current {
-            digest.update(emit_id.to_le_bytes());
+            out.u64(*emit_id);
         }
-        digest.update((self.emit_ids_next.len() as u64).to_le_bytes());
+        out.usize(self.emit_ids_next.len());
         for emit_id in &self.emit_ids_next {
-            digest.update(emit_id.to_le_bytes());
+            out.u64(*emit_id);
         }
 
         let mut handler_names = self.event_handlers.keys().collect::<Vec<_>>();
         handler_names.sort();
+        out.usize(handler_names.len());
         for name in handler_names {
-            text(digest, name);
+            out.text(name);
+            out.usize(self.event_handlers[name].len());
             for handler in &self.event_handlers[name] {
-                digest.update((handler.chunk_id as u64).to_le_bytes());
-                digest.update(handler.param_slot.to_le_bytes());
-                digest.update([
-                    handler.once as u8,
-                    handler.fired as u8,
-                    handler.has_guard as u8,
-                ]);
+                out.usize(handler.chunk_id);
+                out.u16(handler.param_slot);
+                out.bool(handler.once);
+                out.bool(handler.fired);
+                out.bool(handler.has_guard);
             }
         }
 
+        out.usize(self.events_current.len());
         for (name, id) in &self.events_current {
-            text(digest, name);
-            digest.update(id.to_le_bytes());
+            out.text(name);
+            out.u64(*id);
         }
-        digest.update(b"events-next\0");
+        out.usize(self.events_next.len());
         for (name, id) in &self.events_next {
-            text(digest, name);
-            digest.update(id.to_le_bytes());
+            out.text(name);
+            out.u64(*id);
         }
-        digest.update(b"events-processing\0");
+        out.usize(self.events_processing.len());
         for (name, id) in &self.events_processing {
-            text(digest, name);
-            digest.update(id.to_le_bytes());
+            out.text(name);
+            out.u64(*id);
         }
+        out.usize(self.delayed_events.len());
         for (delay, name, id) in &self.delayed_events {
-            digest.update(delay.to_le_bytes());
-            text(digest, name);
-            digest.update(id.to_le_bytes());
+            out.i64(*delay);
+            out.text(name);
+            out.u64(*id);
         }
+        out.usize(self.event_log.len());
         for (tick, event_name) in &self.event_log {
-            digest.update(tick.to_le_bytes());
-            text(digest, event_name);
+            out.u64(*tick);
+            out.text(event_name);
         }
         let mut tasks = self.tasks.iter().collect::<Vec<_>>();
         tasks.sort_by_key(|(id, _)| **id);
+        out.usize(tasks.len());
         for (id, task) in tasks {
-            digest.update(id.to_le_bytes());
+            out.u64(*id);
+            out.u64(task.id);
             match &task.status {
-                TaskStatus::Ready => digest.update(b"ready"),
-                TaskStatus::Completed(_) => digest.update(b"completed"),
+                TaskStatus::Ready => out.byte(0),
+                TaskStatus::Completed(_) => out.byte(1),
                 TaskStatus::Failed(message) => {
-                    digest.update(b"failed");
-                    text(digest, message);
+                    out.byte(2);
+                    out.text(message);
                 }
             }
         }
 
         let mut indexed_components = self.indexed_decl.keys().collect::<Vec<_>>();
         indexed_components.sort();
+        out.usize(indexed_components.len());
         for component in indexed_components {
-            text(digest, component);
+            out.text(component);
             let mut fields = self.indexed_decl[component].iter().collect::<Vec<_>>();
             fields.sort();
+            out.usize(fields.len());
             for field in fields {
-                text(digest, field);
+                out.text(field);
             }
         }
         let mut migration_names = self.migrations.keys().collect::<Vec<_>>();
         migration_names.sort();
+        out.usize(migration_names.len());
         for name in migration_names {
             let migration = &self.migrations[name];
-            text(digest, name);
-            digest.update((migration.chunk_id as u64).to_le_bytes());
-            digest.update(migration.param_slot.to_le_bytes());
-            digest.update(migration.version_slot.unwrap_or(u16::MAX).to_le_bytes());
+            out.text(name);
+            out.usize(migration.chunk_id);
+            out.u16(migration.param_slot);
+            out.bool(migration.version_slot.is_some());
+            if let Some(slot) = migration.version_slot {
+                out.u16(slot);
+            }
         }
 
-        text(digest, &self.world.snapshot_json_like());
-        digest.update(self.rng_state.to_le_bytes());
-        digest.update(self.fuel.to_le_bytes());
-        digest.update((self.mem_limit as u64).to_le_bytes());
-        digest.update(self.next_frame_id.to_le_bytes());
-        digest.update(self.next_settlement_id.to_le_bytes());
-        digest.update(self.next_task_id.to_le_bytes());
-        digest.update(self.causality_frame.to_le_bytes());
+        out.text(&self.world.snapshot_json_like());
+        out.u64(self.rng_state);
+        out.u64(self.fuel);
+        out.usize(self.mem_limit);
+        out.u64(self.next_frame_id);
+        out.u64(self.next_settlement_id);
+        out.u64(self.next_task_id);
+        out.u64(self.causality_frame);
+        out.usize(self.sys_args.len());
         for argument in &self.sys_args {
-            text(digest, argument);
+            out.text(argument);
         }
+        out.usize(self.print_buffer.len());
         for line in &self.print_buffer {
-            text(digest, line);
+            out.text(line);
         }
+        out.usize(self.eprint_buffer.len());
         for line in &self.eprint_buffer {
-            text(digest, line);
+            out.text(line);
         }
+        out.usize(self.timeline.len());
         for snapshot in &self.timeline {
-            text(digest, &snapshot.snapshot_json_like());
+            out.text(&snapshot.snapshot_json_like());
         }
-        text(digest, &format!("{:?}", self.ledger));
-        text(digest, &format!("{:?}", self.current_cause));
-        text(digest, &format!("{:?}", self.trace_patch));
-        text(digest, &format!("{:?}", self.sandbox_input_json));
-        text(digest, &format!("{:?}", self.sandbox_output_json));
-        text(digest, &format!("{:?}", self.last_sandbox_output_json));
-        digest.update(self.last_sandbox_fuel_spent.to_le_bytes());
+        self.ledger.encode_checkpoint(out);
+        crate::causality::CausalityLedger::encode_cause_checkpoint(&self.current_cause, out);
+        out.bool(self.trace_patch.is_some());
+        if let Some((frame, entity, component, field, value)) = &self.trace_patch {
+            out.u64(*frame);
+            out.text(entity);
+            out.text(component);
+            out.text(field);
+            out.text(value);
+        }
+        out.optional_text(self.sandbox_input_json.as_deref());
+        out.optional_text(self.sandbox_output_json.as_deref());
+        out.optional_text(self.last_sandbox_output_json.as_deref());
+        out.u64(self.last_sandbox_fuel_spent);
 
         if let Some(caps) = &self.sandbox_caps {
+            out.bool(true);
             let mut readable = caps.readable_components.iter().collect::<Vec<_>>();
             let mut writable = caps.writable_components.iter().collect::<Vec<_>>();
             readable.sort();
             writable.sort();
+            out.usize(readable.len());
             for component in readable {
-                text(digest, component);
+                out.text(component);
             }
-            digest.update(b"writable\0");
+            out.usize(writable.len());
             for component in writable {
-                text(digest, component);
+                out.text(component);
             }
-            digest.update(caps.fuel.to_le_bytes());
-            digest.update((caps.mem_limit as u64).to_le_bytes());
+            out.u64(caps.fuel);
+            out.usize(caps.mem_limit);
         } else {
-            digest.update(b"no-sandbox\0");
+            out.bool(false);
         }
     }
 }
@@ -467,25 +480,26 @@ impl VM {
     }
 
     pub(crate) fn attempt_checkpoint_digest_from(&self, state: &AttemptReplayState) -> String {
-        fn bytes(digest: &mut Sha256, value: &[u8]) {
-            digest.update((value.len() as u64).to_le_bytes());
-            digest.update(value);
-        }
-        fn text(digest: &mut Sha256, value: &str) {
-            bytes(digest, value.as_bytes());
-        }
+        hex::encode(Sha256::digest(
+            self.attempt_checkpoint_canonical_bytes_from(state),
+        ))
+    }
 
-        let mut digest = Sha256::new();
-        digest.update(b"rad-attempt-checkpoint/v2\0");
-        state.digest_into(&mut digest);
-        text(&mut digest, &self.program_digest());
-        text(&mut digest, &self.runtime_feature_fingerprint());
-        text(&mut digest, &self.constraint_registry_digest());
-        text(&mut digest, &self.constraint_limit_profile.fingerprint());
-        text(
-            &mut digest,
-            &crate::vm::replay_clone::fingerprint_roots(&state.root_layout.roots),
-        );
-        hex::encode(digest.finalize())
+    /// The versioned bytes hashed by portable replay. Persisting a checkpoint
+    /// uses this same representation; no diagnostic formatting participates.
+    pub(crate) fn attempt_checkpoint_canonical_bytes_from(
+        &self,
+        state: &AttemptReplayState,
+    ) -> Vec<u8> {
+        let mut out = crate::canonical::CanonicalWriter::with_domain("rad-attempt-checkpoint/v3");
+        state.encode_checkpoint(&mut out);
+        out.text(&self.program_digest());
+        out.text(&self.runtime_feature_fingerprint());
+        out.text(&self.constraint_registry_digest());
+        out.text(&self.constraint_limit_profile.fingerprint());
+        out.text(&crate::vm::replay_clone::fingerprint_roots(
+            &state.root_layout.roots,
+        ));
+        out.finish()
     }
 }

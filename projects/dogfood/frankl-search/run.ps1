@@ -9,6 +9,7 @@ $repo = Resolve-Path (Join-Path $project "../../..")
 $certificate = Join-Path $project "out/latest.json"
 $report = Join-Path $project "out/latest.verified.json"
 $trace = Join-Path $project "out/latest.radr"
+$deletionCertificate = Join-Path $project "out/deletion-2048.json"
 
 Push-Location $repo
 try {
@@ -41,6 +42,18 @@ try {
         python "projects/dogfood/frankl-search/verify_structure.py" $structural --quick
     }
     if ($LASTEXITCODE -ne 0) { throw "independent structural verification failed" }
+
+    & $Rad "projects/dogfood/frankl-search/deletion_search.rad" `
+        "--experimental-laws" "--" `
+        1 1 1 6144 8192 "-" 2048 $deletionCertificate 0 "max_min" "ordered"
+    if ($LASTEXITCODE -ne 0) { throw "legal-deletion search failed" }
+
+    python "projects/dogfood/frankl-search/verify_deletion.py" $deletionCertificate
+    if ($LASTEXITCODE -ne 0) { throw "independent deletion verification failed" }
+
+    & $Rad "projects/dogfood/frankl-search/boundary_analysis.rad" `
+        "--experimental-laws" "--" $deletionCertificate
+    if ($LASTEXITCODE -ne 0) { throw "causal boundary analysis failed" }
 }
 finally {
     Pop-Location

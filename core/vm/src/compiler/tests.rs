@@ -2592,6 +2592,7 @@ if (x) { return ${n}; }
             component_versions: result.component_versions,
             variant_layouts: result.variant_layouts,
             global_names: result.global_names,
+            program_source_identity: result.program_source_identity,
             warnings: Vec::new(),
             gc: result.gc,
         });

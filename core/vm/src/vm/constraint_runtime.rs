@@ -4,6 +4,12 @@
 //! important: one constraint invocation must not consume another one's
 //! semantic allowance, and retained rejection data must be bounded while it
 //! is collected rather than after the fact.
+//!
+//! Native fuel is a deterministic semantic cost unit, not a count of CPU
+//! instructions or wall-clock time. Constant-time audited calls cost one
+//! native unit; input-sized calls cost a conservative number of units derived
+//! from the checked input plan. Heap quotes separately bound peak temporary
+//! plus retained allocation before the call executes.
 
 use crate::constraint_types::{ConstraintEvaluationFailure, ConstraintViolation};
 use crate::value::{Builtin, Object, Value};

@@ -8,7 +8,6 @@
 
 use crate::gc::GcHeap;
 use crate::value::NativeFnInfo;
-#[cfg(not(target_arch = "wasm32"))]
 use crate::value::Value;
 use std::cell::RefCell;
 #[cfg(not(target_arch = "wasm32"))]
@@ -86,6 +85,19 @@ pub(crate) fn invoke_native(
     // through the supplied constructors. The latter were just adopted by
     // `target`, so the returned handle is now owned by this VM.
     Ok(unsafe { Value::from_raw_unchecked(result_raw) })
+}
+
+/// WebAssembly builds retain the callable value shape for bytecode and wire
+/// compatibility, but cannot invoke a host dynamic-library pointer. Keeping
+/// the unsupported-target policy at this boundary prevents target-specific
+/// branches from spreading through the generic VM executor.
+#[cfg(target_arch = "wasm32")]
+pub(crate) fn invoke_native(
+    _native: &NativeFnInfo,
+    _args: &[Value],
+    _target: &mut GcHeap,
+) -> Result<Value, String> {
+    Err("native extensions are not supported on wasm32".to_string())
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -235,13 +247,8 @@ pub fn load_plugin(
             None
         };
         let resolved: PathBuf = platform_path.unwrap_or_else(|| requested.to_path_buf());
-        let lib = libloading::Library::new(&resolved).map_err(|e| {
-            format!(
-                "Failed to load plugin '{}': {}",
-                resolved.display(),
-                e
-            )
-        })?;
+        let lib = libloading::Library::new(&resolved)
+            .map_err(|e| format!("Failed to load plugin '{}': {}", resolved.display(), e))?;
 
         type InitFn = unsafe extern "C" fn(*const RadPluginApi);
         let init_fn: libloading::Symbol<InitFn> = lib

@@ -1015,31 +1015,19 @@ fn main() {
         let source = replayer.source().to_string();
         let trace_features = replayer.features().to_vec();
         let trace_layout = replayer.source_layout().clone();
-        let mut lexer = rad_vm::lexer::Lexer::new_with_source_layout(&source, &trace_layout)
-            .expect("trace parser validated the source layout");
-        let tokens = lexer.tokenize().0;
-        let mut parser = rad_vm::parser::Parser::new(tokens);
-        let program = parser.parse();
-        if !parser.errors().is_empty() {
-            for e in parser.errors() {
-                eprintln!("Error parsing embedded source: {}", e.message);
-            }
-            process::exit(1);
-        }
-        let compile_result = match Compiler::new()
-            .with_features(trace_features)
-            .compile(&program)
-        {
-            Ok(c) => c,
-            Err(e) => {
-                eprintln!("Error compiling embedded source: {}", e.message);
+        let mut vm = match rad_vm::replay_compile::compile_trace_vm(
+            &source,
+            "embedded source",
+            &trace_features,
+            &trace_layout,
+        ) {
+            Ok(vm) => vm,
+            Err(error) => {
+                eprintln!("Error: {error}");
                 process::exit(1);
             }
         };
-
-        let mut vm = VM::new();
         vm.enable_replay(replayer);
-        vm.load_compile_result(compile_result);
 
         let run_result = vm.run(0);
         // The VM decorates propagated errors with call-site context, so the
@@ -1048,7 +1036,10 @@ fn main() {
             &run_result,
             Err(e) if e.contains(rad_vm::replay::REPLAY_STOP_PREFIX)
         );
-        let report = vm.finish_replay().expect("replay report");
+        let replay_error = run_result.as_ref().err().map(String::as_str);
+        let report = vm
+            .finish_replay_with_outcome(replay_error)
+            .expect("replay report");
 
         match run_result {
             Ok(()) => {}
@@ -1065,6 +1056,10 @@ fn main() {
             report.frames_replayed, report.io_replayed, report.leftover_io
         );
         if !stopped_early {
+            if report.end_outcome_match == Some(false) {
+                eprintln!("Replay DIVERGED: terminal success/error outcome does not match the recorded run");
+                process::exit(1);
+            }
             match report.end_digest_match {
                 Some(true) => eprintln!("Replay verified: world digest matches the recorded run"),
                 Some(false) => {
@@ -1149,6 +1144,12 @@ fn main() {
             }
             let compile_result = match Compiler::new()
                 .with_checker_output(checker.output())
+                .with_program_source_identity(
+                    loaded
+                        .source_layout
+                        .digest(&loaded.merged_source)
+                        .expect("module loader produced an invalid source layout"),
+                )
                 .compile(&loaded.program)
             {
                 Ok(r) => r,
@@ -1209,26 +1210,26 @@ fn main() {
         aliases,
         parse_errors,
     ) = match load_program_with_source_map_and_options(&filepath, parser_options) {
-            Ok(r) => (
-                r.program,
-                r.merged_source,
-                r.source_layout,
-                r.had_imports,
-                r.source_map,
-                r.module_fingerprints,
-                r.aliases,
-                r.errors,
-            ),
-            Err(errors) => {
-                for e in errors {
-                    eprintln!(
-                        "{}",
-                        format_error(&e.source, &e.filepath, &e.message, e.line, e.col)
-                    );
-                }
-                process::exit(1);
+        Ok(r) => (
+            r.program,
+            r.merged_source,
+            r.source_layout,
+            r.had_imports,
+            r.source_map,
+            r.module_fingerprints,
+            r.aliases,
+            r.errors,
+        ),
+        Err(errors) => {
+            for e in errors {
+                eprintln!(
+                    "{}",
+                    format_error(&e.source, &e.filepath, &e.message, e.line, e.col)
+                );
             }
-        };
+            process::exit(1);
+        }
+    };
 
     let mut has_errors = false;
     for e in &parse_errors {
@@ -1305,7 +1306,12 @@ fn main() {
     let compiler = Compiler::new()
         .with_checker_output(checker_output)
         .with_aliases(aliases)
-        .with_features(features.clone());
+        .with_features(features.clone())
+        .with_program_source_identity(
+            source_layout
+                .digest(&source)
+                .expect("module loader produced an invalid source layout"),
+        );
     let compile_result = match compiler.compile(&program) {
         Ok(c) => c,
         Err(e) => {
@@ -1333,7 +1339,9 @@ fn main() {
     // Write the trace even when the run failed: a trace of the crash is the
     // entire point of a time-travel debugger.
     if let Some(trace_path) = &record {
-        if let Some(trace) = vm.take_trace() {
+        if let Some(trace) =
+            vm.take_trace_with_outcome(run_result.as_ref().err().map(String::as_str))
+        {
             // RADPACK (D1): tapes are highly repetitive JSONL — pack them
             // with the raw-binary file envelope (no base64 tax; a tape is a
             // file, not a line-protocol payload). `rad replay` opens packed
@@ -1371,18 +1379,18 @@ fn retroactive_replay(trace_text: &str, new_path: &str, force: bool) {
     let original_source = baseline.source().to_string();
     let trace_features = baseline.features().to_vec();
     let trace_layout = baseline.source_layout().clone();
-    let mut vm_a = match compile_into_vm_with_features(
+    let mut vm_a = match rad_vm::replay_compile::compile_trace_vm(
         &original_source,
         "embedded source",
         &trace_features,
         &trace_layout,
     ) {
-            Ok(vm) => vm,
-            Err(e) => {
-                eprintln!("Error: {}", e);
-                process::exit(1);
-            }
-        };
+        Ok(vm) => vm,
+        Err(e) => {
+            eprintln!("Error: {}", e);
+            process::exit(1);
+        }
+    };
     vm_a.suppress_output();
     vm_a.enable_replay(baseline);
     let baseline_err = vm_a.run(0).err();
@@ -1423,6 +1431,12 @@ fn retroactive_replay(trace_text: &str, new_path: &str, force: bool) {
     }
     let compile_result = match Compiler::new()
         .with_features(trace_features)
+        .with_program_source_identity(
+            loaded
+                .source_layout
+                .digest(&loaded.merged_source)
+                .expect("module loader produced an invalid source layout"),
+        )
         .compile(&loaded.program)
     {
         Ok(c) => c,
@@ -1440,7 +1454,9 @@ fn retroactive_replay(trace_text: &str, new_path: &str, force: bool) {
     let retro_err = vm_b.run(0).err();
     let world_b = vm_b.world_snapshot();
     let digest_b = vm_b.world_digest();
-    let report = vm_b.finish_replay().expect("retro report");
+    let report = vm_b
+        .finish_replay_with_outcome(retro_err.as_deref())
+        .expect("retro report");
 
     eprintln!();
     eprintln!(
@@ -1595,7 +1611,13 @@ fn execute_test_command(test_dir: &str) {
 
         let compiler = Compiler::new()
             .with_checker_output(checker_output)
-            .with_aliases(loaded.aliases);
+            .with_aliases(loaded.aliases)
+            .with_program_source_identity(
+                loaded
+                    .source_layout
+                    .digest(&loaded.merged_source)
+                    .expect("module loader produced an invalid source layout"),
+            );
         let compile_result = match compiler.compile(&loaded.program) {
             Ok(c) => c,
             Err(e) => {
@@ -1663,29 +1685,6 @@ fn execute_test_command(test_dir: &str) {
     if tests_failed > 0 || files_errored > 0 {
         process::exit(1);
     }
-}
-
-fn compile_into_vm_with_features(
-    source: &str,
-    what: &str,
-    features: &[String],
-    source_layout: &rad_vm::source_bundle::SourceLayout,
-) -> Result<VM, String> {
-    let mut lexer = rad_vm::lexer::Lexer::new_with_source_layout(source, source_layout)
-        .map_err(|error| format!("{} has an invalid source layout: {error}", what))?;
-    let tokens = lexer.tokenize().0;
-    let mut parser = rad_vm::parser::Parser::new(tokens);
-    let program = parser.parse();
-    if let Some(e) = parser.errors().first() {
-        return Err(format!("{} failed to parse: {}", what, e.message));
-    }
-    let compile_result = Compiler::new()
-        .with_features(features.to_vec())
-        .compile(&program)
-        .map_err(|e| format!("{} failed to compile: {}", what, e.message))?;
-    let mut vm = VM::new();
-    vm.load_compile_result(compile_result);
-    Ok(vm)
 }
 
 fn resolve_source_for_error<'a>(

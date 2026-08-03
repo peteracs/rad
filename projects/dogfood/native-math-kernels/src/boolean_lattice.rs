@@ -360,6 +360,533 @@ pub(crate) struct OrDeletionState {
     pub separating: bool,
 }
 
+pub(crate) struct OrDeletionRollout {
+    pub deleted: Vec<i64>,
+    pub state: OrDeletionState,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum OrDeletionObjective {
+    MaxMin,
+    MaxMinLowPeak,
+}
+
+/// Incremental state for deleting members from an OR-closed Boolean family.
+///
+/// `subset_counts[u]` is the number of surviving subsets of `u`, while
+/// `union_counts[u]` is the number of ordered surviving pairs whose OR is
+/// exactly `u`.  Removing `x` changes the latter only for pairs containing
+/// `x`, so one dense scan replaces a complete zeta/Mobius rebuild.
+#[derive(Clone)]
+struct IncrementalOrDeletion {
+    width: usize,
+    cube_size: usize,
+    present: Vec<bool>,
+    subset_counts: Vec<i64>,
+    union_counts: Vec<i64>,
+    family_frequencies: Vec<i64>,
+    deletion_frequencies: Vec<i64>,
+    separation_witnesses: Vec<i64>,
+    deleted: Vec<i64>,
+    union_delta: Vec<i64>,
+    touched_unions: Vec<usize>,
+}
+
+impl IncrementalOrDeletion {
+    fn new(deleted: &[i64], width: i64) -> Result<Self, String> {
+        let width = usize::try_from(width)
+            .ok()
+            .filter(|width| *width <= MAX_TRANSFORM_WIDTH)
+            .ok_or_else(|| {
+                format!("or_deletion_rollout width must be between 0 and {MAX_TRANSFORM_WIDTH}")
+            })?;
+        let deleted_masks = checked_masks(deleted, "or_deletion_rollout")?;
+        let cube_size = 1usize << width;
+        let mut present = vec![true; cube_size];
+        let mut deletion_frequencies = vec![0i64; width];
+        for value in &deleted_masks {
+            let index = usize::try_from(*value)
+                .ok()
+                .filter(|index| *index < cube_size)
+                .ok_or_else(|| {
+                    format!("or_deletion_rollout mask {value} has a bit outside width {width}")
+                })?;
+            if !std::mem::replace(&mut present[index], false) {
+                return Err(format!(
+                    "or_deletion_rollout expects duplicate-free deletions; mask {value} repeats"
+                ));
+            }
+            for (bit, count) in deletion_frequencies.iter_mut().enumerate() {
+                *count += ((value >> bit) & 1) as i64;
+            }
+        }
+
+        let mut subset_counts = present
+            .iter()
+            .map(|is_present| i64::from(*is_present))
+            .collect::<Vec<_>>();
+        for bit in 0..width {
+            for mask in 0..cube_size {
+                if mask & (1usize << bit) != 0 {
+                    subset_counts[mask] += subset_counts[mask ^ (1usize << bit)];
+                }
+            }
+        }
+        let mut union_counts = subset_counts
+            .iter()
+            .map(|count| {
+                count
+                    .checked_mul(*count)
+                    .ok_or_else(|| "or_deletion_rollout pair count overflow".to_string())
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        for bit in 0..width {
+            for mask in 0..cube_size {
+                if mask & (1usize << bit) != 0 {
+                    union_counts[mask] -= union_counts[mask ^ (1usize << bit)];
+                }
+            }
+        }
+        if union_counts
+            .iter()
+            .enumerate()
+            .any(|(mask, count)| !present[mask] && *count != 0)
+        {
+            return Err(
+                "or_deletion_rollout deletions do not leave an OR-closed complement".to_string(),
+            );
+        }
+
+        let family_frequencies = deletion_frequencies
+            .iter()
+            .map(|count| (cube_size / 2) as i64 - count)
+            .collect::<Vec<_>>();
+        let mut separation_witnesses = vec![0i64; width * width];
+        for (member, is_present) in present.iter().enumerate() {
+            if !is_present {
+                continue;
+            }
+            for left in 0..width {
+                for right in (left + 1)..width {
+                    if ((member >> left) & 1) != ((member >> right) & 1) {
+                        separation_witnesses[left * width + right] += 1;
+                    }
+                }
+            }
+        }
+
+        Ok(Self {
+            width,
+            cube_size,
+            present,
+            subset_counts,
+            union_counts,
+            family_frequencies,
+            deletion_frequencies,
+            separation_witnesses,
+            deleted: deleted.to_vec(),
+            union_delta: vec![0; cube_size],
+            touched_unions: Vec::with_capacity(cube_size),
+        })
+    }
+
+    fn family_size(&self) -> i64 {
+        (self.cube_size - self.deleted.len()) as i64
+    }
+
+    fn is_deletable(&self, member: usize) -> bool {
+        self.present[member] && self.union_counts[member] == 2 * self.subset_counts[member] - 1
+    }
+
+    fn preserves_effective_universe(&self, member: usize) -> bool {
+        let coverage = (0..self.width)
+            .all(|bit| member & (1usize << bit) == 0 || self.family_frequencies[bit] > 1);
+        let separation = (0..self.width).all(|left| {
+            ((left + 1)..self.width).all(|right| {
+                ((member >> left) & 1) == ((member >> right) & 1)
+                    || self.separation_witnesses[left * self.width + right] > 1
+            })
+        });
+        coverage && separation
+    }
+
+    fn frontiers(&self) -> (Vec<i64>, Vec<i64>) {
+        let mut deletable = Vec::new();
+        let mut effective = Vec::new();
+        for member in 0..self.cube_size {
+            if !self.is_deletable(member) {
+                continue;
+            }
+            deletable.push(member as i64);
+            if self.preserves_effective_universe(member) {
+                effective.push(member as i64);
+            }
+        }
+        (deletable, effective)
+    }
+
+    fn deletion_surpluses(&self) -> Vec<i64> {
+        let deleted_size = self.deleted.len() as i64;
+        self.deletion_frequencies
+            .iter()
+            .map(|frequency| 2 * frequency - deleted_size)
+            .collect()
+    }
+
+    fn profile_after(&self, member: usize) -> Vec<i64> {
+        let mut profile = self
+            .deletion_surpluses()
+            .into_iter()
+            .enumerate()
+            .map(|(bit, surplus)| surplus + if member & (1usize << bit) != 0 { 1 } else { -1 })
+            .collect::<Vec<_>>();
+        profile.sort_unstable();
+        profile
+    }
+
+    fn remove(&mut self, member: usize) -> Result<(), String> {
+        if !self.is_deletable(member) {
+            return Err(format!(
+                "or_deletion_rollout member {member} is not deletable"
+            ));
+        }
+
+        self.touched_unions.clear();
+        for other in 0..self.cube_size {
+            if !self.present[other] {
+                continue;
+            }
+            let joined = member | other;
+            if self.union_delta[joined] == 0 {
+                self.touched_unions.push(joined);
+            }
+            self.union_delta[joined] += if other == member { 1 } else { 2 };
+        }
+        for joined in self.touched_unions.drain(..) {
+            self.union_counts[joined] -= self.union_delta[joined];
+            self.union_delta[joined] = 0;
+        }
+
+        let complement = (self.cube_size - 1) ^ member;
+        let mut subset = complement;
+        loop {
+            self.subset_counts[member | subset] -= 1;
+            if subset == 0 {
+                break;
+            }
+            subset = (subset - 1) & complement;
+        }
+
+        self.present[member] = false;
+        self.deleted.push(member as i64);
+        for bit in 0..self.width {
+            if member & (1usize << bit) != 0 {
+                self.family_frequencies[bit] -= 1;
+                self.deletion_frequencies[bit] += 1;
+            }
+        }
+        for left in 0..self.width {
+            for right in (left + 1)..self.width {
+                if ((member >> left) & 1) != ((member >> right) & 1) {
+                    self.separation_witnesses[left * self.width + right] -= 1;
+                }
+            }
+        }
+        if self.union_counts[member] != 0 {
+            return Err(format!(
+                "or_deletion_rollout internal witness mismatch after deleting {member}"
+            ));
+        }
+        Ok(())
+    }
+
+    fn snapshot(&self) -> OrDeletionState {
+        let (deletable_members, effective_deletable_members) = self.frontiers();
+        let separating = (0..self.width).all(|left| {
+            ((left + 1)..self.width)
+                .all(|right| self.separation_witnesses[left * self.width + right] > 0)
+        });
+        OrDeletionState {
+            family_size: self.family_size(),
+            family_frequencies: self.family_frequencies.clone(),
+            deletion_surpluses: self.deletion_surpluses(),
+            deletable_members,
+            effective_deletable_members,
+            separating,
+        }
+    }
+
+    /// Return the members that must be restored when `member` is adjoined to
+    /// the current OR-closed family.
+    ///
+    /// If `F` is OR-closed, then `F union {x | a : a in F}` is the least
+    /// OR-closed family containing both `F` and `x`: joining two new members
+    /// gives `x | (a | b)`, and `a | b` is already in `F`.
+    fn closure_additions(&self, member: usize) -> Vec<usize> {
+        let mut marked = vec![false; self.cube_size];
+        let mut additions = Vec::new();
+        for existing in 0..self.cube_size {
+            if !self.present[existing] {
+                continue;
+            }
+            let joined = member | existing;
+            if !self.present[joined] && !marked[joined] {
+                marked[joined] = true;
+                additions.push(joined);
+            }
+        }
+        if !self.present[member] && !marked[member] {
+            additions.push(member);
+        }
+        additions.sort_unstable();
+        additions
+    }
+}
+
+fn next_random(seed: &mut u64, upper: usize) -> usize {
+    *seed ^= *seed << 13;
+    *seed ^= *seed >> 7;
+    *seed ^= *seed << 17;
+    (*seed as usize) % upper
+}
+
+/// Follow a deterministic, explicitly seeded deletion rollout.
+///
+/// The objective is generic max-min balancing over coordinate deletion
+/// surpluses. `MaxMinLowPeak` uses the smallest maximum surplus as the first
+/// tie-breaker, which keeps all coordinates represented more uniformly.
+pub(crate) fn or_deletion_rollout(
+    deleted: &[i64],
+    width: i64,
+    steps: usize,
+    choices_per_step: usize,
+    seed: u64,
+    objective: OrDeletionObjective,
+    minimum_density_per_mille: i64,
+) -> Result<OrDeletionRollout, String> {
+    if !(0..=1000).contains(&minimum_density_per_mille) {
+        return Err("minimum density must be between 0 and 1000 per mille".to_string());
+    }
+    let mut machine = IncrementalOrDeletion::new(deleted, width)?;
+    let mut rng = seed.max(1);
+    for _ in 0..steps {
+        let (_, effective) = machine.frontiers();
+        let candidates = effective
+            .into_iter()
+            .filter(|member| *member != 0)
+            .map(|member| member as usize)
+            .filter(|member| {
+                (0..machine.width).all(|bit| {
+                    let next_frequency =
+                        machine.family_frequencies[bit] - i64::from(member & (1usize << bit) != 0);
+                    next_frequency * 1000 >= (machine.family_size() - 1) * minimum_density_per_mille
+                })
+            })
+            .collect::<Vec<_>>();
+        if candidates.is_empty() {
+            break;
+        }
+
+        let start = next_random(&mut rng, candidates.len());
+        let trials = choices_per_step.max(1).min(candidates.len());
+        let mut best_member = candidates[start];
+        let mut best_profile = machine.profile_after(best_member);
+        for offset in 1..trials {
+            let member = candidates[(start + offset) % candidates.len()];
+            let profile = machine.profile_after(member);
+            let better_minimum = profile[0] > best_profile[0];
+            let same_minimum = profile[0] == best_profile[0];
+            let better_peak = profile[profile.len() - 1] < best_profile[best_profile.len() - 1];
+            let same_peak = profile[profile.len() - 1] == best_profile[best_profile.len() - 1];
+            let better_profile = profile > best_profile;
+            let better = better_minimum
+                || (same_minimum && objective == OrDeletionObjective::MaxMinLowPeak && better_peak)
+                || (same_minimum
+                    && (objective == OrDeletionObjective::MaxMin || same_peak)
+                    && better_profile);
+            if better {
+                best_member = member;
+                best_profile = profile;
+            }
+        }
+        machine.remove(best_member)?;
+    }
+    Ok(OrDeletionRollout {
+        deleted: machine.deleted.clone(),
+        state: machine.snapshot(),
+    })
+}
+
+/// Apply one explicitly selected legal deletion and return the exact next
+/// profile. This is the branch-expansion primitive used by exhaustive or beam
+/// search; policy remains in the caller.
+pub(crate) fn or_apply_deletion(
+    deleted: &[i64],
+    width: i64,
+    member: i64,
+) -> Result<OrDeletionRollout, String> {
+    let mut machine = IncrementalOrDeletion::new(deleted, width)?;
+    let member = usize::try_from(member)
+        .ok()
+        .filter(|member| *member < machine.cube_size)
+        .ok_or_else(|| "or_apply_deletion member lies outside the cube".to_string())?;
+    if !machine.preserves_effective_universe(member) {
+        return Err(format!(
+            "or_apply_deletion member {member} does not preserve the effective universe"
+        ));
+    }
+    machine.remove(member)?;
+    Ok(OrDeletionRollout {
+        deleted: machine.deleted.clone(),
+        state: machine.snapshot(),
+    })
+}
+
+fn objective_profile(machine: &IncrementalOrDeletion) -> Vec<i64> {
+    let mut profile = machine.deletion_surpluses();
+    profile.sort_unstable();
+    profile
+}
+
+fn profile_is_better(profile: &[i64], incumbent: &[i64], objective: OrDeletionObjective) -> bool {
+    let better_minimum = profile[0] > incumbent[0];
+    let same_minimum = profile[0] == incumbent[0];
+    let better_peak = profile[profile.len() - 1] < incumbent[incumbent.len() - 1];
+    let same_peak = profile[profile.len() - 1] == incumbent[incumbent.len() - 1];
+    better_minimum
+        || (same_minimum && objective == OrDeletionObjective::MaxMinLowPeak && better_peak)
+        || (same_minimum
+            && (objective == OrDeletionObjective::MaxMin || same_peak)
+            && profile > incumbent)
+}
+
+fn density_allows_removal(
+    machine: &IncrementalOrDeletion,
+    member: usize,
+    minimum_density_per_mille: i64,
+) -> bool {
+    (0..machine.width).all(|bit| {
+        let next_frequency =
+            machine.family_frequencies[bit] - i64::from(member & (1usize << bit) != 0);
+        next_frequency * 1000 >= (machine.family_size() - 1) * minimum_density_per_mille
+    })
+}
+
+/// Explore fixed-cardinality neighbors of an OR-closed Boolean family.
+///
+/// One exchange adjoins a missing member, computes its exact least OR closure,
+/// and then performs the same number of legal deletions.  The explicitly
+/// inserted member is retained, so a successful exchange cannot be a no-op.
+/// This is a domain-neutral branch primitive for finite join-semilattices; the
+/// caller owns the interpretation of coordinate balance.
+pub(crate) fn or_exchange_rollout(
+    deleted: &[i64],
+    width: i64,
+    steps: usize,
+    choices_per_step: usize,
+    seed: u64,
+    objective: OrDeletionObjective,
+    minimum_density_per_mille: i64,
+) -> Result<OrDeletionRollout, String> {
+    if !(0..=1000).contains(&minimum_density_per_mille) {
+        return Err("minimum density must be between 0 and 1000 per mille".to_string());
+    }
+    let mut machine = IncrementalOrDeletion::new(deleted, width)?;
+    let target_size = machine.family_size();
+    let mut rng = seed.max(1);
+
+    for _ in 0..steps {
+        let mut insertion_pool = machine
+            .deleted
+            .iter()
+            .map(|member| *member as usize)
+            .collect::<Vec<_>>();
+        insertion_pool.sort_unstable();
+        if insertion_pool.is_empty() {
+            break;
+        }
+        let start = next_random(&mut rng, insertion_pool.len());
+        let trials = choices_per_step.max(1).min(insertion_pool.len());
+        let mut best: Option<(Vec<i64>, IncrementalOrDeletion)> = None;
+
+        for offset in 0..trials {
+            let inserted = insertion_pool[(start + offset) % insertion_pool.len()];
+            let additions = machine.closure_additions(inserted);
+            if additions.is_empty() {
+                continue;
+            }
+            let mut restored = vec![false; machine.cube_size];
+            for member in &additions {
+                restored[*member] = true;
+            }
+            let next_deleted = machine
+                .deleted
+                .iter()
+                .copied()
+                .filter(|member| !restored[*member as usize])
+                .collect::<Vec<_>>();
+            let mut candidate = IncrementalOrDeletion::new(&next_deleted, width)?;
+
+            let mut valid = true;
+            for _ in 0..additions.len() {
+                let (_, effective) = candidate.frontiers();
+                let mut frontier = effective
+                    .into_iter()
+                    .map(|member| member as usize)
+                    .filter(|member| *member != 0 && *member != inserted)
+                    .filter(|member| {
+                        density_allows_removal(&candidate, *member, minimum_density_per_mille)
+                    })
+                    .collect::<Vec<_>>();
+                if frontier.is_empty() {
+                    valid = false;
+                    break;
+                }
+                frontier.sort_unstable();
+                let mut selected = frontier[0];
+                let mut selected_profile = candidate.profile_after(selected);
+                for member in frontier.into_iter().skip(1) {
+                    let profile = candidate.profile_after(member);
+                    if profile_is_better(&profile, &selected_profile, objective) {
+                        selected = member;
+                        selected_profile = profile;
+                    }
+                }
+                candidate.remove(selected)?;
+            }
+            if !valid || candidate.family_size() != target_size || !candidate.present[inserted] {
+                continue;
+            }
+            candidate.deleted.sort_unstable();
+            let profile = objective_profile(&candidate);
+            let replace = best
+                .as_ref()
+                .map(|(incumbent, _)| profile_is_better(&profile, incumbent, objective))
+                .unwrap_or(true);
+            if replace {
+                best = Some((profile, candidate));
+            }
+        }
+
+        let Some((best_profile, next)) = best else {
+            break;
+        };
+        let current_profile = objective_profile(&machine);
+        // Equal-profile exchanges are useful plateau moves. Reject only a
+        // strict regression; the seed chooses a deterministic representative
+        // when several neighbors have the same coordinate profile.
+        if profile_is_better(&current_profile, &best_profile, objective) {
+            break;
+        }
+        machine = next;
+    }
+
+    Ok(OrDeletionRollout {
+        deleted: machine.deleted.clone(),
+        state: machine.snapshot(),
+    })
+}
+
 /// Analyze the OR-closed complement of a sparse deletion list.
 ///
 /// This is the COW-friendly form of [`or_deletable_members`]: speculative
@@ -484,8 +1011,8 @@ pub(crate) fn or_deletion_state(deleted: &[i64], width: i64) -> Result<OrDeletio
         .iter()
         .copied()
         .filter(|member| {
-            let preserves_coverage = (0..width)
-                .all(|bit| member & (1i64 << bit) == 0 || family_frequencies[bit] > 1);
+            let preserves_coverage =
+                (0..width).all(|bit| member & (1i64 << bit) == 0 || family_frequencies[bit] > 1);
             let preserves_separation = (0..width).all(|left| {
                 ((left + 1)..width).all(|right| {
                     ((member >> left) & 1) == ((member >> right) & 1)
@@ -565,5 +1092,102 @@ mod tests {
         assert!(or_violation_count(&[0], 21).is_err());
         assert!(or_deletable_members(&[0], 21).is_err());
         assert!(or_deletion_state(&[], 21).is_err());
+    }
+
+    #[test]
+    fn incremental_rollout_matches_full_transform_at_every_prefix() {
+        let rollout =
+            or_deletion_rollout(&[], 6, 40, usize::MAX, 1979, OrDeletionObjective::MaxMin, 0)
+                .unwrap();
+        let mut machine = IncrementalOrDeletion::new(&[], 6).unwrap();
+        for prefix in 0..=rollout.deleted.len() {
+            let expected = or_deletion_state(&rollout.deleted[..prefix], 6).unwrap();
+            let actual = machine.snapshot();
+            assert_eq!(actual.family_size, expected.family_size);
+            assert_eq!(actual.family_frequencies, expected.family_frequencies);
+            assert_eq!(actual.deletion_surpluses, expected.deletion_surpluses);
+            assert_eq!(actual.deletable_members, expected.deletable_members);
+            assert_eq!(
+                actual.effective_deletable_members,
+                expected.effective_deletable_members
+            );
+            assert_eq!(actual.separating, expected.separating);
+            if prefix < rollout.deleted.len() {
+                machine.remove(rollout.deleted[prefix] as usize).unwrap();
+            }
+        }
+    }
+
+    #[test]
+    fn rollout_is_seeded_and_preserves_effective_universe() {
+        let left =
+            or_deletion_rollout(&[], 8, 100, 12, 42, OrDeletionObjective::MaxMinLowPeak, 250)
+                .unwrap();
+        let right =
+            or_deletion_rollout(&[], 8, 100, 12, 42, OrDeletionObjective::MaxMinLowPeak, 250)
+                .unwrap();
+        assert_eq!(left.deleted, right.deleted);
+        assert_eq!(left.state.family_size, right.state.family_size);
+        assert!(left.state.separating);
+        assert!(left
+            .state
+            .family_frequencies
+            .iter()
+            .all(|count| { count * 1000 >= left.state.family_size * 250 }));
+    }
+
+    #[test]
+    fn explicit_deletion_matches_the_full_transform() {
+        let applied = or_apply_deletion(&[], 4, 1).unwrap();
+        let expected = or_deletion_state(&[1], 4).unwrap();
+        assert_eq!(applied.deleted, vec![1]);
+        assert_eq!(applied.state.family_size, expected.family_size);
+        assert_eq!(
+            applied.state.family_frequencies,
+            expected.family_frequencies
+        );
+        assert_eq!(applied.state.deletable_members, expected.deletable_members);
+        assert!(or_apply_deletion(&[], 4, 15).is_err());
+    }
+
+    #[test]
+    fn exchange_rollout_preserves_cardinality_closure_and_is_deterministic() {
+        let start =
+            or_deletion_rollout(&[], 6, 48, usize::MAX, 1979, OrDeletionObjective::MaxMin, 0)
+                .unwrap();
+        let left = or_exchange_rollout(
+            &start.deleted,
+            6,
+            12,
+            64,
+            2026,
+            OrDeletionObjective::MaxMin,
+            0,
+        )
+        .unwrap();
+        let right = or_exchange_rollout(
+            &start.deleted,
+            6,
+            12,
+            64,
+            2026,
+            OrDeletionObjective::MaxMin,
+            0,
+        )
+        .unwrap();
+        assert_eq!(left.deleted, right.deleted);
+        assert_eq!(left.state.family_size, start.state.family_size);
+        assert!(left.state.separating);
+
+        let rebuilt = or_deletion_state(&left.deleted, 6).unwrap();
+        assert_eq!(left.state.family_size, rebuilt.family_size);
+        assert_eq!(left.state.family_frequencies, rebuilt.family_frequencies);
+        assert_eq!(left.state.deletion_surpluses, rebuilt.deletion_surpluses);
+
+        let mut before = start.state.deletion_surpluses;
+        let mut after = left.state.deletion_surpluses;
+        before.sort_unstable();
+        after.sort_unstable();
+        assert!(after >= before);
     }
 }

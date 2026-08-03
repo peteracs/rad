@@ -17,8 +17,7 @@ type NativeFnPtr = unsafe extern "C" fn(args: *const u64, argc: usize) -> u64;
 #[repr(C)]
 pub struct RadPluginApi {
     ctx: *mut c_void,
-    register_fn:
-        unsafe extern "C" fn(*mut c_void, *const c_char, NativeFnPtr, u32),
+    register_fn: unsafe extern "C" fn(*mut c_void, *const c_char, NativeFnPtr, u32),
     make_nil: unsafe extern "C" fn() -> u64,
     make_int: unsafe extern "C" fn(i64) -> u64,
     make_float: unsafe extern "C" fn(f64) -> u64,
@@ -219,13 +218,118 @@ unsafe extern "C" fn lattice_deletion_profile(args: *const u64, argc: usize) -> 
     result.map_or_else(fail, return_json)
 }
 
+unsafe extern "C" fn lattice_deletion_rollout(args: *const u64, argc: usize) -> u64 {
+    let result: Result<JsonValue, String> = (|| {
+        let args = arg_slice(args, argc)?;
+        exact_arity(args, 7, "lattice_deletion_rollout")?;
+        let deleted = integer_list(args, "lattice_deletion_rollout")?;
+        let steps = usize::try_from(int_arg(args, 2, "lattice_deletion_rollout")?)
+            .map_err(|_| "lattice_deletion_rollout steps must be non-negative".to_string())?;
+        let choices = usize::try_from(int_arg(args, 3, "lattice_deletion_rollout")?)
+            .map_err(|_| "lattice_deletion_rollout choices must be non-negative".to_string())?;
+        let seed = u64::try_from(int_arg(args, 4, "lattice_deletion_rollout")?)
+            .map_err(|_| "lattice_deletion_rollout seed must be non-negative".to_string())?;
+        let objective = match string_arg(args, 5, "lattice_deletion_rollout")?.as_str() {
+            "max_min" => boolean_lattice::OrDeletionObjective::MaxMin,
+            "max_min_low_peak" => boolean_lattice::OrDeletionObjective::MaxMinLowPeak,
+            other => {
+                return Err(format!(
+                    "lattice_deletion_rollout unknown objective '{other}'"
+                ))
+            }
+        };
+        let rollout = boolean_lattice::or_deletion_rollout(
+            &deleted,
+            int_arg(args, 1, "lattice_deletion_rollout")?,
+            steps,
+            choices,
+            seed,
+            objective,
+            int_arg(args, 6, "lattice_deletion_rollout")?,
+        )?;
+        Ok(json!({
+            "deleted": rollout.deleted,
+            "family_size": rollout.state.family_size,
+            "frequencies": rollout.state.family_frequencies,
+            "surpluses": rollout.state.deletion_surpluses,
+            "frontier": rollout.state.deletable_members,
+            "effective_frontier": rollout.state.effective_deletable_members,
+            "separating": rollout.state.separating,
+        }))
+    })();
+    result.map_or_else(fail, return_json)
+}
+
+unsafe extern "C" fn lattice_apply_deletion(args: *const u64, argc: usize) -> u64 {
+    let result: Result<JsonValue, String> = (|| {
+        let args = arg_slice(args, argc)?;
+        exact_arity(args, 3, "lattice_apply_deletion")?;
+        let deleted = integer_list(args, "lattice_apply_deletion")?;
+        let applied = boolean_lattice::or_apply_deletion(
+            &deleted,
+            int_arg(args, 1, "lattice_apply_deletion")?,
+            int_arg(args, 2, "lattice_apply_deletion")?,
+        )?;
+        Ok(json!({
+            "deleted": applied.deleted,
+            "family_size": applied.state.family_size,
+            "frequencies": applied.state.family_frequencies,
+            "surpluses": applied.state.deletion_surpluses,
+            "frontier": applied.state.deletable_members,
+            "effective_frontier": applied.state.effective_deletable_members,
+            "separating": applied.state.separating,
+        }))
+    })();
+    result.map_or_else(fail, return_json)
+}
+
+unsafe extern "C" fn lattice_exchange_rollout(args: *const u64, argc: usize) -> u64 {
+    let result: Result<JsonValue, String> = (|| {
+        let args = arg_slice(args, argc)?;
+        exact_arity(args, 7, "lattice_exchange_rollout")?;
+        let deleted = integer_list(args, "lattice_exchange_rollout")?;
+        let steps = usize::try_from(int_arg(args, 2, "lattice_exchange_rollout")?)
+            .map_err(|_| "lattice_exchange_rollout steps must be non-negative".to_string())?;
+        let choices = usize::try_from(int_arg(args, 3, "lattice_exchange_rollout")?)
+            .map_err(|_| "lattice_exchange_rollout choices must be non-negative".to_string())?;
+        let seed = u64::try_from(int_arg(args, 4, "lattice_exchange_rollout")?)
+            .map_err(|_| "lattice_exchange_rollout seed must be non-negative".to_string())?;
+        let objective = match string_arg(args, 5, "lattice_exchange_rollout")?.as_str() {
+            "max_min" => boolean_lattice::OrDeletionObjective::MaxMin,
+            "max_min_low_peak" => boolean_lattice::OrDeletionObjective::MaxMinLowPeak,
+            other => {
+                return Err(format!(
+                    "lattice_exchange_rollout unknown objective '{other}'"
+                ))
+            }
+        };
+        let rollout = boolean_lattice::or_exchange_rollout(
+            &deleted,
+            int_arg(args, 1, "lattice_exchange_rollout")?,
+            steps,
+            choices,
+            seed,
+            objective,
+            int_arg(args, 6, "lattice_exchange_rollout")?,
+        )?;
+        Ok(json!({
+            "deleted": rollout.deleted,
+            "family_size": rollout.state.family_size,
+            "frequencies": rollout.state.family_frequencies,
+            "surpluses": rollout.state.deletion_surpluses,
+            "frontier": rollout.state.deletable_members,
+            "effective_frontier": rollout.state.effective_deletable_members,
+            "separating": rollout.state.separating,
+        }))
+    })();
+    result.map_or_else(fail, return_json)
+}
+
 fn nonnegative_u64(value: i64, name: &str) -> Result<u64, String> {
     u64::try_from(value).map_err(|_| format!("{name} must be non-negative"))
 }
 
-fn residue_profile_json(
-    profile: affine_parity::ResidueLaneProfile,
-) -> Result<JsonValue, String> {
+fn residue_profile_json(profile: affine_parity::ResidueLaneProfile) -> Result<JsonValue, String> {
     let residue_sum = i64::try_from(profile.residue_sum)
         .map_err(|_| "affine residue profile sum exceeds RAD int".to_string())?;
     Ok(json!({
@@ -295,30 +399,13 @@ unsafe extern "C" fn affine_residue_profiles(args: *const u64, argc: usize) -> u
         let lane_count =
             nonnegative_u64(int_arg(args, 4, "affine_residue_profiles")?, "lane_count")?;
 
-        let profiles = std::thread::scope(|scope| {
-            let handles = (0..lane_count)
-                .map(|lane_index| {
-                    scope.spawn(move || {
-                        affine_parity::residue_lane_profile(
-                            multiplier,
-                            addend,
-                            depth,
-                            verified_power,
-                            lane_index,
-                            lane_count,
-                        )
-                    })
-                })
-                .collect::<Vec<_>>();
-            handles
-                .into_iter()
-                .map(|handle| {
-                    handle
-                        .join()
-                        .map_err(|_| "affine residue worker panicked".to_string())?
-                })
-                .collect::<Result<Vec<_>, String>>()
-        })?;
+        let profiles = affine_parity::residue_lane_profiles(
+            multiplier,
+            addend,
+            depth,
+            verified_power,
+            lane_count,
+        )?;
         profiles
             .into_iter()
             .map(residue_profile_json)
@@ -370,6 +457,13 @@ unsafe fn register(api: &RadPluginApi, name: &str, function: NativeFnPtr, arity:
 }
 
 #[no_mangle]
+/// Register this extension's functions with a RAD host.
+///
+/// # Safety
+///
+/// `api` must point to a live, ABI-compatible [`RadPluginApi`] for the entire
+/// call. Every callback stored by the extension must remain valid while the
+/// dynamic library is loaded.
 pub unsafe extern "C" fn rad_extension_init(api: *const RadPluginApi) {
     let Some(api) = api.as_ref() else {
         return;
@@ -400,7 +494,30 @@ pub unsafe extern "C" fn rad_extension_init(api: *const RadPluginApi) {
         lattice_deletion_profile,
         2,
     );
-    register(api, "affine_residue_profile_json", affine_residue_profile, 6);
+    register(
+        api,
+        "lattice_deletion_rollout_json",
+        lattice_deletion_rollout,
+        7,
+    );
+    register(
+        api,
+        "lattice_apply_deletion_json",
+        lattice_apply_deletion,
+        3,
+    );
+    register(
+        api,
+        "lattice_exchange_rollout_json",
+        lattice_exchange_rollout,
+        7,
+    );
+    register(
+        api,
+        "affine_residue_profile_json",
+        affine_residue_profile,
+        6,
+    );
     register(
         api,
         "affine_residue_profiles_json",

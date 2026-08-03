@@ -126,6 +126,14 @@ compiled-program, runtime-feature, and constraint-registry identities. Opaque
 settlement record IDs are diagnostic only and do not participate in semantic
 equality.
 
+The compiled-program identity comes from an immutable canonical manifest. It
+includes the authenticated source/import graph and exact global symbol slot
+order as well as bytecode, constants, handler/system tables, causal registries,
+schemas, indexes, and migrations.
+Swapping two names while leaving global values untouched is therefore a
+different program and is rejected before portable replay runs. Checkpoint
+identity uses an explicit versioned encoding rather than diagnostic formatting.
+
 Public attempt recording is an authoritative main-timeline operation; worker
 and simulation-fork VMs are rejected as checkpoint roots. The detached replay
 shell preserves the source gameplay execution role independently from its

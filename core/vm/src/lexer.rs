@@ -224,10 +224,7 @@ impl<'a> Lexer<'a> {
 
     /// Lex concatenated source using explicit, authenticated unit boundaries.
     /// Source comments remain ordinary comments and never affect locations.
-    pub fn new_with_source_layout(
-        source: &'a str,
-        layout: &SourceLayout,
-    ) -> Result<Self, String> {
+    pub fn new_with_source_layout(source: &'a str, layout: &SourceLayout) -> Result<Self, String> {
         layout.validate(source)?;
         let mut lexer = Self::new(source);
         lexer.line_directives = layout
@@ -240,10 +237,8 @@ impl<'a> Lexer<'a> {
     }
 
     pub(crate) fn apply_line_directives(&mut self) {
-        while let Some((offset, line, column)) = self
-            .line_directives
-            .get(self.next_line_directive)
-            .copied()
+        while let Some((offset, line, column)) =
+            self.line_directives.get(self.next_line_directive).copied()
         {
             if offset != self.pos {
                 break;

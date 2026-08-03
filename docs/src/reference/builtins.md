@@ -924,9 +924,9 @@ does not affect reproducibility. A full game session compresses to a few KB of J
 Each io record carries `f`/`s` (frame/sequence coordinates — frames are main-timeline
 `flush_events` flips; speculative flushes inside `simulate()` don't advance the clock) and
 `a`, a digest of the arguments. Traces are **self-contained**: the header embeds the full
-merged source, and the final record carries a blake3 content digest of the world at exit
-(or crash) point. Traces are written even when the run crashes — a trace of the crash is
-the point.
+authenticated module bundle, including resolved import edges, and the final record carries
+both a blake3 content digest of the world and the terminal success/error outcome. Traces are
+written even when the run crashes — a trace of the crash is the point.
 
 ### Replaying: `rad replay`
 
@@ -942,14 +942,16 @@ else replays for free because the interpreter is deterministic.
 
 Three protection layers, all loud:
 
-1. **Integrity** — the embedded source is checked against `source_hash`; a tampered trace
-   is refused (override with `--force`).
+1. **Integrity** — embedded sources, module identities, resolved import edges, and language
+   features are authenticated; a tampered trace is refused (override with `--force`).
 2. **Divergence detection** — every replayed io call is checked against the trace (builtin
    name, argument digest, frame coordinate). A mismatch halts with
    `replay divergence at frame N, record #K: …` instead of debugging a timeline that never
    happened.
-3. **End-to-end verification** — after replay, the world content digest is compared against
-   the recorded run's final digest: `Replay verified: world digest matches the recorded run`.
+3. **End-to-end verification** — after replay, both the world content digest and terminal
+   success/error outcome are compared. An early crash cannot verify merely because it left
+   the same empty world: `Replay verified: world digest matches the recorded run` is printed
+   only after the outcome check also succeeds.
 
 `--to-frame N` halts at the start of frame `N` (handlers dispatched by the k-th
 `flush_events` belong to frame k), leaving the world exactly as it was mid-history.
