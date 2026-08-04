@@ -1,6 +1,6 @@
 # RFC-0003: First-Class Facts, Relations, and Derived Facts
 
-- **Status:** Draft
+- **Status:** Accepted
 - **Product name:** RAD World Facts
 - **Paradigm:** World-Law Programming
 - **Author:** peteracs
@@ -215,6 +215,14 @@ Candidate conflicts are defined over canonical relation keys:
 Relation and component patches join one global conflict check and one atomic
 world adoption. There is no separate relation commit.
 
+Component targets are normalized by resolved generational entity plus
+component identity before candidate mutation. Identical writes coalesce. Two
+different values for one target reject with `component.write_conflict`; source
+or resolver enumeration order never selects a last writer. Candidate-local
+entity handles are resolved before this normalization. Component conflict
+rejects every relation write, spawn, despawn, and component write in the same
+candidate atomically.
+
 ### Base-relative patch algebra
 
 The v0 operations are:
@@ -295,6 +303,16 @@ one committed lifetime of that key for provenance and incremental support.
 - derived supports reference assertion IDs internally;
 - opaque assertion IDs are excluded from semantic tuple equality but included
   in operational checkpoint identity.
+
+### Entity allocator exhaustion
+
+Entity allocation is total and fallible. A reusable slot at generation
+`u32::MAX` is permanently retired and the allocator continues with the next
+canonical reusable slot, then fresh slot space. The final representable fresh
+slot may be allocated once. If neither reusable nor fresh identity remains,
+the complete candidate rejects with `entity.id_space_exhausted`; allocation
+never panics or wraps. Ordered retired slots and the fresh-space exhaustion bit
+are part of operational checkpoint identity and restoration.
 
 ## Derived facts
 
@@ -496,6 +514,12 @@ predicates use canonical plan order because conjunction is commutative in v0.
 Source declaration, schema registration, module loading, and atom enumeration
 cannot select which typed resource error wins.
 
+A separate versioned sealed-plan profile bounds rule count, atoms per rule,
+predicates per rule, total terms, dependency edges, and total canonical typed
+plan bytes before evaluation. This makes scalar predicate work statically
+bounded even though the derivation work meter is charged primarily at row,
+join, intermediate-state, proof, and aggregate boundaries.
+
 ## Storage and compilation
 
 The language semantics do not require a particular kernel layout. A compiler
@@ -536,15 +560,18 @@ operational world checkpoint binds authoritative rows, derived indexes or their
 verified rebuild identity, and provenance supports.
 
 Its relation-state inventory includes the complete entity generation map,
-next entity slot, ordered free slots, live handles, the next assertion ID,
-current assertions, components, ancestry, and every future-determining
-maintenance counter. The same state object drives restoration and canonical
-encoding. Canonical semantic decoders receive the sealed schema and live
-entity environment. They reject unknown relations, wrong arity or types, dead
-entity handles, noncanonical symmetric orientation, duplicate rows, and
-out-of-order rows rather than silently normalizing them. Semantic encoding
-contains fact keys; operational encoding additionally contains assertion
-lifetimes and allocator state.
+next entity slot, fresh-space exhaustion, ordered free and retired slots, live
+handles, the next assertion ID, current assertions, components, ancestry, and
+every future-determining maintenance counter. The same state object drives
+restoration and canonical encoding. Canonical semantic decoders receive the
+sealed schema, live entity environment, and a versioned decode profile. They
+reject unknown relations, wrong arity or types, dead entity handles,
+noncanonical symmetric orientation, duplicate rows, out-of-order rows, and
+input/fact/value/text/allocation limit excesses before oversized retention.
+This decoder returns a canonical `FactKey` set; relation-wide uniqueness and
+other authoritative-state invariants are validated when that set enters the
+complete candidate. Semantic encoding contains fact keys; operational encoding
+additionally contains assertion lifetimes and allocator state.
 
 Portable replay requires matching program, operational world, limits, and
 capabilities before executing. A replay implementation may rebuild derived
@@ -555,8 +582,11 @@ VM.
 
 The first executable oracle is intentionally independent of the VM. It stores
 canonical relation sets in ordered maps, fully recomputes nonrecursive rules,
-and compares that result with indexed affected-group maintenance. It also
-constructs canonical proof alternatives.
+and constructs canonical proof alternatives. Its affected-relation projection
+harness validates dependency closure and atomic state adoption by projecting
+affected answers from a full reference result. It is not an independent
+indexed delta-maintenance implementation; that proof belongs to implementation
+sequence step 5.
 
 Required semantic fixtures before parser/runtime work:
 
@@ -586,12 +616,20 @@ Required semantic fixtures before parser/runtime work:
 14. final-candidate cascades precede uniqueness and assertion allocation;
 15. every rule, atom, schema, row, and module permutation yields identical
     facts/proofs/bytes or the same exact typed failure.
+16. component writes coalesce or conflict by resolved target without
+    last-writer-wins behavior, and every conflict is atomic across the shared
+    candidate;
+17. final fresh-slot allocation, retired generation-exhausted slots, and total
+    entity-ID exhaustion are typed, deterministic, checkpoint-bound, and
+    panic-free;
+18. sealed rule-plan and semantic-decoder profiles reject one-over-limit input
+    before evaluation or oversized decoded retention.
 
 The repository integration test `core/vm/tests/rfc0003_reference.rs` is the
 executable contract. It uses generic typed schemas, fact keys/assertions,
 relation patches, rule plans, proof alternatives, deterministic encodings, and
-an incremental dependency maintainer. It is an oracle, not a hidden VM
-implementation.
+an affected-relation projection harness. It is an oracle, not a hidden VM or
+independent incremental implementation.
 
 ## Dogfood slice
 
@@ -629,11 +667,12 @@ movement denied
 6. candidate constraints, provenance, ACL, wire, WASM, and replay integration;
 7. dogfood, fuzzing, benchmarks, and operational tooling.
 
-The RFC remains **Draft** until the reference fixtures, candidate-phase
-placement, canonical row encoding, proof limits, and capability-redaction
-contract are reviewed. It becomes **Accepted** before syntax lands and
-**Implemented experimentally** only after the full dogfood and differential
-suite pass.
+The reference fixtures, candidate-phase placement, canonical row encoding,
+proof and work limits, capability-redaction contract, component conflict
+normalization, and total entity-allocation semantics are reviewed and
+executable. RFC-0003 is therefore **Accepted** before syntax lands. It becomes
+**Implemented experimentally** only after the parser/checker, full-recompute
+runtime, dogfood, and independent indexed differential suite pass.
 
 ## Explicit non-goals
 

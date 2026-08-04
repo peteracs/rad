@@ -2,7 +2,8 @@
 //!
 //! This deliberately contains no parser, bytecode, VM, GC, or ECS code. It is
 //! a generic typed relation model. Full recomputation defines derivation
-//! semantics; the dependency maintainer is differential-tested against it.
+//! semantics; the affected-relation projection harness checks invalidation
+//! closure and atomicity without claiming an independent incremental engine.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -225,40 +226,54 @@ struct EntityTable {
     live: BTreeSet<EntityRef>,
     generations: BTreeMap<u32, u32>,
     free_slots: BTreeSet<u32>,
+    retired_slots: BTreeSet<u32>,
     next_slot: u32,
+    fresh_slots_exhausted: bool,
 }
 
 impl EntityTable {
-    fn spawn(&mut self) -> EntityRef {
-        let reusable = self.free_slots.iter().next().copied();
-        let slot = match reusable {
-            Some(slot) => {
-                self.free_slots.remove(&slot);
-                slot
+    fn spawn(&mut self) -> OracleResult<EntityRef> {
+        let mut reusable = None;
+        while let Some(slot) = self.free_slots.iter().next().copied() {
+            self.free_slots.remove(&slot);
+            let generation = self.generations.get(&slot).copied().unwrap_or(0);
+            if generation == u32::MAX {
+                self.retired_slots.insert(slot);
+                continue;
             }
-            None => {
-                let slot = self.next_slot;
-                self.next_slot = self.next_slot.checked_add(1).expect("fixture slot space");
-                slot
-            }
-        };
-        let generation = self.generations.entry(slot).or_insert(0);
-        if reusable.is_some() {
-            *generation = generation.checked_add(1).expect("fixture generation space");
+            reusable = Some((slot, generation + 1));
+            break;
         }
-        let entity = EntityRef {
-            slot,
-            generation: *generation,
+        let (slot, generation) = match reusable {
+            Some(reusable) => reusable,
+            None => {
+                if self.fresh_slots_exhausted {
+                    return Err("entity.id_space_exhausted");
+                }
+                let slot = self.next_slot;
+                if slot == u32::MAX {
+                    self.fresh_slots_exhausted = true;
+                } else {
+                    self.next_slot = slot + 1;
+                }
+                (slot, 0)
+            }
         };
+        self.generations.insert(slot, generation);
+        let entity = EntityRef { slot, generation };
         self.live.insert(entity);
-        entity
+        Ok(entity)
     }
 
     fn despawn(&mut self, entity: EntityRef) -> OracleResult<()> {
         if !self.live.remove(&entity) {
             return Err("entity.not_live");
         }
-        self.free_slots.insert(entity.slot);
+        if entity.generation == u32::MAX {
+            self.retired_slots.insert(entity.slot);
+        } else {
+            self.free_slots.insert(entity.slot);
+        }
         Ok(())
     }
 
@@ -718,11 +733,11 @@ impl WorldModel {
             .cloned()
             .collect::<BTreeSet<_>>();
         let base_next_assertion_id = self.relations.next_assertion_id;
-        let handles = transaction
-            .spawn_handles
-            .into_iter()
-            .map(|handle| (handle, candidate.entities.spawn()))
-            .collect::<BTreeMap<_, _>>();
+        let mut handles = BTreeMap::new();
+        for handle in transaction.spawn_handles {
+            handles.insert(handle, candidate.entities.spawn()?);
+        }
+        let mut component_writes = BTreeMap::<(EntityRef, String), FactValue>::new();
         for write in transaction.component_writes {
             let entity = match write.entity {
                 EntityOperand::Existing(entity) => entity,
@@ -733,9 +748,19 @@ impl WorldModel {
             if !candidate.entities.contains(entity) {
                 return Err("component.entity_not_live");
             }
-            candidate
-                .components
-                .insert((entity, write.component), write.value);
+            let key = (entity, write.component);
+            match component_writes.get(&key) {
+                Some(value) if value != &write.value => {
+                    return Err("component.write_conflict");
+                }
+                Some(_) => {}
+                None => {
+                    component_writes.insert(key, write.value);
+                }
+            }
+        }
+        for (key, value) in component_writes {
+            candidate.components.insert(key, value);
         }
         let operations = transaction
             .operations
@@ -1259,6 +1284,36 @@ impl RulePlan {
         }
         out
     }
+
+    fn canonical_len(&self) -> OracleResult<usize> {
+        let mut length = b"rfc0003.rule-plan.v1".len();
+        length = checked_len_add(length, encoded_text_len(&self.id)?)?;
+        length = checked_len_add(length, encoded_text_len(&self.head_relation)?)?;
+        length = checked_len_add(length, encoded_terms_len(&self.head)?)?;
+        length = checked_len_add(length, 8)?;
+        for atom in &self.atoms {
+            length = checked_len_add(length, 8)?;
+            length = checked_len_add(length, encoded_atom_len(atom)?)?;
+        }
+        length = checked_len_add(length, 8)?;
+        for predicate in &self.predicates {
+            length = checked_len_add(length, 8)?;
+            length = checked_len_add(length, encoded_predicate_len(predicate)?)?;
+        }
+        length = checked_len_add(length, 1)?;
+        if let Some(aggregate) = &self.aggregate {
+            length = checked_len_add(length, 2)?;
+            if let Some(input) = &aggregate.input {
+                length = checked_len_add(length, encoded_text_len(input)?)?;
+            }
+            length = checked_len_add(length, encoded_text_len(&aggregate.output)?)?;
+            length = checked_len_add(length, 8)?;
+            for group in &aggregate.group_by {
+                length = checked_len_add(length, encoded_text_len(group)?)?;
+            }
+        }
+        Ok(length)
+    }
 }
 
 fn write_term(out: &mut Vec<u8>, term: &Term) {
@@ -1278,6 +1333,38 @@ fn write_terms(out: &mut Vec<u8>, terms: &[Term]) {
     write_u64(out, terms.len() as u64);
     for term in terms {
         write_term(out, term);
+    }
+}
+
+fn encoded_term_len(term: &Term) -> OracleResult<usize> {
+    checked_len_add(
+        1,
+        match term {
+            Term::Variable(name) => encoded_text_len(name)?,
+            Term::Constant(value) => encoded_value_len(value)?,
+        },
+    )
+}
+
+fn encoded_terms_len(terms: &[Term]) -> OracleResult<usize> {
+    terms.iter().try_fold(8, |length, term| {
+        checked_len_add(length, encoded_term_len(term)?)
+    })
+}
+
+fn encoded_atom_len(atom: &Atom) -> OracleResult<usize> {
+    checked_len_add(
+        encoded_text_len(&atom.relation)?,
+        encoded_terms_len(&atom.terms)?,
+    )
+}
+
+fn encoded_predicate_len(predicate: &Predicate) -> OracleResult<usize> {
+    match predicate {
+        Predicate::Greater(left, right) => checked_len_add(
+            checked_len_add(1, encoded_text_len(left)?)?,
+            encoded_text_len(right)?,
+        ),
     }
 }
 
@@ -1307,7 +1394,31 @@ struct BindingState {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct RulePlanLimits {
+    max_rules: usize,
+    max_atoms_per_rule: usize,
+    max_predicates_per_rule: usize,
+    max_terms: usize,
+    max_canonical_plan_bytes: usize,
+    max_dependency_edges: usize,
+}
+
+impl RulePlanLimits {
+    fn generous() -> Self {
+        Self {
+            max_rules: 1_024,
+            max_atoms_per_rule: 64,
+            max_predicates_per_rule: 256,
+            max_terms: 65_536,
+            max_canonical_plan_bytes: 16 * 1024 * 1024,
+            max_dependency_edges: 16_384,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct DerivationLimits {
+    rule_plans: RulePlanLimits,
     max_bindings: usize,
     max_facts: usize,
     max_proofs_per_fact: usize,
@@ -1327,6 +1438,7 @@ struct DerivationLimits {
 impl DerivationLimits {
     fn generous() -> Self {
         Self {
+            rule_plans: RulePlanLimits::generous(),
             max_bindings: 4_096,
             max_facts: 4_096,
             max_proofs_per_fact: 256,
@@ -1925,6 +2037,7 @@ fn derive_all(
             return Err("derivation.duplicate_rule_id");
         }
     }
+    validate_rule_plan_limits(rules, limits.rule_plans)?;
     let mut canonical_rules = rules.iter().collect::<Vec<_>>();
     canonical_rules.sort_by(|left, right| {
         (
@@ -1976,8 +2089,49 @@ fn derive_all(
     Ok(result)
 }
 
+fn validate_rule_plan_limits(rules: &[RulePlan], limits: RulePlanLimits) -> OracleResult<()> {
+    if rules.len() > limits.max_rules {
+        return Err("derivation.rule_limit");
+    }
+    let mut terms = 0usize;
+    let mut canonical_bytes = 0usize;
+    let mut dependency_edges = BTreeSet::new();
+    for rule in rules {
+        if rule.atoms.len() > limits.max_atoms_per_rule {
+            return Err("derivation.atom_limit");
+        }
+        if rule.predicates.len() > limits.max_predicates_per_rule {
+            return Err("derivation.predicate_limit");
+        }
+        terms = terms
+            .checked_add(rule.head.len())
+            .and_then(|count| {
+                rule.atoms
+                    .iter()
+                    .try_fold(count, |count, atom| count.checked_add(atom.terms.len()))
+            })
+            .ok_or("derivation.term_limit")?;
+        if terms > limits.max_terms {
+            return Err("derivation.term_limit");
+        }
+        canonical_bytes = canonical_bytes
+            .checked_add(rule.canonical_len()?)
+            .ok_or("derivation.rule_plan_byte_limit")?;
+        if canonical_bytes > limits.max_canonical_plan_bytes {
+            return Err("derivation.rule_plan_byte_limit");
+        }
+        for atom in &rule.atoms {
+            dependency_edges.insert((rule.head_relation.as_str(), atom.relation.as_str()));
+            if dependency_edges.len() > limits.max_dependency_edges {
+                return Err("derivation.dependency_edge_limit");
+            }
+        }
+    }
+    Ok(())
+}
+
 #[derive(Clone)]
-struct DependencyMaintainer {
+struct AffectedRelationProjectionHarness {
     model: WorldModel,
     derived_schemas: BTreeMap<String, RelationSchema>,
     rules: Vec<RulePlan>,
@@ -1985,7 +2139,7 @@ struct DependencyMaintainer {
     limits: DerivationLimits,
 }
 
-impl DependencyMaintainer {
+impl AffectedRelationProjectionHarness {
     fn new(
         model: WorldModel,
         derived_schemas: BTreeMap<String, RelationSchema>,
@@ -2042,19 +2196,19 @@ impl DependencyMaintainer {
             &self.rules,
             self.limits,
         )?;
-        let mut incremental = self.derived.clone();
-        incremental.retain(|fact, _| !affected.contains(&fact.relation));
+        let mut projected = self.derived.clone();
+        projected.retain(|fact, _| !affected.contains(&fact.relation));
         for (fact, proofs) in full
             .iter()
             .filter(|(fact, _)| affected.contains(&fact.relation))
         {
-            incremental.insert(fact.clone(), proofs.clone());
+            projected.insert(fact.clone(), proofs.clone());
         }
-        if incremental != full {
-            return Err("derivation.incremental_mismatch");
+        if projected != full {
+            return Err("derivation.affected_projection_mismatch");
         }
         self.model = candidate_model;
-        self.derived = incremental;
+        self.derived = projected;
         Ok(())
     }
 }
@@ -2258,8 +2412,9 @@ impl OperationalRelationState {
     }
 
     fn canonical_bytes(&self) -> Vec<u8> {
-        let mut out = b"rfc0003.operational.v2".to_vec();
+        let mut out = b"rfc0003.operational.v3".to_vec();
         write_u64(&mut out, self.entity_allocator.next_slot as u64);
+        out.push(u8::from(self.entity_allocator.fresh_slots_exhausted));
         write_u64(&mut out, self.entity_allocator.generations.len() as u64);
         for (slot, generation) in &self.entity_allocator.generations {
             out.extend_from_slice(&slot.to_be_bytes());
@@ -2272,6 +2427,10 @@ impl OperationalRelationState {
         }
         write_u64(&mut out, self.entity_allocator.free_slots.len() as u64);
         for slot in &self.entity_allocator.free_slots {
+            out.extend_from_slice(&slot.to_be_bytes());
+        }
+        write_u64(&mut out, self.entity_allocator.retired_slots.len() as u64);
+        for slot in &self.entity_allocator.retired_slots {
             out.extend_from_slice(&slot.to_be_bytes());
         }
         write_u64(&mut out, self.assertion_allocator_next);
@@ -2339,14 +2498,95 @@ fn read_u64(input: &mut &[u8]) -> OracleResult<u64> {
     Ok(u64::from_be_bytes(bytes.try_into().expect("eight bytes")))
 }
 
-fn read_text(input: &mut &[u8]) -> OracleResult<String> {
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct DecodeLimits {
+    max_input_bytes: usize,
+    max_facts: usize,
+    max_values: usize,
+    max_text_bytes: usize,
+    max_decoded_bytes: usize,
+}
+
+impl DecodeLimits {
+    fn generous() -> Self {
+        Self {
+            max_input_bytes: 16 * 1024 * 1024,
+            max_facts: 65_536,
+            max_values: 1_048_576,
+            max_text_bytes: 8 * 1024 * 1024,
+            max_decoded_bytes: 64 * 1024 * 1024,
+        }
+    }
+}
+
+struct DecodeMeter {
+    limits: DecodeLimits,
+    values: usize,
+    text_bytes: usize,
+    decoded_bytes: usize,
+}
+
+impl DecodeMeter {
+    fn new(input_bytes: usize, limits: DecodeLimits) -> OracleResult<Self> {
+        if input_bytes > limits.max_input_bytes {
+            return Err("wire.input_byte_limit");
+        }
+        Ok(Self {
+            limits,
+            values: 0,
+            text_bytes: 0,
+            decoded_bytes: 0,
+        })
+    }
+
+    fn charge_decoded_bytes(&mut self, bytes: usize) -> OracleResult<()> {
+        self.decoded_bytes = self
+            .decoded_bytes
+            .checked_add(bytes)
+            .ok_or("wire.decoded_byte_limit")?;
+        if self.decoded_bytes > self.limits.max_decoded_bytes {
+            return Err("wire.decoded_byte_limit");
+        }
+        Ok(())
+    }
+
+    fn charge_text(&mut self, bytes: usize) -> OracleResult<()> {
+        self.text_bytes = self
+            .text_bytes
+            .checked_add(bytes)
+            .ok_or("wire.text_byte_limit")?;
+        if self.text_bytes > self.limits.max_text_bytes {
+            return Err("wire.text_byte_limit");
+        }
+        self.charge_decoded_bytes(
+            std::mem::size_of::<String>()
+                .checked_add(bytes)
+                .ok_or("wire.decoded_byte_limit")?,
+        )
+    }
+
+    fn charge_values(&mut self, count: usize) -> OracleResult<()> {
+        self.values = self.values.checked_add(count).ok_or("wire.value_limit")?;
+        if self.values > self.limits.max_values {
+            return Err("wire.value_limit");
+        }
+        self.charge_decoded_bytes(
+            std::mem::size_of::<FactValue>()
+                .checked_mul(count)
+                .ok_or("wire.decoded_byte_limit")?,
+        )
+    }
+}
+
+fn read_text(input: &mut &[u8], meter: &mut DecodeMeter) -> OracleResult<String> {
     let len = usize::try_from(read_u64(input)?).map_err(|_| "wire.length")?;
     let bytes = input.get(..len).ok_or("wire.truncated")?;
+    meter.charge_text(len)?;
     *input = &input[len..];
     String::from_utf8(bytes.to_vec()).map_err(|_| "wire.utf8")
 }
 
-fn decode_value(input: &mut &[u8]) -> OracleResult<FactValue> {
+fn decode_value(input: &mut &[u8], meter: &mut DecodeMeter) -> OracleResult<FactValue> {
     let tag = *input.first().ok_or("wire.truncated")?;
     *input = &input[1..];
     match tag {
@@ -2367,7 +2607,7 @@ fn decode_value(input: &mut &[u8]) -> OracleResult<FactValue> {
                 generation: u32::from_be_bytes(generation.try_into().expect("four bytes")),
             }))
         }
-        b't' => Ok(FactValue::Text(read_text(input)?)),
+        b't' => Ok(FactValue::Text(read_text(input, meter)?)),
         _ => Err("wire.tag"),
     }
 }
@@ -2378,17 +2618,19 @@ fn fact_key_bytes(key: &FactKey) -> Vec<u8> {
     out
 }
 
-fn decode_fact_key_from(input: &mut &[u8]) -> OracleResult<FactKey> {
-    let relation = read_text(input)?;
+fn decode_fact_key_from(input: &mut &[u8], meter: &mut DecodeMeter) -> OracleResult<FactKey> {
+    let relation = read_text(input, meter)?;
     let count = usize::try_from(read_u64(input)?).map_err(|_| "wire.length")?;
+    meter.charge_values(count)?;
     let tuple = (0..count)
-        .map(|_| decode_value(input))
+        .map(|_| decode_value(input, meter))
         .collect::<OracleResult<Vec<_>>>()?;
     Ok(FactKey { relation, tuple })
 }
 
 fn decode_fact_key(mut input: &[u8]) -> OracleResult<FactKey> {
-    let key = decode_fact_key_from(&mut input)?;
+    let mut meter = DecodeMeter::new(input.len(), DecodeLimits::generous())?;
+    let key = decode_fact_key_from(&mut input, &mut meter)?;
     if !input.is_empty() {
         return Err("wire.trailing");
     }
@@ -2399,17 +2641,27 @@ fn decode_semantic_relation_bytes(
     mut input: &[u8],
     schemas: &BTreeMap<String, RelationSchema>,
     entities: &EntityTable,
+    limits: DecodeLimits,
 ) -> OracleResult<BTreeSet<FactKey>> {
+    let mut meter = DecodeMeter::new(input.len(), limits)?;
     const DOMAIN: &[u8] = b"rfc0003.semantic.v1";
     if input.get(..DOMAIN.len()) != Some(DOMAIN) {
         return Err("wire.domain");
     }
     input = &input[DOMAIN.len()..];
     let count = usize::try_from(read_u64(&mut input)?).map_err(|_| "wire.length")?;
+    if count > limits.max_facts {
+        return Err("wire.fact_limit");
+    }
+    meter.charge_decoded_bytes(
+        std::mem::size_of::<FactKey>()
+            .checked_mul(count)
+            .ok_or("wire.decoded_byte_limit")?,
+    )?;
     let mut facts = BTreeSet::new();
     let mut previous = None;
     for _ in 0..count {
-        let fact = decode_fact_key_from(&mut input)?;
+        let fact = decode_fact_key_from(&mut input, &mut meter)?;
         let schema = schemas.get(&fact.relation).ok_or("wire.unknown_relation")?;
         if fact.tuple.len() != schema.columns.len() {
             return Err("wire.relation_arity");
@@ -2595,9 +2847,9 @@ fn ownership_rules() -> Vec<RulePlan> {
 fn seed_ownership_model() -> (WorldModel, EntityRef, EntityRef, EntityRef) {
     let mut model = WorldModel::default();
     register_authoritative_schemas(&mut model);
-    let person = model.entities.spawn();
-    let item_a = model.entities.spawn();
-    let item_b = model.entities.spawn();
+    let person = model.entities.spawn().unwrap();
+    let item_a = model.entities.spawn().unwrap();
+    let item_b = model.entities.spawn().unwrap();
     model
         .apply_transaction(Transaction {
             operations: vec![
@@ -2645,8 +2897,8 @@ fn entity_foreign_keys_restrict_cascade_and_never_retarget_reused_slots() {
             vec![entity_column("owner"), entity_column("target").cascade()],
         ))
         .unwrap();
-    let owner = model.entities.spawn();
-    let target = model.entities.spawn();
+    let owner = model.entities.spawn().unwrap();
+    let target = model.entities.spawn().unwrap();
     model
         .apply_transaction(Transaction {
             operations: vec![insert(
@@ -2697,7 +2949,7 @@ fn entity_foreign_keys_restrict_cascade_and_never_retarget_reused_slots() {
         .last_changes
         .iter()
         .any(|change| change.kind == ChangeKind::Cascade));
-    let replacement = model.entities.spawn();
+    let replacement = model.entities.spawn().unwrap();
     assert_eq!(replacement.slot, target.slot);
     assert_ne!(replacement.generation, target.generation);
 
@@ -2725,8 +2977,8 @@ fn entity_foreign_keys_restrict_cascade_and_never_retarget_reused_slots() {
 #[test]
 fn symmetric_storage_has_two_logical_orientations_and_one_self_orientation() {
     let mut model = WorldModel::default();
-    let a = model.entities.spawn();
-    let b = model.entities.spawn();
+    let a = model.entities.spawn().unwrap();
+    let b = model.entities.spawn().unwrap();
     model
         .relations
         .register(
@@ -2865,7 +3117,7 @@ fn patch_algebra_is_base_relative_named_and_order_independent() {
     );
     assert_eq!(model, before);
 
-    let new_owner = model.entities.spawn();
+    let new_owner = model.entities.spawn().unwrap();
     model
         .apply_transaction(Transaction {
             operations: vec![
@@ -3055,7 +3307,190 @@ fn all_authoritative_rows_are_schema_validated_and_component_relation_failures_a
 }
 
 #[test]
-fn insertion_permutations_and_incremental_maintenance_match_full_recomputation() {
+fn component_writes_are_canonical_coalesced_and_conflict_atomically() {
+    let (mut seed, owner, _, _) = seed_ownership_model();
+    let standalone = seed.entities.spawn().unwrap();
+    seed.relations
+        .register(RelationSchema::new("Marker", vec![int_column("value")]))
+        .unwrap();
+
+    let write = |value: &str| PendingComponentWrite {
+        entity: EntityOperand::Existing(owner),
+        component: "Position".to_owned(),
+        value: FactValue::Text(value.to_owned()),
+    };
+    let mut forward = seed.clone();
+    forward
+        .apply_transaction(Transaction {
+            component_writes: vec![write("same"), write("same")],
+            ..Transaction::default()
+        })
+        .unwrap();
+    let mut reverse = seed.clone();
+    reverse
+        .apply_transaction(Transaction {
+            component_writes: vec![write("same"), write("same")]
+                .into_iter()
+                .rev()
+                .collect(),
+            ..Transaction::default()
+        })
+        .unwrap();
+    assert_eq!(forward, reverse);
+
+    for writes in [
+        vec![write("first"), write("second")],
+        vec![write("second"), write("first")],
+    ] {
+        let mut model = seed.clone();
+        let before = model.clone();
+        assert_eq!(
+            model.apply_transaction(Transaction {
+                spawn_handles: BTreeSet::from([7]),
+                despawns: vec![despawn(standalone, "despawn.standalone")],
+                component_writes: writes,
+                operations: vec![insert(pending_key("Marker", vec![int(1)]), "marker.insert",)],
+            }),
+            Err("component.write_conflict")
+        );
+        assert_eq!(model, before);
+    }
+
+    let mut candidate_local = seed.clone();
+    let before = candidate_local.clone();
+    assert_eq!(
+        candidate_local.apply_transaction(Transaction {
+            spawn_handles: BTreeSet::from([3]),
+            component_writes: vec![
+                PendingComponentWrite {
+                    entity: EntityOperand::Candidate(3),
+                    component: "Position".to_owned(),
+                    value: FactValue::Text("a".to_owned()),
+                },
+                PendingComponentWrite {
+                    entity: EntityOperand::Candidate(3),
+                    component: "Position".to_owned(),
+                    value: FactValue::Text("b".to_owned()),
+                },
+            ],
+            ..Transaction::default()
+        }),
+        Err("component.write_conflict")
+    );
+    assert_eq!(candidate_local, before);
+
+    let handles = candidate_local
+        .apply_transaction(Transaction {
+            spawn_handles: BTreeSet::from([4]),
+            component_writes: vec![
+                PendingComponentWrite {
+                    entity: EntityOperand::Candidate(4),
+                    component: "Position".to_owned(),
+                    value: FactValue::Text("same".to_owned()),
+                },
+                PendingComponentWrite {
+                    entity: EntityOperand::Candidate(4),
+                    component: "Position".to_owned(),
+                    value: FactValue::Text("same".to_owned()),
+                },
+            ],
+            ..Transaction::default()
+        })
+        .unwrap();
+    assert_eq!(
+        candidate_local
+            .components
+            .get(&(handles[&4], "Position".to_owned())),
+        Some(&FactValue::Text("same".to_owned()))
+    );
+}
+
+#[test]
+fn entity_allocator_is_total_retires_exhausted_slots_and_fails_atomically() {
+    let mut fresh = EntityTable {
+        next_slot: u32::MAX,
+        ..EntityTable::default()
+    };
+    assert_eq!(
+        fresh.spawn().unwrap(),
+        EntityRef {
+            slot: u32::MAX,
+            generation: 0,
+        }
+    );
+    assert_eq!(fresh.spawn(), Err("entity.id_space_exhausted"));
+
+    let mut reusable = EntityTable {
+        generations: BTreeMap::from([(2, u32::MAX), (7, 4)]),
+        free_slots: BTreeSet::from([2, 7]),
+        next_slot: 8,
+        ..EntityTable::default()
+    };
+    assert_eq!(
+        reusable.spawn().unwrap(),
+        EntityRef {
+            slot: 7,
+            generation: 5,
+        }
+    );
+    assert_eq!(reusable.retired_slots, BTreeSet::from([2]));
+
+    let mut exhausted = WorldModel::default();
+    exhausted
+        .relations
+        .register(RelationSchema::new("Marker", vec![int_column("value")]))
+        .unwrap();
+    exhausted.entities = EntityTable {
+        next_slot: u32::MAX,
+        fresh_slots_exhausted: true,
+        ..EntityTable::default()
+    };
+    let before = exhausted.clone();
+    assert_eq!(
+        exhausted.apply_transaction(Transaction {
+            spawn_handles: BTreeSet::from([1]),
+            component_writes: vec![PendingComponentWrite {
+                entity: EntityOperand::Candidate(1),
+                component: "Position".to_owned(),
+                value: FactValue::Int(1),
+            }],
+            operations: vec![insert(pending_key("Marker", vec![int(1)]), "marker.insert",)],
+            ..Transaction::default()
+        }),
+        Err("entity.id_space_exhausted")
+    );
+    assert_eq!(exhausted, before);
+
+    exhausted
+        .apply_transaction(Transaction {
+            operations: vec![insert(
+                pending_key("Marker", vec![int(2)]),
+                "marker.after.failure",
+            )],
+            ..Transaction::default()
+        })
+        .unwrap();
+    assert!(exhausted
+        .relations
+        .assertions
+        .contains_key(&FactKey::new("Marker", vec![FactValue::Int(2)],)));
+
+    let mut checkpoint_drift = before.clone();
+    checkpoint_drift.entities.retired_slots.insert(4);
+    assert_ne!(
+        operational_checkpoint_bytes(&before),
+        operational_checkpoint_bytes(&checkpoint_drift)
+    );
+    let mut fresh_capacity = before.clone();
+    fresh_capacity.entities.fresh_slots_exhausted = false;
+    assert_ne!(
+        operational_checkpoint_bytes(&before),
+        operational_checkpoint_bytes(&fresh_capacity)
+    );
+}
+
+#[test]
+fn insertion_permutations_and_affected_projection_match_full_recomputation() {
     let (seed, person, item_a, item_b) = seed_ownership_model();
     let mut forward = WorldModel {
         entities: seed.entities.clone(),
@@ -3116,7 +3551,8 @@ fn insertion_permutations_and_incremental_maintenance_match_full_recomputation()
         derive_all(&reverse.relations, &schemas, &rules, limits).unwrap()
     );
 
-    let mut incremental = DependencyMaintainer::new(forward, schemas, rules, limits).unwrap();
+    let mut projection =
+        AffectedRelationProjectionHarness::new(forward, schemas, rules, limits).unwrap();
     for transaction in [
         Transaction {
             operations: vec![remove(
@@ -3140,13 +3576,13 @@ fn insertion_permutations_and_incremental_maintenance_match_full_recomputation()
             ..Transaction::default()
         },
     ] {
-        incremental.apply(transaction).unwrap();
+        projection.apply(transaction).unwrap();
         assert_eq!(
-            incremental.derived,
+            projection.derived,
             derive_all(
-                &incremental.model.relations,
-                &incremental.derived_schemas,
-                &incremental.rules,
+                &projection.model.relations,
+                &projection.derived_schemas,
+                &projection.rules,
                 limits,
             )
             .unwrap()
@@ -3455,6 +3891,7 @@ fn semantic_wire_round_trips_while_portable_replay_binds_assertion_identity() {
             &semantic_before,
             &model.relations.schemas,
             &model.entities,
+            DecodeLimits::generous(),
         )
         .unwrap(),
         model.relations.assertions.keys().cloned().collect()
@@ -3514,9 +3951,9 @@ fn simultaneous_despawns_are_classified_as_one_set_before_any_cascade() {
                     .unique("source", &[usize::from(reverse_columns)]),
             )
             .unwrap();
-        let a = model.entities.spawn();
-        let b = model.entities.spawn();
-        let c = model.entities.spawn();
+        let a = model.entities.spawn().unwrap();
+        let b = model.entities.spawn().unwrap();
+        let c = model.entities.spawn().unwrap();
         let tuple = if reverse_columns {
             vec![existing(b), existing(a)]
         } else {
@@ -3638,8 +4075,8 @@ fn simultaneous_despawns_are_classified_as_one_set_before_any_cascade() {
             vec![entity_column("source").cascade(), entity_column("target")],
         ))
         .unwrap();
-    let source = inserted_then_despawned.entities.spawn();
-    let target = inserted_then_despawned.entities.spawn();
+    let source = inserted_then_despawned.entities.spawn().unwrap();
+    let target = inserted_then_despawned.entities.spawn().unwrap();
     let next_assertion = inserted_then_despawned.relations.next_assertion_id;
     inserted_then_despawned
         .apply_transaction(Transaction {
@@ -3662,10 +4099,10 @@ fn simultaneous_despawns_are_classified_as_one_set_before_any_cascade() {
 #[test]
 fn operational_state_binds_generations_assertion_allocator_and_restoration() {
     let mut generation_a = WorldModel::default();
-    let first = generation_a.entities.spawn();
+    let first = generation_a.entities.spawn().unwrap();
     generation_a.entities.despawn(first).unwrap();
     let mut generation_b = generation_a.clone();
-    let reused = generation_b.entities.spawn();
+    let reused = generation_b.entities.spawn().unwrap();
     generation_b.entities.despawn(reused).unwrap();
     assert_eq!(generation_a.entities.live, generation_b.entities.live);
     assert_eq!(
@@ -3680,7 +4117,10 @@ fn operational_state_binds_generations_assertion_allocator_and_restoration() {
     let state = OperationalRelationState::capture(&generation_a);
     let mut restored = state.restore(generation_a.relations.schemas.clone());
     let mut original = generation_a.clone();
-    assert_eq!(restored.entities.spawn(), original.entities.spawn());
+    assert_eq!(
+        restored.entities.spawn().unwrap(),
+        original.entities.spawn().unwrap()
+    );
 
     let mut assertion_a = WorldModel::default();
     assertion_a
@@ -3805,7 +4245,12 @@ fn schemas_and_semantic_wire_reject_ambiguous_or_noncanonical_input() {
     encode_fact_key(&mut duplicate, &a);
     encode_fact_key(&mut duplicate, &a);
     assert_eq!(
-        decode_semantic_relation_bytes(&duplicate, &schemas, &EntityTable::default()),
+        decode_semantic_relation_bytes(
+            &duplicate,
+            &schemas,
+            &EntityTable::default(),
+            DecodeLimits::generous(),
+        ),
         Err("wire.noncanonical_fact_order")
     );
     let mut out_of_order = b"rfc0003.semantic.v1".to_vec();
@@ -3813,7 +4258,12 @@ fn schemas_and_semantic_wire_reject_ambiguous_or_noncanonical_input() {
     encode_fact_key(&mut out_of_order, &b);
     encode_fact_key(&mut out_of_order, &a);
     assert_eq!(
-        decode_semantic_relation_bytes(&out_of_order, &schemas, &EntityTable::default()),
+        decode_semantic_relation_bytes(
+            &out_of_order,
+            &schemas,
+            &EntityTable::default(),
+            DecodeLimits::generous(),
+        ),
         Err("wire.noncanonical_fact_order")
     );
     let one_fact = |fact: &FactKey| {
@@ -3827,6 +4277,7 @@ fn schemas_and_semantic_wire_reject_ambiguous_or_noncanonical_input() {
             &one_fact(&FactKey::new("Unknown", vec![FactValue::Int(1)])),
             &schemas,
             &EntityTable::default(),
+            DecodeLimits::generous(),
         ),
         Err("wire.unknown_relation")
     );
@@ -3835,6 +4286,7 @@ fn schemas_and_semantic_wire_reject_ambiguous_or_noncanonical_input() {
             &one_fact(&FactKey::new("A", Vec::new())),
             &schemas,
             &EntityTable::default(),
+            DecodeLimits::generous(),
         ),
         Err("wire.relation_arity")
     );
@@ -3843,6 +4295,7 @@ fn schemas_and_semantic_wire_reject_ambiguous_or_noncanonical_input() {
             &one_fact(&FactKey::new("A", vec![FactValue::Text("1".to_owned())])),
             &schemas,
             &EntityTable::default(),
+            DecodeLimits::generous(),
         ),
         Err("wire.relation_type")
     );
@@ -3863,6 +4316,7 @@ fn schemas_and_semantic_wire_reject_ambiguous_or_noncanonical_input() {
             )),
             &schemas,
             &EntityTable::default(),
+            DecodeLimits::generous(),
         ),
         Err("wire.noncanonical_tuple")
     );
@@ -3878,6 +4332,7 @@ fn schemas_and_semantic_wire_reject_ambiguous_or_noncanonical_input() {
             )),
             &schemas,
             &EntityTable::default(),
+            DecodeLimits::generous(),
         ),
         Err("wire.entity_not_live")
     );
@@ -4449,7 +4904,7 @@ fn derivation_limits_bound_proofs_depth_supports_capabilities_and_bytes_atomical
             ..Transaction::default()
         })
         .unwrap();
-    let mut incremental = DependencyMaintainer::new(
+    let mut incremental = AffectedRelationProjectionHarness::new(
         incremental_model.clone(),
         schemas.clone(),
         marked_rules.clone(),
@@ -4601,8 +5056,8 @@ fn symmetric_endpoint_metadata_is_logically_symmetric() {
                 .symmetric(),
             )
             .unwrap();
-        let a = model.entities.spawn();
-        let b = model.entities.spawn();
+        let a = model.entities.spawn().unwrap();
+        let b = model.entities.spawn().unwrap();
         model
             .apply_transaction(Transaction {
                 operations: vec![insert(
@@ -4641,8 +5096,8 @@ fn symmetric_endpoint_metadata_is_logically_symmetric() {
                 .symmetric(),
             )
             .unwrap();
-        let a = model.entities.spawn();
-        let b = model.entities.spawn();
+        let a = model.entities.spawn().unwrap();
+        let b = model.entities.spawn().unwrap();
         let tuple = if reverse { (b, a) } else { (a, b) };
         model
             .apply_transaction(Transaction {
@@ -4676,7 +5131,7 @@ fn symmetric_endpoint_metadata_is_logically_symmetric() {
             .symmetric(),
         )
         .unwrap();
-    let entity = self_edge.entities.spawn();
+    let entity = self_edge.entities.spawn().unwrap();
     self_edge
         .apply_transaction(Transaction {
             operations: vec![insert(
@@ -4705,7 +5160,7 @@ fn final_candidate_precedes_uniqueness_and_assertion_allocation() {
             vec![entity_column("entity").cascade()],
         ))
         .unwrap();
-    let doomed = transient.entities.spawn();
+    let doomed = transient.entities.spawn().unwrap();
     transient.relations.next_assertion_id = u64::MAX;
     transient
         .apply_transaction(Transaction {
@@ -4748,14 +5203,14 @@ fn final_candidate_precedes_uniqueness_and_assertion_allocation() {
                 .unique("item", &[1]),
             )
             .unwrap();
-        let first_owner = model.entities.spawn();
-        let second_owner = model.entities.spawn();
+        let first_owner = model.entities.spawn().unwrap();
+        let second_owner = model.entities.spawn().unwrap();
         let (alice, bob) = if reverse_owner_ids {
             (second_owner, first_owner)
         } else {
             (first_owner, second_owner)
         };
-        let sword = model.entities.spawn();
+        let sword = model.entities.spawn().unwrap();
         model
             .apply_transaction(Transaction {
                 operations: vec![insert(
@@ -4793,9 +5248,9 @@ fn final_candidate_precedes_uniqueness_and_assertion_allocation() {
             .unique("owner", &[0]),
         )
         .unwrap();
-    let owner = one_cascades.entities.spawn();
-    let retained_item = one_cascades.entities.spawn();
-    let doomed_item = one_cascades.entities.spawn();
+    let owner = one_cascades.entities.spawn().unwrap();
+    let retained_item = one_cascades.entities.spawn().unwrap();
+    let doomed_item = one_cascades.entities.spawn().unwrap();
     one_cascades
         .apply_transaction(Transaction {
             operations: vec![insert(
@@ -5085,7 +5540,7 @@ fn intermediate_work_limits_cover_no_match_text_groups_and_proof_products() {
         .unwrap();
     let mut work_limit = DerivationLimits::generous();
     work_limit.max_join_attempts = 64;
-    let mut incremental = DependencyMaintainer::new(
+    let mut incremental = AffectedRelationProjectionHarness::new(
         incremental_model.clone(),
         schemas.clone(),
         vec![no_match.clone()],
@@ -5237,4 +5692,175 @@ fn canonical_rule_plans_make_resource_failures_permutation_invariant() {
         ),
         Err("derivation.relation_namespace_collision")
     );
+}
+
+#[test]
+fn sealed_rule_plan_limits_bound_static_predicate_and_dependency_work() {
+    let (model, _, _, _) = seed_ownership_model();
+    let schemas = derived_schemas();
+    let rules = ownership_rules();
+    let canonical_bytes = rules
+        .iter()
+        .map(|rule| {
+            let encoded = rule.canonical_bytes();
+            assert_eq!(rule.canonical_len().unwrap(), encoded.len());
+            encoded.len()
+        })
+        .sum::<usize>();
+
+    let mut exact = DerivationLimits::generous();
+    exact.rule_plans.max_rules = rules.len();
+    exact.rule_plans.max_atoms_per_rule = rules.iter().map(|rule| rule.atoms.len()).max().unwrap();
+    exact.rule_plans.max_predicates_per_rule = rules
+        .iter()
+        .map(|rule| rule.predicates.len())
+        .max()
+        .unwrap();
+    exact.rule_plans.max_terms = rules
+        .iter()
+        .map(|rule| {
+            rule.head.len()
+                + rule
+                    .atoms
+                    .iter()
+                    .map(|atom| atom.terms.len())
+                    .sum::<usize>()
+        })
+        .sum();
+    exact.rule_plans.max_canonical_plan_bytes = canonical_bytes;
+    exact.rule_plans.max_dependency_edges = rules
+        .iter()
+        .flat_map(|rule| {
+            rule.atoms
+                .iter()
+                .map(move |atom| (&rule.head_relation, &atom.relation))
+        })
+        .collect::<BTreeSet<_>>()
+        .len();
+    assert!(derive_all(&model.relations, &schemas, &rules, exact).is_ok());
+
+    for (constrained, error) in [
+        (
+            {
+                let mut value = exact;
+                value.rule_plans.max_rules -= 1;
+                value
+            },
+            "derivation.rule_limit",
+        ),
+        (
+            {
+                let mut value = exact;
+                value.rule_plans.max_atoms_per_rule = 0;
+                value
+            },
+            "derivation.atom_limit",
+        ),
+        (
+            {
+                let mut value = exact;
+                value.rule_plans.max_predicates_per_rule = 0;
+                value
+            },
+            "derivation.predicate_limit",
+        ),
+        (
+            {
+                let mut value = exact;
+                value.rule_plans.max_terms = 0;
+                value
+            },
+            "derivation.term_limit",
+        ),
+        (
+            {
+                let mut value = exact;
+                value.rule_plans.max_canonical_plan_bytes -= 1;
+                value
+            },
+            "derivation.rule_plan_byte_limit",
+        ),
+        (
+            {
+                let mut value = exact;
+                value.rule_plans.max_dependency_edges = 0;
+                value
+            },
+            "derivation.dependency_edge_limit",
+        ),
+    ] {
+        assert_eq!(
+            derive_all(&model.relations, &schemas, &rules, constrained),
+            Err(error)
+        );
+    }
+}
+
+#[test]
+fn semantic_wire_decode_limits_reject_before_oversized_retention() {
+    let schema = RelationSchema::new("Textual", vec![ColumnSchema::new("value", ValueKind::Text)]);
+    let schemas = BTreeMap::from([("Textual".to_owned(), schema)]);
+    let fact = FactKey::new("Textual", vec![FactValue::Text("payload".to_owned())]);
+    let mut bytes = b"rfc0003.semantic.v1".to_vec();
+    write_u64(&mut bytes, 1);
+    encode_fact_key(&mut bytes, &fact);
+    let decoded_bytes = std::mem::size_of::<FactKey>()
+        + 2 * std::mem::size_of::<String>()
+        + std::mem::size_of::<FactValue>()
+        + "Textual".len()
+        + "payload".len();
+    let exact = DecodeLimits {
+        max_input_bytes: bytes.len(),
+        max_facts: 1,
+        max_values: 1,
+        max_text_bytes: "Textual".len() + "payload".len(),
+        max_decoded_bytes: decoded_bytes,
+    };
+    assert_eq!(
+        decode_semantic_relation_bytes(&bytes, &schemas, &EntityTable::default(), exact).unwrap(),
+        BTreeSet::from([fact])
+    );
+
+    for (limits, error) in [
+        (
+            DecodeLimits {
+                max_input_bytes: bytes.len() - 1,
+                ..exact
+            },
+            "wire.input_byte_limit",
+        ),
+        (
+            DecodeLimits {
+                max_facts: 0,
+                ..exact
+            },
+            "wire.fact_limit",
+        ),
+        (
+            DecodeLimits {
+                max_values: 0,
+                ..exact
+            },
+            "wire.value_limit",
+        ),
+        (
+            DecodeLimits {
+                max_text_bytes: exact.max_text_bytes - 1,
+                ..exact
+            },
+            "wire.text_byte_limit",
+        ),
+        (
+            DecodeLimits {
+                max_decoded_bytes: decoded_bytes - 1,
+                ..exact
+            },
+            "wire.decoded_byte_limit",
+        ),
+    ] {
+        assert_eq!(
+            decode_semantic_relation_bytes(&bytes, &schemas, &EntityTable::default(), limits,),
+            Err(error)
+        );
+    }
 }

@@ -1,8 +1,9 @@
-# Facts, Relations, and Derived Facts (Draft)
+# Facts, Relations, and Derived Facts
 
-RFC-0003 is the next experimental World-Law Programming layer. It is a design
-and executable-reference milestone today; relation syntax is not yet accepted
-by the compiler.
+RFC-0003 is the accepted semantic contract for RAD's next World-Law
+Programming layer. Its parser and runtime are not implemented yet; acceptance
+means the language work now has a reviewed executable oracle rather than that
+relation syntax is already accepted by the compiler.
 
 The intended model is:
 
@@ -36,7 +37,7 @@ tests prove it produces the same tuples and canonical proof alternatives.
 Derived provenance must explain a result through its rule and support facts
 back to the causal settlements that established those facts.
 
-The Draft now fixes the identity-sensitive v0 rules:
+The accepted v0 contract fixes the identity-sensitive rules:
 
 - an `entity` column is a live generational foreign key, with schema-selected
   `on delete restrict` or `on delete cascade` behavior;
@@ -44,6 +45,9 @@ The Draft now fixes the identity-sensitive v0 rules:
   so mixed restrict/cascade outcomes cannot depend on entity order;
 - candidate-local spawn handles are resolved deterministically before relation
   validation;
+- component writes are normalized by resolved entity and component identity;
+  identical values coalesce and different values reject the entire shared
+  candidate instead of selecting a last writer;
 - a symmetric relation stores one canonical row but queries as both logical
   orientations (one for a self-edge), and its two endpoints have identical
   deletion semantics;
@@ -62,8 +66,12 @@ The Draft now fixes the identity-sensitive v0 rules:
   branch. Hidden alternatives reveal neither identity, count, nor ordering at
   any downstream join or aggregate;
 - operational replay identity includes entity generations and the assertion
-  allocator, while schema-aware semantic wire validates canonical fact keys and
-  live generational entity references;
+  allocator, ordered retired slots, and fresh-space exhaustion; allocation
+  retires generation-exhausted slots and returns a typed
+  `entity.id_space_exhausted` instead of panicking;
+- bounded schema-aware semantic wire validates canonical fact-key sets and live
+  generational entity references; relation-wide uniqueness is checked when
+  decoded rows enter an authoritative candidate;
 - bindings, facts, proof branches, support nodes, depth, capability
   alternatives, and canonical bytes are deterministically bounded before
   retention;
@@ -72,11 +80,16 @@ The Draft now fixes the identity-sensitive v0 rules:
 - globally unique typed rule plans, positive atoms, and predicates use
   canonical evaluation order, so declaration or module order cannot select a
   different typed resource failure.
+- a sealed-plan profile bounds rules, atoms, predicates, terms, dependency
+  edges, and canonical plan bytes before evaluation.
 
 The executable oracle validates rows through generic typed schemas, preserves
 assertion ancestry across deletion and reinsertion, rejects unknown, ill-typed,
 dead, duplicate, or noncanonical wire rows, and derives checkpoint encoding and
-restoration from one operational state inventory. It remains deliberately
+restoration from one operational state inventory. Its affected-relation
+projection harness validates dependency closure and atomicity using the full
+reference result; genuine indexed delta maintenance remains a later,
+independent differential implementation. The oracle remains deliberately
 independent of the parser and VM.
 
 V0 intentionally excludes component-backed derivation views, recursion,
@@ -85,5 +98,5 @@ Any later runtime will provide generic relation, join, aggregate, indexing,
 transaction, and provenance mechanisms; domain models remain ordinary RAD
 code.
 
-See [RFC-0003](../rfcs/0003-first-class-relations.md) for the normative Draft
+See [RFC-0003](../rfcs/0003-first-class-relations.md) for the accepted contract
 and the executable oracle in `core/vm/tests/rfc0003_reference.rs`.
