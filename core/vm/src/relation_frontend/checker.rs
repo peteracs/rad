@@ -66,7 +66,38 @@ pub(crate) fn check_and_seal(
     }
 
     let derived_heads = rules_by_head.keys().cloned().collect::<BTreeSet<_>>();
-    let unknown = raw
+    // Operation target kind is knowable before rule inference. Classify it in
+    // the same diagnostic domain as unknown rule atoms so the explicit global
+    // priority is real across checker phases: a write to a derived head beats
+    // a lower-priority unknown atom even when the atom is visited first.
+    let operation_target = raw
+        .operations
+        .iter()
+        .zip(&raw.operation_spans)
+        .filter_map(|(operation, span)| {
+            let code = if derived_heads.contains(&operation.relation) {
+                DiagnosticCode::OperationTargetsDerived
+            } else if !schemas.contains_key(&operation.relation) {
+                DiagnosticCode::UnknownRelation
+            } else {
+                return None;
+            };
+            Some(
+                diagnostic(
+                    code,
+                    &operation.relation,
+                    if code == DiagnosticCode::OperationTargetsDerived {
+                        "authoritative operations cannot target a derived relation"
+                    } else {
+                        "operation names an unknown relation"
+                    },
+                )
+                .at(*span)
+                .owned(&operation.owner),
+            )
+        })
+        .min();
+    let unknown_atom = raw
         .rules
         .iter()
         .flat_map(|rule| rule.ast.atoms.iter().map(move |atom| (rule, atom)))
@@ -83,7 +114,7 @@ pub(crate) fn check_and_seal(
             .owned(&rule.module_id)
         })
         .min();
-    if let Some(error) = unknown {
+    if let Some(error) = operation_target.into_iter().chain(unknown_atom).min() {
         return Err(vec![error]);
     }
     let mut edges = BTreeSet::<(String, String)>::new();

@@ -11,7 +11,7 @@ use sha2::{Digest, Sha256};
 
 pub const COMPILER_SEMANTIC_VERSION: u32 = 1;
 pub const BYTECODE_SEMANTIC_VERSION: u32 = 1;
-pub const PROGRAM_MANIFEST_VERSION: u32 = 2;
+pub const PROGRAM_MANIFEST_VERSION: u32 = 3;
 
 /// Immutable canonical description of the executable program installed in a
 /// VM. Runtime values, handler `fired` bits, and other attempt state belong to
@@ -24,11 +24,16 @@ pub struct CompiledProgramManifest {
 
 impl CompiledProgramManifest {
     pub(crate) fn capture(vm: &VM) -> Result<Self, crate::vm::replay_clone::FingerprintError> {
-        let mut out = CanonicalWriter::with_domain("rad-compiled-program-manifest/v2");
+        let mut out = CanonicalWriter::with_domain("rad-compiled-program-manifest/v3");
         out.u32(PROGRAM_MANIFEST_VERSION);
         out.u32(COMPILER_SEMANTIC_VERSION);
         out.u32(BYTECODE_SEMANTIC_VERSION);
         out.optional_text(vm.program_source_identity.as_deref());
+        out.bool(vm.relation_runtime_manifest.is_some());
+        if let Some(manifest) = &vm.relation_runtime_manifest {
+            out.bytes(manifest.canonical_bytes());
+            out.bytes(&manifest.digest());
+        }
 
         // Exact global name -> slot mapping. Slot order is semantic because
         // call_global resolves a name to an index before reading globals.

@@ -318,7 +318,12 @@ impl Archetype {
 
 pub struct World {
     next_id: u32,
+    fresh_ids_exhausted: bool,
     free_ids: Vec<u32>,
+    /// Current committed lifetime for every allocated entity slot. Relation
+    /// values bind `(slot, generation)` so a recycled ECS id cannot silently
+    /// retarget an authoritative fact.
+    generations: Arc<HashMap<u32, u32>>,
     name_to_id: Arc<HashMap<String, u32>>,
     id_to_name: Arc<HashMap<u32, String>>,
     type_registry: Arc<HashMap<String, TypeId>>,
@@ -329,6 +334,7 @@ pub struct World {
     indexed_fields: Arc<HashMap<String, HashSet<String>>>,
     indices: Arc<HashMap<IndexKey, Vec<u32>>>,
     resources: Arc<ResourceMap>,
+    authoritative_relations: crate::relation_runtime::AuthoritativeRelationState,
 }
 
 impl World {
@@ -348,7 +354,9 @@ impl World {
     pub fn new() -> Self {
         World {
             next_id: 0,
+            fresh_ids_exhausted: false,
             free_ids: Vec::new(),
+            generations: Arc::new(HashMap::new()),
             name_to_id: Arc::new(HashMap::new()),
             id_to_name: Arc::new(HashMap::new()),
             type_registry: Arc::new(HashMap::new()),
@@ -359,6 +367,7 @@ impl World {
             indexed_fields: Arc::new(HashMap::new()),
             indices: Arc::new(HashMap::new()),
             resources: Arc::new(ResourceMap::default()),
+            authoritative_relations: crate::relation_runtime::AuthoritativeRelationState::default(),
         }
     }
 
@@ -456,18 +465,39 @@ impl World {
         self.name_to_id.get(name).copied()
     }
 
-    pub fn spawn_entity(&mut self, name: Option<&str>) -> u32 {
-        let eid = match self.free_ids.pop() {
-            Some(reused) => reused,
-            None => {
-                let fresh = self.next_id;
-                self.next_id = self
-                    .next_id
-                    .checked_add(1)
-                    .expect("Entity ID overflow: exceeded 2^32 entities");
-                fresh
+    pub fn try_spawn_entity(&mut self, name: Option<&str>) -> Result<u32, &'static str> {
+        let (eid, generation) = loop {
+            let reusable_index = self
+                .free_ids
+                .iter()
+                .enumerate()
+                .min_by_key(|(_, id)| **id)
+                .map(|(index, _)| index);
+            let reusable = reusable_index.map(|index| self.free_ids.swap_remove(index));
+            match reusable {
+                Some(reused) => {
+                    let previous = self.generations.get(&reused).copied().unwrap_or(0);
+                    if let Some(generation) = previous.checked_add(1) {
+                        break (reused, generation);
+                    }
+                    // An exhausted slot is retired permanently. Continue in
+                    // exact allocator order instead of wrapping its lifetime.
+                }
+                None => {
+                    if self.fresh_ids_exhausted {
+                        return Err("entity.id_space_exhausted");
+                    }
+                    let fresh = self.next_id;
+                    if fresh == u32::MAX {
+                        self.fresh_ids_exhausted = true;
+                    } else {
+                        self.next_id = fresh + 1;
+                    }
+                    break (fresh, 0);
+                }
             }
         };
+        Arc::make_mut(&mut self.generations).insert(eid, generation);
         let aid = self.get_or_create_archetype(Vec::new());
         self.archetypes[aid as usize].push_entity(eid, HashMap::new());
         Arc::make_mut(&mut self.entity_archetype).insert(eid, aid);
@@ -481,13 +511,71 @@ impl World {
                 Arc::make_mut(&mut self.id_to_name).insert(eid, n.to_string());
             }
         }
-        eid
+        Ok(eid)
+    }
+
+    pub fn spawn_entity(&mut self, name: Option<&str>) -> u32 {
+        self.try_spawn_entity(name)
+            .expect("Entity ID overflow: exceeded 2^32 entity lifetimes")
     }
 
     /// Insert an entity under a **caller-chosen id** (world merge, #7).
     /// Whether `eid` is currently live in the world.
     pub fn entity_exists(&self, eid: u32) -> bool {
         self.entity_archetype.contains_key(&eid)
+    }
+
+    pub fn entity_ref(&self, eid: u32) -> Option<crate::relation_runtime::EntityRef> {
+        self.entity_exists(eid)
+            .then(|| crate::relation_runtime::EntityRef {
+                slot: eid,
+                generation: self.generations.get(&eid).copied().unwrap_or(0),
+            })
+    }
+
+    pub fn relation_state(&self) -> &crate::relation_runtime::AuthoritativeRelationState {
+        &self.authoritative_relations
+    }
+
+    pub fn install_relation_manifest(
+        &mut self,
+        manifest: std::sync::Arc<crate::relation_runtime::RelationRuntimeManifest>,
+        expected: crate::relation_frontend::FrontendManifestDigest,
+    ) -> crate::relation_runtime::RelationRuntimeResult<()> {
+        self.authoritative_relations
+            .install_manifest(manifest, expected)
+    }
+
+    pub(crate) fn live_relation_entities(
+        &self,
+    ) -> std::collections::BTreeSet<crate::relation_runtime::EntityRef> {
+        self.entity_archetype
+            .keys()
+            .filter_map(|id| self.entity_ref(*id))
+            .collect()
+    }
+
+    pub(crate) fn prepare_relation_candidate(
+        &self,
+        transaction: &crate::relation_runtime::RelationTransaction,
+        live_after: std::collections::BTreeSet<crate::relation_runtime::EntityRef>,
+        handles: std::collections::BTreeMap<u32, crate::relation_runtime::EntityRef>,
+    ) -> crate::relation_runtime::RelationRuntimeResult<crate::relation_runtime::RelationCandidate>
+    {
+        self.authoritative_relations.prepare_candidate(
+            transaction,
+            &crate::relation_runtime::CandidateEntityState {
+                live_after,
+                candidate_handles: handles,
+            },
+        )
+    }
+
+    pub(crate) fn adopt_relation_candidate(
+        &mut self,
+        candidate: crate::relation_runtime::RelationCandidate,
+    ) -> Vec<crate::relation_runtime::FactChange> {
+        self.authoritative_relations.adopt(candidate)
     }
 
     /// Forks assign ids independently; when merging, entities that exist in
@@ -498,16 +586,29 @@ impl World {
         if self.entity_archetype.contains_key(&eid) {
             return false;
         }
-        if eid >= self.next_id {
+        let Some(generation) = self
+            .generations
+            .get(&eid)
+            .copied()
+            .map_or(Some(0), |generation| generation.checked_add(1))
+        else {
+            return false;
+        };
+        if self.fresh_ids_exhausted {
+            self.free_ids.retain(|&f| f != eid);
+        } else if eid >= self.next_id {
             for skipped in self.next_id..eid {
                 self.free_ids.push(skipped);
             }
-            self.next_id = eid
-                .checked_add(1)
-                .expect("Entity ID overflow: exceeded 2^32 entities");
+            if eid == u32::MAX {
+                self.fresh_ids_exhausted = true;
+            } else {
+                self.next_id = eid + 1;
+            }
         } else {
             self.free_ids.retain(|&f| f != eid);
         }
+        Arc::make_mut(&mut self.generations).insert(eid, generation);
         let aid = self.get_or_create_archetype(Vec::new());
         self.archetypes[aid as usize].push_entity(eid, HashMap::new());
         Arc::make_mut(&mut self.entity_archetype).insert(eid, aid);
@@ -529,16 +630,29 @@ impl World {
         if self.entity_archetype.contains_key(&eid) {
             return false;
         }
-        if eid >= self.next_id {
+        let Some(generation) = self
+            .generations
+            .get(&eid)
+            .copied()
+            .map_or(Some(0), |generation| generation.checked_add(1))
+        else {
+            return false;
+        };
+        if self.fresh_ids_exhausted {
+            self.free_ids.retain(|&f| f != eid);
+        } else if eid >= self.next_id {
             for skipped in self.next_id..eid {
                 self.free_ids.push(skipped);
             }
-            self.next_id = eid
-                .checked_add(1)
-                .expect("Entity ID overflow: exceeded 2^32 entities");
+            if eid == u32::MAX {
+                self.fresh_ids_exhausted = true;
+            } else {
+                self.next_id = eid + 1;
+            }
         } else {
             self.free_ids.retain(|&f| f != eid);
         }
+        Arc::make_mut(&mut self.generations).insert(eid, generation);
 
         let mut by_tid: HashMap<TypeId, ComponentData> = HashMap::with_capacity(components.len());
         for mut data in components {
@@ -627,6 +741,7 @@ impl World {
             }
         }
         self.next_id = next_id;
+        self.fresh_ids_exhausted = false;
         self.free_ids = free_ids;
         Ok(())
     }
@@ -747,7 +862,7 @@ impl World {
         true
     }
 
-    pub fn destroy_entity(&mut self, eid: u32) -> bool {
+    fn destroy_entity_storage(&mut self, eid: u32) -> bool {
         let Some(&aid) = self.entity_archetype.get(&eid) else {
             return false;
         };
@@ -763,6 +878,138 @@ impl World {
         }
         self.free_ids.push(eid);
         true
+    }
+
+    pub fn destroy_entity(&mut self, eid: u32) -> bool {
+        let Some(entity) = self.entity_ref(eid) else {
+            return false;
+        };
+        if self.authoritative_relations.manifest().is_none() {
+            return self.destroy_entity_storage(eid);
+        }
+        let transaction = crate::relation_runtime::RelationTransaction {
+            spawns: Vec::new(),
+            component_writes: Vec::new(),
+            operations: Vec::new(),
+            despawns: vec![crate::relation_runtime::PendingDespawn {
+                entity,
+                metadata: crate::relation_runtime::OperationMetadata::cause("entity.despawn"),
+            }],
+        };
+        self.apply_relation_transaction(&transaction).is_ok()
+    }
+
+    /// Apply authoritative relation operations and entity deletion as one
+    /// copy-on-write world candidate. A relation failure leaves ECS rows,
+    /// assertion identities, indexes, and provenance untouched.
+    pub fn apply_relation_transaction(
+        &mut self,
+        transaction: &crate::relation_runtime::RelationTransaction,
+    ) -> crate::relation_runtime::RelationRuntimeResult<Vec<crate::relation_runtime::FactChange>>
+    {
+        // Construct the complete ECS + relation candidate in an isolated CoW
+        // world. No allocator, component, entity, assertion, or index state is
+        // adopted unless every phase succeeds.
+        let mut candidate_world = World::new();
+        candidate_world.restore(self.snapshot());
+        let mut handles = std::collections::BTreeMap::new();
+        let mut spawns = transaction.spawns.clone();
+        spawns.sort_by_key(|spawn| spawn.handle);
+        for pair in spawns.windows(2) {
+            if pair[0].handle == pair[1].handle {
+                return Err(crate::relation_runtime::RelationRuntimeError {
+                    code: "entity.duplicate_candidate_handle",
+                    detail: pair[0].handle.to_string(),
+                });
+            }
+        }
+        for spawn in spawns {
+            let slot = candidate_world
+                .try_spawn_entity(spawn.name.as_deref())
+                .map_err(|code| crate::relation_runtime::RelationRuntimeError {
+                    code,
+                    detail: "candidate entity allocation failed".into(),
+                })?;
+            handles.insert(
+                spawn.handle,
+                candidate_world
+                    .entity_ref(slot)
+                    .expect("new entity is live"),
+            );
+        }
+
+        let mut component_writes = std::collections::BTreeMap::<
+            (crate::relation_runtime::EntityRef, String),
+            crate::value::ComponentData,
+        >::new();
+        for write in &transaction.component_writes {
+            let entity = match write.entity {
+                crate::relation_runtime::EntityOperand::Existing(entity) => entity,
+                crate::relation_runtime::EntityOperand::Candidate(handle) => *handles
+                    .get(&handle)
+                    .ok_or_else(|| crate::relation_runtime::RelationRuntimeError {
+                        code: "entity.unknown_candidate_handle",
+                        detail: handle.to_string(),
+                    })?,
+            };
+            if candidate_world.entity_ref(entity.slot) != Some(entity) {
+                return Err(crate::relation_runtime::RelationRuntimeError {
+                    code: "component.entity_not_live",
+                    detail: format!("{}:{}", entity.slot, entity.generation),
+                });
+            }
+            let key = (entity, write.component.type_name.clone());
+            match component_writes.get(&key) {
+                Some(existing) if existing != &write.component => {
+                    return Err(crate::relation_runtime::RelationRuntimeError {
+                        code: "component.write_conflict",
+                        detail: format!("{}:{}::{}", entity.slot, entity.generation, key.1),
+                    });
+                }
+                Some(_) => {}
+                None => {
+                    component_writes.insert(key, write.component.clone());
+                }
+            }
+        }
+        for ((entity, _), component) in component_writes {
+            if !candidate_world.add_component(entity.slot, component) {
+                return Err(crate::relation_runtime::RelationRuntimeError {
+                    code: "component.write_failed",
+                    detail: format!("{}:{}", entity.slot, entity.generation),
+                });
+            }
+        }
+
+        let mut live_after = candidate_world.live_relation_entities();
+        let despawn_entities = transaction
+            .despawns
+            .iter()
+            .map(|despawn| despawn.entity)
+            .collect::<std::collections::BTreeSet<_>>();
+        for entity in &despawn_entities {
+            if !live_after.remove(entity) {
+                return Err(crate::relation_runtime::RelationRuntimeError {
+                    code: "entity.not_live",
+                    detail: format!(
+                        "{}:{} is not a live entity lifetime",
+                        entity.slot, entity.generation
+                    ),
+                });
+            }
+        }
+        let candidate =
+            candidate_world.prepare_relation_candidate(transaction, live_after, handles)?;
+        for entity in despawn_entities {
+            // Exact lifetime membership was checked above; the raw slot is
+            // now safe to remove only after the complete relation candidate
+            // has passed restrict/cascade, foreign-key, and unique checks.
+            let removed = candidate_world.destroy_entity_storage(entity.slot);
+            debug_assert!(removed);
+        }
+        let changes = candidate_world.adopt_relation_candidate(candidate);
+        self.restore(candidate_world.snapshot());
+        Ok(changes)
     }
 
     pub fn has_component(&self, eid: u32, ctype: &str) -> bool {
@@ -1119,7 +1366,9 @@ fn dump_world_json(
 #[derive(Clone)]
 pub struct WorldSnapshot {
     pub next_id: u32,
+    pub fresh_ids_exhausted: bool,
     pub free_ids: Vec<u32>,
+    pub generations: Arc<HashMap<u32, u32>>,
     pub name_to_id: Arc<HashMap<String, u32>>,
     pub id_to_name: Arc<HashMap<u32, String>>,
     pub type_registry: Arc<HashMap<String, TypeId>>,
@@ -1130,6 +1379,7 @@ pub struct WorldSnapshot {
     indexed_fields: Arc<HashMap<String, HashSet<String>>>,
     indices: Arc<HashMap<IndexKey, Vec<u32>>>,
     resources: Arc<ResourceMap>,
+    authoritative_relations: crate::relation_runtime::AuthoritativeRelationState,
     /// In-flight events at capture time: `(event, payload, trace_id)`.
     /// Events are program state — a snapshot that drops them is not a
     /// snapshot. Payloads are persisted on capture. `fork()` fills this,
@@ -1243,11 +1493,24 @@ impl WorldSnapshot {
             }
         }
 
-        out.text("rad-operational-world/v1");
+        out.text("rad-operational-world/v2");
         out.u32(self.next_id);
+        out.bool(self.fresh_ids_exhausted);
         out.usize(self.free_ids.len());
         for id in &self.free_ids {
             out.u32(*id);
+        }
+        let mut generations = self.generations.iter().collect::<Vec<_>>();
+        generations.sort_by_key(|(slot, _)| **slot);
+        out.usize(generations.len());
+        for (slot, generation) in generations {
+            out.u32(*slot);
+            out.u32(*generation);
+        }
+        let relation_bytes = self.authoritative_relations.operational_checkpoint_bytes();
+        out.usize(relation_bytes.len());
+        for byte in relation_bytes {
+            out.byte(byte);
         }
 
         let mut names = self.name_to_id.iter().collect::<Vec<_>>();
@@ -2000,7 +2263,9 @@ impl World {
     pub fn snapshot(&self) -> WorldSnapshot {
         WorldSnapshot {
             next_id: self.next_id,
+            fresh_ids_exhausted: self.fresh_ids_exhausted,
             free_ids: self.free_ids.clone(),
+            generations: Arc::clone(&self.generations),
             name_to_id: Arc::clone(&self.name_to_id),
             id_to_name: Arc::clone(&self.id_to_name),
             type_registry: Arc::clone(&self.type_registry),
@@ -2011,6 +2276,7 @@ impl World {
             indexed_fields: Arc::clone(&self.indexed_fields),
             indices: Arc::clone(&self.indices),
             resources: Arc::clone(&self.resources),
+            authoritative_relations: self.authoritative_relations.clone(),
             // Events live in the VM, not the World; the VM attaches them
             // (`VM::snapshot_with_events`) wherever in-flight state matters.
             events: Arc::new(Vec::new()),
@@ -2028,7 +2294,9 @@ impl World {
         // boundary, not by `World`.
         let WorldSnapshot {
             next_id,
+            fresh_ids_exhausted,
             free_ids,
+            generations,
             name_to_id,
             id_to_name,
             type_registry,
@@ -2039,6 +2307,7 @@ impl World {
             indexed_fields,
             indices,
             resources,
+            authoritative_relations,
             events: _,
             emit_ids: _,
             delayed: _,
@@ -2046,7 +2315,9 @@ impl World {
             rollout_seed: _,
         } = snapshot;
         self.next_id = next_id;
+        self.fresh_ids_exhausted = fresh_ids_exhausted;
         self.free_ids = free_ids;
+        self.generations = generations;
         self.name_to_id = name_to_id;
         self.id_to_name = id_to_name;
         self.type_registry = type_registry;
@@ -2057,6 +2328,7 @@ impl World {
         self.indexed_fields = indexed_fields;
         self.indices = indices;
         self.resources = resources;
+        self.authoritative_relations = authoritative_relations;
     }
 }
 

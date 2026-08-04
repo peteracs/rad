@@ -35,3 +35,5 @@ mod identity_replay_and_deletion;
 mod layout;
 #[path = "rfc0003_reference/tests/plan_and_decode.rs"]
 mod plan_and_decode;
+#[path = "rfc0003_reference/tests/runtime_differential.rs"]
+mod runtime_differential;

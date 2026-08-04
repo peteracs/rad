@@ -638,6 +638,18 @@ derive B(value)
 }
 
 #[test]
+fn derived_operation_beats_lower_priority_unknown_rule_atom() {
+    let source = r#"
+relation Base(value: int)
+derive Derived(value)
+    when Missing(value)
+Insert(Derived, (1))
+"#;
+    let error = compile(source, &enabled()).unwrap_err().remove(0);
+    assert_eq!(error.code, DiagnosticCode::OperationTargetsDerived);
+}
+
+#[test]
 fn every_relation_frontend_source_file_stays_below_one_thousand_lines() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/relation_frontend");
     for entry in std::fs::read_dir(root).unwrap() {

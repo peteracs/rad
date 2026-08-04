@@ -3,8 +3,10 @@
 RFC-0003 is the accepted semantic contract for RAD's next World-Law
 Programming layer. Its bounded experimental front end now parses, checks,
 formats, and seals relation declarations and derivation rules. The
-authoritative relation store and derived-fact runtime are not implemented yet;
-front-end acceptance does not make relation programs executable.
+authoritative ordered-map store now executes `Insert`, `Remove`, and
+`ReplaceBy` as atomic candidate patches. The derived-fact runtime is not
+implemented yet, so accepted rules are sealed program input but are not yet
+evaluated.
 
 Check a source file without installing runtime behavior:
 
@@ -41,8 +43,9 @@ derive TotalWeight(person, sum(weight))
      and ItemWeight(item, weight)
 ```
 
-The experimental front end also checks authoritative operation shapes without
-executing them:
+The experimental front end checks authoritative operation shapes, and an
+embedding can install the resulting immutable manifest and execute the ground
+operation batch through `VM::apply_frontend_relation_operations`:
 
 ```rad
 Insert(Owns, (alice, sword))
@@ -173,5 +176,14 @@ code.
 
 See [RFC-0003](../rfcs/0003-first-class-relations.md) for the accepted contract
 and the executable oracle in `core/vm/tests/rfc0003_reference.rs`. The
-production front end lives in `core/vm/src/relation_frontend/`; it deliberately
-has no path to mutate a VM or relation store.
+production front end lives in `core/vm/src/relation_frontend/`. The separate
+`core/vm/src/relation_runtime/` consumes only its sealed artifacts; relation
+rows, assertion lifetimes, unique indexes, entity generations, and manifest
+identity ride the same `WorldSnapshot` inventory as ECS state.
+
+The embedding transaction may also carry candidate-local spawns and component
+writes. Candidate handles resolve before schema validation; duplicate component
+writes coalesce only when their values agree. Any relation, foreign-key,
+uniqueness, component, or allocator failure discards the complete candidate.
+The current runtime is intentionally an ordered-map reference implementation;
+it does not evaluate `derive` rules yet.

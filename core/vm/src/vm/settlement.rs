@@ -143,6 +143,7 @@ pub(crate) struct SettlementContext {
     pub(crate) origin: crate::causality::Cause,
     pub(crate) proposals: Vec<Proposal>,
     pub(crate) patches: Vec<ResolutionPatch>,
+    pub(crate) relation_operations: Vec<crate::relation_runtime::PendingRelationOperation>,
     pub(crate) active: Option<ActiveResolution>,
     pub(crate) active_constraint: Option<ActiveConstraint>,
     pub(crate) next_proposal_id: u64,
@@ -254,6 +255,7 @@ impl VM {
             origin: self.current_cause.clone(),
             proposals: Vec::new(),
             patches: Vec::new(),
+            relation_operations: Vec::new(),
             active: None,
             active_constraint: None,
             next_proposal_id: 1,
@@ -393,6 +395,24 @@ impl VM {
             entity,
             component: data,
         });
+        Ok(())
+    }
+
+    /// Host/runtime bridge for RFC-0003 authoritative patches. The language
+    /// opcode surface lands separately; this method already gives embedders
+    /// and differential tests the real settlement atomicity boundary.
+    pub fn stage_relation_operation(
+        &mut self,
+        operation: crate::relation_runtime::PendingRelationOperation,
+    ) -> Result<(), String> {
+        let context = self
+            .settlement
+            .as_mut()
+            .ok_or_else(|| "relation patches require an active settlement".to_string())?;
+        if context.active_constraint.is_some() {
+            return Err("constraints cannot stage authoritative relation writes".into());
+        }
+        context.relation_operations.push(operation);
         Ok(())
     }
 
@@ -1249,6 +1269,25 @@ impl VM {
                     ));
                 }
             }
+        }
+
+        if !context.relation_operations.is_empty() {
+            let transaction = crate::relation_runtime::RelationTransaction {
+                spawns: Vec::new(),
+                component_writes: Vec::new(),
+                operations: context.relation_operations.clone(),
+                despawns: Vec::new(),
+            };
+            let relation_candidate = candidate
+                .prepare_relation_candidate(
+                    &transaction,
+                    candidate.live_relation_entities(),
+                    BTreeMap::new(),
+                )
+                .map_err(|error| {
+                    format!("Settlement aborted: {}\nNo world state was changed.", error)
+                })?;
+            candidate.adopt_relation_candidate(relation_candidate);
         }
 
         let committed = candidate.snapshot();

@@ -353,6 +353,21 @@ pub struct FrontendArtifacts {
     pub manifest_digest: FrontendManifestDigest,
 }
 
+impl FrontendArtifacts {
+    /// Recompute the sealed identity from the immutable semantic artifacts.
+    /// Runtime installation uses this instead of trusting public aggregate
+    /// fields to remain paired with the digest returned by the checker.
+    pub fn verify_manifest_digest(&self) -> bool {
+        super::canonical::manifest_digest(
+            &self.modules,
+            self.relations.schemas(),
+            &self.rules,
+            self.dependency_dag.edges(),
+            &self.operations,
+        ) == self.manifest_digest.as_bytes()
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct FrontendManifestDigest([u8; 32]);
 

@@ -60,6 +60,8 @@ pub(crate) struct VmSharedState {
     pub(crate) globals: Vec<Value>,
     pub(crate) global_names: Arc<Vec<String>>,
     pub(crate) program_source_identity: Option<Arc<str>>,
+    pub(crate) relation_runtime_manifest:
+        Option<Arc<crate::relation_runtime::RelationRuntimeManifest>>,
     pub(crate) state_machines: Arc<HashMap<String, HashMap<String, Vec<StateTransitionInfo>>>>,
     pub(crate) event_handlers: Arc<HashMap<String, Vec<HandlerEntry>>>,
     pub(crate) systems: Arc<HashMap<String, SystemRuntimeInfo>>,
@@ -174,6 +176,8 @@ pub struct VM {
     /// that produced the installed program. Kept immutable with the shared
     /// executable tables and included in the compiled-program manifest.
     pub(crate) program_source_identity: Option<Arc<str>>,
+    pub(crate) relation_runtime_manifest:
+        Option<Arc<crate::relation_runtime::RelationRuntimeManifest>>,
     pub(crate) frames: Vec<CallFrame>,
     pub(crate) next_frame_id: u64,
     pub(crate) world: World,
@@ -385,6 +389,54 @@ impl VM {
         &self.native_extension_manifests
     }
 
+    /// Install the immutable RFC-0003 schema artifact into both executable
+    /// identity and operational world state. Reinstalling an identical
+    /// manifest is idempotent; replacing one is rejected.
+    pub fn install_relation_frontend(
+        &mut self,
+        artifacts: &crate::relation_frontend::FrontendArtifacts,
+    ) -> crate::relation_runtime::RelationRuntimeResult<()> {
+        let manifest =
+            Arc::new(crate::relation_runtime::RelationRuntimeManifest::from_frontend(artifacts)?);
+        if let Some(installed) = &self.relation_runtime_manifest {
+            if installed.digest() != manifest.digest() {
+                return Err(crate::relation_runtime::RelationRuntimeError {
+                    code: "relation.manifest_already_installed",
+                    detail: "a different relation program is already installed".into(),
+                });
+            }
+        }
+        self.world
+            .install_relation_manifest(Arc::clone(&manifest), artifacts.manifest_digest)?;
+        self.relation_runtime_manifest = Some(manifest);
+        Ok(())
+    }
+
+    pub fn relation_runtime_manifest(
+        &self,
+    ) -> Option<&Arc<crate::relation_runtime::RelationRuntimeManifest>> {
+        self.relation_runtime_manifest.as_ref()
+    }
+
+    /// Execute the authoritative operation section emitted by the bounded
+    /// front end. This is an embedding boundary, not derived evaluation: all
+    /// symbolic entity operands are ground names in the current world and
+    /// the complete operation batch commits atomically.
+    pub fn apply_frontend_relation_operations(
+        &mut self,
+        artifacts: &crate::relation_frontend::FrontendArtifacts,
+    ) -> crate::relation_runtime::RelationRuntimeResult<Vec<crate::relation_runtime::FactChange>>
+    {
+        self.install_relation_frontend(artifacts)?;
+        let transaction =
+            crate::relation_runtime::RelationTransaction::from_frontend(artifacts, |name| {
+                self.world
+                    .get_entity_by_name(name)
+                    .and_then(|id| self.world.entity_ref(id))
+            })?;
+        self.world.apply_relation_transaction(&transaction)
+    }
+
     #[inline(always)]
     pub fn get_world_mut(&mut self) -> &mut World {
         &mut self.world
@@ -488,6 +540,7 @@ impl VM {
             globals: self.globals.clone(),
             global_names: self.global_names.clone(),
             program_source_identity: self.program_source_identity.clone(),
+            relation_runtime_manifest: self.relation_runtime_manifest.clone(),
             state_machines: self.state_machines.clone(),
             event_handlers: self.event_handlers.clone(),
             systems: self.systems.clone(),
@@ -515,9 +568,19 @@ impl VM {
             globals: shared.globals,
             global_names: shared.global_names,
             program_source_identity: shared.program_source_identity,
+            relation_runtime_manifest: shared.relation_runtime_manifest.clone(),
             frames: Vec::with_capacity(256),
             next_frame_id: 1,
-            world: World::new(),
+            world: {
+                let mut world = World::new();
+                if let Some(manifest) = &shared.relation_runtime_manifest {
+                    let _ = world.install_relation_manifest(
+                        Arc::clone(manifest),
+                        manifest.frontend_digest(),
+                    );
+                }
+                world
+            },
             state_machines: shared.state_machines,
             event_handlers: shared.event_handlers,
             systems: shared.systems,
@@ -606,6 +669,7 @@ impl VM {
             self.chunks = Arc::clone(&shared.chunks);
             self.global_names = Arc::clone(&shared.global_names);
             self.program_source_identity = shared.program_source_identity.clone();
+            self.relation_runtime_manifest = shared.relation_runtime_manifest.clone();
             self.state_machines = Arc::clone(&shared.state_machines);
             self.event_handlers = Arc::clone(&shared.event_handlers);
             self.systems = Arc::clone(&shared.systems);
@@ -628,6 +692,10 @@ impl VM {
         // 3 runs; allocation-shape dependent, which is why a str field
         // modulated it).
         self.globals = shared.globals.clone();
+        // Relation artifacts may be installed after a worker pool has already
+        // cached the same bytecode Arc. Their executable identity must refresh
+        // independently of chunk identity just like globals do.
+        self.relation_runtime_manifest = shared.relation_runtime_manifest.clone();
         self.native_extension_manifests = Arc::clone(&shared.native_extension_manifests);
         self.suppress_output = shared.suppress_output;
         self.profile_copies = shared.profile_copies;
@@ -665,6 +733,7 @@ impl VM {
             globals,
             global_names: Arc::new(global_names),
             program_source_identity: None,
+            relation_runtime_manifest: None,
             frames: Vec::new(),
             next_frame_id: 1,
             world: World::new(),
