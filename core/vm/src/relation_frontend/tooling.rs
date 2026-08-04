@@ -53,21 +53,15 @@ pub(crate) fn format_program(program: &BoundedRawProgram) -> String {
 }
 
 pub(crate) fn symbols(artifacts: &FrontendArtifacts) -> Vec<FrontendSymbol> {
-    let derived = artifacts
-        .rules
-        .iter()
-        .map(|rule| rule.inferred_head().identity.as_str())
-        .collect::<std::collections::BTreeSet<_>>();
     let mut output = artifacts
         .relations
         .schemas()
         .iter()
         .map(|schema| FrontendSymbol {
             identity: schema.identity.clone(),
-            kind: if derived.contains(schema.identity.as_str()) {
-                FrontendSymbolKind::DerivedRelation
-            } else {
-                FrontendSymbolKind::AuthoritativeRelation
+            kind: match schema.kind {
+                RelationKind::Authoritative => FrontendSymbolKind::AuthoritativeRelation,
+                RelationKind::Derived => FrontendSymbolKind::DerivedRelation,
             },
         })
         .collect::<Vec<_>>();
@@ -169,7 +163,7 @@ fn format_term(output: &mut String, term: &RawTerm) {
 
 fn format_operation_value(output: &mut String, value: &RawOperationValue) {
     match value {
-        RawOperationValue::Variable(name) => output.push_str(name),
+        RawOperationValue::EntitySymbol(name) => output.push_str(name),
         RawOperationValue::Literal(value) => format_literal(output, value),
     }
 }

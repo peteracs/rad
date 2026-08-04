@@ -1,5 +1,11 @@
 use std::sync::Arc;
 
+#[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
+pub struct SourceSpan {
+    pub line: u32,
+    pub column: u32,
+}
+
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum RelationType {
     Entity,
@@ -25,6 +31,21 @@ pub enum OnDelete {
     Cascade,
 }
 
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum RelationKind {
+    Authoritative,
+    Derived,
+}
+
+impl RelationKind {
+    pub(crate) fn tag(self) -> u8 {
+        match self {
+            Self::Authoritative => b'a',
+            Self::Derived => b'd',
+        }
+    }
+}
+
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct RelationColumn {
     pub name: String,
@@ -41,6 +62,8 @@ pub struct UniqueConstraint {
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct RelationSchema {
     pub identity: String,
+    pub owner: String,
+    pub kind: RelationKind,
     pub columns: Vec<RelationColumn>,
     pub unique: Vec<UniqueConstraint>,
     pub symmetric: bool,
@@ -123,6 +146,7 @@ pub struct RawRuleSummary {
 pub struct BoundedRawRule {
     pub(super) ast: RawRuleAst,
     pub(super) module_id: Arc<str>,
+    pub(super) source_span: SourceSpan,
     summary: RawRuleSummary,
 }
 
@@ -131,10 +155,16 @@ impl BoundedRawRule {
         self.summary
     }
 
-    pub(super) fn new(ast: RawRuleAst, module_id: Arc<str>, summary: RawRuleSummary) -> Self {
+    pub(super) fn new(
+        ast: RawRuleAst,
+        module_id: Arc<str>,
+        source_span: SourceSpan,
+        summary: RawRuleSummary,
+    ) -> Self {
         Self {
             ast,
             module_id,
+            source_span,
             summary,
         }
     }
@@ -152,7 +182,8 @@ pub enum RelationOperationKind {
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum RawOperationValue {
-    Variable(String),
+    /// A ground symbolic entity reference resolved by the eventual candidate.
+    EntitySymbol(String),
     Literal(Literal),
 }
 
@@ -160,6 +191,7 @@ pub enum RawOperationValue {
 pub struct RelationOperation {
     pub kind: RelationOperationKind,
     pub relation: String,
+    pub owner: String,
     pub tuple: Vec<RawOperationValue>,
 }
 
@@ -178,8 +210,10 @@ pub struct RawInputStats {
 pub struct BoundedRawProgram {
     pub(super) module_ids: Vec<String>,
     pub(super) relations: Vec<RelationSchema>,
+    pub(super) relation_spans: Vec<SourceSpan>,
     pub(super) rules: Vec<BoundedRawRule>,
     pub(super) operations: Vec<RelationOperation>,
+    pub(super) operation_spans: Vec<SourceSpan>,
     stats: RawInputStats,
 }
 
@@ -195,15 +229,19 @@ impl BoundedRawProgram {
     pub(super) fn new(
         module_ids: Vec<String>,
         relations: Vec<RelationSchema>,
+        relation_spans: Vec<SourceSpan>,
         rules: Vec<BoundedRawRule>,
         operations: Vec<RelationOperation>,
+        operation_spans: Vec<SourceSpan>,
         stats: RawInputStats,
     ) -> Self {
         Self {
             module_ids,
             relations,
+            relation_spans,
             rules,
             operations,
+            operation_spans,
             stats,
         }
     }

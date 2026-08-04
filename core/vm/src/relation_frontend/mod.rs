@@ -14,8 +14,9 @@ mod tooling;
 pub use ast::{
     AggregateKind, BoundedRawProgram, BoundedRawRule, DerivationDependencyDag, FrontendArtifacts,
     FrontendManifestDigest, Literal, OnDelete, RawInputStats, RawOperationValue, RawRuleSummary,
-    RelationColumn, RelationManifest, RelationOperation, RelationOperationKind, RelationSchema,
-    RelationType, SealedRulePlan, StaticResourceQuote, UniqueConstraint,
+    RelationColumn, RelationKind, RelationManifest, RelationOperation, RelationOperationKind,
+    RelationSchema, RelationType, SealedRulePlan, SourceSpan, StaticResourceQuote,
+    UniqueConstraint,
 };
 pub use limits::{RawInputLimits, SealedPlanLimits};
 
@@ -25,6 +26,9 @@ use std::io::Read;
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum DiagnosticCode {
     FeatureDisabled,
+    RawModuleLimit,
+    RawTotalModuleIdentifierByteLimit,
+    RawTotalSourceByteLimit,
     RawSourceByteLimit,
     RawTokenLimit,
     RawRelationLimit,
@@ -44,6 +48,8 @@ pub enum DiagnosticCode {
     RawStructuralCostLimit,
     Syntax,
     DuplicateModule,
+    ForeignRelationDeclaration,
+    ForeignDerivedDeclaration,
     DuplicateRelation,
     DuplicateColumn,
     DuplicateUniqueConstraint,
@@ -52,10 +58,13 @@ pub enum DiagnosticCode {
     SymmetricUnique,
     SymmetricEndpointMetadata,
     NamespaceCollision,
+    OperationTargetsDerived,
     UnknownRelation,
     Arity,
     TypeMismatch,
     UnboundVariable,
+    DuplicateHeadColumn,
+    DuplicateGroupVariable,
     AggregateRequiresPositiveInput,
     AggregateOutputNotFresh,
     AggregateHeadProjection,
@@ -74,6 +83,11 @@ impl DiagnosticCode {
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::FeatureDisabled => "relations.feature_disabled",
+            Self::RawModuleLimit => "relations.raw_module_limit",
+            Self::RawTotalModuleIdentifierByteLimit => {
+                "relations.raw_total_module_identifier_byte_limit"
+            }
+            Self::RawTotalSourceByteLimit => "relations.raw_total_source_byte_limit",
             Self::RawSourceByteLimit => "relations.raw_source_byte_limit",
             Self::RawTokenLimit => "relations.raw_token_limit",
             Self::RawRelationLimit => "relations.raw_relation_limit",
@@ -93,6 +107,8 @@ impl DiagnosticCode {
             Self::RawStructuralCostLimit => "relations.raw_structural_cost_limit",
             Self::Syntax => "relations.syntax",
             Self::DuplicateModule => "relations.duplicate_module",
+            Self::ForeignRelationDeclaration => "relations.module_foreign_relation_declaration",
+            Self::ForeignDerivedDeclaration => "relations.module_foreign_derived_declaration",
             Self::DuplicateRelation => "relations.duplicate_relation",
             Self::DuplicateColumn => "relations.duplicate_column",
             Self::DuplicateUniqueConstraint => "relations.duplicate_unique_constraint",
@@ -101,10 +117,13 @@ impl DiagnosticCode {
             Self::SymmetricUnique => "relations.symmetric_unique_forbidden",
             Self::SymmetricEndpointMetadata => "relations.symmetric_endpoint_metadata",
             Self::NamespaceCollision => "relations.namespace_collision",
+            Self::OperationTargetsDerived => "relations.operation_targets_derived",
             Self::UnknownRelation => "relations.unknown_relation",
             Self::Arity => "relations.arity",
             Self::TypeMismatch => "relations.type_mismatch",
             Self::UnboundVariable => "relations.unbound_variable",
+            Self::DuplicateHeadColumn => "relations.derivation_duplicate_head_column",
+            Self::DuplicateGroupVariable => "relations.derivation_duplicate_group_variable",
             Self::AggregateRequiresPositiveInput => "relations.aggregate_requires_positive_input",
             Self::AggregateOutputNotFresh => "relations.aggregate_output_not_fresh",
             Self::AggregateHeadProjection => "relations.aggregate_head_projection",
@@ -123,49 +142,57 @@ impl DiagnosticCode {
     pub const fn priority(self) -> u8 {
         match self {
             Self::FeatureDisabled => 0,
-            Self::RawSourceByteLimit => 1,
-            Self::RawTokenLimit => 2,
-            Self::RawRelationLimit => 3,
-            Self::RawRuleLimit => 4,
-            Self::RawOperationLimit => 5,
-            Self::RawColumnLimit => 6,
-            Self::RawUniqueConstraintLimit => 7,
-            Self::RawTupleLimit => 8,
-            Self::EmptyIdentifier => 9,
-            Self::UnqualifiedModule => 10,
-            Self::RawIdentifierByteLimit => 11,
-            Self::RawTermLimit => 12,
-            Self::RawAtomLimit => 13,
-            Self::RawPredicateLimit => 14,
-            Self::RawAggregateGroupLimit => 15,
-            Self::RawAstNodeLimit => 16,
-            Self::RawStructuralCostLimit => 17,
-            Self::Syntax => 20,
-            Self::DuplicateModule => 21,
-            Self::DuplicateRelation => 22,
-            Self::DuplicateColumn => 23,
-            Self::DuplicateUniqueConstraint => 24,
-            Self::UnknownUniqueColumn => 25,
-            Self::SymmetricShape => 26,
-            Self::SymmetricUnique => 27,
-            Self::SymmetricEndpointMetadata => 28,
-            Self::NamespaceCollision => 29,
-            Self::UnknownRelation => 30,
-            Self::Arity => 31,
-            Self::TypeMismatch => 32,
-            Self::UnboundVariable => 33,
-            Self::AggregateRequiresPositiveInput => 34,
-            Self::AggregateOutputNotFresh => 35,
-            Self::AggregateHeadProjection => 36,
-            Self::AggregateType => 37,
-            Self::RecursiveDerivation => 38,
-            Self::DuplicateRule => 39,
-            Self::SealedRuleLimit => 40,
-            Self::SealedAtomLimit => 41,
-            Self::SealedPredicateLimit => 42,
-            Self::SealedTermLimit => 43,
-            Self::SealedDependencyLimit => 44,
-            Self::SealedByteLimit => 45,
+            Self::RawModuleLimit => 1,
+            Self::RawTotalModuleIdentifierByteLimit => 2,
+            Self::RawTotalSourceByteLimit => 3,
+            Self::RawSourceByteLimit => 4,
+            Self::RawTokenLimit => 5,
+            Self::RawRelationLimit => 6,
+            Self::RawRuleLimit => 7,
+            Self::RawOperationLimit => 8,
+            Self::RawColumnLimit => 9,
+            Self::RawUniqueConstraintLimit => 10,
+            Self::RawTupleLimit => 11,
+            Self::EmptyIdentifier => 12,
+            Self::UnqualifiedModule => 13,
+            Self::RawIdentifierByteLimit => 14,
+            Self::RawTermLimit => 15,
+            Self::RawAtomLimit => 16,
+            Self::RawPredicateLimit => 17,
+            Self::RawAggregateGroupLimit => 18,
+            Self::RawAstNodeLimit => 19,
+            Self::RawStructuralCostLimit => 20,
+            Self::Syntax => 21,
+            Self::DuplicateModule => 22,
+            Self::ForeignRelationDeclaration => 23,
+            Self::ForeignDerivedDeclaration => 24,
+            Self::DuplicateRelation => 25,
+            Self::DuplicateColumn => 26,
+            Self::DuplicateUniqueConstraint => 27,
+            Self::UnknownUniqueColumn => 28,
+            Self::SymmetricShape => 29,
+            Self::SymmetricUnique => 30,
+            Self::SymmetricEndpointMetadata => 31,
+            Self::NamespaceCollision => 32,
+            Self::OperationTargetsDerived => 33,
+            Self::UnknownRelation => 34,
+            Self::Arity => 35,
+            Self::TypeMismatch => 36,
+            Self::UnboundVariable => 37,
+            Self::DuplicateGroupVariable => 38,
+            Self::DuplicateHeadColumn => 39,
+            Self::AggregateRequiresPositiveInput => 40,
+            Self::AggregateOutputNotFresh => 41,
+            Self::AggregateHeadProjection => 42,
+            Self::AggregateType => 43,
+            Self::RecursiveDerivation => 44,
+            Self::DuplicateRule => 45,
+            Self::SealedRuleLimit => 46,
+            Self::SealedAtomLimit => 47,
+            Self::SealedPredicateLimit => 48,
+            Self::SealedTermLimit => 49,
+            Self::SealedDependencyLimit => 50,
+            Self::SealedByteLimit => 51,
         }
     }
 }
@@ -186,6 +213,7 @@ pub struct FrontendDiagnostic {
     pub line: u32,
     pub column: u32,
     pub witness: RawDiagnosticWitness,
+    pub owner: Option<String>,
 }
 
 impl FrontendDiagnostic {
@@ -208,7 +236,28 @@ impl FrontendDiagnostic {
             line,
             column,
             witness: RawDiagnosticWitness(hasher.finalize().into()),
+            owner: None,
         }
+    }
+
+    pub(crate) fn owned(mut self, owner: &str) -> Self {
+        if self.owner.as_deref() == Some(owner) {
+            return self;
+        }
+        let mut hasher = Sha256::new();
+        hasher.update(b"rad.relation-frontend-owned-diagnostic.v1");
+        hasher.update(self.witness.0);
+        hasher.update((owner.len() as u64).to_be_bytes());
+        hasher.update(owner.as_bytes());
+        self.witness = RawDiagnosticWitness(hasher.finalize().into());
+        self.owner = Some(owner.to_string());
+        self
+    }
+
+    pub(crate) fn at(mut self, span: SourceSpan) -> Self {
+        self.line = span.line;
+        self.column = span.column;
+        self
     }
 
     pub(crate) fn limit(code: DiagnosticCode, actual: usize, limit: usize) -> Self {
@@ -280,7 +329,20 @@ pub fn parse_bounded(
             b"experimental-relations",
         )]);
     }
-    parser::parse(source, &options.module_id, options.raw_limits)
+    if let Some(error) =
+        single_module_envelope(source.len(), &options.module_id, options.raw_limits)
+    {
+        return Err(vec![error.owned(&options.module_id)]);
+    }
+    if !parser::valid_module_identity(&options.module_id) {
+        return Err(vec![invalid_module_identity(&options.module_id)]);
+    }
+    parser::parse(source, &options.module_id, options.raw_limits).map_err(|errors| {
+        errors
+            .into_iter()
+            .map(|error| error.owned(&options.module_id))
+            .collect()
+    })
 }
 
 pub fn compile(
@@ -304,31 +366,134 @@ pub fn compile_modules(
             b"experimental-relations",
         )]);
     }
-    let mut module_ids = std::collections::BTreeSet::new();
-    let mut relations = Vec::new();
-    let mut rules = Vec::new();
-    let mut operations = Vec::new();
-    let mut stats = RawInputStats::default();
+    let limits = options.raw_limits;
+    if modules.len() > limits.max_modules {
+        return Err(vec![FrontendDiagnostic::limit(
+            DiagnosticCode::RawModuleLimit,
+            modules.len(),
+            limits.max_modules,
+        )]);
+    }
+    let total_module_identifier_bytes = modules
+        .iter()
+        .map(|module| module.module_id.len())
+        .fold(0usize, usize::saturating_add);
+    let total_source_bytes = modules
+        .iter()
+        .map(|module| module.source.len())
+        .fold(0usize, usize::saturating_add);
+    let mut admission = Vec::new();
+    if total_module_identifier_bytes > limits.max_total_module_identifier_bytes {
+        admission.push(FrontendDiagnostic::limit(
+            DiagnosticCode::RawTotalModuleIdentifierByteLimit,
+            total_module_identifier_bytes,
+            limits.max_total_module_identifier_bytes,
+        ));
+    }
+    if total_source_bytes > limits.max_total_source_bytes {
+        admission.push(FrontendDiagnostic::limit(
+            DiagnosticCode::RawTotalSourceByteLimit,
+            total_source_bytes,
+            limits.max_total_source_bytes,
+        ));
+    }
+    let mut module_sources = std::collections::BTreeMap::<&str, Vec<&str>>::new();
     for module in modules {
-        if module.module_id.len() > options.raw_limits.max_identifier_bytes {
-            return Err(vec![FrontendDiagnostic::limit(
-                DiagnosticCode::RawIdentifierByteLimit,
-                module.module_id.len(),
-                options.raw_limits.max_identifier_bytes,
-            )]);
+        if module.source.len() > limits.max_source_bytes {
+            admission.push(
+                FrontendDiagnostic::limit(
+                    DiagnosticCode::RawSourceByteLimit,
+                    module.source.len(),
+                    limits.max_source_bytes,
+                )
+                .owned(module.module_id),
+            );
         }
-        if !module_ids.insert(module.module_id) {
-            return Err(vec![FrontendDiagnostic::new(
+        if module.module_id.len() > limits.max_identifier_bytes {
+            admission.push(
+                FrontendDiagnostic::limit(
+                    DiagnosticCode::RawIdentifierByteLimit,
+                    module.module_id.len(),
+                    limits.max_identifier_bytes,
+                )
+                .owned(module.module_id),
+            );
+        } else if !parser::valid_module_identity(module.module_id) {
+            admission.push(
+                FrontendDiagnostic::new(
+                    DiagnosticCode::UnqualifiedModule,
+                    "relation module identity must contain nonempty path segments",
+                    0,
+                    0,
+                    module.module_id.as_bytes(),
+                )
+                .owned(module.module_id),
+            );
+        }
+        module_sources
+            .entry(module.module_id)
+            .or_default()
+            .push(module.source);
+    }
+    if let Some(error) = admission.into_iter().min() {
+        return Err(vec![error]);
+    }
+
+    let mut duplicate_diagnostics = Vec::new();
+    for (module_id, sources) in &module_sources {
+        if sources.len() < 2 {
+            continue;
+        }
+        let mut source_digests = sources
+            .iter()
+            .map(|source| <[u8; 32]>::from(Sha256::digest(source.as_bytes())))
+            .collect::<Vec<_>>();
+        source_digests.sort();
+        let mut detail = Vec::new();
+        detail.extend_from_slice(&(module_id.len() as u64).to_be_bytes());
+        detail.extend_from_slice(module_id.as_bytes());
+        detail.extend_from_slice(&(source_digests.len() as u64).to_be_bytes());
+        for digest in &source_digests {
+            detail.extend_from_slice(digest);
+        }
+        duplicate_diagnostics.push(
+            FrontendDiagnostic::new(
                 DiagnosticCode::DuplicateModule,
                 "duplicate relation module identity",
                 0,
                 0,
-                module.module_id.as_bytes(),
-            )]);
-        }
+                &detail,
+            )
+            .owned(module_id),
+        );
+    }
+    if let Some(error) = duplicate_diagnostics.into_iter().min() {
+        return Err(vec![error]);
+    }
+
+    let mut canonical_modules = modules.to_vec();
+    canonical_modules.sort_by_key(|module| module.module_id);
+    let mut relations = Vec::new();
+    let mut relation_spans = Vec::new();
+    let mut rules = Vec::new();
+    let mut operations = Vec::new();
+    let mut operation_spans = Vec::new();
+    let mut stats = RawInputStats::default();
+    let mut parse_diagnostics = Vec::new();
+    for module in canonical_modules {
         let mut module_options = options.clone();
         module_options.module_id = module.module_id.to_string();
-        let parsed = parse_bounded(module.source, &module_options)?;
+        let parsed = match parse_bounded(module.source, &module_options) {
+            Ok(parsed) => parsed,
+            Err(errors) => {
+                parse_diagnostics.extend(
+                    errors
+                        .into_iter()
+                        .map(|error| error.owned(module.module_id)),
+                );
+                continue;
+            }
+        };
         let module_stats = parsed.input_stats();
         stats.source_bytes = stats.source_bytes.saturating_add(module_stats.source_bytes);
         stats.tokens = stats.tokens.saturating_add(module_stats.tokens);
@@ -339,16 +504,26 @@ pub fn compile_modules(
         stats.structural_cost = stats
             .structural_cost
             .saturating_add(module_stats.structural_cost);
-        limits::validate_stats(stats, options.raw_limits).map_err(|error| vec![error])?;
         relations.extend(parsed.relations);
+        relation_spans.extend(parsed.relation_spans);
         rules.extend(parsed.rules);
         operations.extend(parsed.operations);
+        operation_spans.extend(parsed.operation_spans);
     }
+    if let Some(error) = parse_diagnostics.into_iter().min() {
+        return Err(vec![error]);
+    }
+    limits::validate_combined_stats(stats, limits).map_err(|error| vec![error])?;
     let raw = BoundedRawProgram::new(
-        module_ids.into_iter().map(str::to_string).collect(),
+        module_sources
+            .keys()
+            .map(|module| str::to_string(module))
+            .collect(),
         relations,
+        relation_spans,
         rules,
         operations,
+        operation_spans,
         stats,
     );
     checker::check_and_seal(raw, options.sealed_limits)
@@ -368,7 +543,16 @@ pub fn compile_reader<R: std::io::Read>(
             b"experimental-relations",
         )]);
     }
-    let limit = options.raw_limits.max_source_bytes;
+    if let Some(error) = single_module_envelope(0, &options.module_id, options.raw_limits) {
+        return Err(vec![error.owned(&options.module_id)]);
+    }
+    if !parser::valid_module_identity(&options.module_id) {
+        return Err(vec![invalid_module_identity(&options.module_id)]);
+    }
+    let limit = options
+        .raw_limits
+        .max_source_bytes
+        .min(options.raw_limits.max_total_source_bytes);
     let read_limit = limit.saturating_add(1) as u64;
     let mut bytes = Vec::with_capacity(limit.min(64 * 1024));
     reader
@@ -384,11 +568,11 @@ pub fn compile_reader<R: std::io::Read>(
             )]
         })?;
     if bytes.len() > limit {
-        return Err(vec![FrontendDiagnostic::limit(
-            DiagnosticCode::RawSourceByteLimit,
-            bytes.len(),
-            limit,
-        )]);
+        let error = single_module_envelope(bytes.len(), &options.module_id, options.raw_limits)
+            .unwrap_or_else(|| {
+                FrontendDiagnostic::limit(DiagnosticCode::RawSourceByteLimit, bytes.len(), limit)
+            });
+        return Err(vec![error.owned(&options.module_id)]);
     }
     let source = String::from_utf8(bytes).map_err(|_| {
         vec![FrontendDiagnostic::new(
@@ -400,6 +584,52 @@ pub fn compile_reader<R: std::io::Read>(
         )]
     })?;
     compile(&source, options)
+}
+
+fn single_module_envelope(
+    source_bytes: usize,
+    module_id: &str,
+    limits: RawInputLimits,
+) -> Option<FrontendDiagnostic> {
+    let checks = [
+        (DiagnosticCode::RawModuleLimit, 1, limits.max_modules),
+        (
+            DiagnosticCode::RawTotalModuleIdentifierByteLimit,
+            module_id.len(),
+            limits.max_total_module_identifier_bytes,
+        ),
+        (
+            DiagnosticCode::RawTotalSourceByteLimit,
+            source_bytes,
+            limits.max_total_source_bytes,
+        ),
+        (
+            DiagnosticCode::RawSourceByteLimit,
+            source_bytes,
+            limits.max_source_bytes,
+        ),
+        (
+            DiagnosticCode::RawIdentifierByteLimit,
+            module_id.len(),
+            limits.max_identifier_bytes,
+        ),
+    ];
+    checks
+        .into_iter()
+        .filter(|(_, actual, limit)| actual > limit)
+        .map(|(code, actual, limit)| FrontendDiagnostic::limit(code, actual, limit))
+        .min()
+}
+
+fn invalid_module_identity(module_id: &str) -> FrontendDiagnostic {
+    FrontendDiagnostic::new(
+        DiagnosticCode::UnqualifiedModule,
+        "relation module identity must contain nonempty path segments",
+        0,
+        0,
+        module_id.as_bytes(),
+    )
+    .owned(module_id)
 }
 
 pub fn format_source(

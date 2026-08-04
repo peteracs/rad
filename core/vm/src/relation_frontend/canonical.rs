@@ -41,7 +41,7 @@ pub(crate) fn sealed_rule_bytes(
     inferred_head: &RelationSchema,
 ) -> Vec<u8> {
     let mut out = Vec::new();
-    text(&mut out, "rad.sealed-relation-rule.v1");
+    text(&mut out, "rad.sealed-relation-rule.v2");
     text(&mut out, identity);
     bytes(&mut out, &raw_rule_bytes(rule));
     schema(&mut out, inferred_head);
@@ -56,6 +56,7 @@ pub(crate) fn schema_bytes(value: &RelationSchema) -> Vec<u8> {
 
 pub(crate) fn operation_bytes(value: &RelationOperation) -> Vec<u8> {
     let mut out = Vec::new();
+    text(&mut out, &value.owner);
     text(&mut out, &value.relation);
     match &value.kind {
         RelationOperationKind::Insert => out.push(b'i'),
@@ -84,7 +85,7 @@ pub(crate) fn manifest_digest(
     operations: &[RelationOperation],
 ) -> [u8; 32] {
     let mut out = Vec::new();
-    text(&mut out, "rad.relation-frontend-manifest.v1");
+    text(&mut out, "rad.relation-frontend-manifest.v2");
     let mut module_encodings = modules
         .iter()
         .map(|module| {
@@ -122,6 +123,8 @@ pub(crate) fn digest(bytes: &[u8]) -> [u8; 32] {
 
 fn schema(out: &mut Vec<u8>, value: &RelationSchema) {
     text(out, &value.identity);
+    text(out, &value.owner);
+    out.push(value.kind.tag());
     out.push(u8::from(value.symmetric));
     u64_value(out, value.columns.len() as u64);
     for column in &value.columns {
@@ -182,8 +185,8 @@ fn terms(out: &mut Vec<u8>, values: &[RawTerm]) {
 
 fn operation_value(out: &mut Vec<u8>, value: &RawOperationValue) {
     match value {
-        RawOperationValue::Variable(name) => {
-            out.push(b'v');
+        RawOperationValue::EntitySymbol(name) => {
+            out.push(b'e');
             text(out, name);
         }
         RawOperationValue::Literal(value) => {

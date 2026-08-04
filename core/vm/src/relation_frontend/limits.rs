@@ -2,6 +2,9 @@ use super::{DiagnosticCode, FrontendDiagnostic, RawInputStats, RawRuleSummary};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct RawInputLimits {
+    pub max_modules: usize,
+    pub max_total_module_identifier_bytes: usize,
+    pub max_total_source_bytes: usize,
     pub max_source_bytes: usize,
     pub max_tokens: usize,
     pub max_ast_nodes: usize,
@@ -21,6 +24,9 @@ pub struct RawInputLimits {
 impl Default for RawInputLimits {
     fn default() -> Self {
         Self {
+            max_modules: 4_096,
+            max_total_module_identifier_bytes: 4 * 1024 * 1024,
+            max_total_source_bytes: 64 * 1024 * 1024,
             max_source_bytes: 16 * 1024 * 1024,
             max_tokens: 1_000_000,
             max_ast_nodes: 1_000_000,
@@ -251,4 +257,15 @@ pub(crate) fn validate_stats(
         .map(|(code, actual, limit)| FrontendDiagnostic::limit(code, actual, limit))
         .min()
         .map_or(Ok(()), Err)
+}
+
+pub(crate) fn validate_combined_stats(
+    stats: RawInputStats,
+    limits: RawInputLimits,
+) -> Result<(), FrontendDiagnostic> {
+    let combined_limits = RawInputLimits {
+        max_source_bytes: limits.max_total_source_bytes,
+        ..limits
+    };
+    validate_stats(stats, combined_limits)
 }

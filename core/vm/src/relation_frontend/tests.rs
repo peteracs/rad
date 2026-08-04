@@ -48,6 +48,25 @@ fn syntax_diagnostics_report_token_start_positions() {
 }
 
 #[test]
+fn semantic_diagnostics_report_declaration_spans_and_owners() {
+    let schema = "relation Broken(value: int, value: int)\n";
+    let error = compile(schema, &enabled()).unwrap_err().remove(0);
+    assert_eq!(error.code, DiagnosticCode::DuplicateColumn);
+    assert_eq!((error.line, error.column), (1, 1));
+    assert_eq!(error.owner.as_deref(), Some("game::inventory"));
+
+    let rule = r#"
+relation Input(value: int)
+derive Broken(missing)
+    when Input(value)
+"#;
+    let error = compile(rule, &enabled()).unwrap_err().remove(0);
+    assert_eq!(error.code, DiagnosticCode::UnboundVariable);
+    assert_eq!((error.line, error.column), (3, 1));
+    assert_eq!(error.owner.as_deref(), Some("game::inventory"));
+}
+
+#[test]
 fn accepted_rfc_examples_emit_sealed_frontend_artifacts() {
     let artifacts = compile(OWNERSHIP, &enabled()).unwrap();
     assert_eq!(artifacts.relations.schemas().len(), 6);
@@ -58,11 +77,110 @@ fn accepted_rfc_examples_emit_sealed_frontend_artifacts() {
         .schemas()
         .iter()
         .any(|schema| schema.identity == "game::inventory::AlliedWith" && schema.symmetric));
+    assert!(artifacts.relations.schemas().iter().any(|schema| {
+        schema.identity == "game::inventory::Owns"
+            && schema.owner == "game::inventory"
+            && schema.kind == RelationKind::Authoritative
+    }));
+    assert!(artifacts.relations.schemas().iter().any(|schema| {
+        schema.identity == "game::inventory::Encumbered"
+            && schema.owner == "game::inventory"
+            && schema.kind == RelationKind::Derived
+    }));
     for rule in artifacts.rules.iter() {
         assert!(rule.identity().starts_with("game::inventory::rule::"));
         assert_eq!(rule.digest(), canonical::digest(rule.canonical_bytes()));
         assert!(!rule.canonical_bytes().is_empty());
     }
+}
+
+#[test]
+fn authoritative_operations_cannot_target_derived_relations() {
+    let source = r#"
+relation Base(value: int)
+derive ReadOnly(value)
+    when Base(value)
+Insert(ReadOnly, (1))
+"#;
+    let error = compile(source, &enabled()).unwrap_err().remove(0);
+    assert_eq!(error.code, DiagnosticCode::OperationTargetsDerived);
+    assert_eq!((error.line, error.column), (5, 1));
+    assert_eq!(error.owner.as_deref(), Some("game::inventory"));
+}
+
+#[test]
+fn inferred_derived_schemas_reject_duplicate_columns_and_groups() {
+    let duplicate_head = r#"
+relation Input(value: int)
+derive Pair(value, value)
+    when Input(value)
+"#;
+    assert_eq!(
+        compile(duplicate_head, &enabled()).unwrap_err()[0].code,
+        DiagnosticCode::DuplicateHeadColumn
+    );
+
+    let duplicate_group = r#"
+relation Input(value: int)
+derive Counted(value, value, count())
+    when Input(value)
+"#;
+    assert_eq!(
+        compile(duplicate_group, &enabled()).unwrap_err()[0].code,
+        DiagnosticCode::DuplicateGroupVariable
+    );
+
+    let inferred_schema_collision = r#"
+relation Input(value_0: int)
+derive LiteralCollision(0, value_0)
+    when Input(value_0)
+"#;
+    assert_eq!(
+        compile(inferred_schema_collision, &enabled()).unwrap_err()[0].code,
+        DiagnosticCode::DuplicateColumn
+    );
+}
+
+#[test]
+fn declarations_are_owned_by_their_compiling_module() {
+    let mut foreign_options = enabled();
+    foreign_options.module_id = "game::evil".to_string();
+    let relation = "relation game::inventory::Owns(owner: entity, item: entity)\n";
+    let error = compile(relation, &foreign_options).unwrap_err().remove(0);
+    assert_eq!(error.code, DiagnosticCode::ForeignRelationDeclaration);
+    assert_eq!((error.line, error.column), (1, 1));
+
+    let derived = r#"
+relation Input(value: int)
+derive game::other::Output(value)
+    when Input(value)
+"#;
+    assert_eq!(
+        compile(derived, &foreign_options).unwrap_err()[0].code,
+        DiagnosticCode::ForeignDerivedDeclaration
+    );
+
+    let local = r#"
+relation game::inventory::Input(value: int)
+derive game::inventory::Output(value)
+    when Input(value)
+"#;
+    assert!(compile(local, &enabled()).is_ok());
+}
+
+#[test]
+fn relation_kind_and_owner_are_cryptographically_bound() {
+    let artifacts = compile("relation Input(value: int)\n", &enabled()).unwrap();
+    let schema = &artifacts.relations.schemas()[0];
+    let original = canonical::schema_bytes(schema);
+
+    let mut changed_kind = schema.clone();
+    changed_kind.kind = RelationKind::Derived;
+    assert_ne!(original, canonical::schema_bytes(&changed_kind));
+
+    let mut changed_owner = schema.clone();
+    changed_owner.owner = "game::other".to_string();
+    assert_ne!(original, canonical::schema_bytes(&changed_owner));
 }
 
 #[test]
@@ -278,6 +396,97 @@ fn module_aggregation_obeys_one_global_raw_profile() {
 }
 
 #[test]
+fn invalid_module_permutations_select_one_owned_diagnostic() {
+    let syntax = SourceModule {
+        module_id: "game::syntax",
+        source: "relation Broken(value int)\n",
+    };
+    let raw_limit = SourceModule {
+        module_id: "game::limit",
+        source: "relation One(value: int)\n",
+    };
+    let mut options = enabled();
+    options.raw_limits.max_relations = 0;
+    let forward = compile_modules(&[syntax, raw_limit], &options)
+        .unwrap_err()
+        .remove(0);
+    let reverse = compile_modules(&[raw_limit, syntax], &options)
+        .unwrap_err()
+        .remove(0);
+    assert_eq!(forward.code, DiagnosticCode::RawRelationLimit);
+    assert_eq!(forward.code, reverse.code);
+    assert_eq!(forward.witness, reverse.witness);
+    assert_eq!(forward.owner.as_deref(), Some("game::limit"));
+    assert_eq!(forward.owner, reverse.owner);
+}
+
+#[test]
+fn complete_module_totals_have_permutation_independent_witnesses() {
+    let modules = [
+        SourceModule {
+            module_id: "game::a",
+            source: "12345678",
+        },
+        SourceModule {
+            module_id: "game::b",
+            source: "12345678",
+        },
+        SourceModule {
+            module_id: "game::c",
+            source: "12345",
+        },
+    ];
+    let mut options = enabled();
+    options.raw_limits.max_total_source_bytes = 10;
+    let forward = compile_modules(&modules, &options).unwrap_err().remove(0);
+    let reverse = compile_modules(&[modules[2], modules[1], modules[0]], &options)
+        .unwrap_err()
+        .remove(0);
+    assert_eq!(forward.code, DiagnosticCode::RawTotalSourceByteLimit);
+    assert_eq!(forward.witness, reverse.witness);
+}
+
+#[test]
+fn duplicate_module_witnesses_bind_the_complete_conflict() {
+    let first = SourceModule {
+        module_id: "game::same",
+        source: "relation A(value: int)\n",
+    };
+    let second = SourceModule {
+        module_id: "game::same",
+        source: "relation B(value: int)\n",
+    };
+    let third = SourceModule {
+        module_id: "game::same",
+        source: "relation C(value: int)\n",
+    };
+    let left = compile_modules(&[first, second], &enabled())
+        .unwrap_err()
+        .remove(0);
+    let reverse = compile_modules(&[second, first], &enabled())
+        .unwrap_err()
+        .remove(0);
+    let different = compile_modules(&[first, third], &enabled())
+        .unwrap_err()
+        .remove(0);
+    assert_eq!(left.code, DiagnosticCode::DuplicateModule);
+    assert_eq!(left.witness, reverse.witness);
+    assert_ne!(left.witness, different.witness);
+}
+
+#[test]
+fn module_scope_operations_are_ground() {
+    let source = r#"
+relation Score(player: entity, score: int)
+Insert(Score, (hero, unbound_score))
+"#;
+    assert_eq!(
+        compile(source, &enabled()).unwrap_err()[0].code,
+        DiagnosticCode::TypeMismatch
+    );
+}
+
+#[test]
 fn bounded_reader_and_collection_limits_reject_before_truncation() {
     let disabled = compile_reader(
         std::io::Cursor::new(vec![b'x'; 64]),
@@ -286,12 +495,39 @@ fn bounded_reader_and_collection_limits_reject_before_truncation() {
     .unwrap_err();
     assert_eq!(disabled[0].code, DiagnosticCode::FeatureDisabled);
 
+    struct MustNotRead;
+    impl std::io::Read for MustNotRead {
+        fn read(&mut self, _buffer: &mut [u8]) -> std::io::Result<usize> {
+            panic!("an invalid module header must reject before source reads")
+        }
+    }
+    let mut invalid_module = enabled();
+    invalid_module.module_id = "invalid::".to_string();
+    assert_eq!(
+        compile_reader(MustNotRead, &invalid_module).unwrap_err()[0].code,
+        DiagnosticCode::UnqualifiedModule
+    );
+
     let mut options = enabled();
     options.raw_limits.max_source_bytes = 8;
     let reader = std::io::Cursor::new(vec![b'x'; 64]);
     assert_eq!(
         compile_reader(reader, &options).unwrap_err()[0].code,
         DiagnosticCode::RawSourceByteLimit
+    );
+
+    options = enabled();
+    options.raw_limits.max_total_source_bytes = 8;
+    assert_eq!(
+        compile_reader(std::io::Cursor::new(vec![b'x'; 64]), &options).unwrap_err()[0].code,
+        DiagnosticCode::RawTotalSourceByteLimit
+    );
+
+    options = enabled();
+    options.raw_limits.max_modules = 0;
+    assert_eq!(
+        compile("", &options).unwrap_err()[0].code,
+        DiagnosticCode::RawModuleLimit
     );
 
     options = enabled();

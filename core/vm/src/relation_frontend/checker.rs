@@ -12,17 +12,27 @@ pub(crate) fn check_and_seal(
 ) -> Result<FrontendArtifacts, Vec<FrontendDiagnostic>> {
     let mut diagnostics = Vec::new();
     let mut schemas = BTreeMap::<String, RelationSchema>::new();
-    for schema in raw.relations {
-        validate_schema(&schema, &mut diagnostics);
+    for (schema, span) in raw.relations.into_iter().zip(raw.relation_spans) {
+        let mut schema_diagnostics = Vec::new();
+        validate_schema(&schema, &mut schema_diagnostics);
+        diagnostics.extend(
+            schema_diagnostics
+                .into_iter()
+                .map(|error| error.at(span).owned(&schema.owner)),
+        );
         if schemas
             .insert(schema.identity.clone(), schema.clone())
             .is_some()
         {
-            diagnostics.push(diagnostic(
-                DiagnosticCode::DuplicateRelation,
-                &schema.identity,
-                "duplicate authoritative relation",
-            ));
+            diagnostics.push(
+                diagnostic(
+                    DiagnosticCode::DuplicateRelation,
+                    &schema.identity,
+                    "duplicate authoritative relation",
+                )
+                .at(span)
+                .owned(&schema.owner),
+            );
         }
     }
 
@@ -35,11 +45,20 @@ pub(crate) fn check_and_seal(
     }
     for head in rules_by_head.keys() {
         if schemas.contains_key(head) {
-            diagnostics.push(diagnostic(
-                DiagnosticCode::NamespaceCollision,
-                head,
-                "authoritative and derived relations share one namespace",
-            ));
+            if let Some(owner_rule) = rules_by_head[head]
+                .iter()
+                .min_by_key(|rule| canonical::raw_rule_bytes(&rule.ast))
+            {
+                diagnostics.push(
+                    diagnostic(
+                        DiagnosticCode::NamespaceCollision,
+                        head,
+                        "authoritative and derived relations share one namespace",
+                    )
+                    .at(owner_rule.source_span)
+                    .owned(&owner_rule.module_id),
+                );
+            }
         }
     }
     if let Some(error) = diagnostics.iter().min().cloned() {
@@ -50,16 +69,18 @@ pub(crate) fn check_and_seal(
     let unknown = raw
         .rules
         .iter()
-        .flat_map(|rule| &rule.ast.atoms)
-        .filter(|atom| {
+        .flat_map(|rule| rule.ast.atoms.iter().map(move |atom| (rule, atom)))
+        .filter(|(_, atom)| {
             !schemas.contains_key(&atom.relation) && !derived_heads.contains(&atom.relation)
         })
-        .map(|atom| {
+        .map(|(rule, atom)| {
             diagnostic(
                 DiagnosticCode::UnknownRelation,
                 &atom.relation,
                 "rule atom names an unknown relation",
             )
+            .at(rule.source_span)
+            .owned(&rule.module_id)
         })
         .min();
     if let Some(error) = unknown {
@@ -92,20 +113,30 @@ pub(crate) fn check_and_seal(
         let mut head_rules = rules_by_head.remove(&head).unwrap_or_default();
         head_rules.sort_by_key(|rule| canonical::raw_rule_bytes(&rule.ast));
         for bounded in head_rules {
-            let inferred = match infer_rule(&bounded.ast, &schemas) {
+            let inferred = match infer_rule(&bounded.ast, &bounded.module_id, &schemas) {
                 Ok(schema) => schema,
                 Err(error) => {
-                    diagnostics.push(error);
+                    diagnostics.push(error.at(bounded.source_span).owned(&bounded.module_id));
                     continue;
                 }
             };
+            let mut inferred_diagnostics = Vec::new();
+            validate_schema(&inferred, &mut inferred_diagnostics);
+            if let Some(error) = inferred_diagnostics.into_iter().min() {
+                diagnostics.push(error.at(bounded.source_span).owned(&bounded.module_id));
+                continue;
+            }
             if let Some(expected) = &inferred_for_head {
                 if expected != &inferred {
-                    diagnostics.push(diagnostic(
-                        DiagnosticCode::TypeMismatch,
-                        &head,
-                        "all rules for one derived relation must infer the same schema",
-                    ));
+                    diagnostics.push(
+                        diagnostic(
+                            DiagnosticCode::TypeMismatch,
+                            &head,
+                            "all rules for one derived relation must infer the same schema",
+                        )
+                        .at(bounded.source_span)
+                        .owned(&bounded.module_id),
+                    );
                     continue;
                 }
             } else {
@@ -122,11 +153,15 @@ pub(crate) fn check_and_seal(
                 )
             });
             if !seen_rule_ids.insert(identity.clone()) {
-                diagnostics.push(diagnostic(
-                    DiagnosticCode::DuplicateRule,
-                    &identity,
-                    "rule identities must be globally unique",
-                ));
+                diagnostics.push(
+                    diagnostic(
+                        DiagnosticCode::DuplicateRule,
+                        &identity,
+                        "rule identities must be globally unique",
+                    )
+                    .at(bounded.source_span)
+                    .owned(&bounded.module_id),
+                );
                 continue;
             }
             let canonical_bytes = canonical::sealed_rule_bytes(&identity, &bounded.ast, &inferred);
@@ -177,7 +212,7 @@ pub(crate) fn check_and_seal(
             ))
     });
 
-    validate_operations(&raw.operations, &schemas)?;
+    validate_operations(&raw.operations, &raw.operation_spans, &schemas)?;
     validate_sealed_limits(&sealed, edges.len(), limits)?;
     let mut schema_values = schemas.into_values().collect::<Vec<_>>();
     schema_values.sort();
@@ -202,6 +237,20 @@ pub(crate) fn check_and_seal(
 }
 
 fn validate_schema(schema: &RelationSchema, diagnostics: &mut Vec<FrontendDiagnostic>) {
+    let declared_owner = schema
+        .identity
+        .rsplit_once("::")
+        .map_or("", |(owner, _)| owner);
+    if declared_owner != schema.owner {
+        diagnostics.push(diagnostic(
+            match schema.kind {
+                RelationKind::Authoritative => DiagnosticCode::ForeignRelationDeclaration,
+                RelationKind::Derived => DiagnosticCode::ForeignDerivedDeclaration,
+            },
+            &schema.identity,
+            "sealed relation ownership must match its qualified identity",
+        ));
+    }
     let mut columns = BTreeSet::new();
     for column in &schema.columns {
         if !columns.insert(column.name.as_str()) {
@@ -267,8 +316,38 @@ fn validate_schema(schema: &RelationSchema, diagnostics: &mut Vec<FrontendDiagno
 
 fn infer_rule(
     rule: &RawRuleAst,
+    owner: &str,
     schemas: &BTreeMap<String, RelationSchema>,
 ) -> Result<RelationSchema, FrontendDiagnostic> {
+    let mut projection_diagnostics = Vec::new();
+    let mut head_names = BTreeSet::new();
+    for term in &rule.head {
+        if let RawTerm::Variable(name) = term {
+            if !head_names.insert(name) {
+                projection_diagnostics.push(diagnostic(
+                    DiagnosticCode::DuplicateHeadColumn,
+                    &rule.head_relation,
+                    "derived head column variables must be unique",
+                ));
+            }
+        }
+    }
+    if let Some(aggregate) = &rule.aggregate {
+        let mut groups = BTreeSet::new();
+        for group in &aggregate.group_by {
+            if !groups.insert(group) {
+                projection_diagnostics.push(diagnostic(
+                    DiagnosticCode::DuplicateGroupVariable,
+                    &rule.head_relation,
+                    "aggregate grouping variables must be unique",
+                ));
+            }
+        }
+    }
+    if let Some(error) = projection_diagnostics.into_iter().min() {
+        return Err(error);
+    }
+
     let mut bindings = BTreeMap::<String, RelationType>::new();
     let mut diagnostics = Vec::new();
     let mut atoms = rule.atoms.iter().collect::<Vec<_>>();
@@ -428,6 +507,8 @@ fn infer_rule(
     }
     Ok(RelationSchema {
         identity: rule.head_relation.clone(),
+        owner: owner.to_string(),
+        kind: RelationKind::Derived,
         columns,
         unique: Vec::new(),
         symmetric: false,
@@ -490,18 +571,34 @@ fn topological_order(
 
 fn validate_operations(
     operations: &[RelationOperation],
+    spans: &[SourceSpan],
     schemas: &BTreeMap<String, RelationSchema>,
 ) -> Result<(), Vec<FrontendDiagnostic>> {
     let mut diagnostics = Vec::new();
-    for operation in operations {
+    for (operation, span) in operations.iter().zip(spans) {
+        let start = diagnostics.len();
         let Some(schema) = schemas.get(&operation.relation) else {
             diagnostics.push(diagnostic(
                 DiagnosticCode::UnknownRelation,
                 &operation.relation,
                 "relation operation names an unknown relation",
             ));
+            for error in &mut diagnostics[start..] {
+                *error = error.clone().at(*span).owned(&operation.owner);
+            }
             continue;
         };
+        if schema.kind == RelationKind::Derived {
+            diagnostics.push(diagnostic(
+                DiagnosticCode::OperationTargetsDerived,
+                &operation.relation,
+                "authoritative operations cannot target a derived relation",
+            ));
+            for error in &mut diagnostics[start..] {
+                *error = error.clone().at(*span).owned(&operation.owner);
+            }
+            continue;
+        }
         if operation.tuple.len() != schema.columns.len() {
             diagnostics.push(diagnostic(
                 DiagnosticCode::Arity,
@@ -516,6 +613,9 @@ fn validate_operations(
                     constraint,
                     "ReplaceBy names one declared unique constraint",
                 ));
+                for error in &mut diagnostics[start..] {
+                    *error = error.clone().at(*span).owned(&operation.owner);
+                }
                 continue;
             };
             if key.len() != unique.columns.len() {
@@ -548,6 +648,9 @@ fn validate_operations(
                 &operation.relation,
             );
         }
+        for error in &mut diagnostics[start..] {
+            *error = error.clone().at(*span).owned(&operation.owner);
+        }
     }
     if let Some(error) = diagnostics.into_iter().min() {
         Err(vec![error])
@@ -562,14 +665,23 @@ fn validate_operation_value(
     diagnostics: &mut Vec<FrontendDiagnostic>,
     identity: &str,
 ) {
-    if let RawOperationValue::Literal(value) = value {
-        if literal_type(value) != expected {
+    match value {
+        RawOperationValue::EntitySymbol(_) if expected == RelationType::Entity => {}
+        RawOperationValue::EntitySymbol(_) => {
+            diagnostics.push(diagnostic(
+                DiagnosticCode::TypeMismatch,
+                identity,
+                "symbolic operation values are ground entity references",
+            ));
+        }
+        RawOperationValue::Literal(value) if literal_type(value) != expected => {
             diagnostics.push(diagnostic(
                 DiagnosticCode::TypeMismatch,
                 identity,
                 "operation literal type does not match its relation column",
             ));
         }
+        RawOperationValue::Literal(_) => {}
     }
 }
 

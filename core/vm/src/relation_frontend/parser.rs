@@ -18,7 +18,7 @@ pub(crate) fn parse(
             limits.max_identifier_bytes,
         )]);
     }
-    if module_id.is_empty() || module_id.split("::").any(|part| !valid_module_part(part)) {
+    if !valid_module_identity(module_id) {
         return Err(vec![FrontendDiagnostic::new(
             DiagnosticCode::UnqualifiedModule,
             "relation module identity must contain nonempty path segments",
@@ -44,8 +44,10 @@ pub(crate) fn parse(
         position: 0,
         meter,
         relations: Vec::new(),
+        relation_spans: Vec::new(),
         rules: Vec::new(),
         operations: Vec::new(),
+        operation_spans: Vec::new(),
     };
     parser.parse_program()
 }
@@ -57,8 +59,10 @@ struct Parser<'a> {
     position: usize,
     meter: RawInputMeter,
     relations: Vec<RelationSchema>,
+    relation_spans: Vec<SourceSpan>,
     rules: Vec<BoundedRawRule>,
     operations: Vec<RelationOperation>,
+    operation_spans: Vec<SourceSpan>,
 }
 
 impl Parser<'_> {
@@ -110,16 +114,27 @@ impl Parser<'_> {
         Ok(BoundedRawProgram::new(
             vec![self.module_id.to_string()],
             self.relations,
+            self.relation_spans,
             self.rules,
             self.operations,
+            self.operation_spans,
             stats,
         ))
     }
 
     fn parse_relation(&mut self) -> Result<(), FrontendDiagnostic> {
-        self.word("relation")?;
+        let declaration = self.word("relation")?;
         self.meter.relation(self.relations.len() + 1)?;
         let name = self.qualified_identifier()?;
+        let declaration_span = SourceSpan {
+            line: declaration.line,
+            column: declaration.column,
+        };
+        let identity = self.qualify_declaration(
+            &name,
+            DiagnosticCode::ForeignRelationDeclaration,
+            declaration_span,
+        )?;
         self.expect(TokenKind::LParen)?;
         let mut columns = Vec::new();
         let mut column_count = 0usize;
@@ -210,21 +225,32 @@ impl Parser<'_> {
             }
         }
         self.meter.ast_node()?;
-        let identity = self.qualify(&name)?;
         self.relations.push(RelationSchema {
             identity,
+            owner: self.module_id.to_string(),
+            kind: RelationKind::Authoritative,
             columns,
             unique,
             symmetric,
         });
+        self.relation_spans.push(declaration_span);
         Ok(())
     }
 
     fn parse_rule(&mut self) -> Result<(), FrontendDiagnostic> {
-        self.word("derive")?;
+        let declaration = self.word("derive")?;
         self.meter.rule(self.rules.len() + 1)?;
         let mut summary = RawRuleSummary::default();
         let head_relation = self.rule_identifier(&mut summary)?;
+        let declaration_span = SourceSpan {
+            line: declaration.line,
+            column: declaration.column,
+        };
+        let head_relation = self.qualify_declaration(
+            &head_relation,
+            DiagnosticCode::ForeignDerivedDeclaration,
+            declaration_span,
+        )?;
         self.expect(TokenKind::LParen)?;
         let mut head = Vec::new();
         let mut aggregate = None;
@@ -316,7 +342,7 @@ impl Parser<'_> {
                 self.rule_node(&mut summary)?;
                 if atoms.len() < self.limits().max_atoms_per_rule {
                     atoms.push(RawAtom {
-                        relation: self.qualify(&left)?,
+                        relation: self.resolve_reference(&left)?,
                         terms,
                     });
                 }
@@ -326,7 +352,7 @@ impl Parser<'_> {
         self.rule_node(&mut summary)?;
         let ast = RawRuleAst {
             explicit_id: None,
-            head_relation: self.qualify(&head_relation)?,
+            head_relation,
             head,
             atoms,
             predicates,
@@ -335,13 +361,14 @@ impl Parser<'_> {
         self.rules.push(BoundedRawRule::new(
             ast,
             Arc::clone(&self.module_id),
+            declaration_span,
             summary,
         ));
         Ok(())
     }
 
     fn parse_operation(&mut self, tag: OperationTag) -> Result<(), FrontendDiagnostic> {
-        self.advance();
+        let declaration = self.advance();
         self.meter.operation(self.operations.len() + 1)?;
         self.expect(TokenKind::LParen)?;
         let relation = self.qualified_identifier()?;
@@ -365,11 +392,16 @@ impl Parser<'_> {
         self.expect(TokenKind::RParen)?;
         self.consume_line_end()?;
         self.meter.ast_node()?;
-        let relation = self.qualify(&relation)?;
+        let relation = self.resolve_reference(&relation)?;
         self.operations.push(RelationOperation {
             kind,
             relation,
+            owner: self.module_id.to_string(),
             tuple,
+        });
+        self.operation_spans.push(SourceSpan {
+            line: declaration.line,
+            column: declaration.column,
         });
         Ok(())
     }
@@ -414,7 +446,7 @@ impl Parser<'_> {
             _ => {
                 let name = self.qualified_identifier()?;
                 self.meter.ast_node()?;
-                Ok(RawOperationValue::Variable(name))
+                Ok(RawOperationValue::EntitySymbol(name))
             }
         }
     }
@@ -546,7 +578,29 @@ impl Parser<'_> {
         Ok(text.to_string())
     }
 
-    fn qualify(&mut self, identity: &str) -> Result<String, FrontendDiagnostic> {
+    fn qualify_declaration(
+        &mut self,
+        identity: &str,
+        foreign_code: DiagnosticCode,
+        source_span: SourceSpan,
+    ) -> Result<String, FrontendDiagnostic> {
+        if identity.contains("::") {
+            let owner = identity.rsplit_once("::").map_or("", |(owner, _)| owner);
+            if owner != self.module_id.as_ref() {
+                return Err(FrontendDiagnostic::new(
+                    foreign_code,
+                    "declaration identity must be owned by its source module",
+                    0,
+                    0,
+                    identity.as_bytes(),
+                )
+                .at(source_span));
+            }
+        }
+        self.resolve_reference(identity)
+    }
+
+    fn resolve_reference(&mut self, identity: &str) -> Result<String, FrontendDiagnostic> {
         if identity.contains("::") {
             Ok(identity.to_string())
         } else {
@@ -666,6 +720,10 @@ fn aggregate_name(kind: AggregateKind) -> &'static str {
         AggregateKind::Min => "min",
         AggregateKind::Max => "max",
     }
+}
+
+pub(crate) fn valid_module_identity(module_id: &str) -> bool {
+    !module_id.is_empty() && module_id.split("::").all(valid_module_part)
 }
 
 fn valid_module_part(part: &str) -> bool {

@@ -26,8 +26,9 @@ workspace-local module identity from the filename.
 The gate is mandatory. The parser meters source bytes, tokens, identifiers,
 AST nodes, relation/rule/operation collections, terms, atoms, predicates,
 aggregate groups, and structural cost before retention. Successful checking
-produces immutable relation schemas, sealed typed rule plans, a dependency
-DAG, and one canonical manifest digest.
+produces immutable relation schemas with an authoritative/derived kind and
+module owner, sealed typed rule plans, a dependency DAG, and one canonical
+manifest digest. Kind and ownership participate in that digest.
 
 The intended model is:
 
@@ -49,8 +50,16 @@ Remove(Owns, (alice, sword))
 ReplaceBy(Owns, item, sword, (bob, sword))
 ```
 
+These operations may target authoritative relations only. Bare operation
+identifiers such as `alice` and `sword` are ground symbolic entity references,
+not externally bound variables; integer and text columns require literals.
+Derived relations are read-only and reject all three operations.
+
 For a composite named unique constraint, the selected key is a tuple. Source
 and module declaration order do not affect the sealed manifest identity.
+Declarations are owned by their source module: an unqualified declaration is
+local, while an explicitly qualified declaration must have exactly the current
+module as its prefix. Qualified cross-module names remain valid references.
 
 Authoritative relation rows will be staged by resolvers inside the same atomic
 candidate as components. Positive, nonrecursive rules derive read-only facts
@@ -116,6 +125,13 @@ The accepted v0 contract fixes the identity-sensitive rules:
 - globally unique typed rule plans, positive atoms, and predicates use
   canonical evaluation order, so declaration or module order cannot select a
   different typed resource failure.
+- every explicit and inferred schema passes one invariant validator before it
+  enters the sealed relation namespace; duplicate derived-head columns and
+  aggregate group variables are rejected explicitly;
+- module admission is complete-set based: module count, total module-ID bytes,
+  per-module source bytes, and total source bytes are checked before parsing;
+  admitted modules are then parsed in canonical identity order and bounded
+  diagnostics are reduced globally with source-module attribution;
 - a raw-input envelope bounds source bytes, tokens, AST nodes, rules,
   identifiers, terms, atoms, predicates, aggregate groups, structural cost,
   and validation visits while parsing, before an oversized plan exists;
@@ -132,6 +148,10 @@ The accepted v0 contract fixes the identity-sensitive rules:
   exact sorted child digests, and complete duplicate-conflict witnesses, while
   accepted plans precompute one sealed byte representation, digest, dependency
   set, inferred schema, and resource quote for all later consumers;
+- source/token/module-envelope admission is a separate diagnostic domain from
+  syntactic construction. An envelope failure prevents parsing; once admitted,
+  syntax and semantic errors from every module are collected and reduced in
+  canonical module order rather than by caller order;
 - the decoder's `max_structural_bytes` is an abstract deterministic structural
   cost, not a measured allocator peak. The runtime implementation will use a
   bounded arena for a true peak-allocation contract.

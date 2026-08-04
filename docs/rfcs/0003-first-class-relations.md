@@ -573,6 +573,37 @@ canonical sorting, manifest identity, replay, and later caches consume this
 single sealed identity rather than reconstructing and hashing plan bytes during
 comparisons.
 
+The production front end additionally seals a relation kind and declaration
+owner with every schema. `Authoritative` relations are the only legal targets
+of `Insert`, `Remove`, and `ReplaceBy`; `Derived` relations are read-only.
+Explicit schemas and checker-inferred derived schemas pass the same invariant
+validator before registration. In particular, duplicate derived-head columns,
+duplicate aggregate group variables, and incompatible schemas across rules for
+one head are rejected before a derived identity enters the manifest.
+
+A declaration is local to its compiling module. It may use an unqualified
+local name or repeat the current module as its exact qualification prefix; it
+cannot declare a relation or derived head owned by another module. Qualified
+cross-module references remain legal. Relation kind and owner are part of
+canonical schema, sealed-rule, front-end manifest, and compiled-program
+identity.
+
+Multi-module admission is complete-set based. The raw profile bounds module
+count, per-module and total source bytes, and total module-identifier bytes.
+After bounded header admission, modules are canonically ordered by qualified
+identity, parsed independently, and their bounded diagnostics are collected
+before one fixed-priority result is selected. Complete-set totals, rather than
+the first overflowing prefix, form global-limit witnesses. Diagnostics include
+their source owner, so caller module order changes neither code, witness, nor
+ownership attribution.
+
+Source/module envelope admission is an earlier diagnostic domain than syntax:
+an input outside that envelope is never parsed. Once all modules are admitted,
+syntax construction remains bounded per module and competes canonically with
+the other collected module diagnostics. Module-scope relation operations are
+ground: bare identifiers denote symbolic entity references and are not an
+external variable-binding surface.
+
 ## Storage and compilation
 
 The language semantics do not require a particular kernel layout. A compiler

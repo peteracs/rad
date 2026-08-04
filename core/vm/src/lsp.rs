@@ -1319,8 +1319,11 @@ fn is_relation_document(text: &str) -> bool {
         line.starts_with("relation ")
             || line.starts_with("derive ")
             || line.starts_with("Insert(")
+            || line.starts_with("insert(")
             || line.starts_with("Remove(")
+            || line.starts_with("remove(")
             || line.starts_with("ReplaceBy(")
+            || line.starts_with("replace_by(")
     })
 }
 
@@ -1412,5 +1415,10 @@ mod lsp_position_tests {
         let options = relation_options(Path::new("facts.rad"), source);
         assert_eq!(options.module_id, "game::facts");
         assert!(crate::relation_frontend::compile(source, &options).is_ok());
+        assert!(is_relation_document("insert(Owns, (alice, sword))\n"));
+        assert!(is_relation_document("remove(Owns, (alice, sword))\n"));
+        assert!(is_relation_document(
+            "replace_by(Owns, item, sword, (alice, sword))\n"
+        ));
     }
 }
