@@ -10,6 +10,7 @@ struct BindingState {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct DerivationLimits {
+    raw_rule_input: RawRuleInputLimits,
     rule_plans: RulePlanLimits,
     max_bindings: usize,
     max_facts: usize,
@@ -30,6 +31,7 @@ struct DerivationLimits {
 impl DerivationLimits {
     fn generous() -> Self {
         Self {
+            raw_rule_input: RawRuleInputLimits::generous(),
             rule_plans: RulePlanLimits::generous(),
             max_bindings: 4_096,
             max_facts: 4_096,
@@ -617,7 +619,9 @@ fn derive_all(
             return Err("derivation.relation_namespace_collision");
         }
     }
-    if let Some(diagnostic) = select_rule_diagnostic(rules, limits.rule_plans) {
+    if let Some(diagnostic) =
+        select_rule_diagnostic(rules, limits.raw_rule_input, limits.rule_plans)
+    {
         return Err(diagnostic.code.error());
     }
     let mut canonical_rules = rules

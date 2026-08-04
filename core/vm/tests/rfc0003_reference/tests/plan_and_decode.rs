@@ -148,35 +148,38 @@ fn invalid_rule_diagnostics_are_canonical_under_every_registration_order() {
             .collect(),
         aggregate: None,
     };
-    let assert_permutations =
-        |rules: Vec<RulePlan>, limits: RulePlanLimits, expected: RuleDiagnosticCode| {
-            let forward = select_rule_diagnostic(&rules, limits).unwrap();
-            let mut reverse_rules = rules.clone();
-            reverse_rules.reverse();
-            let reverse = select_rule_diagnostic(&reverse_rules, limits).unwrap();
-            assert_eq!(forward, reverse);
-            assert_eq!(forward.code, expected);
-            let schemas = BTreeMap::from([(
-                "Out".to_owned(),
-                RelationSchema::new("Out", vec![int_column("value")]),
-            )]);
-            let mut derivation_limits = DerivationLimits::generous();
-            derivation_limits.rule_plans = limits;
-            let forward_error = derive_all(
-                &RelationStore::default(),
-                &schemas,
-                &rules,
-                derivation_limits,
-            );
-            let reverse_error = derive_all(
-                &RelationStore::default(),
-                &schemas,
-                &reverse_rules,
-                derivation_limits,
-            );
-            assert_eq!(forward_error, Err(expected.error()));
-            assert_eq!(reverse_error, forward_error);
-        };
+    let assert_permutations = |rules: Vec<RulePlan>,
+                               limits: RulePlanLimits,
+                               expected: RuleDiagnosticCode| {
+        let forward =
+            select_rule_diagnostic(&rules, RawRuleInputLimits::generous(), limits).unwrap();
+        let mut reverse_rules = rules.clone();
+        reverse_rules.reverse();
+        let reverse =
+            select_rule_diagnostic(&reverse_rules, RawRuleInputLimits::generous(), limits).unwrap();
+        assert_eq!(forward, reverse);
+        assert_eq!(forward.code, expected);
+        let schemas = BTreeMap::from([(
+            "Out".to_owned(),
+            RelationSchema::new("Out", vec![int_column("value")]),
+        )]);
+        let mut derivation_limits = DerivationLimits::generous();
+        derivation_limits.rule_plans = limits;
+        let forward_error = derive_all(
+            &RelationStore::default(),
+            &schemas,
+            &rules,
+            derivation_limits,
+        );
+        let reverse_error = derive_all(
+            &RelationStore::default(),
+            &schemas,
+            &reverse_rules,
+            derivation_limits,
+        );
+        assert_eq!(forward_error, Err(expected.error()));
+        assert_eq!(reverse_error, forward_error);
+    };
 
     assert_permutations(
         vec![plan("", 1, 0), plan("unqualified", 1, 0)],
@@ -240,7 +243,7 @@ fn invalid_rule_diagnostics_are_canonical_under_every_registration_order() {
                 .iter()
                 .map(|index| three[*index].clone())
                 .collect::<Vec<_>>();
-            select_rule_diagnostic(&rules, three_limits).unwrap()
+            select_rule_diagnostic(&rules, RawRuleInputLimits::generous(), three_limits).unwrap()
         })
         .collect::<BTreeSet<_>>();
     assert_eq!(expected.len(), 1);
@@ -253,6 +256,274 @@ fn invalid_rule_diagnostics_are_canonical_under_every_registration_order() {
     let fingerprint = raw_rule_fingerprint(&atom_order);
     atom_order.atoms.reverse();
     assert_eq!(raw_rule_fingerprint(&atom_order), fingerprint);
+}
+
+#[test]
+fn raw_rule_envelope_bounds_hostile_input_before_complete_fingerprinting() {
+    let plan = |id: &str| RulePlan {
+        id: id.to_owned(),
+        head_relation: "Out".to_owned(),
+        head: vec![Term::var("value")],
+        atoms: vec![Atom::new("Input", vec![Term::var("value")])],
+        predicates: Vec::new(),
+        aggregate: None,
+    };
+    let sealed = RulePlanLimits::generous();
+
+    let mut raw = RawRuleInputLimits::generous();
+    raw.max_rules = 1;
+    let million_rule_preflight = analyze_rule_diagnostics(
+        &[],
+        RawRuleInputStats {
+            rules_seen: 1_000_000,
+            ..RawRuleInputStats::default()
+        },
+        raw,
+        sealed,
+    );
+    assert_eq!(
+        million_rule_preflight.diagnostic.unwrap().code,
+        RuleDiagnosticCode::RawRuleLimit
+    );
+    assert_eq!(million_rule_preflight.usage, RawValidationUsage::default());
+
+    raw = RawRuleInputLimits::generous();
+    raw.max_source_bytes = 8;
+    let source_preflight = analyze_rule_diagnostics(
+        &[],
+        RawRuleInputStats {
+            source_bytes: usize::MAX,
+            ..RawRuleInputStats::default()
+        },
+        raw,
+        sealed,
+    );
+    assert_eq!(
+        source_preflight.diagnostic.unwrap().code,
+        RuleDiagnosticCode::RawSourceByteLimit
+    );
+    assert_eq!(source_preflight.usage.complete_fingerprints, 0);
+
+    raw = RawRuleInputLimits::generous();
+    raw.max_tokens = 4;
+    let token_preflight = analyze_rule_diagnostics(
+        &[],
+        RawRuleInputStats {
+            tokens: usize::MAX,
+            ..RawRuleInputStats::default()
+        },
+        raw,
+        sealed,
+    );
+    assert_eq!(
+        token_preflight.diagnostic.unwrap().code,
+        RuleDiagnosticCode::RawTokenLimit
+    );
+    assert_eq!(token_preflight.usage.complete_fingerprints, 0);
+
+    let mut enormous_body = plan("");
+    enormous_body.atoms = (0..10_000)
+        .map(|index| Atom::new(&format!("Input{index}"), vec![Term::var("value")]))
+        .collect();
+    raw = RawRuleInputLimits::generous();
+    raw.max_atoms_per_rule = 1;
+    let empty_id_wins = analyze_rule_diagnostics(
+        std::slice::from_ref(&enormous_body),
+        RawRuleInputStats::for_rules(std::slice::from_ref(&enormous_body)),
+        raw,
+        sealed,
+    );
+    assert_eq!(
+        empty_id_wins.diagnostic.unwrap().code,
+        RuleDiagnosticCode::EmptyId
+    );
+    assert_eq!(empty_id_wins.usage.complete_fingerprints, 0);
+
+    enormous_body.id = "rules.enormous".to_owned();
+    let atom_limit = analyze_rule_diagnostics(
+        std::slice::from_ref(&enormous_body),
+        RawRuleInputStats::for_rules(std::slice::from_ref(&enormous_body)),
+        raw,
+        sealed,
+    );
+    assert_eq!(
+        atom_limit.diagnostic.unwrap().code,
+        RuleDiagnosticCode::RawAtomLimit
+    );
+    assert_eq!(atom_limit.usage.complete_fingerprints, 0);
+    assert!(atom_limit.usage.metadata_visits <= raw.max_validation_node_visits);
+
+    let enormous_identifier = plan(&format!("rules.{}", "x".repeat(100_000)));
+    raw = RawRuleInputLimits::generous();
+    raw.max_identifier_bytes = 32;
+    let identifier_limit = analyze_rule_diagnostics(
+        std::slice::from_ref(&enormous_identifier),
+        RawRuleInputStats::for_rules(std::slice::from_ref(&enormous_identifier)),
+        raw,
+        sealed,
+    );
+    assert_eq!(
+        identifier_limit.diagnostic.unwrap().code,
+        RuleDiagnosticCode::RawIdentifierByteLimit
+    );
+    assert_eq!(identifier_limit.usage.complete_fingerprints, 0);
+
+    let mut enormous_groups = plan("rules.groups");
+    enormous_groups.aggregate = Some(AggregateSpec {
+        kind: AggregateKind::Count,
+        input: None,
+        output: "count".to_owned(),
+        group_by: vec!["value".to_owned(); 10_000],
+    });
+    raw = RawRuleInputLimits::generous();
+    raw.max_aggregate_groups_per_rule = 1;
+    let group_limit = analyze_rule_diagnostics(
+        std::slice::from_ref(&enormous_groups),
+        RawRuleInputStats::for_rules(std::slice::from_ref(&enormous_groups)),
+        raw,
+        sealed,
+    );
+    assert_eq!(
+        group_limit.diagnostic.unwrap().code,
+        RuleDiagnosticCode::RawAggregateGroupLimit
+    );
+    assert_eq!(group_limit.usage.complete_fingerprints, 0);
+
+    let bounded = plan("rules.bounded");
+    raw = RawRuleInputLimits::generous();
+    raw.max_ast_nodes = 1;
+    let node_limit = analyze_rule_diagnostics(
+        std::slice::from_ref(&bounded),
+        RawRuleInputStats::for_rules(std::slice::from_ref(&bounded)),
+        raw,
+        sealed,
+    );
+    assert_eq!(
+        node_limit.diagnostic.unwrap().code,
+        RuleDiagnosticCode::RawAstNodeLimit
+    );
+    assert_eq!(node_limit.usage.complete_fingerprints, 0);
+
+    raw = RawRuleInputLimits::generous();
+    raw.max_total_structural_cost = 1;
+    let structural_limit = analyze_rule_diagnostics(
+        std::slice::from_ref(&bounded),
+        RawRuleInputStats::for_rules(std::slice::from_ref(&bounded)),
+        raw,
+        sealed,
+    );
+    assert_eq!(
+        structural_limit.diagnostic.unwrap().code,
+        RuleDiagnosticCode::RawStructuralCostLimit
+    );
+    assert_eq!(structural_limit.usage.complete_fingerprints, 0);
+
+    raw = RawRuleInputLimits::generous();
+    raw.max_validation_node_visits = 1;
+    let work_limit = analyze_rule_diagnostics(
+        std::slice::from_ref(&bounded),
+        RawRuleInputStats::for_rules(std::slice::from_ref(&bounded)),
+        raw,
+        sealed,
+    );
+    assert_eq!(
+        work_limit.diagnostic.unwrap().code,
+        RuleDiagnosticCode::RawValidationWorkLimit
+    );
+    assert_eq!(work_limit.usage.complete_fingerprints, 0);
+
+    let mut predicate_heavy = plan("rules.predicates");
+    predicate_heavy.predicates = vec![
+        Predicate::Greater("value".to_owned(), "value".to_owned()),
+        Predicate::Greater("value".to_owned(), "value".to_owned()),
+    ];
+    let mut atom_heavy = plan("rules.atoms");
+    atom_heavy
+        .atoms
+        .push(Atom::new("Other", vec![Term::var("value")]));
+    raw = RawRuleInputLimits::generous();
+    raw.max_atoms_per_rule = 1;
+    raw.max_predicates_per_rule = 1;
+    let forward = analyze_rule_diagnostics(
+        &[predicate_heavy.clone(), atom_heavy.clone()],
+        RawRuleInputStats {
+            rules_seen: 2,
+            ..RawRuleInputStats::default()
+        },
+        raw,
+        sealed,
+    );
+    let reverse = analyze_rule_diagnostics(
+        &[atom_heavy, predicate_heavy],
+        RawRuleInputStats {
+            rules_seen: 2,
+            ..RawRuleInputStats::default()
+        },
+        raw,
+        sealed,
+    );
+    assert_eq!(forward.diagnostic, reverse.diagnostic);
+    assert_eq!(
+        forward.diagnostic.unwrap().code,
+        RuleDiagnosticCode::RawAtomLimit
+    );
+}
+
+#[test]
+fn diagnostic_witnesses_bind_exact_duplicate_groups_and_digest_multisets() {
+    let plan = |relation: &str| RulePlan {
+        id: "rules.duplicate".to_owned(),
+        head_relation: "Out".to_owned(),
+        head: vec![Term::var("value")],
+        atoms: vec![Atom::new(relation, vec![Term::var("value")])],
+        predicates: Vec::new(),
+        aggregate: None,
+    };
+    let a = plan("A");
+    let b = plan("B");
+    let c = plan("C");
+    let diagnose = |rules: &[RulePlan]| {
+        select_rule_diagnostic(
+            rules,
+            RawRuleInputLimits::generous(),
+            RulePlanLimits::generous(),
+        )
+        .unwrap()
+    };
+    let ab = diagnose(&[a.clone(), b.clone()]);
+    let ba = diagnose(&[b.clone(), a.clone()]);
+    let ac = diagnose(&[a.clone(), c]);
+    assert_eq!(ab.code, RuleDiagnosticCode::DuplicateId);
+    assert_eq!(ab, ba);
+    assert_ne!(ab.rule_fingerprint, ac.rule_fingerprint);
+
+    let mut reordered = a.clone();
+    reordered
+        .atoms
+        .push(Atom::new("B", vec![Term::var("value")]));
+    let fingerprint = raw_rule_fingerprint(&reordered);
+    reordered.atoms.reverse();
+    assert_eq!(raw_rule_fingerprint(&reordered), fingerprint);
+    reordered.atoms.push(reordered.atoms[0].clone());
+    assert_ne!(raw_rule_fingerprint(&reordered), fingerprint);
+
+    assert!(RuleDiagnosticCode::EmptyId.priority() < RuleDiagnosticCode::UnqualifiedId.priority());
+    assert!(RuleDiagnosticCode::RuleLimit.priority() < RuleDiagnosticCode::DuplicateId.priority());
+    assert!(RuleDiagnosticCode::DuplicateId.priority() < RuleDiagnosticCode::AtomLimit.priority());
+    assert!(
+        RuleDiagnosticCode::AtomLimit.priority() < RuleDiagnosticCode::PredicateLimit.priority()
+    );
+    assert!(
+        RuleDiagnosticCode::PredicateLimit.priority() < RuleDiagnosticCode::TermLimit.priority()
+    );
+    assert!(
+        RuleDiagnosticCode::TermLimit.priority()
+            < RuleDiagnosticCode::CanonicalByteLimit.priority()
+    );
+    assert!(
+        RuleDiagnosticCode::CanonicalByteLimit.priority()
+            < RuleDiagnosticCode::DependencyEdgeLimit.priority()
+    );
 }
 
 #[test]

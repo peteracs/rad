@@ -514,24 +514,43 @@ predicates use canonical plan order because conjunction is commutative in v0.
 Source declaration, schema registration, module loading, and atom enumeration
 cannot select which typed resource error wins.
 
-A separate versioned sealed-plan profile bounds rule count, atoms per rule,
-predicates per rule, total terms, dependency edges, and total canonical typed
-plan bytes before evaluation. This makes scalar predicate work statically
-bounded even though the derivation work meter is charged primarily at row,
-join, intermediate-state, proof, and aggregate boundaries.
+A raw-input envelope precedes typed-plan validation. The lexer/parser charges
+source bytes, tokens, raw AST nodes, rule count, identifier bytes, terms,
+atoms, predicates, aggregate grouping entries, total raw structural cost, and
+validation node visits while constructing the raw plan. It stops before
+retaining the node that would exceed the envelope. A host may not first build
+an arbitrarily large `RulePlan` and only then ask the checker to reject it.
+The executable oracle models the parser-owned source/token counters and proves
+that oversized rule counts, bodies, identifiers, and grouping lists fail
+before complete raw fingerprints are constructed.
+
+After raw admission, a separate versioned sealed-plan profile bounds typed
+rule count, atoms per rule, predicates per rule, total terms, dependency
+edges, and total canonical typed-plan bytes before evaluation. This makes
+scalar predicate work statically bounded even though the derivation work meter
+is charged primarily at row, join, intermediate-state, proof, and aggregate
+boundaries. Full canonical serialization and sealing occur only after the raw
+envelope has bounded the input.
 
 Invalid rule sets are order-independent too. Static validation reduces all
-applicable diagnostics through one fixed priority, canonical streaming raw-plan
-fingerprint, and canonical detail key. Global rule, term, canonical-byte, and
+applicable diagnostics through one explicit fixed priority, bounded raw-plan
+witness, and canonical detail key. Global rule, term, canonical-byte, and
 dependency-edge limits are calculated from order-independent totals or sets.
-The same rule multiset therefore selects the same diagnostic identity under
-every rule or module registration permutation.
+Commutative child collections are represented by the exact sorted sequence of
+framed SHA-256 digests, not arithmetic sum/XOR sketches. A duplicate-rule-ID
+witness binds the ID, count, and complete sorted list of conflicting bounded
+plan fingerprints. The same rule multiset therefore selects the same
+diagnostic identity under every rule or module registration permutation.
 
 V0 diagnostic priority is, in order: empty rule ID, unqualified rule ID,
 global rule-count limit, duplicate rule ID, per-rule atom limit, per-rule
 predicate limit, global term limit, global canonical-plan-byte limit, then
 global dependency-edge limit. Fingerprint and detail key break ties only within
-one code.
+one code. This order is an explicit `priority()` mapping in the reference and
+front end; enum declaration order is not semantic. Raw source/token/rule
+envelope failures precede plan diagnostics because no complete raw plan exists
+after such a failure. Once a bounded rule header exists, empty and unqualified
+ID diagnostics are selected without traversing an oversized body.
 
 Accepted plans are sealed once as their typed plan, canonical bytes and digest,
 dependency set, inferred head schema, and static resource quote. Validation,

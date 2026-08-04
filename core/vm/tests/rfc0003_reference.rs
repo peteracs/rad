@@ -16,6 +16,7 @@ use sha2::{Digest, Sha256};
 // separate modules grouped by observable behavior.
 include!("rfc0003_reference/model.rs");
 include!("rfc0003_reference/rule_plan.rs");
+include!("rfc0003_reference/raw_validation.rs");
 include!("rfc0003_reference/derivation.rs");
 include!("rfc0003_reference/encoding.rs");
 include!("rfc0003_reference/fixtures.rs");

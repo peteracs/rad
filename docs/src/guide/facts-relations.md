@@ -80,9 +80,13 @@ The accepted v0 contract fixes the identity-sensitive rules:
 - globally unique typed rule plans, positive atoms, and predicates use
   canonical evaluation order, so declaration or module order cannot select a
   different typed resource failure.
-- a sealed-plan profile bounds rules, atoms, predicates, terms, dependency
-  edges, and canonical plan bytes before evaluation.
-- invalid plans use a fixed-priority canonical diagnostic reduction, while
+- a raw-input envelope bounds source bytes, tokens, AST nodes, rules,
+  identifiers, terms, atoms, predicates, aggregate groups, structural cost,
+  and validation visits while parsing, before an oversized plan exists;
+- a sealed-plan profile then bounds typed rules, atoms, predicates, terms,
+  dependency edges, and canonical plan bytes before evaluation;
+- invalid plans use an explicit fixed-priority canonical diagnostic reduction,
+  exact sorted child digests, and complete duplicate-conflict witnesses, while
   accepted plans precompute one sealed byte representation, digest, dependency
   set, inferred schema, and resource quote for all later consumers;
 - the decoder's `max_structural_bytes` is an abstract deterministic structural
