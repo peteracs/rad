@@ -53,7 +53,7 @@ enum DeletePolicy {
 struct ColumnSchema {
     name: String,
     kind: ValueKind,
-    on_delete: DeletePolicy,
+    on_delete: Option<DeletePolicy>,
 }
 
 impl ColumnSchema {
@@ -61,12 +61,12 @@ impl ColumnSchema {
         Self {
             name: name.to_owned(),
             kind,
-            on_delete: DeletePolicy::Restrict,
+            on_delete: (kind == ValueKind::Entity).then_some(DeletePolicy::Restrict),
         }
     }
 
     fn cascade(mut self) -> Self {
-        self.on_delete = DeletePolicy::Cascade;
+        self.on_delete = Some(DeletePolicy::Cascade);
         self
     }
 }
@@ -109,6 +109,21 @@ impl RelationSchema {
     }
 
     fn validate_declaration(&self) -> OracleResult<()> {
+        if self.name.is_empty() {
+            return Err("relation.empty_name");
+        }
+        let mut column_names = BTreeSet::new();
+        for column in &self.columns {
+            if column.name.is_empty() {
+                return Err("relation.empty_column_name");
+            }
+            if !column_names.insert(&column.name) {
+                return Err("relation.duplicate_column_name");
+            }
+            if column.kind != ValueKind::Entity && column.on_delete.is_some() {
+                return Err("relation.delete_policy_non_entity");
+            }
+        }
         if self.symmetric {
             if self.columns.len() != 2 || self.columns[0].kind != self.columns[1].kind {
                 return Err("relation.symmetric_shape");
@@ -116,13 +131,21 @@ impl RelationSchema {
             if !self.unique.is_empty() {
                 return Err("relation.symmetric_unique_forbidden");
             }
+            if self.columns[0].on_delete != self.columns[1].on_delete {
+                return Err("relation.symmetric_endpoint_metadata");
+            }
         }
         let mut unique_names = BTreeSet::new();
         for unique in &self.unique {
+            if unique.name.is_empty() {
+                return Err("relation.empty_unique_name");
+            }
             if !unique_names.insert(&unique.name) {
                 return Err("relation.duplicate_unique_name");
             }
+            let unique_columns = unique.columns.iter().copied().collect::<BTreeSet<_>>();
             if unique.columns.is_empty()
+                || unique_columns.len() != unique.columns.len()
                 || unique
                     .columns
                     .iter()
@@ -345,7 +368,10 @@ impl RelationStore {
         }
     }
 
-    fn apply_operations(&mut self, operations: Vec<RelationOperation>) -> OracleResult<()> {
+    fn apply_provisional_operations(
+        &mut self,
+        operations: Vec<RelationOperation>,
+    ) -> OracleResult<()> {
         self.last_changes.clear();
         let mut actions = BTreeMap::<FactKey, NormalizedAction>::new();
         let mut replacements =
@@ -443,15 +469,13 @@ impl RelationStore {
         for (key, action) in &actions {
             if let Some(metadata) = &action.insert {
                 if !candidate.contains_key(key) {
-                    let id = self.next_assertion_id;
-                    self.next_assertion_id = self
-                        .next_assertion_id
-                        .checked_add(1)
-                        .ok_or("relation.assertion_id_overflow")?;
                     candidate.insert(
                         key.clone(),
                         FactAssertion {
-                            id,
+                            // Candidate-only identity. WorldModel allocates a
+                            // durable assertion version only after cascades and
+                            // final schema validation.
+                            id: 0,
                             key: key.clone(),
                             causes: metadata.causes.clone(),
                             required_capabilities: metadata.required_capabilities.clone(),
@@ -467,7 +491,6 @@ impl RelationStore {
             }
         }
 
-        self.validate_unique(&candidate)?;
         self.assertions = candidate;
         self.last_changes = changes;
         Ok(())
@@ -504,6 +527,14 @@ impl RelationStore {
     }
 
     fn logical_rows(&self, relation: &str) -> OracleResult<Vec<LogicalRow>> {
+        self.logical_rows_metered(relation, None)
+    }
+
+    fn logical_rows_metered(
+        &self,
+        relation: &str,
+        mut meter: Option<&mut DerivationMeter>,
+    ) -> OracleResult<Vec<LogicalRow>> {
         let schema = self.schemas.get(relation).ok_or("relation.unknown")?;
         let mut rows = Vec::new();
         for assertion in self
@@ -511,6 +542,10 @@ impl RelationStore {
             .values()
             .filter(|assertion| assertion.key.relation == relation)
         {
+            let bytes = encoded_authoritative_row_len(assertion)?;
+            if let Some(meter) = meter.as_deref_mut() {
+                meter.charge_intermediate_bytes(bytes)?;
+            }
             let support = SupportRef::Authoritative {
                 key: assertion.key.clone(),
                 assertion_id: assertion.id,
@@ -521,6 +556,9 @@ impl RelationStore {
                 support: support.clone(),
             });
             if schema.symmetric && assertion.key.tuple[0] != assertion.key.tuple[1] {
+                if let Some(meter) = meter.as_deref_mut() {
+                    meter.charge_intermediate_bytes(bytes)?;
+                }
                 rows.push(LogicalRow {
                     tuple: vec![
                         assertion.key.tuple[1].clone(),
@@ -704,7 +742,9 @@ impl WorldModel {
             .iter()
             .map(|operation| operation.resolve(&handles))
             .collect::<OracleResult<Vec<_>>>()?;
-        candidate.relations.apply_operations(operations)?;
+        candidate
+            .relations
+            .apply_provisional_operations(operations)?;
 
         let mut despawns = BTreeMap::<EntityRef, OperationMetadata>::new();
         for despawn in transaction.despawns {
@@ -734,7 +774,7 @@ impl WorldModel {
                     continue;
                 };
                 referenced = true;
-                restricted |= column.on_delete == DeletePolicy::Restrict;
+                restricted |= column.on_delete == Some(DeletePolicy::Restrict);
                 cascade_metadata.merge(metadata);
             }
             if referenced {
@@ -763,6 +803,9 @@ impl WorldModel {
                 }
             }
         }
+        candidate
+            .relations
+            .validate_unique(&candidate.relations.assertions)?;
 
         // Assertion versions name committed lifetimes. Candidate-only rows
         // removed by a same-candidate cascade consume no assertion ID and
@@ -1029,6 +1072,12 @@ impl RulePlan {
         store: &RelationStore,
         derived_schemas: &BTreeMap<String, RelationSchema>,
     ) -> OracleResult<()> {
+        if self.id.is_empty() {
+            return Err("derivation.empty_rule_id");
+        }
+        if !self.id.contains('.') && !self.id.contains("::") {
+            return Err("derivation.unqualified_rule_id");
+        }
         let head_schema = derived_schemas
             .get(&self.head_relation)
             .ok_or("derivation.unknown_head")?;
@@ -1037,7 +1086,9 @@ impl RulePlan {
         }
 
         let mut variable_types = BTreeMap::<String, ValueKind>::new();
-        for atom in &self.atoms {
+        let mut atoms = self.atoms.iter().collect::<Vec<_>>();
+        atoms.sort_by_key(|atom| atom_bytes(atom));
+        for atom in atoms {
             let schema = store
                 .schemas
                 .get(&atom.relation)
@@ -1065,7 +1116,9 @@ impl RulePlan {
             }
         }
 
-        for predicate in &self.predicates {
+        let mut predicates = self.predicates.iter().collect::<Vec<_>>();
+        predicates.sort_by_key(|predicate| predicate_bytes(predicate));
+        for predicate in predicates {
             match predicate {
                 Predicate::Greater(left, right) => {
                     if variable_types.get(left) != Some(&ValueKind::Int)
@@ -1079,6 +1132,9 @@ impl RulePlan {
 
         let mut head_variable_types = variable_types.clone();
         if let Some(aggregate) = &self.aggregate {
+            if self.atoms.is_empty() {
+                return Err("derivation.aggregate_requires_positive_input");
+            }
             let groups = aggregate.group_by.iter().cloned().collect::<BTreeSet<_>>();
             if groups.len() != aggregate.group_by.len() {
                 return Err("derivation.duplicate_group");
@@ -1151,6 +1207,97 @@ impl RulePlan {
         }
         Ok(())
     }
+
+    fn canonical_bytes(&self) -> Vec<u8> {
+        let mut out = b"rfc0003.rule-plan.v1".to_vec();
+        write_text(&mut out, &self.id);
+        write_text(&mut out, &self.head_relation);
+        write_terms(&mut out, &self.head);
+        let mut atoms = self.atoms.iter().map(atom_bytes).collect::<Vec<_>>();
+        atoms.sort();
+        write_u64(&mut out, atoms.len() as u64);
+        for atom in atoms {
+            write_u64(&mut out, atom.len() as u64);
+            out.extend_from_slice(&atom);
+        }
+        let mut predicates = self
+            .predicates
+            .iter()
+            .map(predicate_bytes)
+            .collect::<Vec<_>>();
+        predicates.sort();
+        write_u64(&mut out, predicates.len() as u64);
+        for predicate in predicates {
+            write_u64(&mut out, predicate.len() as u64);
+            out.extend_from_slice(&predicate);
+        }
+        match &self.aggregate {
+            None => out.push(0),
+            Some(aggregate) => {
+                out.push(1);
+                out.push(match aggregate.kind {
+                    AggregateKind::Count => b'c',
+                    AggregateKind::Sum => b's',
+                    AggregateKind::Min => b'n',
+                    AggregateKind::Max => b'x',
+                });
+                match &aggregate.input {
+                    None => out.push(0),
+                    Some(input) => {
+                        out.push(1);
+                        write_text(&mut out, input);
+                    }
+                }
+                write_text(&mut out, &aggregate.output);
+                let mut groups = aggregate.group_by.clone();
+                groups.sort();
+                write_u64(&mut out, groups.len() as u64);
+                for group in groups {
+                    write_text(&mut out, &group);
+                }
+            }
+        }
+        out
+    }
+}
+
+fn write_term(out: &mut Vec<u8>, term: &Term) {
+    match term {
+        Term::Variable(name) => {
+            out.push(b'v');
+            write_text(out, name);
+        }
+        Term::Constant(value) => {
+            out.push(b'c');
+            encode_value(out, value);
+        }
+    }
+}
+
+fn write_terms(out: &mut Vec<u8>, terms: &[Term]) {
+    write_u64(out, terms.len() as u64);
+    for term in terms {
+        write_term(out, term);
+    }
+}
+
+fn atom_bytes(atom: &Atom) -> Vec<u8> {
+    let mut out = Vec::new();
+    write_text(&mut out, &atom.relation);
+    write_terms(&mut out, &atom.terms);
+    out
+}
+
+fn predicate_bytes(predicate: &Predicate) -> Vec<u8> {
+    let mut out = Vec::new();
+    match predicate {
+        Predicate::Greater(left, right) => {
+            out.push(b'g');
+            write_text(&mut out, left);
+            write_text(&mut out, right);
+        }
+    }
+    out
 }
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -1169,6 +1316,12 @@ struct DerivationLimits {
     max_proof_depth: usize,
     max_capability_alternatives: usize,
     max_canonical_bytes: usize,
+    max_rows_scanned: usize,
+    max_join_attempts: usize,
+    max_intermediate_states: usize,
+    max_intermediate_bytes: usize,
+    max_proof_combination_attempts: usize,
+    max_aggregate_group_entries: usize,
 }
 
 impl DerivationLimits {
@@ -1182,6 +1335,12 @@ impl DerivationLimits {
             max_proof_depth: 64,
             max_capability_alternatives: 256,
             max_canonical_bytes: 16 * 1024 * 1024,
+            max_rows_scanned: 1_000_000,
+            max_join_attempts: 1_000_000,
+            max_intermediate_states: 131_072,
+            max_intermediate_bytes: 64 * 1024 * 1024,
+            max_proof_combination_attempts: 131_072,
+            max_aggregate_group_entries: 131_072,
         }
     }
 }
@@ -1201,6 +1360,12 @@ struct DerivationMeter {
     capability_sets: BTreeMap<FactKey, BTreeSet<BTreeSet<String>>>,
     support_nodes: usize,
     canonical_bytes: usize,
+    rows_scanned: usize,
+    join_attempts: usize,
+    intermediate_states: usize,
+    intermediate_bytes: usize,
+    proof_combination_attempts: usize,
+    aggregate_group_entries: usize,
 }
 
 impl DerivationMeter {
@@ -1213,7 +1378,79 @@ impl DerivationMeter {
             capability_sets: BTreeMap::new(),
             support_nodes: 0,
             canonical_bytes: b"rfc0003.derivation.v1".len() + 8,
+            rows_scanned: 0,
+            join_attempts: 0,
+            intermediate_states: 0,
+            intermediate_bytes: 0,
+            proof_combination_attempts: 0,
+            aggregate_group_entries: 0,
         }
+    }
+
+    fn charge_rows_scanned(&mut self) -> OracleResult<()> {
+        self.rows_scanned = self
+            .rows_scanned
+            .checked_add(1)
+            .ok_or("derivation.rows_scanned_limit")?;
+        if self.rows_scanned > self.limits.max_rows_scanned {
+            return Err("derivation.rows_scanned_limit");
+        }
+        Ok(())
+    }
+
+    fn charge_join_attempt(&mut self) -> OracleResult<()> {
+        self.join_attempts = self
+            .join_attempts
+            .checked_add(1)
+            .ok_or("derivation.join_attempt_limit")?;
+        if self.join_attempts > self.limits.max_join_attempts {
+            return Err("derivation.join_attempt_limit");
+        }
+        Ok(())
+    }
+
+    fn charge_intermediate_bytes(&mut self, bytes: usize) -> OracleResult<()> {
+        self.intermediate_bytes = self
+            .intermediate_bytes
+            .checked_add(bytes)
+            .ok_or("derivation.intermediate_byte_limit")?;
+        if self.intermediate_bytes > self.limits.max_intermediate_bytes {
+            return Err("derivation.intermediate_byte_limit");
+        }
+        Ok(())
+    }
+
+    fn charge_intermediate_state(&mut self, bytes: usize) -> OracleResult<()> {
+        self.intermediate_states = self
+            .intermediate_states
+            .checked_add(1)
+            .ok_or("derivation.intermediate_state_limit")?;
+        if self.intermediate_states > self.limits.max_intermediate_states {
+            return Err("derivation.intermediate_state_limit");
+        }
+        self.charge_intermediate_bytes(bytes)
+    }
+
+    fn charge_proof_combination(&mut self, bytes: usize) -> OracleResult<()> {
+        self.proof_combination_attempts = self
+            .proof_combination_attempts
+            .checked_add(1)
+            .ok_or("derivation.proof_combination_limit")?;
+        if self.proof_combination_attempts > self.limits.max_proof_combination_attempts {
+            return Err("derivation.proof_combination_limit");
+        }
+        self.charge_intermediate_bytes(bytes)
+    }
+
+    fn charge_aggregate_group_entry(&mut self, bytes: usize) -> OracleResult<()> {
+        self.aggregate_group_entries = self
+            .aggregate_group_entries
+            .checked_add(1)
+            .ok_or("derivation.aggregate_group_limit")?;
+        if self.aggregate_group_entries > self.limits.max_aggregate_group_entries {
+            return Err("derivation.aggregate_group_limit");
+        }
+        self.charge_intermediate_bytes(bytes)
     }
 
     fn retain(
@@ -1282,11 +1519,14 @@ fn derived_logical_rows(
     relation: &str,
     schemas: &BTreeMap<String, RelationSchema>,
     derived: &DerivationResult,
+    meter: &mut DerivationMeter,
 ) -> OracleResult<Vec<LogicalRow>> {
     let schema = schemas.get(relation).ok_or("relation.unknown")?;
     let mut rows = Vec::new();
     for (key, proofs) in derived.iter().filter(|(key, _)| key.relation == relation) {
         for proof in proofs {
+            let bytes = encoded_derived_row_len(key, proof)?;
+            meter.charge_intermediate_bytes(bytes)?;
             let support = SupportRef::Derived {
                 key: key.clone(),
                 proof_id: proof.identity(),
@@ -1298,6 +1538,7 @@ fn derived_logical_rows(
                 support: support.clone(),
             });
             if schema.symmetric && key.tuple[0] != key.tuple[1] {
+                meter.charge_intermediate_bytes(bytes)?;
                 rows.push(LogicalRow {
                     tuple: vec![key.tuple[1].clone(), key.tuple[0].clone()],
                     support,
@@ -1309,26 +1550,63 @@ fn derived_logical_rows(
     Ok(rows)
 }
 
-fn unify(state: &BindingState, terms: &[Term], row: &LogicalRow) -> Option<BindingState> {
+fn unify(
+    state: &BindingState,
+    terms: &[Term],
+    row: &LogicalRow,
+    meter: &mut DerivationMeter,
+) -> OracleResult<Option<BindingState>> {
     if terms.len() != row.tuple.len() {
-        return None;
+        return Ok(None);
     }
-    let mut next = state.clone();
-    for (term, value) in terms.iter().zip(&row.tuple) {
+    for (index, (term, value)) in terms.iter().zip(&row.tuple).enumerate() {
         match term {
-            Term::Constant(expected) if expected != value => return None,
+            Term::Constant(expected) if expected != value => return Ok(None),
             Term::Constant(_) => {}
-            Term::Variable(name) => match next.bindings.get(name) {
-                Some(existing) if existing != value => return None,
+            Term::Variable(name) => match state.bindings.get(name) {
+                Some(existing) if existing != value => return Ok(None),
                 Some(_) => {}
                 None => {
-                    next.bindings.insert(name.clone(), value.clone());
+                    for (prior_term, prior_value) in terms[..index].iter().zip(&row.tuple[..index])
+                    {
+                        if matches!(prior_term, Term::Variable(prior) if prior == name)
+                            && prior_value != value
+                        {
+                            return Ok(None);
+                        }
+                    }
                 }
             },
         }
     }
+    let mut bytes = encoded_binding_state_len(state)?;
+    for (index, (term, value)) in terms.iter().zip(&row.tuple).enumerate() {
+        let Term::Variable(name) = term else {
+            continue;
+        };
+        let first_new_occurrence = !state.bindings.contains_key(name)
+            && !terms[..index]
+                .iter()
+                .any(|prior| matches!(prior, Term::Variable(prior) if prior == name));
+        if first_new_occurrence {
+            bytes = checked_len_add(bytes, encoded_text_len(name)?)?;
+            bytes = checked_len_add(bytes, encoded_value_len(value)?)?;
+        }
+    }
+    if !state.supports.contains(&row.support) {
+        bytes = checked_len_add(bytes, encoded_support_len(&row.support)?)?;
+    }
+    meter.charge_intermediate_state(bytes)?;
+    let mut next = state.clone();
+    for (term, value) in terms.iter().zip(&row.tuple) {
+        if let Term::Variable(name) = term {
+            if !next.bindings.contains_key(name) {
+                next.bindings.insert(name.clone(), value.clone());
+            }
+        }
+    }
     next.supports.insert(row.support.clone());
-    Some(next)
+    Ok(Some(next))
 }
 
 fn predicate_matches(predicate: &Predicate, bindings: &BTreeMap<String, FactValue>) -> bool {
@@ -1402,6 +1680,22 @@ fn build_head(
     ))
 }
 
+fn encoded_head_len(
+    rule: &RulePlan,
+    bindings: &BTreeMap<String, FactValue>,
+) -> OracleResult<usize> {
+    let mut length = encoded_text_len(&rule.head_relation)?;
+    length = checked_len_add(length, 8)?;
+    for term in &rule.head {
+        let value = match term {
+            Term::Constant(value) => value,
+            Term::Variable(name) => bindings.get(name).ok_or("derivation.unbound_head")?,
+        };
+        length = checked_len_add(length, encoded_value_len(value)?)?;
+    }
+    Ok(length)
+}
+
 fn evaluate_rule(
     rule: &RulePlan,
     store: &RelationStore,
@@ -1410,20 +1704,25 @@ fn evaluate_rule(
     meter: &mut DerivationMeter,
 ) -> OracleResult<DerivationResult> {
     rule.validate(store, schemas)?;
+    meter.charge_intermediate_state(16)?;
     let mut states = BTreeSet::from([BindingState {
         bindings: BTreeMap::new(),
         supports: BTreeSet::new(),
     }]);
-    for atom in &rule.atoms {
+    let mut atoms = rule.atoms.iter().collect::<Vec<_>>();
+    atoms.sort_by_key(|atom| atom_bytes(atom));
+    for atom in atoms {
         let rows = if store.schemas.contains_key(&atom.relation) {
-            store.logical_rows(&atom.relation)?
+            store.logical_rows_metered(&atom.relation, Some(meter))?
         } else {
-            derived_logical_rows(&atom.relation, schemas, derived)?
+            derived_logical_rows(&atom.relation, schemas, derived, meter)?
         };
         let mut next = BTreeSet::new();
         for state in &states {
             for row in &rows {
-                if let Some(joined) = unify(state, &atom.terms, row) {
+                meter.charge_rows_scanned()?;
+                meter.charge_join_attempt()?;
+                if let Some(joined) = unify(state, &atom.terms, row, meter)? {
                     if !next.contains(&joined) && next.len() >= meter.limits.max_bindings {
                         return Err("derivation.binding_limit");
                     }
@@ -1433,30 +1732,34 @@ fn evaluate_rule(
         }
         states = next;
     }
+    let mut predicates = rule.predicates.iter().collect::<Vec<_>>();
+    predicates.sort_by_key(|predicate| predicate_bytes(predicate));
     states.retain(|state| {
-        rule.predicates
+        predicates
             .iter()
             .all(|predicate| predicate_matches(predicate, &state.bindings))
     });
 
     let mut result = DerivationResult::new();
     if let Some(aggregate) = &rule.aggregate {
+        let mut group_names = aggregate.group_by.clone();
+        group_names.sort();
         let mut groups = BTreeMap::<
             Vec<FactValue>,
             BTreeMap<BTreeMap<String, FactValue>, Vec<BindingState>>,
         >::new();
         for state in states {
-            let group = aggregate
-                .group_by
+            let mut group_bytes = 8;
+            for name in &group_names {
+                let value = state.bindings.get(name).ok_or("derivation.unbound_group")?;
+                group_bytes = checked_len_add(group_bytes, encoded_value_len(value)?)?;
+            }
+            let entry_bytes = checked_len_add(group_bytes, encoded_binding_state_len(&state)?)?;
+            meter.charge_aggregate_group_entry(entry_bytes)?;
+            let group = group_names
                 .iter()
-                .map(|name| {
-                    state
-                        .bindings
-                        .get(name)
-                        .cloned()
-                        .ok_or("derivation.unbound_group")
-                })
-                .collect::<OracleResult<Vec<_>>>()?;
+                .map(|name| state.bindings.get(name).cloned().unwrap())
+                .collect::<Vec<_>>();
             groups
                 .entry(group)
                 .or_default()
@@ -1466,35 +1769,62 @@ fn evaluate_rule(
         }
         for (group, logical_bindings) in groups {
             let values = match &aggregate.input {
-                Some(input) => logical_bindings
-                    .keys()
-                    .map(|bindings| {
-                        bindings
-                            .get(input)
-                            .cloned()
-                            .ok_or("derivation.unbound_aggregate")
-                    })
-                    .collect::<OracleResult<Vec<_>>>()?,
-                None => vec![FactValue::Count(1); logical_bindings.len()],
+                Some(input) => {
+                    let mut bytes = 8;
+                    for bindings in logical_bindings.keys() {
+                        let value = bindings.get(input).ok_or("derivation.unbound_aggregate")?;
+                        bytes = checked_len_add(bytes, encoded_value_len(value)?)?;
+                    }
+                    meter.charge_intermediate_bytes(bytes)?;
+                    logical_bindings
+                        .keys()
+                        .map(|bindings| bindings.get(input).cloned().unwrap())
+                        .collect()
+                }
+                None => {
+                    let bytes = checked_len_add(
+                        8,
+                        logical_bindings
+                            .len()
+                            .checked_mul(encoded_value_len(&FactValue::Count(1))?)
+                            .ok_or("derivation.intermediate_byte_limit")?,
+                    )?;
+                    meter.charge_intermediate_bytes(bytes)?;
+                    vec![FactValue::Count(1); logical_bindings.len()]
+                }
             };
             let Some(value) = aggregate_values(aggregate.kind, &values)? else {
                 continue;
             };
-            let mut bindings = aggregate
-                .group_by
+            let mut binding_bytes = 8;
+            for (name, group_value) in group_names.iter().zip(&group) {
+                binding_bytes = checked_len_add(binding_bytes, encoded_text_len(name)?)?;
+                binding_bytes = checked_len_add(binding_bytes, encoded_value_len(group_value)?)?;
+            }
+            binding_bytes = checked_len_add(binding_bytes, encoded_text_len(&aggregate.output)?)?;
+            binding_bytes = checked_len_add(binding_bytes, encoded_value_len(&value)?)?;
+            meter.charge_intermediate_bytes(binding_bytes)?;
+            let mut bindings = group_names
                 .iter()
                 .cloned()
                 .zip(group.iter().cloned())
                 .collect::<BTreeMap<_, _>>();
             bindings.insert(aggregate.output.clone(), value);
+            meter.charge_intermediate_bytes(encoded_head_len(rule, &bindings)?)?;
             let key = build_head(rule, schemas, &bindings)?;
 
+            meter.charge_intermediate_bytes(8)?;
             let mut support_combinations = BTreeSet::from([BTreeSet::new()]);
             for alternatives in logical_bindings.values() {
                 let mut next = BTreeSet::new();
                 let mut capability_sets = BTreeSet::new();
                 for accumulated in &support_combinations {
                     for alternative in alternatives {
+                        let attempt_bytes = checked_len_add(
+                            encoded_support_set_len(accumulated)?,
+                            encoded_support_set_len(&alternative.supports)?,
+                        )?;
+                        meter.charge_proof_combination(attempt_bytes)?;
                         let supports = accumulated
                             .union(&alternative.supports)
                             .cloned()
@@ -1518,6 +1848,7 @@ fn evaluate_rule(
                 support_combinations = next;
             }
             for supports in support_combinations {
+                meter.charge_intermediate_bytes(encoded_combined_capabilities_len(&supports)?)?;
                 let required_capabilities = supports
                     .iter()
                     .flat_map(|support| support.required_capabilities().iter().cloned())
@@ -1539,7 +1870,9 @@ fn evaluate_rule(
         }
     } else {
         for state in states {
+            meter.charge_intermediate_bytes(encoded_head_len(rule, &state.bindings)?)?;
             let key = build_head(rule, schemas, &state.bindings)?;
+            meter.charge_intermediate_bytes(encoded_combined_capabilities_len(&state.supports)?)?;
             let required_capabilities = state
                 .supports
                 .iter()
@@ -1574,11 +1907,42 @@ fn derive_all(
     rules: &[RulePlan],
     limits: DerivationLimits,
 ) -> OracleResult<DerivationResult> {
+    for schema in schemas.values() {
+        schema.validate_declaration()?;
+        if store.schemas.contains_key(&schema.name) {
+            return Err("derivation.relation_namespace_collision");
+        }
+    }
+    let mut rule_ids = BTreeSet::new();
     for rule in rules {
+        if rule.id.is_empty() {
+            return Err("derivation.empty_rule_id");
+        }
+        if !rule.id.contains('.') && !rule.id.contains("::") {
+            return Err("derivation.unqualified_rule_id");
+        }
+        if !rule_ids.insert(&rule.id) {
+            return Err("derivation.duplicate_rule_id");
+        }
+    }
+    let mut canonical_rules = rules.iter().collect::<Vec<_>>();
+    canonical_rules.sort_by(|left, right| {
+        (
+            &left.head_relation,
+            &left.id,
+            Sha256::digest(left.canonical_bytes()),
+        )
+            .cmp(&(
+                &right.head_relation,
+                &right.id,
+                Sha256::digest(right.canonical_bytes()),
+            ))
+    });
+    for rule in &canonical_rules {
         rule.validate(store, schemas)?;
     }
     let mut meter = DerivationMeter::new(limits);
-    let heads = rules
+    let heads = canonical_rules
         .iter()
         .map(|rule| rule.head_relation.clone())
         .collect::<BTreeSet<_>>();
@@ -1587,7 +1951,7 @@ fn derive_all(
     let mut result = DerivationResult::new();
     while !pending.is_empty() {
         let ready = pending.iter().find(|head| {
-            rules
+            canonical_rules
                 .iter()
                 .filter(|rule| rule.head_relation.as_str() == head.as_str())
                 .flat_map(|rule| &rule.atoms)
@@ -1597,7 +1961,10 @@ fn derive_all(
         let Some(head) = ready.cloned() else {
             return Err("derivation.cycle");
         };
-        for rule in rules.iter().filter(|rule| rule.head_relation == head) {
+        for rule in canonical_rules
+            .iter()
+            .filter(|rule| rule.head_relation == head)
+        {
             let produced = evaluate_rule(rule, store, schemas, &result, &mut meter)?;
             for (fact, proofs) in produced {
                 result.entry(fact).or_default().extend(proofs);
@@ -1714,6 +2081,101 @@ fn encoded_fact_key_len(key: &FactKey) -> OracleResult<usize> {
         length = checked_len_add(length, encoded_value_len(value)?)?;
     }
     Ok(length)
+}
+
+fn encoded_tuple_len(tuple: &[FactValue]) -> OracleResult<usize> {
+    let mut length = 8;
+    for value in tuple {
+        length = checked_len_add(length, encoded_value_len(value)?)?;
+    }
+    Ok(length)
+}
+
+fn encoded_capability_set_len(capabilities: &BTreeSet<String>) -> OracleResult<usize> {
+    let mut length = 8;
+    for capability in capabilities {
+        length = checked_len_add(length, encoded_text_len(capability)?)?;
+    }
+    Ok(length)
+}
+
+fn encoded_support_len(support: &SupportRef) -> OracleResult<usize> {
+    let mut length = encoded_fact_key_len(support.key())?;
+    length = checked_len_add(length, 1)?;
+    length = checked_len_add(
+        length,
+        match support {
+            SupportRef::Authoritative { .. } => 8,
+            SupportRef::Derived { proof_id, .. } => encoded_text_len(proof_id)?,
+        },
+    )?;
+    length = checked_len_add(
+        length,
+        encoded_capability_set_len(support.required_capabilities())?,
+    )?;
+    if matches!(support, SupportRef::Derived { .. }) {
+        length = checked_len_add(length, 8)?;
+    }
+    Ok(length)
+}
+
+fn encoded_support_set_len(supports: &BTreeSet<SupportRef>) -> OracleResult<usize> {
+    let mut length = 8;
+    for support in supports {
+        length = checked_len_add(length, encoded_support_len(support)?)?;
+    }
+    Ok(length)
+}
+
+fn encoded_combined_capabilities_len(supports: &BTreeSet<SupportRef>) -> OracleResult<usize> {
+    let mut length = 8;
+    for support in supports {
+        for capability in support.required_capabilities() {
+            // Duplicates deliberately overcharge: this is a conservative
+            // pre-allocation quote for constructing the deduplicated set.
+            length = checked_len_add(length, encoded_text_len(capability)?)?;
+        }
+    }
+    Ok(length)
+}
+
+fn encoded_binding_map_len(bindings: &BTreeMap<String, FactValue>) -> OracleResult<usize> {
+    let mut length = 8;
+    for (name, value) in bindings {
+        length = checked_len_add(length, encoded_text_len(name)?)?;
+        length = checked_len_add(length, encoded_value_len(value)?)?;
+    }
+    Ok(length)
+}
+
+fn encoded_binding_state_len(state: &BindingState) -> OracleResult<usize> {
+    checked_len_add(
+        encoded_binding_map_len(&state.bindings)?,
+        encoded_support_set_len(&state.supports)?,
+    )
+}
+
+fn encoded_authoritative_row_len(assertion: &FactAssertion) -> OracleResult<usize> {
+    let mut length = encoded_fact_key_len(&assertion.key)?;
+    length = checked_len_add(length, encoded_tuple_len(&assertion.key.tuple)?)?;
+    length = checked_len_add(length, 8)?;
+    checked_len_add(
+        length,
+        encoded_capability_set_len(&assertion.required_capabilities)?,
+    )
+}
+
+fn encoded_derived_row_len(key: &FactKey, proof: &ProofAlternative) -> OracleResult<usize> {
+    let mut length = encoded_fact_key_len(key)?;
+    length = checked_len_add(length, encoded_tuple_len(&key.tuple)?)?;
+    length = checked_len_add(length, proof.canonical_len()?)?;
+    // SHA-256 proof IDs are rendered as 64 lowercase hexadecimal bytes.
+    length = checked_len_add(length, 8 + 64)?;
+    length = checked_len_add(
+        length,
+        encoded_capability_set_len(&proof.required_capabilities)?,
+    )?;
+    checked_len_add(length, 8)
 }
 
 fn write_u64(out: &mut Vec<u8>, value: u64) {
@@ -1933,7 +2395,11 @@ fn decode_fact_key(mut input: &[u8]) -> OracleResult<FactKey> {
     Ok(key)
 }
 
-fn decode_semantic_relation_bytes(mut input: &[u8]) -> OracleResult<BTreeSet<FactKey>> {
+fn decode_semantic_relation_bytes(
+    mut input: &[u8],
+    schemas: &BTreeMap<String, RelationSchema>,
+    entities: &EntityTable,
+) -> OracleResult<BTreeSet<FactKey>> {
     const DOMAIN: &[u8] = b"rfc0003.semantic.v1";
     if input.get(..DOMAIN.len()) != Some(DOMAIN) {
         return Err("wire.domain");
@@ -1944,6 +2410,28 @@ fn decode_semantic_relation_bytes(mut input: &[u8]) -> OracleResult<BTreeSet<Fac
     let mut previous = None;
     for _ in 0..count {
         let fact = decode_fact_key_from(&mut input)?;
+        let schema = schemas.get(&fact.relation).ok_or("wire.unknown_relation")?;
+        if fact.tuple.len() != schema.columns.len() {
+            return Err("wire.relation_arity");
+        }
+        if fact
+            .tuple
+            .iter()
+            .zip(&schema.columns)
+            .any(|(value, column)| value.kind() != column.kind)
+        {
+            return Err("wire.relation_type");
+        }
+        if schema.canonical_tuple(fact.tuple.clone())? != fact.tuple {
+            return Err("wire.noncanonical_tuple");
+        }
+        if fact
+            .tuple
+            .iter()
+            .any(|value| matches!(value, FactValue::Entity(entity) if !entities.contains(*entity)))
+        {
+            return Err("wire.entity_not_live");
+        }
         if previous.as_ref().is_some_and(|previous| previous >= &fact) {
             return Err("wire.noncanonical_fact_order");
         }
@@ -2963,7 +3451,12 @@ fn semantic_wire_round_trips_while_portable_replay_binds_assertion_identity() {
     );
     let semantic_before = semantic_relation_bytes(&model.relations);
     assert_eq!(
-        decode_semantic_relation_bytes(&semantic_before).unwrap(),
+        decode_semantic_relation_bytes(
+            &semantic_before,
+            &model.relations.schemas,
+            &model.entities,
+        )
+        .unwrap(),
         model.relations.assertions.keys().cloned().collect()
     );
     let schemas = derived_schemas();
@@ -3256,15 +3749,63 @@ fn schemas_and_semantic_wire_reject_ambiguous_or_noncanonical_input() {
             .validate_declaration(),
         Err("relation.duplicate_unique_name")
     );
+    assert_eq!(
+        RelationSchema::new(
+            "DuplicateColumns",
+            vec![int_column("value"), int_column("value")],
+        )
+        .validate_declaration(),
+        Err("relation.duplicate_column_name")
+    );
+    assert_eq!(
+        RelationSchema::new("DuplicateUniqueIndex", vec![int_column("value")])
+            .unique("value", &[0, 0])
+            .validate_declaration(),
+        Err("relation.unique_shape")
+    );
+    assert_eq!(
+        RelationSchema::new("NonEntityDelete", vec![int_column("value").cascade()])
+            .validate_declaration(),
+        Err("relation.delete_policy_non_entity")
+    );
+    assert_eq!(
+        RelationSchema::new("", vec![int_column("value")]).validate_declaration(),
+        Err("relation.empty_name")
+    );
+    assert_eq!(
+        RelationSchema::new("EmptyColumn", vec![int_column("")]).validate_declaration(),
+        Err("relation.empty_column_name")
+    );
+    assert_eq!(
+        RelationSchema::new("EmptyUnique", vec![int_column("value")])
+            .unique("", &[0])
+            .validate_declaration(),
+        Err("relation.empty_unique_name")
+    );
 
     let a = FactKey::new("A", vec![FactValue::Int(1)]);
     let b = FactKey::new("B", vec![FactValue::Int(2)]);
+    let schemas = BTreeMap::from([
+        (
+            "A".to_owned(),
+            RelationSchema::new("A", vec![int_column("value")]),
+        ),
+        (
+            "B".to_owned(),
+            RelationSchema::new("B", vec![int_column("value")]),
+        ),
+        (
+            "S".to_owned(),
+            RelationSchema::new("S", vec![entity_column("left"), entity_column("right")])
+                .symmetric(),
+        ),
+    ]);
     let mut duplicate = b"rfc0003.semantic.v1".to_vec();
     write_u64(&mut duplicate, 2);
     encode_fact_key(&mut duplicate, &a);
     encode_fact_key(&mut duplicate, &a);
     assert_eq!(
-        decode_semantic_relation_bytes(&duplicate),
+        decode_semantic_relation_bytes(&duplicate, &schemas, &EntityTable::default()),
         Err("wire.noncanonical_fact_order")
     );
     let mut out_of_order = b"rfc0003.semantic.v1".to_vec();
@@ -3272,8 +3813,73 @@ fn schemas_and_semantic_wire_reject_ambiguous_or_noncanonical_input() {
     encode_fact_key(&mut out_of_order, &b);
     encode_fact_key(&mut out_of_order, &a);
     assert_eq!(
-        decode_semantic_relation_bytes(&out_of_order),
+        decode_semantic_relation_bytes(&out_of_order, &schemas, &EntityTable::default()),
         Err("wire.noncanonical_fact_order")
+    );
+    let one_fact = |fact: &FactKey| {
+        let mut bytes = b"rfc0003.semantic.v1".to_vec();
+        write_u64(&mut bytes, 1);
+        encode_fact_key(&mut bytes, fact);
+        bytes
+    };
+    assert_eq!(
+        decode_semantic_relation_bytes(
+            &one_fact(&FactKey::new("Unknown", vec![FactValue::Int(1)])),
+            &schemas,
+            &EntityTable::default(),
+        ),
+        Err("wire.unknown_relation")
+    );
+    assert_eq!(
+        decode_semantic_relation_bytes(
+            &one_fact(&FactKey::new("A", Vec::new())),
+            &schemas,
+            &EntityTable::default(),
+        ),
+        Err("wire.relation_arity")
+    );
+    assert_eq!(
+        decode_semantic_relation_bytes(
+            &one_fact(&FactKey::new("A", vec![FactValue::Text("1".to_owned())])),
+            &schemas,
+            &EntityTable::default(),
+        ),
+        Err("wire.relation_type")
+    );
+    assert_eq!(
+        decode_semantic_relation_bytes(
+            &one_fact(&FactKey::new(
+                "S",
+                vec![
+                    FactValue::Entity(EntityRef {
+                        slot: 9,
+                        generation: 0,
+                    }),
+                    FactValue::Entity(EntityRef {
+                        slot: 4,
+                        generation: 0,
+                    }),
+                ],
+            )),
+            &schemas,
+            &EntityTable::default(),
+        ),
+        Err("wire.noncanonical_tuple")
+    );
+    let dead = EntityRef {
+        slot: 4,
+        generation: 0,
+    };
+    assert_eq!(
+        decode_semantic_relation_bytes(
+            &one_fact(&FactKey::new(
+                "S",
+                vec![FactValue::Entity(dead), FactValue::Entity(dead)],
+            )),
+            &schemas,
+            &EntityTable::default(),
+        ),
+        Err("wire.entity_not_live")
     );
 }
 
@@ -3800,6 +4406,25 @@ fn derivation_limits_bound_proofs_depth_supports_capabilities_and_bytes_atomical
         }])
         .collect::<Vec<_>>();
     let mut aggregate_branch_limit = DerivationLimits::generous();
+    aggregate_branch_limit.max_proof_combination_attempts = 3;
+    assert!(derive_all(
+        &model.relations,
+        &schemas,
+        &aggregate_rules,
+        aggregate_branch_limit,
+    )
+    .is_ok());
+    aggregate_branch_limit.max_proof_combination_attempts = 2;
+    assert_eq!(
+        derive_all(
+            &model.relations,
+            &schemas,
+            &aggregate_rules,
+            aggregate_branch_limit,
+        ),
+        Err("derivation.proof_combination_limit")
+    );
+    aggregate_branch_limit.max_proof_combination_attempts = usize::MAX;
     aggregate_branch_limit.max_capability_alternatives = 2;
     assert_eq!(
         derive_all(
@@ -3849,4 +4474,767 @@ fn derivation_limits_bound_proofs_depth_supports_capabilities_and_bytes_atomical
     assert_eq!(full_error, Err("derivation.proofs_per_fact_limit"));
     assert_eq!(incremental.apply(overflow), full_error.map(|_| ()));
     assert_eq!(incremental.model, incremental_model);
+}
+
+#[test]
+fn aggregates_require_positive_input_and_empty_scans_produce_no_row() {
+    let mut model = WorldModel::default();
+    model
+        .relations
+        .register(RelationSchema::new("Numbers", vec![int_column("value")]))
+        .unwrap();
+    let schemas = BTreeMap::from([
+        (
+            "GlobalCount".to_owned(),
+            RelationSchema::new("GlobalCount", vec![count_column("count")]),
+        ),
+        (
+            "GlobalInt".to_owned(),
+            RelationSchema::new("GlobalInt", vec![int_column("value")]),
+        ),
+    ]);
+    for kind in [
+        AggregateKind::Count,
+        AggregateKind::Sum,
+        AggregateKind::Min,
+        AggregateKind::Max,
+    ] {
+        let (head_relation, output, input) = if matches!(kind, AggregateKind::Count) {
+            ("GlobalCount", "count", None)
+        } else {
+            ("GlobalInt", "value", Some("input".to_owned()))
+        };
+        let atomless = RulePlan {
+            id: format!("derive.atomless.{kind:?}"),
+            head_relation: head_relation.to_owned(),
+            head: vec![Term::var(output)],
+            atoms: Vec::new(),
+            predicates: Vec::new(),
+            aggregate: Some(AggregateSpec {
+                kind,
+                input,
+                output: output.to_owned(),
+                group_by: Vec::new(),
+            }),
+        };
+        assert_eq!(
+            atomless.validate(&model.relations, &schemas),
+            Err("derivation.aggregate_requires_positive_input")
+        );
+    }
+
+    let count = RulePlan {
+        id: "derive.GlobalCount".to_owned(),
+        head_relation: "GlobalCount".to_owned(),
+        head: vec![Term::var("count")],
+        atoms: vec![Atom::new("Numbers", vec![Term::var("value")])],
+        predicates: Vec::new(),
+        aggregate: Some(AggregateSpec {
+            kind: AggregateKind::Count,
+            input: None,
+            output: "count".to_owned(),
+            group_by: Vec::new(),
+        }),
+    };
+    assert!(derive_all(
+        &model.relations,
+        &schemas,
+        std::slice::from_ref(&count),
+        DerivationLimits::generous(),
+    )
+    .unwrap()
+    .is_empty());
+    model
+        .apply_transaction(Transaction {
+            operations: vec![insert(pending_key("Numbers", vec![int(7)]), "number")],
+            ..Transaction::default()
+        })
+        .unwrap();
+    let derived = derive_all(
+        &model.relations,
+        &schemas,
+        &[count],
+        DerivationLimits::generous(),
+    )
+    .unwrap();
+    assert!(derived.contains_key(&FactKey::new("GlobalCount", vec![FactValue::Count(1)],)));
+}
+
+#[test]
+fn symmetric_endpoint_metadata_is_logically_symmetric() {
+    assert!(RelationSchema::new(
+        "CascadeFriend",
+        vec![
+            entity_column("left").cascade(),
+            entity_column("right").cascade()
+        ],
+    )
+    .symmetric()
+    .validate_declaration()
+    .is_ok());
+    assert!(RelationSchema::new(
+        "RestrictFriend",
+        vec![entity_column("left"), entity_column("right")],
+    )
+    .symmetric()
+    .validate_declaration()
+    .is_ok());
+    assert_eq!(
+        RelationSchema::new(
+            "MixedFriend",
+            vec![entity_column("left").cascade(), entity_column("right")],
+        )
+        .symmetric()
+        .validate_declaration(),
+        Err("relation.symmetric_endpoint_metadata")
+    );
+
+    for delete_second in [false, true] {
+        let mut model = WorldModel::default();
+        model
+            .relations
+            .register(
+                RelationSchema::new(
+                    "RestrictedFriend",
+                    vec![entity_column("left"), entity_column("right")],
+                )
+                .symmetric(),
+            )
+            .unwrap();
+        let a = model.entities.spawn();
+        let b = model.entities.spawn();
+        model
+            .apply_transaction(Transaction {
+                operations: vec![insert(
+                    pending_key("RestrictedFriend", vec![existing(a), existing(b)]),
+                    "restricted.friend",
+                )],
+                ..Transaction::default()
+            })
+            .unwrap();
+        let before = model.clone();
+        assert_eq!(
+            model.apply_transaction(Transaction {
+                despawns: vec![despawn(
+                    if delete_second { b } else { a },
+                    "despawn.restricted.friend",
+                )],
+                ..Transaction::default()
+            }),
+            Err("entity.delete_restricted")
+        );
+        assert_eq!(model, before);
+    }
+
+    for reverse in [false, true] {
+        let mut model = WorldModel::default();
+        model
+            .relations
+            .register(
+                RelationSchema::new(
+                    "Friend",
+                    vec![
+                        entity_column("left").cascade(),
+                        entity_column("right").cascade(),
+                    ],
+                )
+                .symmetric(),
+            )
+            .unwrap();
+        let a = model.entities.spawn();
+        let b = model.entities.spawn();
+        let tuple = if reverse { (b, a) } else { (a, b) };
+        model
+            .apply_transaction(Transaction {
+                operations: vec![insert(
+                    pending_key("Friend", vec![existing(tuple.0), existing(tuple.1)]),
+                    "friend",
+                )],
+                ..Transaction::default()
+            })
+            .unwrap();
+        model
+            .apply_transaction(Transaction {
+                despawns: vec![despawn(tuple.0, "despawn.friend")],
+                ..Transaction::default()
+            })
+            .unwrap();
+        assert!(model.relations.assertions.is_empty());
+    }
+
+    let mut self_edge = WorldModel::default();
+    self_edge
+        .relations
+        .register(
+            RelationSchema::new(
+                "Friend",
+                vec![
+                    entity_column("left").cascade(),
+                    entity_column("right").cascade(),
+                ],
+            )
+            .symmetric(),
+        )
+        .unwrap();
+    let entity = self_edge.entities.spawn();
+    self_edge
+        .apply_transaction(Transaction {
+            operations: vec![insert(
+                pending_key("Friend", vec![existing(entity), existing(entity)]),
+                "self.friend",
+            )],
+            ..Transaction::default()
+        })
+        .unwrap();
+    self_edge
+        .apply_transaction(Transaction {
+            despawns: vec![despawn(entity, "despawn.self")],
+            ..Transaction::default()
+        })
+        .unwrap();
+    assert!(self_edge.relations.assertions.is_empty());
+}
+
+#[test]
+fn final_candidate_precedes_uniqueness_and_assertion_allocation() {
+    let mut transient = WorldModel::default();
+    transient
+        .relations
+        .register(RelationSchema::new(
+            "Temporary",
+            vec![entity_column("entity").cascade()],
+        ))
+        .unwrap();
+    let doomed = transient.entities.spawn();
+    transient.relations.next_assertion_id = u64::MAX;
+    transient
+        .apply_transaction(Transaction {
+            despawns: vec![despawn(doomed, "despawn.temporary")],
+            operations: vec![insert(
+                pending_key("Temporary", vec![existing(doomed)]),
+                "insert.temporary",
+            )],
+            ..Transaction::default()
+        })
+        .unwrap();
+    assert!(transient.relations.assertions.is_empty());
+    assert_eq!(transient.relations.next_assertion_id, u64::MAX);
+
+    let mut surviving = WorldModel::default();
+    surviving
+        .relations
+        .register(RelationSchema::new("Marker", vec![int_column("value")]))
+        .unwrap();
+    surviving.relations.next_assertion_id = u64::MAX;
+    let before = surviving.clone();
+    assert_eq!(
+        surviving.apply_transaction(Transaction {
+            operations: vec![insert(pending_key("Marker", vec![int(1)]), "survives")],
+            ..Transaction::default()
+        }),
+        Err("relation.assertion_id_overflow")
+    );
+    assert_eq!(surviving, before);
+
+    let owns_model = |reverse_owner_ids: bool| {
+        let mut model = WorldModel::default();
+        model
+            .relations
+            .register(
+                RelationSchema::new(
+                    "Owns",
+                    vec![entity_column("owner"), entity_column("item").cascade()],
+                )
+                .unique("item", &[1]),
+            )
+            .unwrap();
+        let first_owner = model.entities.spawn();
+        let second_owner = model.entities.spawn();
+        let (alice, bob) = if reverse_owner_ids {
+            (second_owner, first_owner)
+        } else {
+            (first_owner, second_owner)
+        };
+        let sword = model.entities.spawn();
+        model
+            .apply_transaction(Transaction {
+                operations: vec![insert(
+                    pending_key("Owns", vec![existing(alice), existing(sword)]),
+                    "owns.alice",
+                )],
+                ..Transaction::default()
+            })
+            .unwrap();
+        (model, alice, bob, sword)
+    };
+    for reverse in [false, true] {
+        let (mut model, _, bob, sword) = owns_model(reverse);
+        model
+            .apply_transaction(Transaction {
+                despawns: vec![despawn(sword, "despawn.sword")],
+                operations: vec![insert(
+                    pending_key("Owns", vec![existing(bob), existing(sword)]),
+                    "owns.bob",
+                )],
+                ..Transaction::default()
+            })
+            .unwrap();
+        assert!(model.relations.assertions.is_empty());
+    }
+
+    let mut one_cascades = WorldModel::default();
+    one_cascades
+        .relations
+        .register(
+            RelationSchema::new(
+                "Holds",
+                vec![entity_column("owner"), entity_column("item").cascade()],
+            )
+            .unique("owner", &[0]),
+        )
+        .unwrap();
+    let owner = one_cascades.entities.spawn();
+    let retained_item = one_cascades.entities.spawn();
+    let doomed_item = one_cascades.entities.spawn();
+    one_cascades
+        .apply_transaction(Transaction {
+            operations: vec![insert(
+                pending_key("Holds", vec![existing(owner), existing(retained_item)]),
+                "base.holds",
+            )],
+            ..Transaction::default()
+        })
+        .unwrap();
+    let base = one_cascades.clone();
+    one_cascades
+        .apply_transaction(Transaction {
+            despawns: vec![despawn(doomed_item, "despawn.new.item")],
+            operations: vec![insert(
+                pending_key("Holds", vec![existing(owner), existing(doomed_item)]),
+                "candidate.holds",
+            )],
+            ..Transaction::default()
+        })
+        .unwrap();
+    assert_eq!(one_cascades.relations.assertions, base.relations.assertions);
+    let mut conflicting = base.clone();
+    assert_eq!(
+        conflicting.apply_transaction(Transaction {
+            operations: vec![insert(
+                pending_key("Holds", vec![existing(owner), existing(doomed_item)]),
+                "candidate.holds",
+            )],
+            ..Transaction::default()
+        }),
+        Err("relation.unique_conflict")
+    );
+    assert_eq!(conflicting, base);
+}
+
+#[test]
+fn intermediate_work_limits_cover_no_match_text_groups_and_proof_products() {
+    const WIDTH: i64 = 32;
+    const JOIN_ATTEMPTS: usize = 1_056;
+    const MATCH_ALL_BINDINGS: usize = 1_024;
+    let mut model = WorldModel::default();
+    for relation in ["A", "B", "Numbers"] {
+        model
+            .relations
+            .register(RelationSchema::new(relation, vec![int_column("value")]))
+            .unwrap();
+    }
+    for relation in ["TextSource", "TextMirror"] {
+        model
+            .relations
+            .register(RelationSchema::new(
+                relation,
+                vec![ColumnSchema::new("value", ValueKind::Text)],
+            ))
+            .unwrap();
+    }
+    model
+        .apply_transaction(Transaction {
+            operations: (0..WIDTH)
+                .map(|value| insert(pending_key("A", vec![int(value)]), "a"))
+                .chain(
+                    (WIDTH..(2 * WIDTH))
+                        .map(|value| insert(pending_key("B", vec![int(value)]), "b")),
+                )
+                .chain(
+                    (0..WIDTH)
+                        .map(|value| insert(pending_key("Numbers", vec![int(value)]), "number")),
+                )
+                .chain([
+                    PendingOperation::Insert(
+                        pending_key("TextSource", vec![PendingValue::Text("x".repeat(8_192))]),
+                        OperationMetadata::cause("text"),
+                    ),
+                    PendingOperation::Insert(
+                        pending_key("TextMirror", vec![PendingValue::Text("x".repeat(8_192))]),
+                        OperationMetadata::cause("text.mirror"),
+                    ),
+                ])
+                .collect(),
+            ..Transaction::default()
+        })
+        .unwrap();
+    let schemas = BTreeMap::from([
+        (
+            "NoMatch".to_owned(),
+            RelationSchema::new("NoMatch", vec![int_column("value")]),
+        ),
+        (
+            "Pairs".to_owned(),
+            RelationSchema::new("Pairs", vec![int_column("left"), int_column("right")]),
+        ),
+        (
+            "TextOut".to_owned(),
+            RelationSchema::new("TextOut", vec![ColumnSchema::new("value", ValueKind::Text)]),
+        ),
+        (
+            "CountByValue".to_owned(),
+            RelationSchema::new(
+                "CountByValue",
+                vec![int_column("value"), count_column("count")],
+            ),
+        ),
+    ]);
+    let no_match = RulePlan {
+        id: "derive.NoMatch".to_owned(),
+        head_relation: "NoMatch".to_owned(),
+        head: vec![Term::var("value")],
+        atoms: vec![
+            Atom::new("A", vec![Term::var("value")]),
+            Atom::new("B", vec![Term::var("value")]),
+        ],
+        predicates: Vec::new(),
+        aggregate: None,
+    };
+    let mut exact = DerivationLimits::generous();
+    exact.max_join_attempts = JOIN_ATTEMPTS;
+    exact.max_rows_scanned = JOIN_ATTEMPTS;
+    exact.max_intermediate_states = WIDTH as usize + 1;
+    assert!(derive_all(
+        &model.relations,
+        &schemas,
+        std::slice::from_ref(&no_match),
+        exact,
+    )
+    .unwrap()
+    .is_empty());
+    for (mut limits, error) in [
+        (
+            {
+                let mut value = exact;
+                value.max_join_attempts = JOIN_ATTEMPTS - 1;
+                value
+            },
+            "derivation.join_attempt_limit",
+        ),
+        (
+            {
+                let mut value = exact;
+                value.max_rows_scanned = JOIN_ATTEMPTS - 1;
+                value
+            },
+            "derivation.rows_scanned_limit",
+        ),
+        (
+            {
+                let mut value = exact;
+                value.max_intermediate_states = WIDTH as usize;
+                value
+            },
+            "derivation.intermediate_state_limit",
+        ),
+    ] {
+        // Isolate overlapping bounds so the asserted meter wins canonically.
+        if error == "derivation.join_attempt_limit" {
+            limits.max_rows_scanned = usize::MAX;
+        } else if error == "derivation.rows_scanned_limit" {
+            limits.max_join_attempts = usize::MAX;
+        }
+        assert_eq!(
+            derive_all(
+                &model.relations,
+                &schemas,
+                std::slice::from_ref(&no_match),
+                limits,
+            ),
+            Err(error)
+        );
+    }
+
+    let match_all = RulePlan {
+        id: "derive.Pairs".to_owned(),
+        head_relation: "Pairs".to_owned(),
+        head: vec![Term::var("left"), Term::var("right")],
+        atoms: vec![
+            Atom::new("A", vec![Term::var("left")]),
+            Atom::new("B", vec![Term::var("right")]),
+        ],
+        predicates: Vec::new(),
+        aggregate: None,
+    };
+    let mut match_limit = DerivationLimits::generous();
+    match_limit.max_bindings = MATCH_ALL_BINDINGS;
+    assert_eq!(
+        derive_all(
+            &model.relations,
+            &schemas,
+            std::slice::from_ref(&match_all),
+            match_limit,
+        )
+        .unwrap()
+        .len(),
+        MATCH_ALL_BINDINGS
+    );
+    match_limit.max_bindings = MATCH_ALL_BINDINGS - 1;
+    assert_eq!(
+        derive_all(&model.relations, &schemas, &[match_all], match_limit),
+        Err("derivation.binding_limit")
+    );
+
+    let text_rule = RulePlan {
+        id: "derive.TextOut".to_owned(),
+        head_relation: "TextOut".to_owned(),
+        head: vec![Term::var("value")],
+        atoms: vec![
+            Atom::new("TextSource", vec![Term::var("value")]),
+            Atom::new("TextMirror", vec![Term::var("value")]),
+        ],
+        predicates: Vec::new(),
+        aggregate: None,
+    };
+    let mut low = 0_usize;
+    let mut high = DerivationLimits::generous().max_intermediate_bytes;
+    while low + 1 < high {
+        let middle = low + (high - low) / 2;
+        let mut limits = DerivationLimits::generous();
+        limits.max_intermediate_bytes = middle;
+        if derive_all(
+            &model.relations,
+            &schemas,
+            std::slice::from_ref(&text_rule),
+            limits,
+        )
+        .is_ok()
+        {
+            high = middle;
+        } else {
+            low = middle;
+        }
+    }
+    let mut text_limit = DerivationLimits::generous();
+    text_limit.max_intermediate_bytes = high;
+    assert!(derive_all(
+        &model.relations,
+        &schemas,
+        std::slice::from_ref(&text_rule),
+        text_limit,
+    )
+    .is_ok());
+    text_limit.max_intermediate_bytes = high - 1;
+    assert_eq!(
+        derive_all(&model.relations, &schemas, &[text_rule], text_limit),
+        Err("derivation.intermediate_byte_limit")
+    );
+
+    let grouped = RulePlan {
+        id: "derive.CountByValue".to_owned(),
+        head_relation: "CountByValue".to_owned(),
+        head: vec![Term::var("value"), Term::var("count")],
+        atoms: vec![Atom::new("Numbers", vec![Term::var("value")])],
+        predicates: Vec::new(),
+        aggregate: Some(AggregateSpec {
+            kind: AggregateKind::Count,
+            input: None,
+            output: "count".to_owned(),
+            group_by: vec!["value".to_owned()],
+        }),
+    };
+    let mut group_limit = DerivationLimits::generous();
+    group_limit.max_aggregate_group_entries = WIDTH as usize;
+    assert!(derive_all(
+        &model.relations,
+        &schemas,
+        std::slice::from_ref(&grouped),
+        group_limit,
+    )
+    .is_ok());
+    group_limit.max_aggregate_group_entries = WIDTH as usize - 1;
+    assert_eq!(
+        derive_all(&model.relations, &schemas, &[grouped], group_limit),
+        Err("derivation.aggregate_group_limit")
+    );
+
+    let mut incremental_model = WorldModel::default();
+    for relation in ["A", "B"] {
+        incremental_model
+            .relations
+            .register(RelationSchema::new(relation, vec![int_column("value")]))
+            .unwrap();
+    }
+    incremental_model
+        .apply_transaction(Transaction {
+            operations: (0..WIDTH)
+                .map(|value| insert(pending_key("A", vec![int(value)]), "a"))
+                .collect(),
+            ..Transaction::default()
+        })
+        .unwrap();
+    let mut work_limit = DerivationLimits::generous();
+    work_limit.max_join_attempts = 64;
+    let mut incremental = DependencyMaintainer::new(
+        incremental_model.clone(),
+        schemas.clone(),
+        vec![no_match.clone()],
+        work_limit,
+    )
+    .unwrap();
+    let overflow = Transaction {
+        operations: vec![
+            insert(pending_key("B", vec![int(10)]), "b10"),
+            insert(pending_key("B", vec![int(11)]), "b11"),
+        ],
+        ..Transaction::default()
+    };
+    let mut full_candidate = incremental_model.clone();
+    full_candidate.apply_transaction(overflow.clone()).unwrap();
+    let full_error = derive_all(&full_candidate.relations, &schemas, &[no_match], work_limit);
+    assert_eq!(full_error, Err("derivation.join_attempt_limit"));
+    assert_eq!(incremental.apply(overflow), full_error.map(|_| ()));
+    assert_eq!(incremental.model, incremental_model);
+}
+
+#[test]
+fn canonical_rule_plans_make_resource_failures_permutation_invariant() {
+    let mut model = WorldModel::default();
+    for relation in ["One", "TwoLeft", "TwoRight"] {
+        model
+            .relations
+            .register(RelationSchema::new(relation, vec![int_column("value")]))
+            .unwrap();
+    }
+    model
+        .apply_transaction(Transaction {
+            operations: vec![
+                insert(pending_key("One", vec![int(1)]), "one"),
+                insert(pending_key("TwoLeft", vec![int(2)]), "left"),
+                insert(pending_key("TwoRight", vec![int(2)]), "right"),
+            ],
+            ..Transaction::default()
+        })
+        .unwrap();
+    let schemas = BTreeMap::from([(
+        "Out".to_owned(),
+        RelationSchema::new("Out", vec![int_column("value")]),
+    )]);
+    let one = RulePlan {
+        id: "a.one".to_owned(),
+        head_relation: "Out".to_owned(),
+        head: vec![Term::var("value")],
+        atoms: vec![Atom::new("One", vec![Term::var("value")])],
+        predicates: Vec::new(),
+        aggregate: None,
+    };
+    let two = RulePlan {
+        id: "b.two".to_owned(),
+        head_relation: "Out".to_owned(),
+        head: vec![Term::var("value")],
+        atoms: vec![
+            Atom::new("TwoLeft", vec![Term::var("value")]),
+            Atom::new("TwoRight", vec![Term::var("value")]),
+        ],
+        predicates: Vec::new(),
+        aggregate: None,
+    };
+    let mut limits = DerivationLimits::generous();
+    limits.max_facts = 1;
+    limits.max_support_nodes = 1;
+    let forward = derive_all(
+        &model.relations,
+        &schemas,
+        &[one.clone(), two.clone()],
+        limits,
+    );
+    let reverse = derive_all(
+        &model.relations,
+        &schemas,
+        &[two.clone(), one.clone()],
+        limits,
+    );
+    assert_eq!(forward, Err("derivation.fact_limit"));
+    assert_eq!(reverse, forward);
+
+    let mut two_reversed = two.clone();
+    two_reversed.atoms.reverse();
+    assert_eq!(
+        derive_all(
+            &model.relations,
+            &schemas,
+            &[one.clone(), two],
+            DerivationLimits::generous(),
+        ),
+        derive_all(
+            &model.relations,
+            &schemas,
+            &[two_reversed, one.clone()],
+            DerivationLimits::generous(),
+        )
+    );
+    let mut duplicate = one.clone();
+    duplicate.head = vec![Term::Constant(FactValue::Int(9))];
+    assert_eq!(
+        derive_all(
+            &model.relations,
+            &schemas,
+            &[one.clone(), duplicate],
+            DerivationLimits::generous(),
+        ),
+        Err("derivation.duplicate_rule_id")
+    );
+    let mut empty_id = one;
+    empty_id.id.clear();
+    assert_eq!(
+        derive_all(
+            &model.relations,
+            &schemas,
+            &[empty_id],
+            DerivationLimits::generous(),
+        ),
+        Err("derivation.empty_rule_id")
+    );
+    let mut unqualified = RulePlan {
+        id: "a.one".to_owned(),
+        head_relation: "Out".to_owned(),
+        head: vec![Term::Constant(FactValue::Int(1))],
+        atoms: vec![Atom::new("One", vec![Term::var("value")])],
+        predicates: Vec::new(),
+        aggregate: None,
+    };
+    unqualified.id = "one".to_owned();
+    assert_eq!(
+        derive_all(
+            &model.relations,
+            &schemas,
+            &[unqualified],
+            DerivationLimits::generous(),
+        ),
+        Err("derivation.unqualified_rule_id")
+    );
+
+    let collision = BTreeMap::from([(
+        "One".to_owned(),
+        RelationSchema::new("One", vec![int_column("value")]),
+    )]);
+    assert_eq!(
+        derive_all(
+            &model.relations,
+            &collision,
+            &[],
+            DerivationLimits::generous(),
+        ),
+        Err("derivation.relation_namespace_collision")
+    );
 }

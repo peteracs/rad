@@ -106,7 +106,10 @@ relation AlliedWith(left: entity, right: entity)
 
 Normative rules:
 
-1. Relation and column names use normal module qualification and visibility.
+1. Relation, column, unique-constraint, and rule identities are nonempty.
+   Relation and rule identities use normal module qualification and visibility.
+   Column names and unique-constraint names are unique within their relation;
+   rule IDs are globally unique within the compiled program.
 2. A row is a typed tuple with fixed arity.
 3. `unique column` declares a named unique constraint (the default name is the
    column name) and means at most one row may exist for each value of that
@@ -115,12 +118,18 @@ Normative rules:
    Constraint names are unique within the relation; duplicate names are a
    schema error because `ReplaceBy` must identify exactly one constraint.
 5. `symmetric` is valid only for a binary relation whose column types match.
-   Storage canonicalizes `(a, b)` and `(b, a)` to one physical row.
+   Both endpoints must also have identical endpoint-semantic metadata,
+   including `on delete`. Storage canonicalizes `(a, b)` and `(b, a)` to one
+   physical row.
 6. V0 prohibits `unique` on a symmetric relation. Endpoint-wide uniqueness is
    deferred rather than assigning meaning to a physically sorted column.
 7. Duplicate insertion is idempotent. It does not create duplicate
    provenance or alter multiplicity.
 8. Relation iteration and serialization use canonical tuple order.
+9. A unique constraint cannot repeat a column index. Delete policy metadata is
+   valid only on `entity` columns.
+10. Authoritative and derived relations occupy one module-qualified namespace;
+    the same identity cannot name both kinds.
 
 Relation constraints are schema invariants, not declaration-order checks.
 Every candidate is judged as a set of rows.
@@ -252,6 +261,25 @@ Cross-algebra rules with entity destruction are also base-relative:
 - insert-plus-despawn and replace-plus-despawn outcomes are independent of row,
   column, patch, and entity-ID order.
 
+Candidate finalization has one normative phase order:
+
+```text
+normalize explicit operations
+  -> create provisional rows without durable assertion IDs
+  -> freeze and classify the complete despawn set
+  -> apply canonical cascades
+  -> validate final live foreign keys and unique constraints
+  -> allocate assertion IDs only for surviving new FactKeys
+  -> emit durable changes
+  -> atomically adopt
+```
+
+Schema invariants and assertion exhaustion judge the final candidate, never an
+intermediate row that a same-candidate cascade removes. A transient cascading
+row therefore succeeds even when no further assertion ID is available, while
+any surviving new assertion fails atomically if its durable ID cannot be
+allocated.
+
 ### Fact key and assertion identity
 
 `FactKey = relation + canonical tuple` defines semantic equality, joins,
@@ -295,6 +323,11 @@ input. Atom arity, constants, predicates, head columns, and every rule sharing
 one derived head are checked against exact schemas with no implicit coercion.
 Postaggregate bindings are constructed solely from the canonical group key and
 aggregate output.
+
+Every aggregate rule has at least one positive body atom. An atomless aggregate
+is a checker error (`derivation.aggregate_requires_positive_input`), rather
+than treating the empty conjunction as one input. A valid positive scan that
+returns no binding produces no aggregate row.
 
 Allowed operations are:
 
@@ -433,14 +466,35 @@ unless a separately specified declassification rule grants visibility.
 Constraint evaluation may use privileged candidate truth, but public rejection
 rendering never implicitly declassifies supports.
 
-The versioned derivation profile bounds bindings, derived facts, proofs per
-fact, total proofs, support nodes, proof depth, capability alternatives, and
-canonical encoded bytes. Every expansion and retention is charged before it
-allocates or becomes visible. An exceed is one typed derivation resource
-failure: the complete authoritative candidate and prior derived state remain
-unchanged. Full recomputation and incremental maintenance must return the same
-limit result. Bounded `why()` rendering has an independent final envelope and
-never constructs an unbounded tree.
+The versioned derivation profile bounds successful bindings, derived facts,
+proofs per fact, total proofs, support nodes, proof depth, capability
+alternatives, and canonical encoded bytes. It separately bounds intermediate
+work and storage:
+
+```text
+rows scanned
+join attempts, including failed unifications
+materialized intermediate states
+deterministic intermediate bytes
+proof-combination attempts, including later deduplication
+aggregate group entries
+```
+
+The intermediate-byte charge is a deterministic conservative encoding budget
+covering copied names, values, tuples, bindings, supports, derived logical
+rows, aggregate keys, and proof identities. Every scan, clone, expansion, and
+retention is charged before allocation or visibility. An exceed is one typed
+derivation resource failure: the complete authoritative candidate and prior
+derived state remain unchanged. Full recomputation and incremental maintenance
+return the same exact limit class. One-under-limit succeeds and one-over-limit
+fails deterministically. Bounded `why()` rendering has an independent final
+envelope and never constructs an unbounded tree.
+
+Typed rule plans are adjudicated in canonical order by derived-head identity,
+globally unique rule ID, and canonical plan digest. Positive atoms and scalar
+predicates use canonical plan order because conjunction is commutative in v0.
+Source declaration, schema registration, module loading, and atom enumeration
+cannot select which typed resource error wins.
 
 ## Storage and compilation
 
@@ -485,10 +539,12 @@ Its relation-state inventory includes the complete entity generation map,
 next entity slot, ordered free slots, live handles, the next assertion ID,
 current assertions, components, ancestry, and every future-determining
 maintenance counter. The same state object drives restoration and canonical
-encoding. Canonical semantic decoders reject duplicate and out-of-order rows
-rather than silently normalizing them. Semantic encoding contains fact keys;
-operational encoding additionally contains assertion lifetimes and allocator
-state.
+encoding. Canonical semantic decoders receive the sealed schema and live
+entity environment. They reject unknown relations, wrong arity or types, dead
+entity handles, noncanonical symmetric orientation, duplicate rows, and
+out-of-order rows rather than silently normalizing them. Semantic encoding
+contains fact keys; operational encoding additionally contains assertion
+lifetimes and allocator state.
 
 Portable replay requires matching program, operational world, limits, and
 capabilities before executing. A replay implementation may rebuild derived
@@ -513,17 +569,23 @@ Required semantic fixtures before parser/runtime work:
    recomputation;
 6. deleting one support retains a derived fact with another proof;
 7. deleting the final support removes it;
-8. aggregate overflow, proof-branch explosion, and every derivation resource
-   limit reject deterministically and atomically;
+8. aggregate overflow, no-match and match-all joins, large copied values,
+   proof-branch explosion, aggregate-group growth, and every retained or
+   intermediate derivation limit reject deterministically and atomically;
 9. entity restrict/cascade, same-candidate handles, and allocator-slot reuse
    preserve live foreign-key identity;
 10. `why()` reaches exact assertion versions and settlement fan-in;
 11. capability rendering across joins, aggregates, and several derivation
     layers redacts hidden facts/proofs without multiplicity, identity, or
     ordering leakage;
-12. canonical semantic wire rejects duplicate/noncanonical rows, while
-    operational attempt replay binds generation and assertion allocators as
-    well as their deliberately different fact/assertion identities.
+12. schema-aware canonical semantic wire rejects unknown, ill-typed, dead,
+    duplicate, or noncanonical rows, while operational attempt replay binds
+    generation and assertion allocators as well as their deliberately different
+    fact/assertion identities;
+13. atomless aggregates and asymmetric symmetric metadata are checker errors;
+14. final-candidate cascades precede uniqueness and assertion allocation;
+15. every rule, atom, schema, row, and module permutation yields identical
+    facts/proofs/bytes or the same exact typed failure.
 
 The repository integration test `core/vm/tests/rfc0003_reference.rs` is the
 executable contract. It uses generic typed schemas, fact keys/assertions,

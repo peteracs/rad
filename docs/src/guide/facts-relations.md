@@ -45,28 +45,39 @@ The Draft now fixes the identity-sensitive v0 rules:
 - candidate-local spawn handles are resolved deterministically before relation
   validation;
 - a symmetric relation stores one canonical row but queries as both logical
-  orientations (one for a self-edge);
+  orientations (one for a self-edge), and its two endpoints have identical
+  deletion semantics;
 - `Insert`, `Remove`, and named `ReplaceBy` operations use one base-relative,
   order-independent patch algebra;
 - a fact key identifies a tuple, while an assertion version identifies one
   committed lifetime and its causal ancestry;
+- cascades and final foreign-key/uniqueness checks happen before durable
+  assertion IDs are allocated, so transient candidate rows never consume an
+  identity or cause a false intermediate conflict;
 - rules are range-restricted and relation-only in v0;
 - `count`, checked-integer `sum`, `min`, and `max` have exact failure and
   empty-group semantics, and aggregate heads contain only group variables plus
-  one fresh output;
+  one fresh output. Every aggregate has a positive input atom;
 - a derived fact is visible only through at least one completely visible proof
   branch. Hidden alternatives reveal neither identity, count, nor ordering at
   any downstream join or aggregate;
 - operational replay identity includes entity generations and the assertion
-  allocator, while semantic relation wire remains fact-key-only;
+  allocator, while schema-aware semantic wire validates canonical fact keys and
+  live generational entity references;
 - bindings, facts, proof branches, support nodes, depth, capability
   alternatives, and canonical bytes are deterministically bounded before
-  retention.
+  retention;
+- scans, join attempts, intermediate states/bytes, proof combinations, and
+  aggregate groups are independently charged before materialization;
+- globally unique typed rule plans, positive atoms, and predicates use
+  canonical evaluation order, so declaration or module order cannot select a
+  different typed resource failure.
 
 The executable oracle validates rows through generic typed schemas, preserves
-assertion ancestry across deletion and reinsertion, rejects noncanonical wire,
-and derives checkpoint encoding and restoration from one operational state
-inventory. It remains deliberately independent of the parser and VM.
+assertion ancestry across deletion and reinsertion, rejects unknown, ill-typed,
+dead, duplicate, or noncanonical wire rows, and derives checkpoint encoding and
+restoration from one operational state inventory. It remains deliberately
+independent of the parser and VM.
 
 V0 intentionally excludes component-backed derivation views, recursion,
 unrestricted negation, priorities, fixed points, and storage-layout semantics.
