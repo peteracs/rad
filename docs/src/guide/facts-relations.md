@@ -86,6 +86,10 @@ The accepted v0 contract fixes the identity-sensitive rules:
 - admitted rule count always permits one complete canonical header pass;
   separately metered body work cannot hide an empty, unqualified, or oversized
   header identifier;
+- the bounded parser records exact raw summaries while constructing each rule,
+  so nested identifier, term, atom, predicate, aggregate-group, AST-node, and
+  structural-cost diagnostics all participate in one global priority without
+  rescanning rejected bodies;
 - a sealed-plan profile then bounds typed rules, atoms, predicates, terms,
   dependency edges, and canonical plan bytes before evaluation;
 - invalid plans use an explicit fixed-priority canonical diagnostic reduction,

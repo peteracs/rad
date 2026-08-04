@@ -322,13 +322,15 @@ fn raw_rule_envelope_bounds_hostile_input_before_complete_fingerprinting() {
     assert_eq!(token_preflight.usage.complete_fingerprints, 0);
 
     let mut enormous_body = plan("");
-    enormous_body.atoms = (0..10_000)
-        .map(|index| Atom::new(&format!("Input{index}"), vec![Term::var("value")]))
-        .collect();
+    let mut enormous_body_summary = RawRuleSummary::from_rule(&enormous_body);
+    enormous_body_summary.atoms = 10_000;
+    enormous_body_summary.total_terms = 10_001;
+    enormous_body_summary.ast_nodes = 20_002;
     raw = RawRuleInputLimits::generous();
     raw.max_atoms_per_rule = 1;
-    let empty_id_wins = analyze_rule_diagnostics(
+    let empty_id_wins = analyze_summarized_rule_diagnostics(
         std::slice::from_ref(&enormous_body),
+        std::slice::from_ref(&enormous_body_summary),
         RawRuleInputStats::for_rules(std::slice::from_ref(&enormous_body)),
         raw,
         sealed,
@@ -340,8 +342,10 @@ fn raw_rule_envelope_bounds_hostile_input_before_complete_fingerprinting() {
     assert_eq!(empty_id_wins.usage.complete_fingerprints, 0);
 
     enormous_body.id = "rules.enormous".to_owned();
-    let atom_limit = analyze_rule_diagnostics(
+    enormous_body_summary.maximum_identifier_length = enormous_body.id.len();
+    let atom_limit = analyze_summarized_rule_diagnostics(
         std::slice::from_ref(&enormous_body),
+        std::slice::from_ref(&enormous_body_summary),
         RawRuleInputStats::for_rules(std::slice::from_ref(&enormous_body)),
         raw,
         sealed,
@@ -374,12 +378,16 @@ fn raw_rule_envelope_bounds_hostile_input_before_complete_fingerprinting() {
         kind: AggregateKind::Count,
         input: None,
         output: "count".to_owned(),
-        group_by: vec!["value".to_owned(); 10_000],
+        group_by: vec!["value".to_owned()],
     });
+    let mut enormous_group_summary = RawRuleSummary::from_rule(&enormous_groups);
+    enormous_group_summary.aggregate_groups = 10_000;
+    enormous_group_summary.ast_nodes = 10_004;
     raw = RawRuleInputLimits::generous();
     raw.max_aggregate_groups_per_rule = 1;
-    let group_limit = analyze_rule_diagnostics(
+    let group_limit = analyze_summarized_rule_diagnostics(
         std::slice::from_ref(&enormous_groups),
+        std::slice::from_ref(&enormous_group_summary),
         RawRuleInputStats::for_rules(std::slice::from_ref(&enormous_groups)),
         raw,
         sealed,
@@ -508,21 +516,99 @@ fn complete_header_pass_is_permutation_invariant_at_zero_body_budget() {
     );
     assert_permutation(plan("unqualified"), plan(""), RuleDiagnosticCode::EmptyId);
 
-    let mut enormous_empty = plan("");
-    enormous_empty.atoms = (0..10_000)
-        .map(|index| Atom::new(&format!("Input{index}"), vec![Term::var("value")]))
-        .collect();
-    assert_permutation(
-        plan("rules.valid"),
-        enormous_empty,
-        RuleDiagnosticCode::EmptyId,
+    let enormous_empty = plan("");
+    let valid = plan("rules.valid");
+    let mut enormous_summary = RawRuleSummary::from_rule(&enormous_empty);
+    enormous_summary.atoms = 10_000;
+    enormous_summary.total_terms = 10_001;
+    enormous_summary.ast_nodes = 20_002;
+    let valid_summary = RawRuleSummary::from_rule(&valid);
+    let forward_rules = [valid.clone(), enormous_empty.clone()];
+    let reverse_rules = [enormous_empty, valid];
+    let forward = analyze_summarized_rule_diagnostics(
+        &forward_rules,
+        &[valid_summary, enormous_summary],
+        RawRuleInputStats::for_rules(&forward_rules),
+        raw,
+        sealed,
     );
+    let reverse = analyze_summarized_rule_diagnostics(
+        &reverse_rules,
+        &[enormous_summary, valid_summary],
+        RawRuleInputStats::for_rules(&reverse_rules),
+        raw,
+        sealed,
+    );
+    assert_eq!(forward.diagnostic, reverse.diagnostic);
+    assert_eq!(
+        forward.diagnostic.unwrap().code,
+        RuleDiagnosticCode::EmptyId
+    );
+    assert_eq!(forward.usage.complete_fingerprints, 0);
+    assert_eq!(reverse.usage.complete_fingerprints, 0);
 
     assert_permutation(
         plan("rules.first"),
         plan("rules.second"),
         RuleDiagnosticCode::RawValidationWorkLimit,
     );
+}
+
+#[test]
+fn raw_summaries_preserve_global_priority_for_overlapping_failures() {
+    let base = RulePlan {
+        id: "rules.overlap".to_owned(),
+        head_relation: "Out".to_owned(),
+        head: vec![Term::var("value")],
+        atoms: vec![Atom::new("Input", vec![Term::var("value")])],
+        predicates: vec![Predicate::Greater("value".to_owned(), "value".to_owned())],
+        aggregate: Some(AggregateSpec {
+            kind: AggregateKind::Count,
+            input: None,
+            output: "count".to_owned(),
+            group_by: vec!["value".to_owned()],
+        }),
+    };
+    let diagnose = |rules: &[RulePlan], summaries: &[RawRuleSummary], raw| {
+        analyze_summarized_rule_diagnostics(
+            rules,
+            summaries,
+            RawRuleInputStats::for_rules(rules),
+            raw,
+            RulePlanLimits::generous(),
+        )
+        .diagnostic
+        .unwrap()
+    };
+
+    let mut raw = RawRuleInputLimits::generous();
+    raw.max_terms_per_rule = 0;
+    raw.max_atoms_per_rule = 0;
+    raw.max_predicates_per_rule = 0;
+    raw.max_aggregate_groups_per_rule = 0;
+    let summary = RawRuleSummary::from_rule(&base);
+    let result = diagnose(std::slice::from_ref(&base), &[summary], raw);
+    assert_eq!(result.code, RuleDiagnosticCode::RawTermLimit);
+
+    let mut nested_identifier = base.clone();
+    nested_identifier.atoms[0].relation = "x".repeat(4_096);
+    let nested_summary = RawRuleSummary::from_rule(&nested_identifier);
+    raw.max_identifier_bytes = 8;
+    let result = diagnose(
+        std::slice::from_ref(&nested_identifier),
+        &[nested_summary],
+        raw,
+    );
+    assert_eq!(result.code, RuleDiagnosticCode::RawIdentifierByteLimit);
+
+    let peer = RulePlan {
+        id: "rules.peer".to_owned(),
+        ..base.clone()
+    };
+    let peer_summary = RawRuleSummary::from_rule(&peer);
+    let forward = diagnose(&[base.clone(), peer.clone()], &[summary, peer_summary], raw);
+    let reverse = diagnose(&[peer, base], &[peer_summary, summary], raw);
+    assert_eq!(forward, reverse);
 }
 
 #[test]

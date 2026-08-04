@@ -527,12 +527,16 @@ before complete raw fingerprints are constructed.
 Raw rule-count admission guarantees one complete header pass over every
 admitted rule. Header visits are not governed by a smaller independently
 configurable work budget, so empty IDs, unqualified IDs, and oversized header
-identifiers are always reduced canonically before body work begins. A complete
-shape pass is likewise bounded structurally by `max_rules * (1 +
-max_atoms_per_rule)`. Only measurement and fingerprint traversal consume the
-separate body-node budget; their complete required visit count is computed
-before either pass starts. Profiles therefore cannot express the invalid state
-"admit N rules but inspect fewer than N headers."
+identifiers are always reduced canonically before body work begins. While
+constructing each admitted rule, the bounded parser also records an exact
+`RawRuleSummary`: maximum identifier length, head and total term counts, atom,
+predicate and aggregate-group counts, AST nodes, and structural cost. Static
+diagnosis reduces every applicable raw limit from those summaries. It never
+has to revisit an already-oversized body to discover that a higher-priority
+term or nested-identifier limit also applies. Only admitted-plan measurement
+and fingerprint traversal consume the separate body-node budget. Profiles
+therefore cannot express either "admit N rules but inspect fewer than N
+headers" or a phase-local priority that hides a higher-priority raw error.
 
 After raw admission, a separate versioned sealed-plan profile bounds typed
 rule count, atoms per rule, predicates per rule, total terms, dependency

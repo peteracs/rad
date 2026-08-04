@@ -19,7 +19,7 @@
 - [Events](./guide/events.md)
 - [Causal Laws (experimental)](./guide/causal-laws.md)
   - [Candidate Constraints](./guide/candidate-constraints.md)
-  - [Facts, Relations, and Derived Facts (Draft)](./guide/facts-relations.md)
+  - [Facts, Relations, and Derived Facts](./guide/facts-relations.md)
 - [State Machines](./guide/state-machines.md)
 - [Sum Types & Pattern Matching](./guide/sum-types.md)
 - [Type Annotations](./guide/types.md)

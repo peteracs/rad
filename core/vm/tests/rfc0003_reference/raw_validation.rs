@@ -192,12 +192,91 @@ struct RuleDiagnosticSelection {
 }
 
 #[derive(Clone, Copy, Debug)]
-struct RawRuleSummary {
+struct SealedRuleSummary {
     fingerprint: [u8; 32],
     atoms: usize,
     predicates: usize,
     terms: usize,
     canonical_bytes: usize,
+}
+
+/// Exact counters produced while the bounded parser constructs one raw rule.
+/// Validation consumes this summary without revisiting a body that already
+/// exceeds a raw limit. The production parser must charge and update these
+/// fields before retaining each corresponding syntax node.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct RawRuleSummary {
+    maximum_identifier_length: usize,
+    head_terms: usize,
+    total_terms: usize,
+    atoms: usize,
+    predicates: usize,
+    aggregate_groups: usize,
+    ast_nodes: usize,
+    canonical_bytes: usize,
+    structural_cost: usize,
+}
+
+impl RawRuleSummary {
+    /// Reference-only construction helper. Real source input is summarized
+    /// incrementally by the parser; this helper is for small, already-built
+    /// oracle fixtures.
+    fn from_rule(rule: &RulePlan) -> Self {
+        let (canonical_bytes, maximum_identifier_length) = measure_rule(rule);
+        let total_terms = rule.atoms.iter().fold(rule.head.len(), |total, atom| {
+            checked_raw_add(total, atom.terms.len())
+        });
+        let aggregate_groups = rule
+            .aggregate
+            .as_ref()
+            .map_or(0, |aggregate| aggregate.group_by.len());
+        let ast_nodes = [
+            1,
+            total_terms,
+            rule.atoms.len(),
+            rule.predicates.len(),
+            aggregate_groups,
+            usize::from(rule.aggregate.is_some()),
+        ]
+        .into_iter()
+        .fold(0usize, checked_raw_add);
+        Self {
+            maximum_identifier_length,
+            head_terms: rule.head.len(),
+            total_terms,
+            atoms: rule.atoms.len(),
+            predicates: rule.predicates.len(),
+            aggregate_groups,
+            ast_nodes,
+            canonical_bytes,
+            structural_cost: checked_raw_add(canonical_bytes, ast_nodes.saturating_mul(8)),
+        }
+    }
+
+    fn witness(self, rule: &RulePlan) -> [u8; 32] {
+        let mut hasher = Sha256::new();
+        hasher.update(b"rfc0003.raw-rule-summary.v1");
+        hash_text(&mut hasher, &rule.id);
+        hash_text(&mut hasher, &rule.head_relation);
+        for value in [
+            self.maximum_identifier_length,
+            self.head_terms,
+            self.total_terms,
+            self.atoms,
+            self.predicates,
+            self.aggregate_groups,
+            self.ast_nodes,
+            self.canonical_bytes,
+            self.structural_cost,
+        ] {
+            hasher.update((value as u64).to_be_bytes());
+        }
+        hasher.finalize().into()
+    }
+}
+
+fn summarize_rules(rules: &[RulePlan]) -> Vec<RawRuleSummary> {
+    rules.iter().map(RawRuleSummary::from_rule).collect()
 }
 
 fn checked_raw_add(left: usize, right: usize) -> usize {
@@ -467,8 +546,9 @@ fn duplicate_group_witness(id: &str, fingerprints: &[[u8; 32]]) -> [u8; 32] {
     hasher.finalize().into()
 }
 
-fn analyze_rule_diagnostics(
+fn analyze_summarized_rule_diagnostics(
     rules: &[RulePlan],
+    raw_summaries: &[RawRuleSummary],
     input: RawRuleInputStats,
     raw_limits: RawRuleInputLimits,
     plan_limits: RulePlanLimits,
@@ -499,6 +579,11 @@ fn analyze_rule_diagnostics(
             };
         }
     }
+    assert_eq!(
+        rules.len(),
+        raw_summaries.len(),
+        "bounded parser must provide exactly one raw summary per rule"
+    );
 
     // Raw rule-count admission makes this complete pass inherently bounded.
     // It is deliberately not charged against the later body-work budget:
@@ -542,79 +627,73 @@ fn analyze_rule_diagnostics(
         };
     }
 
-    // Shape inspection is also complete. Its maximum work is derived from
-    // max_rules * (1 + max_atoms_per_rule), so no independent profile knob can
-    // truncate it and make a raw shape diagnostic registration-order dependent.
+    // Summary inspection is complete and independent of the body-work meter.
+    // The parser already computed these exact counters while constructing the
+    // bounded AST, so overlapping diagnostics obey one global priority without
+    // rescanning an oversized body.
     let mut shape_diagnostic = None;
     let mut ast_nodes = 0usize;
-    for rule in rules {
+    let mut structural_cost = 0usize;
+    for (rule, summary) in rules.iter().zip(raw_summaries) {
         usage.shape_visits = checked_raw_add(usage.shape_visits, 1);
-        let header = bounded_header_fingerprint(rule);
-        if rule.atoms.len() > raw_limits.max_atoms_per_rule {
+        let witness = summary.witness(rule);
+        if summary.maximum_identifier_length > raw_limits.max_identifier_bytes {
+            offer(
+                &mut shape_diagnostic,
+                diagnostic(
+                    RuleDiagnosticCode::RawIdentifierByteLimit,
+                    witness,
+                    summary.maximum_identifier_length,
+                    raw_limits.max_identifier_bytes,
+                ),
+            );
+        }
+        if summary.total_terms > raw_limits.max_terms_per_rule {
+            offer(
+                &mut shape_diagnostic,
+                diagnostic(
+                    RuleDiagnosticCode::RawTermLimit,
+                    witness,
+                    summary.total_terms,
+                    raw_limits.max_terms_per_rule,
+                ),
+            );
+        }
+        if summary.atoms > raw_limits.max_atoms_per_rule {
             offer(
                 &mut shape_diagnostic,
                 diagnostic(
                     RuleDiagnosticCode::RawAtomLimit,
-                    header,
-                    rule.atoms.len(),
+                    witness,
+                    summary.atoms,
                     raw_limits.max_atoms_per_rule,
                 ),
             );
         }
-        if rule.predicates.len() > raw_limits.max_predicates_per_rule {
+        if summary.predicates > raw_limits.max_predicates_per_rule {
             offer(
                 &mut shape_diagnostic,
                 diagnostic(
                     RuleDiagnosticCode::RawPredicateLimit,
-                    header,
-                    rule.predicates.len(),
+                    witness,
+                    summary.predicates,
                     raw_limits.max_predicates_per_rule,
                 ),
             );
         }
-        let groups = rule
-            .aggregate
-            .as_ref()
-            .map_or(0, |aggregate| aggregate.group_by.len());
-        if groups > raw_limits.max_aggregate_groups_per_rule {
+        if summary.aggregate_groups > raw_limits.max_aggregate_groups_per_rule {
             offer(
                 &mut shape_diagnostic,
                 diagnostic(
                     RuleDiagnosticCode::RawAggregateGroupLimit,
-                    header,
-                    groups,
+                    witness,
+                    summary.aggregate_groups,
                     raw_limits.max_aggregate_groups_per_rule,
                 ),
             );
         }
-        if rule.atoms.len() <= raw_limits.max_atoms_per_rule {
-            usage.shape_visits = checked_raw_add(usage.shape_visits, rule.atoms.len());
-            let terms = rule.atoms.iter().fold(rule.head.len(), |total, atom| {
-                checked_raw_add(total, atom.terms.len())
-            });
-            if terms > raw_limits.max_terms_per_rule {
-                offer(
-                    &mut shape_diagnostic,
-                    diagnostic(
-                        RuleDiagnosticCode::RawTermLimit,
-                        header,
-                        terms,
-                        raw_limits.max_terms_per_rule,
-                    ),
-                );
-            }
-            let rule_nodes = [
-                1,
-                terms,
-                rule.atoms.len(),
-                rule.predicates.len(),
-                groups,
-                usize::from(rule.aggregate.is_some()),
-            ]
-            .into_iter()
-            .fold(0usize, checked_raw_add);
-            ast_nodes = checked_raw_add(ast_nodes, rule_nodes);
-        }
+        ast_nodes = checked_raw_add(ast_nodes, summary.ast_nodes);
+        structural_cost = checked_raw_add(structural_cost, summary.structural_cost);
     }
     if let Some(diagnostic) = shape_diagnostic {
         return RuleDiagnosticSelection {
@@ -633,6 +712,17 @@ fn analyze_rule_diagnostics(
             usage,
         };
     }
+    usage.structural_cost = structural_cost;
+    if structural_cost > raw_limits.max_total_structural_cost {
+        return RuleDiagnosticSelection {
+            diagnostic: Some(set_limit_diagnostic(
+                RuleDiagnosticCode::RawStructuralCostLimit,
+                structural_cost,
+                raw_limits.max_total_structural_cost,
+            )),
+            usage,
+        };
+    }
     let predicted_visits = ast_nodes.saturating_mul(2);
     if predicted_visits > raw_limits.max_body_node_visits {
         return RuleDiagnosticSelection {
@@ -645,63 +735,30 @@ fn analyze_rule_diagnostics(
         };
     }
 
-    let mut canonical_bytes = 0usize;
-    let mut identifier_max = 0usize;
-    let mut measurements = Vec::with_capacity(rules.len());
-    for rule in rules {
-        let (bytes, rule_identifier_max) = measure_rule(rule);
-        canonical_bytes = checked_raw_add(canonical_bytes, bytes);
-        identifier_max = identifier_max.max(rule_identifier_max);
-        measurements.push(bytes);
-    }
     usage.body_node_visits = ast_nodes;
-    usage.structural_cost = checked_raw_add(canonical_bytes, ast_nodes.saturating_mul(8));
-    if identifier_max > raw_limits.max_identifier_bytes {
-        return RuleDiagnosticSelection {
-            diagnostic: Some(set_limit_diagnostic(
-                RuleDiagnosticCode::RawIdentifierByteLimit,
-                identifier_max,
-                raw_limits.max_identifier_bytes,
-            )),
-            usage,
-        };
-    }
-    if usage.structural_cost > raw_limits.max_total_structural_cost {
-        return RuleDiagnosticSelection {
-            diagnostic: Some(set_limit_diagnostic(
-                RuleDiagnosticCode::RawStructuralCostLimit,
-                usage.structural_cost,
-                raw_limits.max_total_structural_cost,
-            )),
-            usage,
-        };
-    }
 
-    let mut summaries = Vec::with_capacity(rules.len());
+    let mut sealed_summaries = Vec::with_capacity(rules.len());
     let mut ids = BTreeMap::<&str, Vec<[u8; 32]>>::new();
     let mut dependency_edges = BTreeSet::new();
-    for (rule, canonical_bytes) in rules.iter().zip(measurements) {
+    for (rule, raw_summary) in rules.iter().zip(raw_summaries) {
         let fingerprint = raw_rule_fingerprint(rule);
-        let terms = rule.atoms.iter().fold(rule.head.len(), |total, atom| {
-            checked_raw_add(total, atom.terms.len())
-        });
         for atom in &rule.atoms {
             dependency_edges.insert((rule.head_relation.as_str(), atom.relation.as_str()));
         }
         ids.entry(&rule.id).or_default().push(fingerprint);
-        summaries.push(RawRuleSummary {
+        sealed_summaries.push(SealedRuleSummary {
             fingerprint,
-            atoms: rule.atoms.len(),
-            predicates: rule.predicates.len(),
-            terms,
-            canonical_bytes,
+            atoms: raw_summary.atoms,
+            predicates: raw_summary.predicates,
+            terms: raw_summary.total_terms,
+            canonical_bytes: raw_summary.canonical_bytes,
         });
     }
     usage.body_node_visits = predicted_visits;
-    usage.complete_fingerprints = summaries.len();
+    usage.complete_fingerprints = sealed_summaries.len();
     let rule_set_fingerprint = exact_digest_multiset(
         b"rfc0003.raw-rule-plan-multiset.v2",
-        summaries
+        sealed_summaries
             .iter()
             .map(|summary| summary.fingerprint)
             .collect(),
@@ -731,7 +788,7 @@ fn analyze_rule_diagnostics(
             );
         }
     }
-    for summary in &summaries {
+    for summary in &sealed_summaries {
         if summary.atoms > plan_limits.max_atoms_per_rule {
             offer(
                 &mut best,
@@ -755,7 +812,7 @@ fn analyze_rule_diagnostics(
             );
         }
     }
-    let total_terms = summaries.iter().fold(0usize, |total, summary| {
+    let total_terms = sealed_summaries.iter().fold(0usize, |total, summary| {
         checked_raw_add(total, summary.terms)
     });
     if total_terms > plan_limits.max_terms {
@@ -769,7 +826,7 @@ fn analyze_rule_diagnostics(
             ),
         );
     }
-    let total_canonical_bytes = summaries.iter().fold(0usize, |total, summary| {
+    let total_canonical_bytes = sealed_summaries.iter().fold(0usize, |total, summary| {
         checked_raw_add(total, summary.canonical_bytes)
     });
     if total_canonical_bytes > plan_limits.max_canonical_plan_bytes {
@@ -798,6 +855,19 @@ fn analyze_rule_diagnostics(
         diagnostic: best,
         usage,
     }
+}
+
+/// Convenience path for small, already-constructed reference fixtures. The
+/// hostile-input tests and production parser use the summary-taking entry
+/// point so rejection never requires reconstructing this metadata.
+fn analyze_rule_diagnostics(
+    rules: &[RulePlan],
+    input: RawRuleInputStats,
+    raw_limits: RawRuleInputLimits,
+    plan_limits: RulePlanLimits,
+) -> RuleDiagnosticSelection {
+    let summaries = summarize_rules(rules);
+    analyze_summarized_rule_diagnostics(rules, &summaries, input, raw_limits, plan_limits)
 }
 
 fn select_rule_diagnostic(
