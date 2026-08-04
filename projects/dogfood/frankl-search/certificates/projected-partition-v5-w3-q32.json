@@ -1,0 +1,28 @@
+{
+  "labelled_by_test_count": {
+    "5": 1
+  },
+  "labelled_minimal_cores": 1,
+  "maximum_tests": 12,
+  "maximum_weight": 3,
+  "orbit_cores": [
+    {
+      "quotient_size": 32,
+      "test_count": 5,
+      "tests": [
+        1,
+        2,
+        4,
+        8,
+        16
+      ]
+    }
+  ],
+  "permutations": 120,
+  "quotient_threshold": 32,
+  "schema": "rad.boolean-lattice.projected-partition-frontier.v1",
+  "symmetry_orbits": 1,
+  "test_patterns": 25,
+  "variables": 5,
+  "visited_search_nodes": 16640204
+}

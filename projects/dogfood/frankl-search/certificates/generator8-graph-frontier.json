@@ -1,0 +1,60 @@
+{
+  "best": {
+    "column_count": 13,
+    "edge_mask": 219224160,
+    "family_size": 100,
+    "frequencies": [
+      50,
+      50,
+      20,
+      20,
+      60,
+      60,
+      60,
+      60,
+      60,
+      60,
+      60,
+      60,
+      36
+    ],
+    "loop_mask": 195,
+    "margin": 20
+  },
+  "coloured_graph_orbits": 2038236,
+  "counterexample": null,
+  "frontier_orbits": 12431,
+  "generator_count": 8,
+  "maximum_column_count": 36,
+  "maximum_column_weight": 2,
+  "maximum_family_size": 127,
+  "minimum_column_count": 13,
+  "minimum_family_size": 51,
+  "minimum_margin": 20,
+  "scanned_orbits": 1992040,
+  "schema": "rad.boolean-lattice.coloured-graph-quotient.v1",
+  "signature": "5746f0f3b6b351667594addbef6096dae7408ada7b7410f3ffe336f1ce8e034a",
+  "smallest_family": {
+    "column_count": 13,
+    "edge_mask": 237044856,
+    "family_size": 80,
+    "frequencies": [
+      26,
+      26,
+      26,
+      53,
+      44,
+      44,
+      44,
+      53,
+      53,
+      53,
+      44,
+      44,
+      44
+    ],
+    "loop_mask": 97,
+    "margin": 26
+  },
+  "smallest_family_size": 80
+}

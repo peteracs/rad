@@ -81,6 +81,57 @@ impl NormalizedAction {
 }
 
 impl AuthoritativeRelationState {
+    pub(crate) fn from_transport_parts(
+        manifest: Arc<RelationRuntimeManifest>,
+        assertions: BTreeMap<FactKey, FactAssertion>,
+        encoded_indexes: BTreeMap<UniqueIndexKey, FactKey>,
+        next_assertion_id: u64,
+    ) -> RelationRuntimeResult<Self> {
+        let mut assertion_ids = BTreeSet::new();
+        let validator = Self {
+            manifest: Some(Arc::clone(&manifest)),
+            assertions: Arc::new(BTreeMap::new()),
+            unique_indexes: Arc::new(BTreeMap::new()),
+            next_assertion_id,
+        };
+        for (key, assertion) in &assertions {
+            if key != &assertion.fact_key || validator.canonical_key(key.clone())? != *key {
+                return Err(RelationRuntimeError::new(
+                    "relation.transport_noncanonical_fact",
+                    key.relation.clone(),
+                ));
+            }
+            if assertion.assertion_id >= next_assertion_id
+                || !assertion_ids.insert(assertion.assertion_id)
+            {
+                return Err(RelationRuntimeError::new(
+                    "relation.transport_invalid_assertion_id",
+                    assertion.assertion_id.to_string(),
+                ));
+            }
+        }
+        let rebuilt_indexes = build_unique_indexes(&manifest, &assertions)?;
+        if rebuilt_indexes != encoded_indexes {
+            return Err(RelationRuntimeError::new(
+                "relation.transport_index_mismatch",
+                "encoded unique indexes do not match the authoritative assertions",
+            ));
+        }
+        Ok(Self {
+            manifest: Some(manifest),
+            assertions: Arc::new(assertions),
+            unique_indexes: Arc::new(rebuilt_indexes),
+            next_assertion_id,
+        })
+    }
+
+    pub(crate) fn validate_live_entity_set(
+        &self,
+        live: &BTreeSet<EntityRef>,
+    ) -> RelationRuntimeResult<()> {
+        validate_live_entities(&self.assertions, live)
+    }
+
     pub fn install_manifest(
         &mut self,
         manifest: Arc<RelationRuntimeManifest>,

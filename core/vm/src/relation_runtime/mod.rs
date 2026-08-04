@@ -8,6 +8,7 @@ mod candidate;
 mod encoding;
 mod manifest;
 mod store;
+mod transaction_profile;
 mod value;
 
 pub use candidate::{
@@ -19,6 +20,9 @@ pub use manifest::{RelationRuntimeManifest, RuntimeRelationSchema};
 pub use store::{
     AuthoritativeRelationState, FactAssertion, FactChange, FactChangeKind, LogicalFactRow,
     UniqueIndexKey,
+};
+pub use transaction_profile::{
+    BoundedRelationTransaction, BoundedRelationTransactionBuilder, RelationTransactionProfile,
 };
 pub use value::{
     EntityOperand, EntityRef, FactKey, FactValue, OperationMetadata, RelationRuntimeError,

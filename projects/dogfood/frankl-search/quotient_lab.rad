@@ -1,0 +1,261 @@
+// Generator-column quotient laboratory for the 51-set frontier.
+
+use "../native-math-kernels/math_kernels.rad"
+use "structure_lib.rad"
+
+let WIDTH = 13
+let FULL = 8191
+let TARGET_SIZE = 51
+let SEARCH_SEED = 510013
+
+resource QuotientCandidate {
+    generators: list = [6432, 1648, 1156, 457, 2570, 4100]
+    frequencies: list = []
+    family_size: int = 0
+    margin: int = 999999
+    separating: bool = false
+    generation: int = 0
+}
+
+resource QuotientTelemetry {
+    trials: int = 0
+    exact_size_trials: int = 0
+    best_margin: int = 999999
+}
+
+component QuotientEvidence {
+    family_size: int = 0
+    margin: int = 0
+    maximum_frequency: int = 0
+    minimum_frequency: int = 0
+    generator_incidences: int = 0
+    multi_generator_coordinates: int = 0
+    abundant_coordinates: int = 0
+    union_closed: bool = false
+    separating: bool = false
+}
+
+intent CoordinatePressure {
+    key target: entity
+    coordinate: int
+    generator_multiplicity: int
+    frequency: int
+    family_size: int
+    margin: int
+    union_closed: bool
+    separating: bool
+}
+
+law SubmitCoordinatePressure(
+    target: entity,
+    coordinate: int,
+    generator_multiplicity: int,
+    frequency: int,
+    family_size: int,
+    margin: int,
+    union_closed: bool,
+    separating: bool,
+) {
+    propose CoordinatePressure {
+        target: target,
+        coordinate: coordinate,
+        generator_multiplicity: generator_multiplicity,
+        frequency: frequency,
+        family_size: family_size,
+        margin: margin,
+        union_closed: union_closed,
+        separating: separating,
+    }
+}
+
+resolver ResolveCoordinatePressure for CoordinatePressure(target, proposals) {
+    let first = proposals[0]
+    let mut maximum = 0
+    let mut minimum = first.family_size
+    let mut incidences = 0
+    let mut multi = 0
+    let mut abundant = 0
+    for proposal in proposals {
+        maximum = if proposal.frequency > maximum { proposal.frequency } else { maximum }
+        minimum = if proposal.frequency < minimum { proposal.frequency } else { minimum }
+        incidences = incidences + proposal.generator_multiplicity
+        if proposal.generator_multiplicity >= 2 {
+            multi = multi + 1
+        }
+        if proposal.frequency * 2 >= proposal.family_size {
+            abundant = abundant + 1
+        }
+    }
+    next(target, QuotientEvidence {
+        family_size: first.family_size,
+        margin: first.margin,
+        maximum_frequency: maximum,
+        minimum_frequency: minimum,
+        generator_incidences: incidences,
+        multi_generator_coordinates: multi,
+        abundant_coordinates: abundant,
+        union_closed: first.union_closed,
+        separating: first.separating,
+    })
+}
+
+constraint ValidQuotientEvidence for QuotientEvidence(subject, proposed) {
+    require proposed.family_size >= TARGET_SIZE
+        else "frankl.quotient.below_frontier"
+    require proposed.margin == proposed.maximum_frequency * 2 - proposed.family_size
+        else "frankl.quotient.margin_mismatch"
+    require proposed.union_closed else "frankl.quotient.not_closed"
+    require proposed.separating else "frankl.quotient.not_separating"
+    require proposed.abundant_coordinates > 0
+        else "frankl.quotient.counterexample"
+}
+
+entity quotient_judge { QuotientEvidence {} }
+
+pure fn distance_from_target(size: int) -> int {
+    return if size >= TARGET_SIZE { size - TARGET_SIZE } else { TARGET_SIZE - size }
+}
+
+pure fn analyze(generators: list<int>, generation: int) -> QuotientCandidate {
+    let profile = lattice_profile(generators, WIDTH)
+    let frequencies = profile["frequencies"]
+    return QuotientCandidate {
+        generators: generators,
+        frequencies: frequencies,
+        family_size: profile["size"],
+        margin: max_int(frequencies) * 2 - profile["size"],
+        separating: profile["separating"],
+        generation: generation,
+    }
+}
+
+pure fn better(left: QuotientCandidate, right: QuotientCandidate) -> bool {
+    if left.separating != right.separating {
+        return left.separating
+    }
+    let left_distance = distance_from_target(left.family_size)
+    let right_distance = distance_from_target(right.family_size)
+    if left_distance != right_distance {
+        return left_distance < right_distance
+    }
+    if left.margin != right.margin {
+        return left.margin < right.margin
+    }
+    return false
+}
+
+system ExploreQuotient(candidate: mut QuotientCandidate, telemetry: mut QuotientTelemetry) {
+    let base = candidate.generators
+    let mut best = candidate
+    let mut exact = 0
+    let mut best_margin = 999999
+    for _trial in range(64) {
+        let mut generators = base
+        if rand_int(0, 31) == 0 {
+            generators = []
+            for _index in range(len(base)) {
+                generators = push(generators, rand_int(1, FULL - 1))
+            }
+        } else {
+            for _edit in range(rand_int(1, 4)) {
+                generators[rand_int(0, len(generators) - 1)] = rand_int(1, FULL - 1)
+            }
+        }
+        let candidate_next = analyze(generators, candidate.generation + 1)
+        if candidate_next.family_size == TARGET_SIZE {
+            exact = exact + 1
+            if candidate_next.margin < best_margin {
+                best_margin = candidate_next.margin
+            }
+        }
+        if better(candidate_next, best) {
+            best = candidate_next
+        }
+    }
+    candidate = best
+    telemetry = QuotientTelemetry {
+        trials: 64,
+        exact_size_trials: exact,
+        best_margin: best_margin,
+    }
+}
+
+fn generator_multiplicity(generators: list<int>, coordinate: int) -> int {
+    let bit = shl(1, coordinate)
+    let mut count = 0
+    for generator in generators {
+        if (generator & bit) != 0 {
+            count = count + 1
+        }
+    }
+    return count
+}
+
+fn main() -> nil {
+    let argv = sys_args()
+    let generations = if len(argv) >= 1 { int(argv[0]) } else { 40 }
+    let lanes = if len(argv) >= 2 { int(argv[1]) } else { 64 }
+    assert(generations > 0 and lanes > 0, "positive search dimensions required")
+
+    let initial = analyze(res(QuotientCandidate).generators, 0)
+    set_resource(QuotientCandidate, initial)
+    let live_digest = world_digest()
+    let mut parent = fork()
+    let mut evaluated = 1
+    let mut exact_trials = 0
+    print("Frankl generator-column quotient laboratory")
+    print(f"initial size={initial.family_size} margin={initial.margin}")
+
+    for generation in range(generations) {
+        let mut inputs = []
+        for _lane in range(lanes) {
+            inputs = push(inputs, fork_with(parent, QuotientTelemetry {}))
+        }
+        let futures = simulate_many(
+            inputs,
+            [system::ExploreQuotient],
+            1,
+            SEARCH_SEED + generation * 1009,
+        )
+        let mut best = peek_resource(parent, QuotientCandidate) |> unwrap
+        let mut best_fork = parent
+        for future in futures {
+            let candidate = peek_resource(future, QuotientCandidate) |> unwrap
+            let telemetry = peek_resource(future, QuotientTelemetry) |> unwrap
+            evaluated = evaluated + telemetry.trials
+            exact_trials = exact_trials + telemetry.exact_size_trials
+            if better(candidate, best) {
+                best = candidate
+                best_fork = future
+            }
+        }
+        parent = best_fork
+        if generation == 0 or (generation + 1) % 5 == 0 {
+            print(f"generation={generation + 1} evaluated={evaluated} exact={exact_trials} size={best.family_size} margin={best.margin}")
+        }
+    }
+
+    let best = peek_resource(parent, QuotientCandidate) |> unwrap
+    let family = lattice_closure(best.generators)
+    let closed = lattice_is_closed(family)
+    assert(world_digest() == live_digest, "fork search must not mutate the live world")
+    settle {
+        for coordinate in range(WIDTH) {
+            SubmitCoordinatePressure(
+                quotient_judge,
+                coordinate,
+                generator_multiplicity(best.generators, coordinate),
+                best.frequencies[coordinate],
+                best.family_size,
+                best.margin,
+                closed,
+                best.separating,
+            )
+        }
+    }
+    let evidence = require(quotient_judge, QuotientEvidence)
+    print(f"best generators={best.generators}")
+    print(f"family={best.family_size} frequencies={best.frequencies} margin={best.margin}")
+    print(f"multi_generator_coordinates={evidence.multi_generator_coordinates} abundant_coordinates={evidence.abundant_coordinates}")
+    print(why(quotient_judge, QuotientEvidence))
+}

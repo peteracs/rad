@@ -1,0 +1,130 @@
+// Causal aggregation of exact forbidden-automorphism certificates.
+
+let DEFAULT_CERTIFICATE = "projects/dogfood/frankl-search/certificates/symmetry-exclusions-n13.json"
+
+resource SymmetryProofInput { width: int = 0, cases: list = [] }
+
+component SymmetryExclusionCertificate {
+    width: int = 0
+    case_count: int = 0
+    invalid_cycle_types: int = 0
+    maximum_subset_orbits: int = 0
+    horn_clause_count: int = 0
+    cnf_variable_count: int = 0
+    cnf_clause_count: int = 0
+    all_excluded: bool = false
+}
+
+intent SymmetryCaseEvidence {
+    key target: entity
+    cycle_type: list<int>
+    subset_orbits: int
+    horn_clauses: int
+    cnf_variables: int
+    cnf_clauses: int
+    counterexample_exists: bool
+}
+
+law SubmitSymmetryCase(
+    target: entity,
+    cycle_type: list<int>,
+    subset_orbits: int,
+    horn_clauses: int,
+    cnf_variables: int,
+    cnf_clauses: int,
+    counterexample_exists: bool,
+) {
+    propose SymmetryCaseEvidence {
+        target: target,
+        cycle_type: cycle_type,
+        subset_orbits: subset_orbits,
+        horn_clauses: horn_clauses,
+        cnf_variables: cnf_variables,
+        cnf_clauses: cnf_clauses,
+        counterexample_exists: counterexample_exists,
+    }
+}
+
+resolver ResolveSymmetryCases for SymmetryCaseEvidence(target, proposals) {
+    let proof_input = res(SymmetryProofInput)
+    let mut invalid_cycle_types = 0
+    let mut maximum_subset_orbits = 0
+    let mut horn_clause_count = 0
+    let mut cnf_variable_count = 0
+    let mut cnf_clause_count = 0
+    let mut all_excluded = true
+    for proposal in proposals {
+        let mut cycle_total = 0
+        for length in proposal.cycle_type {
+            cycle_total = cycle_total + length
+        }
+        if cycle_total != proof_input.width { invalid_cycle_types = invalid_cycle_types + 1 }
+        maximum_subset_orbits = max(maximum_subset_orbits, proposal.subset_orbits)
+        horn_clause_count = horn_clause_count + proposal.horn_clauses
+        cnf_variable_count = cnf_variable_count + proposal.cnf_variables
+        cnf_clause_count = cnf_clause_count + proposal.cnf_clauses
+        all_excluded = all_excluded and not proposal.counterexample_exists
+    }
+    next(target, SymmetryExclusionCertificate {
+        width: proof_input.width,
+        case_count: len(proposals),
+        invalid_cycle_types: invalid_cycle_types,
+        maximum_subset_orbits: maximum_subset_orbits,
+        horn_clause_count: horn_clause_count,
+        cnf_variable_count: cnf_variable_count,
+        cnf_clause_count: cnf_clause_count,
+        all_excluded: all_excluded,
+    })
+}
+
+constraint ValidSymmetryExclusionCertificate
+for SymmetryExclusionCertificate(subject, proposed)
+{
+    require proposed.width == 13 else "symmetry-proof.width"
+    require proposed.case_count == 5 else "symmetry-proof.case-count"
+    require proposed.invalid_cycle_types == 0 else "symmetry-proof.cycle-partition"
+    require proposed.maximum_subset_orbits > 0 else "symmetry-proof.empty-orbits"
+    require proposed.horn_clause_count > 0 else "symmetry-proof.empty-horn-theory"
+    require proposed.cnf_variable_count > 0 else "symmetry-proof.empty-variables"
+    require proposed.cnf_clause_count > proposed.horn_clause_count
+    else "symmetry-proof.missing-minority-circuits"
+    require proposed.all_excluded else "symmetry-proof.counterexample"
+}
+
+entity symmetry_judge { SymmetryExclusionCertificate {} }
+
+event SymmetrySuiteReady {}
+
+on SymmetrySuiteReady(_evt) {
+    let proof_input = res(SymmetryProofInput)
+    settle {
+        for proof in proof_input.cases {
+            SubmitSymmetryCase(
+                symmetry_judge,
+                proof["cycle_type"],
+                proof["subset_orbits"],
+                proof["horn_clauses"],
+                proof["cnf_variables"],
+                proof["cnf_clauses"],
+                proof["counterexample_exists"],
+            )
+        }
+    }
+}
+
+fn main() -> nil {
+    let argv = sys_args()
+    let path = if len(argv) > 0 { argv[0] } else { DEFAULT_CERTIFICATE }
+    let document = json_parse(read_file(path)) |> unwrap
+    set_resource(SymmetryProofInput, SymmetryProofInput {
+        width: document["width"],
+        cases: document["cases"],
+    })
+    emit SymmetrySuiteReady {}
+    flush_events()
+    let proof = require(symmetry_judge, SymmetryExclusionCertificate)
+    print("exact forbidden-automorphism suite")
+    print(f"cases={proof.case_count} maximum_subset_orbits={proof.maximum_subset_orbits}")
+    print(f"horn_clauses={proof.horn_clause_count} cnf_clauses={proof.cnf_clause_count}")
+    print(why(symmetry_judge, SymmetryExclusionCertificate))
+}

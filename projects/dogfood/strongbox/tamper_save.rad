@@ -48,7 +48,7 @@ if case == "S0" {
     payload = "this is not a world at all"
     what = "arbitrary text"
 } else if case == "S3" {
-    payload = replace(base, "RADWORLD2", "RADWORLD9")
+    payload = replace(base, "RADWORLD3", "RADWORLD9")
     what = "unknown envelope version RADWORLD9"
 } else if case == "S4" {
     payload = substring_bytes(base, 0, len(base) / 2)

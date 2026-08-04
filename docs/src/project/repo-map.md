@@ -72,7 +72,7 @@ dogfood projects, but they are not the language implementation.
 | `projects/dogfood/causal-laws/` | RFC-0001 damage settlement vertical slice. |
 | `projects/dogfood/causal-constraints/` | RFC-0002 movement validation commit/rejection dogfood. |
 | `projects/dogfood/frankl-search/` | Computational-mathematics dogfood: exhaustive small case, deterministic `N=13` generator search, exact cyclic-universe/deletion-obstruction study, causal explanations, and independent certificate verifiers. |
-| `projects/dogfood/collatz-lab/` | Structural Collatz dogfood: pruned affine residue universes, exact cycle-word equations, Causal Laws/constraints/causality/replay, and a Python-bigint certificate verifier. |
+| `projects/dogfood/collatz-lab/` | Structural Collatz dogfood: pruned affine residue universes, bounded-support and natural-tail/ballot certificates, forked exact-state frontier synthesis, cycle-word equations, Causal Laws/constraints/causality/replay, and Python-bigint certificate verifiers. |
 | `projects/moba-rad/` | Networked MOBA dogfood stack: RAD authority server, Rust WebTransport edge proxy, and browser client. The authority owns all game rules; the proxy forwards opaque datagrams and must stay dumb. |
 | `projects/playground/` | Browser hosts, interactive demos, relay, JS session tests, and public playground shell. |
 | `projects/playground/demos/` | Standalone browser visual prototypes and their local assets. |

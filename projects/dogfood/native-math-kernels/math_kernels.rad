@@ -12,15 +12,28 @@ let MATH_KERNELS = load_extension("projects/dogfood/native-math-kernels/out/rad_
 let LATTICE_CLOSURE_JSON: pure fn(str) -> str = MATH_KERNELS["lattice_closure_json"]
 let LATTICE_PROFILE_JSON: pure fn(str, int) -> str = MATH_KERNELS["lattice_profile_json"]
 let LATTICE_FREQUENCIES_JSON: pure fn(str, int) -> str = MATH_KERNELS["lattice_frequencies_json"]
+let BITMASK_ROTATION_ORBIT_JSON: pure fn(int, int) -> str = MATH_KERNELS["bitmask_rotation_orbit_json"]
+let BITMASK_ROTATION_REPRESENTATIVES_JSON: pure fn(int) -> str = MATH_KERNELS["bitmask_rotation_representatives_json"]
+let COLUMN_QUOTIENT_SCAN_JSON: pure fn(int, int, int, int, int) -> str = MATH_KERNELS["column_quotient_scan_json"]
+let COLUMN_QUOTIENT_PROFILE_JSON: pure fn(str, int) -> str = MATH_KERNELS["column_quotient_profile_json"]
+let COLUMN_QUOTIENT_PROFILES_JSON: pure fn(str, int) -> str = MATH_KERNELS["column_quotient_profiles_json"]
+let COLUMN_QUOTIENT_MUTATION_LANE_JSON: pure fn(str, int, int, int, int, int, int) -> str = MATH_KERNELS["column_quotient_mutation_lane_json"]
+let COLUMN_QUOTIENT_RANGE_SCAN_JSON: pure fn(int, int, int, int, int, int) -> str = MATH_KERNELS["column_quotient_range_scan_json"]
 let LATTICE_IS_CLOSED_JSON: pure fn(str) -> str = MATH_KERNELS["lattice_is_closed_json"]
 let LATTICE_VIOLATION_COUNT_JSON: pure fn(str, int) -> str = MATH_KERNELS["lattice_violation_count_json"]
 let LATTICE_DELETABLE_JSON: pure fn(str, int) -> str = MATH_KERNELS["lattice_deletable_json"]
 let LATTICE_DELETION_PROFILE_JSON: pure fn(str, int) -> str = MATH_KERNELS["lattice_deletion_profile_json"]
 let LATTICE_DELETION_ROLLOUT_JSON: pure fn(str, int, int, int, int, str, int) -> str = MATH_KERNELS["lattice_deletion_rollout_json"]
 let LATTICE_APPLY_DELETION_JSON: pure fn(str, int, int) -> str = MATH_KERNELS["lattice_apply_deletion_json"]
-let LATTICE_EXCHANGE_ROLLOUT_JSON: pure fn(str, int, int, int, int, str, int) -> str = MATH_KERNELS["lattice_exchange_rollout_json"]
+let LATTICE_EXCHANGE_ROLLOUT_JSON: pure fn(str, int, int, int, int, str, int, str, int) -> str = MATH_KERNELS["lattice_exchange_rollout_json"]
 let AFFINE_RESIDUE_PROFILE_JSON: pure fn(int, int, int, int, int, int) -> str = MATH_KERNELS["affine_residue_profile_json"]
 let AFFINE_RESIDUE_PROFILES_JSON: pure fn(int, int, int, int, int) -> str = MATH_KERNELS["affine_residue_profiles_json"]
+let AFFINE_NATURAL_TAIL_PROFILES_JSON: pure fn(int, int, int, int, int, int) -> str = MATH_KERNELS["affine_natural_tail_profiles_json"]
+let AFFINE_SPARSE_SUPPORT_PROFILE_JSON: pure fn(int, int, int, int, int) -> str = MATH_KERNELS["affine_sparse_support_profile_json"]
+let AFFINE_SPARSE_SUPPORT_SUMMARY_JSON: pure fn(int, int, int, int, int) -> str = MATH_KERNELS["affine_sparse_support_summary_json"]
+let AFFINE_SPARSE_SLOPE_SUPPORT_SUMMARY_JSON: pure fn(int, int, int, int) -> str = MATH_KERNELS["affine_sparse_slope_support_summary_json"]
+let AFFINE_SPARSE_SLOPE_SUPPORT_LANE_JSON: pure fn(int, int, int, int, int, int) -> str = MATH_KERNELS["affine_sparse_slope_support_lane_json"]
+let AFFINE_FRONTIER_PROFILE_JSON: pure fn(int, int, int, int, int, str, int) -> str = MATH_KERNELS["affine_frontier_profile_json"]
 let AFFINE_CYCLE_PROFILE_JSON: pure fn(int, int, int, int) -> str = MATH_KERNELS["affine_cycle_profile_json"]
 
 pure fn decode_kernel_result(encoded: str, operation: str) -> any {
@@ -42,6 +55,103 @@ pub pure fn lattice_profile(members: list<int>, width: int) -> map<str, any> {
 pub pure fn lattice_frequencies(members: list<int>, width: int) -> list<int> {
     let encoded = LATTICE_FREQUENCIES_JSON(json_stringify(members), width)
     return decode_kernel_result(encoded, "lattice_frequencies")
+}
+
+pub pure fn bitmask_rotation_orbit(mask: int, width: int) -> list<int> {
+    return decode_kernel_result(
+        BITMASK_ROTATION_ORBIT_JSON(mask, width),
+        "bitmask_rotation_orbit",
+    )
+}
+
+pub pure fn bitmask_rotation_representatives(width: int) -> list<int> {
+    return decode_kernel_result(
+        BITMASK_ROTATION_REPRESENTATIVES_JSON(width),
+        "bitmask_rotation_representatives",
+    )
+}
+
+pub pure fn column_quotient_scan(
+    generator_count: int,
+    column_count: int,
+    maximum_column_weight: int,
+    minimum_family_size: int,
+    maximum_family_size: int,
+) -> map<str, any> {
+    return decode_kernel_result(
+        COLUMN_QUOTIENT_SCAN_JSON(
+            generator_count,
+            column_count,
+            maximum_column_weight,
+            minimum_family_size,
+            maximum_family_size,
+        ),
+        "column_quotient_scan",
+    )
+}
+
+pub pure fn column_quotient_profile(
+    columns: list<int>,
+    generator_count: int,
+) -> map<str, any> {
+    return decode_kernel_result(
+        COLUMN_QUOTIENT_PROFILE_JSON(json_stringify(columns), generator_count),
+        "column_quotient_profile",
+    )
+}
+
+pub pure fn column_quotient_profiles(
+    batches: list<list<int>>,
+    generator_count: int,
+) -> list {
+    return decode_kernel_result(
+        COLUMN_QUOTIENT_PROFILES_JSON(json_stringify(batches), generator_count),
+        "column_quotient_profiles",
+    )
+}
+
+pub pure fn column_quotient_mutation_lane(
+    columns: list<int>,
+    generator_count: int,
+    maximum_column_weight: int,
+    trials: int,
+    seed: int,
+    minimum_family_size: int,
+    maximum_family_size: int,
+) -> map<str, any> {
+    return decode_kernel_result(
+        COLUMN_QUOTIENT_MUTATION_LANE_JSON(
+            json_stringify(columns),
+            generator_count,
+            maximum_column_weight,
+            trials,
+            seed,
+            minimum_family_size,
+            maximum_family_size,
+        ),
+        "column_quotient_mutation_lane",
+    )
+}
+
+pub pure fn column_quotient_range_scan(
+    generator_count: int,
+    minimum_column_count: int,
+    maximum_column_count: int,
+    maximum_column_weight: int,
+    minimum_family_size: int,
+    maximum_family_size: int,
+) -> map<str, any> {
+    return decode_kernel_result(
+        COLUMN_QUOTIENT_RANGE_SCAN_JSON(
+            generator_count,
+            minimum_column_count,
+            maximum_column_count,
+            maximum_column_weight,
+            minimum_family_size,
+            maximum_family_size,
+        ),
+        "column_quotient_range_scan",
+    )
 }
 
 pub pure fn lattice_is_closed(members: list<int>) -> bool {
@@ -106,6 +216,8 @@ pub pure fn lattice_exchange_rollout(
     seed: int,
     objective: str,
     minimum_density_per_mille: int,
+    acceptance: str,
+    repair_beam_width: int,
 ) -> map<str, any> {
     let encoded = LATTICE_EXCHANGE_ROLLOUT_JSON(
         json_stringify(deleted),
@@ -115,6 +227,8 @@ pub pure fn lattice_exchange_rollout(
         seed,
         objective,
         minimum_density_per_mille,
+        acceptance,
+        repair_beam_width,
     )
     return decode_kernel_result(encoded, "lattice_exchange_rollout")
 }
@@ -153,6 +267,116 @@ pub pure fn affine_residue_profiles(
         lane_count,
     )
     return decode_kernel_result(encoded, "affine_residue_profiles")
+}
+
+pub pure fn affine_natural_tail_profiles(
+    multiplier: int,
+    addend: int,
+    depth: int,
+    verified_power: int,
+    lane_count: int,
+    max_steps: int,
+) -> list<map<str, any>> {
+    let encoded = AFFINE_NATURAL_TAIL_PROFILES_JSON(
+        multiplier,
+        addend,
+        depth,
+        verified_power,
+        lane_count,
+        max_steps,
+    )
+    return decode_kernel_result(encoded, "affine_natural_tail_profiles")
+}
+
+pub pure fn affine_sparse_support_profile(
+    multiplier: int,
+    addend: int,
+    max_depth: int,
+    verified_power: int,
+    max_input_ones: int,
+) -> map<str, any> {
+    let encoded = AFFINE_SPARSE_SUPPORT_PROFILE_JSON(
+        multiplier,
+        addend,
+        max_depth,
+        verified_power,
+        max_input_ones,
+    )
+    return decode_kernel_result(encoded, "affine_sparse_support_profile")
+}
+
+pub pure fn affine_sparse_support_summary(
+    multiplier: int,
+    addend: int,
+    max_depth: int,
+    verified_power: int,
+    max_input_ones: int,
+) -> map<str, any> {
+    let encoded = AFFINE_SPARSE_SUPPORT_SUMMARY_JSON(
+        multiplier,
+        addend,
+        max_depth,
+        verified_power,
+        max_input_ones,
+    )
+    return decode_kernel_result(encoded, "affine_sparse_support_summary")
+}
+
+pub pure fn affine_sparse_slope_support_summary(
+    multiplier: int,
+    addend: int,
+    max_depth: int,
+    max_input_ones: int,
+) -> map<str, any> {
+    let encoded = AFFINE_SPARSE_SLOPE_SUPPORT_SUMMARY_JSON(
+        multiplier,
+        addend,
+        max_depth,
+        max_input_ones,
+    )
+    return decode_kernel_result(encoded, "affine_sparse_slope_support_summary")
+}
+
+pub pure fn affine_sparse_slope_support_lane(
+    multiplier: int,
+    addend: int,
+    max_depth: int,
+    max_input_ones: int,
+    lane_index: int,
+    lane_count: int,
+) -> map<str, any> {
+    let encoded = AFFINE_SPARSE_SLOPE_SUPPORT_LANE_JSON(
+        multiplier,
+        addend,
+        max_depth,
+        max_input_ones,
+        lane_index,
+        lane_count,
+    )
+    return decode_kernel_result(encoded, "affine_sparse_slope_support_lane")
+}
+
+// Deterministic exact-state beam for counterexample and invariant discovery.
+// It returns witnesses, not an exhaustion certificate.
+pub pure fn affine_frontier_profile(
+    multiplier: int,
+    addend: int,
+    max_depth: int,
+    max_input_ones: int,
+    beam_per_support: int,
+    objective: str,
+    seed: int,
+) -> map<str, any> {
+    let encoded = AFFINE_FRONTIER_PROFILE_JSON(
+        multiplier,
+        addend,
+        max_depth,
+        max_input_ones,
+        beam_per_support,
+        objective,
+        seed,
+    )
+    return decode_kernel_result(encoded, "affine_frontier_profile")
 }
 
 pub pure fn affine_cycle_summary(

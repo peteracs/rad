@@ -1,0 +1,18 @@
+// Prefix-slope branch probe for the bounded-support proof program.
+//
+// This intentionally omits the verified convergence floor and affine
+// threshold. It retains exactly the input prefixes whose multiplicative
+// coefficient has never contracted, isolating the meander branch from the
+// paradoxical additive-remainder branch.
+
+use "../native-math-kernels/math_kernels.rad"
+
+fn main() -> nil {
+    let args = sys_args()
+    let support = if len(args) > 0 { int(args[0]) } else { 10 }
+    let depth = if len(args) > 1 { int(args[1]) } else { 2048 }
+    let started = clock()
+    let profile = affine_sparse_slope_support_summary(3, 1, depth, support)
+    print(json_stringify(profile))
+    print(f"slope support={support} time={clock() - started}s")
+}

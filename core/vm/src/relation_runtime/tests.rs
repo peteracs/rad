@@ -1,6 +1,6 @@
 use super::*;
 use crate::relation_frontend::{compile, FrontendOptions};
-use crate::value::ComponentData;
+use crate::value::{Builtin, ComponentData, Value};
 use crate::vm::VM;
 use crate::world::World;
 use std::collections::{BTreeMap, BTreeSet};
@@ -304,6 +304,316 @@ fn checkpoint_inventory_binds_assertions_indexes_and_allocator() {
 }
 
 #[test]
+fn canonical_relation_transport_round_trips_assertion_identity_and_ancestry() {
+    let mut world = World::new();
+    install(
+        &mut world,
+        "relation Marker(value: int)\n    unique value\n",
+    );
+    world
+        .apply_relation_transaction(&RelationTransaction {
+            operations: vec![PendingRelationOperation::Insert {
+                fact: PendingFactKey::new(
+                    "game::inventory::Marker",
+                    vec![PendingRelationValue::Int(7)],
+                ),
+                metadata: OperationMetadata::cause("settlement:7")
+                    .with_capability("inventory.read"),
+            }],
+            ..RelationTransaction::default()
+        })
+        .unwrap();
+
+    let state = world.relation_state();
+    let encoded = state.transport_hex().unwrap();
+    let restored = AuthoritativeRelationState::from_transport_hex(
+        &encoded,
+        Arc::clone(state.manifest().unwrap()),
+    )
+    .unwrap();
+    assert_eq!(
+        state.operational_checkpoint_bytes(),
+        restored.operational_checkpoint_bytes()
+    );
+    assert_eq!(state.assertions(), restored.assertions());
+    assert_eq!(state.next_assertion_id(), restored.next_assertion_id());
+
+    let mut incompatible = World::new();
+    install(&mut incompatible, "relation Marker(value: text)\n");
+    let error = AuthoritativeRelationState::from_transport_hex(
+        &encoded,
+        Arc::clone(incompatible.relation_state().manifest().unwrap()),
+    )
+    .unwrap_err();
+    assert_eq!(error.code, "relation.transport_manifest_mismatch");
+}
+
+#[test]
+fn save_load_preserves_authoritative_relation_state_exactly() {
+    let front_end = artifacts("relation Owns(owner: entity, item: entity)\n    unique item\n");
+    let mut source = VM::new_with_seed(17);
+    source.install_relation_frontend(&front_end).unwrap();
+    let recycled = source.get_world_mut().spawn_entity(Some("recycled"));
+    assert!(source.get_world_mut().destroy_entity(recycled));
+    let alice_id = source.get_world_mut().spawn_entity(Some("alice"));
+    let sword_id = source.get_world_mut().spawn_entity(Some("sword"));
+    let alice = source.get_world().entity_ref(alice_id).unwrap();
+    let sword = source.get_world().entity_ref(sword_id).unwrap();
+    source
+        .get_world_mut()
+        .apply_relation_transaction(&RelationTransaction {
+            operations: vec![PendingRelationOperation::Insert {
+                fact: PendingFactKey::new(
+                    "game::inventory::Owns",
+                    vec![existing(alice), existing(sword)],
+                ),
+                metadata: OperationMetadata::cause("settlement.acquire")
+                    .with_capability("inventory.read"),
+            }],
+            ..RelationTransaction::default()
+        })
+        .unwrap();
+    let expected = source
+        .get_world()
+        .relation_state()
+        .operational_checkpoint_bytes();
+    let saved = source
+        .call_builtin(Builtin::SaveWorld, Vec::new())
+        .unwrap()
+        .as_str()
+        .unwrap()
+        .to_owned();
+
+    let mut restored = VM::new_with_seed(19);
+    restored.install_relation_frontend(&front_end).unwrap();
+    let payload = Value::from_string(restored.gc_mut(), saved.clone());
+    restored
+        .call_builtin(Builtin::LoadWorld, vec![payload])
+        .unwrap();
+    assert_eq!(
+        expected,
+        restored
+            .get_world()
+            .relation_state()
+            .operational_checkpoint_bytes()
+    );
+    assert_eq!(
+        restored.get_world().get_entity_by_name("alice"),
+        Some(alice.slot)
+    );
+    assert_eq!(restored.get_world().entity_ref(alice.slot), Some(alice));
+    assert_eq!(
+        restored.get_world().get_entity_by_name("sword"),
+        Some(sword.slot)
+    );
+
+    let plain = crate::radpack::open(&saved).unwrap();
+    let rest = plain.strip_prefix("RADWORLD3 ").unwrap();
+    let (_, body) = rest.split_once(' ').unwrap();
+    let mut document = serde_json::from_str::<serde_json::Value>(body).unwrap();
+    document.as_object_mut().unwrap().remove("relations");
+    let incomplete = crate::radpack::seal("RADWORLD3", &document.to_string());
+    let payload = Value::from_string(restored.gc_mut(), incomplete);
+    let error = restored
+        .call_builtin(Builtin::LoadWorld, vec![payload])
+        .unwrap_err();
+    assert!(
+        error.contains("payload omits authoritative relation state"),
+        "got: {error}"
+    );
+    assert_eq!(
+        expected,
+        restored
+            .get_world()
+            .relation_state()
+            .operational_checkpoint_bytes()
+    );
+}
+
+#[test]
+fn full_fork_wire_preserves_authoritative_relation_state_exactly() {
+    let front_end = artifacts("relation Marker(value: int)\n    unique value\n");
+    let mut vm = VM::new_with_seed(23);
+    vm.install_relation_frontend(&front_end).unwrap();
+    vm.get_world_mut()
+        .apply_relation_transaction(&RelationTransaction {
+            operations: vec![insert(
+                "game::inventory::Marker",
+                vec![PendingRelationValue::Int(9)],
+                "wire",
+            )],
+            ..RelationTransaction::default()
+        })
+        .unwrap();
+    let expected = vm
+        .get_world()
+        .relation_state()
+        .operational_checkpoint_bytes();
+    let snapshot = Arc::new(vm.get_world().snapshot());
+    let fork = Value::world_fork(vm.gc_mut(), snapshot);
+    let encoded = vm
+        .call_builtin(Builtin::ForkToBytes, vec![fork])
+        .unwrap()
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let payload = Value::from_string(vm.gc_mut(), encoded);
+    let decoded = vm
+        .call_builtin(Builtin::ForkFromBytes, vec![payload])
+        .unwrap();
+    let result = decoded.as_sum_type().unwrap();
+    assert_eq!(result.variant, "Ok");
+    let snapshot = result.fields["value"].as_world_fork().unwrap();
+    assert_eq!(
+        expected,
+        snapshot.relation_state().operational_checkpoint_bytes()
+    );
+}
+
+#[test]
+fn fork_delta_preserves_authoritative_relation_state_exactly() {
+    let front_end = artifacts("relation Marker(value: int)\n");
+    let mut vm = VM::new_with_seed(29);
+    vm.install_relation_frontend(&front_end).unwrap();
+    let base_snapshot = Arc::new(vm.get_world().snapshot());
+    vm.get_world_mut()
+        .apply_relation_transaction(&RelationTransaction {
+            operations: vec![insert(
+                "game::inventory::Marker",
+                vec![PendingRelationValue::Int(3)],
+                "delta",
+            )],
+            ..RelationTransaction::default()
+        })
+        .unwrap();
+    let expected = vm
+        .get_world()
+        .relation_state()
+        .operational_checkpoint_bytes();
+    let target_snapshot = Arc::new(vm.get_world().snapshot());
+    let base = Value::world_fork(vm.gc_mut(), Arc::clone(&base_snapshot));
+    let target = Value::world_fork(vm.gc_mut(), target_snapshot);
+    let delta = vm
+        .call_builtin(Builtin::ForkDelta, vec![base, target])
+        .unwrap();
+    let local_base = Value::world_fork(vm.gc_mut(), base_snapshot);
+    let applied = vm
+        .call_builtin(Builtin::ForkApply, vec![local_base, delta])
+        .unwrap();
+    let result = applied.as_sum_type().unwrap();
+    assert_eq!(result.variant, "Ok");
+    let snapshot = result.fields["value"].as_world_fork().unwrap();
+    assert_eq!(
+        expected,
+        snapshot.relation_state().operational_checkpoint_bytes()
+    );
+}
+
+#[test]
+fn relation_only_changes_affect_content_digest() {
+    let mut world = World::new();
+    install(&mut world, "relation Marker(value: int)\n");
+    let before = world.content_digest();
+    world
+        .apply_relation_transaction(&RelationTransaction {
+            operations: vec![insert(
+                "game::inventory::Marker",
+                vec![PendingRelationValue::Int(1)],
+                "digest",
+            )],
+            ..RelationTransaction::default()
+        })
+        .unwrap();
+    assert_ne!(before, world.content_digest());
+}
+
+#[test]
+fn relation_only_changes_affect_world_digest_builtin() {
+    let front_end = artifacts("relation Marker(value: int)\n");
+    let mut vm = VM::new_with_seed(31);
+    vm.install_relation_frontend(&front_end).unwrap();
+    let before = vm
+        .call_builtin(Builtin::WorldDigest, Vec::new())
+        .unwrap()
+        .as_str()
+        .unwrap()
+        .to_owned();
+    vm.get_world_mut()
+        .apply_relation_transaction(&RelationTransaction {
+            operations: vec![insert(
+                "game::inventory::Marker",
+                vec![PendingRelationValue::Int(1)],
+                "digest",
+            )],
+            ..RelationTransaction::default()
+        })
+        .unwrap();
+    let after = vm
+        .call_builtin(Builtin::WorldDigest, Vec::new())
+        .unwrap()
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert_ne!(before, after);
+}
+
+#[test]
+fn merge_fails_closed_before_relation_only_branch_changes_can_be_lost() {
+    let mut world = World::new();
+    install(&mut world, "relation Marker(value: int)\n");
+    let base = world.snapshot();
+    world
+        .apply_relation_transaction(&RelationTransaction {
+            operations: vec![insert(
+                "game::inventory::Marker",
+                vec![PendingRelationValue::Int(1)],
+                "ours",
+            )],
+            ..RelationTransaction::default()
+        })
+        .unwrap();
+    let ours = world.snapshot();
+    let errors = crate::merge::merge_worlds(
+        &base,
+        &ours,
+        &base,
+        &mut crate::value::PersistentStore,
+        &crate::merge::Resolutions::default(),
+    )
+    .err()
+    .expect("relation divergence must fail closed");
+    assert!(matches!(
+        errors.as_slice(),
+        [crate::merge::MergeConflict::Relations { .. }]
+    ));
+}
+
+#[test]
+fn bounded_transaction_rejects_before_world_mutation() {
+    let mut world = World::new();
+    install(&mut world, "relation Marker(value: int)\n");
+    let before = world.snapshot();
+    let profile = RelationTransactionProfile {
+        max_operations: 0,
+        ..RelationTransactionProfile::default()
+    };
+    let mut builder = BoundedRelationTransactionBuilder::new(profile);
+    let error = builder
+        .push_operation(insert(
+            "game::inventory::Marker",
+            vec![PendingRelationValue::Int(1)],
+            "oversized",
+        ))
+        .unwrap_err();
+    assert_eq!(error.code, "relation.transaction_operation_limit");
+    assert_eq!(
+        before.relation_state().operational_checkpoint_bytes(),
+        world.relation_state().operational_checkpoint_bytes()
+    );
+    assert_eq!(before.next_id, world.snapshot().next_id);
+}
+
+#[test]
 fn portable_attempt_checkpoint_binds_authoritative_relation_state() {
     let artifacts = artifacts("relation Marker(value: int)\n    unique value\n");
     let mut vm = VM::new_with_seed(11);
@@ -565,20 +875,4 @@ relation CarryCapacity(person: entity, capacity: int)
         owns[0].causes,
         BTreeSet::from(["settlement.transfer".into()])
     );
-}
-
-#[test]
-fn relation_runtime_sources_stay_below_one_thousand_lines() {
-    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/relation_runtime");
-    for entry in std::fs::read_dir(&root).unwrap() {
-        let path = entry.unwrap().path();
-        if path.extension().is_some_and(|extension| extension == "rs") {
-            let lines = std::fs::read_to_string(&path).unwrap().lines().count();
-            assert!(
-                lines <= 1_000,
-                "{} has {lines} lines; runtime files are capped at 1000",
-                path.display()
-            );
-        }
-    }
 }

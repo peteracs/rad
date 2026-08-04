@@ -1,0 +1,379 @@
+// Causal audit of the exact cyclic-invariant minimum-margin certificate.
+//
+// The external optimizer proves the Horn/PB optimum. RAD independently checks
+// the extremal family in the Boolean-lattice kernel, settles three independent
+// evidence streams atomically, and retains their fan-in through why().
+
+use "structure_lib.rad"
+use "../native-math-kernels/math_kernels.rad"
+
+let DEFAULT_CERTIFICATE = "projects/dogfood/frankl-search/certificates/regular-maxsat-proper-n13.json"
+
+component RegularClassProof {
+    width: int = 0
+    minimum_margin: int = 0
+    orbit_count: int = 0
+    computed_orbit_count: int = 0
+    horn_clause_count: int = 0
+    horn_digest: str = ""
+    objective_digest: str = ""
+    family_size: int = 0
+    frequency: int = 0
+    profile_signature: int = 0
+    evidence_count: int = 0
+    counterexample_exists: bool = true
+    proper_required: bool = false
+    separating_required: bool = false
+    extremal_closed: bool = false
+    extremal_uniform: bool = false
+    extremal_separating: bool = false
+    transitive_class_covered: bool = false
+}
+
+intent RegularProofEvidence {
+    key target: entity
+    kind: str
+    width: int
+    minimum_margin: int
+    orbit_count: int
+    computed_orbit_count: int
+    horn_clause_count: int
+    horn_digest: str
+    objective_digest: str
+    family_size: int
+    frequency: int
+    profile_signature: int
+    counterexample_exists: bool
+    proper_required: bool
+    separating_required: bool
+    extremal_closed: bool
+    extremal_uniform: bool
+    extremal_separating: bool
+    transitive_class_covered: bool
+}
+
+law SubmitOptimizationEvidence(
+    target: entity,
+    width: int,
+    minimum_margin: int,
+    counterexample_exists: bool,
+    proper_required: bool,
+    separating_required: bool,
+) {
+    propose RegularProofEvidence {
+        target: target,
+        kind: "optimization",
+        width: width,
+        minimum_margin: minimum_margin,
+        orbit_count: 0,
+        computed_orbit_count: 0,
+        horn_clause_count: 0,
+        horn_digest: "",
+        objective_digest: "",
+        family_size: 0,
+        frequency: 0,
+        profile_signature: 0,
+        counterexample_exists: counterexample_exists,
+        proper_required: proper_required,
+        separating_required: separating_required,
+        extremal_closed: false,
+        extremal_uniform: false,
+        extremal_separating: false,
+        transitive_class_covered: false,
+    }
+}
+
+law SubmitHornEvidence(
+    target: entity,
+    orbit_count: int,
+    horn_clause_count: int,
+    horn_digest: str,
+    objective_digest: str,
+) {
+    propose RegularProofEvidence {
+        target: target,
+        kind: "horn-closure",
+        width: 0,
+        minimum_margin: 0,
+        orbit_count: orbit_count,
+        computed_orbit_count: 0,
+        horn_clause_count: horn_clause_count,
+        horn_digest: horn_digest,
+        objective_digest: objective_digest,
+        family_size: 0,
+        frequency: 0,
+        profile_signature: 0,
+        counterexample_exists: false,
+        proper_required: false,
+        separating_required: false,
+        extremal_closed: false,
+        extremal_uniform: false,
+        extremal_separating: false,
+        transitive_class_covered: false,
+    }
+}
+
+law SubmitExtremalEvidence(
+    target: entity,
+    family_size: int,
+    frequency: int,
+    profile_signature: int,
+    computed_orbit_count: int,
+    closed: bool,
+    uniform: bool,
+    separating: bool,
+) {
+    propose RegularProofEvidence {
+        target: target,
+        kind: "extremal-witness",
+        width: 0,
+        minimum_margin: 0,
+        orbit_count: 0,
+        computed_orbit_count: computed_orbit_count,
+        horn_clause_count: 0,
+        horn_digest: "",
+        objective_digest: "",
+        family_size: family_size,
+        frequency: frequency,
+        profile_signature: profile_signature,
+        counterexample_exists: false,
+        proper_required: false,
+        separating_required: false,
+        extremal_closed: closed,
+        extremal_uniform: uniform,
+        extremal_separating: separating,
+        transitive_class_covered: false,
+    }
+}
+
+law SubmitPrimeTransitivityReduction(
+    target: entity,
+    width: int,
+    width_is_prime: bool,
+) {
+    propose RegularProofEvidence {
+        target: target,
+        kind: "prime-transitivity-reduction",
+        width: width,
+        minimum_margin: 0,
+        orbit_count: 0,
+        computed_orbit_count: 0,
+        horn_clause_count: 0,
+        horn_digest: "",
+        objective_digest: "",
+        family_size: 0,
+        frequency: 0,
+        profile_signature: 0,
+        counterexample_exists: false,
+        proper_required: false,
+        separating_required: false,
+        extremal_closed: false,
+        extremal_uniform: false,
+        extremal_separating: false,
+        transitive_class_covered: width_is_prime,
+    }
+}
+
+resolver ResolveRegularProof for RegularProofEvidence(target, proposals) {
+    let mut width = 0
+    let mut minimum_margin = 0
+    let mut orbit_count = 0
+    let mut computed_orbit_count = 0
+    let mut horn_clause_count = 0
+    let mut horn_digest = ""
+    let mut objective_digest = ""
+    let mut family_size = 0
+    let mut frequency = 0
+    let mut profile_signature = 0
+    let mut counterexample_exists = false
+    let mut proper_required = false
+    let mut separating_required = false
+    let mut extremal_closed = false
+    let mut extremal_uniform = false
+    let mut extremal_separating = false
+    let mut transitive_class_covered = false
+    for proposal in proposals {
+        if proposal.kind == "optimization" {
+            width = proposal.width
+            minimum_margin = proposal.minimum_margin
+            counterexample_exists = proposal.counterexample_exists
+            proper_required = proposal.proper_required
+            separating_required = proposal.separating_required
+        } else if proposal.kind == "horn-closure" {
+            orbit_count = proposal.orbit_count
+            horn_clause_count = proposal.horn_clause_count
+            horn_digest = proposal.horn_digest
+            objective_digest = proposal.objective_digest
+        } else if proposal.kind == "extremal-witness" {
+            family_size = proposal.family_size
+            frequency = proposal.frequency
+            profile_signature = proposal.profile_signature
+            computed_orbit_count = proposal.computed_orbit_count
+            extremal_closed = proposal.extremal_closed
+            extremal_uniform = proposal.extremal_uniform
+            extremal_separating = proposal.extremal_separating
+        } else if proposal.kind == "prime-transitivity-reduction" {
+            transitive_class_covered = proposal.transitive_class_covered
+        }
+    }
+    next(target, RegularClassProof {
+        width: width,
+        minimum_margin: minimum_margin,
+        orbit_count: orbit_count,
+        computed_orbit_count: computed_orbit_count,
+        horn_clause_count: horn_clause_count,
+        horn_digest: horn_digest,
+        objective_digest: objective_digest,
+        family_size: family_size,
+        frequency: frequency,
+        profile_signature: profile_signature,
+        evidence_count: len(proposals),
+        counterexample_exists: counterexample_exists,
+        proper_required: proper_required,
+        separating_required: separating_required,
+        extremal_closed: extremal_closed,
+        extremal_uniform: extremal_uniform,
+        extremal_separating: extremal_separating,
+        transitive_class_covered: transitive_class_covered,
+    })
+}
+
+constraint ValidRegularClassProof for RegularClassProof(subject, proposed) {
+    require proposed.width == 13 else "regular-proof.width"
+    require proposed.evidence_count == 4 else "regular-proof.incomplete-fan-in"
+    require proposed.orbit_count == proposed.computed_orbit_count
+    else "regular-proof.orbit-partition"
+    require proposed.horn_clause_count > 0 else "regular-proof.empty-horn-theory"
+    require len(proposed.horn_digest) == 64 else "regular-proof.horn-digest"
+    require len(proposed.objective_digest) == 64 else "regular-proof.objective-digest"
+    require proposed.proper_required else "regular-proof.proper-reduction"
+    require proposed.separating_required else "regular-proof.separating-reduction"
+    require not proposed.counterexample_exists else "regular-proof.counterexample"
+    require proposed.minimum_margin == 1 else "regular-proof.sharp-margin"
+    require proposed.family_size == shl(1, proposed.width) - 1
+    else "regular-proof.extremal-size"
+    require proposed.frequency * 2 - proposed.family_size == proposed.minimum_margin
+    else "regular-proof.margin-identity"
+    require proposed.extremal_closed else "regular-proof.extremal-not-closed"
+    require proposed.extremal_uniform else "regular-proof.extremal-not-uniform"
+    require proposed.extremal_separating else "regular-proof.extremal-not-separating"
+    require proposed.transitive_class_covered else "regular-proof.transitive-reduction"
+}
+
+entity regular_proof_judge { RegularClassProof {} }
+
+event RegularProofReady {
+    width: int
+    minimum_margin: int
+    orbit_count: int
+    horn_clause_count: int
+    horn_digest: str
+    objective_digest: str
+    family_size: int
+    frequency: int
+    profile_signature: int
+    computed_orbit_count: int
+    counterexample_exists: bool
+    proper_required: bool
+    separating_required: bool
+    extremal_closed: bool
+    extremal_uniform: bool
+    extremal_separating: bool
+    transitive_class_covered: bool
+}
+
+on RegularProofReady(evt) {
+    settle {
+        SubmitOptimizationEvidence(
+            regular_proof_judge,
+            evt.width,
+            evt.minimum_margin,
+            evt.counterexample_exists,
+            evt.proper_required,
+            evt.separating_required,
+        )
+        SubmitHornEvidence(
+            regular_proof_judge,
+            evt.orbit_count,
+            evt.horn_clause_count,
+            evt.horn_digest,
+            evt.objective_digest,
+        )
+        SubmitExtremalEvidence(
+            regular_proof_judge,
+            evt.family_size,
+            evt.frequency,
+            evt.profile_signature,
+            evt.computed_orbit_count,
+            evt.extremal_closed,
+            evt.extremal_uniform,
+            evt.extremal_separating,
+        )
+        SubmitPrimeTransitivityReduction(
+            regular_proof_judge,
+            evt.width,
+            evt.transitive_class_covered,
+        )
+    }
+}
+
+pure fn is_uniform(items: list<int>) -> bool {
+    if len(items) == 0 { return true }
+    for value in items {
+        if value != items[0] { return false }
+    }
+    return true
+}
+
+pure fn is_prime(value: int) -> bool {
+    if value < 2 { return false }
+    let mut divisor = 2
+    while divisor * divisor <= value {
+        if value % divisor == 0 { return false }
+        divisor = divisor + 1
+    }
+    return true
+}
+
+fn main() -> nil {
+    let argv = sys_args()
+    let path = if len(argv) > 0 { argv[0] } else { DEFAULT_CERTIFICATE }
+    let document = json_parse(read_file(path)) |> unwrap
+    let width = document["width"]
+    let family = if document["family_encoding"] == "all_nonempty_subsets" {
+        range(1, shl(1, width))
+    } else {
+        document["family"]
+    }
+    let frequencies = lattice_frequencies(family, width)
+    print(f"optimizer certificate: family={document["family_size"]} frequency={document["frequency"]} orbits={document["orbit_count"]}")
+    print(f"independent lattice profile: family={len(family)} frequencies={frequencies} necklaces={len(necklace_representatives(width)) + 2}")
+    let before = fork()
+    emit RegularProofReady {
+        width: width,
+        minimum_margin: document["minimum_margin"],
+        orbit_count: document["orbit_count"],
+        horn_clause_count: document["horn_clause_count"],
+        horn_digest: document["horn_digest"],
+        objective_digest: document["objective_digest"],
+        family_size: len(family),
+        frequency: frequencies[0],
+        profile_signature: 0,
+        computed_orbit_count: len(bitmask_rotation_representatives(width)),
+        counterexample_exists: document["counterexample_exists"],
+        proper_required: document["proper_family_required"],
+        separating_required: document["separating_required"],
+        extremal_closed: lattice_is_closed(family),
+        extremal_uniform: is_uniform(frequencies),
+        extremal_separating: family_is_separating(family, width),
+        transitive_class_covered: is_prime(width),
+    }
+    flush_events()
+    let proof = require(regular_proof_judge, RegularClassProof)
+    print("exact cyclic-invariant class certificate")
+    print(f"width={proof.width} orbits={proof.orbit_count} horn_clauses={proof.horn_clause_count}")
+    print(f"sharp proper separating margin={proof.minimum_margin} family={proof.family_size} frequency={proof.frequency}")
+    print(f"prime-degree transitive class covered={proof.transitive_class_covered}")
+    print(diff(before, fork()))
+    print(why(regular_proof_judge, RegularClassProof))
+}

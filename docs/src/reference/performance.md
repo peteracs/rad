@@ -110,12 +110,12 @@ directly into a string buffer, schema embedded once, component rows as
 positional arrays, scalars spending bytes only where type fidelity demands
 (`1` is an int, `1.0` is a float, `{"e":5}` is an entity reference). The
 digest covers the raw body bytes, so verification on ingest needs no parse.
-`save_world()` uses the same writer (`RADWORLD2` prefix); v1 tagged saves
-still load.
+`save_world()` uses the same canonical writer inside the current `RADWORLD3`
+envelope; unsupported pre-release save shapes are rejected.
 
-For perspective, the v1 codec (tagged `serde_json` tree) measured 246 ms /
+For historical performance context, the earlier tagged `serde_json` experiment measured 246 ms /
 1.45 MB to encode and 184 ms to decode the same world — **without** carrying
-any history. The v2 state sections alone measure ~16 ms / ~515 KB (15x
+any history. The current compact state sections alone measure ~16 ms / ~515 KB (15x
 faster, 3x smaller); the payload above is larger because it now also carries
 the **provenance closure** (the last write per live value plus its emit
 chain — what makes cross-machine `why()` answer). History is most of the

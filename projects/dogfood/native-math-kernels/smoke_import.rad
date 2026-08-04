@@ -9,3 +9,27 @@ for profile in profiles {
 }
 assert(classes == 256, "imported adapter lane partition mismatch")
 print("imported native math extension smoke: ok")
+
+let tails = affine_natural_tail_profiles(3, 1, 8, 12, 4, 256)
+assert(len(tails) == 4, "natural-tail adapter lane count mismatch")
+
+let sparse = affine_sparse_support_profile(3, 1, 20, 20, 6)
+assert(sparse["max_depth"] == 20, "sparse-support adapter depth mismatch")
+assert(len(sparse["survivors_by_depth"]) == 21, "sparse-support depth profile mismatch")
+
+let slope = affine_sparse_slope_support_summary(3, 1, 64, 4)
+assert(slope["criterion"] == "prefix_slope", "slope-support criterion mismatch")
+assert(slope["all_budgets_terminated"], "slope-support smoke did not terminate")
+
+let frontier = affine_frontier_profile(3, 1, 64, 7, 16, "zero_runway", 0)
+assert(frontier["reached_depth"] == 64, "affine frontier smoke stopped early")
+assert(not frontier["certificate"], "heuristic frontier mislabeled itself as a certificate")
+
+let slope_lane_0 = affine_sparse_slope_support_lane(3, 1, 64, 4, 0, 2)
+let slope_lane_1 = affine_sparse_slope_support_lane(3, 1, 64, 4, 1, 2)
+assert(slope_lane_0["seed_count"] == slope_lane_1["seed_count"], "slope lanes disagree on partition")
+assert(
+    slope_lane_0["assigned_seed_count"] + slope_lane_1["assigned_seed_count"]
+    == slope_lane_0["seed_count"],
+    "slope lanes do not cover every proof seed",
+)

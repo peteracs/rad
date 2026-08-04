@@ -1,0 +1,360 @@
+{
+  "labelled_by_test_count": {
+    "10": 316,
+    "5": 1,
+    "6": 30,
+    "7": 60,
+    "8": 420,
+    "9": 240
+  },
+  "labelled_minimal_cores": 1067,
+  "maximum_tests": 12,
+  "maximum_weight": 3,
+  "orbit_cores": [
+    {
+      "quotient_size": 32,
+      "test_count": 5,
+      "tests": [
+        1,
+        2,
+        4,
+        8,
+        16
+      ]
+    },
+    {
+      "quotient_size": 28,
+      "test_count": 6,
+      "tests": [
+        2,
+        3,
+        4,
+        5,
+        8,
+        16
+      ]
+    },
+    {
+      "quotient_size": 28,
+      "test_count": 8,
+      "tests": [
+        3,
+        4,
+        5,
+        6,
+        8,
+        9,
+        10,
+        16
+      ]
+    },
+    {
+      "quotient_size": 27,
+      "test_count": 8,
+      "tests": [
+        2,
+        3,
+        5,
+        6,
+        8,
+        9,
+        16,
+        17
+      ]
+    },
+    {
+      "quotient_size": 28,
+      "test_count": 8,
+      "tests": [
+        3,
+        4,
+        5,
+        6,
+        8,
+        10,
+        16,
+        17
+      ]
+    },
+    {
+      "quotient_size": 27,
+      "test_count": 8,
+      "tests": [
+        4,
+        5,
+        6,
+        8,
+        9,
+        10,
+        16,
+        17
+      ]
+    },
+    {
+      "quotient_size": 27,
+      "test_count": 7,
+      "tests": [
+        2,
+        4,
+        7,
+        8,
+        11,
+        16,
+        17
+      ]
+    },
+    {
+      "quotient_size": 27,
+      "test_count": 9,
+      "tests": [
+        2,
+        3,
+        5,
+        6,
+        9,
+        10,
+        12,
+        16,
+        17
+      ]
+    },
+    {
+      "quotient_size": 27,
+      "test_count": 8,
+      "tests": [
+        2,
+        4,
+        7,
+        9,
+        10,
+        12,
+        16,
+        17
+      ]
+    },
+    {
+      "quotient_size": 27,
+      "test_count": 8,
+      "tests": [
+        4,
+        7,
+        8,
+        9,
+        10,
+        16,
+        17,
+        18
+      ]
+    },
+    {
+      "quotient_size": 27,
+      "test_count": 9,
+      "tests": [
+        4,
+        6,
+        7,
+        8,
+        9,
+        11,
+        16,
+        17,
+        18
+      ]
+    },
+    {
+      "quotient_size": 27,
+      "test_count": 9,
+      "tests": [
+        3,
+        5,
+        6,
+        8,
+        9,
+        12,
+        16,
+        17,
+        18
+      ]
+    },
+    {
+      "quotient_size": 27,
+      "test_count": 9,
+      "tests": [
+        4,
+        5,
+        6,
+        9,
+        10,
+        12,
+        16,
+        17,
+        18
+      ]
+    },
+    {
+      "quotient_size": 27,
+      "test_count": 8,
+      "tests": [
+        3,
+        4,
+        6,
+        8,
+        13,
+        16,
+        17,
+        18
+      ]
+    },
+    {
+      "quotient_size": 27,
+      "test_count": 10,
+      "tests": [
+        4,
+        6,
+        7,
+        8,
+        10,
+        11,
+        13,
+        16,
+        17,
+        18
+      ]
+    },
+    {
+      "quotient_size": 27,
+      "test_count": 10,
+      "tests": [
+        1,
+        3,
+        5,
+        6,
+        9,
+        10,
+        12,
+        17,
+        18,
+        20
+      ]
+    },
+    {
+      "quotient_size": 27,
+      "test_count": 10,
+      "tests": [
+        3,
+        5,
+        6,
+        8,
+        9,
+        10,
+        12,
+        17,
+        18,
+        20
+      ]
+    },
+    {
+      "quotient_size": 27,
+      "test_count": 10,
+      "tests": [
+        3,
+        7,
+        8,
+        9,
+        10,
+        12,
+        16,
+        17,
+        18,
+        20
+      ]
+    },
+    {
+      "quotient_size": 27,
+      "test_count": 10,
+      "tests": [
+        5,
+        6,
+        8,
+        9,
+        11,
+        12,
+        16,
+        17,
+        18,
+        20
+      ]
+    },
+    {
+      "quotient_size": 27,
+      "test_count": 10,
+      "tests": [
+        3,
+        5,
+        6,
+        9,
+        10,
+        12,
+        17,
+        18,
+        20,
+        24
+      ]
+    },
+    {
+      "quotient_size": 27,
+      "test_count": 10,
+      "tests": [
+        1,
+        2,
+        7,
+        9,
+        10,
+        12,
+        17,
+        18,
+        20,
+        24
+      ]
+    },
+    {
+      "quotient_size": 27,
+      "test_count": 10,
+      "tests": [
+        2,
+        4,
+        7,
+        8,
+        11,
+        13,
+        17,
+        18,
+        20,
+        24
+      ]
+    },
+    {
+      "quotient_size": 27,
+      "test_count": 10,
+      "tests": [
+        2,
+        4,
+        7,
+        8,
+        11,
+        13,
+        16,
+        19,
+        21,
+        25
+      ]
+    }
+  ],
+  "permutations": 120,
+  "quotient_threshold": 27,
+  "schema": "rad.boolean-lattice.projected-partition-frontier.v1",
+  "symmetry_orbits": 23,
+  "test_patterns": 25,
+  "variables": 5,
+  "visited_search_nodes": 15619251
+}

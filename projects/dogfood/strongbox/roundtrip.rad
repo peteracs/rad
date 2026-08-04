@@ -12,7 +12,7 @@
 //   R5  a committed decoded fork restores the original world_digest
 //   R6  split(bytes, " ")[1] is the payload digest in BOTH wire formats
 //       (docs/src/reference/builtins.md: "always the second space-separated
-//       token" — legacy JSON under ~4 KB, RADPACK1 above it)
+//       token" — plain current JSON under ~4 KB, RADPACK1 above it)
 //   R7  a save round-trips unchanged a SECOND time (no drift on re-entry)
 
 component Incident { code: "", severity: 1, status: "open", opened_at: 0, sla_mins: 60 }
@@ -65,7 +65,7 @@ fn wire_format(bytes: str) -> str {
     if len(bytes) >= 9 and slice(bytes, 0, 9) == "RADPACK1:" {
         return "RADPACK1"
     }
-    return "legacy"
+    return "plain"
 }
 
 let mut fails = 0

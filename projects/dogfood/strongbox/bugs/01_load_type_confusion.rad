@@ -5,8 +5,7 @@
 // The save envelope stores component values positionally against an embedded
 // schema of field NAMES only (no types):
 //
-//   RADWORLD2 {"entities":[["e",[["Incident",["DISK_FULL",3,false]]]]],
-//              "schema":[["Incident",["code","sev","open"]]]}
+//   RADWORLD3 <digest> {"entities":[[0,"e",[["Incident",...]]]], ...}
 //
 // Below, the field SET matches the declaration exactly, so this is NOT shape
 // drift and no `migrate` block is required or declared. Only the VALUE TYPES
@@ -23,7 +22,7 @@
 
 component Incident { code: "", sev: 1, open: true }
 
-let poisoned = "RADWORLD2 {\"entities\":[[\"inc-1001\",[[\"Incident\",[\"DISK_FULL\",\"3\",0]]]]],\"resources\":[],\"schema\":[[\"Incident\",[\"code\",\"sev\",\"open\"]]]}"
+let poisoned = "RADWORLD3 ab8bd6fe08bc619467188762cf055849ad2dc69ae9c733ef20babe0127f7b053 {\"entities\":[[0,\"inc-1001\",[[\"Incident\",[\"DISK_FULL\",\"3\",0]]]]],\"resources\":[],\"schema\":[[\"Incident\",[\"code\",\"sev\",\"open\"]]],\"entity_allocator\":[1,false,[],[]],\"relations\":null}"
 
 print("=== BUG 01: type confusion through load_world ===")
 

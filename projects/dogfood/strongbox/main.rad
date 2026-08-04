@@ -6,11 +6,10 @@
 //
 // WHY THIS APP EXISTS
 //
-// fork_to_bytes() wraps its payload in a blake3 integrity digest, so a
-// tampered fork is rejected on ingest (proved 12 ways in tamper_wire.rad).
-// save_world() has no such envelope: an archive on disk is a plain
-// `RADWORLD2 {json}` document that anyone can edit, and load_world() will
-// read the edit back as gospel (proved in run_tamper_saves.ps1).
+// Current fork and save payloads both carry blake3 integrity digests, so
+// accidental corruption and edits without resealing are rejected on ingest.
+// An unkeyed transport digest is not authentication: someone able to edit an
+// archive can also recompute it.
 //
 // Strongbox builds the missing layer out of the language itself. Every state
 // transition is followed by a world_digest() receipt appended to a chain, so
@@ -20,8 +19,8 @@
 //   the world on disk is the world the receipts describe.
 //
 // The chain is only as trustworthy as its own storage, so it is deliberately
-// kept in a SEPARATE file from the archive: an attacker must now forge two
-// artifacts consistently instead of editing one number.
+// kept in a SEPARATE protected file from the archive: an attacker must now
+// forge two artifacts consistently instead of editing and resealing one.
 
 component Incident { code: "", severity: 1, status: "open", age: 0, sla_mins: 60 }
 

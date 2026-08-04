@@ -1,0 +1,22 @@
+{
+  "schema": "rad.boolean-lattice.coprime-cycle-layering.v1",
+  "target_width": 13,
+  "covered_nonidentity_cycle_types": 63,
+  "uncovered_nonidentity_cycle_types": 37,
+  "target_proper_separating_minimum": 1,
+  "target_horn_digest": "26adb539aa3519d23fcad947a5b8262b846df190663adc9ddecbb57cd449d9e9",
+  "target_objective_digest": "3cd52e74935849fba2d1b895f0ea677d4cf6d361f0bd3acb2c2e78c3335efd28",
+  "cyclic_cases": [
+    {"width": 2, "minimum_margin": 0, "orbit_count": 3, "horn_clause_count": 1, "horn_digest": "0a826d48b6b945a3a70fe0453179c722792e6d522cf30c22b13f771e9e2d7bf3", "objective_digest": "abee88d7997cadd27be5c67d447e26c4c1aa06e7ca79ac84e559154218c6c8a9"},
+    {"width": 3, "minimum_margin": 0, "orbit_count": 4, "horn_clause_count": 3, "horn_digest": "9c594fd72a20236033b2b33dee7f2a37e72e7885e205e7808d8e64cfa6c82b7f", "objective_digest": "51e2a11f2f5f03817d2eac77e9174c3bdb7e5e310864aa13cb832ade6ede9eb1"},
+    {"width": 4, "minimum_margin": 0, "orbit_count": 6, "horn_clause_count": 12, "horn_digest": "8519b2b67142c3d7b8794df31f9758c725eee01b0640f67ec3954198416904d2", "objective_digest": "f937667968b476dac8f4647569f77104635f18541f7244cd0639b8fb50181f05"},
+    {"width": 5, "minimum_margin": 0, "orbit_count": 8, "horn_clause_count": 33, "horn_digest": "a801c826ea4accbc1a70d15872f3c5ede59423a433e71f16034b8233674f3e67", "objective_digest": "2eb615a9edf318bcf574a169382cada154c14ef09baad0e86201b2de9451f5e7"},
+    {"width": 6, "minimum_margin": 0, "orbit_count": 14, "horn_clause_count": 150, "horn_digest": "2122aa2925bf118d06372bdc77b73257025459cd639904463f1017121afbc7f4", "objective_digest": "18df3480f9a39d54daee285bef38e39512183cdd83644fd6b0cfed61d63674d4"},
+    {"width": 7, "minimum_margin": 0, "orbit_count": 20, "horn_clause_count": 476, "horn_digest": "66437c03da486a7d41513a54fcdf9725575abe9cb0c0c2c84564dcb49b70b32e", "objective_digest": "4c84bbd998ca80c8ecefa9f11f9b59ad65b3094ad8e0c0e42eca996b5131474a"},
+    {"width": 8, "minimum_margin": 0, "orbit_count": 36, "horn_clause_count": 2025, "horn_digest": "55b51d570082d0b7fa5818d89809bc243f90d474c20d74cbddc9bcfd482c7b28", "objective_digest": "4ddf1d6fda01eec5fb28889fbf61458273684746af36892b0de74cdfc536f33b"},
+    {"width": 9, "minimum_margin": 0, "orbit_count": 60, "horn_clause_count": 7739, "horn_digest": "39481bf3764ad1901c6b48fb3bacfafa764f5d6f4ea14fdaa54bbb71949b433d", "objective_digest": "bcc4bfe5330a9670570bff60fb5d4ff0de88f8c5fd40be91ace36df4b46d104e"},
+    {"width": 10, "minimum_margin": 0, "orbit_count": 108, "horn_clause_count": 31131, "horn_digest": "48d821e7f78dda2356c3b3858ab80d77abdca697c4aaa8fd86a852d0a042b7a9", "objective_digest": "d6044ac1c63a941c009a7e3a6a7391f44b075d6c5cc7e77d783ae5fde83e28ee"},
+    {"width": 11, "minimum_margin": 0, "orbit_count": 188, "horn_clause_count": 121317, "horn_digest": "f68343f9fc7ec7cef4aa5612f88e1303bd211f66e47a219418d3416c7da38a79", "objective_digest": "1b6eb7082fe5f4ebc63238b12b72bd9d7bbf15c699acbc34a1987cac3d68227b"},
+    {"width": 12, "minimum_margin": 0, "orbit_count": 352, "horn_clause_count": 481907, "horn_digest": "5e74e0015f8f93f4acb9c2f1435af4c356817a394cde7c08efe2b17a6fb23e09", "objective_digest": "615f6376f36655adf1f0e190b3c5af20ff2031f943b6eb1b84d31b5cbe68ac57"}
+  ]
+}

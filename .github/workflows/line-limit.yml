@@ -1,0 +1,20 @@
+name: Line Limit
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+permissions:
+  contents: read
+
+jobs:
+  tracked-text-files:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Test line-limit policy
+        run: python3 -m unittest tooling.test_check_line_limits
+      - name: Enforce 1,000-line file limit
+        run: python3 tooling/check_line_limits.py

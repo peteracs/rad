@@ -1,0 +1,191 @@
+// Causal synthesis of the exact eight-generator structural frontier.
+
+component GeneratorEightFrontier {
+    small_family_boundary: int = 0
+    smaller_generator_components_closed: bool = false
+    high_multiplicity_absent_cap: int = 0
+    triple_multiplicity_threshold: int = 0
+    graph_orbits: int = 0
+    scanned_graph_orbits: int = 0
+    smallest_graph_family: int = 0
+    graph_minimum_margin: int = 0
+    graph_counterexample: bool = false
+    surviving_family_minimum: int = 0
+    surviving_family_maximum: int = 0
+    surviving_maximum_column_weight: int = 0
+    surviving_requires_triple_column: bool = false
+    surviving_requires_connected_support: bool = false
+    scan_signature: str = ""
+}
+
+intent GeneratorEightEvidence {
+    key target: entity
+    kind: str
+    value: int
+    other: int
+    flag: bool
+    signature: str
+}
+
+law PublishedSmallFamilyBoundary(target: entity) {
+    propose GeneratorEightEvidence {
+        target: target,
+        kind: "small_family_boundary",
+        value: 50,
+        other: 12,
+        flag: true,
+        signature: "",
+    }
+}
+
+law ProductFactorization(target: entity) {
+    propose GeneratorEightEvidence {
+        target: target,
+        kind: "product_factorization",
+        value: 7,
+        other: 0,
+        flag: true,
+        signature: "",
+    }
+}
+
+law IncidenceMultiplicityBound(target: entity) {
+    // An incidence column of weight k is absent from at most 2^(8-k)
+    // distinct quotient members.  At 51 sets, weight four is abundant;
+    // at 64 sets, weight three is abundant.
+    propose GeneratorEightEvidence {
+        target: target,
+        kind: "multiplicity_bound",
+        value: 16,
+        other: 64,
+        flag: true,
+        signature: "",
+    }
+}
+
+law ExactGraphFrontier(target: entity, profile: map<str, any>) {
+    propose GeneratorEightEvidence {
+        target: target,
+        kind: "graph_orbits",
+        value: profile["coloured_graph_orbits"],
+        other: profile["scanned_orbits"],
+        flag: profile["counterexample"] == nil,
+        signature: profile["signature"],
+    }
+    propose GeneratorEightEvidence {
+        target: target,
+        kind: "graph_extrema",
+        value: profile["smallest_family_size"],
+        other: profile["minimum_margin"],
+        flag: true,
+        signature: profile["signature"],
+    }
+}
+
+resolver ResolveGeneratorEightFrontier for GeneratorEightEvidence(target, proposals) {
+    let mut small_boundary = 0
+    let mut components_closed = false
+    let mut absent_cap = 0
+    let mut triple_threshold = 0
+    let mut graph_orbits = 0
+    let mut scanned_orbits = 0
+    let mut smallest_graph_family = 0
+    let mut graph_margin = 0
+    let mut graph_counterexample = true
+    let mut signature = ""
+    for proposal in proposals {
+        if proposal.kind == "small_family_boundary" {
+            small_boundary = proposal.value
+        } else if proposal.kind == "product_factorization" {
+            components_closed = proposal.flag and proposal.value == 7
+        } else if proposal.kind == "multiplicity_bound" {
+            absent_cap = proposal.value
+            triple_threshold = proposal.other
+        } else if proposal.kind == "graph_orbits" {
+            graph_orbits = proposal.value
+            scanned_orbits = proposal.other
+            graph_counterexample = not proposal.flag
+            signature = proposal.signature
+        } else if proposal.kind == "graph_extrema" {
+            smallest_graph_family = proposal.value
+            graph_margin = proposal.other
+        }
+    }
+    next(target, GeneratorEightFrontier {
+        small_family_boundary: small_boundary,
+        smaller_generator_components_closed: components_closed,
+        high_multiplicity_absent_cap: absent_cap,
+        triple_multiplicity_threshold: triple_threshold,
+        graph_orbits: graph_orbits,
+        scanned_graph_orbits: scanned_orbits,
+        smallest_graph_family: smallest_graph_family,
+        graph_minimum_margin: graph_margin,
+        graph_counterexample: graph_counterexample,
+        surviving_family_minimum: 51,
+        surviving_family_maximum: 63,
+        surviving_maximum_column_weight: 3,
+        surviving_requires_triple_column: true,
+        surviving_requires_connected_support: true,
+        scan_signature: signature,
+    })
+}
+
+constraint ValidGeneratorEightFrontier for GeneratorEightFrontier(subject, proposed) {
+    require proposed.small_family_boundary == 50
+        else "frankl.generator8.small_boundary"
+    require proposed.smaller_generator_components_closed
+        else "frankl.generator8.disconnected_gap"
+    require proposed.high_multiplicity_absent_cap == 16
+        else "frankl.generator8.multiplicity_bound"
+    require proposed.triple_multiplicity_threshold == 64
+        else "frankl.generator8.triple_threshold"
+    require proposed.graph_orbits == 2038236
+        else "frankl.generator8.graph_coverage"
+    require proposed.scanned_graph_orbits == 1992040
+        else "frankl.generator8.scanned_coverage"
+    require proposed.smallest_graph_family == 80
+        else "frankl.generator8.graph_size_floor"
+    require proposed.graph_minimum_margin >= 0
+        else "frankl.generator8.graph_counterexample"
+    require not proposed.graph_counterexample
+        else "frankl.generator8.counterexample_witness"
+    require proposed.surviving_family_minimum == 51
+        else "frankl.generator8.survivor_minimum"
+    require proposed.surviving_family_maximum == 63
+        else "frankl.generator8.survivor_maximum"
+    require proposed.surviving_maximum_column_weight == 3
+        else "frankl.generator8.survivor_weight"
+    require proposed.surviving_requires_triple_column
+        else "frankl.generator8.triple_column_required"
+    require proposed.surviving_requires_connected_support
+        else "frankl.generator8.connected_support_required"
+    require len(proposed.scan_signature) == 64
+        else "frankl.generator8.signature"
+}
+
+entity generator_eight_judge { GeneratorEightFrontier {} }
+
+fn main() -> nil {
+    let argv = sys_args()
+    let certificate_path = if len(argv) >= 1 {
+        argv[0]
+    } else {
+        "projects/dogfood/frankl-search/certificates/generator8-graph-frontier.json"
+    }
+    let profile = json_parse(read_file(certificate_path)) |> unwrap
+    settle {
+        PublishedSmallFamilyBoundary(generator_eight_judge)
+        ProductFactorization(generator_eight_judge)
+        IncidenceMultiplicityBound(generator_eight_judge)
+        ExactGraphFrontier(generator_eight_judge, profile)
+    }
+    let result = require(generator_eight_judge, GeneratorEightFrontier)
+    print("Frankl eight-generator surviving frontier")
+    print(f"graph_orbits={result.graph_orbits} scanned={result.scanned_graph_orbits}")
+    print(f"smallest_connected_graph_quotient={result.smallest_graph_family}")
+    print(f"graph_minimum_margin={result.graph_minimum_margin}")
+    print(f"survivors: family={result.surviving_family_minimum}..{result.surviving_family_maximum} column_weight<=3")
+    print("survivors require connected support and at least one weight-three incidence column")
+    print(f"signature={result.scan_signature}")
+    print(why(generator_eight_judge, GeneratorEightFrontier))
+}

@@ -1,0 +1,209 @@
+// Causal audit of exact eight-generator, thirteen-column CNF exclusions.
+
+component GeneratorEightQ13Exclusion {
+    solver_runs: int = 0
+    excluded_triple_mask: int = 0
+    triple3_singleton_mask: int = 0
+    triple4_singleton_mask: int = 0
+    triple5_ranged_singleton_mask: int = 0
+    triple5_exact_family_mask: int = 0
+    higher_singleton_masks: list = []
+    triple11_trace_split_mask: int = 0
+    all_unsat: bool = false
+    complete_coverage: bool = false
+    total_clauses: int = 0
+    manifest_digest: str = ""
+}
+
+intent GeneratorEightQ13Evidence {
+    key target: entity
+    kind: str
+    triples: int
+    singletons: int
+    minimum_family: int
+    maximum_family: int
+    clauses: int
+    unsat: bool
+    trace_split: int
+    complete: bool
+    signature: str
+}
+
+law SubmitQ13Exclusion(target: entity, run: map<str, any>) {
+    let singleton_count = if run["singleton_count"] == nil {
+        -1
+    } else {
+        run["singleton_count"]
+    }
+    propose GeneratorEightQ13Evidence {
+        target: target,
+        kind: "solver_run",
+        triples: run["triple_count"],
+        singletons: singleton_count,
+        minimum_family: run["minimum_family_size"],
+        maximum_family: run["maximum_family_size"],
+        clauses: run["clauses"],
+        unsat: run["result"] == "unsat",
+        trace_split: if run["fixed_triple_singleton_traces"] == nil {
+            -1
+        } else {
+            run["fixed_triple_singleton_traces"]
+        },
+        complete: true,
+        signature: run["cnf_digest"],
+    }
+}
+
+law SubmitQ13Manifest(target: entity, manifest: map<str, any>) {
+    propose GeneratorEightQ13Evidence {
+        target: target,
+        kind: "manifest",
+        triples: 0,
+        singletons: 0,
+        minimum_family: manifest["family_size_range"][0],
+        maximum_family: manifest["family_size_range"][1],
+        clauses: 0,
+        unsat: true,
+        trace_split: -1,
+        complete: manifest["complete_triple_count_coverage"]
+            and not manifest["counterexample_exists"],
+        signature: manifest["manifest_digest"],
+    }
+}
+
+resolver ResolveQ13Exclusions for GeneratorEightQ13Evidence(target, proposals) {
+    let mut runs = 0
+    let mut triple_mask = 0
+    let mut triple3_singletons = 0
+    let mut triple4_singletons = 0
+    let mut triple5_ranged_singletons = 0
+    let mut triple5_exact_families = 0
+    let mut higher_singleton_masks = []
+    for _index in range(0, 14) {
+        higher_singleton_masks = push(higher_singleton_masks, 0)
+    }
+    let mut triple11_trace_split_mask = 0
+    let mut all_unsat = true
+    let mut complete_coverage = false
+    let mut total_clauses = 0
+    let mut manifest_digest = ""
+    for proposal in proposals {
+        if proposal.kind == "manifest" {
+            manifest_digest = proposal.signature
+            complete_coverage = proposal.complete
+            all_unsat = all_unsat and proposal.minimum_family == 51
+                and proposal.maximum_family == 63
+        } else {
+            runs = runs + 1
+            triple_mask = triple_mask | (1 << proposal.triples)
+            total_clauses = total_clauses + proposal.clauses
+            all_unsat = all_unsat and proposal.unsat and len(proposal.signature) == 64
+            if proposal.triples == 3 {
+                triple3_singletons = triple3_singletons | (1 << proposal.singletons)
+            } else if proposal.triples == 4 {
+                triple4_singletons = triple4_singletons | (1 << proposal.singletons)
+            } else if proposal.triples == 5 and proposal.singletons == 0 {
+                all_unsat = all_unsat
+                    and proposal.minimum_family == proposal.maximum_family
+                triple5_exact_families = triple5_exact_families
+                    | (1 << (proposal.minimum_family - 51))
+            } else if proposal.triples == 5 {
+                triple5_ranged_singletons = triple5_ranged_singletons
+                    | (1 << proposal.singletons)
+            } else if proposal.triples >= 6 {
+                higher_singleton_masks = set_at(
+                    higher_singleton_masks,
+                    proposal.triples,
+                    higher_singleton_masks[proposal.triples]
+                        | (1 << proposal.singletons),
+                )
+                if proposal.triples == 11
+                    and proposal.singletons == 0
+                    and proposal.trace_split >= 0
+                {
+                    triple11_trace_split_mask = triple11_trace_split_mask
+                        | (1 << proposal.trace_split)
+                }
+            }
+        }
+    }
+    next(target, GeneratorEightQ13Exclusion {
+        solver_runs: runs,
+        excluded_triple_mask: triple_mask,
+        triple3_singleton_mask: triple3_singletons,
+        triple4_singleton_mask: triple4_singletons,
+        triple5_ranged_singleton_mask: triple5_ranged_singletons,
+        triple5_exact_family_mask: triple5_exact_families,
+        higher_singleton_masks: higher_singleton_masks,
+        triple11_trace_split_mask: triple11_trace_split_mask,
+        all_unsat: all_unsat,
+        complete_coverage: complete_coverage,
+        total_clauses: total_clauses,
+        manifest_digest: manifest_digest,
+    })
+}
+
+constraint ValidQ13Exclusions for GeneratorEightQ13Exclusion(subject, proposed) {
+    require proposed.solver_runs == 82
+        else "frankl.generator8.q13.run_coverage"
+    require proposed.excluded_triple_mask == 16382
+        else "frankl.generator8.q13.triple_coverage"
+    require proposed.triple3_singleton_mask == 511
+        else "frankl.generator8.q13.triple3_singletons"
+    require proposed.triple4_singleton_mask == 511
+        else "frankl.generator8.q13.triple4_singletons"
+    require proposed.triple5_ranged_singleton_mask == 510
+        else "frankl.generator8.q13.triple5_ranged"
+    require proposed.triple5_exact_family_mask == 8191
+        else "frankl.generator8.q13.triple5_exact_sizes"
+    require proposed.higher_singleton_masks[6] == 255
+        else "frankl.generator8.q13.triple6_singletons"
+    require proposed.higher_singleton_masks[7] == 127
+        else "frankl.generator8.q13.triple7_singletons"
+    require proposed.higher_singleton_masks[8] == 63
+        else "frankl.generator8.q13.triple8_singletons"
+    require proposed.higher_singleton_masks[9] == 31
+        else "frankl.generator8.q13.triple9_singletons"
+    require proposed.higher_singleton_masks[10] == 15
+        else "frankl.generator8.q13.triple10_singletons"
+    require proposed.higher_singleton_masks[11] == 7
+        else "frankl.generator8.q13.triple11_singletons"
+    require proposed.higher_singleton_masks[12] == 3
+        else "frankl.generator8.q13.triple12_singletons"
+    require proposed.higher_singleton_masks[13] == 1
+        else "frankl.generator8.q13.triple13_singletons"
+    require proposed.triple11_trace_split_mask == 63
+        else "frankl.generator8.q13.triple11_trace_partition"
+    require proposed.all_unsat
+        else "frankl.generator8.q13.sat_witness"
+    require proposed.complete_coverage
+        else "frankl.generator8.q13.incomplete_coverage"
+    require proposed.total_clauses == 240687998
+        else "frankl.generator8.q13.theory_size"
+    require len(proposed.manifest_digest) == 64
+        else "frankl.generator8.q13.manifest_digest"
+}
+
+entity q13_exclusion_judge { GeneratorEightQ13Exclusion {} }
+
+fn main() -> nil {
+    let argv = sys_args()
+    let certificate_path = if len(argv) >= 1 {
+        argv[0]
+    } else {
+        "projects/dogfood/frankl-search/certificates/generator8-q13-exclusions.json"
+    }
+    let manifest = json_parse(read_file(certificate_path)) |> unwrap
+    settle {
+        SubmitQ13Manifest(q13_exclusion_judge, manifest)
+        for run in manifest["runs"] {
+            SubmitQ13Exclusion(q13_exclusion_judge, run)
+        }
+    }
+    let proof = require(q13_exclusion_judge, GeneratorEightQ13Exclusion)
+    print("Frankl eight-generator q=13 exact exclusions")
+    print(f"solver_runs={proof.solver_runs} total_clauses={proof.total_clauses}")
+    print("excluded_triple_counts=1..13; no surviving q=13 parameter stratum")
+    print(f"manifest_digest={proof.manifest_digest}")
+    print(why(q13_exclusion_judge, GeneratorEightQ13Exclusion))
+}

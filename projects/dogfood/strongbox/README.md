@@ -16,15 +16,14 @@ must survive being written to disk, migrated across three schema generations,
 shipped over the wire as fork bytes, and replayed frame by frame — and come back
 identical every time.
 
-The app is built around a gap the harnesses found. `fork_to_bytes()` wraps its
-payload in a blake3 integrity digest, so a tampered fork is rejected on ingest.
-`save_world()` has no such envelope: an archive on disk is a plain
-`RADWORLD2 {json}` document, and `load_world()` reads any well-formed edit back
-as gospel. So strongbox builds the missing layer out of the language itself —
-`main.rad` appends a `world_digest()` receipt after every transition and stores
-the chain in a separate file, and `verify.rad` re-derives the digest and
-compares. An attacker now has to forge two artifacts consistently instead of
-editing one number.
+Current fork and save payloads carry blake3 integrity envelopes, so corruption
+and edits that were not resealed are rejected on ingest. An unkeyed transport
+digest is not authentication, however: someone able to edit an archive can
+also recompute it. Strongbox builds that separate semantic check out of the
+language itself. `main.rad` appends a `world_digest()` receipt after every
+transition and stores the chain in a separate protected file; `verify.rad`
+re-derives the digest and compares it. An attacker must forge two artifacts
+consistently instead of editing and resealing one.
 
 ## Files
 

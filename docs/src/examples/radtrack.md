@@ -77,16 +77,16 @@ Receipts that mattered more than the ratios:
 - **Content addressing held.** The 400-ticket world's fork digest is
   byte-identical before and after the format change (`9cbdb5c5…`), because
   the digest covers the uncompressed canonical body, not the envelope.
-- **Compat is proven, not promised.** The pre-RADPACK tape
-  (`incident_v1.radr`, raw JSONL) replays verified on the new binary; a
-  DEFLATE-vintage packed tape decodes too (pinned by unit test); legacy
-  `RADFORK2`/`RADDELTA1`/`RADWORLD2` payloads pass through untouched.
+- **Representation invariance is proven.** Plain and packed current
+  `RADFORK2`/`RADDELTA1`/`RADWORLD3` payloads identify the same canonical
+  body, and the native and WASM file encodings are cross-decoded in tests.
 - **Dogfooding caught a real break.** The first cut changed what
   `world_digest()` hashed — old tapes diverged on replay (19 of 53 io
-  records consumed, then a wire mismatch). Fixed to hash the exact legacy
-  bytes; the old tape then verified. A digest is an API.
+  records consumed, then a wire mismatch). The current contract hashes the
+  exact canonical body independently of its transport representation. A
+  digest is an API.
 - **Sub-threshold payloads stay readable.** This demo's 1 KB syncs still
-  ship as legacy JSON on purpose: the envelope only pays past ~4 KB, and
+  ship as plain JSON on purpose: the envelope only pays past ~4 KB, and
   debuggability of small payloads is worth more than a few dozen bytes.
 
 ## D2: the soundness gate — fuzz the boundary, in anger

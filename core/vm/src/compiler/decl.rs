@@ -386,7 +386,15 @@ impl Compiler {
             f.body.clone()
         };
 
-        self.compile_body(&optimized_body.stmts)?;
+        let causal_callable = self.may_run_in_causal_region(&f.name);
+        if causal_callable {
+            self.causal_lowering_depth += 1;
+        }
+        let body_result = self.compile_body(&optimized_body.stmts);
+        if causal_callable {
+            self.causal_lowering_depth -= 1;
+        }
+        body_result?;
 
         self.emit_constant(Value::NIL, line);
         self.emit_op(Op::Return, line);

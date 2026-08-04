@@ -3,11 +3,11 @@
 //   rad projects/dogfood/strongbox/verify.rad                 (the real archive)
 //   rad projects/dogfood/strongbox/verify.rad -- forged_downgrade
 //
-// The save format carries no integrity envelope, so a well-formed edit to an
-// archive is undetectable BY THE FORMAT: load_world() reads it back happily.
-// This program supplies the missing check. It loads the archive under the
-// current schema and compares the resulting world_digest() against the last
-// receipt main.rad wrote when it sealed that archive.
+// The save format detects corruption and edits that were not resealed, but
+// its unkeyed integrity digest is not an authenticity proof. This program
+// loads a structurally valid, correctly sealed archive under the current
+// schema and compares its world_digest() against the final protected receipt
+// written by main.rad.
 //
 // SCOPE, stated honestly: the chain pins the FINAL state. It proves the
 // archive on disk is the archive that was sealed; it does not by itself

@@ -64,10 +64,12 @@ Declarations are owned by their source module: an unqualified declaration is
 local, while an explicitly qualified declaration must have exactly the current
 module as its prefix. Qualified cross-module names remain valid references.
 
-Authoritative relation rows will be staged by resolvers inside the same atomic
-candidate as components. Positive, nonrecursive rules derive read-only facts
-from the complete **relation** candidate. Constraints then inspect components,
-authoritative relations, and derived facts together before the world commits.
+The runtime bridge now stages authoritative relation rows inside resolver-owned
+patches and builds them into the same copy-on-write candidate as component
+writes. Relation conflicts reject that complete candidate before adoption.
+Positive, nonrecursive rules will derive read-only facts from the complete
+**relation** candidate in the next runtime layer; the front end already seals
+those plans, but does not execute them yet.
 
 ```text
 authoritative component + relation candidate
@@ -78,6 +80,22 @@ validation-only constraints
         ↓
 atomic commit or rejection
 ```
+
+Authoritative state is part of world identity rather than an auxiliary table.
+`save_world`/`load_world`, full fork wire, and fork deltas preserve the sealed
+relation manifest, assertion allocator, canonical facts, assertion lifetimes,
+causes, capabilities, entity generations, and verified unique indexes.
+Relation-only changes alter semantic world digests, while operational replay
+also binds the complete assertion history and future allocator state.
+
+Three-way world merge currently fails closed when any branch has a different
+authoritative relation state. Assertion-aware relation merge needs explicit
+rules for unique transfers, entity remapping, deletion, and ancestry; silently
+choosing the base or one branch would lose facts. Host-created transaction
+batches should be constructed through `BoundedRelationTransactionBuilder`,
+which charges each spawn, component write, relation operation, despawn, value,
+text field, metadata entry, candidate handle, and structural byte before
+retaining it.
 
 The semantic reference is full recomputation over canonical ordered relation
 sets. Indexed incremental maintenance is permitted only when differential

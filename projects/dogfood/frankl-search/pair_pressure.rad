@@ -1,0 +1,183 @@
+// Explain the pairwise incidence pressure in an exact OR-closed family.
+
+use "../native-math-kernels/math_kernels.rad"
+use "structure_lib.rad"
+
+let WIDTH = 13
+let EXPECTED_PAIRS = 78
+let DEFAULT_CERTIFICATE = "projects/dogfood/frankl-search/out/deletion-balanced-exchange-10.json"
+
+component PairPressureCertificate {
+    audited_pairs: int = 0
+    failing_minority_pairs: int = 0
+    maximum_bias: int = 0
+    cross_pairs: int = 0
+    distinct_cross_unions: int = 0
+    all_cross_unions_present: bool = false
+}
+
+struct CrossUnionProfile {
+    cross_pairs: int = 0
+    distinct_images: int = 0
+    all_present: bool = false
+}
+
+intent PairPressure {
+    key target: entity
+    left: int
+    right: int
+    neither: int
+    both: int
+    cross_pairs: int
+    distinct_cross_unions: int
+    cross_unions_present: bool
+}
+
+law SubmitPairPressure(
+    target: entity,
+    left: int,
+    right: int,
+    neither: int,
+    both: int,
+    cross_pairs: int,
+    distinct_cross_unions: int,
+    cross_unions_present: bool,
+) {
+    propose PairPressure {
+        target: target,
+        left: left,
+        right: right,
+        neither: neither,
+        both: both,
+        cross_pairs: cross_pairs,
+        distinct_cross_unions: distinct_cross_unions,
+        cross_unions_present: cross_unions_present,
+    }
+}
+
+resolver ResolvePairPressure for PairPressure(target, proposals) {
+    let mut failing = 0
+    let mut maximum_bias = -999999999
+    let mut cross_pairs = 0
+    let mut cross_unions = 0
+    let mut closed = true
+    for proposal in proposals {
+        let bias = proposal.both - proposal.neither
+        if bias >= 0 {
+            failing = failing + 1
+        }
+        if bias > maximum_bias {
+            maximum_bias = bias
+        }
+        cross_pairs = cross_pairs + proposal.cross_pairs
+        cross_unions = cross_unions + proposal.distinct_cross_unions
+        closed = closed and proposal.cross_unions_present
+    }
+    next(target, PairPressureCertificate {
+        audited_pairs: len(proposals),
+        failing_minority_pairs: failing,
+        maximum_bias: maximum_bias,
+        cross_pairs: cross_pairs,
+        distinct_cross_unions: cross_unions,
+        all_cross_unions_present: closed,
+    })
+}
+
+constraint ValidPairPressureAudit for PairPressureCertificate(subject, proposed) {
+    require proposed.audited_pairs == EXPECTED_PAIRS
+    else "frankl.pair_pressure.incomplete_pair_audit"
+    require proposed.all_cross_unions_present
+    else "frankl.pair_pressure.missing_cross_union"
+}
+
+entity pair_judge { PairPressureCertificate {} }
+
+pure fn count_pattern(family: list<int>, left: int, right: int, pattern: int) -> int {
+    let mut count = 0
+    for member in family {
+        let actual = (if (member & shl(1, left)) != 0 { 1 } else { 0 })
+        + (if (member & shl(1, right)) != 0 { 2 } else { 0 })
+        if actual == pattern {
+            count = count + 1
+        }
+    }
+    return count
+}
+
+pure fn cross_union_profile(
+    family: list<int>,
+    left: int,
+    right: int,
+) -> CrossUnionProfile {
+    let mut present = bitset_new()
+    let mut left_only = []
+    let mut right_only = []
+    for member in family {
+        present = bitset_set(present, member)
+        let pattern = (if (member & shl(1, left)) != 0 { 1 } else { 0 })
+        + (if (member & shl(1, right)) != 0 { 2 } else { 0 })
+        if pattern == 1 {
+            left_only = push(left_only, member)
+        } else if pattern == 2 {
+            right_only = push(right_only, member)
+        }
+    }
+    let mut images = bitset_new()
+    let mut image_count = 0
+    let mut all_present = true
+    for a in left_only {
+        for b in right_only {
+            let image = a | b
+            if not bitset_has(images, image) {
+                image_count = image_count + 1
+            }
+            images = bitset_set(images, image)
+            all_present = all_present and bitset_has(present, image)
+        }
+    }
+    return CrossUnionProfile {
+        cross_pairs: len(left_only) * len(right_only),
+        distinct_images: image_count,
+        all_present: all_present,
+    }
+}
+
+fn main() -> nil {
+    let argv = sys_args()
+    let path = if len(argv) > 0 { argv[0] } else { DEFAULT_CERTIFICATE }
+    let parsed = json_parse(read_file(path))
+    assert(is_some(parsed), "certificate must contain valid JSON")
+    let document = unwrap(parsed)
+    assert(document["width"] == WIDTH, "pair-pressure width mismatch")
+    let family = complement_family(document["deleted"], WIDTH)
+    let frequencies = lattice_frequencies(family, WIDTH)
+    settle {
+        for left in range(WIDTH) {
+            for right in range(left + 1, WIDTH) {
+                let profile = cross_union_profile(family, left, right)
+                SubmitPairPressure(
+                    pair_judge,
+                    left,
+                    right,
+                    count_pattern(family, left, right, 0),
+                    count_pattern(family, left, right, 3),
+                    profile.cross_pairs,
+                    profile.distinct_images,
+                    profile.all_present,
+                )
+            }
+        }
+    }
+
+    let certificate = get(pair_judge, PairPressureCertificate) |> unwrap
+    let ordered = sort(frequencies)
+    print("Frankl pair-pressure audit")
+    print(f"family={len(family)} frequencies={frequencies}")
+    print(f"top_two={ordered[WIDTH - 2]},{ordered[WIDTH - 1]} maximum_bias={certificate.maximum_bias}")
+    print(f"failing_minority_pairs={certificate.failing_minority_pairs}/{certificate.audited_pairs}")
+    print(f"cross_pairs={certificate.cross_pairs} distinct_cross_unions={certificate.distinct_cross_unions}")
+    print("necessary condition: every pair needs neither > both; equivalently each pair-frequency sum is below family size")
+    print(why(pair_judge, PairPressureCertificate))
+}
+
+main()

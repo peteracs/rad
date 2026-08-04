@@ -1,0 +1,11 @@
+{
+  "schema": "rad.boolean-lattice.permutation-symmetry-suite.v1",
+  "width": 13,
+  "cases": [
+    {"cycle_type": [10, 3], "subset_orbits": 432, "horn_clauses": 650081, "cnf_variables": 46578, "cnf_clauses": 807806, "counterexample_exists": false},
+    {"cycle_type": [9, 4], "subset_orbits": 360, "horn_clauses": 433824, "cnf_variables": 36386, "cnf_clauses": 556984, "counterexample_exists": false},
+    {"cycle_type": [8, 5], "subset_orbits": 288, "horn_clauses": 263448, "cnf_variables": 30074, "cnf_clauses": 365288, "counterexample_exists": false},
+    {"cycle_type": [7, 6], "subset_orbits": 280, "horn_clauses": 253931, "cnf_variables": 29106, "cnf_clauses": 352490, "counterexample_exists": false},
+    {"cycle_type": [7, 5, 1], "subset_orbits": 320, "horn_clauses": 266105, "cnf_variables": 61161, "cnf_clauses": 473988, "counterexample_exists": false}
+  ]
+}

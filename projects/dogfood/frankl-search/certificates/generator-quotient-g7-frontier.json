@@ -1,0 +1,13 @@
+{
+  "counterexample_exists": false,
+  "elapsed_seconds": 300.1003161999979,
+  "generator_count": 7,
+  "maximum_column_weight": 2,
+  "maximum_family_size": 63,
+  "minimum_family_size": 51,
+  "minimum_nonempty_rank": 3,
+  "result": "unknown",
+  "schema": "rad.boolean-lattice.generator-quotient-proof.v1",
+  "solver": "z3-smt",
+  "width": 13
+}

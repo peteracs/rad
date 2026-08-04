@@ -85,13 +85,13 @@ resolver ResolveCoordinateBalance for CoordinateBalance(target, proposals) {
 
 constraint ValidChainLiftCertificate for ChainLiftCertificate(subject, proposed) {
     require proposed.base_width > 0
-        else "frankl.boundary.empty_base"
+    else "frankl.boundary.empty_base"
     require proposed.missing_core_sets == proposed.special_sets
-        else "frankl.boundary.not_same_size_lift"
+    else "frankl.boundary.not_same_size_lift"
     require proposed.all_specials_cover_base
-        else "frankl.boundary.special_misses_base"
+    else "frankl.boundary.special_misses_base"
     require proposed.template_obstructed
-        else "frankl.boundary.obstruction_not_established"
+    else "frankl.boundary.obstruction_not_established"
 }
 
 entity boundary_judge { ChainLiftCertificate {} }

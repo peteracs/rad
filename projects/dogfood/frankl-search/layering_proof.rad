@@ -1,0 +1,169 @@
+// Causal proof certificate for the coprime-cycle layering lemma at width 13.
+
+let DEFAULT_CERTIFICATE = "projects/dogfood/frankl-search/certificates/cyclic-layering-n13.json"
+
+resource LayeringProofInput { document: map = {} }
+
+component LayeringCertificate {
+    target_width: int = 0
+    cyclic_case_count: int = 0
+    cyclic_width_mask: int = 0
+    cyclic_horn_clauses: int = 0
+    invalid_cyclic_cases: int = 0
+    digest_count: int = 0
+    target_minimum_margin: int = 0
+    covered_cycle_types: int = 0
+    uncovered_cycle_types: int = 0
+}
+
+intent LayeringEvidence {
+    key target: entity
+    kind: str
+    width: int
+    minimum_margin: int
+    horn_clauses: int
+    horn_digest: str
+    objective_digest: str
+    covered_cycle_types: int
+    uncovered_cycle_types: int
+}
+
+law SubmitCyclicLayer(
+    target: entity,
+    width: int,
+    minimum_margin: int,
+    horn_clauses: int,
+    horn_digest: str,
+    objective_digest: str,
+) {
+    propose LayeringEvidence {
+        target: target,
+        kind: "cyclic-layer",
+        width: width,
+        minimum_margin: minimum_margin,
+        horn_clauses: horn_clauses,
+        horn_digest: horn_digest,
+        objective_digest: objective_digest,
+        covered_cycle_types: 0,
+        uncovered_cycle_types: 0,
+    }
+}
+
+law SubmitCoprimeReduction(
+    target: entity,
+    width: int,
+    minimum_margin: int,
+    horn_digest: str,
+    objective_digest: str,
+    covered_cycle_types: int,
+    uncovered_cycle_types: int,
+) {
+    propose LayeringEvidence {
+        target: target,
+        kind: "coprime-cycle-reduction",
+        width: width,
+        minimum_margin: minimum_margin,
+        horn_clauses: 0,
+        horn_digest: horn_digest,
+        objective_digest: objective_digest,
+        covered_cycle_types: covered_cycle_types,
+        uncovered_cycle_types: uncovered_cycle_types,
+    }
+}
+
+resolver ResolveLayeringEvidence for LayeringEvidence(target, proposals) {
+    let mut target_width = 0
+    let mut cyclic_case_count = 0
+    let mut cyclic_width_mask = 0
+    let mut cyclic_horn_clauses = 0
+    let mut invalid_cyclic_cases = 0
+    let mut digest_count = 0
+    let mut target_minimum_margin = 0
+    let mut covered_cycle_types = 0
+    let mut uncovered_cycle_types = 0
+    for proposal in proposals {
+        if len(proposal.horn_digest) == 64 { digest_count = digest_count + 1 }
+        if len(proposal.objective_digest) == 64 { digest_count = digest_count + 1 }
+        if proposal.kind == "cyclic-layer" {
+            cyclic_case_count = cyclic_case_count + 1
+            cyclic_width_mask = cyclic_width_mask | shl(1, proposal.width)
+            cyclic_horn_clauses = cyclic_horn_clauses + proposal.horn_clauses
+            if proposal.minimum_margin < 0 { invalid_cyclic_cases = invalid_cyclic_cases + 1 }
+        } else if proposal.kind == "coprime-cycle-reduction" {
+            target_width = proposal.width
+            target_minimum_margin = proposal.minimum_margin
+            covered_cycle_types = proposal.covered_cycle_types
+            uncovered_cycle_types = proposal.uncovered_cycle_types
+        }
+    }
+    next(target, LayeringCertificate {
+        target_width: target_width,
+        cyclic_case_count: cyclic_case_count,
+        cyclic_width_mask: cyclic_width_mask,
+        cyclic_horn_clauses: cyclic_horn_clauses,
+        invalid_cyclic_cases: invalid_cyclic_cases,
+        digest_count: digest_count,
+        target_minimum_margin: target_minimum_margin,
+        covered_cycle_types: covered_cycle_types,
+        uncovered_cycle_types: uncovered_cycle_types,
+    })
+}
+
+constraint ValidLayeringCertificate for LayeringCertificate(subject, proposed) {
+    require proposed.target_width == 13 else "layering.target-width"
+    require proposed.cyclic_case_count == 11 else "layering.cyclic-case-count"
+    require proposed.cyclic_width_mask == shl(1, 13) - shl(1, 2)
+    else "layering.cyclic-width-coverage"
+    require proposed.cyclic_horn_clauses > 0 else "layering.empty-horn-theory"
+    require proposed.invalid_cyclic_cases == 0 else "layering.negative-cyclic-margin"
+    require proposed.digest_count == 24 else "layering.digest-coverage"
+    require proposed.target_minimum_margin == 1 else "layering.target-cyclic-margin"
+    require proposed.covered_cycle_types == 63 else "layering.covered-cycle-types"
+    require proposed.uncovered_cycle_types == 37 else "layering.uncovered-cycle-types"
+    require proposed.covered_cycle_types + proposed.uncovered_cycle_types == 100
+    else "layering.nonidentity-partition-count"
+}
+
+entity layering_judge { LayeringCertificate {} }
+
+event LayeringProofReady {}
+
+on LayeringProofReady(_evt) {
+    let proof_input = res(LayeringProofInput).document
+    settle {
+        for proof in proof_input["cyclic_cases"] {
+            SubmitCyclicLayer(
+                layering_judge,
+                proof["width"],
+                proof["minimum_margin"],
+                proof["horn_clause_count"],
+                proof["horn_digest"],
+                proof["objective_digest"],
+            )
+        }
+        SubmitCoprimeReduction(
+            layering_judge,
+            proof_input["target_width"],
+            proof_input["target_proper_separating_minimum"],
+            proof_input["target_horn_digest"],
+            proof_input["target_objective_digest"],
+            proof_input["covered_nonidentity_cycle_types"],
+            proof_input["uncovered_nonidentity_cycle_types"],
+        )
+    }
+}
+
+fn main() -> nil {
+    let argv = sys_args()
+    let path = if len(argv) > 0 { argv[0] } else { DEFAULT_CERTIFICATE }
+    let document = json_parse(read_file(path)) |> unwrap
+    set_resource(LayeringProofInput, LayeringProofInput { document: document })
+    emit LayeringProofReady {}
+    flush_events()
+    let proof = require(layering_judge, LayeringCertificate)
+    print("coprime-cycle layering theorem")
+    print(f"cyclic widths=2..12 horn_clauses={proof.cyclic_horn_clauses}")
+    print(f"excluded automorphism cycle types={proof.covered_cycle_types}/100")
+    print(f"remaining possible nonidentity types={proof.uncovered_cycle_types}")
+    print(why(layering_judge, LayeringCertificate))
+}

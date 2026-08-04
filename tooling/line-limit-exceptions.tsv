@@ -1,0 +1,14 @@
+# Exact repository path<TAB>why this file is intentionally indivisible.
+# Exceptions are reviewed debt: globs and stale entries are rejected.
+Cargo.lock	Generated Cargo dependency resolution must remain one canonical workspace lockfile.
+projects/moba-rad/client/package-lock.json	Generated npm dependency resolution must remain one canonical package lockfile.
+projects/moba-rad/server/edge-proxy/Cargo.lock	Generated Cargo dependency resolution belongs to the independently built edge proxy workspace.
+projects/dogfood/sudoku/data/top1465.txt	Fixed upstream benchmark corpus whose line order and identity are part of the dataset.
+projects/dogfood/frankl-search/certificates/generator8-q13-exclusions.json	Generated proof certificate is reviewed and verified as one authenticated artifact; splitting it would change the certificate/verifier contract.
+core/c-backend/src/runtime.c	Frozen C runtime is one order-dependent private translation unit; include fragments would only disguise its coupling without creating maintainable module boundaries.
+core/c-backend/src/emit_c.rad	Bootstrap emitter is intentionally one private RAD module; splitting would export internal compiler helpers and change its sealed bootstrap surface.
+core/c-backend/src/parser.rad	Bootstrap parser is one stateful routine whose local cursor machinery cannot cross RAD module boundaries without changing semantics.
+core/c-backend/src/checker.rad	Bootstrap checker phases share private ECS scope state; a file split would expose internals and alter the frozen cross-backend compiler artifact.
+projects/dogfood/moba/treeline.rad	Frozen single-file whole-game parity fixture used unchanged across VM and C-backend conformance runs.
+examples/orianna_spell_runtime.rad	Standalone copy-and-run spell-runtime example is intentionally self-contained as one distributable teaching artifact.
+docs/rfcs/0002-candidate-constraints.md	Accepted normative RFC is an immutable review record; fragmenting it would degrade source review and archival links.

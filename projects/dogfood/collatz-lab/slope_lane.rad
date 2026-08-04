@@ -1,0 +1,30 @@
+// Resumable exact lane for a sparse-support prefix-slope exhaustion.
+//
+// Every lane is an independent exact certificate fragment.  Lane zero owns
+// the pre-split trunk; the post-split seeds are partitioned by seed index.
+// Merging all lanes recovers the monolithic exact result.
+
+use "../native-math-kernels/math_kernels.rad"
+
+fn main() -> nil {
+    let args = sys_args()
+    let support = if len(args) > 0 { int(args[0]) } else { 11 }
+    let depth = if len(args) > 1 { int(args[1]) } else { 945 }
+    let lane_index = if len(args) > 2 { int(args[2]) } else { 0 }
+    let lane_count = if len(args) > 3 { int(args[3]) } else { 256 }
+
+    let started = clock()
+    let lane = affine_sparse_slope_support_lane(
+        3,
+        1,
+        depth,
+        support,
+        lane_index,
+        lane_count,
+    )
+    print(json_stringify(lane))
+    print(
+        f"slope lane={lane_index}/{lane_count} support={support} "
+        + f"time={clock() - started}s",
+    )
+}

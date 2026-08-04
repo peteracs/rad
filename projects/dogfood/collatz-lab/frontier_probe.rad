@@ -1,0 +1,274 @@
+// Heuristic exact-state frontier probe for sparse prefix meanders.
+//
+// This is a witness generator, not a proof certificate.  It intentionally
+// forks several deterministic ranking objectives so a ranking law survives
+// only by producing a deeper/sparser exact witness than its competitors.
+
+use "../native-math-kernels/math_kernels.rad"
+
+component FrontierPlan {
+    objective: str = ""
+    seed: int = 0
+    depth: int = 0
+    support: int = 0
+    beam: int = 0
+    expected_boundary_matches: int = 0
+    required_support_floor: int = 0
+}
+
+component FrontierResult {
+    objective: str = ""
+    seed: int = 0
+    reached_depth: int = 0
+    terminal_support: int = 0
+    terminal_witness: str = ""
+    one_positions: list = []
+    records: list = []
+    deepest_retained: list = []
+    expanded_nodes: int = 0
+    peak_frontier: int = 0
+    signature: int = 0
+}
+
+component FrontierSynthesis {
+    selected_plan: str = ""
+    reached_depth: int = 0
+    terminal_support: int = 0
+    terminal_witness: str = ""
+    one_positions: list = []
+    certified_boundary_matches: int = 0
+    proposal_count: int = 0
+}
+
+intent FrontierCandidate {
+    key target: entity
+    plan: str
+    priority: int
+    reached_depth: int
+    terminal_support: int
+    terminal_witness: str
+    one_positions: list
+    certified_boundary_matches: int
+}
+
+law SubmitFrontierCandidate(
+    target: entity,
+    result: FrontierResult,
+    priority: int,
+    certified_boundary_matches: int,
+) {
+    propose FrontierCandidate {
+        target: target,
+        plan: plan_key(result),
+        priority: priority,
+        reached_depth: result.reached_depth,
+        terminal_support: result.terminal_support,
+        terminal_witness: result.terminal_witness,
+        one_positions: result.one_positions,
+        certified_boundary_matches: certified_boundary_matches,
+    }
+}
+
+resolver SelectFrontierCandidate for FrontierCandidate(target, proposals) {
+    assert(len(proposals) > 0, "frontier synthesis has no candidates")
+    let mut selected = proposals[0]
+    for proposal in proposals {
+        if proposal.certified_boundary_matches > selected.certified_boundary_matches
+        or (proposal.certified_boundary_matches == selected.certified_boundary_matches
+            and proposal.terminal_support < selected.terminal_support)
+        or (proposal.certified_boundary_matches == selected.certified_boundary_matches
+            and proposal.terminal_support == selected.terminal_support
+            and proposal.priority > selected.priority) {
+            selected = proposal
+        }
+    }
+    next(target, FrontierSynthesis {
+        selected_plan: selected.plan,
+        reached_depth: selected.reached_depth,
+        terminal_support: selected.terminal_support,
+        terminal_witness: selected.terminal_witness,
+        one_positions: selected.one_positions,
+        certified_boundary_matches: selected.certified_boundary_matches,
+        proposal_count: len(proposals),
+    })
+}
+
+constraint HonestFrontierSynthesis
+for FrontierSynthesis(subject, proposed)
+watches FrontierPlan
+{
+    let plan = candidate(subject, FrontierPlan)
+    require proposed.proposal_count == 6 else "affine.frontier.candidate_partition"
+    require proposed.certified_boundary_matches >= plan.expected_boundary_matches
+    else "affine.frontier.failed_known_boundary"
+    require proposed.reached_depth == plan.depth
+    else "affine.frontier.incomplete_selected_run"
+    require proposed.terminal_support >= plan.required_support_floor
+    else "affine.frontier.regressed_support_floor"
+    require len(proposed.one_positions) == proposed.terminal_support
+    else "affine.frontier.witness_support"
+}
+
+entity frontier_judge {
+    FrontierPlan {}
+    FrontierSynthesis {}
+}
+
+system ExploreFrontier(
+    plan: FrontierPlan,
+    result: mut FrontierResult,
+) {
+    let profile = affine_frontier_profile(
+        3,
+        1,
+        plan.depth,
+        plan.support,
+        plan.beam,
+        plan.objective,
+        plan.seed,
+    )
+    result = FrontierResult {
+        objective: plan.objective,
+        seed: plan.seed,
+        reached_depth: profile["reached_depth"],
+        terminal_support: profile["terminal_minimum_input_ones"],
+        terminal_witness: profile["terminal_witness"],
+        one_positions: profile["terminal_one_positions"],
+        records: profile["records"],
+        deepest_retained: profile["deepest_retained_by_support"],
+        expanded_nodes: profile["expanded_nodes"],
+        peak_frontier: profile["peak_frontier"],
+        signature: profile["signature"],
+    }
+}
+
+pure fn plan_key(result: FrontierResult) -> str {
+    return f"{result.objective}:{result.seed}"
+}
+
+pure fn certified_boundary_matches(records: list) -> int {
+    let known = [1, 2, 4, 7, 59, 137, 214, 365, 552, 634, 818]
+    let mut matches = 0
+    for index in range(min(len(records), len(known))) {
+        if records[index]["minimum_input_ones"] == index + 1
+        and records[index]["depth"] == known[index] {
+            matches = matches + 1
+        } else {
+            return matches
+        }
+    }
+    return matches
+}
+
+pure fn known_boundaries_through(depth: int) -> int {
+    let known = [1, 2, 4, 7, 59, 137, 214, 365, 552, 634, 818]
+    let mut count = 0
+    for boundary in known {
+        if boundary <= depth {
+            count = count + 1
+        }
+    }
+    return count
+}
+
+fn explore_portfolio(depth: int, support: int, beam: int) -> any {
+    let objectives = [
+        "zero_runway",
+        "odd_headroom",
+        "small_probe",
+        "deterministic_mix",
+    ]
+    let root = fork()
+    let mut candidates = []
+    let mut labels = []
+    for objective in objectives {
+        let seeds = if objective == "deterministic_mix" { [3, 17, 101] } else { [0] }
+        for seed in seeds {
+            commit(root)
+            let subject = spawn(FrontierPlan {
+                objective: objective,
+                seed: seed,
+                depth: depth,
+                support: support,
+                beam: beam,
+                }, FrontierResult {})
+            candidates = push(candidates, fork())
+            labels = push(labels, (objective, seed, subject))
+        }
+    }
+    commit(root)
+    let isolated = world_digest() == world_digest(root)
+    return (
+        simulate_many(candidates, [system::ExploreFrontier], 1, 1937),
+        labels,
+        isolated,
+    )
+}
+
+fn collect_reports(universes: list, labels: list) -> any {
+    let mut reports = []
+    let mut results = []
+    for index in range(len(universes)) {
+        let (_objective, _seed, subject) = labels[index]
+        let result = unwrap(peek(universes[index], subject, FrontierResult))
+        results = push(results, result)
+        reports = push(reports, {
+            "plan": plan_key(result),
+            "reached_depth": result.reached_depth,
+            "terminal_support": result.terminal_support,
+            "one_positions": result.one_positions,
+            "record_curve": result.records,
+            "deepest_retained_by_support": result.deepest_retained,
+            "expanded_nodes": result.expanded_nodes,
+            "peak_frontier": result.peak_frontier,
+            "signature": result.signature,
+        })
+    }
+    return (reports, results)
+}
+
+fn main() -> nil {
+    let args = sys_args()
+    let depth = if len(args) > 0 { int(args[0]) } else { 1024 }
+    let support = if len(args) > 1 { int(args[1]) } else { 16 }
+    let beam = if len(args) > 2 { int(args[2]) } else { 256 }
+    let (universes, labels, speculative_isolation) = explore_portfolio(depth, support, beam)
+    set(frontier_judge, FrontierPlan {
+        depth: depth,
+        support: support,
+        beam: beam,
+        expected_boundary_matches: known_boundaries_through(depth),
+        required_support_floor: known_boundaries_through(depth),
+    })
+
+    let (reports, results) = collect_reports(universes, labels)
+
+    settle {
+        for index in range(len(results)) {
+            SubmitFrontierCandidate(
+                frontier_judge,
+                results[index],
+                len(results) - index,
+                certified_boundary_matches(results[index].records),
+            )
+        }
+    }
+
+    let selected = unwrap(get(frontier_judge, FrontierSynthesis))
+    let report: map<str, any> = {
+        "schema": "rad.affine-frontier-study.v1",
+        "certificate": false,
+        "depth": depth,
+        "support_budget": support,
+        "beam_per_support": beam,
+        "best_plan": selected.selected_plan,
+        "best_terminal_support": selected.terminal_support,
+        "best_terminal_witness": selected.terminal_witness,
+        "best_one_positions": selected.one_positions,
+        "known_exact_boundaries_reconstructed": selected.certified_boundary_matches,
+        "selection_why": why(frontier_judge, FrontierSynthesis),
+        "universes": reports,
+        "speculative_worlds_left_authoritative_state_unchanged": speculative_isolation,
+    }
+    print(json_stringify(report))
+}

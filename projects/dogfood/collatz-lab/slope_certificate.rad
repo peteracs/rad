@@ -1,0 +1,198 @@
+// Exact, mergeable sparse-support prefix-slope certificate.
+//
+// The search is partitioned into independent universes.  Each universe runs
+// one exact native lane; a causal settlement then combines every lane as a
+// simultaneous contribution and rejects an incomplete partition.
+
+use "../native-math-kernels/math_kernels.rad"
+
+component LanePlan {
+    lane_index: int = 0
+    lane_count: int = 0
+    depth: int = 0
+    support: int = 0
+}
+
+component LaneResult {
+    lane_index: int = 0
+    lane_count: int = 0
+    seed_count: int = 0
+    assigned_seed_count: int = 0
+    deepest: list = []
+    witnesses: list = []
+    positions: list = []
+    anchors: list = []
+    expanded_nodes: int = 0
+    signature: int = 0
+}
+
+component ExactSlopeCertificate {
+    lane_count: int = 0
+    reports: int = 0
+    seed_count: int = 0
+    assigned_seed_count: int = 0
+    max_depth: int = 0
+    max_support: int = 0
+    deepest: list = []
+    witnesses: list = []
+    positions: list = []
+    anchors: list = []
+    expanded_nodes: int = 0
+}
+
+intent SlopeLaneContribution {
+    key target: entity
+    lane: LaneResult
+}
+
+law SubmitSlopeLane(target: entity, lane: LaneResult) {
+    propose SlopeLaneContribution { target: target, lane: lane }
+}
+
+resolver MergeSlopeLanes for SlopeLaneContribution(target, proposals) {
+    let plan = require(target, LanePlan)
+    let mut deepest = []
+    let mut witnesses = []
+    let mut positions = []
+    let mut anchors = []
+    for _weight in range(plan.support + 1) {
+        deepest = push(deepest, 0)
+        witnesses = push(witnesses, "0")
+        positions = push(positions, [])
+        anchors = push(anchors, 0)
+    }
+    let mut assigned = 0
+    let mut expanded = 0
+    let mut seed_count = 0
+
+    for proposal in proposals {
+        let lane = proposal.lane
+        seed_count = max(seed_count, lane.seed_count)
+        assigned = assigned + lane.assigned_seed_count
+        expanded = expanded + lane.expanded_nodes
+        for weight in range(plan.support + 1) {
+            anchors = set_at(anchors, weight, anchors[weight] + lane.anchors[weight])
+            if lane.deepest[weight] > deepest[weight] {
+                deepest = set_at(deepest, weight, lane.deepest[weight])
+                witnesses = set_at(witnesses, weight, lane.witnesses[weight])
+                positions = set_at(positions, weight, lane.positions[weight])
+            }
+        }
+    }
+
+    next(target, ExactSlopeCertificate {
+        lane_count: plan.lane_count,
+        reports: len(proposals),
+        seed_count: seed_count,
+        assigned_seed_count: assigned,
+        max_depth: plan.depth,
+        max_support: plan.support,
+        deepest: deepest,
+        witnesses: witnesses,
+        positions: positions,
+        anchors: anchors,
+        expanded_nodes: expanded,
+    })
+}
+
+constraint CompleteSlopePartition
+for ExactSlopeCertificate(subject, proposed)
+watches LanePlan
+{
+    let plan = candidate(subject, LanePlan)
+    require proposed.reports == plan.lane_count
+    else "affine.slope.missing_lane"
+    require proposed.assigned_seed_count == proposed.seed_count
+    else "affine.slope.incomplete_seed_partition"
+    require proposed.deepest[plan.support] < plan.depth
+    else "affine.slope.boundary_not_exhausted"
+}
+
+entity slope_judge {
+    LanePlan {}
+    ExactSlopeCertificate {}
+}
+
+system ExploreSlopeLane(plan: LanePlan, result: mut LaneResult) {
+    let lane = affine_sparse_slope_support_lane(
+        3,
+        1,
+        plan.depth,
+        plan.support,
+        plan.lane_index,
+        plan.lane_count,
+    )
+    result = LaneResult {
+        lane_index: lane["lane_index"],
+        lane_count: lane["lane_count"],
+        seed_count: lane["seed_count"],
+        assigned_seed_count: lane["assigned_seed_count"],
+        deepest: lane["deepest_survival_by_weight"],
+        witnesses: lane["deepest_witness_by_weight"],
+        positions: lane["deepest_witness_one_positions_by_weight"],
+        anchors: lane["anchors_by_weight"],
+        expanded_nodes: lane["expanded_nodes"],
+        signature: lane["signature"],
+    }
+}
+
+fn run_lanes(depth: int, support: int, lane_count: int) -> list {
+    let root = fork()
+    let mut universes = []
+    let mut subjects = []
+    for lane_index in range(lane_count) {
+        commit(root)
+        let subject = spawn(
+            LanePlan {
+                lane_index: lane_index,
+                lane_count: lane_count,
+                depth: depth,
+                support: support,
+            },
+            LaneResult {},
+        )
+        universes = push(universes, fork())
+        subjects = push(subjects, subject)
+    }
+    commit(root)
+    let futures = simulate_many(universes, [system::ExploreSlopeLane], 1, 1979)
+    let mut results = []
+    for index in range(lane_count) {
+        results = push(results, unwrap(peek(futures[index], subjects[index], LaneResult)))
+    }
+    return results
+}
+
+fn certify(depth: int, support: int, lane_count: int, results: list) -> any {
+    set(slope_judge, LanePlan {
+        lane_count: lane_count,
+        depth: depth,
+        support: support,
+    })
+    settle {
+        for result in results {
+            SubmitSlopeLane(slope_judge, result)
+        }
+    }
+    return unwrap(get(slope_judge, ExactSlopeCertificate))
+}
+
+fn main() -> nil {
+    let args = sys_args()
+    let support = if len(args) > 0 { int(args[0]) } else { 11 }
+    let depth = if len(args) > 1 { int(args[1]) } else { 945 }
+    let lane_count = if len(args) > 2 { int(args[2]) } else { 256 }
+    let started = clock()
+    let results = run_lanes(depth, support, lane_count)
+    let certificate = certify(depth, support, lane_count, results)
+    print(json_stringify( {
+        "schema": "rad.affine-slope-certificate.v1",
+        "certificate": true,
+        "criterion": "prefix_slope",
+        "multiplier": 3,
+        "addend": 1,
+        "elapsed_seconds": clock() - started,
+        "result": certificate,
+    }))
+    print(why(slope_judge, ExactSlopeCertificate))
+}

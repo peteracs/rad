@@ -1,0 +1,119 @@
+// Exact seven-generator graph frontier, audited through one causal settlement.
+
+use "../native-math-kernels/math_kernels.rad"
+
+component GeneratorFrontierCertificate {
+    minimum_column_count: int = 0
+    maximum_column_count: int = 0
+    labelled_configurations: int = 0
+    covered_labelled_configurations: int = 0
+    symmetry_orbits: int = 0
+    frontier_orbits: int = 0
+    minimum_margin: int = 0
+    best_family_size: int = 0
+    best_columns: list = []
+    best_frequencies: list = []
+    counterexample_columns: list = []
+    signature: str = ""
+}
+
+intent GeneratorFrontierEvidence {
+    key target: entity
+    minimum_column_count: int
+    maximum_column_count: int
+    labelled_configurations: int
+    covered_labelled_configurations: int
+    symmetry_orbits: int
+    frontier_orbits: int
+    minimum_margin: int
+    best_family_size: int
+    best_columns: list
+    best_frequencies: list
+    counterexample_columns: list
+    signature: str
+}
+
+law SubmitGeneratorFrontier(target: entity, profile: map<str, any>) {
+    propose GeneratorFrontierEvidence {
+        target: target,
+        minimum_column_count: profile["minimum_column_count"],
+        maximum_column_count: profile["maximum_column_count"],
+        labelled_configurations: profile["labelled_configurations"],
+        covered_labelled_configurations: profile["covered_labelled_configurations"],
+        symmetry_orbits: profile["symmetry_orbits"],
+        frontier_orbits: profile["frontier_orbits"],
+        minimum_margin: profile["minimum_margin"],
+        best_family_size: profile["best_family_size"],
+        best_columns: profile["best_columns"],
+        best_frequencies: profile["best_frequencies"],
+        counterexample_columns: profile["counterexample_columns"],
+        signature: profile["signature"],
+    }
+}
+
+resolver ResolveGeneratorFrontier for GeneratorFrontierEvidence(target, proposals) {
+    let proposal = proposals[0]
+    next(target, GeneratorFrontierCertificate {
+        minimum_column_count: proposal.minimum_column_count,
+        maximum_column_count: proposal.maximum_column_count,
+        labelled_configurations: proposal.labelled_configurations,
+        covered_labelled_configurations: proposal.covered_labelled_configurations,
+        symmetry_orbits: proposal.symmetry_orbits,
+        frontier_orbits: proposal.frontier_orbits,
+        minimum_margin: proposal.minimum_margin,
+        best_family_size: proposal.best_family_size,
+        best_columns: proposal.best_columns,
+        best_frequencies: proposal.best_frequencies,
+        counterexample_columns: proposal.counterexample_columns,
+        signature: proposal.signature,
+    })
+}
+
+constraint ValidGeneratorFrontier for GeneratorFrontierCertificate(subject, proposed) {
+    require proposed.minimum_column_count == 13
+        else "frankl.generator.minimum_column_count_mismatch"
+    require proposed.maximum_column_count == 28
+        else "frankl.generator.maximum_column_count_mismatch"
+    require proposed.labelled_configurations == 191718188
+        else "frankl.generator.labelled_count_mismatch"
+    require proposed.covered_labelled_configurations == proposed.labelled_configurations
+        else "frankl.generator.incomplete_orbit_coverage"
+    require proposed.symmetry_orbits > 0
+        else "frankl.generator.no_symmetry_orbits"
+    require proposed.frontier_orbits > 0
+        else "frankl.generator.empty_frontier"
+    require proposed.minimum_margin >= 0
+        else "frankl.generator.counterexample_found"
+    require len(proposed.counterexample_columns) == 0
+        else "frankl.generator.counterexample_witness"
+    require len(proposed.signature) == 64
+        else "frankl.generator.signature_malformed"
+}
+
+entity frontier_judge { GeneratorFrontierCertificate {} }
+
+fn main() -> nil {
+    let argv = sys_args()
+    let certificate_path = if len(argv) >= 1 {
+        argv[0]
+    } else {
+        "projects/dogfood/frankl-search/certificates/generator-frontier-n13.json"
+    }
+    let mut profile = column_quotient_range_scan(7, 13, 28, 2, 51, 63)
+    profile["schema"] = "rad.boolean-lattice.generator-frontier.v2"
+    profile["claim_scope"] = "all separating quotients of seven generators after the set-size and incidence-multiplicity reductions"
+    write_file(certificate_path, json_stringify(profile))
+    settle {
+        SubmitGeneratorFrontier(frontier_judge, profile)
+    }
+    let result = require(frontier_judge, GeneratorFrontierCertificate)
+    print("Frankl complete seven-generator graph frontier")
+    print(f"columns={result.minimum_column_count}..{result.maximum_column_count}")
+    print(f"labelled={result.labelled_configurations} covered={result.covered_labelled_configurations} symmetry_orbits={result.symmetry_orbits} frontier_orbits={result.frontier_orbits}")
+    print(f"minimum_margin={result.minimum_margin} family={result.best_family_size}")
+    print(f"best_columns={result.best_columns}")
+    print(f"best_frequencies={result.best_frequencies}")
+    print(f"signature={result.signature}")
+    print(f"certificate={certificate_path}")
+    print(why(frontier_judge, GeneratorFrontierCertificate))
+}

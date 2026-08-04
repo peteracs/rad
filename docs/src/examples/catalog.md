@@ -67,8 +67,8 @@ These examples demonstrate Rad's first-class world forking feature — fork the 
 
 | Project | What it demonstrates |
 |---|---|
-| [`frankl-search`](./frankl-search.md) | Native exact Boolean-lattice kernels, deterministic family-distinct `simulate_many()` search at the first open ground-set size, Causal Laws/constraints/`why()`/replay, exhaustive `N=4` audit, and independently verified JSON certificates |
-| [`collatz-lab`](./collatz-lab.md) | Pruned affine residue trees, exact odd-cycle equations, eight COW universes, Causal Laws/constraints/`why()`/replay, and a VM-independent certificate verifier that explains the form of any possible Collatz counterexample |
+| [`frankl-search`](./frankl-search.md) | Native exact Boolean-quotient kernels, forked `simulate_many()` search, Causal Laws/constraints/`why()`/replay, an all-width theorem for at most seven join-generators, exact eight-generator graph/projected-CNF exclusions, and independently verified certificates |
+| [`collatz-lab`](./collatz-lab.md) | Pruned affine residue trees, bounded-binary-support and natural-tail certificates, counterexample-guided exact-state frontier portfolios, irrational-slope ballot paths, exact odd-cycle equations, COW universes, Causal Laws/constraints/`why()`/replay, and VM-independent verifiers that isolate the forms of a possible Collatz counterexample |
 
 ## "Cursed" examples (pushing the language to its limits)
 

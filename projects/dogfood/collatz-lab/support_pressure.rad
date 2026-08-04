@@ -1,0 +1,369 @@
+// Bounded-support obstruction laboratory.
+//
+// A fixed non-negative integer has finitely many set input bits. This study
+// asks how deep an unpruned least-counterexample cylinder can survive when
+// its binary support is capped. The native arithmetic is generic over affine
+// parity maps; RAD owns universe isolation, wire roundtrips, audit, causal
+// settlement, constraints, provenance, certificates, and replay.
+
+use "collatz_lib.rad"
+use "../native-math-kernels/math_kernels.rad"
+
+let VERIFIED_POWER = 71
+let MAX_DEPTH = 2048
+let OUTPUT_PATH = "projects/dogfood/collatz-lab/out/support-pressure-certificate.json"
+let SUPPORT_ARGS = sys_args()
+let MAX_INPUT_ONES = if len(SUPPORT_ARGS) > 1 { int(SUPPORT_ARGS[1]) } else { 10 }
+
+resource SparseSupportUniverse {
+    budget: int = 0
+    max_depth: int = 0
+    verified_power: int = 0
+    termination_depth: int = 0
+    deepest_survival: int = 0
+    witness: str = "0"
+    one_positions: list = []
+    anchors: int = 0
+    profile_signature: int = 0
+    audited: bool = false
+}
+
+pure fn support_universe(profile: map<str, any>, budget: int) -> SparseSupportUniverse {
+    return SparseSupportUniverse {
+        budget: budget,
+        max_depth: profile["max_depth"],
+        verified_power: profile["verified_power"],
+        termination_depth: profile["termination_depth_by_budget"][budget],
+        deepest_survival: profile["deepest_survival_by_weight"][budget],
+        witness: profile["deepest_witness_by_weight"][budget],
+        one_positions: profile["deepest_witness_one_positions_by_weight"][budget],
+        anchors: profile["anchors_by_weight"][budget],
+        profile_signature: profile["signature"],
+        audited: false,
+    }
+}
+
+system AuditSparseSupportUniverse(universe: mut SparseSupportUniverse) {
+    assert(universe.budget >= 0 and universe.budget <= MAX_INPUT_ONES, "support budget out of range")
+    assert(universe.max_depth == MAX_DEPTH, "support depth mismatch")
+    assert(universe.verified_power == VERIFIED_POWER, "support verified floor mismatch")
+    assert(universe.termination_depth > 0, "support budget did not terminate")
+    assert(universe.termination_depth == universe.deepest_survival + 1, "support death boundary mismatch")
+    assert(universe.anchors > 0, "support anchor set is empty")
+    assert(len(universe.witness) > 0, "support witness is empty")
+    universe.audited = true
+}
+
+component SparseSupportEvidence {
+    maximum_budget: int = 0
+    minimum_required_input_ones: int = 0
+    budgets: list = []
+    termination_depths: list = []
+    deepest_survivals: list = []
+    witnesses: map = {}
+    one_positions: map = {}
+    one_position_counts: list = []
+    maximum_witness_bit_positions: list = []
+    renewal_deadline_slacks: list = []
+    anchor_counts: list = []
+    profile_signature: int = 0
+    proposal_count: int = 0
+}
+
+intent SparseSupportFinding {
+    key target: entity
+    budget: int
+    termination_depth: int
+    deepest_survival: int
+    witness: str
+    one_positions: list
+    anchors: int
+    profile_signature: int
+}
+
+law SubmitSparseSupportFinding(target: entity, universe: SparseSupportUniverse) {
+    propose SparseSupportFinding {
+        target: target,
+        budget: universe.budget,
+        termination_depth: universe.termination_depth,
+        deepest_survival: universe.deepest_survival,
+        witness: universe.witness,
+        one_positions: universe.one_positions,
+        anchors: universe.anchors,
+        profile_signature: universe.profile_signature,
+    }
+}
+
+resolver ResolveSparseSupport for SparseSupportFinding(target, proposals) {
+    let mut seen = zeros(MAX_INPUT_ONES + 1)
+    let mut termination_depths = zeros(MAX_INPUT_ONES + 1)
+    let mut deepest_survivals = zeros(MAX_INPUT_ONES + 1)
+    let mut anchor_counts = zeros(MAX_INPUT_ONES + 1)
+    let mut witnesses: map<str, str> = {}
+    let mut one_positions = {}
+    let mut one_position_counts = zeros(MAX_INPUT_ONES + 1)
+    let mut maximum_witness_bit_positions = zeros(MAX_INPUT_ONES + 1)
+    let mut signature = 0
+
+    for proposal in proposals {
+        assert(proposal.budget >= 0 and proposal.budget <= MAX_INPUT_ONES, "proposal budget out of range")
+        assert(seen[proposal.budget] == 0, "duplicate support-budget proposal")
+        seen = set_at(seen, proposal.budget, 1)
+        termination_depths = set_at(
+            termination_depths,
+            proposal.budget,
+            proposal.termination_depth,
+        )
+        deepest_survivals = set_at(
+            deepest_survivals,
+            proposal.budget,
+            proposal.deepest_survival,
+        )
+        anchor_counts = set_at(anchor_counts, proposal.budget, proposal.anchors)
+        witnesses = set_at(witnesses, str(proposal.budget), proposal.witness)
+        one_positions = set_at(one_positions, str(proposal.budget), proposal.one_positions)
+        one_position_counts = set_at(
+            one_position_counts,
+            proposal.budget,
+            len(proposal.one_positions),
+        )
+        let maximum_position = if len(proposal.one_positions) == 0 {
+            -1
+        } else {
+            proposal.one_positions[len(proposal.one_positions) - 1]
+        }
+        maximum_witness_bit_positions = set_at(
+            maximum_witness_bit_positions,
+            proposal.budget,
+            maximum_position,
+        )
+        if signature == 0 {
+            signature = proposal.profile_signature
+        } else {
+            assert(signature == proposal.profile_signature, "support profile signatures disagree")
+        }
+    }
+
+    let mut renewal_deadline_slacks = zeros(MAX_INPUT_ONES + 1)
+    for budget in range(1, MAX_INPUT_ONES + 1) {
+        renewal_deadline_slacks = set_at(
+            renewal_deadline_slacks,
+            budget,
+            termination_depths[budget - 1] - maximum_witness_bit_positions[budget],
+        )
+    }
+
+    next(target, SparseSupportEvidence {
+        maximum_budget: MAX_INPUT_ONES,
+        minimum_required_input_ones: MAX_INPUT_ONES + 1,
+        budgets: seen,
+        termination_depths: termination_depths,
+        deepest_survivals: deepest_survivals,
+        witnesses: witnesses,
+        one_positions: one_positions,
+        one_position_counts: one_position_counts,
+        maximum_witness_bit_positions: maximum_witness_bit_positions,
+        renewal_deadline_slacks: renewal_deadline_slacks,
+        anchor_counts: anchor_counts,
+        profile_signature: signature,
+        proposal_count: len(proposals),
+    })
+}
+
+constraint ExactSupportBoundary for SparseSupportEvidence(subject, proposed) {
+    require proposed.maximum_budget == MAX_INPUT_ONES else "collatz.support.maximum_budget"
+    require proposed.minimum_required_input_ones == MAX_INPUT_ONES + 1
+    else "collatz.support.minimum_required"
+    require proposed.proposal_count == MAX_INPUT_ONES + 1 else "collatz.support.proposal_count"
+    require sum_ints(proposed.budgets) == MAX_INPUT_ONES + 1
+    else "collatz.support.budget_partition"
+    require len(proposed.termination_depths) == MAX_INPUT_ONES + 1
+    else "collatz.support.termination_shape"
+    require len(proposed.deepest_survivals) == MAX_INPUT_ONES + 1
+    else "collatz.support.deepest_shape"
+    require len(proposed.anchor_counts) == MAX_INPUT_ONES + 1 else "collatz.support.anchor_shape"
+    require len(proposed.witnesses) == MAX_INPUT_ONES + 1 else "collatz.support.witness_shape"
+    require len(proposed.one_positions) == MAX_INPUT_ONES + 1
+    else "collatz.support.position_shape"
+    require len(proposed.one_position_counts) == MAX_INPUT_ONES + 1
+    else "collatz.support.position_count_shape"
+    require len(proposed.maximum_witness_bit_positions) == MAX_INPUT_ONES + 1
+    else "collatz.support.maximum_position_shape"
+    require len(proposed.renewal_deadline_slacks) == MAX_INPUT_ONES + 1
+    else "collatz.support.deadline_slack_shape"
+    require proposed.profile_signature > 0 else "collatz.support.signature"
+    let mut exponential_envelope = 8
+    for budget in range(MAX_INPUT_ONES + 1) {
+        require proposed.termination_depths[budget] > 0 else "collatz.support.unterminated_budget"
+        require proposed.termination_depths[budget] == proposed.deepest_survivals[budget] + 1
+        else "collatz.support.death_boundary"
+        require proposed.anchor_counts[budget] > 0 else "collatz.support.empty_anchor_set"
+        require proposed.one_position_counts[budget] == budget else "collatz.support.witness_support"
+        require proposed.termination_depths[budget] < exponential_envelope
+        else "collatz.support.exponential_envelope"
+        if budget > 0 {
+            require proposed.maximum_witness_bit_positions[budget]
+            < proposed.termination_depths[budget - 1]
+            else "collatz.support.missed_renewal_deadline"
+            require proposed.renewal_deadline_slacks[budget] > 0
+            else "collatz.support.nonpositive_deadline_slack"
+        }
+        if budget >= 6 {
+            require proposed.termination_depths[budget]
+            < 2 * proposed.termination_depths[budget - 1]
+            else "collatz.support.renewal_doubling_target"
+        }
+        exponential_envelope = exponential_envelope * 2
+    }
+}
+
+entity support_judge { SparseSupportEvidence {} }
+
+entity support_judge_reversed { SparseSupportEvidence {} }
+
+event SparseSupportBatchReady {
+    target: entity
+    universes: list
+    reverse_order: bool
+}
+
+on SparseSupportBatchReady(evt) {
+    settle {
+        if evt.reverse_order {
+            for index in range(len(evt.universes)) {
+                SubmitSparseSupportFinding(evt.target, evt.universes[len(evt.universes) - index - 1])
+            }
+        } else {
+            for universe in evt.universes {
+                SubmitSparseSupportFinding(evt.target, universe)
+            }
+        }
+    }
+}
+
+event SparseSupportStudyCompleted {
+    minimum_required_input_ones: int
+    final_termination_depth: int
+}
+
+resource SparseSupportJournal { summary: str = "not-run" }
+
+on SparseSupportStudyCompleted(evt) {
+    set_resource(SparseSupportJournal, SparseSupportJournal {
+        summary: f"least counterexample requires at least {evt.minimum_required_input_ones} input one-bits; support-{MAX_INPUT_ONES} dies at depth {evt.final_termination_depth}"
+    })
+}
+
+fn audit_budget_universes(profile: map<str, any>) -> map<str, any> {
+    let live_before = world_digest()
+    let root = fork()
+    let mut candidates = []
+    for budget in range(MAX_INPUT_ONES + 1) {
+        candidates = push(candidates, fork_with(root, support_universe(profile, budget)))
+    }
+    let futures = simulate_many(candidates, [system::AuditSparseSupportUniverse], 1, 1937)
+    assert(world_digest() == live_before, "support speculation mutated the live world")
+
+    let mut universes = []
+    let mut wire_digests = []
+    for future in futures {
+        assert_only_changed(root, future, [SparseSupportUniverse])
+        let encoded = fork_to_bytes(future)
+        let restored = fork_from_bytes(encoded) |> unwrap
+        assert(world_digest(restored) == world_digest(future), "support universe wire roundtrip changed the world")
+        let universe = peek_resource(restored, SparseSupportUniverse) |> unwrap
+        assert(universe.audited, "support speculative audit did not complete")
+        universes = push(universes, universe)
+        wire_digests = push(wire_digests, world_digest(restored))
+    }
+    let result: map<str, any> = {
+        "universes": universes,
+        "wire_digests": wire_digests,
+    }
+    return result
+}
+
+fn main() -> nil {
+    let output_path = if len(SUPPORT_ARGS) > 0 { SUPPORT_ARGS[0] } else { OUTPUT_PATH }
+    let started = clock()
+    let profile = affine_sparse_support_summary(
+        3,
+        1,
+        MAX_DEPTH,
+        VERIFIED_POWER,
+        MAX_INPUT_ONES,
+    )
+    let kernel_seconds = clock() - started
+    assert(profile["criterion"] == "descent_threshold", "wrong sparse-support proof criterion")
+    assert(profile["all_budgets_terminated"], "a bounded-support obstruction survived the horizon")
+
+    let audited = audit_budget_universes(profile)
+    let universes = audited["universes"]
+    emit SparseSupportBatchReady {
+        target: support_judge,
+        universes: universes,
+        reverse_order: false,
+    }
+    emit SparseSupportBatchReady {
+        target: support_judge_reversed,
+        universes: universes,
+        reverse_order: true,
+    }
+    flush_events()
+
+    let evidence = require(support_judge, SparseSupportEvidence)
+    let reversed = require(support_judge_reversed, SparseSupportEvidence)
+    assert(evidence == reversed, "support proposal order changed the settlement")
+    assert(
+        evidence.termination_depths == profile["termination_depth_by_budget"],
+        "RAD evidence changed the kernel termination sequence",
+    )
+    assert(
+        evidence.deepest_survivals == profile["deepest_survival_by_weight"],
+        "RAD evidence changed the kernel survival records",
+    )
+    emit SparseSupportStudyCompleted {
+        minimum_required_input_ones: evidence.minimum_required_input_ones,
+        final_termination_depth: evidence.termination_depths[MAX_INPUT_ONES],
+    }
+    flush_events()
+
+    let certificate: map<str, any> = {
+        "schema": "rad.affine-sparse-support-certificate.v1",
+        "criterion": profile["criterion"],
+        "map": "T(n)=n/2 if even, (3n+1)/2 if odd",
+        "verified_convergence_floor": "2^71",
+        "maximum_input_ones_excluded": MAX_INPUT_ONES,
+        "minimum_required_input_ones": evidence.minimum_required_input_ones,
+        "maximum_search_depth": MAX_DEPTH,
+        "termination_depth_by_budget": evidence.termination_depths,
+        "deepest_survival_by_weight": evidence.deepest_survivals,
+        "deepest_witness_by_weight": evidence.witnesses,
+        "deepest_witness_one_positions_by_weight": evidence.one_positions,
+        "maximum_witness_bit_positions": evidence.maximum_witness_bit_positions,
+        "renewal_deadline_slacks": evidence.renewal_deadline_slacks,
+        "observed_exponential_envelope": f"H(w) < 2^(w+3) for 0 <= w <= {MAX_INPUT_ONES}",
+        "observed_renewal_recurrence": f"H(w+1) < 2*H(w) for 5 <= w < {MAX_INPUT_ONES}",
+        "anchors_by_weight": evidence.anchor_counts,
+        "expanded_nodes": profile["expanded_nodes"],
+        "profile_signature": evidence.profile_signature,
+        "proposal_order_independent": evidence == reversed,
+        "speculative_worlds_left_live_state_unchanged": true,
+        "wire_roundtrip_digests": audited["wire_digests"],
+        "evidence_why": why(support_judge, SparseSupportEvidence),
+        "journal_why": why_resource(SparseSupportJournal),
+    }
+    create_dir("projects/dogfood/collatz-lab/out")
+    write_file(output_path, json_stringify(certificate))
+
+    print("Collatz bounded-support obstruction laboratory")
+    print(f"excluded input-one budgets 0..{MAX_INPUT_ONES}; any least counterexample needs at least {evidence.minimum_required_input_ones} set bits")
+    print(f"termination depths={evidence.termination_depths}")
+    print(f"deepest witnesses={evidence.witnesses}")
+    print(f"witness one-bit positions={evidence.one_positions}")
+    print(f"anchors={evidence.anchor_counts} expanded={profile[\"expanded_nodes\"]}")
+    print(f"kernel time={kernel_seconds}s")
+    print(why(support_judge, SparseSupportEvidence))
+    print(why_resource(SparseSupportJournal))
+    print(f"certificate={output_path}")
+}

@@ -237,6 +237,31 @@ impl Checker {
                         }
                     }
                 }
+                // Causal declarations are executable roots just like systems:
+                // resolvers and constraints are invoked by the settlement
+                // kernel, while laws are callable from settlement bodies.
+                // Their helper calls must participate in reachability even
+                // though these declarations are not ordinary FnDecl values.
+                Decl::Law(l) => {
+                    queue.push(VisitItem::Block(&l.body));
+                    for param_type in &l.param_types {
+                        queue.push(VisitItem::TypeExpr(param_type));
+                    }
+                }
+                Decl::Resolver(r) => {
+                    queue.push(VisitItem::Block(&r.body));
+                }
+                Decl::Constraint(c) => {
+                    queue.push(VisitItem::Block(&c.body));
+                    for component in std::iter::once(&c.component_name).chain(c.watches.iter()) {
+                        let resolved = self.resolve_canonical_name(component);
+                        if reachable_components.insert(resolved.clone()) {
+                            if let Some(decl) = component_decls.get(&resolved) {
+                                queue.push(VisitItem::ComponentDecl(decl));
+                            }
+                        }
+                    }
+                }
                 Decl::Test(t) => {
                     queue.push(VisitItem::Block(&t.body));
                 }
@@ -291,6 +316,20 @@ impl Checker {
                             let resolved_comp = self.resolve_canonical_name(comp);
                             if reachable_components.insert(resolved_comp.clone()) {
                                 if let Some(decl) = component_decls.get(&resolved_comp) {
+                                    queue.push(VisitItem::ComponentDecl(decl));
+                                }
+                            }
+                        }
+                    }
+                    Decl::Law(l) => queue.push(VisitItem::Block(&l.body)),
+                    Decl::Resolver(r) => queue.push(VisitItem::Block(&r.body)),
+                    Decl::Constraint(c) => {
+                        queue.push(VisitItem::Block(&c.body));
+                        for component in std::iter::once(&c.component_name).chain(c.watches.iter())
+                        {
+                            let resolved = self.resolve_canonical_name(component);
+                            if reachable_components.insert(resolved.clone()) {
+                                if let Some(decl) = component_decls.get(&resolved) {
                                     queue.push(VisitItem::ComponentDecl(decl));
                                 }
                             }

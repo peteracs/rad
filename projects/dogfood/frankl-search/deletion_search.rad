@@ -21,11 +21,13 @@ resource DeletionCandidate {
     family_size: int = 8192
     frequencies: list = []
     deletion_surpluses: list = []
+    pair_biases: list = []
     frontier: list = []
     margin: int = 0
     depth: int = 0
     separating: bool = true
     regime: int = 0
+    score_mode: str = "max_min"
 }
 
 resource DeletionConfig {
@@ -36,6 +38,8 @@ resource DeletionConfig {
     regime: int = 0
     forced_member: int = -1
     operation: str = "delete"
+    exchange_acceptance: str = "non_worsening"
+    exchange_repair_beam_width: int = 1
 }
 
 component DeletionCertificate {
@@ -96,15 +100,15 @@ resolver ResolveDeletionEvidence for DeletionEvidence(target, proposals) {
 
 constraint ValidDeletionCertificate for DeletionCertificate(subject, proposed) {
     require proposed.family_size >= MIN_FAMILY_SIZE
-        else "frankl.deletion.family_too_small"
+    else "frankl.deletion.family_too_small"
     require proposed.union_closed
-        else "frankl.deletion.not_union_closed"
+    else "frankl.deletion.not_union_closed"
     require proposed.exact_partition
-        else "frankl.deletion.partition_mismatch"
+    else "frankl.deletion.partition_mismatch"
     require proposed.covers_universe
-        else "frankl.deletion.incomplete_ground_set"
+    else "frankl.deletion.incomplete_ground_set"
     require proposed.separating
-        else "frankl.deletion.nonseparating"
+    else "frankl.deletion.nonseparating"
 }
 
 entity deletion_judge { DeletionCertificate {} }
@@ -141,6 +145,7 @@ fn candidate_from_state(
         family_size: family_size,
         frequencies: frequencies,
         deletion_surpluses: surpluses,
+        pair_biases: state["pair_biases"],
         // The kernel has already intersected algebraic deletability with the
         // exact same-entity witnesses needed to preserve ground-set coverage
         // and coordinate separation.  Keeping this as one generic profile
@@ -150,6 +155,7 @@ fn candidate_from_state(
         depth: depth,
         separating: state["separating"],
         regime: 0,
+        score_mode: "max_min",
     }
 }
 
@@ -164,9 +170,9 @@ fn legal_frontier(
         let mut dense_enough = true
         for bit in range(WIDTH) {
             let next_frequency = candidate.frequencies[bit]
-                - (if (member & shl(1, bit)) != 0 { 1 } else { 0 })
+            - (if (member & shl(1, bit)) != 0 { 1 } else { 0 })
             if next_frequency * 1000
-                < (candidate.family_size - 1) * minimum_density_per_mille {
+            < (candidate.family_size - 1) * minimum_density_per_mille {
                 dense_enough = false
             }
         }
@@ -203,6 +209,8 @@ system ExploreLegalDeletions(candidate: mut DeletionCandidate, config: DeletionC
             rand_int(1, 2147483647),
             config.objective,
             config.minimum_density_per_mille,
+            config.exchange_acceptance,
+            config.exchange_repair_beam_width,
         )
     } else {
         lattice_deletion_rollout(
@@ -223,6 +231,7 @@ system ExploreLegalDeletions(candidate: mut DeletionCandidate, config: DeletionC
     }
     let mut next = candidate_from_state(deleted, state, next_depth)
     next.regime = config.regime
+    next.score_mode = config.objective
     candidate = next
 }
 
@@ -232,6 +241,13 @@ fn better(left: DeletionCandidate, right: DeletionCandidate) -> bool {
     }
     if left.family_size != right.family_size {
         return left.family_size < right.family_size
+    }
+    if left.score_mode == "min_pair_bias" or right.score_mode == "min_pair_bias" {
+        let left_pair_pressure = max_int(left.pair_biases)
+        let right_pair_pressure = max_int(right.pair_biases)
+        if left_pair_pressure != right_pair_pressure {
+            return left_pair_pressure < right_pair_pressure
+        }
     }
     if left.margin != right.margin {
         return left.margin < right.margin
@@ -262,7 +278,7 @@ fn dominates(left: DeletionCandidate, right: DeletionCandidate) -> bool {
     let left_peak = max_int(left.deletion_surpluses)
     let right_peak = max_int(right.deletion_surpluses)
     return left.margin <= right.margin and left_peak <= right_peak
-        and (left.margin < right.margin or left_peak < right_peak)
+    and (left.margin < right.margin or left_peak < right_peak)
 }
 
 fn insert_pareto(
@@ -339,10 +355,17 @@ fn main() -> nil {
     let objective = if len(argv) > 9 { argv[9] } else { "max_min" }
     let selection = if len(argv) > 10 { argv[10] } else { "ordered" }
     let operation = if len(argv) > 11 { argv[11] } else { "delete" }
+    let exchange_acceptance = if len(argv) > 12 { argv[12] } else { "non_worsening" }
+    let exchange_repair_beam_width = if len(argv) > 13 { int(argv[13]) } else { 1 }
     assert(
         operation == "delete" or operation == "exchange",
         "operation must be delete or exchange",
     )
+    assert(
+        exchange_acceptance == "non_worsening" or exchange_acceptance == "exploratory",
+        "exchange acceptance must be non_worsening or exploratory",
+    )
+    assert(exchange_repair_beam_width > 0, "exchange repair beam width must be positive")
     assert(generations > 0 and beam_width > 0 and children > 0, "positive search dimensions required")
 
     let mut initial_deleted = []
@@ -353,7 +376,8 @@ fn main() -> nil {
         assert(document["width"] == WIDTH, "resume certificate width mismatch")
         initial_deleted = document["deleted"]
     }
-    let initial = candidate_from(initial_deleted, len(initial_deleted))
+    let mut initial = candidate_from(initial_deleted, len(initial_deleted))
+    initial.score_mode = objective
     set_resource(DeletionCandidate, initial)
     set_resource(DeletionConfig, DeletionConfig {
         rollout_steps: rollout_steps,
@@ -363,6 +387,8 @@ fn main() -> nil {
         regime: 0,
         forced_member: -1,
         operation: operation,
+        exchange_acceptance: exchange_acceptance,
+        exchange_repair_beam_width: exchange_repair_beam_width,
     })
     let live_digest = world_digest()
     let root = fork()
@@ -383,6 +409,8 @@ fn main() -> nil {
                 regime: regime,
                 forced_member: -1,
                 operation: operation,
+                exchange_acceptance: exchange_acceptance,
+                exchange_repair_beam_width: exchange_repair_beam_width,
             }))
         }
     }
@@ -393,8 +421,8 @@ fn main() -> nil {
     let mut have_target = false
     let mut target_fork = root
 
-    print(f"Frankl OR-closed search operation={operation}")
-    print(f"initial family={initial.family_size} frontier={len(initial.frontier)} margin={initial.margin}")
+    print(f"Frankl OR-closed search operation={operation} exchange_acceptance={exchange_acceptance} repair_beam={exchange_repair_beam_width}")
+    print(f"initial family={initial.family_size} frontier={len(initial.frontier)} margin={initial.margin} pair_pressure={max_int(initial.pair_biases)}")
     for generation in range(generations) {
         let mut inputs = []
         for parent in beam {
@@ -413,6 +441,8 @@ fn main() -> nil {
                         regime: parent_config.regime,
                         forced_member: member,
                         operation: parent_config.operation,
+                        exchange_acceptance: parent_config.exchange_acceptance,
+                        exchange_repair_beam_width: parent_config.exchange_repair_beam_width,
                     }))
                 }
             } else {
@@ -443,13 +473,19 @@ fn main() -> nil {
             near_fork = beam[0]
             near_margin = best.margin
         }
-        if target_family_size > 0 and not have_target
-            and best.family_size <= target_family_size {
-            have_target = true
-            target_fork = beam[0]
+        if target_family_size > 0 and best.family_size <= target_family_size {
+            if not have_target {
+                have_target = true
+                target_fork = beam[0]
+            } else {
+                let incumbent = peek_resource(target_fork, DeletionCandidate) |> unwrap
+                if better(best, incumbent) {
+                    target_fork = beam[0]
+                }
+            }
         }
         if generation == 0 or (generation + 1) % 4 == 0 {
-            print(f"generation={generation + 1} depth={best.depth} family={best.family_size} margin={best.margin} min_dual={min_int(best.deletion_surpluses)} frontier={len(best.frontier)}")
+            print(f"generation={generation + 1} depth={best.depth} family={best.family_size} margin={best.margin} min_dual={min_int(best.deletion_surpluses)} pair_pressure={max_int(best.pair_biases)} frontier={len(best.frontier)}")
         }
     }
 
@@ -482,12 +518,13 @@ fn main() -> nil {
     }
     print(f"evaluated={evaluated} depth={best.depth} family={best.family_size} margin={best.margin}")
     print(f"deletion_surpluses={best.deletion_surpluses}")
+    print(f"pair_pressure={max_int(best.pair_biases)} failing_pair_conditions={len(filter(best.pair_biases, fn(value) { return value >= 0 }))}/{len(best.pair_biases)}")
     print(f"rank_histogram={rank_histogram(best.deleted, WIDTH)}")
     print(f"frontier={len(best.frontier)} viable_frontier={len(viable_frontier)} union_closed={closed} covers={covers} separating={separating} counterexample={best.margin < 0 and covers and separating}")
     print("terminal_world_spectrum:")
     for world in beam {
         let candidate = peek_resource(world, DeletionCandidate) |> unwrap
-        print(f"  regime={candidate.regime} family={candidate.family_size} margin={candidate.margin} min_frequency={min_int(candidate.frequencies)} peak_dual={max_int(candidate.deletion_surpluses)} frontier={len(candidate.frontier)}")
+        print(f"  regime={candidate.regime} family={candidate.family_size} margin={candidate.margin} min_frequency={min_int(candidate.frequencies)} peak_dual={max_int(candidate.deletion_surpluses)} pair_pressure={max_int(candidate.pair_biases)} frontier={len(candidate.frontier)}")
     }
     print(why(deletion_judge, DeletionCertificate))
     let document: map<str, any> = {
@@ -498,6 +535,8 @@ fn main() -> nil {
         "family_size": best.family_size,
         "frequencies": best.frequencies,
         "deletion_surpluses": best.deletion_surpluses,
+        "pair_biases": best.pair_biases,
+        "pair_pressure": max_int(best.pair_biases),
         "rank_histogram": rank_histogram(best.deleted, WIDTH),
         "margin": best.margin,
         "frontier": best.frontier,
@@ -507,6 +546,8 @@ fn main() -> nil {
         "separating": separating,
         "counterexample": best.margin < 0 and covers and separating,
         "search_operation": operation,
+        "exchange_acceptance": exchange_acceptance,
+        "exchange_repair_beam_width": exchange_repair_beam_width,
         "terminal_depth": terminal.depth,
         "terminal_family_size": terminal.family_size,
         "terminal_margin": terminal.margin,

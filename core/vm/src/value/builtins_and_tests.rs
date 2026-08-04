@@ -1,0 +1,592 @@
+
+
+impl Builtin {
+    pub const ALL: [Builtin; 220] = [
+        Builtin::GetOr,
+        Builtin::Clamp,
+        Builtin::IndexOf,
+        Builtin::Any,
+        Builtin::All,
+        Builtin::DropFirst,
+        Builtin::RecentEvents,
+        Builtin::Popcount,
+        Builtin::Ctz,
+        Builtin::Shl,
+        Builtin::Shr,
+        Builtin::Filled,
+        Builtin::SetAt,
+        Builtin::Res,
+        Builtin::Sum,
+        Builtin::Product,
+        Builtin::Print,
+        Builtin::Len,
+        Builtin::TypeOf,
+        Builtin::VariantOf,
+        Builtin::SysArgs,
+        Builtin::Str,
+        Builtin::Int,
+        Builtin::Float,
+        Builtin::Abs,
+        Builtin::Min,
+        Builtin::Max,
+        Builtin::Unwrap,
+        Builtin::Expect,
+        Builtin::Push,
+        Builtin::Pop,
+        Builtin::PopLast,
+        Builtin::DropLast,
+        Builtin::Sort,
+        Builtin::Reverse,
+        Builtin::Slice,
+        Builtin::Map,
+        Builtin::Filter,
+        Builtin::Reduce,
+        Builtin::Range,
+        Builtin::Get,
+        Builtin::Lookup,
+        Builtin::LookupAll,
+        Builtin::Set,
+        Builtin::Has,
+        Builtin::Spawn,
+        Builtin::GetEntity,
+        Builtin::RequireEntity,
+        Builtin::Sign,
+        Builtin::PeekResource,
+        Builtin::Remove,
+        Builtin::Despawn,
+        Builtin::Entities,
+        Builtin::GetResource,
+        Builtin::SetResource,
+        Builtin::Transition,
+        Builtin::Keys,
+        Builtin::Contains,
+        Builtin::Format,
+        Builtin::Entries,
+        Builtin::Merge,
+        Builtin::RemoveKey,
+        Builtin::GroupBy,
+        Builtin::Split,
+        Builtin::Join,
+        Builtin::Trim,
+        Builtin::Replace,
+        Builtin::StartsWith,
+        Builtin::EndsWith,
+        Builtin::Append,
+        Builtin::Extend,
+        Builtin::Zip,
+        Builtin::FlatMap,
+        Builtin::TryInt,
+        Builtin::TryFloat,
+        Builtin::Chr,
+        Builtin::Ord,
+        Builtin::Chars,
+        Builtin::ToUpper,
+        Builtin::ToLower,
+        Builtin::Values,
+        Builtin::ReadFile,
+        Builtin::WriteFile,
+        Builtin::HttpGet,
+        Builtin::RegexIsMatch,
+        Builtin::RegexFind,
+        Builtin::NowUnixS,
+        Builtin::NowUnixMs,
+        Builtin::RandInt,
+        Builtin::RandFloat,
+        Builtin::RandBool,
+        Builtin::RandSeed,
+        Builtin::GenInt,
+        Builtin::GenFloat,
+        Builtin::GenStr,
+        Builtin::GenBool,
+        Builtin::GenList,
+        Builtin::Input,
+        Builtin::Readline,
+        Builtin::Assert,
+        Builtin::AssertEq,
+        Builtin::IntDiv,
+        Builtin::SortBy,
+        Builtin::UnwrapOr,
+        Builtin::IsSome,
+        Builtin::IsNone,
+        Builtin::Require,
+        Builtin::RequireAll,
+        Builtin::MapOr,
+        Builtin::LoadExtension,
+        Builtin::GcCollect,
+        Builtin::Eprint,
+        Builtin::WriteStdout,
+        Builtin::WriteStderr,
+        Builtin::ReadStdinAll,
+        Builtin::FlushStdout,
+        Builtin::SleepMs,
+        Builtin::NameOf,
+        Builtin::IdOf,
+        Builtin::AppendFile,
+        Builtin::FileExists,
+        Builtin::RemoveFile,
+        Builtin::ListDir,
+        Builtin::CreateDir,
+        Builtin::RemoveDir,
+        Builtin::ReadFileBytes,
+        Builtin::WriteFileBytes,
+        Builtin::HttpPost,
+        Builtin::HttpPostJson,
+        Builtin::HttpRequest,
+        Builtin::TcpConnect,
+        Builtin::TcpListen,
+        Builtin::TcpAccept,
+        Builtin::TcpAcceptTimeout,
+        Builtin::TcpRead,
+        Builtin::TcpWrite,
+        Builtin::TcpClose,
+        Builtin::UdpBind,
+        Builtin::UdpRecvFrom,
+        Builtin::UdpRecvFromTimeout,
+        Builtin::UdpRecvFromBytes,
+        Builtin::UdpRecvFromBytesTimeout,
+        Builtin::UdpRecvByteBuf,
+        Builtin::UdpRecvByteBufTimeout,
+        Builtin::UdpSendTo,
+        Builtin::UdpSendToBytes,
+        Builtin::UdpSendByteBuf,
+        Builtin::UdpClose,
+        Builtin::QueryWhere,
+        Builtin::QueryMap,
+        Builtin::QueryCount,
+        Builtin::WithField,
+        Builtin::Log,
+        Builtin::Metric,
+        Builtin::TraceId,
+        Builtin::FlushEvents,
+        Builtin::ByteAt,
+        Builtin::SubstringBytes,
+        Builtin::ByteLen,
+        Builtin::BitsetNew,
+        Builtin::BitsetSet,
+        Builtin::BitsetHas,
+        Builtin::BitsetClear,
+        Builtin::BufferNew,
+        Builtin::BufferAppend,
+        Builtin::BufferToStr,
+        Builtin::ByteBufNew,
+        Builtin::ByteBufLen,
+        Builtin::ByteBufGet,
+        Builtin::ByteBufSetU8,
+        Builtin::ByteBufSetU32Le,
+        Builtin::ByteBufSetI32Le,
+        Builtin::ByteBufGetU32Le,
+        Builtin::ByteBufGetI32Le,
+        Builtin::ByteBufToList,
+        Builtin::ByteBufFromList,
+        Builtin::Fork,
+        Builtin::Simulate,
+        Builtin::Commit,
+        Builtin::Clock,
+        Builtin::Peek,
+        Builtin::DebugTrace,
+        Builtin::FormatValue,
+        Builtin::Enumerate,
+        Builtin::Find,
+        Builtin::MaxBy,
+        Builtin::MinBy,
+        Builtin::Round,
+        Builtin::Floor,
+        Builtin::Ceil,
+        Builtin::Sqrt,
+        Builtin::Pow,
+        Builtin::ToFixed,
+        Builtin::JsonStringify,
+        Builtin::JsonParse,
+        Builtin::SimulatePar,
+        Builtin::SandboxRun,
+        Builtin::SandboxInput,
+        Builtin::SandboxOutput,
+        Builtin::SandboxLastOutput,
+        Builtin::SandboxLastFuel,
+        Builtin::SimulateMany,
+        Builtin::SimulateSeeded,
+        Builtin::ForkWith,
+        Builtin::ForkSeed,
+        Builtin::Diff,
+        Builtin::AssertOnlyChanged,
+        Builtin::Why,
+        Builtin::WhyResource,
+        Builtin::SaveWorld,
+        Builtin::LoadWorld,
+        Builtin::TryLoadWorld,
+        Builtin::WorldDigest,
+        Builtin::SchemaDigest,
+        Builtin::MergeForks,
+        Builtin::MergeForksWith,
+        Builtin::ForkToBytes,
+        Builtin::ForkFromBytes,
+        Builtin::ForkDelta,
+        Builtin::ForkApply,
+    ];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Builtin::Print => "print",
+            Builtin::Len => "len",
+            Builtin::TypeOf => "typeof",
+            Builtin::VariantOf => "variant_of",
+            Builtin::SysArgs => "sys_args",
+            Builtin::Str => "str",
+            Builtin::Int => "int",
+            Builtin::Float => "float",
+            Builtin::Abs => "abs",
+            Builtin::Sign => "sign",
+            Builtin::Popcount => "popcount",
+            Builtin::Ctz => "ctz",
+            Builtin::Shl => "shl",
+            Builtin::Shr => "shr",
+            Builtin::Filled => "filled",
+            Builtin::SetAt => "set_at",
+            Builtin::Res => "res",
+            Builtin::Sum => "sum",
+            Builtin::Product => "product",
+            Builtin::GetOr => "get_or",
+            Builtin::Clamp => "clamp",
+            Builtin::IndexOf => "index_of",
+            Builtin::Any => "any",
+            Builtin::All => "all",
+            Builtin::DropFirst => "drop_first",
+            Builtin::RecentEvents => "recent_events",
+            Builtin::Min => "min",
+            Builtin::Max => "max",
+            Builtin::Unwrap => "unwrap",
+            Builtin::Expect => "expect",
+            Builtin::Push => "push",
+            Builtin::Pop => "pop",
+            Builtin::PopLast => "pop_last",
+            Builtin::DropLast => "drop_last",
+            Builtin::Sort => "sort",
+            Builtin::Reverse => "reverse",
+            Builtin::Slice => "slice",
+            Builtin::Map => "map",
+            Builtin::Filter => "filter",
+            Builtin::Reduce => "reduce",
+            Builtin::Range => "range",
+            Builtin::Get => "get",
+            Builtin::Lookup => "lookup",
+            Builtin::LookupAll => "lookup_all",
+            Builtin::Set => "set",
+            Builtin::Has => "has",
+            Builtin::Spawn => "spawn",
+            Builtin::GetEntity => "get_entity",
+            Builtin::RequireEntity => "require_entity",
+            Builtin::Remove => "remove",
+            Builtin::Despawn => "despawn",
+            Builtin::Entities => "entities",
+            Builtin::GetResource => "get_resource",
+            Builtin::SetResource => "set_resource",
+            Builtin::Transition => "transition",
+            Builtin::Keys => "keys",
+            Builtin::Contains => "contains",
+            Builtin::Format => "format",
+            Builtin::Entries => "entries",
+            Builtin::Merge => "merge",
+            Builtin::GroupBy => "group_by",
+            Builtin::Split => "split",
+            Builtin::Join => "join",
+            Builtin::Trim => "trim",
+            Builtin::Replace => "replace",
+            Builtin::StartsWith => "starts_with",
+            Builtin::EndsWith => "ends_with",
+            Builtin::Append => "append",
+            Builtin::Extend => "extend",
+            Builtin::Zip => "zip",
+            Builtin::FlatMap => "flat_map",
+            Builtin::TryInt => "try_int",
+            Builtin::TryFloat => "try_float",
+            Builtin::Chr => "chr",
+            Builtin::Ord => "ord",
+            Builtin::Chars => "chars",
+            Builtin::ToUpper => "to_upper",
+            Builtin::ToLower => "to_lower",
+            Builtin::Values => "values",
+            Builtin::ReadFile => "read_file",
+            Builtin::WriteFile => "write_file",
+            Builtin::HttpGet => "http_get",
+            Builtin::RegexIsMatch => "regex_is_match",
+            Builtin::RegexFind => "regex_find",
+            Builtin::NowUnixS => "now_unix_s",
+            Builtin::NowUnixMs => "now_unix_ms",
+            Builtin::RandInt => "rand_int",
+            Builtin::RandFloat => "rand_float",
+            Builtin::RandBool => "rand_bool",
+            Builtin::RandSeed => "rand_seed",
+            Builtin::GenInt => "gen_int",
+            Builtin::GenFloat => "gen_float",
+            Builtin::GenStr => "gen_str",
+            Builtin::GenBool => "gen_bool",
+            Builtin::GenList => "gen_list",
+            Builtin::Input => "input",
+            Builtin::Readline => "readline",
+            Builtin::Assert => "assert",
+            Builtin::AssertEq => "assert_eq",
+            Builtin::IntDiv => "int_div",
+            Builtin::SortBy => "sort_by",
+            Builtin::UnwrapOr => "unwrap_or",
+            Builtin::IsSome => "is_some",
+            Builtin::IsNone => "is_none",
+            Builtin::Require => "require",
+            Builtin::RequireAll => "require_all",
+            Builtin::MapOr => "map_or",
+            Builtin::LoadExtension => "load_extension",
+            Builtin::GcCollect => "gc_collect",
+            Builtin::Eprint => "eprint",
+            Builtin::WriteStdout => "write_stdout",
+            Builtin::WriteStderr => "write_stderr",
+            Builtin::ReadStdinAll => "read_stdin_all",
+            Builtin::FlushStdout => "flush_stdout",
+            Builtin::SleepMs => "sleep_ms",
+            Builtin::NameOf => "name_of",
+            Builtin::IdOf => "id_of",
+            Builtin::AppendFile => "append_file",
+            Builtin::FileExists => "file_exists",
+            Builtin::RemoveFile => "remove_file",
+            Builtin::ListDir => "list_dir",
+            Builtin::CreateDir => "create_dir",
+            Builtin::RemoveDir => "remove_dir",
+            Builtin::ReadFileBytes => "read_file_bytes",
+            Builtin::WriteFileBytes => "write_file_bytes",
+            Builtin::HttpPost => "http_post",
+            Builtin::HttpPostJson => "http_post_json",
+            Builtin::HttpRequest => "http_request",
+            Builtin::TcpConnect => "tcp_connect",
+            Builtin::TcpListen => "tcp_listen",
+            Builtin::TcpAccept => "tcp_accept",
+            Builtin::TcpAcceptTimeout => "tcp_accept_timeout",
+            Builtin::TcpRead => "tcp_read",
+            Builtin::TcpWrite => "tcp_write",
+            Builtin::TcpClose => "tcp_close",
+            Builtin::UdpBind => "udp_bind",
+            Builtin::UdpRecvFrom => "udp_recv_from",
+            Builtin::UdpRecvFromTimeout => "udp_recv_from_timeout",
+            Builtin::UdpRecvFromBytes => "udp_recv_from_bytes",
+            Builtin::UdpRecvFromBytesTimeout => "udp_recv_from_bytes_timeout",
+            Builtin::UdpRecvByteBuf => "udp_recv_bytebuf",
+            Builtin::UdpRecvByteBufTimeout => "udp_recv_bytebuf_timeout",
+            Builtin::UdpSendTo => "udp_send_to",
+            Builtin::UdpSendToBytes => "udp_send_to_bytes",
+            Builtin::UdpSendByteBuf => "udp_send_bytebuf",
+            Builtin::UdpClose => "udp_close",
+            Builtin::QueryWhere => "query_where",
+            Builtin::QueryMap => "query_map",
+            Builtin::QueryCount => "query_count",
+            Builtin::WithField => "with_field",
+            Builtin::RemoveKey => "remove_key",
+            Builtin::Log => "log",
+            Builtin::Metric => "metric",
+            Builtin::TraceId => "trace_id",
+            Builtin::FlushEvents => "flush_events",
+            Builtin::ByteAt => "byte_at",
+            Builtin::SubstringBytes => "substring_bytes",
+            Builtin::ByteLen => "byte_len",
+            Builtin::BitsetNew => "bitset_new",
+            Builtin::BitsetSet => "bitset_set",
+            Builtin::BitsetHas => "bitset_has",
+            Builtin::BitsetClear => "bitset_clear",
+            Builtin::BufferNew => "buffer_new",
+            Builtin::BufferAppend => "buffer_append",
+            Builtin::BufferToStr => "buffer_to_str",
+            Builtin::ByteBufNew => "bytebuf_new",
+            Builtin::ByteBufLen => "bytebuf_len",
+            Builtin::ByteBufGet => "bytebuf_get",
+            Builtin::ByteBufSetU8 => "bytebuf_set_u8",
+            Builtin::ByteBufSetU32Le => "bytebuf_set_u32_le",
+            Builtin::ByteBufSetI32Le => "bytebuf_set_i32_le",
+            Builtin::ByteBufGetU32Le => "bytebuf_get_u32_le",
+            Builtin::ByteBufGetI32Le => "bytebuf_get_i32_le",
+            Builtin::ByteBufToList => "bytebuf_to_list",
+            Builtin::ByteBufFromList => "bytebuf_from_list",
+            Builtin::Fork => "fork",
+            Builtin::Simulate => "simulate",
+            Builtin::Commit => "commit",
+            Builtin::Clock => "clock",
+            Builtin::Peek => "peek",
+            Builtin::PeekResource => "peek_resource",
+            Builtin::DebugTrace => "debug_trace",
+            Builtin::FormatValue => "format_value",
+            Builtin::Enumerate => "enumerate",
+            Builtin::Find => "find",
+            Builtin::MaxBy => "max_by",
+            Builtin::MinBy => "min_by",
+            Builtin::Round => "round",
+            Builtin::Floor => "floor",
+            Builtin::Ceil => "ceil",
+            Builtin::Sqrt => "sqrt",
+            Builtin::Pow => "pow",
+            Builtin::ToFixed => "to_fixed",
+            Builtin::JsonStringify => "json_stringify",
+            Builtin::JsonParse => "json_parse",
+            Builtin::SimulatePar => "simulate_par",
+            Builtin::SandboxRun => "sandbox_run",
+            Builtin::SandboxInput => "sandbox_input",
+            Builtin::SandboxOutput => "sandbox_output",
+            Builtin::SandboxLastOutput => "sandbox_last_output",
+            Builtin::SandboxLastFuel => "sandbox_last_fuel",
+            Builtin::SimulateMany => "simulate_many",
+            Builtin::SimulateSeeded => "simulate_seeded",
+            Builtin::ForkWith => "fork_with",
+            Builtin::ForkSeed => "fork_seed",
+            Builtin::Diff => "diff",
+            Builtin::AssertOnlyChanged => "assert_only_changed",
+            Builtin::Why => "why",
+            Builtin::WhyResource => "why_resource",
+            Builtin::SaveWorld => "save_world",
+            Builtin::WorldDigest => "world_digest",
+            Builtin::SchemaDigest => "schema_digest",
+            Builtin::LoadWorld => "load_world",
+            Builtin::TryLoadWorld => "try_load_world",
+            Builtin::MergeForks => "merge_forks",
+            Builtin::MergeForksWith => "merge_forks_with",
+            Builtin::ForkToBytes => "fork_to_bytes",
+            Builtin::ForkFromBytes => "fork_from_bytes",
+            Builtin::ForkDelta => "fork_delta",
+            Builtin::ForkApply => "fork_apply",
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ComponentData {
+    pub type_name: String,
+    pub layout: Arc<Vec<String>>,
+    pub(crate) values: Vec<Value>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StateInst {
+    pub machine: String,
+    pub state: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SumTypeInst {
+    pub type_name: String,
+    pub variant: String,
+    pub(crate) fields: HashMap<String, Value>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FnValue {
+    pub name: String,
+    pub arity: u8,
+    pub chunk_id: usize,
+}
+
+/// A closure captures zero or more `CaptureCell` pointers.
+///
+/// Each pointer is a GC-managed raw pointer to a `CaptureCell`.
+/// Multiple closures may share the same cell (aliased raw pointers;
+/// the GC keeps cells alive as long as any closure referencing them
+/// is reachable).
+#[derive(Clone, Debug)]
+pub struct ClosureValue {
+    pub name: String,
+    pub arity: u8,
+    pub chunk_id: usize,
+    pub captures: Vec<*mut gc::CaptureCell>,
+}
+
+unsafe impl Send for ClosureValue {}
+unsafe impl Sync for ClosureValue {}
+
+impl PartialEq for ClosureValue {
+    fn eq(&self, other: &Self) -> bool {
+        self.chunk_id == other.chunk_id
+            && self.arity == other.arity
+            && self.captures.len() == other.captures.len()
+            && self
+                .captures
+                .iter()
+                .zip(other.captures.iter())
+                .all(|(&a, &b)| unsafe { (*a).get() == (*b).get() })
+    }
+}
+
+impl Eq for ClosureValue {}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PipelineOp {
+    Map,
+    Filter,
+}
+
+impl fmt::Display for ComponentData {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} {{", display_type_name(&self.type_name))?;
+        if !self.layout.is_empty() {
+            write!(f, " ")?;
+            let mut first = true;
+            for (k, v) in self.layout.iter().zip(self.values.iter()) {
+                if !first {
+                    write!(f, ", ")?;
+                }
+                first = false;
+                write!(f, "{}: {}", k, v)?;
+            }
+            write!(f, " ")?;
+        }
+        write!(f, "}}")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Builtin, Value, ValueTag, CANONICAL_FLOAT_NAN};
+    use std::collections::HashSet;
+
+    #[test]
+    fn builtin_all_has_unique_names() {
+        let mut seen = HashSet::new();
+        for builtin in Builtin::ALL {
+            assert!(
+                seen.insert(builtin.name()),
+                "duplicate builtin registration: {}",
+                builtin.name()
+            );
+        }
+    }
+
+    #[test]
+    fn every_float_nan_is_canonical_and_never_object_tagged() {
+        let reserved_and_ieee_patterns = [
+            0x7FF0_0000_0000_0001,
+            0x7FF8_0000_0000_0000,
+            0x7FFC_0000_0000_0000,
+            0x7FFF_FFFF_FFFF_FFFF,
+            0xFFF0_0000_0000_0001,
+            0xFFF8_0000_0000_0000,
+            0xFFFC_0000_0000_0000,
+            0xFFFC_0000_0000_0001,
+            0xFFFC_7FFF_FFFF_FFFF,
+            0xFFFC_8000_0000_0000,
+            0xFFFF_FFFF_FFFF_FFFF,
+        ];
+
+        for bits in reserved_and_ieee_patterns {
+            let input = f64::from_bits(bits);
+            assert!(input.is_nan(), "test pattern {bits:#018x} must be NaN");
+            let value = Value::from_float(input);
+            assert_eq!(value.to_raw(), CANONICAL_FLOAT_NAN, "input {bits:#018x}");
+            assert_eq!(value.tag(), ValueTag::Float, "input {bits:#018x}");
+            assert!(value.is_float(), "input {bits:#018x}");
+            assert!(!value.is_heap_object_tag(), "input {bits:#018x}");
+            assert!(value.as_float().is_some_and(f64::is_nan));
+        }
+
+        let zero = std::hint::black_box(0.0_f64);
+        for arithmetic_nan in [
+            zero / zero,
+            f64::INFINITY - f64::INFINITY,
+            (-1.0_f64).sqrt(),
+        ] {
+            let value = Value::from_float(arithmetic_nan);
+            assert_eq!(value.to_raw(), CANONICAL_FLOAT_NAN);
+            assert_eq!(value.tag(), ValueTag::Float);
+        }
+    }
+}

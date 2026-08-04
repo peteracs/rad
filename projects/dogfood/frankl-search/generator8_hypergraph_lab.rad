@@ -1,0 +1,370 @@
+// Forked search laboratory for the surviving eight-generator 3-hypergraph frontier.
+
+use "../native-math-kernels/math_kernels.rad"
+use "structure_lib.rad"
+
+let GENERATORS = 8
+let TARGET_MIN = 51
+let TARGET_MAX = 63
+let FULL_GENERATOR_MASK = 255
+let SEARCH_SEED = 800051
+let WIDTH_SEED_COLUMNS = [
+    1, 64, 65, 67, 69, 81, 128, 129, 192, 193, 196, 200, 224,
+    68, 3, 132, 5, 4, 131, 133, 7,
+]
+
+resource HypergraphCandidate {
+    columns: list = [1, 32, 64, 17, 33, 65, 129, 34, 68, 136, 96, 160, 192]
+    frequencies: list = []
+    family_size: int = 0
+    margin: int = 999999
+    excess_sum: int = 999999
+    abundant_count: int = 999999
+    connected: bool = false
+    has_triple: bool = false
+    generation: int = 0
+}
+
+resource HypergraphTelemetry {
+    evaluated: int = 0
+    in_window: int = 0
+    best_window_margin: int = 999999
+    window_counts: list = []
+    window_minimum_margins: list = []
+}
+
+resource HypergraphTarget {
+    family_size: int = 53
+}
+
+component HypergraphEvidence {
+    family_size: int = 0
+    margin: int = 0
+    minimum_frequency: int = 0
+    maximum_frequency: int = 0
+    connected: bool = false
+    has_triple: bool = false
+    counterexample: bool = false
+}
+
+intent HypergraphCoordinateEvidence {
+    key target: entity
+    frequency: int
+    family_size: int
+    margin: int
+    connected: bool
+    has_triple: bool
+}
+
+law SubmitHypergraphCoordinate(
+    target: entity,
+    frequency: int,
+    family_size: int,
+    margin: int,
+    connected: bool,
+    has_triple: bool,
+) {
+    propose HypergraphCoordinateEvidence {
+        target: target,
+        frequency: frequency,
+        family_size: family_size,
+        margin: margin,
+        connected: connected,
+        has_triple: has_triple,
+    }
+}
+
+resolver ResolveHypergraphEvidence for HypergraphCoordinateEvidence(target, proposals) {
+    let first = proposals[0]
+    let mut minimum = first.family_size
+    let mut maximum = 0
+    for proposal in proposals {
+        minimum = if proposal.frequency < minimum { proposal.frequency } else { minimum }
+        maximum = if proposal.frequency > maximum { proposal.frequency } else { maximum }
+    }
+    next(target, HypergraphEvidence {
+        family_size: first.family_size,
+        margin: first.margin,
+        minimum_frequency: minimum,
+        maximum_frequency: maximum,
+        connected: first.connected,
+        has_triple: first.has_triple,
+        counterexample: maximum * 2 < first.family_size,
+    })
+}
+
+constraint ValidHypergraphEvidence for HypergraphEvidence(subject, proposed) {
+    require proposed.connected else "frankl.generator8.disconnected_candidate"
+    require proposed.has_triple else "frankl.generator8.graph_candidate"
+    require proposed.margin == proposed.maximum_frequency * 2 - proposed.family_size
+        else "frankl.generator8.margin_mismatch"
+}
+
+entity hypergraph_judge { HypergraphEvidence {} }
+
+pure fn bit_count(mask: int) -> int {
+    let mut value = mask
+    let mut count = 0
+    while value != 0 {
+        if (value & 1) != 0 {
+            count = count + 1
+        }
+        value = value >> 1
+    }
+    return count
+}
+
+pure fn connected_support(columns: list<int>) -> bool {
+    let mut reached = 1
+    let mut previous = -1
+    while reached != previous {
+        previous = reached
+        for column in columns {
+            if (column & reached) != 0 {
+                reached = reached | column
+            }
+        }
+    }
+    return reached == FULL_GENERATOR_MASK
+}
+
+pure fn contains_triple(columns: list<int>) -> bool {
+    for column in columns {
+        if bit_count(column) == 3 {
+            return true
+        }
+    }
+    return false
+}
+
+pure fn window_distance(size: int) -> int {
+    if size < TARGET_MIN { return TARGET_MIN - size }
+    if size > TARGET_MAX { return size - TARGET_MAX }
+    return 0
+}
+
+pure fn candidate_from_profile(
+    columns: list<int>,
+    profile: map<str, any>,
+    generation: int,
+) -> HypergraphCandidate {
+    let frequencies = profile["frequencies"]
+    let mut excess_sum = 0
+    let mut abundant_count = 0
+    for frequency in frequencies {
+        let excess = frequency * 2 - profile["size"] + 1
+        if excess > 0 {
+            excess_sum = excess_sum + excess
+            abundant_count = abundant_count + 1
+        }
+    }
+    return HypergraphCandidate {
+        columns: sort(columns),
+        frequencies: frequencies,
+        family_size: profile["size"],
+        margin: max_int(frequencies) * 2 - profile["size"],
+        excess_sum: excess_sum,
+        abundant_count: abundant_count,
+        connected: connected_support(columns),
+        has_triple: contains_triple(columns),
+        generation: generation,
+    }
+}
+
+
+pure fn analyze(columns: list<int>, generation: int) -> HypergraphCandidate {
+    return candidate_from_profile(
+        columns,
+        column_quotient_profile(columns, GENERATORS),
+        generation,
+    )
+}
+
+pure fn better(left: HypergraphCandidate, right: HypergraphCandidate) -> bool {
+    let left_valid = left.connected and left.has_triple
+    let right_valid = right.connected and right.has_triple
+    if left_valid != right_valid { return left_valid }
+    let left_distance = window_distance(left.family_size)
+    let right_distance = window_distance(right.family_size)
+    if left_distance != right_distance { return left_distance < right_distance }
+    if left.margin != right.margin { return left.margin < right.margin }
+    if left.excess_sum != right.excess_sum { return left.excess_sum < right.excess_sum }
+    if left.abundant_count != right.abundant_count { return left.abundant_count < right.abundant_count }
+    return left.family_size < right.family_size
+}
+
+system ExploreHypergraph(candidate: mut HypergraphCandidate, telemetry: mut HypergraphTelemetry) {
+    let target = res(HypergraphTarget).family_size
+    let lane_minimum = target
+    let lane_maximum = target
+    let lane = column_quotient_mutation_lane(
+        candidate.columns,
+        GENERATORS,
+        3,
+        256,
+        rand_int(1, 2147483647),
+        lane_minimum,
+        lane_maximum,
+    )
+    candidate = HypergraphCandidate {
+        columns: lane["columns"],
+        frequencies: lane["frequencies"],
+        family_size: lane["size"],
+        margin: lane["margin"],
+        excess_sum: lane["excess_sum"],
+        abundant_count: lane["abundant_count"],
+        connected: lane["connected"],
+        has_triple: lane["has_maximum_weight_column"],
+        generation: candidate.generation + 1,
+    }
+    let mut lane_counts = []
+    let mut lane_margins = []
+    for _size in range(TARGET_MIN, TARGET_MAX + 1) {
+        lane_counts = push(lane_counts, 0)
+        lane_margins = push(lane_margins, 0)
+    }
+    for index in range(len(lane["window_counts"])) {
+        let target_index = lane_minimum - TARGET_MIN + index
+        lane_counts[target_index] = lane["window_counts"][index]
+        lane_margins[target_index] = lane["window_minimum_margins"][index]
+    }
+    telemetry = HypergraphTelemetry {
+        evaluated: lane["evaluated"],
+        in_window: lane["in_window"],
+        best_window_margin: lane["best_window_margin"],
+        window_counts: lane_counts,
+        window_minimum_margins: lane_margins,
+    }
+}
+
+fn main() -> nil {
+    let argv = sys_args()
+    let generations = if len(argv) >= 1 { int(argv[0]) } else { 80 }
+    let beam_width = if len(argv) >= 2 { int(argv[1]) } else { 12 }
+    let children_per_parent = if len(argv) >= 3 { int(argv[2]) } else { 8 }
+    let width = if len(argv) >= 4 { int(argv[3]) } else { 13 }
+    assert(width >= 13 and width <= len(WIDTH_SEED_COLUMNS), "supported width seed is 13..21")
+    let initial = analyze(slice(WIDTH_SEED_COLUMNS, 0, width), 0)
+    set_resource(HypergraphCandidate, initial)
+    let live_digest = world_digest()
+    let root = fork()
+    let mut parents = []
+    for target_size in range(TARGET_MIN, TARGET_MAX + 1) {
+        parents = push(parents, fork_with(root, HypergraphTarget { family_size: target_size }))
+    }
+    let mut evaluated = 1
+    let mut in_window = 0
+    let mut window_counts = []
+    let mut window_minimum_margins = []
+    for _size in range(TARGET_MIN, TARGET_MAX + 1) {
+        window_counts = push(window_counts, 0)
+        window_minimum_margins = push(window_minimum_margins, 999999)
+    }
+    print(f"Frankl eight-generator hypergraph laboratory width={width}")
+    print(f"initial size={initial.family_size} margin={initial.margin}")
+    for generation in range(generations) {
+        let mut worlds = []
+        for parent in parents {
+            for _child in range(children_per_parent) {
+                worlds = push(worlds, fork_with(parent, HypergraphTelemetry {}))
+            }
+        }
+        let futures = simulate_many(
+            worlds,
+            [system::ExploreHypergraph],
+            1,
+            SEARCH_SEED + generation * 1009,
+        )
+        for future in futures {
+            let stats = peek_resource(future, HypergraphTelemetry) |> unwrap
+            evaluated = evaluated + stats.evaluated
+            in_window = in_window + stats.in_window
+            for index in range(len(window_counts)) {
+                window_counts[index] = window_counts[index] + stats.window_counts[index]
+                if stats.window_counts[index] > 0 and stats.window_minimum_margins[index] < window_minimum_margins[index] {
+                    window_minimum_margins[index] = stats.window_minimum_margins[index]
+                }
+            }
+        }
+        let mut pool = []
+        for parent in parents { pool = push(pool, parent) }
+        for future in futures { pool = push(pool, future) }
+        let mut next_parents = []
+        let mut selected_columns = []
+        for target_size in range(TARGET_MIN, TARGET_MAX + 1) {
+            let mut found = false
+            let mut best_world = pool[0]
+            let mut best = peek_resource(pool[0], HypergraphCandidate) |> unwrap
+            for world in pool {
+                let candidate = peek_resource(world, HypergraphCandidate) |> unwrap
+                if candidate.family_size == target_size and not contains(selected_columns, candidate.columns) and (not found or better(candidate, best)) {
+                    found = true
+                    best = candidate
+                    best_world = world
+                }
+            }
+            if found {
+                next_parents = push(next_parents, best_world)
+                selected_columns = push(selected_columns, best.columns)
+            }
+        }
+        while len(next_parents) < beam_width {
+            let mut found = false
+            let mut best_world = pool[0]
+            let mut best = peek_resource(pool[0], HypergraphCandidate) |> unwrap
+            for world in pool {
+                let candidate = peek_resource(world, HypergraphCandidate) |> unwrap
+                if not contains(selected_columns, candidate.columns) and (not found or better(candidate, best)) {
+                    found = true
+                    best = candidate
+                    best_world = world
+                }
+            }
+            if not found { break }
+            next_parents = push(next_parents, best_world)
+            selected_columns = push(selected_columns, best.columns)
+        }
+        parents = next_parents
+        let mut best = peek_resource(parents[0], HypergraphCandidate) |> unwrap
+        for parent in parents {
+            let candidate = peek_resource(parent, HypergraphCandidate) |> unwrap
+            if better(candidate, best) { best = candidate }
+        }
+        if generation == 0 or (generation + 1) % 10 == 0 {
+            print(f"generation={generation + 1} evaluated={evaluated} in_window={in_window} size={best.family_size} margin={best.margin} excess={best.excess_sum} abundant={best.abundant_count}")
+        }
+    }
+    let mut best = peek_resource(parents[0], HypergraphCandidate) |> unwrap
+    for parent in parents {
+        let candidate = peek_resource(parent, HypergraphCandidate) |> unwrap
+        if better(candidate, best) { best = candidate }
+    }
+    assert(world_digest() == live_digest, "fork search changed the authoritative world")
+    settle {
+        for frequency in best.frequencies {
+            SubmitHypergraphCoordinate(
+                hypergraph_judge,
+                frequency,
+                best.family_size,
+                best.margin,
+                best.connected,
+                best.has_triple,
+            )
+        }
+    }
+    let evidence = require(hypergraph_judge, HypergraphEvidence)
+    print(f"best columns={best.columns}")
+    print(f"family={best.family_size} frequencies={best.frequencies} margin={best.margin} excess={best.excess_sum} abundant={best.abundant_count}")
+    for index in range(len(window_counts)) {
+        if window_counts[index] > 0 {
+            print(f"size={TARGET_MIN + index} samples={window_counts[index]} minimum_margin={window_minimum_margins[index]}")
+        }
+    }
+    for parent in parents {
+        let target = peek_resource(parent, HypergraphTarget) |> unwrap
+        let candidate = peek_resource(parent, HypergraphCandidate) |> unwrap
+        print(f"niche={target.family_size} candidate_size={candidate.family_size} margin={candidate.margin} excess={candidate.excess_sum} abundant={candidate.abundant_count}")
+    }
+    print(f"counterexample={evidence.counterexample}")
+    print(why(hypergraph_judge, HypergraphEvidence))
+}

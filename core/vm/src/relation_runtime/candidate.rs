@@ -94,6 +94,25 @@ pub enum PendingRelationOperation {
     },
 }
 
+impl PendingRelationOperation {
+    #[cfg(test)]
+    pub(crate) fn metadata(&self) -> &OperationMetadata {
+        match self {
+            Self::Insert { metadata, .. }
+            | Self::Remove { metadata, .. }
+            | Self::ReplaceBy { metadata, .. } => metadata,
+        }
+    }
+
+    pub(crate) fn metadata_mut(&mut self) -> &mut OperationMetadata {
+        match self {
+            Self::Insert { metadata, .. }
+            | Self::Remove { metadata, .. }
+            | Self::ReplaceBy { metadata, .. } => metadata,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PendingDespawn {
     pub entity: EntityRef,

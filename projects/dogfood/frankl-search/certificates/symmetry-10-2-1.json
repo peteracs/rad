@@ -1,0 +1,19 @@
+{
+  "closure_mode": "eager",
+  "cnf_clause_count": 2691113,
+  "cnf_variable_count": 123529,
+  "coordinate_orbit_count": 3,
+  "counterexample_exists": false,
+  "cycle_type": [
+    10,
+    2,
+    1
+  ],
+  "elapsed_seconds": 5367.610755199974,
+  "horn_clause_count": 2272015,
+  "schema": "rad.boolean-lattice.permutation-symmetry-proof.v1",
+  "separating_required": true,
+  "solver": "cadical195",
+  "subset_orbit_count": 848,
+  "width": 13
+}

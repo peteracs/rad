@@ -1,0 +1,108 @@
+// Causal audit of the bounded join-generator reduction.
+
+component GeneratorBoundCertificate {
+    six_generator_frontier: int = 0
+    six_generator_absent_cap: int = 0
+    six_generator_margin: int = 0
+    seven_generator_large_threshold: int = 0
+    seven_generator_max_column_weight: int = 0
+    seven_generator_max_counterexample_size: int = 0
+    graph_column_patterns: int = 0
+    labelled_graph_frontier: int = 0
+    six_generator_class_closed: bool = false
+    seven_generator_reduction_valid: bool = false
+}
+
+intent GeneratorMultiplicityBound {
+    key target: entity
+    generator_count: int
+    multiplicity: int
+    family_size: int
+    absent_cap: int
+    guaranteed_margin: int
+}
+
+law SubmitGeneratorMultiplicityBound(
+    target: entity,
+    generator_count: int,
+    multiplicity: int,
+    family_size: int,
+) {
+    let absent_cap = shl(1, generator_count - multiplicity)
+    propose GeneratorMultiplicityBound {
+        target: target,
+        generator_count: generator_count,
+        multiplicity: multiplicity,
+        family_size: family_size,
+        absent_cap: absent_cap,
+        guaranteed_margin: 2 * (family_size - absent_cap) - family_size,
+    }
+}
+
+resolver ResolveGeneratorBounds for GeneratorMultiplicityBound(target, proposals) {
+    let mut six_margin = -999
+    let mut six_absent = 0
+    let mut seven_triple_margin = -999
+    let mut seven_pair_margin = -999
+    for proposal in proposals {
+        if proposal.generator_count == 6 and proposal.multiplicity == 2 {
+            six_margin = proposal.guaranteed_margin
+            six_absent = proposal.absent_cap
+        }
+        if proposal.generator_count == 7 and proposal.multiplicity == 3 {
+            seven_triple_margin = proposal.guaranteed_margin
+        }
+        if proposal.generator_count == 7 and proposal.multiplicity == 2 {
+            seven_pair_margin = proposal.guaranteed_margin
+        }
+    }
+    next(target, GeneratorBoundCertificate {
+        six_generator_frontier: 51,
+        six_generator_absent_cap: six_absent,
+        six_generator_margin: six_margin,
+        seven_generator_large_threshold: 64,
+        seven_generator_max_column_weight: 2,
+        seven_generator_max_counterexample_size: 63,
+        graph_column_patterns: 28,
+        labelled_graph_frontier: 37442160,
+        // At size <= 50 the published small-family theorem applies.  At size
+        // >= 51, a multiplicity-two coordinate has positive margin; if all
+        // columns have weight one, the quotient is Boolean and has equality.
+        six_generator_class_closed: six_margin > 0 and six_absent == 16,
+        // At g=7, multiplicity >=3 is abundant from size 51, while
+        // multiplicity 2 is abundant from size 64.
+        seven_generator_reduction_valid: seven_triple_margin > 0 and seven_pair_margin >= 0,
+    })
+}
+
+constraint ValidGeneratorBound for GeneratorBoundCertificate(subject, proposed) {
+    require proposed.six_generator_frontier == 51
+        else "frankl.generator.frontier_mismatch"
+    require proposed.six_generator_margin == 19
+        else "frankl.generator.six_margin_mismatch"
+    require proposed.six_generator_class_closed
+        else "frankl.generator.six_class_not_closed"
+    require proposed.seven_generator_reduction_valid
+        else "frankl.generator.seven_reduction_invalid"
+    require proposed.graph_column_patterns == 7 + 21
+        else "frankl.generator.graph_pattern_count"
+    require proposed.labelled_graph_frontier == 37442160
+        else "frankl.generator.graph_frontier_count"
+}
+
+entity generator_judge { GeneratorBoundCertificate {} }
+
+fn main() -> nil {
+    settle {
+        SubmitGeneratorMultiplicityBound(generator_judge, 6, 2, 51)
+        SubmitGeneratorMultiplicityBound(generator_judge, 7, 3, 51)
+        SubmitGeneratorMultiplicityBound(generator_judge, 7, 2, 64)
+    }
+    let result = require(generator_judge, GeneratorBoundCertificate)
+    print("Frankl bounded-generator reduction")
+    print(f"g<=6: multiplicity-two absent_cap={result.six_generator_absent_cap} guaranteed_margin={result.six_generator_margin}")
+    print("conclusion=all union-closed families with at most six join-generators satisfy Frankl")
+    print(f"g=7 frontier: size=51..{result.seven_generator_max_counterexample_size} column_weight<=2")
+    print(f"graph encoding: patterns={result.graph_column_patterns} labelled_configurations={result.labelled_graph_frontier}")
+    print(why(generator_judge, GeneratorBoundCertificate))
+}

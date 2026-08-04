@@ -1,0 +1,20 @@
+{
+  "counterexample_exists": false,
+  "elapsed_seconds": 154.74995870003477,
+  "family_encoding": "all_nonempty_subsets",
+  "family_size": 8191,
+  "frequency": 4096,
+  "horn_clause_count": 1895650,
+  "horn_digest": "26adb539aa3519d23fcad947a5b8262b846df190663adc9ddecbb57cd449d9e9",
+  "objective_digest": "3cd52e74935849fba2d1b895f0ea677d4cf6d361f0bd3acb2c2e78c3335efd28",
+  "hard_clause_count": 1895658,
+  "soft_clause_count": 632,
+  "minimum_margin": 1,
+  "optimizer": "RC2/cadical195",
+  "orbit_count": 632,
+  "proper_family_required": true,
+  "schema": "rad.boolean-lattice.regular-margin-proof.v1",
+  "selected_orbits_encoding": "all_except_empty",
+  "separating_required": true,
+  "width": 13
+}

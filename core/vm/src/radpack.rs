@@ -11,12 +11,11 @@
 //!   (`digest_of` in lib_track/lib_combat) names worlds by the second
 //!   space-separated token. RADPACK keeps the digest there.
 //! - **Content-addressed.** The digest covers the *uncompressed canonical
-//!   body*, so a world has the same name whether it shipped packed or
-//!   legacy, and decoders verify integrity after inflation.
+//!   body*, so a world has the same name whether it shipped packed or plain,
+//!   and decoders verify integrity after inflation.
 //! - **Self-selecting.** Below [`PACK_THRESHOLD`] (or when DEFLATE+base64
-//!   doesn't pay) the encoder emits the legacy format unchanged: small
-//!   payloads stay human-readable, debuggable, and grep-able. Decoders
-//!   accept both forever.
+//!   doesn't pay) the encoder emits the plain current format: small payloads
+//!   stay human-readable, debuggable, and grep-able.
 //! - **Deterministic.** miniz_oxide at a fixed level is a pure function of
 //!   the input for a given build — the same world packs to the same bytes
 //!   on every machine running the same binary, which the base-by-digest
@@ -26,44 +25,42 @@ use base64::engine::general_purpose::STANDARD_NO_PAD as B64;
 use base64::Engine as _;
 use std::borrow::Cow;
 
-/// Bodies smaller than this ship legacy: the envelope's fixed overhead
+/// Bodies smaller than this ship plain: the envelope's fixed overhead
 /// (~90 B of header + 4/3 base64 expansion) eats most of the win, and
 /// keeping small payloads readable is worth more than a few dozen bytes.
 pub const PACK_THRESHOLD: usize = 4096;
 
-/// DEFLATE level (0-10). Fixed forever at a given version: compression is
-/// part of the deterministic encode path.
+/// DEFLATE level (0-10), fixed within this format domain so encoding remains
+/// deterministic.
 const LEVEL: u8 = 10;
 
 /// Inflate ceiling — network input must not be a decompression bomb.
 const MAX_BODY: usize = 1 << 28; // 256 MiB
 
-/// Tags whose *legacy* form carries the digest between header and body
-/// (`<tag> <digest> <body>`). `RADWORLD2` predates digests (`<tag> <body>`),
-/// and `RADTRACE` is raw JSONL with no header at all.
-fn legacy_form(tag: &str, digest: &str, body: &str) -> String {
+/// The plain current form carries the digest between header and body
+/// (`<tag> <digest> <body>`). `RADTRACE` is raw JSONL with no header.
+fn plain_form(tag: &str, digest: &str, body: &str) -> String {
     match tag {
-        "RADWORLD2" => format!("{} {}", tag, body),
         "RADTRACE" => body.to_string(),
         _ => format!("{} {} {}", tag, digest, body),
     }
 }
 
-/// Encode `body` under `tag`, choosing whichever of packed/legacy is
+/// Encode `body` under `tag`, choosing whichever of packed/plain is
 /// smaller. The digest is always blake3 of `body`.
 pub fn seal(tag: &str, body: &str) -> String {
     let digest = blake3::hash(body.as_bytes()).to_hex();
-    let legacy = legacy_form(tag, digest.as_str(), body);
+    let plain = plain_form(tag, digest.as_str(), body);
     if body.len() < PACK_THRESHOLD {
-        return legacy;
+        return plain;
     }
     let compressed = miniz_oxide::deflate::compress_to_vec(body.as_bytes(), LEVEL);
     let payload = B64.encode(&compressed);
     let packed = format!("RADPACK1:{} {} {}", tag, digest.as_str(), payload);
-    if packed.len() < legacy.len() {
+    if packed.len() < plain.len() {
         packed
     } else {
-        legacy
+        plain
     }
 }
 
@@ -80,10 +77,9 @@ pub fn preview(s: &str, max: usize) -> &str {
     &s[..end]
 }
 
-/// Normalize a wire string to its legacy form: RADPACK1 envelopes are
-/// opened (base64 -> inflate -> digest check), everything else passes
-/// through untouched. Decoders call this first and keep their existing
-/// parsers; old payloads therefore decode forever.
+/// Normalize a wire string to its plain form: RADPACK1 envelopes are opened
+/// (base64 -> inflate -> digest check), while plain current inputs pass
+/// through untouched.
 pub fn open(text: &str) -> Result<Cow<'_, str>, String> {
     let Some(rest) = text.strip_prefix("RADPACK1:") else {
         return Ok(Cow::Borrowed(text));
@@ -110,18 +106,18 @@ pub fn open(text: &str) -> Result<Cow<'_, str>, String> {
             &actual.as_str()[..12]
         ));
     }
-    Ok(Cow::Owned(legacy_form(tag, claimed, &body)))
+    Ok(Cow::Owned(plain_form(tag, claimed, &body)))
 }
 
 /// File variant: `RADPACKZ:<tag> <digest> ` (zstd, native) or
 /// `RADPACKB:<tag> <digest> ` (DEFLATE, wasm) header followed by **raw**
 /// compressed bytes. Files don't traverse line protocols, so base64 would
 /// be a 33% tax for nothing; and tapes are digest-dense JSONL where zstd
-/// beats DEFLATE by ~25%. Small bodies stay legacy text, unchanged.
+/// beats DEFLATE by ~25%. Small bodies stay plain text.
 pub fn seal_file(tag: &str, body: &str) -> Vec<u8> {
     let digest = blake3::hash(body.as_bytes()).to_hex();
     if body.len() < PACK_THRESHOLD {
-        return legacy_form(tag, digest.as_str(), body).into_bytes();
+        return plain_form(tag, digest.as_str(), body).into_bytes();
     }
     #[cfg(not(target_arch = "wasm32"))]
     let (magic, compressed) = (
@@ -135,7 +131,7 @@ pub fn seal_file(tag: &str, body: &str) -> Vec<u8> {
     );
     let mut out = format!("{}:{} {} ", magic, tag, digest.as_str()).into_bytes();
     if compressed.is_empty() || compressed.len() + out.len() >= body.len() {
-        return legacy_form(tag, digest.as_str(), body).into_bytes();
+        return plain_form(tag, digest.as_str(), body).into_bytes();
     }
     out.extend_from_slice(&compressed);
     out
@@ -146,8 +142,8 @@ pub fn seal_file(tag: &str, body: &str) -> Vec<u8> {
 const ZSTD_LEVEL: i32 = 19;
 
 /// Open a file payload: RADPACKZ (zstd), RADPACKB (DEFLATE), RADPACK1
-/// (text envelope), or legacy text — all normalize to the legacy string
-/// form. Both binary vintages decode on every target that can.
+/// (text envelope), or plain text — all normalize to the same plain string
+/// form. Both platform encodings decode on every target that can.
 pub fn open_file(bytes: &[u8]) -> Result<String, String> {
     for magic in ["RADPACKZ:", "RADPACKB:"] {
         let Some(rest) = bytes.strip_prefix(magic.as_bytes()) else {
@@ -201,7 +197,7 @@ pub fn open_file(bytes: &[u8]) -> Result<String, String> {
                 &actual.as_str()[..12]
             ));
         }
-        return Ok(legacy_form(tag, claimed, &body));
+        return Ok(plain_form(tag, claimed, &body));
     }
     let text = std::str::from_utf8(bytes)
         .map_err(|_| "radpack: file is neither RADPACK binary nor text".to_string())?;
@@ -248,11 +244,11 @@ mod tests {
     }
 
     /// The property: for every tag and any body, open(seal(body)) yields
-    /// exactly the legacy form — packed or not.
+    /// exactly the plain form — packed or not.
     #[test]
     fn seal_open_round_trips_for_arbitrary_bodies() {
         let mut rng = XorShift(0x5eed_cafe_f00d_0001);
-        for tag in ["RADFORK2", "RADDELTA1", "RADWORLD2", "RADTRACE"] {
+        for tag in ["RADFORK2", "RADDELTA1", "RADWORLD3", "RADTRACE"] {
             for &(len, repetitive) in &[
                 (0usize, false),
                 (1, false),
@@ -269,7 +265,7 @@ mod tests {
                 let opened = open(&sealed).expect("open must succeed on sealed output");
                 assert_eq!(
                     opened.as_ref(),
-                    legacy_form(tag, digest.as_str(), &body),
+                    plain_form(tag, digest.as_str(), &body),
                     "tag={} len={} repetitive={}",
                     tag,
                     len,
@@ -298,9 +294,9 @@ mod tests {
         assert_eq!(sealed.split(' ').nth(1), Some(digest.as_str()));
     }
 
-    /// Sub-threshold bodies stay legacy and readable.
+    /// Sub-threshold bodies stay plain and readable.
     #[test]
-    fn small_bodies_stay_legacy() {
+    fn small_bodies_stay_plain() {
         let body = "{\"entities\":[]}";
         assert_eq!(
             seal("RADDELTA1", body),
@@ -334,7 +330,7 @@ mod tests {
         assert!(open(&with_bad_digest).is_err());
     }
 
-    /// File envelope: binary round trip, tamper detection, legacy text
+    /// File envelope: binary round trip, tamper detection, plain text
     /// passthrough.
     #[test]
     fn file_envelope_round_trips_and_detects_corruption() {
@@ -356,9 +352,9 @@ mod tests {
         corrupt[last] ^= 0xFF;
         assert!(open_file(&corrupt).is_err(), "corrupted tail must refuse");
 
-        // legacy raw text file passes through
+        // Plain raw trace text passes through.
         assert_eq!(
-            open_file(b"{\"t\":\"header\"}\n").expect("legacy"),
+            open_file(b"{\"t\":\"header\"}\n").expect("plain trace"),
             "{\"t\":\"header\"}\n"
         );
         // and the text envelope is also accepted from a file
@@ -368,29 +364,29 @@ mod tests {
             body
         );
 
-        // DEFLATE-vintage binary envelopes (RADPACKB) decode forever
+        // The WASM DEFLATE envelope decodes on native targets too.
         let digest = blake3::hash(body.as_bytes()).to_hex();
-        let mut vintage = format!("RADPACKB:RADTRACE {} ", digest.as_str()).into_bytes();
-        vintage.extend_from_slice(&miniz_oxide::deflate::compress_to_vec(
+        let mut wasm_form = format!("RADPACKB:RADTRACE {} ", digest.as_str()).into_bytes();
+        wasm_form.extend_from_slice(&miniz_oxide::deflate::compress_to_vec(
             body.as_bytes(),
             LEVEL,
         ));
-        assert_eq!(open_file(&vintage).expect("deflate vintage"), body);
+        assert_eq!(open_file(&wasm_form).expect("wasm deflate form"), body);
     }
 
-    /// Non-RADPACK strings pass through untouched (legacy compatibility).
+    /// Plain current strings pass through without allocation.
     #[test]
-    fn legacy_passthrough_is_borrowing_identity() {
+    fn plain_passthrough_is_borrowing_identity() {
         for s in [
             "RADFORK2 abc {\"entities\":[]}",
             "RADDELTA1 def {}",
-            "RADWORLD2 {\"entities\":[]}",
+            "RADWORLD3 abc {\"entities\":[]}",
             "{\"t\":\"header\"}\n{\"t\":\"end\"}\n",
             "",
         ] {
-            match open(s).expect("legacy must pass through") {
+            match open(s).expect("plain input must pass through") {
                 Cow::Borrowed(out) => assert_eq!(out, s),
-                Cow::Owned(_) => panic!("legacy input must not be copied"),
+                Cow::Owned(_) => panic!("plain input must not be copied"),
             }
         }
     }

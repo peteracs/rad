@@ -20,6 +20,42 @@ and certificates sharply separated.
 - `boundary_analysis.rad` recognizes the power-set-plus-chain near boundary
   and uses Causal Laws, Candidate Constraints, and `why()` to explain its
   coordinate-incidence obstruction.
+- `pair_pressure.rad` settles all 78 coordinate-pair audits into one causal
+  certificate and explains the closure pressure between one-sided cells.
+- `orbit_search.rad` searches three-to-eight cyclic-orbit bases in forked
+  regular universes, then settles one causal proposal per missing orbit to
+  explain the exact dual rank pressure.
+- `regular_maxsat_solver.py` collapses the complete cyclic-invariant class to
+  binary-necklace variables, encodes all orbit joins as Horn clauses, and
+  minimizes the exact regular Frankl margin with weighted MaxSAT.
+- `regular_proof.rad` independently audits the sharp width-13 extremal, settles
+  optimization/Horn/extremal evidence atomically, and makes the three-way
+  proof fan-in inspectable through `why()`.
+- `verify_regular_proof.py` independently regenerates the 632-orbit partition,
+  1,895,650-clause Horn theory and digest, then checks the extremal family.
+- `permutation_symmetry_solver.py` generalizes the orbit/Horn construction to
+  arbitrary coordinate-permutation cycle types; `symmetry_proof.rad` settles
+  the exact exclusions as a causal forbidden-automorphism certificate.
+- `generator_frontier.rad` and `verify_generator_frontier.py` audit the exact
+  all-width theorem for families with at most seven join-generators.
+- `generator8_frontier.rad` combines product factorization, incidence-weight
+  bounds, and the exact 2,038,236-orbit connected graph frontier.
+- `generator8_hypergraph_lab.rad` uses forked worlds, `simulate_many`, native
+  mutation lanes, Causal Laws, Candidate Constraints, and `why()` to explore
+  the surviving weight-three incidence hypergraphs without touching the live
+  world.
+- `generator_quotient_cnf.py` is the exact Boolean-quotient encoding.  It
+  supports symmetry-invariant structural splits, projected outside-quotient
+  cardinalities, and finite projected-core cuts.
+- `generator8_q13_sweep.py` reproducibly schedules the complete triple/singleton
+  parameter grid with bounded parallelism and refuses to treat a SAT slice as
+  an exclusion.
+- `projected_partition_proof.rad` audits seven exhaustive five-variable local
+  quotient frontiers; `verify_projected_partition_frontier.py` independently
+  checks every canonical core and its full symmetry orbit.
+- `generator8_q13_exclusions.rad` settles 82 exact solver branches into the
+  complete thirteen-column exclusion theorem; the independent manifest checker
+  proves every triple/singleton/family-size/trace partition is covered.
 - `structure_lib.rad` contains reusable rotation, complement, rank, and
   dual-majority mathematics rather than inflating either executable.
 - `verify_certificate.py` independently regenerates the family and uses exact
@@ -29,7 +65,11 @@ and certificates sharply separated.
 - `verify_structure.py` independently verifies the structural certificate and,
   unless passed `--quick`, reproduces the full cyclic enumeration.
 - `verify_deletion.py` independently audits a legal-deletion certificate,
-  including its exact effective frontier and family digest.
+  including pair biases, its exact effective frontier, and family digest.
+- `analyze_deletion.py` independently reports join-irreducible generators,
+  coordinate implications, rank shape, and cross-union pressure.
+- `verify_orbit_search.py` independently regenerates the regular closure and
+  checks its uniform frequencies, deleted-rank identity, and SHA-256 digest.
 
 The default release run evaluates 258,561 exact generator closures and retains
 only compact candidate summaries in speculative worlds. It materializes the
@@ -65,6 +105,40 @@ families has size `2^8192`.
 
 Outputs are written under `out/` and ignored by Git.
 
+The exact Python backends require `z3-solver` and `python-sat` (with a CaDiCaL
+backend). The checked-in compact width-13 certificate does not require the
+155-second optimization replay for the normal RAD audit.
+
+## Join-generator results
+
+Incidence columns turn a family with `g` join-generators into a quotient of the
+`g`-dimensional Boolean cube.  This has produced three exact reductions:
+
+```text
+at most 7 join-generators
+    Frankl holds for every number of distinct ground columns
+
+8 generators, column weight at most 2, connected support
+    2,038,236 coloured graph orbits; no counterexample
+    smallest quotient size 80; minimum margin +20
+
+8 generators, exactly 13 columns, 51..63 members, weight at most 3
+    every triple count 1..13 excluded by 82 exact CNF runs
+    no counterexample in the complete parameter class
+```
+
+For a selected triple, the absent side is a quotient on only five outside
+generators.  Exhaustive projected frontiers for required quotient sizes 26
+through 32 contain respectively 39, 23, 11, 6, 3, 2, and 1 symmetry types of
+minimal test cores.  The direct projected encoding reduces a representative
+exact CNF from roughly 987k to 185k variables.  The compact certificates live
+under `certificates/`; normal RAD audits and independent Python checkers do not
+rerun the expensive SAT sweep.
+
+The UNSAT manifest is reproducible and content-hashed, but it does not yet
+contain DRAT/LRAT proof logs.  It proves the stated finite strata, not Frankl's
+full conjecture and not every eight-generator ground width.
+
 ## Structural result
 
 For a deleted family `D = P([13]) - F`, a Frankl counterexample needs every
@@ -87,3 +161,93 @@ chain above the core union. The chain adds `t` incidences to every base
 coordinate, but `t` removed subsets cannot remove more than `t` incidences
 from every base coordinate. Consequently this whole near-extremal template
 cannot be a strict counterexample.
+
+At the 51-set lower boundary, fixed-cardinality closure exchanges expose two
+different basins. A balanced family has frequencies between 25 and 32, but
+all 78 coordinate pairs have at least as many `both` sets as `neither` sets.
+A pair-bias-guided family reduces that count to 14 of 78, but does so by
+creating coordinates of frequencies 1, 2, 3, and 4. For an odd-sized strict
+counterexample every pair must satisfy `neither > both`, equivalently the two
+coordinate frequencies must sum to less than the family size. The search is
+therefore measuring a concrete closure/balance tradeoff rather than only
+reporting that a random campaign found no witness.
+
+The exchange implementation now has two orthogonal generic search controls:
+an exploratory acceptance policy can cross a strict local regression, and a
+bounded repair beam explores alternative exact deletion sequences after an
+insertion. Ranking exact repair moves before cloning dense witness state made
+the width-8 campaign 2.63x faster (37.9 seconds to 14.4 seconds) with the same
+family hash. Exploratory paths improved the balanced size-51 frequency range
+from `25..32` to `28..32`, although the maximum remains 32.
+
+The regular-orbit search evaluated 47,361 three-, four-, and six-orbit worlds
+per lane. Its best six-orbit basis `[3,5,9,17,33,65]` is the six cyclic
+distance classes of all two-element sets. It generates exactly
+
+```text
+{empty} union {A : |A| >= 2},
+```
+
+with 8,179 sets, uniform frequency 4,095, and margin `+11`. In a transitive
+family, if the complement deletes `d` sets of total rank `R`, then
+
+```text
+Frankl margin = d - 2R/13.
+```
+
+Thus a regular counterexample needs deleted average rank greater than 6.5.
+`why()` derives the observed `+11` from the single missing singleton orbit;
+the independent verifier confirms `d=13`, `R=13`, and family digest
+`8eb0a6ebd79fc70c837223ba2a4f23aa4a74533790a0d49981e97b6a9ddea1ff`.
+
+The heuristic result is now complemented by an exact theorem-class result.
+Rotation invariance reduces all 8,192 subset decisions at width 13 to 632
+binary-necklace decisions. Union closure becomes 1,895,650 hard Horn clauses;
+regularity turns the conjecture into one weighted rank objective. RC2/CaDiCaL
+proves that every proper, separating, cyclic-invariant union-closed family on
+13 coordinates has margin at least `+1`. The bound is sharp, attained by
+`P([13]) - {empty}`, with 8,191 sets and uniform frequency 4,096. The exact
+optimization took 154.75 seconds; RAD's causal audit of the compact result now
+takes about 0.68 seconds after moving generic bitmask rotation orbits into the
+project math kernel (down from about 7 seconds).
+
+At prime degree 13 this also covers **every transitive family**: a transitive
+automorphism group has order divisible by 13, so Cauchy's theorem supplies an
+element of order 13, necessarily a 13-cycle. The result is still not a proof
+for arbitrary width-13 families, and the transitive-family special case across
+all degrees remains open. Aaronson, Ellis, and Leader proved the narrower class
+generated by translates of one fixed set; the exact RAD/MaxSAT result covers
+all transitive union-closed families at degree 13.
+
+The same quotient construction now handles nontransitive automorphisms. Exact
+CNF/CaDiCaL runs exclude separating counterexamples invariant under cycle
+types `(10,3)`, `(9,4)`, `(8,5)`, `(7,6)`, and `(7,5,1)`. Together those five
+theories contain 1,867,389 Horn clauses and 2,556,556 total CNF clauses.
+`symmetry_proof.rad` receives one proposal per cycle type and explains the
+aggregate exclusion through `why()`. The harder `(12,1)` and `(11,2)` runs did
+not finish within the bounded ten-minute attempt and are not claimed.
+
+Those two timeouts exposed a stronger reduction. If one permutation cycle has
+length `L` coprime to the lcm of every other cycle length, freeze the bit
+pattern outside that cycle. Each layer is union-closed, and a power of the
+automorphism fixes the outside coordinates while acting as a full `L`-cycle.
+The unrestricted cyclic theorem at width `L` forces mean layer rank at least
+`L/2`, so some coordinate on that cycle is globally abundant. This
+**coprime-cycle layering lemma** closes `(12,1)` and `(11,2)` analytically and
+subsumes the five CNF exclusions above.
+
+Exact unrestricted cyclic minima for every width 2 through 12, together with
+the sharp width-13 separating result, let `layering_lemma.py` classify all 100
+nonidentity permutation cycle types at degree 13. It excludes 63 types and
+leaves 37 possible. `layering_proof.rad` settles the eleven cyclic theorem
+certificates plus the target-width reduction into one atomic proof object;
+`why()` retains the twelve-branch causal explanation.
+
+Finally, `dual_obstruction_solver.py` now separates closure failures in two
+layers. A deleted union first receives the aggregate subcube-density cut that
+at least half of its subsets must also be deleted; only models satisfying all
+such cuts receive individual decomposition clauses. With the finite-domain
+SAT backend this proves the width-6 instance UNSAT in 53.1 seconds using 44
+aggregate cuts and 497 residual clauses. Width 13 remains unresolved within
+the bounded runs, so these are obstruction certificates and search guidance,
+not a proof of the conjecture.

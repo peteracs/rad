@@ -14,9 +14,9 @@
 //
 // fork_to_bytes() wraps its payload in a blake3 integrity digest, so a
 // tampered fork is rejected on ingest (proved 12 ways in tamper_wire.rad).
-// save_world() has no such envelope: an archive on disk is a plain
-// `RADWORLD2 {json}` document that anyone can edit, and load_world() will
-// read the edit back as gospel (proved in run_tamper_saves.ps1).
+// save_world() now has the same transport-integrity property. Strongbox's
+// separate receipt chain addresses semantic authenticity after a valid save
+// has been deliberately edited and resealed.
 //
 // Strongbox builds the missing layer out of the language itself. Every state
 // transition is followed by a world_digest() receipt appended to a chain, so

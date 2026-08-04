@@ -85,7 +85,7 @@ test wire_roundtrip_is_identity_when_packed {
 
 test wire_digest_token_is_second_field {
     // builtins.md: the blake3 digest is "always the second space-separated
-    // token", in RADPACK and legacy-JSON payloads alike.
+    // token", in packed and plain current payloads alike.
     seed(4)
     let small = fork_to_bytes(fork())
     assert_eq(len(split(small, " ")[1]), 64)

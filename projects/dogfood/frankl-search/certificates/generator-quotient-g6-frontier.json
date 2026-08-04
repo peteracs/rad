@@ -1,0 +1,11 @@
+{
+  "counterexample_exists": false,
+  "elapsed_seconds": 300.04419210000196,
+  "generator_count": 6,
+  "minimum_family_size": 51,
+  "minimum_nonempty_rank": 3,
+  "result": "unknown",
+  "schema": "rad.boolean-lattice.generator-quotient-proof.v1",
+  "solver": "z3-smt",
+  "width": 13
+}

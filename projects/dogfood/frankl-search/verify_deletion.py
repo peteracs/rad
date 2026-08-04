@@ -57,6 +57,18 @@ def verify(document: dict) -> dict:
     ]
     surpluses = [2 * count - len(deleted) for count in deletion_frequencies]
     margin = max(2 * count - len(family) for count in frequencies)
+    pair_biases = []
+    for left in range(width):
+        for right in range(left + 1, width):
+            both = sum(
+                bool(mask & 1 << left) and bool(mask & 1 << right)
+                for mask in family
+            )
+            neither = sum(
+                not mask & 1 << left and not mask & 1 << right
+                for mask in family
+            )
+            pair_biases.append(both - neither)
 
     witnesses = [[0] * width for _ in range(width)]
     for mask in family:
@@ -97,6 +109,10 @@ def verify(document: dict) -> dict:
         raise ValueError("frequency vector does not match certificate")
     if surpluses != [int(value) for value in document["deletion_surpluses"]]:
         raise ValueError("deletion-surplus vector does not match certificate")
+    if "pair_biases" in document and pair_biases != [
+        int(value) for value in document["pair_biases"]
+    ]:
+        raise ValueError("pair-bias vector does not match certificate")
     if margin != int(document["margin"]):
         raise ValueError("Frankl margin does not match certificate")
     if separating != bool(document["separating"]):
@@ -112,6 +128,10 @@ def verify(document: dict) -> dict:
         "deleted_size": len(deleted),
         "frequencies": frequencies,
         "frankl_margin": margin,
+        "maximum_pair_bias": max(pair_biases),
+        "pairs_failing_minority_necessary_condition": sum(
+            bias >= 0 for bias in pair_biases
+        ),
         "union_closed": True,
         "separating": separating,
         "deletable_count": len(deletable),

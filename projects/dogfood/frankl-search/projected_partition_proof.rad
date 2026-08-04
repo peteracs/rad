@@ -1,0 +1,137 @@
+// Causal audit of the five-variable projected quotient frontier.
+
+component ProjectedPartitionProof {
+    threshold_mask: int = 0
+    labelled_minimal_cores: int = 0
+    symmetry_orbits: int = 0
+    singleton_trace_signature: int = 0
+    collision_bound: bool = false
+}
+
+intent ProjectedPartitionEvidence {
+    key target: entity
+    kind: str
+    threshold: int
+    labelled: int
+    orbits: int
+    minimum_singletons: int
+    valid: bool
+}
+
+pure fn bit_count(mask: int) -> int {
+    let mut value = mask
+    let mut count = 0
+    while value != 0 {
+        count = count + (value & 1)
+        value = value >> 1
+    }
+    return count
+}
+
+pure fn minimum_singletons(profile: map<str, any>) -> int {
+    let mut minimum = 99
+    for core in profile["orbit_cores"] {
+        let mut count = 0
+        for test in core["tests"] {
+            if bit_count(test) == 1 { count = count + 1 }
+        }
+        if count < minimum { minimum = count }
+    }
+    return minimum
+}
+
+law SubmitProjectedFrontier(target: entity, profile: map<str, any>) {
+    propose ProjectedPartitionEvidence {
+        target: target,
+        kind: "frontier",
+        threshold: profile["quotient_threshold"],
+        labelled: profile["labelled_minimal_cores"],
+        orbits: profile["symmetry_orbits"],
+        minimum_singletons: minimum_singletons(profile),
+        valid: profile["variables"] == 5
+            and profile["maximum_weight"] == 3
+            and profile["maximum_tests"] == 12,
+    }
+}
+
+law SubmitCollisionBound(target: entity) {
+    // If r singleton tests are present, the full set and every full-minus-v
+    // set for a missing singleton collide.  Hence the quotient has at most
+    // 32 - (5-r) = 27+r states.
+    propose ProjectedPartitionEvidence {
+        target: target,
+        kind: "collision_bound",
+        threshold: 0,
+        labelled: 0,
+        orbits: 0,
+        minimum_singletons: 0,
+        valid: true,
+    }
+}
+
+resolver ResolveProjectedPartitionProof for ProjectedPartitionEvidence(target, proposals) {
+    let mut threshold_mask = 0
+    let mut labelled = 0
+    let mut orbits = 0
+    let mut singleton_signature = 0
+    let mut collision_bound = false
+    for proposal in proposals {
+        if proposal.kind == "collision_bound" {
+            collision_bound = proposal.valid
+        } else {
+            let index = proposal.threshold - 26
+            threshold_mask = threshold_mask | (1 << index)
+            labelled = labelled + proposal.labelled
+            orbits = orbits + proposal.orbits
+            singleton_signature = singleton_signature
+                | (proposal.minimum_singletons << (index * 3))
+        }
+    }
+    next(target, ProjectedPartitionProof {
+        threshold_mask: threshold_mask,
+        labelled_minimal_cores: labelled,
+        symmetry_orbits: orbits,
+        singleton_trace_signature: singleton_signature,
+        collision_bound: collision_bound,
+    })
+}
+
+constraint ValidProjectedPartitionProof for ProjectedPartitionProof(subject, proposed) {
+    require proposed.threshold_mask == 127
+        else "frankl.projected.threshold_coverage"
+    require proposed.labelled_minimal_cores == 3958
+        else "frankl.projected.labelled_cores"
+    require proposed.symmetry_orbits == 85
+        else "frankl.projected.symmetry_orbits"
+    require proposed.singleton_trace_signature == 1455168
+        else "frankl.projected.singleton_trace_bound"
+    require proposed.collision_bound
+        else "frankl.projected.collision_lemma"
+}
+
+entity projected_partition_judge { ProjectedPartitionProof {} }
+
+fn main() -> nil {
+    let argv = sys_args()
+    let certificate_dir = if len(argv) >= 1 {
+        argv[0]
+    } else {
+        "projects/dogfood/frankl-search/certificates"
+    }
+    let mut profiles = []
+    for threshold in range(26, 33) {
+        let path = f"{certificate_dir}/projected-partition-v5-w3-q{threshold}.json"
+        profiles = push(profiles, json_parse(read_file(path)) |> unwrap)
+    }
+    settle {
+        SubmitCollisionBound(projected_partition_judge)
+        for profile in profiles {
+            SubmitProjectedFrontier(projected_partition_judge, profile)
+        }
+    }
+    let proof = require(projected_partition_judge, ProjectedPartitionProof)
+    print("Projected five-variable quotient frontier")
+    print(f"minimal_cores={proof.labelled_minimal_cores} symmetry_orbits={proof.symmetry_orbits}")
+    print("thresholds 26..32 force minimum singleton traces 0,0,1,2,3,4,5")
+    print(why(projected_partition_judge, ProjectedPartitionProof))
+}

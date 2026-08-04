@@ -82,6 +82,15 @@ jobs:
           cargo run -p rad-vm --bin rad -- projects/dogfood/collatz-lab/main.rad --experimental-laws --record projects/dogfood/collatz-lab/out/ci.radr
           target/debug/rad replay projects/dogfood/collatz-lab/out/ci.radr
           python3 projects/dogfood/collatz-lab/verify_certificate.py projects/dogfood/collatz-lab/out/certificate.json --report projects/dogfood/collatz-lab/out/ci-verification.json
+          cargo run -p rad-vm --bin rad -- projects/dogfood/collatz-lab/natural_tail.rad --experimental-laws --record projects/dogfood/collatz-lab/out/ci-natural-tail.radr
+          target/debug/rad replay projects/dogfood/collatz-lab/out/ci-natural-tail.radr
+          python3 projects/dogfood/collatz-lab/verify_natural_tail.py projects/dogfood/collatz-lab/out/natural-tail-certificate.json --report projects/dogfood/collatz-lab/out/ci-natural-tail-verification.json
+          cargo run -p rad-vm --bin rad -- projects/dogfood/collatz-lab/support_pressure.rad --experimental-laws --record projects/dogfood/collatz-lab/out/ci-support-pressure.radr -- projects/dogfood/collatz-lab/out/support-pressure-certificate.json 7
+          target/debug/rad replay projects/dogfood/collatz-lab/out/ci-support-pressure.radr
+          python3 projects/dogfood/collatz-lab/verify_support_pressure.py projects/dogfood/collatz-lab/out/support-pressure-certificate.json --report projects/dogfood/collatz-lab/out/ci-support-pressure-verification.json
+          cargo run -p rad-vm --bin rad -- projects/dogfood/collatz-lab/frontier_probe.rad --experimental-laws --record projects/dogfood/collatz-lab/out/ci-frontier.radr -- 1024 14 64 > projects/dogfood/collatz-lab/out/ci-frontier.json
+          python3 projects/dogfood/collatz-lab/verify_frontier.py projects/dogfood/collatz-lab/out/ci-frontier.json --output projects/dogfood/collatz-lab/out/ci-frontier-verification.json
+          target/debug/rad replay projects/dogfood/collatz-lab/out/ci-frontier.radr
 
   ordinary-snapshots:
     runs-on: ubuntu-latest

@@ -1,0 +1,9 @@
+{
+  "counterexample_exists": false,
+  "elapsed_seconds": 300.0459620000329,
+  "generator_count": 6,
+  "result": "unknown",
+  "schema": "rad.boolean-lattice.generator-quotient-proof.v1",
+  "solver": "z3-smt",
+  "width": 13
+}

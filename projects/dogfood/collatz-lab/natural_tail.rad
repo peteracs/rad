@@ -1,0 +1,466 @@
+// Natural-tail analysis for affine residue survivors.
+//
+// A positive integer has finitely many nonzero input bits.  This laboratory
+// asks what happens when every dangerous residue prefix is continued with
+// that finite-input boundary condition.  The extension performs only the
+// parameterized bulk arithmetic; RAD owns speculation, audit, settlement,
+// constraints, causal explanation, output, and replay.
+
+use "collatz_lib.rad"
+use "../native-math-kernels/math_kernels.rad"
+
+let VERIFIED_POWER = 71
+let LANE_COUNT = 8
+let MAX_STEPS = 512
+let OUTPUT_PATH = "projects/dogfood/collatz-lab/out/natural-tail-certificate.json"
+
+resource NaturalTailUniverse {
+    lane_index: int = 0
+    lane_count: int = 1
+    depth: int = 0
+    survivor_classes: int = 0
+    coefficient_stops: int = 0
+    descents: int = 0
+    unresolved: int = 0
+    max_coefficient_stop_step: int = 0
+    max_coefficient_stop_residue: int = 0
+    max_descent_step: int = 0
+    max_descent_residue: int = 0
+    max_additive_delay: int = 0
+    max_additive_delay_residue: int = 0
+    max_peak: int = 0
+    max_peak_residue: int = 0
+    coefficient_stop_histogram: list = []
+    descent_histogram: list = []
+    signature: int = 0
+    audited: bool = false
+}
+
+pure fn tail_universe(stats: map<str, any>) -> NaturalTailUniverse {
+    return NaturalTailUniverse {
+        lane_index: stats["lane_index"],
+        lane_count: stats["lane_count"],
+        depth: stats["depth"],
+        survivor_classes: stats["survivor_classes"],
+        coefficient_stops: stats["coefficient_stops"],
+        descents: stats["descents"],
+        unresolved: stats["unresolved"],
+        max_coefficient_stop_step: stats["max_coefficient_stop_step"],
+        max_coefficient_stop_residue: stats["max_coefficient_stop_residue"],
+        max_descent_step: stats["max_descent_step"],
+        max_descent_residue: stats["max_descent_residue"],
+        max_additive_delay: stats["max_additive_delay"],
+        max_additive_delay_residue: stats["max_additive_delay_residue"],
+        max_peak: int(stats["max_peak"]),
+        max_peak_residue: stats["max_peak_residue"],
+        coefficient_stop_histogram: stats["coefficient_stop_histogram"],
+        descent_histogram: stats["descent_histogram"],
+        signature: stats["signature"],
+        audited: false,
+    }
+}
+
+system AuditNaturalTailUniverse(universe: mut NaturalTailUniverse) {
+    assert(universe.lane_count == LANE_COUNT, "natural-tail lane count mismatch")
+    assert(universe.lane_index >= 0 and universe.lane_index < LANE_COUNT, "natural-tail lane index out of range")
+    assert(universe.coefficient_stops <= universe.survivor_classes, "too many coefficient stops")
+    assert(universe.descents + universe.unresolved == universe.survivor_classes, "natural-tail lane partition mismatch")
+    assert(universe.coefficient_stops >= universe.descents, "descent preceded coefficient contraction")
+    assert(sum_ints(universe.coefficient_stop_histogram) == universe.coefficient_stops, "coefficient histogram mismatch")
+    assert(sum_ints(universe.descent_histogram) == universe.descents, "descent histogram mismatch")
+    universe.audited = true
+}
+
+component NaturalTailEvidence {
+    depth: int = 0
+    lane_count: int = 0
+    lane_indices: list = []
+    survivor_classes: int = 0
+    coefficient_stops: int = 0
+    descents: int = 0
+    unresolved: int = 0
+    max_coefficient_stop_step: int = 0
+    max_coefficient_stop_residue: int = 0
+    max_descent_step: int = 0
+    max_descent_residue: int = 0
+    max_additive_delay: int = 0
+    max_additive_delay_residue: int = 0
+    max_peak: int = 0
+    max_peak_residue: int = 0
+    coefficient_stop_histogram: list = []
+    descent_histogram: list = []
+    lane_signatures: list = []
+    terminal_noncontracting_words: int = 0
+    prefix_noncontracting_words: int = 0
+}
+
+intent NaturalTailFinding {
+    key target: entity
+    kind: str
+    lane_index: int
+    depth: int
+    survivor_classes: int
+    coefficient_stops: int
+    descents: int
+    unresolved: int
+    max_coefficient_stop_step: int
+    max_coefficient_stop_residue: int
+    max_descent_step: int
+    max_descent_residue: int
+    max_additive_delay: int
+    max_additive_delay_residue: int
+    max_peak: int
+    max_peak_residue: int
+    coefficient_stop_histogram: list
+    descent_histogram: list
+    signature: int
+    terminal_noncontracting_words: int
+    prefix_noncontracting_words: int
+}
+
+law SubmitNaturalTailLane(target: entity, lane: NaturalTailUniverse) {
+    propose NaturalTailFinding {
+        target: target,
+        kind: "lane",
+        lane_index: lane.lane_index,
+        depth: lane.depth,
+        survivor_classes: lane.survivor_classes,
+        coefficient_stops: lane.coefficient_stops,
+        descents: lane.descents,
+        unresolved: lane.unresolved,
+        max_coefficient_stop_step: lane.max_coefficient_stop_step,
+        max_coefficient_stop_residue: lane.max_coefficient_stop_residue,
+        max_descent_step: lane.max_descent_step,
+        max_descent_residue: lane.max_descent_residue,
+        max_additive_delay: lane.max_additive_delay,
+        max_additive_delay_residue: lane.max_additive_delay_residue,
+        max_peak: lane.max_peak,
+        max_peak_residue: lane.max_peak_residue,
+        coefficient_stop_histogram: lane.coefficient_stop_histogram,
+        descent_histogram: lane.descent_histogram,
+        signature: lane.signature,
+        terminal_noncontracting_words: 0,
+        prefix_noncontracting_words: 0,
+    }
+}
+
+law SubmitCriticalPathCount(target: entity, depth: int, profile: map<str, int>) {
+    propose NaturalTailFinding {
+        target: target,
+        kind: "critical-paths",
+        lane_index: -1,
+        depth: depth,
+        survivor_classes: 0,
+        coefficient_stops: 0,
+        descents: 0,
+        unresolved: 0,
+        max_coefficient_stop_step: 0,
+        max_coefficient_stop_residue: 0,
+        max_descent_step: 0,
+        max_descent_residue: 0,
+        max_additive_delay: 0,
+        max_additive_delay_residue: 0,
+        max_peak: 0,
+        max_peak_residue: 0,
+        coefficient_stop_histogram: [],
+        descent_histogram: [],
+        signature: 0,
+        terminal_noncontracting_words: profile["terminal_noncontracting_words"],
+        prefix_noncontracting_words: profile["prefix_noncontracting_words"],
+    }
+}
+
+resolver ResolveNaturalTail for NaturalTailFinding(target, proposals) {
+    let mut depth = 0
+    let mut lane_indices = []
+    let mut survivor_classes = 0
+    let mut coefficient_stops = 0
+    let mut descents = 0
+    let mut unresolved = 0
+    let mut max_coefficient_stop_step = 0
+    let mut max_coefficient_stop_residue = 0
+    let mut max_descent_step = 0
+    let mut max_descent_residue = 0
+    let mut max_additive_delay = 0
+    let mut max_additive_delay_residue = 0
+    let mut max_peak = 0
+    let mut max_peak_residue = 0
+    let mut coefficient_stop_histogram = zeros(MAX_STEPS + 1)
+    let mut descent_histogram = zeros(MAX_STEPS + 1)
+    let mut lane_signatures = []
+    let mut terminal_noncontracting_words = 0
+    let mut prefix_noncontracting_words = 0
+
+    for proposal in proposals {
+        depth = proposal.depth
+        if proposal.kind == "lane" {
+            lane_indices = push(lane_indices, proposal.lane_index)
+            survivor_classes = survivor_classes + proposal.survivor_classes
+            coefficient_stops = coefficient_stops + proposal.coefficient_stops
+            descents = descents + proposal.descents
+            unresolved = unresolved + proposal.unresolved
+            if proposal.max_coefficient_stop_step > max_coefficient_stop_step
+            or (proposal.max_coefficient_stop_step == max_coefficient_stop_step
+                and proposal.max_coefficient_stop_residue < max_coefficient_stop_residue) {
+                max_coefficient_stop_step = proposal.max_coefficient_stop_step
+                max_coefficient_stop_residue = proposal.max_coefficient_stop_residue
+            }
+            if proposal.max_descent_step > max_descent_step
+            or (proposal.max_descent_step == max_descent_step
+                and proposal.max_descent_residue < max_descent_residue) {
+                max_descent_step = proposal.max_descent_step
+                max_descent_residue = proposal.max_descent_residue
+            }
+            if proposal.max_additive_delay > max_additive_delay
+            or (proposal.max_additive_delay == max_additive_delay
+                and proposal.max_additive_delay_residue < max_additive_delay_residue) {
+                max_additive_delay = proposal.max_additive_delay
+                max_additive_delay_residue = proposal.max_additive_delay_residue
+            }
+            if proposal.max_peak > max_peak
+            or (proposal.max_peak == max_peak and proposal.max_peak_residue < max_peak_residue) {
+                max_peak = proposal.max_peak
+                max_peak_residue = proposal.max_peak_residue
+            }
+            coefficient_stop_histogram = add_vectors(
+                coefficient_stop_histogram,
+                proposal.coefficient_stop_histogram,
+            )
+            descent_histogram = add_vectors(descent_histogram, proposal.descent_histogram)
+            lane_signatures = push(lane_signatures, proposal.signature)
+        } else {
+            terminal_noncontracting_words = proposal.terminal_noncontracting_words
+            prefix_noncontracting_words = proposal.prefix_noncontracting_words
+        }
+    }
+
+    next(target, NaturalTailEvidence {
+        depth: depth,
+        lane_count: len(lane_indices),
+        lane_indices: sort(lane_indices),
+        survivor_classes: survivor_classes,
+        coefficient_stops: coefficient_stops,
+        descents: descents,
+        unresolved: unresolved,
+        max_coefficient_stop_step: max_coefficient_stop_step,
+        max_coefficient_stop_residue: max_coefficient_stop_residue,
+        max_descent_step: max_descent_step,
+        max_descent_residue: max_descent_residue,
+        max_additive_delay: max_additive_delay,
+        max_additive_delay_residue: max_additive_delay_residue,
+        max_peak: max_peak,
+        max_peak_residue: max_peak_residue,
+        coefficient_stop_histogram: coefficient_stop_histogram,
+        descent_histogram: descent_histogram,
+        lane_signatures: sort(lane_signatures),
+        terminal_noncontracting_words: terminal_noncontracting_words,
+        prefix_noncontracting_words: prefix_noncontracting_words,
+    })
+}
+
+constraint ExactNaturalTailBoundary for NaturalTailEvidence(subject, proposed) {
+    require proposed.lane_count == LANE_COUNT else "collatz.tail_lane_count"
+    require proposed.lane_indices == range(LANE_COUNT) else "collatz.tail_lane_partition"
+    require proposed.coefficient_stops == proposed.survivor_classes
+    else "collatz.tail_coefficient_unresolved"
+    require proposed.descents == proposed.survivor_classes
+    else "collatz.tail_descent_unresolved"
+    require proposed.unresolved == 0 else "collatz.tail_horizon_too_short"
+    require sum_ints(proposed.coefficient_stop_histogram) == proposed.coefficient_stops
+    else "collatz.tail_coefficient_histogram"
+    require sum_ints(proposed.descent_histogram) == proposed.descents
+    else "collatz.tail_descent_histogram"
+    require proposed.coefficient_stop_histogram == proposed.descent_histogram
+    else "collatz.tail_additive_delay_detected"
+    require proposed.max_additive_delay == 0 else "collatz.tail_nonzero_additive_delay"
+    require proposed.max_coefficient_stop_step == proposed.max_descent_step
+    else "collatz.tail_record_steps_disagree"
+    require proposed.max_coefficient_stop_residue == proposed.max_descent_residue
+    else "collatz.tail_record_residues_disagree"
+    require len(proposed.lane_signatures) == LANE_COUNT else "collatz.tail_signature_count"
+    require proposed.prefix_noncontracting_words == proposed.survivor_classes
+    else "collatz.tail_meander_survivor_mismatch"
+    require proposed.terminal_noncontracting_words >= proposed.prefix_noncontracting_words
+    else "collatz.tail_terminal_word_partition"
+}
+
+entity depth_8 { NaturalTailEvidence {} }
+
+entity depth_12 { NaturalTailEvidence {} }
+
+entity depth_16 { NaturalTailEvidence {} }
+
+entity depth_20 { NaturalTailEvidence {} }
+
+entity depth_24 { NaturalTailEvidence {} }
+
+entity depth_26 { NaturalTailEvidence {} }
+
+entity depth_28 { NaturalTailEvidence {} }
+
+entity depth_28_reversed { NaturalTailEvidence {} }
+
+event NaturalTailBatchReady {
+    target: entity
+    lanes: list
+    reverse_order: bool
+}
+
+on NaturalTailBatchReady(evt) {
+    settle {
+        let profile = critical_path_profile(evt.lanes[0].depth)
+        if evt.reverse_order {
+            SubmitCriticalPathCount(evt.target, evt.lanes[0].depth, profile)
+            for index in range(len(evt.lanes)) {
+                SubmitNaturalTailLane(evt.target, evt.lanes[len(evt.lanes) - index - 1])
+            }
+        } else {
+            for lane in evt.lanes {
+                SubmitNaturalTailLane(evt.target, lane)
+            }
+            SubmitCriticalPathCount(evt.target, evt.lanes[0].depth, profile)
+        }
+    }
+}
+
+event NaturalTailStudyCompleted {
+    survivors: int
+    max_descent_step: int
+    record_residue: int
+}
+
+resource NaturalTailJournal { summary: str = "not-run" }
+
+on NaturalTailStudyCompleted(evt) {
+    set_resource(NaturalTailJournal, NaturalTailJournal {
+        summary: f"{evt.survivors} finite survivor shadows all descend; record {evt.record_residue} at step {evt.max_descent_step}"
+    })
+}
+
+fn audit_lanes(raw_profiles: list) -> list {
+    let live_before = world_digest()
+    let root = fork()
+    let mut candidates = []
+    for profile in raw_profiles {
+        candidates = push(candidates, fork_with(root, tail_universe(profile)))
+    }
+    let futures = simulate_many(candidates, [system::AuditNaturalTailUniverse], 1, 1937)
+    assert(world_digest() == live_before, "natural-tail speculation mutated the live world")
+    let mut lanes = []
+    for future in futures {
+        let lane = peek_resource(future, NaturalTailUniverse) |> unwrap
+        assert(lane.audited, "natural-tail speculative audit did not complete")
+        lanes = push(lanes, lane)
+    }
+    return lanes
+}
+
+pure fn evidence_summary(evidence: NaturalTailEvidence) -> map<str, any> {
+    let summary: map<str, any> = {
+        "depth": evidence.depth,
+        "survivor_classes": evidence.survivor_classes,
+        "coefficient_stops": evidence.coefficient_stops,
+        "descents": evidence.descents,
+        "unresolved": evidence.unresolved,
+        "max_coefficient_stop_step": evidence.max_coefficient_stop_step,
+        "max_coefficient_stop_residue": evidence.max_coefficient_stop_residue,
+        "max_descent_step": evidence.max_descent_step,
+        "max_descent_residue": evidence.max_descent_residue,
+        "max_additive_delay": evidence.max_additive_delay,
+        "max_peak": evidence.max_peak,
+        "max_peak_residue": evidence.max_peak_residue,
+        "coefficient_stop_histogram": evidence.coefficient_stop_histogram,
+        "descent_histogram": evidence.descent_histogram,
+        "lane_signatures": evidence.lane_signatures,
+        "terminal_noncontracting_words": evidence.terminal_noncontracting_words,
+        "prefix_noncontracting_words": evidence.prefix_noncontracting_words,
+    }
+    return summary
+}
+
+fn main() -> nil {
+    let program_args = sys_args()
+    let output_path = if len(program_args) > 0 { program_args[0] } else { OUTPUT_PATH }
+    let depths = [8, 12, 16, 20, 24, 26, 28]
+    let targets = [depth_8, depth_12, depth_16, depth_20, depth_24, depth_26, depth_28]
+    let mut summaries = []
+    let mut kernel_seconds = 0.0
+
+    for index in range(len(depths)) {
+        let started = clock()
+        let raw_profiles = affine_natural_tail_profiles(
+            3,
+            1,
+            depths[index],
+            VERIFIED_POWER,
+            LANE_COUNT,
+            MAX_STEPS,
+        )
+        kernel_seconds = kernel_seconds + (clock() - started)
+        let lanes = audit_lanes(raw_profiles)
+        emit NaturalTailBatchReady {
+            target: targets[index],
+            lanes: lanes,
+            reverse_order: false,
+        }
+        flush_events()
+
+        if depths[index] == 28 {
+            emit NaturalTailBatchReady {
+                target: depth_28_reversed,
+                lanes: lanes,
+                reverse_order: true,
+            }
+            flush_events()
+        }
+        summaries = push(summaries, evidence_summary(require(targets[index], NaturalTailEvidence)))
+    }
+
+    let evidence = require(depth_28, NaturalTailEvidence)
+    let reversed = require(depth_28_reversed, NaturalTailEvidence)
+    assert(evidence == reversed, "natural-tail proposal order changed the result")
+    let descent_record = first_descent(evidence.max_descent_residue, MAX_STEPS)
+    assert(descent_record[0] == evidence.max_descent_step, "RAD record trace disagrees with affine kernel")
+    let critical_shadow = greedy_critical_shadow(61)
+    let critical_escape = first_descent(critical_shadow["residue"], 10000)
+    let critical_escape_record = [critical_escape[0], critical_escape[1], critical_escape[2], critical_escape[3]]
+    assert(critical_escape[0] > critical_shadow["depth"], "critical shadow descended inside its certified prefix")
+    assert(critical_shadow["next_forced_input_bit"] == 1, "critical inverse path unexpectedly stabilized")
+    emit NaturalTailStudyCompleted {
+        survivors: evidence.survivor_classes,
+        max_descent_step: evidence.max_descent_step,
+        record_residue: evidence.max_descent_residue,
+    }
+    flush_events()
+
+    let certificate: map<str, any> = {
+        "schema": "rad.affine-natural-tail-certificate.v1",
+        "map": "T(n)=n/2 if even, (3n+1)/2 if odd",
+        "verified_convergence_floor": "2^71",
+        "lane_count": LANE_COUNT,
+        "max_steps": MAX_STEPS,
+        "zero_high_input_bits": true,
+        "scales": summaries,
+        "proposal_order_independent": evidence == reversed,
+        "speculative_worlds_left_live_state_unchanged": true,
+        "deepest_record_terminal": descent_record[1],
+        "deepest_record_odd_steps": descent_record[3],
+        "greedy_critical_shadow": critical_shadow,
+        "greedy_shadow_first_descent": critical_escape_record,
+        "evidence_why": why(depth_28, NaturalTailEvidence),
+        "journal_why": why_resource(NaturalTailJournal),
+    }
+    create_dir("projects/dogfood/collatz-lab/out")
+    write_file(output_path, json_stringify(certificate))
+
+    print("Collatz natural-tail boundary laboratory")
+    for summary in summaries {
+        print(f"depth={summary[\"depth\"]} survivors={summary[\"survivor_classes\"]} max-descent={summary[\"max_descent_step\"]} record={summary[\"max_descent_residue\"]} max-peak={summary[\"max_peak\"]}")
+    }
+    print(f"depth-28 coefficient/descent histograms equal={evidence.coefficient_stop_histogram == evidence.descent_histogram}")
+    print(f"greedy 2-adic boundary shadow depth={critical_shadow[\"depth\"]} residue={critical_shadow[\"residue\"]} last-one-bit={critical_shadow[\"last_nonzero_input_bit\"]} next-forced-bit={critical_shadow[\"next_forced_input_bit\"]} finite descent={critical_escape[0]}")
+    print(f"kernel time across seven exact scales={kernel_seconds}s")
+    print(why(depth_28, NaturalTailEvidence))
+    print(why_resource(NaturalTailJournal))
+    print(f"certificate={output_path}")
+}

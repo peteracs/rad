@@ -173,29 +173,22 @@ print(save_world())
 // mutation
 // ---------------------------------------------------------------------------
 
-/// Split a legacy payload into (tag, body) so the body can be mutated and
+/// Split a plain current payload into (tag, body) so the body can be mutated and
 /// re-sealed with a CORRECT digest — mutants then reach the layers behind
 /// the integrity check.
 fn split_payload(payload: &str) -> Option<(String, String)> {
-    // RADWORLD3 (like RADFORK2/RADDELTA1) carries the digest between tag and
-    // body; RADWORLD2 is the digest-less legacy form.
     for tag in ["RADFORK2", "RADDELTA1", "RADWORLD3"] {
         if let Some(rest) = payload.strip_prefix(&format!("{} ", tag)) {
             let (_digest, body) = rest.split_once(' ')?;
             return Some((tag.to_string(), body.to_string()));
         }
     }
-    payload
-        .strip_prefix("RADWORLD2 ")
-        .map(|body| ("RADWORLD2".to_string(), body.to_string()))
+    None
 }
 
 fn reseal(tag: &str, body: &str) -> String {
     let digest = blake3::hash(body.as_bytes()).to_hex();
-    match tag {
-        "RADWORLD2" => format!("{} {}", tag, body),
-        _ => format!("{} {} {}", tag, digest.as_str(), body),
-    }
+    format!("{} {} {}", tag, digest.as_str(), body)
 }
 
 const NUMBER_BOMBS: &[&str] = &[
@@ -367,10 +360,7 @@ fn make_mutant(rng: &mut Rng, payload: &str) -> String {
         // pack the mutated body: exercises envelope + parser together
         5 => crate::radpack::seal(&tag, &mutated),
         // stale digest: exercises the rejection path
-        6..=7 => match tag.as_str() {
-            "RADWORLD2" => format!("{} {}", tag, mutated),
-            _ => format!("{} {} {}", tag, "0".repeat(64), mutated),
-        },
+        6..=7 => format!("{} {} {}", tag, "0".repeat(64), mutated),
         // mutate the whole envelope (headers, digest field, everything)
         _ => mutate_once(rng, payload),
     }
@@ -438,6 +428,44 @@ fn fork_apply_unicode_base_digest_is_an_error_not_a_panic() {
     assert_eq!(result.variant, "Err");
     let message = format!("{}", result.fields["message"]);
     assert!(message.contains("different base"), "got: {message}");
+}
+
+#[test]
+fn fork_apply_requires_every_current_identity_field() {
+    let corpus = grow_corpus(0x5eed_cafe);
+    let (tag, body) = split_payload(&corpus.delta).expect("generated delta payload");
+    assert_eq!(tag, "RADDELTA1");
+
+    for (field, expected) in [
+        ("sdig", "missing schema digest"),
+        ("bdig", "missing base digest"),
+    ] {
+        let mut body: serde_json::Value =
+            serde_json::from_str(&body).expect("generated delta JSON");
+        body.as_object_mut()
+            .expect("delta body is an object")
+            .remove(field);
+        let mutant = reseal(
+            &tag,
+            &serde_json::to_string(&body).expect("mutated delta JSON"),
+        );
+
+        let decoder = format!("{}\nlet _ready = 1", DECLS);
+        let mut vm = fresh_vm(&decoder);
+        let base_bytes = Value::from_string(vm.gc_mut(), corpus.base_bytes.clone());
+        let base = vm
+            .call_builtin(Builtin::ForkFromBytes, vec![base_bytes])
+            .expect("fork_from_bytes returns a Result");
+        let base = unwrap_ok(&base);
+        let mutant = Value::from_string(vm.gc_mut(), mutant);
+        let result = vm
+            .call_builtin(Builtin::ForkApply, vec![base, mutant])
+            .expect("fork_apply returns a Result");
+        let result = result.as_sum_type().expect("fork_apply Result");
+        assert_eq!(result.variant, "Err");
+        let message = format!("{}", result.fields["message"]);
+        assert!(message.contains(expected), "got: {message}");
+    }
 }
 
 #[test]
@@ -687,7 +715,7 @@ fn fuzz_adversarial_semantic_payloads() {
     };
     let body = |entities: String, free_ids: &str, next_id: &str| {
         format!(
-            r#"{{"entities":[{entities}],"events":[],"free_ids":{free_ids},"next_id":{next_id},"resources":[],"schema":{schema},"prov":[]}}"#
+            r#"{{"entities":[{entities}],"events":[],"entity_allocator":[{next_id},false,{free_ids},[]],"relations":null,"resources":[],"schema":{schema},"prov":[]}}"#
         )
     };
 
@@ -703,13 +731,13 @@ fn fuzz_adversarial_semantic_payloads() {
         ("name_collision", body(format!("{},{}", row("0", "\"x\""), row("1", "\"x\"")), "[]", "2")),
         ("nul_in_name", body(row("0", "\"a\\u0000b\""), "[]", "1")),
         ("free_ids_flood", body(row("0", "\"a\""), &format!("[{}]", (1..5000).map(|i| i.to_string()).collect::<Vec<_>>().join(",")), "1")),
-        ("arity_short", format!(r#"{{"entities":[[0,"a",[["Alpha",[1]]]]],"events":[],"free_ids":[],"next_id":1,"resources":[],"schema":{schema},"prov":[]}}"#)),
-        ("arity_long", format!(r#"{{"entities":[[0,"a",[["Alpha",[1,0.5,"s",true,9,9,9]]]]],"events":[],"free_ids":[],"next_id":1,"resources":[],"schema":{schema},"prov":[]}}"#)),
-        ("unknown_component", format!(r#"{{"entities":[[0,"a",[["Phantom",[1]]]]],"events":[],"free_ids":[],"next_id":1,"resources":[],"schema":{schema},"prov":[]}}"#)),
-        ("event_ghost_entity", format!(r#"{{"entities":[],"events":[["Ping",[999999,1]]],"free_ids":[],"next_id":0,"resources":[],"schema":{schema},"prov":[]}}"#)),
-        ("resource_arity", format!(r#"{{"entities":[],"events":[],"free_ids":[],"next_id":0,"resources":[["Counter",[1]]],"schema":{schema},"prov":[]}}"#)),
-        ("schema_not_array", r#"{"entities":[],"events":[],"free_ids":[],"next_id":0,"resources":[],"schema":42,"prov":[]}"#.to_string()),
-        ("everything_null", r#"{"entities":null,"events":null,"free_ids":null,"next_id":null,"resources":null,"schema":null,"prov":null}"#.to_string()),
+        ("arity_short", format!(r#"{{"entities":[[0,"a",[["Alpha",[1]]]]],"events":[],"entity_allocator":[1,false,[],[]],"relations":null,"resources":[],"schema":{schema},"prov":[]}}"#)),
+        ("arity_long", format!(r#"{{"entities":[[0,"a",[["Alpha",[1,0.5,"s",true,9,9,9]]]]],"events":[],"entity_allocator":[1,false,[],[]],"relations":null,"resources":[],"schema":{schema},"prov":[]}}"#)),
+        ("unknown_component", format!(r#"{{"entities":[[0,"a",[["Phantom",[1]]]]],"events":[],"entity_allocator":[1,false,[],[]],"relations":null,"resources":[],"schema":{schema},"prov":[]}}"#)),
+        ("event_ghost_entity", format!(r#"{{"entities":[],"events":[["Ping",[999999,1]]],"entity_allocator":[0,false,[],[]],"relations":null,"resources":[],"schema":{schema},"prov":[]}}"#)),
+        ("resource_arity", format!(r#"{{"entities":[],"events":[],"entity_allocator":[0,false,[],[]],"relations":null,"resources":[["Counter",[1]]],"schema":{schema},"prov":[]}}"#)),
+        ("schema_not_array", r#"{"entities":[],"events":[],"entity_allocator":[0,false,[],[]],"relations":null,"resources":[],"schema":42,"prov":[]}"#.to_string()),
+        ("everything_null", r#"{"entities":null,"events":null,"entity_allocator":null,"relations":null,"resources":null,"schema":null,"prov":null}"#.to_string()),
     ];
 
     let decoder = format!("{}\nlet _ready = 1", DECLS);
@@ -718,7 +746,7 @@ fn fuzz_adversarial_semantic_payloads() {
     let mut accepted = 0usize;
 
     for (label, raw_body) in &poisons {
-        for sealed in [reseal("RADFORK2", raw_body), reseal("RADWORLD2", raw_body)] {
+        for sealed in [reseal("RADFORK2", raw_body), reseal("RADWORLD3", raw_body)] {
             let is_fork = sealed.starts_with("RADFORK2");
             let target: &str = if is_fork {
                 "fork_from_bytes"

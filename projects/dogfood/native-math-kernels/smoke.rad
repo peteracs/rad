@@ -13,3 +13,34 @@ for profile in profiles {
 }
 assert(classes == 256, "lane partition mismatch")
 print("native math extension smoke: ok")
+
+let tail_batch: pure fn(int, int, int, int, int, int) -> str = kernels["affine_natural_tail_profiles_json"]
+let tails = json_parse(tail_batch(3, 1, 8, 12, 4, 256)) |> unwrap
+assert(len(tails) == 4, "affine natural-tail kernel returned every canonical lane")
+assert(len(tails) > 0, "natural-tail kernel returned no JSON")
+
+let rotation_representatives: pure fn(int) -> str = kernels["bitmask_rotation_representatives_json"]
+let rotation_orbit: pure fn(int, int) -> str = kernels["bitmask_rotation_orbit_json"]
+let necklaces = json_parse(rotation_representatives(13)) |> unwrap
+let singleton_orbit = json_parse(rotation_orbit(1, 13)) |> unwrap
+assert(len(necklaces) == 632, "width-13 rotation partition count mismatch")
+assert(len(singleton_orbit) == 13, "singleton rotation orbit must cover every coordinate")
+
+let quotient_scan: pure fn(int, int, int, int, int) -> str = kernels["column_quotient_scan_json"]
+let quotient_profile: pure fn(str, int) -> str = kernels["column_quotient_profile_json"]
+let quotient_profiles: pure fn(str, int) -> str = kernels["column_quotient_profiles_json"]
+let quotient_mutation_lane: pure fn(str, int, int, int, int, int, int) -> str = kernels["column_quotient_mutation_lane_json"]
+let quotient_range_scan: pure fn(int, int, int, int, int, int) -> str = kernels["column_quotient_range_scan_json"]
+let quotient = json_parse(quotient_scan(3, 3, 2, 2, 8)) |> unwrap
+assert(quotient["pattern_count"] == 6, "column quotient pattern count mismatch")
+assert(quotient["labelled_configurations"] == 20, "column quotient labelled count mismatch")
+assert(len(quotient["counterexample_columns"]) == 0, "small column quotient scan found a false counterexample")
+let quotient_profile_result = json_parse(quotient_profile("[1,2,4]", 3)) |> unwrap
+assert(quotient_profile_result["size"] == 8, "column quotient profile size mismatch")
+let quotient_profile_results = json_parse(quotient_profiles("[[1,2],[1,2,4]]", 3)) |> unwrap
+assert(quotient_profile_results[0]["size"] == 4, "batched quotient profile first size mismatch")
+assert(quotient_profile_results[1]["size"] == 8, "batched quotient profile second size mismatch")
+let quotient_lane = json_parse(quotient_mutation_lane("[1,2,4]", 3, 2, 16, 1979, 2, 8)) |> unwrap
+assert(quotient_lane["evaluated"] == 16, "column quotient mutation lane mismatch")
+let quotient_range = json_parse(quotient_range_scan(3, 2, 3, 2, 2, 8)) |> unwrap
+assert(quotient_range["labelled_configurations"] == 35, "column quotient range scan mismatch")
