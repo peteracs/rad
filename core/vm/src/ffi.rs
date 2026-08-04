@@ -51,6 +51,24 @@ struct SealedNativeImage {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
+impl SealedNativeImage {
+    fn loader_path(&self) -> PathBuf {
+        #[cfg(target_os = "linux")]
+        {
+            use std::os::fd::AsRawFd;
+            // Linux's loader follows this descriptor to the already-open
+            // inode. A later rename or replacement of the cache path cannot
+            // change which bytes are mapped.
+            return PathBuf::from(format!("/proc/self/fd/{}", self.file.as_raw_fd()));
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            self.path.clone()
+        }
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 static SEALED_IMAGE_NONCE: AtomicU64 = AtomicU64::new(0);
 
 pub const RAD_EXTENSION_ABI_VERSION: u32 = 1;
@@ -395,10 +413,11 @@ pub fn load_plugin(
         };
         let resolved: PathBuf = platform_path.unwrap_or_else(|| requested.to_path_buf());
         let sealed = seal_native_library(&resolved)?;
-        let lib = libloading::Library::new(&sealed.path).map_err(|error| {
+        let loader_path = sealed.loader_path();
+        let lib = libloading::Library::new(&loader_path).map_err(|error| {
             format!(
                 "Failed to load sealed plugin '{}': {}",
-                sealed.path.display(),
+                loader_path.display(),
                 error
             )
         })?;
@@ -611,6 +630,10 @@ mod tests {
         std::fs::write(&source, b"replacement image").expect("replace source path");
         assert_eq!(
             std::fs::read(&sealed.path).expect("read sealed image"),
+            original
+        );
+        assert_eq!(
+            std::fs::read(sealed.loader_path()).expect("read loader image"),
             original
         );
         assert_eq!(sealed.bytes, original);
