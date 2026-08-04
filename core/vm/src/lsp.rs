@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::path::Path;
 #[cfg(all(feature = "native-wasm-phase3", not(target_arch = "wasm32")))]
 use std::path::PathBuf;
 #[cfg(all(feature = "native-wasm-phase3", not(target_arch = "wasm32")))]
@@ -17,6 +18,7 @@ use crate::types::SystemType;
 pub struct LspBackend {
     pub client: Client,
     pub documents: RwLock<HashMap<Url, String>>,
+    pub experimental_relations: bool,
 }
 
 impl LspBackend {
@@ -26,6 +28,37 @@ impl LspBackend {
         } else {
             return;
         };
+
+        if self.experimental_relations && is_relation_document(&text) {
+            let options = relation_options(&path, &text);
+            let diagnostics = match crate::relation_frontend::compile(&text, &options) {
+                Ok(_) => Vec::new(),
+                Err(errors) => errors
+                    .into_iter()
+                    .map(|error| Diagnostic {
+                        range: Range::new(
+                            Position::new(
+                                error.line.saturating_sub(1),
+                                error.column.saturating_sub(1),
+                            ),
+                            Position::new(
+                                error.line.saturating_sub(1),
+                                error.column.saturating_sub(1).saturating_add(1),
+                            ),
+                        ),
+                        severity: Some(DiagnosticSeverity::ERROR),
+                        code: Some(NumberOrString::String(error.code.as_str().to_string())),
+                        source: Some("rad(relations)".to_string()),
+                        message: error.message,
+                        ..Default::default()
+                    })
+                    .collect(),
+            };
+            self.client
+                .publish_diagnostics(uri, diagnostics, None)
+                .await;
+            return;
+        }
 
         #[cfg(all(feature = "native-wasm-phase3", not(target_arch = "wasm32")))]
         {
@@ -191,6 +224,7 @@ impl LanguageServer for LspBackend {
                 hover_provider: Some(HoverProviderCapability::Simple(true)),
                 definition_provider: Some(OneOf::Left(true)),
                 document_formatting_provider: Some(OneOf::Left(true)),
+                document_symbol_provider: Some(OneOf::Left(true)),
                 ..Default::default()
             },
             ..Default::default()
@@ -266,7 +300,21 @@ impl LanguageServer for LspBackend {
             return Ok(None);
         };
 
-        let formatted = crate::formatter::format_rad(&text);
+        let formatted = if self.experimental_relations && is_relation_document(&text) {
+            let path = uri.to_file_path().ok();
+            let options = path
+                .as_deref()
+                .map(|path| relation_options(path, &text))
+                .unwrap_or_else(relation_default_options);
+            match crate::relation_frontend::format_source(&text, &options) {
+                Ok(formatted) => relation_module_directive(&text)
+                    .map(|module| format!("// module: {module}\n{formatted}"))
+                    .unwrap_or(formatted),
+                Err(_) => return Ok(None),
+            }
+        } else {
+            crate::formatter::format_rad(&text)
+        };
         if formatted == text {
             return Ok(Some(vec![]));
         }
@@ -275,6 +323,57 @@ impl LanguageServer for LspBackend {
             range: Range::new(Position::new(0, 0), document_end_position(&text)),
             new_text: formatted,
         }]))
+    }
+
+    #[allow(deprecated)]
+    async fn document_symbol(
+        &self,
+        params: DocumentSymbolParams,
+    ) -> Result<Option<DocumentSymbolResponse>> {
+        if !self.experimental_relations {
+            return Ok(None);
+        }
+        let uri = params.text_document.uri;
+        let text = {
+            let documents = self.documents.read().await;
+            documents.get(&uri).cloned()
+        };
+        let Some(text) = text else {
+            return Ok(None);
+        };
+        if !is_relation_document(&text) {
+            return Ok(None);
+        }
+        let path = uri.to_file_path().ok();
+        let options = path
+            .as_deref()
+            .map(|path| relation_options(path, &text))
+            .unwrap_or_else(relation_default_options);
+        let Ok(symbols) = crate::relation_frontend::symbols(&text, &options) else {
+            return Ok(Some(DocumentSymbolResponse::Nested(Vec::new())));
+        };
+        let range = Range::new(Position::new(0, 0), document_end_position(&text));
+        Ok(Some(DocumentSymbolResponse::Nested(
+            symbols
+                .into_iter()
+                .map(|symbol| DocumentSymbol {
+                    name: symbol.identity,
+                    detail: Some("RFC-0003 experimental front end".to_string()),
+                    kind: match symbol.kind {
+                        crate::relation_frontend::FrontendSymbolKind::Rule => SymbolKind::FUNCTION,
+                        crate::relation_frontend::FrontendSymbolKind::AuthoritativeRelation
+                        | crate::relation_frontend::FrontendSymbolKind::DerivedRelation => {
+                            SymbolKind::CLASS
+                        }
+                    },
+                    tags: None,
+                    deprecated: None,
+                    range,
+                    selection_range: range,
+                    children: None,
+                })
+                .collect(),
+        )))
     }
 
     async fn hover(&self, params: HoverParams) -> Result<Option<Hover>> {
@@ -1215,6 +1314,58 @@ fn system_path_completion_prefix(line: &str, char_col: usize) -> Option<(Vec<Str
     }
 }
 
+fn is_relation_document(text: &str) -> bool {
+    text.lines().map(str::trim_start).any(|line| {
+        line.starts_with("relation ")
+            || line.starts_with("derive ")
+            || line.starts_with("Insert(")
+            || line.starts_with("Remove(")
+            || line.starts_with("ReplaceBy(")
+    })
+}
+
+fn relation_options(path: &Path, text: &str) -> crate::relation_frontend::FrontendOptions {
+    let module_id = relation_module_directive(text)
+        .map(str::to_string)
+        .unwrap_or_else(|| {
+            let stem = path
+                .file_stem()
+                .and_then(|value| value.to_str())
+                .unwrap_or("facts");
+            let sanitized = stem
+                .chars()
+                .map(|character| {
+                    if character.is_ascii_alphanumeric() || character == '_' {
+                        character
+                    } else {
+                        '_'
+                    }
+                })
+                .collect::<String>();
+            format!("workspace::{sanitized}")
+        });
+    crate::relation_frontend::FrontendOptions {
+        enabled: true,
+        module_id,
+        ..relation_default_options()
+    }
+}
+
+fn relation_module_directive(text: &str) -> Option<&str> {
+    text.lines()
+        .find_map(|line| line.trim().strip_prefix("// module:"))
+        .map(str::trim)
+        .filter(|module| !module.is_empty())
+}
+
+fn relation_default_options() -> crate::relation_frontend::FrontendOptions {
+    crate::relation_frontend::FrontendOptions {
+        enabled: true,
+        module_id: "workspace::facts".to_string(),
+        ..crate::relation_frontend::FrontendOptions::default()
+    }
+}
+
 #[cfg(test)]
 mod lsp_position_tests {
     use super::*;
@@ -1252,5 +1403,14 @@ mod lsp_position_tests {
         assert_eq!(system_ref_path_at(line, idx_b), Some(vec!["B".to_string()]));
         let idx_a = line.chars().position(|c| c == 'A').unwrap();
         assert_eq!(system_ref_path_at(line, idx_a), Some(vec!["A".to_string()]));
+    }
+
+    #[test]
+    fn relation_documents_and_module_directives_are_detected_without_runtime_state() {
+        let source = "// module: game::facts\nrelation Owns(owner: entity, item: entity)\n";
+        assert!(is_relation_document(source));
+        let options = relation_options(Path::new("facts.rad"), source);
+        assert_eq!(options.module_id, "game::facts");
+        assert!(crate::relation_frontend::compile(source, &options).is_ok());
     }
 }

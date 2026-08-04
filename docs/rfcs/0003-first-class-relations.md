@@ -6,7 +6,7 @@
 - **Author:** peteracs
 - **Created:** 2026-08-04
 - **Depends on:** [RFC-0001](0001-causal-settlements.md), [RFC-0002](0002-candidate-constraints.md)
-- **Proposed feature gate:** `--experimental-relations`
+- **Feature gate:** `--experimental-relations`
 
 ## Summary
 
@@ -720,7 +720,8 @@ movement denied
 ## Implementation sequence
 
 1. executable reference fixtures and canonical schema/value encodings;
-2. parser, AST, checker, formatter, LSP, and module identity;
+2. bounded parser, AST, checker, formatter/symbol surfaces, and module identity
+   (**experimental front end implemented; runtime-free**);
 3. authoritative relation store, indexes, and transactional patches;
 4. nonrecursive rule planner and full reference evaluation;
 5. indexed incremental maintenance with differential tests;
@@ -730,7 +731,9 @@ movement denied
 The reference fixtures, candidate-phase placement, canonical row encoding,
 proof and work limits, capability-redaction contract, component conflict
 normalization, and total entity-allocation semantics are reviewed and
-executable. RFC-0003 is therefore **Accepted** before syntax lands. It becomes
+executable. RFC-0003 was therefore **Accepted** before syntax landed. The
+feature-gated front end now seals syntax and typed plans without installing a
+relation runtime. RFC-0003 becomes
 **Implemented experimentally** only after the parser/checker, full-recompute
 runtime, dogfood, and independent indexed differential suite pass.
 

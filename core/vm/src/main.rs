@@ -36,7 +36,14 @@ enum CliCommand {
         preset: String,
         boundaries: HashMap<String, Vec<String>>,
     },
-    Lsp,
+    Lsp {
+        experimental_relations: bool,
+    },
+    RelationsCheck {
+        filepath: String,
+        module_id: String,
+        experimental_relations: bool,
+    },
     Test {
         test_dir: String,
     },
@@ -97,12 +104,26 @@ fn project_entry_from_rad_toml() -> Result<String, String> {
 }
 
 fn usage(program: &str) -> String {
-    let mut output = format!(
-        "Rad v{} — Bytecode Compiler & Virtual Machine\n\nUsage: {} <file.rad> [--no-check] [--compat-v0.5-dx|--no-compat-v0.5-dx] [--experimental-laws] [--deny-warnings] [--warn-compat|--no-warn-compat] [--strict-types] [--write-lock] [--profile-copies] [--serial-schedule] [--record <trace.radr>] [-- <program args>]\n       {} run [run options] [-- <program args>]   (entry from ./rad.toml)\n       {} new <name> [--template <template>]\n       {} snapshot [--update] [--create] [--experimental-laws] [dir]\n       {} play [--port <port>]\n       {} build [--target wasm] <input.rad> <output.wasm>\n       {} sandbox serve [host.rad] [--caps <caps.json>]\n       {} replay <trace.radr> [--to-frame <n>] [--serve] [--with <fixed.rad>] [--force]\n       {} fmt [--check] [file.rad...]\n       {} lint [--preset=strict] [file.rad...]\n       {} test [dir]\n       {} lsp\n       {} --version",
-        env!("CARGO_PKG_VERSION"), program, program, program, program, program, program, program, program, program, program, program, program, program
-    );
-    output.push_str(&format!("\n       {} --help", program));
-    output
+    format!(
+        "Rad v{} — Bytecode Compiler & Virtual Machine
+
+Usage: {program} <file.rad> [--no-check] [--compat-v0.5-dx|--no-compat-v0.5-dx] [--experimental-laws] [--deny-warnings] [--warn-compat|--no-warn-compat] [--strict-types] [--write-lock] [--profile-copies] [--serial-schedule] [--record <trace.radr>] [-- <program args>]
+       {program} run [run options] [-- <program args>]   (entry from ./rad.toml)
+       {program} relations check <file.rad> --experimental-relations [--module <id>]
+       {program} new <name> [--template <template>]
+       {program} snapshot [--update] [--create] [--experimental-laws] [dir]
+       {program} play [--port <port>]
+       {program} build [--target wasm] <input.rad> <output.wasm>
+       {program} sandbox serve [host.rad] [--caps <caps.json>]
+       {program} replay <trace.radr> [--to-frame <n>] [--serve] [--with <fixed.rad>] [--force]
+       {program} fmt [--check] [file.rad...]
+       {program} lint [--preset=strict] [file.rad...]
+       {program} test [dir]
+       {program} lsp [--experimental-relations]
+       {program} --version
+       {program} --help",
+        env!("CARGO_PKG_VERSION")
+    )
 }
 
 fn wants_help(args: &[String]) -> bool {
@@ -183,7 +204,59 @@ fn parse_cli_args(args: &[String]) -> Result<CliCommand, String> {
     }
 
     if args.len() > 1 && args[1] == "lsp" {
-        return Ok(CliCommand::Lsp);
+        let experimental_relations = args[2..]
+            .iter()
+            .any(|argument| argument == "--experimental-relations");
+        if args[2..]
+            .iter()
+            .any(|argument| argument != "--experimental-relations")
+        {
+            return Err(format!("Unknown lsp option\n\n{}", usage(program)));
+        }
+        return Ok(CliCommand::Lsp {
+            experimental_relations,
+        });
+    }
+
+    if args.len() > 1 && args[1] == "relations" {
+        if args.get(2).map(String::as_str) != Some("check") {
+            return Err(format!(
+                "Expected: {} relations check <file.rad> --experimental-relations [--module <id>]\n\n{}",
+                program,
+                usage(program)
+            ));
+        }
+        let mut filepath = None;
+        let mut module_id = "main".to_string();
+        let mut experimental_relations = false;
+        let mut index = 3;
+        while index < args.len() {
+            match args[index].as_str() {
+                "--experimental-relations" => {
+                    experimental_relations = true;
+                    index += 1;
+                }
+                "--module" if index + 1 < args.len() => {
+                    module_id = args[index + 1].clone();
+                    index += 2;
+                }
+                option if option.starts_with('-') => {
+                    return Err(format!("Unknown option for relations check: {option}"));
+                }
+                value if filepath.is_none() => {
+                    filepath = Some(value.to_string());
+                    index += 1;
+                }
+                value => return Err(format!("Unexpected relations check argument: {value}")),
+            }
+        }
+        let filepath =
+            filepath.ok_or_else(|| "relations check requires a .rad file".to_string())?;
+        return Ok(CliCommand::RelationsCheck {
+            filepath,
+            module_id,
+            experimental_relations,
+        });
     }
 
     if args.len() > 1 && args[1] == "new" {
@@ -548,6 +621,50 @@ fn main() {
         return;
     }
 
+    if let CliCommand::RelationsCheck {
+        filepath,
+        module_id,
+        experimental_relations,
+    } = command
+    {
+        let source = match fs::File::open(&filepath) {
+            Ok(source) => source,
+            Err(error) => {
+                eprintln!("Error reading {filepath}: {error}");
+                process::exit(1);
+            }
+        };
+        let options = rad_vm::relation_frontend::FrontendOptions {
+            enabled: experimental_relations,
+            module_id,
+            ..rad_vm::relation_frontend::FrontendOptions::default()
+        };
+        match rad_vm::relation_frontend::compile_reader(source, &options) {
+            Ok(artifacts) => {
+                println!(
+                    "relations: {} schemas, {} rules, manifest {}",
+                    artifacts.relations.schemas().len(),
+                    artifacts.rules.len(),
+                    hex::encode(artifacts.manifest_digest.as_bytes())
+                );
+            }
+            Err(diagnostics) => {
+                for diagnostic in diagnostics {
+                    eprintln!(
+                        "{}:{}:{} [{}] {}",
+                        filepath,
+                        diagnostic.line,
+                        diagnostic.column,
+                        diagnostic.code.as_str(),
+                        diagnostic.message
+                    );
+                }
+                process::exit(1);
+            }
+        }
+        return;
+    }
+
     if let CliCommand::Fmt {
         filepaths,
         check_only,
@@ -788,7 +905,10 @@ fn main() {
     }
 
     #[cfg(not(target_arch = "wasm32"))]
-    if let CliCommand::Lsp = command {
+    if let CliCommand::Lsp {
+        experimental_relations,
+    } = command
+    {
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async {
             let stdin = tokio::io::stdin();
@@ -797,6 +917,7 @@ fn main() {
             let (service, socket) = tower_lsp::LspService::new(|client| rad_vm::lsp::LspBackend {
                 client,
                 documents: tokio::sync::RwLock::new(std::collections::HashMap::new()),
+                experimental_relations,
             });
             tower_lsp::Server::new(stdin, stdout, socket)
                 .serve(service)
@@ -1775,7 +1896,9 @@ mod tests {
             CliCommand::Fmt { .. } => panic!("expected run command"),
             CliCommand::Lint { .. } => panic!("expected run command"),
             CliCommand::Test { .. } => panic!("expected run command"),
-            CliCommand::Lsp => panic!("expected run command"),
+            CliCommand::Lsp { .. } | CliCommand::RelationsCheck { .. } => {
+                panic!("expected run command")
+            }
             CliCommand::Build { .. } => panic!("expected run command"),
             CliCommand::New { .. }
             | CliCommand::Snapshot { .. }
@@ -1803,6 +1926,46 @@ mod tests {
         for args in cases {
             assert_parses_run_with_no_check(args);
         }
+    }
+
+    #[test]
+    fn parse_cli_args_accepts_bounded_relations_check() {
+        let args = vec![
+            "rad".to_string(),
+            "relations".to_string(),
+            "check".to_string(),
+            "facts.rad".to_string(),
+            "--experimental-relations".to_string(),
+            "--module".to_string(),
+            "game::facts".to_string(),
+        ];
+        match parse_cli_args(&args).unwrap() {
+            CliCommand::RelationsCheck {
+                filepath,
+                module_id,
+                experimental_relations,
+            } => {
+                assert_eq!(filepath, "facts.rad");
+                assert_eq!(module_id, "game::facts");
+                assert!(experimental_relations);
+            }
+            _ => panic!("expected relations check command"),
+        }
+    }
+
+    #[test]
+    fn parse_cli_args_feature_gates_relation_lsp_support() {
+        let args = vec![
+            "rad".to_string(),
+            "lsp".to_string(),
+            "--experimental-relations".to_string(),
+        ];
+        assert!(matches!(
+            parse_cli_args(&args).unwrap(),
+            CliCommand::Lsp {
+                experimental_relations: true
+            }
+        ));
     }
 
     #[test]
@@ -1847,7 +2010,9 @@ mod tests {
             CliCommand::Fmt { .. } => panic!("expected run command"),
             CliCommand::Lint { .. } => panic!("expected run command"),
             CliCommand::Test { .. } => panic!("expected run command"),
-            CliCommand::Lsp => panic!("expected run command"),
+            CliCommand::Lsp { .. } | CliCommand::RelationsCheck { .. } => {
+                panic!("expected run command")
+            }
             CliCommand::Build { .. } => panic!("expected run command"),
             CliCommand::New { .. }
             | CliCommand::Snapshot { .. }
@@ -1873,7 +2038,9 @@ mod tests {
             CliCommand::Fmt { .. } => panic!("expected run command"),
             CliCommand::Lint { .. } => panic!("expected run command"),
             CliCommand::Test { .. } => panic!("expected run command"),
-            CliCommand::Lsp => panic!("expected run command"),
+            CliCommand::Lsp { .. } | CliCommand::RelationsCheck { .. } => {
+                panic!("expected run command")
+            }
             CliCommand::Build { .. } => panic!("expected run command"),
             CliCommand::New { .. }
             | CliCommand::Snapshot { .. }
@@ -1900,7 +2067,9 @@ mod tests {
             CliCommand::Fmt { .. } => panic!("expected run command"),
             CliCommand::Lint { .. } => panic!("expected run command"),
             CliCommand::Test { .. } => panic!("expected run command"),
-            CliCommand::Lsp => panic!("expected run command"),
+            CliCommand::Lsp { .. } | CliCommand::RelationsCheck { .. } => {
+                panic!("expected run command")
+            }
             CliCommand::Build { .. } => panic!("expected run command"),
             CliCommand::New { .. }
             | CliCommand::Snapshot { .. }
@@ -1942,7 +2111,9 @@ mod tests {
             CliCommand::Fmt { .. } => panic!("expected run command"),
             CliCommand::Lint { .. } => panic!("expected run command"),
             CliCommand::Test { .. } => panic!("expected run command"),
-            CliCommand::Lsp => panic!("expected run command"),
+            CliCommand::Lsp { .. } | CliCommand::RelationsCheck { .. } => {
+                panic!("expected run command")
+            }
             CliCommand::Build { .. } => panic!("expected run command"),
             CliCommand::New { .. }
             | CliCommand::Snapshot { .. }
@@ -1974,7 +2145,9 @@ mod tests {
             CliCommand::Fmt { .. } => panic!("expected run command"),
             CliCommand::Lint { .. } => panic!("expected run command"),
             CliCommand::Test { .. } => panic!("expected run command"),
-            CliCommand::Lsp => panic!("expected run command"),
+            CliCommand::Lsp { .. } | CliCommand::RelationsCheck { .. } => {
+                panic!("expected run command")
+            }
             CliCommand::Build { .. } => panic!("expected run command"),
             CliCommand::New { .. }
             | CliCommand::Snapshot { .. }
@@ -2000,7 +2173,9 @@ mod tests {
             CliCommand::Fmt { .. } => panic!("expected run command"),
             CliCommand::Lint { .. } => panic!("expected run command"),
             CliCommand::Test { .. } => panic!("expected run command"),
-            CliCommand::Lsp => panic!("expected run command"),
+            CliCommand::Lsp { .. } | CliCommand::RelationsCheck { .. } => {
+                panic!("expected run command")
+            }
             CliCommand::Build { .. } => panic!("expected run command"),
             CliCommand::New { .. }
             | CliCommand::Snapshot { .. }

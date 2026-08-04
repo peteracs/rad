@@ -72,6 +72,7 @@ impl RadRuntime {
             "version": env!("CARGO_PKG_VERSION"),
             "session": 2,
             "causal_laws": 1,
+            "relations_frontend": 1,
             "host_values": 1,
             "causal_constraints": 1,
             "causal_value_limits": {
@@ -1345,6 +1346,7 @@ print(require(hero, Health).hp)
         let features: serde_json::Value =
             serde_json::from_str(&rt.runtime_features()).expect("feature JSON");
         assert_eq!(features["causal_laws"], 1);
+        assert_eq!(features["relations_frontend"], 1);
         assert_eq!(features["causal_constraints"], 1);
         assert_eq!(features["host_values"], 1);
         assert_eq!(features["causal_value_limits"]["max_depth"], 128);

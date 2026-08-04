@@ -15,6 +15,7 @@ pub mod constraint_types;
 pub mod host_value;
 pub mod merge;
 pub mod radpack;
+pub mod relation_frontend;
 pub mod wire;
 
 #[cfg(test)]

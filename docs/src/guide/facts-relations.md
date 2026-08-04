@@ -1,9 +1,33 @@
 # Facts, Relations, and Derived Facts
 
 RFC-0003 is the accepted semantic contract for RAD's next World-Law
-Programming layer. Its parser and runtime are not implemented yet; acceptance
-means the language work now has a reviewed executable oracle rather than that
-relation syntax is already accepted by the compiler.
+Programming layer. Its bounded experimental front end now parses, checks,
+formats, and seals relation declarations and derivation rules. The
+authoritative relation store and derived-fact runtime are not implemented yet;
+front-end acceptance does not make relation programs executable.
+
+Check a source file without installing runtime behavior:
+
+```text
+rad relations check facts.rad --experimental-relations --module game::facts
+```
+
+Editor diagnostics, formatting, and document symbols use the same bounded
+front end when the server is started with:
+
+```text
+rad lsp --experimental-relations
+```
+
+An optional leading `// module: game::facts` directive gives an editor buffer
+the same stable module ownership used by the CLI; otherwise the LSP derives a
+workspace-local module identity from the filename.
+
+The gate is mandatory. The parser meters source bytes, tokens, identifiers,
+AST nodes, relation/rule/operation collections, terms, atoms, predicates,
+aggregate groups, and structural cost before retention. Successful checking
+produces immutable relation schemas, sealed typed rule plans, a dependency
+DAG, and one canonical manifest digest.
 
 The intended model is:
 
@@ -15,6 +39,18 @@ derive TotalWeight(person, sum(weight))
     when Owns(person, item)
      and ItemWeight(item, weight)
 ```
+
+The experimental front end also checks authoritative operation shapes without
+executing them:
+
+```rad
+Insert(Owns, (alice, sword))
+Remove(Owns, (alice, sword))
+ReplaceBy(Owns, item, sword, (bob, sword))
+```
+
+For a composite named unique constraint, the selected key is a tuple. Source
+and module declaration order do not affect the sealed manifest identity.
 
 Authoritative relation rows will be staged by resolvers inside the same atomic
 candidate as components. Positive, nonrecursive rules derive read-only facts
@@ -116,4 +152,6 @@ transaction, and provenance mechanisms; domain models remain ordinary RAD
 code.
 
 See [RFC-0003](../rfcs/0003-first-class-relations.md) for the accepted contract
-and the executable oracle in `core/vm/tests/rfc0003_reference.rs`.
+and the executable oracle in `core/vm/tests/rfc0003_reference.rs`. The
+production front end lives in `core/vm/src/relation_frontend/`; it deliberately
+has no path to mutate a VM or relation store.
