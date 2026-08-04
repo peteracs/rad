@@ -40,6 +40,8 @@ The Draft now fixes the identity-sensitive v0 rules:
 
 - an `entity` column is a live generational foreign key, with schema-selected
   `on delete restrict` or `on delete cascade` behavior;
+- all rows are classified against the complete despawn set before any cascade,
+  so mixed restrict/cascade outcomes cannot depend on entity order;
 - candidate-local spawn handles are resolved deterministically before relation
   validation;
 - a symmetric relation stores one canonical row but queries as both logical
@@ -50,14 +52,21 @@ The Draft now fixes the identity-sensitive v0 rules:
   committed lifetime and its causal ancestry;
 - rules are range-restricted and relation-only in v0;
 - `count`, checked-integer `sum`, `min`, and `max` have exact failure and
-  empty-group semantics;
+  empty-group semantics, and aggregate heads contain only group variables plus
+  one fresh output;
 - a derived fact is visible only through at least one completely visible proof
-  alternative. Hidden alternatives reveal neither count nor ordering.
+  branch. Hidden alternatives reveal neither identity, count, nor ordering at
+  any downstream join or aggregate;
+- operational replay identity includes entity generations and the assertion
+  allocator, while semantic relation wire remains fact-key-only;
+- bindings, facts, proof branches, support nodes, depth, capability
+  alternatives, and canonical bytes are deterministically bounded before
+  retention.
 
 The executable oracle validates rows through generic typed schemas, preserves
-assertion ancestry across deletion and reinsertion, and distinguishes semantic
-row encoding from operational replay identity. It remains deliberately
-independent of the parser and VM.
+assertion ancestry across deletion and reinsertion, rejects noncanonical wire,
+and derives checkpoint encoding and restoration from one operational state
+inventory. It remains deliberately independent of the parser and VM.
 
 V0 intentionally excludes component-backed derivation views, recursion,
 unrestricted negation, priorities, fixed points, and storage-layout semantics.

@@ -112,6 +112,8 @@ Normative rules:
    column name) and means at most one row may exist for each value of that
    column in the complete candidate.
 4. Several `unique` clauses may be declared and are checked independently.
+   Constraint names are unique within the relation; duplicate names are a
+   schema error because `ReplaceBy` must identify exactly one constraint.
 5. `symmetric` is valid only for a binary relation whose column types match.
    Storage canonicalizes `(a, b)` and `(b, a)` to one physical row.
 6. V0 prohibits `unique` on a symmetric relation. Endpoint-wide uniqueness is
@@ -138,15 +140,21 @@ Normative rules:
    handle order before relation conflicts and foreign-key checks.
 3. Each entity column declares `on delete restrict` or `on delete cascade`.
    Omission means `restrict`.
-4. `restrict` rejects a candidate that despawns a referenced entity unless
-   that candidate explicitly removes or replaces every restricting row.
-5. `cascade` removes every remaining referencing row in canonical fact-key
-   order. A row with any restricting reference rejects rather than partially
-   cascading.
-6. A cascade is an implicit authoritative relation removal attributed to the
+4. Explicit relation operations are applied first. The complete despawn set is
+   then frozen, and every remaining row is classified once against that set
+   before any implicit removal or entity destruction occurs.
+5. `restrict` rejects a candidate that despawns a referenced entity unless
+   that candidate explicitly removes or replaces every restricting row. A
+   cascade caused by another endpoint cannot satisfy a restricting reference.
+6. If any despawned endpoint of a row uses `restrict`, the whole candidate
+   rejects. Otherwise `cascade` schedules that row for one removal in canonical
+   fact-key order. Cascades are applied only after every row passes
+   classification, and entities are despawned only after every cascade.
+7. A cascade is an implicit authoritative relation removal attributed to the
    entity-despawn resolution. It receives its own canonical fact-change record
-   and causal ancestry.
-7. Allocator-slot reuse increments the generation. A row referring to
+   with the exact settlement, resolver, capabilities, and proposal fan-in of
+   every despawn that caused it.
+8. Allocator-slot reuse increments the generation. A row referring to
    `(slot=42, generation=7)` can never refer to a later entity at
    `(slot=42, generation=8)`.
 
@@ -233,6 +241,17 @@ Direct operations and replacement expansions use the same table. Identical
 effects coalesce; incompatible effects conflict. Resolver registration and
 patch enumeration order cannot change the result.
 
+Cross-algebra rules with entity destruction are also base-relative:
+
+- an explicit remove before a restricting despawn satisfies that reference;
+- a `ReplaceBy` away from a despawned endpoint satisfies the old reference,
+  while its replacement tuple is validated against the complete despawn set;
+- a newly inserted row with any restricting despawned endpoint rejects;
+- a newly inserted row whose despawned endpoints are all cascading never
+  commits, consumes no assertion version, and emits no durable fact change;
+- insert-plus-despawn and replace-plus-despawn outcomes are independent of row,
+  column, patch, and entity-ID order.
+
 ### Fact key and assertion identity
 
 `FactKey = relation + canonical tuple` defines semantic equality, joins,
@@ -266,6 +285,16 @@ use the types specified below. Every other rule with that head name must unify
 with the exact schema. There are no implicit numeric coercions. Ambiguous,
 inconsistent, or unconstrained head types are checker errors, and the resulting
 derived schema is part of compiled-program identity.
+
+For an aggregate rule, the nonconstant head variables are exactly the unique
+group variables plus one fresh aggregate output. A nongrouped body variable
+cannot be projected by selecting a representative row. The output is not
+bound by an atom and cannot also be an input or group variable. `count` has no
+value input; `sum`, `min`, and `max` have exactly one positively bound `i64`
+input. Atom arity, constants, predicates, head columns, and every rule sharing
+one derived head are checked against exact schemas with no implicit coercion.
+Postaggregate bindings are constructed solely from the canonical group key and
+aggregate output.
 
 Allowed operations are:
 
@@ -386,19 +415,32 @@ rule identity
 ```
 
 The semantic proof graph is maintained independently from bounded `why()`
-rendering. Each authoritative assertion has a set of required read
-capabilities. A proof's required capability set is the union of all support
+rendering. Each complete proof branch retains exactly one proof ID and one
+capability set; derived scans never collapse visible and hidden proof IDs into
+one support. A downstream nonaggregate rule creates a separate proof for each
+complete support combination. An aggregate counts each logical binding once
+while retaining its proof combinations as separate provenance branches.
+
+Each authoritative assertion has a set of required read capabilities. A
+proof's required capability set is the union of that complete branch's support
 requirements (equivalently, its visibility is the intersection of support
 visibility). A derived fact is visible to a recipient if at least one complete
-proof alternative is visible. Hidden alternatives do not affect visible
-ordering, reveal their count, or change visible canonical bytes. Aggregates
-over hidden inputs remain hidden unless a separately specified declassification
-rule grants visibility. Constraint evaluation may use privileged candidate
-truth, but public rejection rendering never implicitly declassifies supports.
+proof alternative is visible. Rendering filters complete branches before
+constructing identities or ordering them. Hidden alternatives do not affect
+visible ordering, reveal their count or IDs, or change visible canonical bytes
+at any derivation depth. Aggregates over hidden logical inputs remain hidden
+unless a separately specified declassification rule grants visibility.
+Constraint evaluation may use privileged candidate truth, but public rejection
+rendering never implicitly declassifies supports.
 
-Proof count, depth, node count, and canonical encoded bytes use the same
-versioned transaction limit profile. Exceeding an explanation limit returns a
-bounded typed result rather than constructing an unbounded tree.
+The versioned derivation profile bounds bindings, derived facts, proofs per
+fact, total proofs, support nodes, proof depth, capability alternatives, and
+canonical encoded bytes. Every expansion and retention is charged before it
+allocates or becomes visible. An exceed is one typed derivation resource
+failure: the complete authoritative candidate and prior derived state remain
+unchanged. Full recomputation and incremental maintenance must return the same
+limit result. Bounded `why()` rendering has an independent final envelope and
+never constructs an unbounded tree.
 
 ## Storage and compilation
 
@@ -439,6 +481,15 @@ aggregate semantics, index declarations, and semantic versions. The
 operational world checkpoint binds authoritative rows, derived indexes or their
 verified rebuild identity, and provenance supports.
 
+Its relation-state inventory includes the complete entity generation map,
+next entity slot, ordered free slots, live handles, the next assertion ID,
+current assertions, components, ancestry, and every future-determining
+maintenance counter. The same state object drives restoration and canonical
+encoding. Canonical semantic decoders reject duplicate and out-of-order rows
+rather than silently normalizing them. Semantic encoding contains fact keys;
+operational encoding additionally contains assertion lifetimes and allocator
+state.
+
 Portable replay requires matching program, operational world, limits, and
 capabilities before executing. A replay implementation may rebuild derived
 indexes, but it must verify their canonical digest before exposing the child
@@ -462,14 +513,17 @@ Required semantic fixtures before parser/runtime work:
    recomputation;
 6. deleting one support retains a derived fact with another proof;
 7. deleting the final support removes it;
-8. aggregate overflow and resource limits reject deterministically;
+8. aggregate overflow, proof-branch explosion, and every derivation resource
+   limit reject deterministically and atomically;
 9. entity restrict/cascade, same-candidate handles, and allocator-slot reuse
    preserve live foreign-key identity;
 10. `why()` reaches exact assertion versions and settlement fan-in;
-11. capability rendering redacts hidden facts/proofs without multiplicity or
+11. capability rendering across joins, aggregates, and several derivation
+    layers redacts hidden facts/proofs without multiplicity, identity, or
     ordering leakage;
-12. semantic wire and operational attempt replay preserve their deliberately
-    different fact/assertion identities.
+12. canonical semantic wire rejects duplicate/noncanonical rows, while
+    operational attempt replay binds generation and assertion allocators as
+    well as their deliberately different fact/assertion identities.
 
 The repository integration test `core/vm/tests/rfc0003_reference.rs` is the
 executable contract. It uses generic typed schemas, fact keys/assertions,

@@ -6,6 +6,8 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use sha2::{Digest, Sha256};
+
 type OracleResult<T> = Result<T, &'static str>;
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -115,7 +117,11 @@ impl RelationSchema {
                 return Err("relation.symmetric_unique_forbidden");
             }
         }
+        let mut unique_names = BTreeSet::new();
         for unique in &self.unique {
+            if !unique_names.insert(&unique.name) {
+                return Err("relation.duplicate_unique_name");
+            }
             if unique.columns.is_empty()
                 || unique
                     .columns
@@ -188,6 +194,7 @@ struct FactChange {
     kind: ChangeKind,
     key: FactKey,
     causes: BTreeSet<String>,
+    required_capabilities: BTreeSet<String>,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -309,9 +316,10 @@ impl NormalizedAction {
 impl RelationStore {
     fn register(&mut self, schema: RelationSchema) -> OracleResult<()> {
         schema.validate_declaration()?;
-        if self.schemas.insert(schema.name.clone(), schema).is_some() {
+        if self.schemas.contains_key(&schema.name) {
             return Err("relation.duplicate_schema");
         }
+        self.schemas.insert(schema.name.clone(), schema);
         Ok(())
     }
 
@@ -427,6 +435,7 @@ impl RelationStore {
                         kind: ChangeKind::Remove,
                         key: key.clone(),
                         causes: metadata.causes.clone(),
+                        required_capabilities: metadata.required_capabilities.clone(),
                     });
                 }
             }
@@ -452,6 +461,7 @@ impl RelationStore {
                         kind: ChangeKind::Insert,
                         key: key.clone(),
                         causes: metadata.causes.clone(),
+                        required_capabilities: metadata.required_capabilities.clone(),
                     });
                 }
             }
@@ -482,12 +492,13 @@ impl RelationStore {
         Ok(())
     }
 
-    fn remove_cascade(&mut self, key: &FactKey, cause: &str) {
+    fn remove_cascade(&mut self, key: &FactKey, metadata: &OperationMetadata) {
         if self.assertions.remove(key).is_some() {
             self.last_changes.push(FactChange {
                 kind: ChangeKind::Cascade,
                 key: key.clone(),
-                causes: BTreeSet::from([cause.to_owned()]),
+                causes: metadata.causes.clone(),
+                required_capabilities: metadata.required_capabilities.clone(),
             });
         }
     }
@@ -624,7 +635,7 @@ impl PendingOperation {
 #[derive(Clone, Debug, Default)]
 struct Transaction {
     spawn_handles: BTreeSet<u32>,
-    despawns: BTreeSet<EntityRef>,
+    despawns: Vec<PendingDespawn>,
     component_writes: Vec<PendingComponentWrite>,
     operations: Vec<PendingOperation>,
 }
@@ -643,12 +654,32 @@ struct PendingComponentWrite {
     value: FactValue,
 }
 
+#[derive(Clone, Debug)]
+struct PendingDespawn {
+    entity: EntityRef,
+    metadata: OperationMetadata,
+}
+
+fn despawn(entity: EntityRef, cause: &str) -> PendingDespawn {
+    PendingDespawn {
+        entity,
+        metadata: OperationMetadata::cause(cause),
+    }
+}
+
 impl WorldModel {
     fn apply_transaction(
         &mut self,
         transaction: Transaction,
     ) -> OracleResult<BTreeMap<u32, EntityRef>> {
         let mut candidate = self.clone();
+        let base_fact_keys = self
+            .relations
+            .assertions
+            .keys()
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        let base_next_assertion_id = self.relations.next_assertion_id;
         let handles = transaction
             .spawn_handles
             .into_iter()
@@ -675,30 +706,48 @@ impl WorldModel {
             .collect::<OracleResult<Vec<_>>>()?;
         candidate.relations.apply_operations(operations)?;
 
-        for entity in transaction.despawns {
-            let mut cascade = BTreeSet::new();
-            for fact in candidate.relations.assertions.keys() {
-                let schema = &candidate.relations.schemas[&fact.relation];
-                let mut referenced = false;
-                let mut restricted = false;
-                for (value, column) in fact.tuple.iter().zip(&schema.columns) {
-                    if *value == FactValue::Entity(entity) {
-                        referenced = true;
-                        restricted |= column.on_delete == DeletePolicy::Restrict;
-                    }
-                }
-                if referenced {
-                    if restricted {
-                        return Err("entity.delete_restricted");
-                    }
-                    cascade.insert(fact.clone());
-                }
+        let mut despawns = BTreeMap::<EntityRef, OperationMetadata>::new();
+        for despawn in transaction.despawns {
+            if !candidate.entities.contains(despawn.entity) {
+                return Err("entity.not_live");
             }
-            for fact in cascade {
-                candidate
-                    .relations
-                    .remove_cascade(&fact, "entity.despawn.cascade");
+            despawns
+                .entry(despawn.entity)
+                .or_default()
+                .merge(&despawn.metadata);
+        }
+
+        // Classify the complete candidate against the complete despawn set
+        // before applying any implicit cascade. A cascade caused by one
+        // endpoint can therefore never hide a restricting endpoint.
+        let mut cascades = BTreeMap::<FactKey, OperationMetadata>::new();
+        for fact in candidate.relations.assertions.keys() {
+            let schema = &candidate.relations.schemas[&fact.relation];
+            let mut cascade_metadata = OperationMetadata::default();
+            let mut referenced = false;
+            let mut restricted = false;
+            for (value, column) in fact.tuple.iter().zip(&schema.columns) {
+                let FactValue::Entity(entity) = value else {
+                    continue;
+                };
+                let Some(metadata) = despawns.get(entity) else {
+                    continue;
+                };
+                referenced = true;
+                restricted |= column.on_delete == DeletePolicy::Restrict;
+                cascade_metadata.merge(metadata);
             }
+            if referenced {
+                if restricted {
+                    return Err("entity.delete_restricted");
+                }
+                cascades.insert(fact.clone(), cascade_metadata);
+            }
+        }
+        for (fact, metadata) in cascades {
+            candidate.relations.remove_cascade(&fact, &metadata);
+        }
+        for entity in despawns.keys().copied() {
             candidate.entities.despawn(entity)?;
             candidate
                 .components
@@ -714,6 +763,36 @@ impl WorldModel {
                 }
             }
         }
+
+        // Assertion versions name committed lifetimes. Candidate-only rows
+        // removed by a same-candidate cascade consume no assertion ID and
+        // leave no durable insert/remove record.
+        let new_fact_keys = candidate
+            .relations
+            .assertions
+            .keys()
+            .filter(|key| !base_fact_keys.contains(*key))
+            .cloned()
+            .collect::<Vec<_>>();
+        for (offset, key) in new_fact_keys.iter().enumerate() {
+            candidate.relations.assertions.get_mut(key).unwrap().id = base_next_assertion_id
+                .checked_add(u64::try_from(offset).map_err(|_| "relation.assertion_id_overflow")?)
+                .ok_or("relation.assertion_id_overflow")?;
+        }
+        candidate.relations.next_assertion_id = base_next_assertion_id
+            .checked_add(
+                u64::try_from(new_fact_keys.len()).map_err(|_| "relation.assertion_id_overflow")?,
+            )
+            .ok_or("relation.assertion_id_overflow")?;
+        let final_fact_keys = candidate
+            .relations
+            .assertions
+            .keys()
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        candidate.relations.last_changes.retain(|change| {
+            base_fact_keys.contains(&change.key) || final_fact_keys.contains(&change.key)
+        });
         *self = candidate;
         Ok(handles)
     }
@@ -755,57 +834,36 @@ enum SupportRef {
     },
     Derived {
         key: FactKey,
-        proof_ids: BTreeSet<String>,
-        capability_alternatives: CapabilityFormula,
+        proof_id: String,
+        required_capabilities: BTreeSet<String>,
+        proof_depth: usize,
     },
 }
 
-type CapabilityFormula = BTreeSet<BTreeSet<String>>;
-
-fn minimize_capability_formula(formula: CapabilityFormula) -> CapabilityFormula {
-    formula
-        .iter()
-        .filter(|candidate| {
-            !formula
-                .iter()
-                .any(|other| other != *candidate && other.is_subset(candidate))
-        })
-        .cloned()
-        .collect()
-}
-
-fn conjoin_support_capabilities(supports: &BTreeSet<SupportRef>) -> CapabilityFormula {
-    let mut formula = BTreeSet::from([BTreeSet::new()]);
-    for support in supports {
-        let alternatives = support.capability_formula();
-        let mut next = CapabilityFormula::new();
-        for left in &formula {
-            for right in &alternatives {
-                next.insert(left.union(right).cloned().collect());
-            }
-        }
-        formula = minimize_capability_formula(next);
-    }
-    formula
-}
-
 impl SupportRef {
-    fn capability_formula(&self) -> CapabilityFormula {
+    fn required_capabilities(&self) -> &BTreeSet<String> {
         match self {
             Self::Authoritative {
                 required_capabilities,
                 ..
-            } => BTreeSet::from([required_capabilities.clone()]),
-            Self::Derived {
-                capability_alternatives,
+            }
+            | Self::Derived {
+                required_capabilities,
                 ..
-            } => capability_alternatives.clone(),
+            } => required_capabilities,
         }
     }
 
     fn key(&self) -> &FactKey {
         match self {
             Self::Authoritative { key, .. } | Self::Derived { key, .. } => key,
+        }
+    }
+
+    fn depth(&self) -> usize {
+        match self {
+            Self::Authoritative { .. } => 1,
+            Self::Derived { proof_depth, .. } => *proof_depth,
         }
     }
 }
@@ -822,11 +880,45 @@ struct ProofAlternative {
     bindings: BTreeMap<String, FactValue>,
     supports: BTreeSet<SupportRef>,
     aggregate_group: Option<Vec<FactValue>>,
-    capability_alternatives: CapabilityFormula,
+    required_capabilities: BTreeSet<String>,
+    depth: usize,
 }
 
 impl ProofAlternative {
-    fn identity(&self) -> String {
+    fn canonical_len(&self) -> OracleResult<usize> {
+        let mut length = encoded_text_len(&self.rule)?;
+        length = checked_len_add(length, 8)?;
+        for (name, value) in &self.bindings {
+            length = checked_len_add(length, encoded_text_len(name)?)?;
+            length = checked_len_add(length, encoded_value_len(value)?)?;
+        }
+        length = checked_len_add(length, 1)?;
+        if let Some(group) = &self.aggregate_group {
+            length = checked_len_add(length, 8)?;
+            for value in group {
+                length = checked_len_add(length, encoded_value_len(value)?)?;
+            }
+        }
+        length = checked_len_add(length, 8)?;
+        for support in &self.supports {
+            length = checked_len_add(length, encoded_fact_key_len(support.key())?)?;
+            length = checked_len_add(length, 1)?;
+            length = checked_len_add(
+                length,
+                match support {
+                    SupportRef::Authoritative { .. } => 8,
+                    SupportRef::Derived { proof_id, .. } => encoded_text_len(proof_id)?,
+                },
+            )?;
+        }
+        length = checked_len_add(length, 8)?;
+        for capability in &self.required_capabilities {
+            length = checked_len_add(length, encoded_text_len(capability)?)?;
+        }
+        checked_len_add(length, 8)
+    }
+
+    fn canonical_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::new();
         write_text(&mut bytes, &self.rule);
         write_u64(&mut bytes, self.bindings.len() as u64);
@@ -852,16 +944,22 @@ impl ProofAlternative {
                     bytes.push(b'A');
                     write_u64(&mut bytes, *assertion_id);
                 }
-                SupportRef::Derived { proof_ids, .. } => {
+                SupportRef::Derived { proof_id, .. } => {
                     bytes.push(b'D');
-                    write_u64(&mut bytes, proof_ids.len() as u64);
-                    for proof in proof_ids {
-                        write_text(&mut bytes, proof);
-                    }
+                    write_text(&mut bytes, proof_id);
                 }
             }
         }
-        hex(&bytes)
+        write_u64(&mut bytes, self.required_capabilities.len() as u64);
+        for capability in &self.required_capabilities {
+            write_text(&mut bytes, capability);
+        }
+        write_u64(&mut bytes, self.depth as u64);
+        bytes
+    }
+
+    fn identity(&self) -> String {
+        hex(&Sha256::digest(self.canonical_bytes()))
     }
 }
 
@@ -926,42 +1024,132 @@ struct RulePlan {
 }
 
 impl RulePlan {
-    fn validate_range_restriction(&self) -> OracleResult<()> {
-        let bound = self
-            .atoms
-            .iter()
-            .flat_map(|atom| &atom.terms)
-            .filter_map(|term| match term {
-                Term::Variable(name) => Some(name.clone()),
-                Term::Constant(_) => None,
-            })
-            .collect::<BTreeSet<_>>();
-        let aggregate_output = self.aggregate.as_ref().map(|aggregate| &aggregate.output);
-        let mut required = BTreeSet::new();
-        for term in &self.head {
-            if let Term::Variable(name) = term {
-                if Some(name) != aggregate_output {
-                    required.insert(name.clone());
+    fn validate(
+        &self,
+        store: &RelationStore,
+        derived_schemas: &BTreeMap<String, RelationSchema>,
+    ) -> OracleResult<()> {
+        let head_schema = derived_schemas
+            .get(&self.head_relation)
+            .ok_or("derivation.unknown_head")?;
+        if self.head.len() != head_schema.columns.len() {
+            return Err("derivation.head_arity");
+        }
+
+        let mut variable_types = BTreeMap::<String, ValueKind>::new();
+        for atom in &self.atoms {
+            let schema = store
+                .schemas
+                .get(&atom.relation)
+                .or_else(|| derived_schemas.get(&atom.relation))
+                .ok_or("derivation.unknown_atom")?;
+            if atom.terms.len() != schema.columns.len() {
+                return Err("derivation.atom_arity");
+            }
+            for (term, column) in atom.terms.iter().zip(&schema.columns) {
+                match term {
+                    Term::Constant(value) if value.kind() != column.kind => {
+                        return Err("derivation.atom_type");
+                    }
+                    Term::Constant(_) => {}
+                    Term::Variable(name) => match variable_types.get(name) {
+                        Some(kind) if *kind != column.kind => {
+                            return Err("derivation.variable_type");
+                        }
+                        Some(_) => {}
+                        None => {
+                            variable_types.insert(name.clone(), column.kind);
+                        }
+                    },
                 }
             }
         }
+
         for predicate in &self.predicates {
             match predicate {
                 Predicate::Greater(left, right) => {
-                    required.insert(left.clone());
-                    required.insert(right.clone());
+                    if variable_types.get(left) != Some(&ValueKind::Int)
+                        || variable_types.get(right) != Some(&ValueKind::Int)
+                    {
+                        return Err("derivation.predicate_type");
+                    }
                 }
             }
         }
+
+        let mut head_variable_types = variable_types.clone();
         if let Some(aggregate) = &self.aggregate {
-            required.extend(aggregate.group_by.iter().cloned());
-            required.extend(aggregate.input.iter().cloned());
+            let groups = aggregate.group_by.iter().cloned().collect::<BTreeSet<_>>();
+            if groups.len() != aggregate.group_by.len() {
+                return Err("derivation.duplicate_group");
+            }
+            if groups
+                .iter()
+                .any(|group| !variable_types.contains_key(group))
+            {
+                return Err("derivation.unbound_group");
+            }
+            if variable_types.contains_key(&aggregate.output)
+                || groups.contains(&aggregate.output)
+                || aggregate.input.as_ref() == Some(&aggregate.output)
+            {
+                return Err("derivation.aggregate_output_not_fresh");
+            }
+            let output_kind = match aggregate.kind {
+                AggregateKind::Count => {
+                    if aggregate.input.is_some() {
+                        return Err("derivation.count_input");
+                    }
+                    ValueKind::Count
+                }
+                AggregateKind::Sum | AggregateKind::Min | AggregateKind::Max => {
+                    let input = aggregate
+                        .input
+                        .as_ref()
+                        .ok_or("derivation.aggregate_input")?;
+                    if variable_types.get(input) != Some(&ValueKind::Int) {
+                        return Err("derivation.aggregate_type");
+                    }
+                    ValueKind::Int
+                }
+            };
+            head_variable_types.insert(aggregate.output.clone(), output_kind);
+            let head_variables = self
+                .head
+                .iter()
+                .filter_map(|term| match term {
+                    Term::Variable(name) => Some(name.clone()),
+                    Term::Constant(_) => None,
+                })
+                .collect::<BTreeSet<_>>();
+            let mut expected = groups;
+            expected.insert(aggregate.output.clone());
+            if head_variables != expected
+                || self
+                    .head
+                    .iter()
+                    .filter(
+                        |term| matches!(term, Term::Variable(name) if name == &aggregate.output),
+                    )
+                    .count()
+                    != 1
+            {
+                return Err("derivation.aggregate_head_projection");
+            }
         }
-        if required.is_subset(&bound) {
-            Ok(())
-        } else {
-            Err("derivation.unbound_variable")
+
+        for (term, column) in self.head.iter().zip(&head_schema.columns) {
+            let kind = match term {
+                Term::Constant(value) => value.kind(),
+                Term::Variable(name) => *head_variable_types
+                    .get(name)
+                    .ok_or("derivation.unbound_variable")?,
+            };
+            if kind != column.kind {
+                return Err("derivation.head_type");
+            }
         }
+        Ok(())
     }
 }
 
@@ -971,9 +1159,123 @@ struct BindingState {
     supports: BTreeSet<SupportRef>,
 }
 
-#[derive(Clone, Copy, Debug)]
-struct EvaluationLimits {
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct DerivationLimits {
     max_bindings: usize,
+    max_facts: usize,
+    max_proofs_per_fact: usize,
+    max_total_proofs: usize,
+    max_support_nodes: usize,
+    max_proof_depth: usize,
+    max_capability_alternatives: usize,
+    max_canonical_bytes: usize,
+}
+
+impl DerivationLimits {
+    fn generous() -> Self {
+        Self {
+            max_bindings: 4_096,
+            max_facts: 4_096,
+            max_proofs_per_fact: 256,
+            max_total_proofs: 16_384,
+            max_support_nodes: 131_072,
+            max_proof_depth: 64,
+            max_capability_alternatives: 256,
+            max_canonical_bytes: 16 * 1024 * 1024,
+        }
+    }
+}
+
+fn limits(max_bindings: usize) -> DerivationLimits {
+    DerivationLimits {
+        max_bindings,
+        ..DerivationLimits::generous()
+    }
+}
+
+struct DerivationMeter {
+    limits: DerivationLimits,
+    facts: BTreeSet<FactKey>,
+    proofs: BTreeSet<(FactKey, ProofAlternative)>,
+    proofs_per_fact: BTreeMap<FactKey, usize>,
+    capability_sets: BTreeMap<FactKey, BTreeSet<BTreeSet<String>>>,
+    support_nodes: usize,
+    canonical_bytes: usize,
+}
+
+impl DerivationMeter {
+    fn new(limits: DerivationLimits) -> Self {
+        Self {
+            limits,
+            facts: BTreeSet::new(),
+            proofs: BTreeSet::new(),
+            proofs_per_fact: BTreeMap::new(),
+            capability_sets: BTreeMap::new(),
+            support_nodes: 0,
+            canonical_bytes: b"rfc0003.derivation.v1".len() + 8,
+        }
+    }
+
+    fn retain(
+        &mut self,
+        result: &mut DerivationResult,
+        fact: FactKey,
+        proof: ProofAlternative,
+    ) -> OracleResult<()> {
+        if self.proofs.contains(&(fact.clone(), proof.clone())) {
+            return Ok(());
+        }
+        if !self.facts.contains(&fact) && self.facts.len() >= self.limits.max_facts {
+            return Err("derivation.fact_limit");
+        }
+        let fact_proofs = self.proofs_per_fact.get(&fact).copied().unwrap_or(0);
+        if fact_proofs >= self.limits.max_proofs_per_fact {
+            return Err("derivation.proofs_per_fact_limit");
+        }
+        if self.proofs.len() >= self.limits.max_total_proofs {
+            return Err("derivation.total_proof_limit");
+        }
+        let support_nodes = self
+            .support_nodes
+            .checked_add(proof.supports.len())
+            .ok_or("derivation.support_limit")?;
+        if support_nodes > self.limits.max_support_nodes {
+            return Err("derivation.support_limit");
+        }
+        if proof.depth > self.limits.max_proof_depth {
+            return Err("derivation.depth_limit");
+        }
+        let mut capability_sets = self.capability_sets.get(&fact).cloned().unwrap_or_default();
+        capability_sets.insert(proof.required_capabilities.clone());
+        if capability_sets.len() > self.limits.max_capability_alternatives {
+            return Err("derivation.capability_alternative_limit");
+        }
+        let mut additional = 8_usize
+            .checked_add(proof.canonical_len()?)
+            .ok_or("derivation.canonical_byte_limit")?;
+        if !self.facts.contains(&fact) {
+            additional = additional
+                .checked_add(encoded_fact_key_len(&fact)?)
+                .and_then(|bytes| bytes.checked_add(8))
+                .ok_or("derivation.canonical_byte_limit")?;
+        }
+        let encoded = self
+            .canonical_bytes
+            .checked_add(additional)
+            .ok_or("derivation.canonical_byte_limit")?;
+        if encoded > self.limits.max_canonical_bytes {
+            return Err("derivation.canonical_byte_limit");
+        }
+
+        self.facts.insert(fact.clone());
+        self.proofs.insert((fact.clone(), proof.clone()));
+        self.proofs_per_fact.insert(fact.clone(), fact_proofs + 1);
+        self.capability_sets.insert(fact.clone(), capability_sets);
+        self.support_nodes = support_nodes;
+        self.canonical_bytes = encoded;
+        result.entry(fact).or_default().insert(proof);
+        Ok(())
+    }
 }
 
 fn derived_logical_rows(
@@ -984,24 +1286,23 @@ fn derived_logical_rows(
     let schema = schemas.get(relation).ok_or("relation.unknown")?;
     let mut rows = Vec::new();
     for (key, proofs) in derived.iter().filter(|(key, _)| key.relation == relation) {
-        let capability_alternatives = proofs
-            .iter()
-            .flat_map(|proof| proof.capability_alternatives.iter().cloned())
-            .collect::<CapabilityFormula>();
-        let support = SupportRef::Derived {
-            key: key.clone(),
-            proof_ids: proofs.iter().map(ProofAlternative::identity).collect(),
-            capability_alternatives: minimize_capability_formula(capability_alternatives),
-        };
-        rows.push(LogicalRow {
-            tuple: key.tuple.clone(),
-            support: support.clone(),
-        });
-        if schema.symmetric && key.tuple[0] != key.tuple[1] {
+        for proof in proofs {
+            let support = SupportRef::Derived {
+                key: key.clone(),
+                proof_id: proof.identity(),
+                required_capabilities: proof.required_capabilities.clone(),
+                proof_depth: proof.depth,
+            };
             rows.push(LogicalRow {
-                tuple: vec![key.tuple[1].clone(), key.tuple[0].clone()],
-                support,
+                tuple: key.tuple.clone(),
+                support: support.clone(),
             });
+            if schema.symmetric && key.tuple[0] != key.tuple[1] {
+                rows.push(LogicalRow {
+                    tuple: vec![key.tuple[1].clone(), key.tuple[0].clone()],
+                    support,
+                });
+            }
         }
     }
     rows.sort();
@@ -1106,9 +1407,9 @@ fn evaluate_rule(
     store: &RelationStore,
     schemas: &BTreeMap<String, RelationSchema>,
     derived: &DerivationResult,
-    limits: EvaluationLimits,
+    meter: &mut DerivationMeter,
 ) -> OracleResult<DerivationResult> {
-    rule.validate_range_restriction()?;
+    rule.validate(store, schemas)?;
     let mut states = BTreeSet::from([BindingState {
         bindings: BTreeMap::new(),
         supports: BTreeSet::new(),
@@ -1123,7 +1424,7 @@ fn evaluate_rule(
         for state in &states {
             for row in &rows {
                 if let Some(joined) = unify(state, &atom.terms, row) {
-                    if next.len() >= limits.max_bindings {
+                    if !next.contains(&joined) && next.len() >= meter.limits.max_bindings {
                         return Err("derivation.binding_limit");
                     }
                     next.insert(joined);
@@ -1140,7 +1441,10 @@ fn evaluate_rule(
 
     let mut result = DerivationResult::new();
     if let Some(aggregate) = &rule.aggregate {
-        let mut groups = BTreeMap::<Vec<FactValue>, Vec<BindingState>>::new();
+        let mut groups = BTreeMap::<
+            Vec<FactValue>,
+            BTreeMap<BTreeMap<String, FactValue>, Vec<BindingState>>,
+        >::new();
         for state in states {
             let group = aggregate
                 .group_by
@@ -1153,52 +1457,112 @@ fn evaluate_rule(
                         .ok_or("derivation.unbound_group")
                 })
                 .collect::<OracleResult<Vec<_>>>()?;
-            groups.entry(group).or_default().push(state);
+            groups
+                .entry(group)
+                .or_default()
+                .entry(state.bindings.clone())
+                .or_default()
+                .push(state);
         }
-        for (group, states) in groups {
+        for (group, logical_bindings) in groups {
             let values = match &aggregate.input {
-                Some(input) => states
-                    .iter()
-                    .map(|state| {
-                        state
-                            .bindings
+                Some(input) => logical_bindings
+                    .keys()
+                    .map(|bindings| {
+                        bindings
                             .get(input)
                             .cloned()
                             .ok_or("derivation.unbound_aggregate")
                     })
                     .collect::<OracleResult<Vec<_>>>()?,
-                None => vec![FactValue::Count(1); states.len()],
+                None => vec![FactValue::Count(1); logical_bindings.len()],
             };
             let Some(value) = aggregate_values(aggregate.kind, &values)? else {
                 continue;
             };
-            let mut bindings = states[0].bindings.clone();
-            bindings.insert(aggregate.output.clone(), value);
-            let supports = states
+            let mut bindings = aggregate
+                .group_by
                 .iter()
-                .flat_map(|state| state.supports.iter().cloned())
-                .collect::<BTreeSet<_>>();
-            let capability_alternatives = conjoin_support_capabilities(&supports);
+                .cloned()
+                .zip(group.iter().cloned())
+                .collect::<BTreeMap<_, _>>();
+            bindings.insert(aggregate.output.clone(), value);
             let key = build_head(rule, schemas, &bindings)?;
-            result.entry(key).or_default().insert(ProofAlternative {
-                rule: rule.id.clone(),
-                bindings,
-                supports,
-                aggregate_group: Some(group),
-                capability_alternatives,
-            });
+
+            let mut support_combinations = BTreeSet::from([BTreeSet::new()]);
+            for alternatives in logical_bindings.values() {
+                let mut next = BTreeSet::new();
+                let mut capability_sets = BTreeSet::new();
+                for accumulated in &support_combinations {
+                    for alternative in alternatives {
+                        let supports = accumulated
+                            .union(&alternative.supports)
+                            .cloned()
+                            .collect::<BTreeSet<_>>();
+                        if !next.contains(&supports) {
+                            if next.len() >= meter.limits.max_proofs_per_fact {
+                                return Err("derivation.proofs_per_fact_limit");
+                            }
+                            let required_capabilities = supports
+                                .iter()
+                                .flat_map(|support| support.required_capabilities().iter().cloned())
+                                .collect::<BTreeSet<_>>();
+                            capability_sets.insert(required_capabilities);
+                            if capability_sets.len() > meter.limits.max_capability_alternatives {
+                                return Err("derivation.capability_alternative_limit");
+                            }
+                        }
+                        next.insert(supports);
+                    }
+                }
+                support_combinations = next;
+            }
+            for supports in support_combinations {
+                let required_capabilities = supports
+                    .iter()
+                    .flat_map(|support| support.required_capabilities().iter().cloned())
+                    .collect();
+                let depth = 1 + supports.iter().map(SupportRef::depth).max().unwrap_or(0);
+                meter.retain(
+                    &mut result,
+                    key.clone(),
+                    ProofAlternative {
+                        rule: rule.id.clone(),
+                        bindings: bindings.clone(),
+                        supports,
+                        aggregate_group: Some(group.clone()),
+                        required_capabilities,
+                        depth,
+                    },
+                )?;
+            }
         }
     } else {
         for state in states {
             let key = build_head(rule, schemas, &state.bindings)?;
-            let capability_alternatives = conjoin_support_capabilities(&state.supports);
-            result.entry(key).or_default().insert(ProofAlternative {
-                rule: rule.id.clone(),
-                bindings: state.bindings,
-                supports: state.supports,
-                aggregate_group: None,
-                capability_alternatives,
-            });
+            let required_capabilities = state
+                .supports
+                .iter()
+                .flat_map(|support| support.required_capabilities().iter().cloned())
+                .collect();
+            let depth = 1 + state
+                .supports
+                .iter()
+                .map(SupportRef::depth)
+                .max()
+                .unwrap_or(0);
+            meter.retain(
+                &mut result,
+                key,
+                ProofAlternative {
+                    rule: rule.id.clone(),
+                    bindings: state.bindings,
+                    supports: state.supports,
+                    aggregate_group: None,
+                    required_capabilities,
+                    depth,
+                },
+            )?;
         }
     }
     Ok(result)
@@ -1208,8 +1572,12 @@ fn derive_all(
     store: &RelationStore,
     schemas: &BTreeMap<String, RelationSchema>,
     rules: &[RulePlan],
-    limits: EvaluationLimits,
+    limits: DerivationLimits,
 ) -> OracleResult<DerivationResult> {
+    for rule in rules {
+        rule.validate(store, schemas)?;
+    }
+    let mut meter = DerivationMeter::new(limits);
     let heads = rules
         .iter()
         .map(|rule| rule.head_relation.clone())
@@ -1230,7 +1598,7 @@ fn derive_all(
             return Err("derivation.cycle");
         };
         for rule in rules.iter().filter(|rule| rule.head_relation == head) {
-            let produced = evaluate_rule(rule, store, schemas, &result, limits)?;
+            let produced = evaluate_rule(rule, store, schemas, &result, &mut meter)?;
             for (fact, proofs) in produced {
                 result.entry(fact).or_default().extend(proofs);
             }
@@ -1247,7 +1615,7 @@ struct DependencyMaintainer {
     derived_schemas: BTreeMap<String, RelationSchema>,
     rules: Vec<RulePlan>,
     derived: DerivationResult,
-    limits: EvaluationLimits,
+    limits: DerivationLimits,
 }
 
 impl DependencyMaintainer {
@@ -1255,7 +1623,7 @@ impl DependencyMaintainer {
         model: WorldModel,
         derived_schemas: BTreeMap<String, RelationSchema>,
         rules: Vec<RulePlan>,
-        limits: EvaluationLimits,
+        limits: DerivationLimits,
     ) -> OracleResult<Self> {
         let derived = derive_all(&model.relations, &derived_schemas, &rules, limits)?;
         Ok(Self {
@@ -1268,6 +1636,7 @@ impl DependencyMaintainer {
     }
 
     fn apply(&mut self, transaction: Transaction) -> OracleResult<()> {
+        let mut candidate_model = self.model.clone();
         let before = self
             .model
             .relations
@@ -1275,9 +1644,8 @@ impl DependencyMaintainer {
             .keys()
             .cloned()
             .collect::<BTreeSet<_>>();
-        self.model.apply_transaction(transaction)?;
-        let after = self
-            .model
+        candidate_model.apply_transaction(transaction)?;
+        let after = candidate_model
             .relations
             .assertions
             .keys()
@@ -1302,24 +1670,50 @@ impl DependencyMaintainer {
             }
         }
         let full = derive_all(
-            &self.model.relations,
+            &candidate_model.relations,
             &self.derived_schemas,
             &self.rules,
             self.limits,
         )?;
-        self.derived
-            .retain(|fact, _| !affected.contains(&fact.relation));
+        let mut incremental = self.derived.clone();
+        incremental.retain(|fact, _| !affected.contains(&fact.relation));
         for (fact, proofs) in full
             .iter()
             .filter(|(fact, _)| affected.contains(&fact.relation))
         {
-            self.derived.insert(fact.clone(), proofs.clone());
+            incremental.insert(fact.clone(), proofs.clone());
         }
-        if self.derived != full {
+        if incremental != full {
             return Err("derivation.incremental_mismatch");
         }
+        self.model = candidate_model;
+        self.derived = incremental;
         Ok(())
     }
+}
+
+fn checked_len_add(left: usize, right: usize) -> OracleResult<usize> {
+    left.checked_add(right)
+        .ok_or("derivation.canonical_byte_limit")
+}
+
+fn encoded_text_len(value: &str) -> OracleResult<usize> {
+    checked_len_add(8, value.len())
+}
+
+fn encoded_value_len(value: &FactValue) -> OracleResult<usize> {
+    match value {
+        FactValue::Int(_) | FactValue::Count(_) | FactValue::Entity(_) => Ok(9),
+        FactValue::Text(value) => checked_len_add(1, encoded_text_len(value)?),
+    }
+}
+
+fn encoded_fact_key_len(key: &FactKey) -> OracleResult<usize> {
+    let mut length = checked_len_add(encoded_text_len(&key.relation)?, 8)?;
+    for value in &key.tuple {
+        length = checked_len_add(length, encoded_value_len(value)?)?;
+    }
+    Ok(length)
 }
 
 fn write_u64(out: &mut Vec<u8>, value: u64) {
@@ -1370,59 +1764,100 @@ fn semantic_relation_bytes(store: &RelationStore) -> Vec<u8> {
     out
 }
 
-fn operational_checkpoint_bytes(model: &WorldModel) -> Vec<u8> {
-    let mut out = b"rfc0003.operational.v1".to_vec();
-    write_u64(&mut out, model.entities.next_slot as u64);
-    write_u64(&mut out, model.entities.live.len() as u64);
-    for entity in &model.entities.live {
-        out.extend_from_slice(&entity.slot.to_be_bytes());
-        out.extend_from_slice(&entity.generation.to_be_bytes());
-    }
-    write_u64(&mut out, model.entities.free_slots.len() as u64);
-    for slot in &model.entities.free_slots {
-        out.extend_from_slice(&slot.to_be_bytes());
-    }
-    write_u64(&mut out, model.components.len() as u64);
-    for ((entity, component), value) in &model.components {
-        out.extend_from_slice(&entity.slot.to_be_bytes());
-        out.extend_from_slice(&entity.generation.to_be_bytes());
-        write_text(&mut out, component);
-        encode_value(&mut out, value);
-    }
-    write_u64(&mut out, model.relations.assertions.len() as u64);
-    for assertion in model.relations.assertions.values() {
-        encode_fact_key(&mut out, &assertion.key);
-        write_u64(&mut out, assertion.id);
-        write_u64(&mut out, assertion.causes.len() as u64);
-        for cause in &assertion.causes {
-            write_text(&mut out, cause);
-        }
-        write_u64(&mut out, assertion.required_capabilities.len() as u64);
-        for capability in &assertion.required_capabilities {
-            write_text(&mut out, capability);
-        }
-    }
-    out
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct OperationalRelationState {
+    entity_allocator: EntityTable,
+    assertion_allocator_next: u64,
+    components: BTreeMap<(EntityRef, String), FactValue>,
+    assertions: BTreeMap<FactKey, FactAssertion>,
 }
 
-fn derivation_checkpoint_bytes(derived: &DerivationResult) -> Vec<u8> {
+impl OperationalRelationState {
+    fn capture(model: &WorldModel) -> Self {
+        Self {
+            entity_allocator: model.entities.clone(),
+            assertion_allocator_next: model.relations.next_assertion_id,
+            components: model.components.clone(),
+            assertions: model.relations.assertions.clone(),
+        }
+    }
+
+    fn restore(&self, schemas: BTreeMap<String, RelationSchema>) -> WorldModel {
+        WorldModel {
+            entities: self.entity_allocator.clone(),
+            components: self.components.clone(),
+            relations: RelationStore {
+                schemas,
+                assertions: self.assertions.clone(),
+                next_assertion_id: self.assertion_allocator_next,
+                last_changes: Vec::new(),
+            },
+        }
+    }
+
+    fn canonical_bytes(&self) -> Vec<u8> {
+        let mut out = b"rfc0003.operational.v2".to_vec();
+        write_u64(&mut out, self.entity_allocator.next_slot as u64);
+        write_u64(&mut out, self.entity_allocator.generations.len() as u64);
+        for (slot, generation) in &self.entity_allocator.generations {
+            out.extend_from_slice(&slot.to_be_bytes());
+            out.extend_from_slice(&generation.to_be_bytes());
+        }
+        write_u64(&mut out, self.entity_allocator.live.len() as u64);
+        for entity in &self.entity_allocator.live {
+            out.extend_from_slice(&entity.slot.to_be_bytes());
+            out.extend_from_slice(&entity.generation.to_be_bytes());
+        }
+        write_u64(&mut out, self.entity_allocator.free_slots.len() as u64);
+        for slot in &self.entity_allocator.free_slots {
+            out.extend_from_slice(&slot.to_be_bytes());
+        }
+        write_u64(&mut out, self.assertion_allocator_next);
+        write_u64(&mut out, self.components.len() as u64);
+        for ((entity, component), value) in &self.components {
+            out.extend_from_slice(&entity.slot.to_be_bytes());
+            out.extend_from_slice(&entity.generation.to_be_bytes());
+            write_text(&mut out, component);
+            encode_value(&mut out, value);
+        }
+        write_u64(&mut out, self.assertions.len() as u64);
+        for assertion in self.assertions.values() {
+            encode_fact_key(&mut out, &assertion.key);
+            write_u64(&mut out, assertion.id);
+            write_u64(&mut out, assertion.causes.len() as u64);
+            for cause in &assertion.causes {
+                write_text(&mut out, cause);
+            }
+            write_u64(&mut out, assertion.required_capabilities.len() as u64);
+            for capability in &assertion.required_capabilities {
+                write_text(&mut out, capability);
+            }
+        }
+        out
+    }
+}
+
+fn operational_checkpoint_bytes(model: &WorldModel) -> Vec<u8> {
+    OperationalRelationState::capture(model).canonical_bytes()
+}
+
+fn canonical_derivation_bytes(derived: &DerivationResult) -> Vec<u8> {
     let mut out = b"rfc0003.derivation.v1".to_vec();
     write_u64(&mut out, derived.len() as u64);
     for (fact, proofs) in derived {
         encode_fact_key(&mut out, fact);
         write_u64(&mut out, proofs.len() as u64);
         for proof in proofs {
-            write_text(&mut out, &proof.identity());
-            write_u64(&mut out, proof.capability_alternatives.len() as u64);
-            for alternative in &proof.capability_alternatives {
-                write_u64(&mut out, alternative.len() as u64);
-                for capability in alternative {
-                    write_text(&mut out, capability);
-                }
-            }
+            let proof = proof.canonical_bytes();
+            write_u64(&mut out, proof.len() as u64);
+            out.extend_from_slice(&proof);
         }
     }
     out
+}
+
+fn derivation_checkpoint_bytes(derived: &DerivationResult) -> Vec<u8> {
+    canonical_derivation_bytes(derived)
 }
 
 fn portable_checkpoint_bytes(model: &WorldModel, derived: &DerivationResult) -> Vec<u8> {
@@ -1505,9 +1940,16 @@ fn decode_semantic_relation_bytes(mut input: &[u8]) -> OracleResult<BTreeSet<Fac
     }
     input = &input[DOMAIN.len()..];
     let count = usize::try_from(read_u64(&mut input)?).map_err(|_| "wire.length")?;
-    let facts = (0..count)
-        .map(|_| decode_fact_key_from(&mut input))
-        .collect::<OracleResult<BTreeSet<_>>>()?;
+    let mut facts = BTreeSet::new();
+    let mut previous = None;
+    for _ in 0..count {
+        let fact = decode_fact_key_from(&mut input)?;
+        if previous.as_ref().is_some_and(|previous| previous >= &fact) {
+            return Err("wire.noncanonical_fact_order");
+        }
+        previous = Some(fact.clone());
+        facts.insert(fact);
+    }
     if !input.is_empty() {
         return Err("wire.trailing");
     }
@@ -1529,12 +1971,7 @@ fn render_visible(derived: &DerivationResult, capabilities: &BTreeSet<String>) -
     for (fact, proofs) in derived {
         let visible = proofs
             .iter()
-            .filter(|proof| {
-                proof
-                    .capability_alternatives
-                    .iter()
-                    .any(|required| required.is_subset(capabilities))
-            })
+            .filter(|proof| proof.required_capabilities.is_subset(capabilities))
             .collect::<Vec<_>>();
         if visible.is_empty() {
             continue;
@@ -1734,7 +2171,7 @@ fn entity_foreign_keys_restrict_cascade_and_never_retarget_reused_slots() {
     let before = model.clone();
     assert_eq!(
         model.apply_transaction(Transaction {
-            despawns: BTreeSet::from([target]),
+            despawns: vec![despawn(target, "settlement.restricted_despawn")],
             ..Transaction::default()
         }),
         Err("entity.delete_restricted")
@@ -1758,7 +2195,7 @@ fn entity_foreign_keys_restrict_cascade_and_never_retarget_reused_slots() {
         .unwrap();
     model
         .apply_transaction(Transaction {
-            despawns: BTreeSet::from([target]),
+            despawns: vec![despawn(target, "settlement.cascade_despawn")],
             ..Transaction::default()
         })
         .unwrap();
@@ -1882,13 +2319,7 @@ fn symmetric_storage_has_two_logical_orientations_and_one_self_orientation() {
             }),
         },
     ];
-    let derived = derive_all(
-        &model.relations,
-        &schemas,
-        &rules,
-        EvaluationLimits { max_bindings: 64 },
-    )
-    .unwrap();
+    let derived = derive_all(&model.relations, &schemas, &rules, limits(64)).unwrap();
     assert!(derived.contains_key(&FactKey::new("HasAlly", vec![FactValue::Entity(a)],)));
     assert!(derived.contains_key(&FactKey::new("HasAlly", vec![FactValue::Entity(b)],)));
     assert!(derived.contains_key(&FactKey::new(
@@ -2191,7 +2622,7 @@ fn insertion_permutations_and_incremental_maintenance_match_full_recomputation()
     assert_eq!(forward.relations.assertions, reverse.relations.assertions);
     let schemas = derived_schemas();
     let rules = ownership_rules();
-    let limits = EvaluationLimits { max_bindings: 128 };
+    let limits = limits(128);
     assert_eq!(
         derive_all(&forward.relations, &schemas, &rules, limits).unwrap(),
         derive_all(&reverse.relations, &schemas, &rules, limits).unwrap()
@@ -2265,7 +2696,7 @@ fn alternative_proofs_are_unioned_and_final_support_removal_retracts_fact() {
         })
         .collect::<Vec<_>>();
     let schemas = derived_schemas();
-    let limits = EvaluationLimits { max_bindings: 32 };
+    let limits = limits(32);
     let marked = FactKey::new("Marked", vec![FactValue::Int(7)]);
     let first = derive_all(&model.relations, &schemas, &rules, limits).unwrap();
     assert_eq!(first[&marked].len(), 2);
@@ -2314,7 +2745,7 @@ fn aggregate_contract_is_checked_exact_and_bounded() {
             &model.relations,
             &derived_schemas(),
             &ownership_rules(),
-            EvaluationLimits { max_bindings: 1 },
+            limits(1),
         ),
         Err("derivation.binding_limit")
     );
@@ -2331,7 +2762,7 @@ fn rule_plans_are_range_restricted_and_cycles_fail_closed() {
         aggregate: None,
     };
     assert_eq!(
-        unsafe_rule.validate_range_restriction(),
+        unsafe_rule.validate(&RelationStore::default(), &derived_schemas()),
         Err("derivation.unbound_variable")
     );
     let cycle = RulePlan {
@@ -2347,7 +2778,7 @@ fn rule_plans_are_range_restricted_and_cycles_fail_closed() {
             &RelationStore::default(),
             &derived_schemas(),
             &[cycle],
-            EvaluationLimits { max_bindings: 8 },
+            limits(8),
         ),
         Err("derivation.cycle")
     );
@@ -2408,7 +2839,7 @@ fn why_chain_reaches_exact_assertion_versions_and_settlement_causes() {
         &model.relations,
         &derived_schemas(),
         &ownership_rules(),
-        EvaluationLimits { max_bindings: 128 },
+        limits(128),
     )
     .unwrap();
     let encumbered = FactKey::new("Encumbered", vec![FactValue::Entity(person)]);
@@ -2418,8 +2849,8 @@ fn why_chain_reaches_exact_assertion_versions_and_settlement_causes() {
         .iter()
         .find(|support| support.key().relation == "TotalWeight")
         .unwrap();
-    let total_proof_ids = match total_support {
-        SupportRef::Derived { proof_ids, .. } => proof_ids,
+    let total_proof_id = match total_support {
+        SupportRef::Derived { proof_id, .. } => proof_id,
         SupportRef::Authoritative { .. } => panic!("TotalWeight must be derived"),
     };
     let total = total_support.key();
@@ -2428,11 +2859,8 @@ fn why_chain_reaches_exact_assertion_versions_and_settlement_causes() {
         vec![FactValue::Entity(person), FactValue::Int(13)]
     );
     assert_eq!(
-        total_proof_ids,
-        &derived[total]
-            .iter()
-            .map(ProofAlternative::identity)
-            .collect()
+        total_proof_id,
+        &derived[total].iter().next().unwrap().identity()
     );
     let total_proof = derived[total].iter().next().unwrap();
     for expected in [
@@ -2502,20 +2930,14 @@ fn capability_filtering_hides_proof_multiplicity_and_order() {
             aggregate: None,
         })
         .collect::<Vec<_>>();
-    let derived = derive_all(
-        &model.relations,
-        &derived_schemas(),
-        &rules,
-        EvaluationLimits { max_bindings: 16 },
-    )
-    .unwrap();
+    let derived = derive_all(&model.relations, &derived_schemas(), &rules, limits(16)).unwrap();
     let public = render_visible(&derived, &BTreeSet::new());
     let marked = FactKey::new("Marked", vec![FactValue::Int(1)]);
     let mut without_hidden = derived.clone();
     without_hidden
         .get_mut(&marked)
         .unwrap()
-        .retain(|proof| proof.capability_alternatives.contains(&BTreeSet::new()));
+        .retain(|proof| proof.required_capabilities.is_empty());
     assert_eq!(public, render_visible(&without_hidden, &BTreeSet::new()));
     let privileged = render_visible(&derived, &BTreeSet::from(["secret".to_owned()]));
     assert_ne!(public, privileged);
@@ -2546,7 +2968,7 @@ fn semantic_wire_round_trips_while_portable_replay_binds_assertion_identity() {
     );
     let schemas = derived_schemas();
     let rules = ownership_rules();
-    let limits = EvaluationLimits { max_bindings: 128 };
+    let limits = limits(128);
     let derived_before = derive_all(&model.relations, &schemas, &rules, limits).unwrap();
     let attempt = PortableAttempt {
         checkpoint: portable_checkpoint_bytes(&model, &derived_before),
@@ -2581,4 +3003,850 @@ fn semantic_wire_round_trips_while_portable_replay_binds_assertion_identity() {
         Err("attempt.checkpoint_mismatch")
     );
     assert_eq!(instructions, 0);
+}
+
+#[test]
+fn simultaneous_despawns_are_classified_as_one_set_before_any_cascade() {
+    fn link_model(reverse_columns: bool) -> (WorldModel, EntityRef, EntityRef, EntityRef) {
+        let mut model = WorldModel::default();
+        let columns = if reverse_columns {
+            vec![entity_column("target"), entity_column("source").cascade()]
+        } else {
+            vec![entity_column("source").cascade(), entity_column("target")]
+        };
+        model
+            .relations
+            .register(
+                RelationSchema::new("Link", columns)
+                    .unique("source", &[usize::from(reverse_columns)]),
+            )
+            .unwrap();
+        let a = model.entities.spawn();
+        let b = model.entities.spawn();
+        let c = model.entities.spawn();
+        let tuple = if reverse_columns {
+            vec![existing(b), existing(a)]
+        } else {
+            vec![existing(a), existing(b)]
+        };
+        model
+            .apply_transaction(Transaction {
+                operations: vec![insert(pending_key("Link", tuple), "link.insert")],
+                ..Transaction::default()
+            })
+            .unwrap();
+        (model, a, b, c)
+    }
+
+    for reverse_columns in [false, true] {
+        let (model, a, b, _) = link_model(reverse_columns);
+        for despawns in [
+            vec![despawn(a, "despawn.a"), despawn(b, "despawn.b")],
+            vec![despawn(b, "despawn.b"), despawn(a, "despawn.a")],
+        ] {
+            let mut candidate = model.clone();
+            assert_eq!(
+                candidate.apply_transaction(Transaction {
+                    despawns,
+                    ..Transaction::default()
+                }),
+                Err("entity.delete_restricted")
+            );
+            assert_eq!(candidate, model);
+        }
+    }
+
+    let (mut explicit_remove, a, b, _) = link_model(false);
+    explicit_remove
+        .apply_transaction(Transaction {
+            despawns: vec![despawn(a, "despawn.a"), despawn(b, "despawn.b")],
+            operations: vec![remove(
+                pending_key("Link", vec![existing(a), existing(b)]),
+                "link.explicit_remove",
+            )],
+            ..Transaction::default()
+        })
+        .unwrap();
+    assert!(explicit_remove.relations.assertions.is_empty());
+
+    let (mut replaced, a, b, c) = link_model(false);
+    replaced
+        .apply_transaction(Transaction {
+            despawns: vec![despawn(b, "despawn.old_target")],
+            operations: vec![PendingOperation::ReplaceBy {
+                relation: "Link".to_owned(),
+                unique_constraint: "source".to_owned(),
+                selected_key: vec![existing(a)],
+                tuple: vec![existing(a), existing(c)],
+                metadata: OperationMetadata::cause("link.replace"),
+            }],
+            ..Transaction::default()
+        })
+        .unwrap();
+    assert!(replaced.relations.assertions.contains_key(&FactKey::new(
+        "Link",
+        vec![FactValue::Entity(a), FactValue::Entity(c)],
+    )));
+
+    let (mut cascade, a, _, _) = link_model(false);
+    cascade
+        .apply_transaction(Transaction {
+            despawns: vec![PendingDespawn {
+                entity: a,
+                metadata: OperationMetadata::cause("settlement.despawn.a")
+                    .with_capability("world.delete"),
+            }],
+            ..Transaction::default()
+        })
+        .unwrap();
+    let cascade_change = cascade
+        .relations
+        .last_changes
+        .iter()
+        .find(|change| change.kind == ChangeKind::Cascade)
+        .unwrap();
+    assert_eq!(
+        cascade_change.causes,
+        BTreeSet::from(["settlement.despawn.a".to_owned()])
+    );
+    assert_eq!(
+        cascade_change.required_capabilities,
+        BTreeSet::from(["world.delete".to_owned()])
+    );
+
+    let (mut same_entity, a, _, _) = link_model(false);
+    same_entity
+        .apply_transaction(Transaction {
+            operations: vec![PendingOperation::ReplaceBy {
+                relation: "Link".to_owned(),
+                unique_constraint: "source".to_owned(),
+                selected_key: vec![existing(a)],
+                tuple: vec![existing(a), existing(a)],
+                metadata: OperationMetadata::cause("link.self"),
+            }],
+            ..Transaction::default()
+        })
+        .unwrap();
+    let before = same_entity.clone();
+    assert_eq!(
+        same_entity.apply_transaction(Transaction {
+            despawns: vec![despawn(a, "despawn.self")],
+            ..Transaction::default()
+        }),
+        Err("entity.delete_restricted")
+    );
+    assert_eq!(same_entity, before);
+
+    let mut inserted_then_despawned = WorldModel::default();
+    inserted_then_despawned
+        .relations
+        .register(RelationSchema::new(
+            "CascadeOnly",
+            vec![entity_column("source").cascade(), entity_column("target")],
+        ))
+        .unwrap();
+    let source = inserted_then_despawned.entities.spawn();
+    let target = inserted_then_despawned.entities.spawn();
+    let next_assertion = inserted_then_despawned.relations.next_assertion_id;
+    inserted_then_despawned
+        .apply_transaction(Transaction {
+            despawns: vec![despawn(source, "despawn.inserted_source")],
+            operations: vec![insert(
+                pending_key("CascadeOnly", vec![existing(source), existing(target)]),
+                "insert.before.cascade",
+            )],
+            ..Transaction::default()
+        })
+        .unwrap();
+    assert!(inserted_then_despawned.relations.assertions.is_empty());
+    assert!(inserted_then_despawned.relations.last_changes.is_empty());
+    assert_eq!(
+        inserted_then_despawned.relations.next_assertion_id, next_assertion,
+        "a row that never commits has no assertion lifetime"
+    );
+}
+
+#[test]
+fn operational_state_binds_generations_assertion_allocator_and_restoration() {
+    let mut generation_a = WorldModel::default();
+    let first = generation_a.entities.spawn();
+    generation_a.entities.despawn(first).unwrap();
+    let mut generation_b = generation_a.clone();
+    let reused = generation_b.entities.spawn();
+    generation_b.entities.despawn(reused).unwrap();
+    assert_eq!(generation_a.entities.live, generation_b.entities.live);
+    assert_eq!(
+        generation_a.entities.free_slots,
+        generation_b.entities.free_slots
+    );
+    assert_ne!(
+        operational_checkpoint_bytes(&generation_a),
+        operational_checkpoint_bytes(&generation_b)
+    );
+
+    let state = OperationalRelationState::capture(&generation_a);
+    let mut restored = state.restore(generation_a.relations.schemas.clone());
+    let mut original = generation_a.clone();
+    assert_eq!(restored.entities.spawn(), original.entities.spawn());
+
+    let mut assertion_a = WorldModel::default();
+    assertion_a
+        .relations
+        .register(RelationSchema::new("Marker", vec![int_column("value")]))
+        .unwrap();
+    let mut assertion_b = assertion_a.clone();
+    assertion_b
+        .apply_transaction(Transaction {
+            operations: vec![insert(pending_key("Marker", vec![int(1)]), "insert")],
+            ..Transaction::default()
+        })
+        .unwrap();
+    assertion_b
+        .apply_transaction(Transaction {
+            operations: vec![remove(pending_key("Marker", vec![int(1)]), "remove")],
+            ..Transaction::default()
+        })
+        .unwrap();
+    assert!(assertion_a.relations.assertions.is_empty());
+    assert!(assertion_b.relations.assertions.is_empty());
+    assert_ne!(
+        operational_checkpoint_bytes(&assertion_a),
+        operational_checkpoint_bytes(&assertion_b)
+    );
+    let attempt = PortableAttempt {
+        checkpoint: portable_checkpoint_bytes(&assertion_a, &DerivationResult::new()),
+    };
+    let mut instructions = 0;
+    assert_eq!(
+        replay_portable(
+            &assertion_b,
+            &DerivationResult::new(),
+            &attempt,
+            &mut instructions,
+        ),
+        Err("attempt.checkpoint_mismatch")
+    );
+    assert_eq!(instructions, 0);
+
+    let state = OperationalRelationState::capture(&assertion_b);
+    let mut restored = state.restore(assertion_b.relations.schemas.clone());
+    for model in [&mut assertion_b, &mut restored] {
+        model
+            .apply_transaction(Transaction {
+                operations: vec![insert(
+                    pending_key("Marker", vec![int(2)]),
+                    "next.assertion",
+                )],
+                ..Transaction::default()
+            })
+            .unwrap();
+    }
+    assert_eq!(
+        assertion_b.relations.assertions,
+        restored.relations.assertions
+    );
+}
+
+#[test]
+fn schemas_and_semantic_wire_reject_ambiguous_or_noncanonical_input() {
+    assert_eq!(
+        RelationSchema::new("Ambiguous", vec![int_column("value")])
+            .unique("same", &[0])
+            .unique("same", &[0])
+            .validate_declaration(),
+        Err("relation.duplicate_unique_name")
+    );
+
+    let a = FactKey::new("A", vec![FactValue::Int(1)]);
+    let b = FactKey::new("B", vec![FactValue::Int(2)]);
+    let mut duplicate = b"rfc0003.semantic.v1".to_vec();
+    write_u64(&mut duplicate, 2);
+    encode_fact_key(&mut duplicate, &a);
+    encode_fact_key(&mut duplicate, &a);
+    assert_eq!(
+        decode_semantic_relation_bytes(&duplicate),
+        Err("wire.noncanonical_fact_order")
+    );
+    let mut out_of_order = b"rfc0003.semantic.v1".to_vec();
+    write_u64(&mut out_of_order, 2);
+    encode_fact_key(&mut out_of_order, &b);
+    encode_fact_key(&mut out_of_order, &a);
+    assert_eq!(
+        decode_semantic_relation_bytes(&out_of_order),
+        Err("wire.noncanonical_fact_order")
+    );
+}
+
+#[test]
+fn hidden_proof_branches_do_not_change_transitive_or_aggregate_public_bytes() {
+    let mut model = WorldModel::default();
+    for source in [
+        "VisibleSourceA",
+        "VisibleSourceB",
+        "HiddenSourceA",
+        "HiddenSourceB",
+        "JoinSource",
+    ] {
+        model
+            .relations
+            .register(RelationSchema::new(source, vec![int_column("value")]))
+            .unwrap();
+    }
+    model
+        .apply_transaction(Transaction {
+            operations: vec![
+                PendingOperation::Insert(
+                    pending_key("VisibleSourceA", vec![int(1)]),
+                    OperationMetadata::cause("visible.a"),
+                ),
+                PendingOperation::Insert(
+                    pending_key("VisibleSourceB", vec![int(1)]),
+                    OperationMetadata::cause("visible.b"),
+                ),
+                PendingOperation::Insert(
+                    pending_key("HiddenSourceA", vec![int(1)]),
+                    OperationMetadata::cause("hidden.a").with_capability("secret.a"),
+                ),
+                PendingOperation::Insert(
+                    pending_key("HiddenSourceB", vec![int(1)]),
+                    OperationMetadata::cause("hidden.b").with_capability("secret.b"),
+                ),
+                insert(pending_key("JoinSource", vec![int(1)]), "join.visible"),
+            ],
+            ..Transaction::default()
+        })
+        .unwrap();
+
+    let mut schemas = derived_schemas();
+    for schema in [
+        RelationSchema::new("Public", vec![int_column("value")]),
+        RelationSchema::new("Joined", vec![int_column("value")]),
+        RelationSchema::new("CountMarked", vec![count_column("count")]),
+        RelationSchema::new("SumMarked", vec![int_column("sum")]),
+        RelationSchema::new("MinMarked", vec![int_column("min")]),
+        RelationSchema::new("MaxMarked", vec![int_column("max")]),
+    ] {
+        schemas.insert(schema.name.clone(), schema);
+    }
+    let mut rules = [
+        "VisibleSourceA",
+        "VisibleSourceB",
+        "HiddenSourceA",
+        "HiddenSourceB",
+    ]
+    .into_iter()
+    .map(|source| RulePlan {
+        id: format!("derive.Marked.{source}"),
+        head_relation: "Marked".to_owned(),
+        head: vec![Term::var("value")],
+        atoms: vec![Atom::new(source, vec![Term::var("value")])],
+        predicates: Vec::new(),
+        aggregate: None,
+    })
+    .collect::<Vec<_>>();
+    rules.extend([
+        RulePlan {
+            id: "derive.Public".to_owned(),
+            head_relation: "Public".to_owned(),
+            head: vec![Term::var("value")],
+            atoms: vec![Atom::new("Marked", vec![Term::var("value")])],
+            predicates: Vec::new(),
+            aggregate: None,
+        },
+        RulePlan {
+            id: "derive.Joined".to_owned(),
+            head_relation: "Joined".to_owned(),
+            head: vec![Term::var("value")],
+            atoms: vec![
+                Atom::new("Marked", vec![Term::var("value")]),
+                Atom::new("JoinSource", vec![Term::var("value")]),
+            ],
+            predicates: Vec::new(),
+            aggregate: None,
+        },
+    ]);
+    for (relation, output, kind) in [
+        ("CountMarked", "count", AggregateKind::Count),
+        ("SumMarked", "sum", AggregateKind::Sum),
+        ("MinMarked", "min", AggregateKind::Min),
+        ("MaxMarked", "max", AggregateKind::Max),
+    ] {
+        rules.push(RulePlan {
+            id: format!("derive.{relation}"),
+            head_relation: relation.to_owned(),
+            head: vec![Term::var(output)],
+            atoms: vec![Atom::new("Marked", vec![Term::var("value")])],
+            predicates: Vec::new(),
+            aggregate: Some(AggregateSpec {
+                kind,
+                input: (!matches!(kind, AggregateKind::Count)).then(|| "value".to_owned()),
+                output: output.to_owned(),
+                group_by: Vec::new(),
+            }),
+        });
+    }
+
+    let with_hidden = derive_all(&model.relations, &schemas, &rules, limits(256)).unwrap();
+    let mut without_hidden_model = model.clone();
+    without_hidden_model
+        .apply_transaction(Transaction {
+            operations: vec![
+                remove(pending_key("HiddenSourceA", vec![int(1)]), "remove.a"),
+                remove(pending_key("HiddenSourceB", vec![int(1)]), "remove.b"),
+            ],
+            ..Transaction::default()
+        })
+        .unwrap();
+    let without_hidden = derive_all(
+        &without_hidden_model.relations,
+        &schemas,
+        &rules,
+        limits(256),
+    )
+    .unwrap();
+    assert_eq!(
+        render_visible(&with_hidden, &BTreeSet::new()),
+        render_visible(&without_hidden, &BTreeSet::new())
+    );
+    assert_eq!(
+        with_hidden[&FactKey::new("CountMarked", vec![FactValue::Count(1)])].len(),
+        4,
+        "one logical binding contributes once while provenance branches remain separate"
+    );
+    assert_ne!(
+        render_visible(
+            &with_hidden,
+            &BTreeSet::from(["secret.a".to_owned(), "secret.b".to_owned()]),
+        ),
+        render_visible(&with_hidden, &BTreeSet::new())
+    );
+}
+
+#[test]
+fn aggregate_checker_rejects_nongrouped_projection_and_invalid_shapes() {
+    let (model, _, _, _) = seed_ownership_model();
+    let mut schemas = derived_schemas();
+    for schema in [
+        RelationSchema::new(
+            "BadProjection",
+            vec![
+                entity_column("person"),
+                entity_column("item"),
+                count_column("count"),
+            ],
+        ),
+        RelationSchema::new(
+            "CountByPerson",
+            vec![entity_column("person"), count_column("count")],
+        ),
+        RelationSchema::new(
+            "BadBoundOutput",
+            vec![entity_column("person"), count_column("item")],
+        ),
+        RelationSchema::new(
+            "SumByPerson",
+            vec![entity_column("person"), int_column("sum")],
+        ),
+        RelationSchema::new(
+            "WrongOutput",
+            vec![entity_column("person"), count_column("sum")],
+        ),
+    ] {
+        schemas.insert(schema.name.clone(), schema);
+    }
+    let count_rule = |head_relation: &str, head: Vec<Term>, group_by: Vec<&str>, input| RulePlan {
+        id: format!("derive.{head_relation}"),
+        head_relation: head_relation.to_owned(),
+        head,
+        atoms: vec![Atom::new(
+            "Owns",
+            vec![Term::var("person"), Term::var("item")],
+        )],
+        predicates: Vec::new(),
+        aggregate: Some(AggregateSpec {
+            kind: AggregateKind::Count,
+            input,
+            output: "count".to_owned(),
+            group_by: group_by.into_iter().map(str::to_owned).collect(),
+        }),
+    };
+    assert_eq!(
+        count_rule(
+            "BadProjection",
+            vec![Term::var("person"), Term::var("item"), Term::var("count")],
+            vec!["person"],
+            None,
+        )
+        .validate(&model.relations, &schemas),
+        Err("derivation.aggregate_head_projection")
+    );
+    let bound_output = RulePlan {
+        id: "derive.BadBoundOutput".to_owned(),
+        head_relation: "BadBoundOutput".to_owned(),
+        head: vec![Term::var("person"), Term::var("item")],
+        atoms: vec![Atom::new(
+            "Owns",
+            vec![Term::var("person"), Term::var("item")],
+        )],
+        predicates: Vec::new(),
+        aggregate: Some(AggregateSpec {
+            kind: AggregateKind::Count,
+            input: None,
+            output: "item".to_owned(),
+            group_by: vec!["person".to_owned()],
+        }),
+    };
+    assert_eq!(
+        bound_output.validate(&model.relations, &schemas),
+        Err("derivation.aggregate_output_not_fresh")
+    );
+    assert_eq!(
+        count_rule(
+            "CountByPerson",
+            vec![Term::var("person"), Term::var("count")],
+            vec!["person", "person"],
+            None,
+        )
+        .validate(&model.relations, &schemas),
+        Err("derivation.duplicate_group")
+    );
+    assert_eq!(
+        count_rule(
+            "CountByPerson",
+            vec![Term::var("person"), Term::var("count")],
+            vec!["person"],
+            Some("item".to_owned()),
+        )
+        .validate(&model.relations, &schemas),
+        Err("derivation.count_input")
+    );
+
+    let invalid_sum = |head_relation: &str, input: &str| RulePlan {
+        id: format!("derive.{head_relation}"),
+        head_relation: head_relation.to_owned(),
+        head: vec![Term::var("person"), Term::var("sum")],
+        atoms: vec![Atom::new(
+            "Owns",
+            vec![Term::var("person"), Term::var("item")],
+        )],
+        predicates: Vec::new(),
+        aggregate: Some(AggregateSpec {
+            kind: AggregateKind::Sum,
+            input: Some(input.to_owned()),
+            output: "sum".to_owned(),
+            group_by: vec!["person".to_owned()],
+        }),
+    };
+    assert_eq!(
+        invalid_sum("SumByPerson", "item").validate(&model.relations, &schemas),
+        Err("derivation.aggregate_type")
+    );
+
+    let wrong_output = RulePlan {
+        id: "derive.WrongOutput".to_owned(),
+        head_relation: "WrongOutput".to_owned(),
+        head: vec![Term::var("person"), Term::var("sum")],
+        atoms: vec![
+            Atom::new("Owns", vec![Term::var("person"), Term::var("item")]),
+            Atom::new("ItemWeight", vec![Term::var("item"), Term::var("weight")]),
+        ],
+        predicates: Vec::new(),
+        aggregate: Some(AggregateSpec {
+            kind: AggregateKind::Sum,
+            input: Some("weight".to_owned()),
+            output: "sum".to_owned(),
+            group_by: vec!["person".to_owned()],
+        }),
+    };
+    assert_eq!(
+        wrong_output.validate(&model.relations, &schemas),
+        Err("derivation.head_type")
+    );
+
+    let bad_atom_arity = RulePlan {
+        id: "derive.BadArity".to_owned(),
+        head_relation: "Marked".to_owned(),
+        head: vec![Term::Constant(FactValue::Int(1))],
+        atoms: vec![Atom::new("Owns", vec![Term::var("person")])],
+        predicates: Vec::new(),
+        aggregate: None,
+    };
+    assert_eq!(
+        bad_atom_arity.validate(&model.relations, &schemas),
+        Err("derivation.atom_arity")
+    );
+    let bad_atom_type = RulePlan {
+        id: "derive.BadType".to_owned(),
+        head_relation: "Marked".to_owned(),
+        head: vec![Term::Constant(FactValue::Int(1))],
+        atoms: vec![Atom::new(
+            "Owns",
+            vec![Term::Constant(FactValue::Int(1)), Term::var("item")],
+        )],
+        predicates: Vec::new(),
+        aggregate: None,
+    };
+    assert_eq!(
+        bad_atom_type.validate(&model.relations, &schemas),
+        Err("derivation.atom_type")
+    );
+
+    let incompatible_heads = vec![
+        RulePlan {
+            id: "derive.Marked.weight".to_owned(),
+            head_relation: "Marked".to_owned(),
+            head: vec![Term::var("weight")],
+            atoms: vec![Atom::new(
+                "ItemWeight",
+                vec![Term::var("item"), Term::var("weight")],
+            )],
+            predicates: Vec::new(),
+            aggregate: None,
+        },
+        RulePlan {
+            id: "derive.Marked.person".to_owned(),
+            head_relation: "Marked".to_owned(),
+            head: vec![Term::var("person")],
+            atoms: vec![Atom::new(
+                "Owns",
+                vec![Term::var("person"), Term::var("item")],
+            )],
+            predicates: Vec::new(),
+            aggregate: None,
+        },
+    ];
+    assert_eq!(
+        derive_all(&model.relations, &schemas, &incompatible_heads, limits(32)),
+        Err("derivation.head_type")
+    );
+}
+
+#[test]
+fn derivation_limits_bound_proofs_depth_supports_capabilities_and_bytes_atomically() {
+    let mut model = WorldModel::default();
+    for source in ["SourceA", "SourceB", "SourceC", "SourceD"] {
+        model
+            .relations
+            .register(RelationSchema::new(source, vec![int_column("value")]))
+            .unwrap();
+    }
+    model
+        .apply_transaction(Transaction {
+            operations: ["SourceA", "SourceB", "SourceC", "SourceD"]
+                .into_iter()
+                .map(|source| {
+                    PendingOperation::Insert(
+                        pending_key(source, vec![int(1)]),
+                        OperationMetadata::cause(source).with_capability(&format!("read.{source}")),
+                    )
+                })
+                .collect(),
+            ..Transaction::default()
+        })
+        .unwrap();
+    let mut schemas = derived_schemas();
+    for schema in [
+        RelationSchema::new("D1", vec![int_column("value")]),
+        RelationSchema::new("D2", vec![int_column("value")]),
+        RelationSchema::new("D3", vec![int_column("value")]),
+        RelationSchema::new("Left", vec![int_column("value")]),
+        RelationSchema::new("Right", vec![int_column("value")]),
+        RelationSchema::new("Combined", vec![int_column("value")]),
+        RelationSchema::new("CountBranches", vec![count_column("count")]),
+    ] {
+        schemas.insert(schema.name.clone(), schema);
+    }
+    let source_rule = |source: &str, head: &str| RulePlan {
+        id: format!("derive.{head}.{source}"),
+        head_relation: head.to_owned(),
+        head: vec![Term::var("value")],
+        atoms: vec![Atom::new(source, vec![Term::var("value")])],
+        predicates: Vec::new(),
+        aggregate: None,
+    };
+    let marked_rules = ["SourceA", "SourceB", "SourceC"]
+        .into_iter()
+        .map(|source| source_rule(source, "Marked"))
+        .collect::<Vec<_>>();
+
+    let bounded_result = derive_all(
+        &model.relations,
+        &schemas,
+        &marked_rules[..1],
+        DerivationLimits::generous(),
+    )
+    .unwrap();
+    let exact_canonical_bytes = canonical_derivation_bytes(&bounded_result).len();
+    let mut exact_byte_limit = DerivationLimits::generous();
+    exact_byte_limit.max_canonical_bytes = exact_canonical_bytes;
+    assert!(derive_all(
+        &model.relations,
+        &schemas,
+        &marked_rules[..1],
+        exact_byte_limit,
+    )
+    .is_ok());
+    exact_byte_limit.max_canonical_bytes -= 1;
+    assert_eq!(
+        derive_all(
+            &model.relations,
+            &schemas,
+            &marked_rules[..1],
+            exact_byte_limit,
+        ),
+        Err("derivation.canonical_byte_limit")
+    );
+
+    let mut proof_limit = DerivationLimits::generous();
+    proof_limit.max_proofs_per_fact = 2;
+    assert!(derive_all(&model.relations, &schemas, &marked_rules[..2], proof_limit,).is_ok());
+    assert_eq!(
+        derive_all(&model.relations, &schemas, &marked_rules, proof_limit),
+        Err("derivation.proofs_per_fact_limit")
+    );
+
+    let mut capability_limit = DerivationLimits::generous();
+    capability_limit.max_capability_alternatives = 2;
+    assert_eq!(
+        derive_all(&model.relations, &schemas, &marked_rules, capability_limit),
+        Err("derivation.capability_alternative_limit")
+    );
+    let mut support_limit = DerivationLimits::generous();
+    support_limit.max_support_nodes = 0;
+    assert_eq!(
+        derive_all(
+            &model.relations,
+            &schemas,
+            &marked_rules[..1],
+            support_limit
+        ),
+        Err("derivation.support_limit")
+    );
+    let mut byte_limit = DerivationLimits::generous();
+    byte_limit.max_canonical_bytes = 1;
+    assert_eq!(
+        derive_all(&model.relations, &schemas, &marked_rules[..1], byte_limit),
+        Err("derivation.canonical_byte_limit")
+    );
+    let mut fact_limit = DerivationLimits::generous();
+    fact_limit.max_facts = 0;
+    assert_eq!(
+        derive_all(&model.relations, &schemas, &marked_rules[..1], fact_limit),
+        Err("derivation.fact_limit")
+    );
+    let mut total_proof_limit = DerivationLimits::generous();
+    total_proof_limit.max_total_proofs = 0;
+    assert_eq!(
+        derive_all(
+            &model.relations,
+            &schemas,
+            &marked_rules[..1],
+            total_proof_limit,
+        ),
+        Err("derivation.total_proof_limit")
+    );
+
+    let depth_rules = vec![
+        source_rule("SourceA", "D1"),
+        source_rule("D1", "D2"),
+        source_rule("D2", "D3"),
+    ];
+    let mut depth_limit = DerivationLimits::generous();
+    depth_limit.max_proof_depth = 2;
+    assert_eq!(
+        derive_all(&model.relations, &schemas, &depth_rules, depth_limit),
+        Err("derivation.depth_limit")
+    );
+
+    let branch_rules = vec![
+        source_rule("SourceA", "Left"),
+        source_rule("SourceB", "Left"),
+        source_rule("SourceC", "Right"),
+        source_rule("SourceD", "Right"),
+        RulePlan {
+            id: "derive.Combined".to_owned(),
+            head_relation: "Combined".to_owned(),
+            head: vec![Term::var("value")],
+            atoms: vec![
+                Atom::new("Left", vec![Term::var("value")]),
+                Atom::new("Right", vec![Term::var("value")]),
+            ],
+            predicates: Vec::new(),
+            aggregate: None,
+        },
+    ];
+    let mut branch_limit = DerivationLimits::generous();
+    branch_limit.max_capability_alternatives = 3;
+    assert_eq!(
+        derive_all(&model.relations, &schemas, &branch_rules, branch_limit),
+        Err("derivation.capability_alternative_limit")
+    );
+
+    let aggregate_rules = marked_rules
+        .iter()
+        .cloned()
+        .chain([RulePlan {
+            id: "derive.CountBranches".to_owned(),
+            head_relation: "CountBranches".to_owned(),
+            head: vec![Term::var("count")],
+            atoms: vec![Atom::new("Marked", vec![Term::var("value")])],
+            predicates: Vec::new(),
+            aggregate: Some(AggregateSpec {
+                kind: AggregateKind::Count,
+                input: None,
+                output: "count".to_owned(),
+                group_by: Vec::new(),
+            }),
+        }])
+        .collect::<Vec<_>>();
+    let mut aggregate_branch_limit = DerivationLimits::generous();
+    aggregate_branch_limit.max_capability_alternatives = 2;
+    assert_eq!(
+        derive_all(
+            &model.relations,
+            &schemas,
+            &aggregate_rules,
+            aggregate_branch_limit,
+        ),
+        Err("derivation.capability_alternative_limit")
+    );
+
+    let mut incremental_model = WorldModel::default();
+    for source in ["SourceA", "SourceB", "SourceC"] {
+        incremental_model
+            .relations
+            .register(RelationSchema::new(source, vec![int_column("value")]))
+            .unwrap();
+    }
+    incremental_model
+        .apply_transaction(Transaction {
+            operations: vec![insert(pending_key("SourceA", vec![int(1)]), "a")],
+            ..Transaction::default()
+        })
+        .unwrap();
+    let mut incremental = DependencyMaintainer::new(
+        incremental_model.clone(),
+        schemas.clone(),
+        marked_rules.clone(),
+        proof_limit,
+    )
+    .unwrap();
+    let overflow = Transaction {
+        operations: vec![
+            insert(pending_key("SourceB", vec![int(1)]), "b"),
+            insert(pending_key("SourceC", vec![int(1)]), "c"),
+        ],
+        ..Transaction::default()
+    };
+    let mut full_candidate = incremental_model.clone();
+    full_candidate.apply_transaction(overflow.clone()).unwrap();
+    let full_error = derive_all(
+        &full_candidate.relations,
+        &schemas,
+        &marked_rules,
+        proof_limit,
+    );
+    assert_eq!(full_error, Err("derivation.proofs_per_fact_limit"));
+    assert_eq!(incremental.apply(overflow), full_error.map(|_| ()));
+    assert_eq!(incremental.model, incremental_model);
 }
