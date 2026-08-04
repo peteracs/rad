@@ -52,19 +52,18 @@ struct SealedNativeImage {
 
 #[cfg(not(target_arch = "wasm32"))]
 impl SealedNativeImage {
+    #[cfg(target_os = "linux")]
     fn loader_path(&self) -> PathBuf {
-        #[cfg(target_os = "linux")]
-        {
-            use std::os::fd::AsRawFd;
-            // Linux's loader follows this descriptor to the already-open
-            // inode. A later rename or replacement of the cache path cannot
-            // change which bytes are mapped.
-            return PathBuf::from(format!("/proc/self/fd/{}", self.file.as_raw_fd()));
-        }
-        #[cfg(not(target_os = "linux"))]
-        {
-            self.path.clone()
-        }
+        use std::os::fd::AsRawFd;
+        // Linux's loader follows this descriptor to the already-open inode. A
+        // later rename or replacement of the cache path cannot change which
+        // bytes are mapped.
+        PathBuf::from(format!("/proc/self/fd/{}", self.file.as_raw_fd()))
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    fn loader_path(&self) -> PathBuf {
+        self.path.clone()
     }
 }
 
