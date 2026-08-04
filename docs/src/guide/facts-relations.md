@@ -82,6 +82,12 @@ The accepted v0 contract fixes the identity-sensitive rules:
   different typed resource failure.
 - a sealed-plan profile bounds rules, atoms, predicates, terms, dependency
   edges, and canonical plan bytes before evaluation.
+- invalid plans use a fixed-priority canonical diagnostic reduction, while
+  accepted plans precompute one sealed byte representation, digest, dependency
+  set, inferred schema, and resource quote for all later consumers;
+- the decoder's `max_structural_bytes` is an abstract deterministic structural
+  cost, not a measured allocator peak. The runtime implementation will use a
+  bounded arena for a true peak-allocation contract.
 
 The executable oracle validates rows through generic typed schemas, preserves
 assertion ancestry across deletion and reinsertion, rejects unknown, ill-typed,

@@ -6,6 +6,7 @@
 //! closure and atomicity without claiming an independent incremental engine.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
 
 use sha2::{Digest, Sha256};
 
@@ -1387,6 +1388,150 @@ fn predicate_bytes(predicate: &Predicate) -> Vec<u8> {
     out
 }
 
+fn hash_text(hasher: &mut Sha256, value: &str) {
+    hasher.update((value.len() as u64).to_be_bytes());
+    hasher.update(value.as_bytes());
+}
+
+fn hash_value(hasher: &mut Sha256, value: &FactValue) {
+    match value {
+        FactValue::Int(value) => {
+            hasher.update(b"i");
+            hasher.update(value.to_be_bytes());
+        }
+        FactValue::Count(value) => {
+            hasher.update(b"c");
+            hasher.update(value.to_be_bytes());
+        }
+        FactValue::Entity(entity) => {
+            hasher.update(b"e");
+            hasher.update(entity.slot.to_be_bytes());
+            hasher.update(entity.generation.to_be_bytes());
+        }
+        FactValue::Text(value) => {
+            hasher.update(b"t");
+            hash_text(hasher, value);
+        }
+    }
+}
+
+fn hash_term(hasher: &mut Sha256, term: &Term) {
+    match term {
+        Term::Variable(name) => {
+            hasher.update(b"v");
+            hash_text(hasher, name);
+        }
+        Term::Constant(value) => {
+            hasher.update(b"c");
+            hash_value(hasher, value);
+        }
+    }
+}
+
+fn atom_fingerprint(atom: &Atom) -> [u8; 32] {
+    let mut hasher = Sha256::new();
+    hasher.update(b"rfc0003.raw-atom.v1");
+    hash_text(&mut hasher, &atom.relation);
+    hasher.update((atom.terms.len() as u64).to_be_bytes());
+    for term in &atom.terms {
+        hash_term(&mut hasher, term);
+    }
+    hasher.finalize().into()
+}
+
+fn predicate_fingerprint(predicate: &Predicate) -> [u8; 32] {
+    let mut hasher = Sha256::new();
+    hasher.update(b"rfc0003.raw-predicate.v1");
+    match predicate {
+        Predicate::Greater(left, right) => {
+            hasher.update(b"g");
+            hash_text(&mut hasher, left);
+            hash_text(&mut hasher, right);
+        }
+    }
+    hasher.finalize().into()
+}
+
+#[derive(Default)]
+struct DigestMultiset {
+    count: u64,
+    sums: [u64; 4],
+    xors: [u64; 4],
+}
+
+impl DigestMultiset {
+    fn insert(&mut self, digest: [u8; 32]) {
+        self.count = self.count.saturating_add(1);
+        for (index, chunk) in digest.chunks_exact(8).enumerate() {
+            let value = u64::from_be_bytes(chunk.try_into().expect("eight bytes"));
+            self.sums[index] = self.sums[index].wrapping_add(value);
+            self.xors[index] ^= value;
+        }
+    }
+
+    fn finish(&self, domain: &[u8]) -> [u8; 32] {
+        let mut hasher = Sha256::new();
+        hasher.update(domain);
+        hasher.update(self.count.to_be_bytes());
+        for value in self.sums {
+            hasher.update(value.to_be_bytes());
+        }
+        for value in self.xors {
+            hasher.update(value.to_be_bytes());
+        }
+        hasher.finalize().into()
+    }
+}
+
+fn raw_rule_fingerprint(rule: &RulePlan) -> [u8; 32] {
+    let mut hasher = Sha256::new();
+    hasher.update(b"rfc0003.raw-rule-plan.v1");
+    hash_text(&mut hasher, &rule.id);
+    hash_text(&mut hasher, &rule.head_relation);
+    hasher.update((rule.head.len() as u64).to_be_bytes());
+    for term in &rule.head {
+        hash_term(&mut hasher, term);
+    }
+    let mut atoms = DigestMultiset::default();
+    for atom in &rule.atoms {
+        atoms.insert(atom_fingerprint(atom));
+    }
+    hasher.update(atoms.finish(b"rfc0003.raw-rule-atoms.v1"));
+    let mut predicates = DigestMultiset::default();
+    for predicate in &rule.predicates {
+        predicates.insert(predicate_fingerprint(predicate));
+    }
+    hasher.update(predicates.finish(b"rfc0003.raw-rule-predicates.v1"));
+    match &rule.aggregate {
+        None => hasher.update([0]),
+        Some(aggregate) => {
+            hasher.update([1]);
+            hasher.update([match aggregate.kind {
+                AggregateKind::Count => b'c',
+                AggregateKind::Sum => b's',
+                AggregateKind::Min => b'n',
+                AggregateKind::Max => b'x',
+            }]);
+            match &aggregate.input {
+                None => hasher.update([0]),
+                Some(input) => {
+                    hasher.update([1]);
+                    hash_text(&mut hasher, input);
+                }
+            }
+            hash_text(&mut hasher, &aggregate.output);
+            let mut groups = DigestMultiset::default();
+            for group in &aggregate.group_by {
+                let mut group_hasher = Sha256::new();
+                hash_text(&mut group_hasher, group);
+                groups.insert(group_hasher.finalize().into());
+            }
+            hasher.update(groups.finish(b"rfc0003.raw-rule-groups.v1"));
+        }
+    }
+    hasher.finalize().into()
+}
+
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 struct BindingState {
     bindings: BTreeMap<String, FactValue>,
@@ -1413,6 +1558,255 @@ impl RulePlanLimits {
             max_canonical_plan_bytes: 16 * 1024 * 1024,
             max_dependency_edges: 16_384,
         }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+enum RuleDiagnosticCode {
+    EmptyId,
+    UnqualifiedId,
+    RuleLimit,
+    DuplicateId,
+    AtomLimit,
+    PredicateLimit,
+    TermLimit,
+    CanonicalByteLimit,
+    DependencyEdgeLimit,
+}
+
+impl RuleDiagnosticCode {
+    fn error(self) -> &'static str {
+        match self {
+            Self::EmptyId => "derivation.empty_rule_id",
+            Self::UnqualifiedId => "derivation.unqualified_rule_id",
+            Self::RuleLimit => "derivation.rule_limit",
+            Self::DuplicateId => "derivation.duplicate_rule_id",
+            Self::AtomLimit => "derivation.atom_limit",
+            Self::PredicateLimit => "derivation.predicate_limit",
+            Self::TermLimit => "derivation.term_limit",
+            Self::CanonicalByteLimit => "derivation.rule_plan_byte_limit",
+            Self::DependencyEdgeLimit => "derivation.dependency_edge_limit",
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+struct RuleDiagnostic {
+    code: RuleDiagnosticCode,
+    rule_fingerprint: [u8; 32],
+    detail_key: [u8; 32],
+}
+
+fn diagnostic_detail(code: RuleDiagnosticCode, actual: usize, limit: usize) -> [u8; 32] {
+    let mut hasher = Sha256::new();
+    hasher.update(b"rfc0003.rule-diagnostic-detail.v1");
+    hasher.update([code as u8]);
+    hasher.update((actual as u64).to_be_bytes());
+    hasher.update((limit as u64).to_be_bytes());
+    hasher.finalize().into()
+}
+
+fn diagnostic(
+    code: RuleDiagnosticCode,
+    rule_fingerprint: [u8; 32],
+    actual: usize,
+    limit: usize,
+) -> RuleDiagnostic {
+    RuleDiagnostic {
+        code,
+        rule_fingerprint,
+        detail_key: diagnostic_detail(code, actual, limit),
+    }
+}
+
+fn select_rule_diagnostic(rules: &[RulePlan], limits: RulePlanLimits) -> Option<RuleDiagnostic> {
+    let mut best = None::<RuleDiagnostic>;
+    let mut rule_fingerprints = DigestMultiset::default();
+    let within_rule_limit = rules.len() <= limits.max_rules;
+    let mut ids = within_rule_limit.then(BTreeMap::<&str, Vec<[u8; 32]>>::new);
+    let mut terms = 0usize;
+    let mut canonical_bytes = 0usize;
+    let mut dependency_edges = BTreeSet::new();
+
+    let mut offer = |diagnostic: RuleDiagnostic| {
+        if best.as_ref().is_none_or(|current| diagnostic < *current) {
+            best = Some(diagnostic);
+        }
+    };
+
+    for rule in rules {
+        let fingerprint = raw_rule_fingerprint(rule);
+        rule_fingerprints.insert(fingerprint);
+        if rule.id.is_empty() {
+            offer(diagnostic(RuleDiagnosticCode::EmptyId, fingerprint, 0, 1));
+        } else if !rule.id.contains('.') && !rule.id.contains("::") {
+            offer(diagnostic(
+                RuleDiagnosticCode::UnqualifiedId,
+                fingerprint,
+                rule.id.len(),
+                0,
+            ));
+        }
+        if !within_rule_limit {
+            continue;
+        }
+        ids.as_mut()
+            .expect("bounded ID table")
+            .entry(&rule.id)
+            .or_default()
+            .push(fingerprint);
+        if rule.atoms.len() > limits.max_atoms_per_rule {
+            offer(diagnostic(
+                RuleDiagnosticCode::AtomLimit,
+                fingerprint,
+                rule.atoms.len(),
+                limits.max_atoms_per_rule,
+            ));
+        }
+        if rule.predicates.len() > limits.max_predicates_per_rule {
+            offer(diagnostic(
+                RuleDiagnosticCode::PredicateLimit,
+                fingerprint,
+                rule.predicates.len(),
+                limits.max_predicates_per_rule,
+            ));
+        }
+        terms = terms
+            .checked_add(rule.head.len())
+            .and_then(|count| {
+                rule.atoms
+                    .iter()
+                    .try_fold(count, |count, atom| count.checked_add(atom.terms.len()))
+            })
+            .unwrap_or(usize::MAX);
+        canonical_bytes =
+            canonical_bytes.saturating_add(rule.canonical_len().unwrap_or(usize::MAX));
+        for atom in &rule.atoms {
+            dependency_edges.insert((rule.head_relation.as_str(), atom.relation.as_str()));
+        }
+    }
+
+    let rule_set_fingerprint = rule_fingerprints.finish(b"rfc0003.raw-rule-plan-multiset.v1");
+    if !within_rule_limit {
+        offer(diagnostic(
+            RuleDiagnosticCode::RuleLimit,
+            rule_set_fingerprint,
+            rules.len(),
+            limits.max_rules,
+        ));
+        return best;
+    }
+    for fingerprints in ids.expect("bounded ID table").values_mut() {
+        if fingerprints.len() > 1 {
+            fingerprints.sort();
+            offer(diagnostic(
+                RuleDiagnosticCode::DuplicateId,
+                fingerprints[0],
+                fingerprints.len(),
+                1,
+            ));
+        }
+    }
+    if terms > limits.max_terms {
+        offer(diagnostic(
+            RuleDiagnosticCode::TermLimit,
+            rule_set_fingerprint,
+            terms,
+            limits.max_terms,
+        ));
+    }
+    if canonical_bytes > limits.max_canonical_plan_bytes {
+        offer(diagnostic(
+            RuleDiagnosticCode::CanonicalByteLimit,
+            rule_set_fingerprint,
+            canonical_bytes,
+            limits.max_canonical_plan_bytes,
+        ));
+    }
+    if dependency_edges.len() > limits.max_dependency_edges {
+        offer(diagnostic(
+            RuleDiagnosticCode::DependencyEdgeLimit,
+            rule_set_fingerprint,
+            dependency_edges.len(),
+            limits.max_dependency_edges,
+        ));
+    }
+    best
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct RuleStaticQuote {
+    atoms: usize,
+    predicates: usize,
+    terms: usize,
+    canonical_bytes: usize,
+    dependency_edges: usize,
+}
+
+struct SealedRulePlan<'a> {
+    plan: &'a RulePlan,
+    canonical_bytes: Arc<[u8]>,
+    digest: [u8; 32],
+    dependency_set: BTreeSet<String>,
+    inferred_head_schema: Option<RelationSchema>,
+    static_quote: RuleStaticQuote,
+}
+
+impl<'a> SealedRulePlan<'a> {
+    fn new(plan: &'a RulePlan, schemas: &BTreeMap<String, RelationSchema>) -> Self {
+        let canonical_bytes = Arc::<[u8]>::from(plan.canonical_bytes());
+        let digest = Sha256::digest(canonical_bytes.as_ref()).into();
+        let dependency_set = plan
+            .atoms
+            .iter()
+            .map(|atom| atom.relation.clone())
+            .collect::<BTreeSet<_>>();
+        let static_quote = RuleStaticQuote {
+            atoms: plan.atoms.len(),
+            predicates: plan.predicates.len(),
+            terms: plan.head.len()
+                + plan
+                    .atoms
+                    .iter()
+                    .map(|atom| atom.terms.len())
+                    .sum::<usize>(),
+            canonical_bytes: canonical_bytes.len(),
+            dependency_edges: dependency_set.len(),
+        };
+        Self {
+            plan,
+            canonical_bytes,
+            digest,
+            dependency_set,
+            inferred_head_schema: schemas.get(&plan.head_relation).cloned(),
+            static_quote,
+        }
+    }
+
+    fn validate(
+        &self,
+        store: &RelationStore,
+        schemas: &BTreeMap<String, RelationSchema>,
+    ) -> OracleResult<()> {
+        let expected_quote = RuleStaticQuote {
+            atoms: self.plan.atoms.len(),
+            predicates: self.plan.predicates.len(),
+            terms: self.plan.head.len()
+                + self
+                    .plan
+                    .atoms
+                    .iter()
+                    .map(|atom| atom.terms.len())
+                    .sum::<usize>(),
+            canonical_bytes: self.canonical_bytes.len(),
+            dependency_edges: self.dependency_set.len(),
+        };
+        if self.static_quote != expected_quote
+            || self.inferred_head_schema.as_ref() != schemas.get(&self.plan.head_relation)
+        {
+            return Err("derivation.invalid_sealed_rule");
+        }
+        self.plan.validate(store, schemas)
     }
 }
 
@@ -2025,31 +2419,19 @@ fn derive_all(
             return Err("derivation.relation_namespace_collision");
         }
     }
-    let mut rule_ids = BTreeSet::new();
-    for rule in rules {
-        if rule.id.is_empty() {
-            return Err("derivation.empty_rule_id");
-        }
-        if !rule.id.contains('.') && !rule.id.contains("::") {
-            return Err("derivation.unqualified_rule_id");
-        }
-        if !rule_ids.insert(&rule.id) {
-            return Err("derivation.duplicate_rule_id");
-        }
+    if let Some(diagnostic) = select_rule_diagnostic(rules, limits.rule_plans) {
+        return Err(diagnostic.code.error());
     }
-    validate_rule_plan_limits(rules, limits.rule_plans)?;
-    let mut canonical_rules = rules.iter().collect::<Vec<_>>();
+    let mut canonical_rules = rules
+        .iter()
+        .map(|rule| SealedRulePlan::new(rule, schemas))
+        .collect::<Vec<_>>();
     canonical_rules.sort_by(|left, right| {
-        (
-            &left.head_relation,
-            &left.id,
-            Sha256::digest(left.canonical_bytes()),
-        )
-            .cmp(&(
-                &right.head_relation,
-                &right.id,
-                Sha256::digest(right.canonical_bytes()),
-            ))
+        (&left.plan.head_relation, &left.plan.id, left.digest).cmp(&(
+            &right.plan.head_relation,
+            &right.plan.id,
+            right.digest,
+        ))
     });
     for rule in &canonical_rules {
         rule.validate(store, schemas)?;
@@ -2057,7 +2439,7 @@ fn derive_all(
     let mut meter = DerivationMeter::new(limits);
     let heads = canonical_rules
         .iter()
-        .map(|rule| rule.head_relation.clone())
+        .map(|rule| rule.plan.head_relation.clone())
         .collect::<BTreeSet<_>>();
     let mut pending = heads.clone();
     let mut completed = BTreeSet::new();
@@ -2066,19 +2448,19 @@ fn derive_all(
         let ready = pending.iter().find(|head| {
             canonical_rules
                 .iter()
-                .filter(|rule| rule.head_relation.as_str() == head.as_str())
-                .flat_map(|rule| &rule.atoms)
-                .filter(|atom| heads.contains(&atom.relation))
-                .all(|atom| completed.contains(&atom.relation))
+                .filter(|rule| rule.plan.head_relation.as_str() == head.as_str())
+                .flat_map(|rule| &rule.dependency_set)
+                .filter(|dependency| heads.contains(*dependency))
+                .all(|dependency| completed.contains(dependency))
         });
         let Some(head) = ready.cloned() else {
             return Err("derivation.cycle");
         };
         for rule in canonical_rules
             .iter()
-            .filter(|rule| rule.head_relation == head)
+            .filter(|rule| rule.plan.head_relation == head)
         {
-            let produced = evaluate_rule(rule, store, schemas, &result, &mut meter)?;
+            let produced = evaluate_rule(rule.plan, store, schemas, &result, &mut meter)?;
             for (fact, proofs) in produced {
                 result.entry(fact).or_default().extend(proofs);
             }
@@ -2087,47 +2469,6 @@ fn derive_all(
         completed.insert(head);
     }
     Ok(result)
-}
-
-fn validate_rule_plan_limits(rules: &[RulePlan], limits: RulePlanLimits) -> OracleResult<()> {
-    if rules.len() > limits.max_rules {
-        return Err("derivation.rule_limit");
-    }
-    let mut terms = 0usize;
-    let mut canonical_bytes = 0usize;
-    let mut dependency_edges = BTreeSet::new();
-    for rule in rules {
-        if rule.atoms.len() > limits.max_atoms_per_rule {
-            return Err("derivation.atom_limit");
-        }
-        if rule.predicates.len() > limits.max_predicates_per_rule {
-            return Err("derivation.predicate_limit");
-        }
-        terms = terms
-            .checked_add(rule.head.len())
-            .and_then(|count| {
-                rule.atoms
-                    .iter()
-                    .try_fold(count, |count, atom| count.checked_add(atom.terms.len()))
-            })
-            .ok_or("derivation.term_limit")?;
-        if terms > limits.max_terms {
-            return Err("derivation.term_limit");
-        }
-        canonical_bytes = canonical_bytes
-            .checked_add(rule.canonical_len()?)
-            .ok_or("derivation.rule_plan_byte_limit")?;
-        if canonical_bytes > limits.max_canonical_plan_bytes {
-            return Err("derivation.rule_plan_byte_limit");
-        }
-        for atom in &rule.atoms {
-            dependency_edges.insert((rule.head_relation.as_str(), atom.relation.as_str()));
-            if dependency_edges.len() > limits.max_dependency_edges {
-                return Err("derivation.dependency_edge_limit");
-            }
-        }
-    }
-    Ok(())
 }
 
 #[derive(Clone)]
@@ -2504,7 +2845,7 @@ struct DecodeLimits {
     max_facts: usize,
     max_values: usize,
     max_text_bytes: usize,
-    max_decoded_bytes: usize,
+    max_structural_bytes: usize,
 }
 
 impl DecodeLimits {
@@ -2514,7 +2855,7 @@ impl DecodeLimits {
             max_facts: 65_536,
             max_values: 1_048_576,
             max_text_bytes: 8 * 1024 * 1024,
-            max_decoded_bytes: 64 * 1024 * 1024,
+            max_structural_bytes: 64 * 1024 * 1024,
         }
     }
 }
@@ -2523,7 +2864,7 @@ struct DecodeMeter {
     limits: DecodeLimits,
     values: usize,
     text_bytes: usize,
-    decoded_bytes: usize,
+    structural_bytes: usize,
 }
 
 impl DecodeMeter {
@@ -2535,17 +2876,17 @@ impl DecodeMeter {
             limits,
             values: 0,
             text_bytes: 0,
-            decoded_bytes: 0,
+            structural_bytes: 0,
         })
     }
 
-    fn charge_decoded_bytes(&mut self, bytes: usize) -> OracleResult<()> {
-        self.decoded_bytes = self
-            .decoded_bytes
+    fn charge_structural_bytes(&mut self, bytes: usize) -> OracleResult<()> {
+        self.structural_bytes = self
+            .structural_bytes
             .checked_add(bytes)
-            .ok_or("wire.decoded_byte_limit")?;
-        if self.decoded_bytes > self.limits.max_decoded_bytes {
-            return Err("wire.decoded_byte_limit");
+            .ok_or("wire.structural_byte_limit")?;
+        if self.structural_bytes > self.limits.max_structural_bytes {
+            return Err("wire.structural_byte_limit");
         }
         Ok(())
     }
@@ -2558,10 +2899,10 @@ impl DecodeMeter {
         if self.text_bytes > self.limits.max_text_bytes {
             return Err("wire.text_byte_limit");
         }
-        self.charge_decoded_bytes(
+        self.charge_structural_bytes(
             std::mem::size_of::<String>()
                 .checked_add(bytes)
-                .ok_or("wire.decoded_byte_limit")?,
+                .ok_or("wire.structural_byte_limit")?,
         )
     }
 
@@ -2570,10 +2911,10 @@ impl DecodeMeter {
         if self.values > self.limits.max_values {
             return Err("wire.value_limit");
         }
-        self.charge_decoded_bytes(
+        self.charge_structural_bytes(
             std::mem::size_of::<FactValue>()
                 .checked_mul(count)
-                .ok_or("wire.decoded_byte_limit")?,
+                .ok_or("wire.structural_byte_limit")?,
         )
     }
 }
@@ -2653,10 +2994,10 @@ fn decode_semantic_relation_bytes(
     if count > limits.max_facts {
         return Err("wire.fact_limit");
     }
-    meter.charge_decoded_bytes(
+    meter.charge_structural_bytes(
         std::mem::size_of::<FactKey>()
             .checked_mul(count)
-            .ok_or("wire.decoded_byte_limit")?,
+            .ok_or("wire.structural_byte_limit")?,
     )?;
     let mut facts = BTreeSet::new();
     let mut previous = None;
@@ -5695,6 +6036,127 @@ fn canonical_rule_plans_make_resource_failures_permutation_invariant() {
 }
 
 #[test]
+fn invalid_rule_diagnostics_are_canonical_under_every_registration_order() {
+    let plan = |id: &str, atoms: usize, predicates: usize| RulePlan {
+        id: id.to_owned(),
+        head_relation: "Out".to_owned(),
+        head: vec![Term::var("value")],
+        atoms: (0..atoms)
+            .map(|index| Atom::new(&format!("Input{index}"), vec![Term::var("value")]))
+            .collect(),
+        predicates: (0..predicates)
+            .map(|_| Predicate::Greater("value".to_owned(), "value".to_owned()))
+            .collect(),
+        aggregate: None,
+    };
+    let assert_permutations =
+        |rules: Vec<RulePlan>, limits: RulePlanLimits, expected: RuleDiagnosticCode| {
+            let forward = select_rule_diagnostic(&rules, limits).unwrap();
+            let mut reverse_rules = rules.clone();
+            reverse_rules.reverse();
+            let reverse = select_rule_diagnostic(&reverse_rules, limits).unwrap();
+            assert_eq!(forward, reverse);
+            assert_eq!(forward.code, expected);
+            let schemas = BTreeMap::from([(
+                "Out".to_owned(),
+                RelationSchema::new("Out", vec![int_column("value")]),
+            )]);
+            let mut derivation_limits = DerivationLimits::generous();
+            derivation_limits.rule_plans = limits;
+            let forward_error = derive_all(
+                &RelationStore::default(),
+                &schemas,
+                &rules,
+                derivation_limits,
+            );
+            let reverse_error = derive_all(
+                &RelationStore::default(),
+                &schemas,
+                &reverse_rules,
+                derivation_limits,
+            );
+            assert_eq!(forward_error, Err(expected.error()));
+            assert_eq!(reverse_error, forward_error);
+        };
+
+    assert_permutations(
+        vec![plan("", 1, 0), plan("unqualified", 1, 0)],
+        RulePlanLimits::generous(),
+        RuleDiagnosticCode::EmptyId,
+    );
+
+    let mut overlapping = RulePlanLimits::generous();
+    overlapping.max_atoms_per_rule = 1;
+    overlapping.max_predicates_per_rule = 0;
+    assert_permutations(
+        vec![plan("rules.atom", 2, 0), plan("rules.predicate", 1, 1)],
+        overlapping,
+        RuleDiagnosticCode::AtomLimit,
+    );
+
+    overlapping.max_predicates_per_rule = usize::MAX;
+    overlapping.max_terms = 1;
+    assert_permutations(
+        vec![plan("rules.atom", 2, 0), plan("rules.terms", 1, 0)],
+        overlapping,
+        RuleDiagnosticCode::AtomLimit,
+    );
+
+    let byte_plan = plan("rules.bytes", 1, 0);
+    let mut totals = RulePlanLimits::generous();
+    totals.max_terms = 1;
+    totals.max_canonical_plan_bytes = byte_plan.canonical_len().unwrap() - 1;
+    assert_permutations(
+        vec![byte_plan, plan("rules.terms", 1, 0)],
+        totals,
+        RuleDiagnosticCode::TermLimit,
+    );
+
+    assert_permutations(
+        vec![plan("rules.duplicate", 1, 0), plan("rules.duplicate", 2, 0)],
+        RulePlanLimits::generous(),
+        RuleDiagnosticCode::DuplicateId,
+    );
+
+    let three = [
+        plan("", 1, 0),
+        plan("rules.atom", 2, 0),
+        plan("rules.predicate", 1, 1),
+    ];
+    let permutations = [
+        [0, 1, 2],
+        [0, 2, 1],
+        [1, 0, 2],
+        [1, 2, 0],
+        [2, 0, 1],
+        [2, 1, 0],
+    ];
+    let mut three_limits = RulePlanLimits::generous();
+    three_limits.max_atoms_per_rule = 1;
+    three_limits.max_predicates_per_rule = 0;
+    let expected = permutations
+        .iter()
+        .map(|order| {
+            let rules = order
+                .iter()
+                .map(|index| three[*index].clone())
+                .collect::<Vec<_>>();
+            select_rule_diagnostic(&rules, three_limits).unwrap()
+        })
+        .collect::<BTreeSet<_>>();
+    assert_eq!(expected.len(), 1);
+    assert_eq!(
+        expected.iter().next().unwrap().code,
+        RuleDiagnosticCode::EmptyId
+    );
+
+    let mut atom_order = plan("rules.atom_order", 2, 0);
+    let fingerprint = raw_rule_fingerprint(&atom_order);
+    atom_order.atoms.reverse();
+    assert_eq!(raw_rule_fingerprint(&atom_order), fingerprint);
+}
+
+#[test]
 fn sealed_rule_plan_limits_bound_static_predicate_and_dependency_work() {
     let (model, _, _, _) = seed_ownership_model();
     let schemas = derived_schemas();
@@ -5797,14 +6259,14 @@ fn sealed_rule_plan_limits_bound_static_predicate_and_dependency_work() {
 }
 
 #[test]
-fn semantic_wire_decode_limits_reject_before_oversized_retention() {
+fn semantic_wire_structural_limits_reject_before_oversized_retention() {
     let schema = RelationSchema::new("Textual", vec![ColumnSchema::new("value", ValueKind::Text)]);
     let schemas = BTreeMap::from([("Textual".to_owned(), schema)]);
     let fact = FactKey::new("Textual", vec![FactValue::Text("payload".to_owned())]);
     let mut bytes = b"rfc0003.semantic.v1".to_vec();
     write_u64(&mut bytes, 1);
     encode_fact_key(&mut bytes, &fact);
-    let decoded_bytes = std::mem::size_of::<FactKey>()
+    let structural_bytes = std::mem::size_of::<FactKey>()
         + 2 * std::mem::size_of::<String>()
         + std::mem::size_of::<FactValue>()
         + "Textual".len()
@@ -5814,7 +6276,7 @@ fn semantic_wire_decode_limits_reject_before_oversized_retention() {
         max_facts: 1,
         max_values: 1,
         max_text_bytes: "Textual".len() + "payload".len(),
-        max_decoded_bytes: decoded_bytes,
+        max_structural_bytes: structural_bytes,
     };
     assert_eq!(
         decode_semantic_relation_bytes(&bytes, &schemas, &EntityTable::default(), exact).unwrap(),
@@ -5852,10 +6314,10 @@ fn semantic_wire_decode_limits_reject_before_oversized_retention() {
         ),
         (
             DecodeLimits {
-                max_decoded_bytes: decoded_bytes - 1,
+                max_structural_bytes: structural_bytes - 1,
                 ..exact
             },
-            "wire.decoded_byte_limit",
+            "wire.structural_byte_limit",
         ),
     ] {
         assert_eq!(

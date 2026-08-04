@@ -520,6 +520,25 @@ plan bytes before evaluation. This makes scalar predicate work statically
 bounded even though the derivation work meter is charged primarily at row,
 join, intermediate-state, proof, and aggregate boundaries.
 
+Invalid rule sets are order-independent too. Static validation reduces all
+applicable diagnostics through one fixed priority, canonical streaming raw-plan
+fingerprint, and canonical detail key. Global rule, term, canonical-byte, and
+dependency-edge limits are calculated from order-independent totals or sets.
+The same rule multiset therefore selects the same diagnostic identity under
+every rule or module registration permutation.
+
+V0 diagnostic priority is, in order: empty rule ID, unqualified rule ID,
+global rule-count limit, duplicate rule ID, per-rule atom limit, per-rule
+predicate limit, global term limit, global canonical-plan-byte limit, then
+global dependency-edge limit. Fingerprint and detail key break ties only within
+one code.
+
+Accepted plans are sealed once as their typed plan, canonical bytes and digest,
+dependency set, inferred head schema, and static resource quote. Validation,
+canonical sorting, manifest identity, replay, and later caches consume this
+single sealed identity rather than reconstructing and hashing plan bytes during
+comparisons.
+
 ## Storage and compilation
 
 The language semantics do not require a particular kernel layout. A compiler
@@ -567,7 +586,10 @@ restoration and canonical encoding. Canonical semantic decoders receive the
 sealed schema, live entity environment, and a versioned decode profile. They
 reject unknown relations, wrong arity or types, dead entity handles,
 noncanonical symmetric orientation, duplicate rows, out-of-order rows, and
-input/fact/value/text/allocation limit excesses before oversized retention.
+input/fact/value/text/structural-cost limit excesses before oversized
+retention. `max_structural_bytes` is a deterministic abstract cost over decoded
+containers, values, and strings; it is not a claim about allocator peak. The
+runtime decoder must eventually enforce peak allocation with a bounded arena.
 This decoder returns a canonical `FactKey` set; relation-wide uniqueness and
 other authoritative-state invariants are validated when that set enters the
 complete candidate. Semantic encoding contains fact keys; operational encoding
@@ -624,6 +646,10 @@ Required semantic fixtures before parser/runtime work:
     panic-free;
 18. sealed rule-plan and semantic-decoder profiles reject one-over-limit input
     before evaluation or oversized decoded retention.
+19. empty, unqualified, duplicate, oversized-atom, oversized-predicate,
+    term-limit, canonical-byte-limit, and dependency-limit diagnostics select
+    the same code and canonical identity under every overlapping rule/module
+    permutation.
 
 The repository integration test `core/vm/tests/rfc0003_reference.rs` is the
 executable contract. It uses generic typed schemas, fact keys/assertions,
