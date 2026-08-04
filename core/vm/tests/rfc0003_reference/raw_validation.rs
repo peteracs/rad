@@ -32,7 +32,7 @@ struct RawRuleInputLimits {
     max_predicates_per_rule: usize,
     max_aggregate_groups_per_rule: usize,
     max_total_structural_cost: usize,
-    max_validation_node_visits: usize,
+    max_body_node_visits: usize,
 }
 
 impl RawRuleInputLimits {
@@ -48,15 +48,16 @@ impl RawRuleInputLimits {
             max_predicates_per_rule: 512,
             max_aggregate_groups_per_rule: 1_024,
             max_total_structural_cost: 32 * 1024 * 1024,
-            max_validation_node_visits: 3_000_000,
+            max_body_node_visits: 2_000_000,
         }
     }
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 struct RawValidationUsage {
-    metadata_visits: usize,
-    node_visits: usize,
+    header_visits: usize,
+    shape_visits: usize,
+    body_node_visits: usize,
     ast_nodes: usize,
     structural_cost: usize,
     complete_fingerprints: usize,
@@ -499,24 +500,15 @@ fn analyze_rule_diagnostics(
         }
     }
 
+    // Raw rule-count admission makes this complete pass inherently bounded.
+    // It is deliberately not charged against the later body-work budget:
+    // every admitted header must participate in canonical diagnostic choice.
     let mut header_diagnostic = None;
-    let mut shape_diagnostic = None;
-    let mut work_diagnostic = None;
-    let mut ast_nodes = 0usize;
-    let mut metadata_visits = 0usize;
     for rule in rules {
-        if metadata_visits >= raw_limits.max_validation_node_visits {
-            work_diagnostic = Some(set_limit_diagnostic(
-                RuleDiagnosticCode::RawValidationWorkLimit,
-                raw_limits.max_validation_node_visits.saturating_add(1),
-                raw_limits.max_validation_node_visits,
-            ));
-            break;
-        }
-        metadata_visits += 1;
-        let identifiers_bounded = rule.id.len() <= raw_limits.max_identifier_bytes
-            && rule.head_relation.len() <= raw_limits.max_identifier_bytes;
-        let header = if identifiers_bounded {
+        usage.header_visits += 1;
+        let id_bounded = rule.id.len() <= raw_limits.max_identifier_bytes;
+        let head_bounded = rule.head_relation.len() <= raw_limits.max_identifier_bytes;
+        let header = if id_bounded && head_bounded {
             bounded_header_fingerprint(rule)
         } else {
             set_limit_witness(RuleDiagnosticCode::RawIdentifierByteLimit)
@@ -526,15 +518,15 @@ fn analyze_rule_diagnostics(
                 &mut header_diagnostic,
                 diagnostic(RuleDiagnosticCode::EmptyId, header, 0, 1),
             );
-        } else if identifiers_bounded && !rule.id.contains('.') && !rule.id.contains("::") {
+        } else if id_bounded && !rule.id.contains('.') && !rule.id.contains("::") {
             offer(
                 &mut header_diagnostic,
                 diagnostic(RuleDiagnosticCode::UnqualifiedId, header, rule.id.len(), 0),
             );
         }
-        if !identifiers_bounded {
+        if !id_bounded || !head_bounded {
             offer(
-                &mut shape_diagnostic,
+                &mut header_diagnostic,
                 set_limit_diagnostic(
                     RuleDiagnosticCode::RawIdentifierByteLimit,
                     rule.id.len().max(rule.head_relation.len()),
@@ -542,6 +534,22 @@ fn analyze_rule_diagnostics(
                 ),
             );
         }
+    }
+    if let Some(diagnostic) = header_diagnostic {
+        return RuleDiagnosticSelection {
+            diagnostic: Some(diagnostic),
+            usage,
+        };
+    }
+
+    // Shape inspection is also complete. Its maximum work is derived from
+    // max_rules * (1 + max_atoms_per_rule), so no independent profile knob can
+    // truncate it and make a raw shape diagnostic registration-order dependent.
+    let mut shape_diagnostic = None;
+    let mut ast_nodes = 0usize;
+    for rule in rules {
+        usage.shape_visits = checked_raw_add(usage.shape_visits, 1);
+        let header = bounded_header_fingerprint(rule);
         if rule.atoms.len() > raw_limits.max_atoms_per_rule {
             offer(
                 &mut shape_diagnostic,
@@ -580,17 +588,7 @@ fn analyze_rule_diagnostics(
             );
         }
         if rule.atoms.len() <= raw_limits.max_atoms_per_rule {
-            if checked_raw_add(metadata_visits, rule.atoms.len())
-                > raw_limits.max_validation_node_visits
-            {
-                work_diagnostic = Some(set_limit_diagnostic(
-                    RuleDiagnosticCode::RawValidationWorkLimit,
-                    raw_limits.max_validation_node_visits.saturating_add(1),
-                    raw_limits.max_validation_node_visits,
-                ));
-                break;
-            }
-            metadata_visits = checked_raw_add(metadata_visits, rule.atoms.len());
+            usage.shape_visits = checked_raw_add(usage.shape_visits, rule.atoms.len());
             let terms = rule.atoms.iter().fold(rule.head.len(), |total, atom| {
                 checked_raw_add(total, atom.terms.len())
             });
@@ -618,19 +616,6 @@ fn analyze_rule_diagnostics(
             ast_nodes = checked_raw_add(ast_nodes, rule_nodes);
         }
     }
-    usage.metadata_visits = metadata_visits;
-    if let Some(diagnostic) = header_diagnostic {
-        return RuleDiagnosticSelection {
-            diagnostic: Some(diagnostic),
-            usage,
-        };
-    }
-    if let Some(diagnostic) = work_diagnostic {
-        return RuleDiagnosticSelection {
-            diagnostic: Some(diagnostic),
-            usage,
-        };
-    }
     if let Some(diagnostic) = shape_diagnostic {
         return RuleDiagnosticSelection {
             diagnostic: Some(diagnostic),
@@ -648,13 +633,13 @@ fn analyze_rule_diagnostics(
             usage,
         };
     }
-    let predicted_visits = checked_raw_add(metadata_visits, ast_nodes.saturating_mul(2));
-    if predicted_visits > raw_limits.max_validation_node_visits {
+    let predicted_visits = ast_nodes.saturating_mul(2);
+    if predicted_visits > raw_limits.max_body_node_visits {
         return RuleDiagnosticSelection {
             diagnostic: Some(set_limit_diagnostic(
                 RuleDiagnosticCode::RawValidationWorkLimit,
                 predicted_visits,
-                raw_limits.max_validation_node_visits,
+                raw_limits.max_body_node_visits,
             )),
             usage,
         };
@@ -669,7 +654,7 @@ fn analyze_rule_diagnostics(
         identifier_max = identifier_max.max(rule_identifier_max);
         measurements.push(bytes);
     }
-    usage.node_visits = checked_raw_add(metadata_visits, ast_nodes);
+    usage.body_node_visits = ast_nodes;
     usage.structural_cost = checked_raw_add(canonical_bytes, ast_nodes.saturating_mul(8));
     if identifier_max > raw_limits.max_identifier_bytes {
         return RuleDiagnosticSelection {
@@ -712,7 +697,7 @@ fn analyze_rule_diagnostics(
             canonical_bytes,
         });
     }
-    usage.node_visits = predicted_visits;
+    usage.body_node_visits = predicted_visits;
     usage.complete_fingerprints = summaries.len();
     let rule_set_fingerprint = exact_digest_multiset(
         b"rfc0003.raw-rule-plan-multiset.v2",

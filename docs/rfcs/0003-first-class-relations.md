@@ -517,12 +517,22 @@ cannot select which typed resource error wins.
 A raw-input envelope precedes typed-plan validation. The lexer/parser charges
 source bytes, tokens, raw AST nodes, rule count, identifier bytes, terms,
 atoms, predicates, aggregate grouping entries, total raw structural cost, and
-validation node visits while constructing the raw plan. It stops before
+body-validation node visits while constructing the raw plan. It stops before
 retaining the node that would exceed the envelope. A host may not first build
 an arbitrarily large `RulePlan` and only then ask the checker to reject it.
 The executable oracle models the parser-owned source/token counters and proves
 that oversized rule counts, bodies, identifiers, and grouping lists fail
 before complete raw fingerprints are constructed.
+
+Raw rule-count admission guarantees one complete header pass over every
+admitted rule. Header visits are not governed by a smaller independently
+configurable work budget, so empty IDs, unqualified IDs, and oversized header
+identifiers are always reduced canonically before body work begins. A complete
+shape pass is likewise bounded structurally by `max_rules * (1 +
+max_atoms_per_rule)`. Only measurement and fingerprint traversal consume the
+separate body-node budget; their complete required visit count is computed
+before either pass starts. Profiles therefore cannot express the invalid state
+"admit N rules but inspect fewer than N headers."
 
 After raw admission, a separate versioned sealed-plan profile bounds typed
 rule count, atoms per rule, predicates per rule, total terms, dependency
@@ -550,7 +560,8 @@ one code. This order is an explicit `priority()` mapping in the reference and
 front end; enum declaration order is not semantic. Raw source/token/rule
 envelope failures precede plan diagnostics because no complete raw plan exists
 after such a failure. Once a bounded rule header exists, empty and unqualified
-ID diagnostics are selected without traversing an oversized body.
+ID diagnostics are selected across the complete admitted header set without
+traversing an oversized body or consulting the body-work budget.
 
 Accepted plans are sealed once as their typed plan, canonical bytes and digest,
 dependency set, inferred head schema, and static resource quote. Validation,

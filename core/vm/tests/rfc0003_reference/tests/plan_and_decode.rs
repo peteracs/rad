@@ -351,7 +351,8 @@ fn raw_rule_envelope_bounds_hostile_input_before_complete_fingerprinting() {
         RuleDiagnosticCode::RawAtomLimit
     );
     assert_eq!(atom_limit.usage.complete_fingerprints, 0);
-    assert!(atom_limit.usage.metadata_visits <= raw.max_validation_node_visits);
+    assert_eq!(atom_limit.usage.header_visits, 1);
+    assert_eq!(atom_limit.usage.shape_visits, 1);
 
     let enormous_identifier = plan(&format!("rules.{}", "x".repeat(100_000)));
     raw = RawRuleInputLimits::generous();
@@ -419,7 +420,7 @@ fn raw_rule_envelope_bounds_hostile_input_before_complete_fingerprinting() {
     assert_eq!(structural_limit.usage.complete_fingerprints, 0);
 
     raw = RawRuleInputLimits::generous();
-    raw.max_validation_node_visits = 1;
+    raw.max_body_node_visits = 1;
     let work_limit = analyze_rule_diagnostics(
         std::slice::from_ref(&bounded),
         RawRuleInputStats::for_rules(std::slice::from_ref(&bounded)),
@@ -466,6 +467,61 @@ fn raw_rule_envelope_bounds_hostile_input_before_complete_fingerprinting() {
     assert_eq!(
         forward.diagnostic.unwrap().code,
         RuleDiagnosticCode::RawAtomLimit
+    );
+}
+
+#[test]
+fn complete_header_pass_is_permutation_invariant_at_zero_body_budget() {
+    let plan = |id: &str| RulePlan {
+        id: id.to_owned(),
+        head_relation: "Out".to_owned(),
+        head: vec![Term::var("value")],
+        atoms: vec![Atom::new("Input", vec![Term::var("value")])],
+        predicates: Vec::new(),
+        aggregate: None,
+    };
+    let mut raw = RawRuleInputLimits::generous();
+    raw.max_rules = 2;
+    raw.max_body_node_visits = 0;
+    let sealed = RulePlanLimits::generous();
+    let diagnose = |rules: &[RulePlan]| {
+        analyze_rule_diagnostics(rules, RawRuleInputStats::for_rules(rules), raw, sealed)
+    };
+    let assert_permutation = |left: RulePlan, right: RulePlan, expected: RuleDiagnosticCode| {
+        let forward = diagnose(&[left.clone(), right.clone()]);
+        let reverse = diagnose(&[right, left]);
+        assert_eq!(forward.diagnostic, reverse.diagnostic);
+        assert_eq!(forward.diagnostic.unwrap().code, expected);
+        assert_eq!(forward.usage.header_visits, 2);
+        assert_eq!(reverse.usage.header_visits, 2);
+        assert_eq!(forward.usage.body_node_visits, 0);
+        assert_eq!(reverse.usage.body_node_visits, 0);
+        assert_eq!(forward.usage.complete_fingerprints, 0);
+        assert_eq!(reverse.usage.complete_fingerprints, 0);
+    };
+
+    assert_permutation(plan("rules.valid"), plan(""), RuleDiagnosticCode::EmptyId);
+    assert_permutation(
+        plan("rules.valid"),
+        plan("unqualified"),
+        RuleDiagnosticCode::UnqualifiedId,
+    );
+    assert_permutation(plan("unqualified"), plan(""), RuleDiagnosticCode::EmptyId);
+
+    let mut enormous_empty = plan("");
+    enormous_empty.atoms = (0..10_000)
+        .map(|index| Atom::new(&format!("Input{index}"), vec![Term::var("value")]))
+        .collect();
+    assert_permutation(
+        plan("rules.valid"),
+        enormous_empty,
+        RuleDiagnosticCode::EmptyId,
+    );
+
+    assert_permutation(
+        plan("rules.first"),
+        plan("rules.second"),
+        RuleDiagnosticCode::RawValidationWorkLimit,
     );
 }
 

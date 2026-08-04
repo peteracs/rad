@@ -83,6 +83,9 @@ The accepted v0 contract fixes the identity-sensitive rules:
 - a raw-input envelope bounds source bytes, tokens, AST nodes, rules,
   identifiers, terms, atoms, predicates, aggregate groups, structural cost,
   and validation visits while parsing, before an oversized plan exists;
+- admitted rule count always permits one complete canonical header pass;
+  separately metered body work cannot hide an empty, unqualified, or oversized
+  header identifier;
 - a sealed-plan profile then bounds typed rules, atoms, predicates, terms,
   dependency edges, and canonical plan bytes before evaluation;
 - invalid plans use an explicit fixed-priority canonical diagnostic reduction,
