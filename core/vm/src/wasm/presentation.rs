@@ -39,6 +39,19 @@ const MODEL_CLOCKWORK_MAGE: u32 = 1;
 const MODEL_UNKNOWN_NAME: &str = "";
 const MODEL_CLOCKWORK_MAGE_NAME: &str = "clockwork_mage";
 
+#[derive(Clone, Copy)]
+pub(crate) struct PacketIdentity {
+    pub(crate) stream_id: u64,
+    pub(crate) sequence: u64,
+    pub(crate) frame: u64,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct EncodingLimits {
+    pub(crate) max_records: u32,
+    pub(crate) max_entities_scanned: u32,
+}
+
 /// Encode one packet into caller-owned storage so steady-state frames reuse
 /// their allocation. Header and records are all `u32` words:
 ///
@@ -53,14 +66,15 @@ const MODEL_CLOCKWORK_MAGE_NAME: &str = "clockwork_mage";
 /// ```
 pub(crate) fn encode_avatar_packet(
     snapshot: &WorldSnapshot,
-    stream_id: u64,
-    sequence: u64,
-    frame: u64,
+    identity: PacketIdentity,
     output: &mut Vec<u32>,
     entity_scratch: &mut Vec<u32>,
-    max_records: u32,
-    max_entities_scanned: u32,
+    limits: EncodingLimits,
 ) -> Result<(), String> {
+    let EncodingLimits {
+        max_records,
+        max_entities_scanned,
+    } = limits;
     if max_records == 0 || max_records > HARD_MAX_RECORDS {
         output.clear();
         return Err(format!(
@@ -176,12 +190,12 @@ pub(crate) fn encode_avatar_packet(
         output[HEADER_VERSION] = VERSION;
         output[HEADER_RECORD_WORDS] = RECORD_WORDS as u32;
         output[HEADER_COUNT] = count;
-        output[HEADER_STREAM_ID_LOW] = stream_id as u32;
-        output[HEADER_STREAM_ID_HIGH] = (stream_id >> 32) as u32;
-        output[HEADER_SEQUENCE_LOW] = sequence as u32;
-        output[HEADER_SEQUENCE_HIGH] = (sequence >> 32) as u32;
-        output[HEADER_FRAME_LOW] = frame as u32;
-        output[HEADER_FRAME_HIGH] = (frame >> 32) as u32;
+        output[HEADER_STREAM_ID_LOW] = identity.stream_id as u32;
+        output[HEADER_STREAM_ID_HIGH] = (identity.stream_id >> 32) as u32;
+        output[HEADER_SEQUENCE_LOW] = identity.sequence as u32;
+        output[HEADER_SEQUENCE_HIGH] = (identity.sequence >> 32) as u32;
+        output[HEADER_FRAME_LOW] = identity.frame as u32;
+        output[HEADER_FRAME_HIGH] = (identity.frame >> 32) as u32;
         output[HEADER_PACKET_KIND] = PACKET_KIND_FULL;
         output[HEADER_BASE_SEQUENCE_LOW] = 0;
         output[HEADER_BASE_SEQUENCE_HIGH] = 0;
@@ -339,13 +353,17 @@ mod tests {
         let mut entity_scratch = Vec::new();
         encode_avatar_packet(
             &world.snapshot(),
-            0x1122_3344_5566_7788,
-            0x8877_6655_4433_2211,
-            u64::MAX - 2,
+            PacketIdentity {
+                stream_id: 0x1122_3344_5566_7788,
+                sequence: 0x8877_6655_4433_2211,
+                frame: u64::MAX - 2,
+            },
             &mut packet,
             &mut entity_scratch,
-            DEFAULT_MAX_RECORDS,
-            DEFAULT_MAX_ENTITIES_SCANNED,
+            EncodingLimits {
+                max_records: DEFAULT_MAX_RECORDS,
+                max_entities_scanned: DEFAULT_MAX_ENTITIES_SCANNED,
+            },
         )
         .unwrap();
         assert_eq!(packet[0], MAGIC);
@@ -378,13 +396,17 @@ mod tests {
         let mut entity_scratch = Vec::new();
         let error = encode_avatar_packet(
             &world.snapshot(),
-            1,
-            0,
-            0,
+            PacketIdentity {
+                stream_id: 1,
+                sequence: 0,
+                frame: 0,
+            },
             &mut packet,
             &mut entity_scratch,
-            0,
-            DEFAULT_MAX_ENTITIES_SCANNED,
+            EncodingLimits {
+                max_records: 0,
+                max_entities_scanned: DEFAULT_MAX_ENTITIES_SCANNED,
+            },
         )
         .unwrap_err();
         assert!(error.starts_with("presentation.invalid_record_limit:"));
@@ -395,13 +417,17 @@ mod tests {
         let second = world.spawn_entity(Some("second")).unwrap();
         encode_avatar_packet(
             &world.snapshot(),
-            1,
-            0,
-            0,
+            PacketIdentity {
+                stream_id: 1,
+                sequence: 0,
+                frame: 0,
+            },
             &mut packet,
             &mut entity_scratch,
-            DEFAULT_MAX_RECORDS,
-            1,
+            EncodingLimits {
+                max_records: DEFAULT_MAX_RECORDS,
+                max_entities_scanned: 1,
+            },
         )
         .expect("non-presentation entities do not consume the candidate scan budget");
         assert_eq!(packet[3], 0);
@@ -411,13 +437,17 @@ mod tests {
         packet.extend_from_slice(&[4, 5, 6]);
         let error = encode_avatar_packet(
             &world.snapshot(),
-            1,
-            1,
-            0,
+            PacketIdentity {
+                stream_id: 1,
+                sequence: 1,
+                frame: 0,
+            },
             &mut packet,
             &mut entity_scratch,
-            DEFAULT_MAX_RECORDS,
-            1,
+            EncodingLimits {
+                max_records: DEFAULT_MAX_RECORDS,
+                max_entities_scanned: 1,
+            },
         )
         .unwrap_err();
         assert!(error.starts_with("presentation.entity_scan_limit:"));

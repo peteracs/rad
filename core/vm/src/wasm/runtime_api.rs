@@ -652,13 +652,17 @@ impl RadRuntime {
         let cur = self.current_fork()?;
         presentation::encode_avatar_packet(
             &cur,
-            self.presentation_stream_id,
-            sequence,
-            self.vm.causality_frame,
+            presentation::PacketIdentity {
+                stream_id: self.presentation_stream_id,
+                sequence,
+                frame: self.vm.causality_frame,
+            },
             &mut self.render_buffer,
             &mut self.render_entity_scratch,
-            max_records,
-            max_entities_scanned,
+            presentation::EncodingLimits {
+                max_records,
+                max_entities_scanned,
+            },
         )?;
         self.presentation_next_sequence = sequence.checked_add(1);
         Ok(())
