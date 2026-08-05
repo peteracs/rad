@@ -10,6 +10,16 @@ All notable changes to the Rad language are documented here.
 
 ### Added
 
+- **Compiled resolvers can now author authoritative relation patches.**
+  Resolver-only `insert_fact()`, `remove_fact()`, and `replace_fact_by()`
+  validate sealed relation identities, tuple values, generational entity
+  references, and named unique keys before staging into the owning
+  `ResolutionPatch`. They inherit exact proposal fan-in, obey sandbox write
+  grants, participate in the same copy-on-write candidate as component
+  replacements, and roll back that complete settlement on any relation,
+  derivation, or constraint failure. Ownership/weight/capacity dogfood is now
+  authored by RAD laws and resolvers rather than host-seeded transactions.
+
 - **Candidate constraints can now inspect exact authoritative and derived
   relation tuples.** Constraint-only `base_fact()` and `candidate_fact()`
   reads validate module-qualified identities and exact tuple shape against the

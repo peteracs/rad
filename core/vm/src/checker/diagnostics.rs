@@ -228,6 +228,7 @@ pub(super) fn builtin_required_effects(name: &str) -> Vec<crate::types::Effect> 
         | "log" | "metric" => {
             vec![Effect::IO]
         }
+        "insert_fact" | "remove_fact" | "replace_fact_by" => vec![Effect::ECS],
         // Every world-mutating builtin must appear here: this table is what
         // keeps effect ANNOTATIONS honest (`readonly fn`/`pure fn` bodies are
         // checked against it), and annotation-trusting consumers — pipeline

@@ -218,6 +218,18 @@ impl Checker {
             }
             Expr::Call(callee, args, _) => {
                 if let Expr::Ident(name, _) = callee.as_ref() {
+                    // Resolver fact writes, like the `next` statement, only
+                    // stage data in the isolated resolution patch. The
+                    // dedicated causal call checker rejects them everywhere
+                    // except a resolver; they remain impure in ordinary code.
+                    if matches!(
+                        name.as_str(),
+                        "insert_fact" | "remove_fact" | "replace_fact_by"
+                    ) {
+                        return args
+                            .iter()
+                            .all(|expr| self.expr_is_conservatively_readonly(expr));
+                    }
                     if super::diagnostics::is_impure_builtin(name) {
                         return false;
                     }
@@ -442,6 +454,16 @@ impl Checker {
                 .or_else(|| self.find_expr_purity_breach(r)),
             Expr::Call(callee, args, _) => {
                 if let Expr::Ident(name, _) = callee.as_ref() {
+                    if self.purity_allow_read_ecs.get()
+                        && matches!(
+                            name.as_str(),
+                            "insert_fact" | "remove_fact" | "replace_fact_by"
+                        )
+                    {
+                        return args
+                            .iter()
+                            .find_map(|argument| self.find_expr_purity_breach(argument));
+                    }
                     if self.purity_allow_read_ecs.get()
                         && matches!(name.as_str(), "base" | "candidate")
                     {

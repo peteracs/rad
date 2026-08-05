@@ -430,6 +430,16 @@ reads the derived state recomputed from the complete authoritative candidate,
 never a partially updated proof index. Sandboxed relation reads fail closed
 until capability-label grants can preserve the same noninterference contract.
 
+Resolver code stages authoritative changes with
+`insert_fact("module::Relation", [tuple...])`,
+`remove_fact("module::Relation", [tuple...])`, and
+`replace_fact_by("module::Relation", "unique", [selected...], [tuple...])`.
+These operations are invalid outside the active resolver, cannot target a
+derived relation, resolve entity values against the base snapshot's
+generational handles, and become part of that resolver's isolated patch.
+Settlement adoption—not the builtin call—is the only mutation point. The
+resulting assertion ancestry binds the resolver and its exact proposal fan-in.
+
 Any derivation error or resource exceed rejects before adoption and leaves the
 world, relation store, derived indexes, provenance, events, output, RNG, and
 tasks unchanged.

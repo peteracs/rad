@@ -78,6 +78,33 @@ constraint InvalidFactRead for Position(subject, proposed) {
 }
 
 #[test]
+fn relation_fact_writes_are_resolver_only_and_statically_shaped() {
+    let errors = check_causal_source(
+        r#"
+fn outside() { insert_fact("game::facts::Marker", [1]) }
+intent Mark { key target: entity }
+resolver ResolveMark for Mark(target, proposals) {
+    let relation = "game::facts::Marker"
+    insert_fact(relation, 1)
+    replace_fact_by("game::facts::Marker", "", [1], 2)
+}
+"#,
+    );
+    assert!(errors
+        .iter()
+        .any(|error| error.message.contains("only valid inside a resolver")));
+    assert!(errors.iter().any(|error| error
+        .message
+        .contains("module-qualified relation string literal")));
+    assert!(errors
+        .iter()
+        .any(|error| error.message.contains("list literals")));
+    assert!(errors
+        .iter()
+        .any(|error| error.message.contains("nonempty unique-constraint")));
+}
+
+#[test]
 fn break_and_continue_cannot_escape_to_a_loop_outside_settlement() {
     let errors = check_causal_source(
         r#"

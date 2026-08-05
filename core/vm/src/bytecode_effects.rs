@@ -82,6 +82,15 @@ pub(crate) fn opcode_effect(op: Op) -> OpcodeEffect {
 }
 
 pub(crate) fn forbidden_builtin_effect(builtin: Builtin) -> Option<String> {
+    // These ECS effects do not mutate the live world. They append to the
+    // active resolver's isolated patch and are adopted only by the settlement
+    // commit path after global conflict, derivation, and constraint checks.
+    if matches!(
+        builtin,
+        Builtin::InsertFact | Builtin::RemoveFact | Builtin::ReplaceFactBy
+    ) {
+        return None;
+    }
     if matches!(
         builtin,
         Builtin::SysArgs

@@ -85,6 +85,11 @@ impl VM {
         match builtin {
             Builtin::BaseFact => self.bi_constraint_fact(args, false),
             Builtin::CandidateFact => self.bi_constraint_fact(args, true),
+            Builtin::InsertFact => self.bi_resolver_fact_write(args, Builtin::InsertFact),
+            Builtin::RemoveFact => self.bi_resolver_fact_write(args, Builtin::RemoveFact),
+            Builtin::ReplaceFactBy => {
+                self.bi_resolver_fact_write(args, Builtin::ReplaceFactBy)
+            }
             Builtin::Print => self.bi_print(args),
             Builtin::Len => bi_len(&mut self.gc, args),
             Builtin::TypeOf => bi_typeof(&mut self.gc, args),

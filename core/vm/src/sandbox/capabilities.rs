@@ -56,7 +56,9 @@ pub fn builtin_allowed_in_sandbox(builtin: Builtin) -> bool {
 /// Capability grant for a single sandboxed simulation.
 #[derive(Clone, Debug)]
 pub struct SandboxCaps {
-    /// Component types the sandbox may write via `set` / `spawn`.
+    /// World types the sandbox may write: component names for `set`/`spawn`
+    /// and module-qualified authoritative relation identities for resolver
+    /// fact operations.
     /// Empty set = no writes permitted at all.
     pub writable_components: HashSet<String>,
     /// Component/resource types the sandbox may read via `get` / `res` /

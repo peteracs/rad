@@ -228,13 +228,21 @@ impl Builtin {
             "fork_apply" => Some(Builtin::ForkApply),
             "base_fact" => Some(Builtin::BaseFact),
             "candidate_fact" => Some(Builtin::CandidateFact),
+            "insert_fact" => Some(Builtin::InsertFact),
+            "remove_fact" => Some(Builtin::RemoveFact),
+            "replace_fact_by" => Some(Builtin::ReplaceFactBy),
             _ => None,
         }
     }
 
     pub fn return_type(self) -> Ty {
         match self {
-            Builtin::Print | Builtin::Set | Builtin::SetResource => Ty::Nil,
+            Builtin::Print
+            | Builtin::Set
+            | Builtin::SetResource
+            | Builtin::InsertFact
+            | Builtin::RemoveFact
+            | Builtin::ReplaceFactBy => Ty::Nil,
             Builtin::Len | Builtin::Int | Builtin::IntDiv | Builtin::GcCollect => Ty::Int,
             Builtin::Popcount | Builtin::Ctz | Builtin::Shl | Builtin::Shr => Ty::Int,
             Builtin::IdOf => Ty::Int,

@@ -4,9 +4,9 @@ RFC-0003 is the accepted semantic contract for RAD's next World-Law
 Programming layer. Its bounded experimental front end now parses, checks,
 formats, and seals relation declarations and derivation rules. The
 authoritative ordered-map store now executes `Insert`, `Remove`, and
-`ReplaceBy` as atomic candidate patches. The derived-fact runtime is not
-implemented yet, so accepted rules are sealed program input but are not yet
-evaluated.
+`ReplaceBy` as atomic candidate patches. The production full-recompute
+runtime executes accepted nonrecursive rules after each complete
+authoritative candidate and atomically adopts their bounded proof state.
 
 Check a source file without installing runtime behavior:
 
@@ -66,10 +66,21 @@ module as its prefix. Qualified cross-module names remain valid references.
 
 The runtime bridge now stages authoritative relation rows inside resolver-owned
 patches and builds them into the same copy-on-write candidate as component
-writes. Relation conflicts reject that complete candidate before adoption.
-Positive, nonrecursive rules will derive read-only facts from the complete
-**relation** candidate in the next runtime layer; the front end already seals
-those plans, but does not execute them yet.
+writes. Compiled resolvers use:
+
+```rad
+insert_fact("game::inventory::Owns", [owner, item])
+remove_fact("game::inventory::Owns", [owner, item])
+replace_fact_by("game::inventory::Owns", "item", [item], [new_owner, item])
+```
+
+All three forms are resolver-only and require literal module-qualified
+relation identities; `replace_fact_by` also requires a literal named unique
+constraint. The runtime validates values against the installed immutable
+manifest, resolves entity values to their current generational handles, and
+stages no live-world mutation. Relation conflicts or derivation failures
+reject the complete candidate before adoption. Positive, nonrecursive rules
+derive read-only facts from that complete relation candidate.
 
 ```text
 authoritative component + relation candidate

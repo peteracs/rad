@@ -277,6 +277,9 @@ fn check_expr_operations(&mut self, expr: &Expr) -> Ty {
                     resolved_callee_name.as_deref()
                 };
                 if let Some(name) = callee_name_ref {
+                    if let Some(ty) = self.check_resolver_fact_write_call(name, args, span) {
+                        return ty;
+                    }
                     if let Some(ty) = self.check_constraint_read_call(name, args, span) {
                         return ty;
                     }

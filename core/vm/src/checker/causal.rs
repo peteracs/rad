@@ -608,6 +608,86 @@ impl Checker {
         Some(Ty::Bool)
     }
 
+    pub(super) fn check_resolver_fact_write_call(
+        &mut self,
+        write_kind: &str,
+        args: &[Expr],
+        span: &Span,
+    ) -> Option<Ty> {
+        if !matches!(
+            write_kind,
+            "insert_fact" | "remove_fact" | "replace_fact_by"
+        ) {
+            return None;
+        }
+        if !matches!(
+            self.scopes.last().map(|scope| &scope.causal_context),
+            Some(CausalContext::Resolver { .. })
+        ) {
+            self.error(
+                span,
+                format!("`{write_kind}` is only valid inside a resolver"),
+                None,
+            );
+        }
+        let expected = if write_kind == "replace_fact_by" {
+            4
+        } else {
+            2
+        };
+        if args.len() != expected {
+            self.error(
+                span,
+                if write_kind == "replace_fact_by" {
+                    "`replace_fact_by` expects (relation, unique constraint, selected key, tuple)"
+                        .to_string()
+                } else {
+                    format!("`{write_kind}` expects (relation, tuple)")
+                },
+                None,
+            );
+            for arg in args {
+                self.check_expr(arg);
+            }
+            return Some(Ty::Nil);
+        }
+        match &args[0] {
+            Expr::StrLit(identity, _) if !identity.is_empty() && identity.contains("::") => {}
+            _ => self.error(
+                args[0].span(),
+                format!("`{write_kind}` requires a module-qualified relation string literal"),
+                Some("Use a sealed identity such as \"game::inventory::Owns\"".into()),
+            ),
+        }
+        if write_kind == "replace_fact_by"
+            && !matches!(&args[1], Expr::StrLit(value, _) if !value.is_empty())
+        {
+            self.error(
+                args[1].span(),
+                "`replace_fact_by` requires a nonempty unique-constraint string literal".into(),
+                None,
+            );
+        }
+        let tuple_indexes: &[usize] = if write_kind == "replace_fact_by" {
+            &[2, 3]
+        } else {
+            &[1]
+        };
+        for index in tuple_indexes {
+            if !matches!(&args[*index], Expr::ListLit(..)) {
+                self.error(
+                    args[*index].span(),
+                    format!("`{write_kind}` requires list literals for relation values"),
+                    Some("Tuple shape is validated against the installed relation manifest".into()),
+                );
+            }
+        }
+        for arg in args {
+            self.check_expr(arg);
+        }
+        Some(Ty::Nil)
+    }
+
     pub(super) fn check_settle_stmt(&mut self, stmt: &SettleStmt) {
         self.require_causal_feature(&stmt.span);
         let context = self.scopes.last().unwrap().causal_context.clone();

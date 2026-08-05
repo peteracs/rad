@@ -113,11 +113,23 @@ impl VM {
     /// Enforce the sandbox component-write ACL. No-op for trusted code.
     #[inline]
     pub(crate) fn sandbox_check_write(&self, component: &str) -> Result<(), String> {
+        self.sandbox_check_named_write("component", component)
+    }
+
+    /// Enforce the same deny-by-default write grant for an authoritative
+    /// relation identity. Grants name the world type they permit; component
+    /// and relation mutation share one capability mechanism.
+    #[inline]
+    pub(crate) fn sandbox_check_relation_write(&self, relation: &str) -> Result<(), String> {
+        self.sandbox_check_named_write("relation", relation)
+    }
+
+    #[inline]
+    fn sandbox_check_named_write(&self, kind: &str, identity: &str) -> Result<(), String> {
         if let Some(caps) = &self.sandbox_caps {
-            if !caps.may_write(component) {
+            if !caps.may_write(identity) {
                 return Err(format!(
-                    "sandbox: write to component '{}' denied by capability grant",
-                    component
+                    "sandbox: write to {kind} '{identity}' denied by capability grant"
                 ));
             }
         }

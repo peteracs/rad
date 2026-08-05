@@ -526,4 +526,7 @@ pub enum Builtin {
     RecentEvents,
     BaseFact,
     CandidateFact,
+    InsertFact,
+    RemoveFact,
+    ReplaceFactBy,
 }
