@@ -202,10 +202,37 @@ impl World {
     ) -> crate::relation_runtime::RelationRuntimeResult<Vec<crate::relation_runtime::FactChange>> {
         let mut authoritative = self.authoritative_relations.clone();
         let changes = authoritative.adopt(candidate);
-        let derived = Self::derive_relations(&authoritative)?;
+        let derived = Self::maintain_relations(
+            &self.derived_relations,
+            &authoritative,
+            &changes,
+        )?;
         self.authoritative_relations = authoritative;
         self.derived_relations = derived;
         Ok(changes)
+    }
+
+    fn maintain_relations(
+        previous: &crate::relation_derivation::DerivedRelationState,
+        authoritative: &crate::relation_runtime::AuthoritativeRelationState,
+        changes: &[crate::relation_runtime::FactChange],
+    ) -> crate::relation_runtime::RelationRuntimeResult<
+        crate::relation_derivation::DerivedRelationState,
+    > {
+        let Some(manifest) = authoritative.manifest() else {
+            return Ok(crate::relation_derivation::DerivedRelationState::default());
+        };
+        crate::relation_derivation::maintain_indexed(
+            previous,
+            authoritative,
+            manifest,
+            changes,
+            crate::relation_derivation::DerivationLimits::default(),
+        )
+        .map_err(|error| crate::relation_runtime::RelationRuntimeError {
+            code: error.code,
+            detail: error.detail,
+        })
     }
 
     fn derive_relations(

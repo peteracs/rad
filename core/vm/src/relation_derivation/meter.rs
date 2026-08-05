@@ -67,7 +67,54 @@ impl DerivationMeter {
             self.limits.max_join_attempts,
             "derivation.join_attempt_limit",
             1,
-        )
+        )?;
+        self.physical_join()
+    }
+
+    pub(crate) fn physical_join(&mut self) -> DerivationResult<()> {
+        self.stats.physical_join_attempts = self
+            .stats
+            .physical_join_attempts
+            .checked_add(1)
+            .ok_or_else(|| {
+                DerivationError::new("derivation.join_attempt_limit", "counter overflow")
+            })?;
+        Ok(())
+    }
+
+    /// Charge a canonical row/join scan in O(1). The reference loop checks
+    /// the row limit before the join limit for each attempt; comparing the
+    /// remaining budgets preserves that exact typed-failure priority while
+    /// an indexed evaluator skips physical no-match comparisons.
+    pub(crate) fn scan_attempts(&mut self, count: usize) -> DerivationResult<()> {
+        let row_remaining = self
+            .limits
+            .max_rows_scanned
+            .saturating_sub(self.stats.rows_scanned);
+        let join_remaining = self
+            .limits
+            .max_join_attempts
+            .saturating_sub(self.stats.join_attempts);
+        if count > row_remaining || count > join_remaining {
+            if row_remaining <= join_remaining {
+                return Err(DerivationError::new(
+                    "derivation.rows_scanned_limit",
+                    format!("limit {}", self.limits.max_rows_scanned),
+                ));
+            }
+            return Err(DerivationError::new(
+                "derivation.join_attempt_limit",
+                format!("limit {}", self.limits.max_join_attempts),
+            ));
+        }
+        self.stats.rows_scanned = self.stats.rows_scanned.checked_add(count).ok_or_else(|| {
+            DerivationError::new("derivation.rows_scanned_limit", "counter overflow")
+        })?;
+        self.stats.join_attempts =
+            self.stats.join_attempts.checked_add(count).ok_or_else(|| {
+                DerivationError::new("derivation.join_attempt_limit", "counter overflow")
+            })?;
+        Ok(())
     }
 
     pub(crate) fn intermediate_bytes(&mut self, bytes: usize) -> DerivationResult<()> {

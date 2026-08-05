@@ -10,6 +10,12 @@ use rad_vm::host_value::FrozenValue;
 use rad_vm::lexer::Lexer;
 use rad_vm::module_loader::load_program_with_uses;
 use rad_vm::parser::Parser;
+use rad_vm::relation_derivation::{derive_all, derive_indexed_all, DerivationLimits};
+use rad_vm::relation_frontend::{compile as compile_relations, FrontendOptions};
+use rad_vm::relation_runtime::{
+    OperationMetadata, PendingFactKey, PendingRelationOperation, PendingRelationValue,
+    RelationRuntimeManifest, RelationTransaction,
+};
 use rad_vm::settlement_reference::{
     settle_reference, ReferenceProposal, ReferenceResolver, ReferenceValue, ReferenceWorld,
     ReferenceWrite,
@@ -406,7 +412,9 @@ fn bench_causal_reference_and_provenance(c: &mut Criterion) {
                 )
             })
         });
-        let closure = vm.causality_ledger().provenance_closure(|_| true, &[]);
+        let closure = vm
+            .causality_ledger()
+            .provenance_closure(|_| true, |_| true, &[]);
         provenance.bench_with_input(BenchmarkId::new("wire_encode", count), &count, |b, _| {
             b.iter(|| {
                 let mut encoded = String::new();
@@ -416,6 +424,91 @@ fn bench_causal_reference_and_provenance(c: &mut Criterion) {
         });
     }
     provenance.finish();
+}
+
+fn no_match_relation_world(width: i64) -> World {
+    let artifacts = compile_relations(
+        r#"
+relation Left(key: int)
+relation Right(key: int)
+derive Match(key)
+    when Left(key)
+    and Right(key)
+"#,
+        &FrontendOptions {
+            enabled: true,
+            module_id: "bench::relations".into(),
+            ..FrontendOptions::default()
+        },
+    )
+    .expect("compile derivation benchmark");
+    let manifest = std::sync::Arc::new(
+        RelationRuntimeManifest::from_frontend(&artifacts).expect("seal benchmark manifest"),
+    );
+    let mut world = World::new();
+    world
+        .install_relation_manifest(manifest, artifacts.manifest_digest)
+        .expect("install benchmark manifest");
+    let operations = (0..width)
+        .flat_map(|value| {
+            [
+                PendingRelationOperation::Insert {
+                    fact: PendingFactKey::new(
+                        "bench::relations::Left",
+                        vec![PendingRelationValue::Int(value)],
+                    ),
+                    metadata: OperationMetadata::cause("benchmark.left"),
+                },
+                PendingRelationOperation::Insert {
+                    fact: PendingFactKey::new(
+                        "bench::relations::Right",
+                        vec![PendingRelationValue::Int(value + width)],
+                    ),
+                    metadata: OperationMetadata::cause("benchmark.right"),
+                },
+            ]
+        })
+        .collect();
+    world
+        .apply_relation_transaction(&RelationTransaction {
+            operations,
+            ..RelationTransaction::default()
+        })
+        .expect("seed derivation benchmark");
+    world
+}
+
+fn bench_indexed_derivation(c: &mut Criterion) {
+    let width = 400_i64;
+    let world = no_match_relation_world(width);
+    let manifest = world
+        .relation_state()
+        .manifest()
+        .expect("benchmark manifest installed");
+    let mut group = c.benchmark_group("relations/no_match_join");
+    group.sample_size(10);
+    group.throughput(Throughput::Elements((width * width) as u64));
+    group.bench_function("full_scan", |b| {
+        b.iter(|| {
+            derive_all(
+                black_box(world.relation_state()),
+                black_box(manifest),
+                DerivationLimits::default(),
+            )
+            .expect("full derivation")
+        })
+    });
+    group.bench_function("indexed", |b| {
+        b.iter(|| {
+            derive_indexed_all(
+                black_box(world.relation_state()),
+                black_box(manifest),
+                DerivationLimits::default(),
+            )
+            .expect("indexed derivation")
+        })
+    });
+    group.finish();
 }
 
 fn bench_causal_phase_baselines(c: &mut Criterion) {
@@ -515,5 +608,6 @@ criterion_group!(
     bench_causal_reference_and_provenance,
     bench_causal_phase_baselines,
     bench_candidate_constraints,
+    bench_indexed_derivation,
 );
 criterion_main!(benches);

@@ -76,6 +76,10 @@ pub struct DerivationStats {
     pub canonical_bytes: usize,
     pub rows_scanned: usize,
     pub join_attempts: usize,
+    /// Actual candidate rows visited after indexing. Semantic join charging
+    /// remains `join_attempts`, so optimized and reference paths adjudicate
+    /// the same profile while this counter exposes physical speedup.
+    pub physical_join_attempts: usize,
     pub intermediate_states: usize,
     pub intermediate_bytes: usize,
     pub proof_combination_attempts: usize,

@@ -10,6 +10,14 @@ All notable changes to the Rad language are documented here.
 
 ### Added
 
+- **Derived relations now have independent indexed maintenance.** Canonical
+  per-column indexes skip no-match comparisons, authoritative deltas
+  invalidate only dependency-reachable heads, and unchanged proof sets are
+  retained exactly. An indexed full preflight preserves full-recompute limit
+  failures without supplying the maintained answer. Differential tests cover
+  aggregate/multilevel deletion and require over 100x fewer physical joins in
+  the permanent no-match smoke; Criterion tracks both paths.
+
 - **Derived facts now explain their complete causal ancestry.** `why_fact()`
   walks an exact bounded proof branch through sealed rules and intermediate
   derived supports to authoritative assertion lifetimes, resolver fan-in,

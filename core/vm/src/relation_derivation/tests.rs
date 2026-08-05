@@ -99,6 +99,13 @@ derive Encumbered(person)
         DerivationLimits::default(),
     )
     .unwrap();
+    let indexed = derive_indexed_all(
+        world.relation_state(),
+        world.relation_state().manifest().unwrap(),
+        DerivationLimits::default(),
+    )
+    .unwrap();
+    assert_eq!(derived.canonical_bytes(), indexed.canonical_bytes());
     let total = FactKey::new(
         "game::derived::TotalWeight",
         vec![FactValue::Entity(alice), FactValue::Int(40)],
@@ -125,6 +132,40 @@ derive Encumbered(person)
         world.derived_relation_state().canonical_bytes(),
         derived.canonical_bytes()
     );
+
+    let previous = world.derived_relation_state().clone();
+    let changes = world
+        .apply_relation_transaction(&RelationTransaction {
+            operations: vec![PendingRelationOperation::Remove {
+                fact: PendingFactKey::new(
+                    "game::derived::ItemWeight",
+                    vec![
+                        PendingRelationValue::Entity(EntityOperand::Existing(sword)),
+                        PendingRelationValue::Int(40),
+                    ],
+                ),
+                metadata: OperationMetadata::cause("remove-weight"),
+            }],
+            ..RelationTransaction::default()
+        })
+        .unwrap();
+    let maintained = maintain_indexed(
+        &previous,
+        world.relation_state(),
+        world.relation_state().manifest().unwrap(),
+        &changes,
+        DerivationLimits::default(),
+    )
+    .unwrap();
+    let full_after = derive_all(
+        world.relation_state(),
+        world.relation_state().manifest().unwrap(),
+        DerivationLimits::default(),
+    )
+    .unwrap();
+    assert_eq!(maintained.canonical_bytes(), full_after.canonical_bytes());
+    assert!(!maintained.facts().contains_key(&total));
+    assert!(!maintained.facts().contains_key(&encumbered));
 }
 
 #[test]
@@ -302,4 +343,268 @@ fn explanation_caps_construction_for_one_large_value() {
         "{}",
         explanation.len()
     );
+}
+
+#[test]
+fn indexed_maintenance_recomputes_only_reachable_heads() {
+    let artifacts = artifacts(
+        r#"
+relation Source(value: int)
+relation Unrelated(value: int)
+derive Mid(value)
+    when Source(value)
+derive Public(value)
+    when Mid(value)
+derive Other(value)
+    when Unrelated(value)
+"#,
+    );
+    let mut world = World::new();
+    install(&mut world, &artifacts);
+    world
+        .apply_relation_transaction(&RelationTransaction {
+            operations: vec![
+                insert(
+                    "game::derived::Source",
+                    vec![PendingRelationValue::Int(1)],
+                    OperationMetadata::cause("source"),
+                ),
+                insert(
+                    "game::derived::Unrelated",
+                    vec![PendingRelationValue::Int(9)],
+                    OperationMetadata::cause("unrelated"),
+                ),
+            ],
+            ..RelationTransaction::default()
+        })
+        .unwrap();
+    let previous = world.derived_relation_state().clone();
+    let unrelated_before = previous
+        .facts()
+        .iter()
+        .find(|(fact, _)| fact.relation == "game::derived::Other")
+        .map(|(fact, proofs)| (fact.clone(), proofs.clone()))
+        .unwrap();
+    let changes = world
+        .apply_relation_transaction(&RelationTransaction {
+            operations: vec![PendingRelationOperation::Remove {
+                fact: PendingFactKey::new(
+                    "game::derived::Source",
+                    vec![PendingRelationValue::Int(1)],
+                ),
+                metadata: OperationMetadata::cause("remove-source"),
+            }],
+            ..RelationTransaction::default()
+        })
+        .unwrap();
+    let maintained = maintain_indexed(
+        &previous,
+        world.relation_state(),
+        world.relation_state().manifest().unwrap(),
+        &changes,
+        DerivationLimits::default(),
+    )
+    .unwrap();
+    assert_eq!(
+        maintained.canonical_bytes(),
+        world.derived_relation_state().canonical_bytes()
+    );
+    assert_eq!(
+        maintained
+            .facts()
+            .get(&unrelated_before.0)
+            .expect("unreachable head retained"),
+        &unrelated_before.1
+    );
+}
+
+#[test]
+fn indexed_no_match_join_preserves_limits_and_skips_physical_work() {
+    let artifacts = artifacts(
+        r#"
+relation Left(key: int)
+relation Right(key: int)
+derive Match(key)
+    when Left(key)
+    and Right(key)
+"#,
+    );
+    let mut world = World::new();
+    install(&mut world, &artifacts);
+    let width = 400_i64;
+    let operations = (0..width)
+        .flat_map(|value| {
+            [
+                insert(
+                    "game::derived::Left",
+                    vec![PendingRelationValue::Int(value)],
+                    OperationMetadata::cause("left"),
+                ),
+                insert(
+                    "game::derived::Right",
+                    vec![PendingRelationValue::Int(value + width)],
+                    OperationMetadata::cause("right"),
+                ),
+            ]
+        })
+        .collect();
+    world
+        .apply_relation_transaction(&RelationTransaction {
+            operations,
+            ..RelationTransaction::default()
+        })
+        .unwrap();
+    let manifest = world.relation_state().manifest().unwrap();
+    let full = derive_all(
+        world.relation_state(),
+        manifest,
+        DerivationLimits::default(),
+    )
+    .unwrap();
+    let indexed = derive_indexed_all(
+        world.relation_state(),
+        manifest,
+        DerivationLimits::default(),
+    )
+    .unwrap();
+    assert_eq!(full.canonical_bytes(), indexed.canonical_bytes());
+    assert_eq!(full.stats().join_attempts, indexed.stats().join_attempts);
+    assert!(
+        full.stats().physical_join_attempts
+            > indexed.stats().physical_join_attempts.saturating_mul(100),
+        "full={} indexed={}",
+        full.stats().physical_join_attempts,
+        indexed.stats().physical_join_attempts
+    );
+
+    let tight = DerivationLimits {
+        max_rows_scanned: 500,
+        max_join_attempts: 500,
+        ..DerivationLimits::default()
+    };
+    let full_error = derive_all(world.relation_state(), manifest, tight).unwrap_err();
+    let indexed_error = derive_indexed_all(world.relation_state(), manifest, tight).unwrap_err();
+    assert_eq!(full_error, indexed_error);
+}
+
+#[test]
+fn indexed_scan_skipping_preserves_intermediate_failure_priority() {
+    let artifacts = artifacts(
+        r#"
+relation Left(key: int)
+relation Right(key: int, value: int)
+derive Match(key, value)
+    when Left(key)
+    and Right(key, value)
+"#,
+    );
+    let mut world = World::new();
+    install(&mut world, &artifacts);
+    world
+        .apply_relation_transaction(&RelationTransaction {
+            operations: vec![
+                insert(
+                    "game::derived::Left",
+                    vec![PendingRelationValue::Int(0)],
+                    OperationMetadata::cause("left"),
+                ),
+                insert(
+                    "game::derived::Right",
+                    vec![PendingRelationValue::Int(0), PendingRelationValue::Int(0)],
+                    OperationMetadata::cause("matching-right"),
+                ),
+                insert(
+                    "game::derived::Right",
+                    vec![PendingRelationValue::Int(1), PendingRelationValue::Int(0)],
+                    OperationMetadata::cause("later-right"),
+                ),
+            ],
+            ..RelationTransaction::default()
+        })
+        .unwrap();
+    let manifest = world.relation_state().manifest().unwrap();
+    let limits = DerivationLimits {
+        max_rows_scanned: 2,
+        max_join_attempts: 2,
+        max_intermediate_states: 2,
+        ..DerivationLimits::default()
+    };
+    let full_error = derive_all(world.relation_state(), manifest, limits).unwrap_err();
+    let indexed_error = derive_indexed_all(world.relation_state(), manifest, limits).unwrap_err();
+    assert_eq!(full_error.code, "derivation.intermediate_state_limit");
+    assert_eq!(indexed_error, full_error);
+}
+
+#[test]
+fn generated_deltas_match_independent_full_recomputation() {
+    let artifacts = artifacts(
+        r#"
+relation Left(key: int, value: int)
+relation Right(key: int, value: int)
+derive Pair(key, left, right)
+    when Left(key, left)
+    and Right(key, right)
+derive PairCount(key, count())
+    when Pair(key, left, right)
+"#,
+    );
+    for seed in 1_u64..=24 {
+        let mut world = World::new();
+        install(&mut world, &artifacts);
+        let mut random = seed;
+        for step in 0..32 {
+            random ^= random << 13;
+            random ^= random >> 7;
+            random ^= random << 17;
+            let relation = if random & 1 == 0 { "Left" } else { "Right" };
+            let key = ((random >> 1) % 6) as i64;
+            let value = ((random >> 8) % 5) as i64;
+            let identity = format!("game::derived::{relation}");
+            let fact = PendingFactKey::new(
+                &identity,
+                vec![
+                    PendingRelationValue::Int(key),
+                    PendingRelationValue::Int(value),
+                ],
+            );
+            let operation = if random & 2 == 0 {
+                PendingRelationOperation::Insert {
+                    fact,
+                    metadata: OperationMetadata::cause(format!("seed-{seed}-step-{step}")),
+                }
+            } else {
+                PendingRelationOperation::Remove {
+                    fact,
+                    metadata: OperationMetadata::cause(format!("seed-{seed}-step-{step}")),
+                }
+            };
+            let previous = world.derived_relation_state().clone();
+            let changes = world
+                .apply_relation_transaction(&RelationTransaction {
+                    operations: vec![operation],
+                    ..RelationTransaction::default()
+                })
+                .unwrap();
+            let manifest = world.relation_state().manifest().unwrap();
+            let maintained = maintain_indexed(
+                &previous,
+                world.relation_state(),
+                manifest,
+                &changes,
+                DerivationLimits::default(),
+            )
+            .unwrap();
+            let full = derive_all(
+                world.relation_state(),
+                manifest,
+                DerivationLimits::default(),
+            )
+            .unwrap();
+            assert_eq!(
+                maintained.canonical_bytes(),
+                full.canonical_bytes(),
+                "seed {seed}, step {step}"
+            );
+        }
+    }
 }

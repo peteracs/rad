@@ -206,6 +206,15 @@ reference result; genuine indexed delta maintenance remains a later,
 independent differential implementation. The oracle remains deliberately
 independent of the parser and VM.
 
+The production runtime now supplies that separate implementation. It indexes
+canonical logical rows by column value, invalidates only derived heads
+reachable from the authoritative `FactChange` set, and rebuilds aggregate
+groups in those heads. A separate indexed full preflight preserves the full
+reference evaluator's exact resource-limit class without supplying the
+maintained facts. Differential fixtures cover joins, aggregates, proof
+alternatives, support deletion, and unchanged-head retention; a permanent
+no-match smoke requires more than 100x fewer physical comparisons.
+
 V0 intentionally excludes component-backed derivation views, recursion,
 unrestricted negation, priorities, fixed points, and storage-layout semantics.
 Any later runtime will provide generic relation, join, aggregate, indexing,

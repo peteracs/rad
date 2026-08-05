@@ -796,7 +796,9 @@ movement denied
    (**ordered-map runtime implemented**);
 4. nonrecursive rule planner and full-recompute production evaluation
    (**implemented and byte-for-byte differential-tested against the oracle**);
-5. indexed incremental maintenance with differential tests;
+5. indexed incremental maintenance with differential tests
+   (**implemented with affected-head invalidation and canonical full-limit
+   preflight**);
 6. candidate constraints, provenance, ACL, wire, WASM, and replay integration;
 7. dogfood, fuzzing, benchmarks, and operational tooling.
 
@@ -815,6 +817,13 @@ alternatives, capability requirements, aggregate results, and canonical bytes
 are stored in the same world snapshot and content identity. The production
 implementation is differentially checked against this RFC's frozen oracle for
 authoritative rows, assertion lifetimes, and full-recompute derivation bytes.
+The production indexed path builds canonical per-column row indexes, skips
+physical no-match comparisons, and recomputes only dependency-reachable heads
+from each authoritative `FactChange` set. It independently constructs the
+maintained answer; an indexed full preflight supplies the exact reference work
+limit class without copying its result. Permanent tests require identical
+facts/proofs and more than a 100x reduction in physical comparisons for a
+large no-match join.
 RFC-0003 becomes **Implemented experimentally** only after the complete
 settlement/constraint dogfood and independent indexed differential suite pass.
 

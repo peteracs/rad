@@ -25,6 +25,23 @@ pub fn derive_all(
         .map(|schema| (schema.schema().identity.clone(), schema.schema()))
         .collect::<BTreeMap<_, _>>();
     let mut meter = DerivationMeter::new(limits);
+    let mut result = BTreeMap::new();
+    for head in canonical_head_order(manifest)? {
+        for rule in manifest
+            .rules()
+            .iter()
+            .filter(|rule| rule.typed_plan().head_relation == head)
+        {
+            evaluate_rule(rule, authoritative, &schemas, &mut result, &mut meter)?;
+        }
+    }
+
+    Ok(DerivedRelationState::new(result, meter.stats()))
+}
+
+pub(super) fn canonical_head_order(
+    manifest: &RelationRuntimeManifest,
+) -> DerivationResult<Vec<String>> {
     let heads = manifest
         .rules()
         .iter()
@@ -32,7 +49,7 @@ pub fn derive_all(
         .collect::<BTreeSet<_>>();
     let mut pending = heads.clone();
     let mut completed = BTreeSet::new();
-    let mut result = BTreeMap::new();
+    let mut order = Vec::with_capacity(heads.len());
 
     while !pending.is_empty() {
         let ready = pending.iter().find(|head| {
@@ -50,21 +67,14 @@ pub fn derive_all(
                 "sealed dependency graph has no ready head",
             ));
         };
-        for rule in manifest
-            .rules()
-            .iter()
-            .filter(|rule| rule.typed_plan().head_relation == head)
-        {
-            evaluate_rule(rule, authoritative, &schemas, &mut result, &mut meter)?;
-        }
         pending.remove(&head);
-        completed.insert(head);
+        completed.insert(head.clone());
+        order.push(head);
     }
-
-    Ok(DerivedRelationState::new(result, meter.stats()))
+    Ok(order)
 }
 
-fn validate_installation(
+pub(super) fn validate_installation(
     authoritative: &AuthoritativeRelationState,
     expected: &RelationRuntimeManifest,
 ) -> DerivationResult<()> {
@@ -127,7 +137,7 @@ fn evaluate_rule(
     }
 }
 
-fn logical_rows(
+pub(super) fn logical_rows(
     atom: &RuleAtom,
     authoritative: &AuthoritativeRelationState,
     schemas: &BTreeMap<String, &RelationSchema>,
@@ -199,7 +209,7 @@ fn logical_rows(
     Ok(rows)
 }
 
-fn unify(
+pub(super) fn unify(
     state: &BindingState,
     terms: &[RuleTerm],
     row: &LogicalRow,
@@ -258,7 +268,10 @@ fn unify(
     Ok(Some(next))
 }
 
-fn predicate_matches(predicate: &RulePredicate, bindings: &BTreeMap<String, FactValue>) -> bool {
+pub(super) fn predicate_matches(
+    predicate: &RulePredicate,
+    bindings: &BTreeMap<String, FactValue>,
+) -> bool {
     match predicate {
         RulePredicate::Greater(left, right) => {
             matches!(
@@ -269,7 +282,7 @@ fn predicate_matches(predicate: &RulePredicate, bindings: &BTreeMap<String, Fact
     }
 }
 
-fn evaluate_plain(
+pub(super) fn evaluate_plain(
     rule: &SealedRulePlan,
     states: BTreeSet<BindingState>,
     schemas: &BTreeMap<String, &RelationSchema>,
@@ -303,7 +316,7 @@ fn evaluate_plain(
     Ok(())
 }
 
-fn evaluate_aggregate(
+pub(super) fn evaluate_aggregate(
     rule: &SealedRulePlan,
     aggregate: &RuleAggregate,
     states: BTreeSet<BindingState>,
@@ -497,7 +510,7 @@ fn build_head(
         })
 }
 
-fn literal_value(value: &Literal) -> FactValue {
+pub(super) fn literal_value(value: &Literal) -> FactValue {
     match value {
         Literal::Int(value) => FactValue::Int(*value),
         Literal::Count(value) => FactValue::Count(*value),
