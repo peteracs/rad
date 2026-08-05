@@ -1,3 +1,4 @@
+#[cfg(not(target_arch = "wasm32"))]
 fn tcp_accept_with_timeout(
     listener: &std::net::TcpListener,
     timeout_ms: i64,
