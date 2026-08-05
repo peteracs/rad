@@ -6,12 +6,16 @@ test('renders pixels across resize, session restart, and device recovery', async
   const status = page.locator('#status');
   await expect(status).toHaveAttribute('data-kind', 'ok', { timeout: 30_000 });
   const canvas = page.locator('#viewport');
+  await settlePresentation(page);
+  const ready = await snapshot(page);
+  expect(ready.recordCount).toBeGreaterThan(0);
+  expect(ready.errors).toEqual([]);
   await expectVisibleAvatarPixels(canvas);
 
-  const initial = await snapshot(page);
-  expect(initial.errors).toEqual([]);
+  const initial = ready;
   await canvas.evaluate((element) => { element.style.width = '520px'; });
   await expect.poll(async () => (await snapshot(page)).canvasWidth).not.toBe(initial.canvasWidth);
+  await settlePresentation(page);
   await expectVisibleAvatarPixels(canvas);
 
   await page.evaluate(() => globalThis.__radWebGpuDogfood?.restart());
@@ -19,6 +23,7 @@ test('renders pixels across resize, session restart, and device recovery', async
     BigInt(initial.streamId),
   );
   await expect(status).toHaveAttribute('data-kind', 'ok');
+  await settlePresentation(page);
   await expectVisibleAvatarPixels(canvas);
   expect((await snapshot(page)).errors).toEqual([]);
 
@@ -28,6 +33,7 @@ test('renders pixels across resize, session restart, and device recovery', async
     beforeLoss.deviceEpoch,
   );
   await expect(status).toHaveAttribute('data-kind', 'ok');
+  await settlePresentation(page);
   await expectVisibleAvatarPixels(canvas);
   const recovered = await snapshot(page);
   expect(recovered.errors.length).toBeGreaterThanOrEqual(1);
@@ -59,4 +65,8 @@ async function snapshot(page: import('@playwright/test').Page) {
   const value = await page.evaluate(() => globalThis.__radWebGpuDogfood?.snapshot());
   if (!value) throw new Error('RAD WebGPU dogfood harness is unavailable');
   return value;
+}
+
+async function settlePresentation(page: import('@playwright/test').Page): Promise<void> {
+  await page.evaluate(() => globalThis.__radWebGpuDogfood?.settle());
 }

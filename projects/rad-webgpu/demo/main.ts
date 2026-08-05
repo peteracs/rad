@@ -34,6 +34,7 @@ async function start(): Promise<void> {
   let renderedFrames = 0;
   let lastStreamId = 0n;
   let lastSequence = 0n;
+  let lastRecordCount = 0;
   globalThis.__radWebGpuDogfood = {
     loseDevice() {
       app.deviceHost.session?.device.destroy();
@@ -41,11 +42,22 @@ async function start(): Promise<void> {
     restart() {
       runtime.session_start(source);
     },
+    async settle() {
+      const submitted = app.deviceHost.session;
+      if (!submitted) return;
+      await submitted.device.queue.onSubmittedWorkDone();
+      await nextAnimationFrame();
+      const presented = app.deviceHost.session;
+      if (!presented) return;
+      await presented.device.queue.onSubmittedWorkDone();
+      await nextAnimationFrame();
+    },
     snapshot() {
       return {
         canvasWidth: canvas.width,
         deviceEpoch: app.deviceHost.session?.epoch ?? 0,
         errors: [...errors],
+        recordCount: lastRecordCount,
         renderedFrames,
         sequence: lastSequence.toString(),
         streamId: lastStreamId.toString(),
@@ -60,6 +72,7 @@ async function start(): Promise<void> {
     const packet = app.source.refresh();
     if (app.renderer.render(packet)) {
       renderedFrames += 1;
+      lastRecordCount = packet.header.count;
       lastStreamId = packet.header.streamId;
       lastSequence = packet.header.sequence;
       status.textContent = `RAD frame materialized on GPU device epoch ${app.deviceHost.session?.epoch ?? 0}`;
@@ -73,6 +86,10 @@ async function start(): Promise<void> {
     globalThis.__radWebGpuDogfood = undefined;
     app.destroy();
   }, { once: true });
+}
+
+function nextAnimationFrame(): Promise<void> {
+  return new Promise((resolve) => requestAnimationFrame(() => resolve()));
 }
 
 start().catch((error: unknown) => {

@@ -22,6 +22,7 @@ interface RadWebGpuDogfoodSnapshot {
   readonly canvasWidth: number;
   readonly deviceEpoch: number;
   readonly errors: readonly string[];
+  readonly recordCount: number;
   readonly renderedFrames: number;
   readonly sequence: string;
   readonly streamId: string;
@@ -30,6 +31,7 @@ interface RadWebGpuDogfoodSnapshot {
 interface RadWebGpuDogfoodHarness {
   loseDevice(): void;
   restart(): void;
+  settle(): Promise<void>;
   snapshot(): RadWebGpuDogfoodSnapshot;
 }
 
