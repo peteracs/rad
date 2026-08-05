@@ -419,8 +419,8 @@ derive Marked(value)
     when Hidden(value)
 derive Counted(count())
     when Marked(value)
-derive Public(count)
-    when Counted(count)
+derive Public(total)
+    when Counted(total)
 "#;
     let artifacts = compile(
         source,
@@ -463,7 +463,7 @@ derive Public(count)
     let derived_schemas = [
         RelationSchema::new(MARKED, vec![ColumnSchema::new("value", ValueKind::Int)]),
         RelationSchema::new(COUNTED, vec![ColumnSchema::new("count", ValueKind::Count)]),
-        RelationSchema::new(PUBLIC, vec![ColumnSchema::new("count", ValueKind::Count)]),
+        RelationSchema::new(PUBLIC, vec![ColumnSchema::new("total", ValueKind::Count)]),
     ]
     .into_iter()
     .map(|schema| (schema.name.clone(), schema))

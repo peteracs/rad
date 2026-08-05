@@ -11,6 +11,8 @@ Health of hero = { hp: 80 }   (set in frame 1)
 
      <- proposal Damage { target: hero, source: attacker, amount: 20 }
         proposed by law `DirectHit` at line 10
+
+     settlement origin:
   <- by `on CombatFrame` handler
   <- CombatFrame { source: attacker, target: hero } emitted in frame 0
   <- by top-level code
