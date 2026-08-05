@@ -109,6 +109,12 @@ The exact Python backends require `z3-solver` and `python-sat` (with a CaDiCaL
 backend). The checked-in compact width-13 certificate does not require the
 155-second optimization replay for the normal RAD audit.
 
+Install the pinned solver versions used by CI before running the Python suite:
+
+```bash
+python3 -m pip install --requirement projects/dogfood/frankl-search/requirements.txt
+```
+
 ## Join-generator results
 
 Incidence columns turn a family with `g` join-generators into a quotient of the

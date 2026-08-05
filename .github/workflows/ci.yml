@@ -69,6 +69,7 @@ jobs:
           fi
       - name: Frankl computational-mathematics dogfood
         run: |
+          python3 -m pip install --requirement projects/dogfood/frankl-search/requirements.txt
           cargo run -p rad-vm --bin rad -- projects/dogfood/frankl-search/exhaustive_n4.rad
           cargo run -p rad-vm --bin rad -- projects/dogfood/frankl-search/search.rad --experimental-laws --record projects/dogfood/frankl-search/out/ci.radr -- 1 4 2 1 24 quick
           target/debug/rad replay projects/dogfood/frankl-search/out/ci.radr
