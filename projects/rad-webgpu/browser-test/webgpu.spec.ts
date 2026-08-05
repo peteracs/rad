@@ -45,7 +45,12 @@ async function snapshot(page: import('@playwright/test').Page) {
 }
 
 async function capturePresentation(page: import('@playwright/test').Page) {
-  const proof = await page.evaluate(() => globalThis.__radWebGpuDogfood?.capture());
-  if (!proof) throw new Error('RAD WebGPU pixel proof is unavailable');
-  return proof;
+  try {
+    const proof = await page.evaluate(() => globalThis.__radWebGpuDogfood?.capture());
+    if (!proof) throw new Error('RAD WebGPU pixel proof is unavailable');
+    return proof;
+  } catch (error) {
+    const state = await snapshot(page);
+    throw new Error(`RAD WebGPU pixel readback failed: ${JSON.stringify(state)}`, { cause: error });
+  }
 }

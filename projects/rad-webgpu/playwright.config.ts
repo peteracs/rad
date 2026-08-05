@@ -14,7 +14,11 @@ export default defineConfig({
       args: [
         '--enable-unsafe-webgpu',
         '--use-webgpu-adapter=swiftshader',
-        '--enable-features=Vulkan',
+        '--use-vulkan=swiftshader',
+        '--enable-features=UseSkiaRenderer,Vulkan',
+        '--enable-gpu-rasterization',
+        '--enable-oop-rasterization',
+        '--disable-vulkan-fallback-to-gl-for-testing',
         '--enable-dawn-features=allow_unsafe_apis',
         '--enable-webgpu-developer-features',
         '--use-gpu-in-tests',
