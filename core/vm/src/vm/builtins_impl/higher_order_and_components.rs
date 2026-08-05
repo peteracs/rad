@@ -533,7 +533,10 @@ impl VM {
             }
         }
         let name = args.first().and_then(|v| v.as_str().map(|s| s.to_string()));
-        let eid = self.world.spawn_entity(name.as_deref());
+        let eid = self
+            .world
+            .spawn_entity(name.as_deref())
+            .map_err(|error| error.to_string())?;
         let start_idx = if name.is_some() { 1 } else { 0 };
 
         if self.is_worker {

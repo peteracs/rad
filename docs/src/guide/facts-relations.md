@@ -205,6 +205,8 @@ slots must be a canonical, disjoint, exact partition of every issued slot.
 Duplicate or out-of-order entries, overlaps, gaps, and noncanonical exhaustion
 state reject before insertion, so a compact hostile payload cannot expand a
 sparse identity range or allocate one reusable identity twice.
+Generation-exhausted slots retire immediately on destruction and never appear
+in the reusable-free set.
 
 The embedding transaction may also carry candidate-local spawns and component
 writes. Candidate handles resolve before schema validation; duplicate component

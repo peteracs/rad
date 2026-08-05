@@ -708,7 +708,11 @@ pub(crate) fn merge_worlds(
         let Some(st) = st else { continue };
         let base_state = state_of(&wb, eid);
         if base_state.is_none() {
-            work.insert_entity_with_id(eid, st.name.as_deref());
+            if let Err(error) = work.insert_entity_with_id(eid, st.name.as_deref()) {
+                return Err(vec![MergeConflict::Relations {
+                    detail: format!("cannot install merged entity {eid}: {error}"),
+                }]);
+            }
         } else if base_state.as_ref().map(|b| &b.name) != Some(&st.name) {
             work.set_entity_name(eid, st.name.as_deref());
         }

@@ -79,8 +79,8 @@ Insert(Owns, (alice, sword))
 "#;
     let artifacts = artifacts(source);
     let mut vm = VM::new_with_seed(7);
-    vm.get_world_mut().spawn_entity(Some("alice"));
-    vm.get_world_mut().spawn_entity(Some("sword"));
+    vm.get_world_mut().spawn_entity(Some("alice")).unwrap();
+    vm.get_world_mut().spawn_entity(Some("sword")).unwrap();
     let before = vm.compiled_program_manifest().unwrap().digest().to_string();
     let changes = vm.apply_frontend_relation_operations(&artifacts).unwrap();
     assert_eq!(changes.len(), 1);
@@ -96,8 +96,8 @@ fn symmetric_aliases_share_one_physical_assertion() {
         &mut world,
         "relation Allied(left: entity, right: entity)\n    symmetric\n    on delete cascade\n",
     );
-    let a = world.spawn_entity(Some("a"));
-    let b = world.spawn_entity(Some("b"));
+    let a = world.spawn_entity(Some("a")).unwrap();
+    let b = world.spawn_entity(Some("b")).unwrap();
     let a = world.entity_ref(a).unwrap();
     let b = world.entity_ref(b).unwrap();
     let relation = "game::inventory::Allied";
@@ -127,9 +127,9 @@ fn replacement_allocates_a_new_assertion_lifetime() {
         &mut world,
         "relation Owns(owner: entity, item: entity)\n    unique item\n",
     );
-    let alice_id = world.spawn_entity(Some("alice"));
-    let bob_id = world.spawn_entity(Some("bob"));
-    let sword_id = world.spawn_entity(Some("sword"));
+    let alice_id = world.spawn_entity(Some("alice")).unwrap();
+    let bob_id = world.spawn_entity(Some("bob")).unwrap();
+    let sword_id = world.spawn_entity(Some("sword")).unwrap();
     let alice = world.entity_ref(alice_id).unwrap();
     let bob = world.entity_ref(bob_id).unwrap();
     let sword = world.entity_ref(sword_id).unwrap();
@@ -179,9 +179,9 @@ fn restrict_and_unique_failures_are_atomic() {
         &mut world,
         "relation Owns(owner: entity, item: entity)\n    unique item\n",
     );
-    let alice_id = world.spawn_entity(Some("alice"));
-    let bob_id = world.spawn_entity(Some("bob"));
-    let sword_id = world.spawn_entity(Some("sword"));
+    let alice_id = world.spawn_entity(Some("alice")).unwrap();
+    let bob_id = world.spawn_entity(Some("bob")).unwrap();
+    let sword_id = world.spawn_entity(Some("sword")).unwrap();
     let alice = world.entity_ref(alice_id).unwrap();
     let bob = world.entity_ref(bob_id).unwrap();
     let sword = world.entity_ref(sword_id).unwrap();
@@ -247,8 +247,8 @@ fn cascade_and_generation_reuse_never_retarget_a_fact() {
         &mut world,
         "relation Carries(owner: entity, item: entity on delete cascade)\n",
     );
-    let owner_id = world.spawn_entity(Some("owner"));
-    let item_id = world.spawn_entity(Some("item"));
+    let owner_id = world.spawn_entity(Some("owner")).unwrap();
+    let item_id = world.spawn_entity(Some("item")).unwrap();
     let owner = world.entity_ref(owner_id).unwrap();
     let item = world.entity_ref(item_id).unwrap();
     world
@@ -265,7 +265,7 @@ fn cascade_and_generation_reuse_never_retarget_a_fact() {
         .unwrap();
     assert!(world.destroy_entity(item.slot));
     assert!(world.relation_state().assertions().is_empty());
-    let replacement_id = world.spawn_entity(Some("monster"));
+    let replacement_id = world.spawn_entity(Some("monster")).unwrap();
     let replacement = world.entity_ref(replacement_id).unwrap();
     assert_eq!(replacement.slot, item.slot);
     assert_ne!(replacement.generation, item.generation);
@@ -353,10 +353,13 @@ fn save_load_preserves_authoritative_relation_state_exactly() {
     let front_end = artifacts("relation Owns(owner: entity, item: entity)\n    unique item\n");
     let mut source = VM::new_with_seed(17);
     source.install_relation_frontend(&front_end).unwrap();
-    let recycled = source.get_world_mut().spawn_entity(Some("recycled"));
+    let recycled = source
+        .get_world_mut()
+        .spawn_entity(Some("recycled"))
+        .unwrap();
     assert!(source.get_world_mut().destroy_entity(recycled));
-    let alice_id = source.get_world_mut().spawn_entity(Some("alice"));
-    let sword_id = source.get_world_mut().spawn_entity(Some("sword"));
+    let alice_id = source.get_world_mut().spawn_entity(Some("alice")).unwrap();
+    let sword_id = source.get_world_mut().spawn_entity(Some("sword")).unwrap();
     let alice = source.get_world().entity_ref(alice_id).unwrap();
     let sword = source.get_world().entity_ref(sword_id).unwrap();
     source
@@ -714,8 +717,8 @@ fn relation_conflict_rolls_back_candidate_spawn_and_component_write() {
         &mut world,
         "relation Owns(owner: entity, item: entity)\n    unique item\n",
     );
-    let alice_id = world.spawn_entity(Some("alice"));
-    let sword_id = world.spawn_entity(Some("sword"));
+    let alice_id = world.spawn_entity(Some("alice")).unwrap();
+    let sword_id = world.spawn_entity(Some("sword")).unwrap();
     let alice = world.entity_ref(alice_id).unwrap();
     let sword = world.entity_ref(sword_id).unwrap();
     world
@@ -770,10 +773,10 @@ fn entity_allocator_uses_the_last_fresh_slot_then_fails_as_typed_data() {
     let mut snapshot = world.snapshot();
     snapshot.next_id = u32::MAX;
     world.restore(snapshot);
-    assert_eq!(world.try_spawn_entity(Some("last")).unwrap(), u32::MAX);
+    assert_eq!(world.spawn_entity(Some("last")).unwrap(), u32::MAX);
     assert_eq!(
-        world.try_spawn_entity(Some("overflow")),
-        Err("entity.id_space_exhausted")
+        world.spawn_entity(Some("overflow")),
+        Err(crate::world::EntityAllocationError::IdSpaceExhausted)
     );
     assert_eq!(world.get_entity_by_name("last"), Some(u32::MAX));
     assert!(world.get_entity_by_name("overflow").is_none());
@@ -782,12 +785,13 @@ fn entity_allocator_uses_the_last_fresh_slot_then_fails_as_typed_data() {
 #[test]
 fn exhausted_reusable_generation_is_retired_without_blocking_other_capacity() {
     let mut world = World::new();
-    let retired = world.spawn_entity(None);
-    assert!(world.destroy_entity(retired));
+    let retired = world.spawn_entity(None).unwrap();
     let mut snapshot = world.snapshot();
     snapshot.generations = Arc::new(std::collections::HashMap::from([(retired, u32::MAX)]));
     world.restore(snapshot);
-    let replacement = world.try_spawn_entity(None).unwrap();
+    assert!(world.destroy_entity(retired));
+    assert!(!world.allocator_state().2.contains(&retired));
+    let replacement = world.spawn_entity(None).unwrap();
     assert_ne!(replacement, retired);
     assert_eq!(world.entity_ref(replacement).unwrap().generation, 0);
 }
@@ -804,9 +808,9 @@ relation CarryCapacity(person: entity, capacity: int)
 "#;
     let mut world = World::new();
     install(&mut world, source);
-    let alice_id = world.spawn_entity(Some("alice"));
-    let bob_id = world.spawn_entity(Some("bob"));
-    let sword_id = world.spawn_entity(Some("sword"));
+    let alice_id = world.spawn_entity(Some("alice")).unwrap();
+    let bob_id = world.spawn_entity(Some("bob")).unwrap();
+    let sword_id = world.spawn_entity(Some("sword")).unwrap();
     let alice = world.entity_ref(alice_id).unwrap();
     let bob = world.entity_ref(bob_id).unwrap();
     let sword = world.entity_ref(sword_id).unwrap();

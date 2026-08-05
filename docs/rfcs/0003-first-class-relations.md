@@ -324,6 +324,10 @@ fresh-space exhaustion is canonical only with `next_id == u32::MAX`. The proof
 uses only transmitted rows and generation entries and never expands the issued
 numeric range.
 
+A generation-exhausted slot retires when its last live entity is destroyed; it
+is never placed in the reusable-free set. Decoders reject a `u32::MAX`
+generation in that set rather than accepting a pending future reclassification.
+
 ## Derived facts
 
 V0 derivations are positive, nonrecursive, and stratified by a finite

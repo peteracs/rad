@@ -3,9 +3,74 @@
 pub(crate) struct ValidatedEntityAllocatorState {
     next_id: u32,
     fresh_ids_exhausted: bool,
-    free_ids: Vec<u32>,
+    free_ids: Arc<BTreeSet<u32>>,
     generations: Arc<HashMap<u32, u32>>,
 }
+
+/// Stable, typed failures from the entity identity allocator and its storage
+/// boundary. Public host APIs return these instead of panicking or collapsing
+/// allocator corruption into a boolean.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum EntityAllocationError {
+    IdSpaceExhausted,
+    AllocatorLiveFreeOverlap(u32),
+    FreshIdAlreadyLive(u32),
+    ArchetypeDuplicate(u32),
+    IdAlreadyLive(u32),
+    GenerationExhausted(u32),
+    ExplicitIdNotReusable(u32),
+    ExplicitIdGapTooLarge {
+        start: u32,
+        requested: u32,
+        limit: u32,
+    },
+}
+
+impl EntityAllocationError {
+    pub fn code(&self) -> &'static str {
+        match self {
+            Self::IdSpaceExhausted => "entity.id_space_exhausted",
+            Self::AllocatorLiveFreeOverlap(_) => "entity.allocator_live_free_overlap",
+            Self::FreshIdAlreadyLive(_) => "entity.allocator_fresh_id_is_live",
+            Self::ArchetypeDuplicate(_) => "entity.archetype_duplicate",
+            Self::IdAlreadyLive(_) => "entity.id_already_live",
+            Self::GenerationExhausted(_) => "entity.generation_exhausted",
+            Self::ExplicitIdNotReusable(_) => "entity.explicit_id_not_reusable",
+            Self::ExplicitIdGapTooLarge { .. } => "entity.explicit_id_gap_limit",
+        }
+    }
+}
+
+impl std::fmt::Display for EntityAllocationError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(self.code())?;
+        match self {
+            Self::AllocatorLiveFreeOverlap(entity)
+            | Self::FreshIdAlreadyLive(entity)
+            | Self::ArchetypeDuplicate(entity)
+            | Self::IdAlreadyLive(entity)
+            | Self::GenerationExhausted(entity)
+            | Self::ExplicitIdNotReusable(entity) => write!(formatter, ": entity {entity}"),
+            Self::ExplicitIdGapTooLarge {
+                start,
+                requested,
+                limit,
+            } => write!(
+                formatter,
+                ": requested entity {requested} from fresh cursor {start}, limit {limit}"
+            ),
+            Self::IdSpaceExhausted => Ok(()),
+        }
+    }
+}
+
+impl std::error::Error for EntityAllocationError {}
+
+// Explicit identities exist only for internal fork merging and delta
+// reconstruction. A fixed bound prevents one integer from materializing an
+// attacker-sized free set; full world/fork restoration bypasses gap inference
+// and installs a separately validated allocator partition instead.
+const MAX_EXPLICIT_ENTITY_GAP: u32 = 65_536;
 
 impl ValidatedEntityAllocatorState {
     pub(crate) fn try_new(
@@ -110,9 +175,14 @@ impl ValidatedEntityAllocatorState {
             while free_ids.get(free_cursor).is_some_and(|id| *id < slot) {
                 free_cursor += 1;
             }
-            if live_ids.get(live_cursor) == Some(&slot)
-                || free_ids.get(free_cursor) == Some(&slot)
-            {
+            let live = live_ids.get(live_cursor) == Some(&slot);
+            let free = free_ids.get(free_cursor) == Some(&slot);
+            if free && generation == u32::MAX {
+                return Err(format!(
+                    "id allocator: generation-exhausted slot {slot} must be retired, not free"
+                ));
+            }
+            if live || free {
                 continue;
             }
             if generation != u32::MAX {
@@ -139,7 +209,7 @@ impl ValidatedEntityAllocatorState {
         Ok(Self {
             next_id,
             fresh_ids_exhausted,
-            free_ids,
+            free_ids: Arc::new(free_ids.into_iter().collect()),
             generations: Arc::new(generations.into_iter().collect()),
         })
     }
@@ -155,7 +225,7 @@ impl World {
         }
     }
 
-    pub fn try_spawn_entity(&mut self, name: Option<&str>) -> Result<u32, &'static str> {
+    pub fn spawn_entity(&mut self, name: Option<&str>) -> Result<u32, EntityAllocationError> {
         let empty_archetype = self.archetype_map.get(&Vec::new()).copied();
         let has_physical_row = |world: &World, entity| {
             empty_archetype.is_some_and(|aid| {
@@ -165,38 +235,34 @@ impl World {
             })
         };
         let (eid, generation) = loop {
-            let reusable = self
-                .free_ids
-                .iter()
-                .enumerate()
-                .min_by_key(|(_, id)| **id)
-                .map(|(index, id)| (index, *id));
+            let reusable = self.free_ids.first().copied();
             match reusable {
-                Some((index, reused)) => {
+                Some(reused) => {
                     if self.entity_archetype.contains_key(&reused) {
-                        return Err("entity.allocator_live_free_overlap");
+                        return Err(EntityAllocationError::AllocatorLiveFreeOverlap(reused));
                     }
                     if has_physical_row(self, reused) {
-                        return Err("entity.archetype_duplicate");
+                        return Err(EntityAllocationError::ArchetypeDuplicate(reused));
                     }
-                    self.free_ids.swap_remove(index);
+                    Arc::make_mut(&mut self.free_ids).pop_first();
                     let previous = self.generations.get(&reused).copied().unwrap_or(0);
                     if let Some(generation) = previous.checked_add(1) {
                         break (reused, generation);
                     }
-                    // An exhausted slot is retired permanently. Continue in
-                    // exact allocator order instead of wrapping its lifetime.
+                    // Defense in depth for a corrupted trusted snapshot:
+                    // canonical worlds retire this slot at destruction and
+                    // transport rejects it in the free set.
                 }
                 None => {
                     if self.fresh_ids_exhausted {
-                        return Err("entity.id_space_exhausted");
+                        return Err(EntityAllocationError::IdSpaceExhausted);
                     }
                     let fresh = self.next_id;
                     if self.entity_archetype.contains_key(&fresh) {
-                        return Err("entity.allocator_fresh_id_is_live");
+                        return Err(EntityAllocationError::FreshIdAlreadyLive(fresh));
                     }
                     if has_physical_row(self, fresh) {
-                        return Err("entity.archetype_duplicate");
+                        return Err(EntityAllocationError::ArchetypeDuplicate(fresh));
                     }
                     if fresh == u32::MAX {
                         self.fresh_ids_exhausted = true;
@@ -224,11 +290,6 @@ impl World {
         Ok(eid)
     }
 
-    pub fn spawn_entity(&mut self, name: Option<&str>) -> u32 {
-        self.try_spawn_entity(name)
-            .expect("Entity ID overflow: exceeded 2^32 entity lifetimes")
-    }
-
     pub fn entity_ref(&self, eid: u32) -> Option<crate::relation_runtime::EntityRef> {
         self.entity_exists(eid)
             .then(|| crate::relation_runtime::EntityRef {
@@ -248,8 +309,7 @@ impl World {
     }
 
     pub(crate) fn allocator_state(&self) -> (u32, bool, Vec<u32>) {
-        let mut free_ids = self.free_ids.clone();
-        free_ids.sort_unstable();
+        let free_ids = self.free_ids.iter().copied().collect();
         (self.next_id, self.fresh_ids_exhausted, free_ids)
     }
 
@@ -263,32 +323,45 @@ impl World {
         self.generations = state.generations;
     }
 
-    /// Claim a caller-selected identity while preserving allocator state.
-    /// Wire decoders validate the complete partition before reaching this
-    /// lower-level reconstruction primitive.
-    fn claim_explicit_entity_id(&mut self, eid: u32) -> Result<u32, &'static str> {
+    /// Claim a caller-selected identity while preserving allocator state for
+    /// bounded internal delta and merge reconstruction. Full world/fork
+    /// decoders install a sealed allocator partition without gap inference.
+    fn claim_explicit_entity_id(
+        &mut self,
+        eid: u32,
+    ) -> Result<u32, EntityAllocationError> {
         if self.entity_archetype.contains_key(&eid) {
-            return Err("entity.id_already_live");
+            return Err(EntityAllocationError::IdAlreadyLive(eid));
         }
         let generation = self
             .generations
             .get(&eid)
             .copied()
             .map_or(Some(0), |generation| generation.checked_add(1))
-            .ok_or("entity.generation_exhausted")?;
+            .ok_or(EntityAllocationError::GenerationExhausted(eid))?;
         if self.fresh_ids_exhausted {
-            self.free_ids.retain(|&free| free != eid);
-        } else if eid >= self.next_id {
-            for skipped in self.next_id..eid {
-                self.free_ids.push(skipped);
+            if !Arc::make_mut(&mut self.free_ids).remove(&eid) {
+                return Err(EntityAllocationError::ExplicitIdNotReusable(eid));
             }
+        } else if eid >= self.next_id {
+            let gap = eid - self.next_id;
+            if gap > MAX_EXPLICIT_ENTITY_GAP {
+                return Err(EntityAllocationError::ExplicitIdGapTooLarge {
+                    start: self.next_id,
+                    requested: eid,
+                    limit: MAX_EXPLICIT_ENTITY_GAP,
+                });
+            }
+            Arc::make_mut(&mut self.free_ids).extend(self.next_id..eid);
             if eid == u32::MAX {
                 self.fresh_ids_exhausted = true;
             } else {
                 self.next_id = eid + 1;
             }
         } else {
-            self.free_ids.retain(|&free| free != eid);
+            if !Arc::make_mut(&mut self.free_ids).remove(&eid) {
+                return Err(EntityAllocationError::ExplicitIdNotReusable(eid));
+            }
         }
         self.set_entity_generation(eid, generation);
         Ok(generation)

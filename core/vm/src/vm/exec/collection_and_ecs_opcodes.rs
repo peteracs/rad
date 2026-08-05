@@ -723,7 +723,10 @@ impl VM {
                 self.sandbox_check_write(&c.type_name)?;
             }
         }
-        let eid = self.get_world_mut().spawn_entity(name_opt);
+        let eid = self
+            .get_world_mut()
+            .spawn_entity(name_opt)
+            .map_err(|error| error.to_string())?;
         if self.is_worker {
             let mut comps_clone = Vec::with_capacity(comps.len());
             for c in comps.iter().rev() {

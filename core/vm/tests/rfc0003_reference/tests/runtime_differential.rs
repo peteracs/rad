@@ -72,7 +72,7 @@ relation Allied(left: entity, right: entity)
         .unwrap();
     let entities = (0..4)
         .map(|_| {
-            let slot = world.try_spawn_entity(None).unwrap();
+            let slot = world.spawn_entity(None).unwrap();
             world.entity_ref(slot).unwrap()
         })
         .collect();

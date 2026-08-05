@@ -310,7 +310,10 @@ impl VM {
                                 );
                             }
                             crate::vm::EcsCommand::SpawnEntity(name, comps, local_eid) => {
-                                let real_eid = self.get_world_mut().spawn_entity(name.as_deref());
+                                let real_eid = self
+                                    .get_world_mut()
+                                    .spawn_entity(name.as_deref())
+                                    .map_err(|error| error.to_string())?;
                                 if real_eid != local_eid {
                                     eid_map.insert(local_eid, real_eid);
                                 }

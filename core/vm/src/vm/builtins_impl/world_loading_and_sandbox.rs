@@ -389,9 +389,9 @@ impl VM {
                 comps.push(data);
             }
 
-            if !target.insert_entity_with_components(saved_entity, name, comps.clone()) {
-                return Err(format!("load_world(): duplicate entity ID {saved_entity}"));
-            }
+            target
+                .restore_entity_with_components(saved_entity, name, comps.clone())
+                .map_err(|error| format!("load_world(): {error}"))?;
             let eid = saved_entity;
             loaded += 1;
             for data in &comps {

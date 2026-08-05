@@ -15,6 +15,7 @@ use rad_vm::settlement_reference::{
     ReferenceWrite,
 };
 use rad_vm::vm::VM;
+use rad_vm::world::World;
 
 fn examples_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -133,6 +134,37 @@ fn bench_startup(c: &mut Criterion) {
             let _ = vm.run(0);
         })
     });
+}
+
+fn world_with_reusable_entities(count: usize) -> World {
+    let mut world = World::new();
+    let entities = (0..count)
+        .map(|_| world.spawn_entity(None).expect("benchmark identity space"))
+        .collect::<Vec<_>>();
+    for entity in entities.into_iter().rev() {
+        assert!(world.destroy_entity(entity));
+    }
+    world
+}
+
+fn bench_entity_allocator_churn(c: &mut Criterion) {
+    let mut group = c.benchmark_group("world/entity_allocator/reuse");
+    group.sample_size(10);
+    for count in [1_000usize, 10_000] {
+        group.throughput(Throughput::Elements(count as u64));
+        group.bench_with_input(BenchmarkId::from_parameter(count), &count, |b, &count| {
+            b.iter_batched(
+                || world_with_reusable_entities(count),
+                |mut world| {
+                    for _ in 0..count {
+                        black_box(world.spawn_entity(None).expect("reusable identity"));
+                    }
+                },
+                BatchSize::LargeInput,
+            )
+        });
+    }
+    group.finish();
 }
 
 fn bench_fib(c: &mut Criterion) {
@@ -472,6 +504,7 @@ criterion_group!(
     bench_compile,
     bench_vm_execution,
     bench_startup,
+    bench_entity_allocator_churn,
     bench_fib,
     bench_causal_settlement,
     bench_causal_reference_and_provenance,

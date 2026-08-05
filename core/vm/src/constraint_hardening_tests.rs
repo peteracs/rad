@@ -532,7 +532,7 @@ fn attempt() {
     supplied.run(0).expect("initialize supplied checkpoint");
     let visible_before = supplied.world.snapshot_json_like();
     let mut altered = supplied.world.snapshot();
-    altered.free_ids = vec![42];
+    altered.free_ids = std::sync::Arc::new(std::collections::BTreeSet::from([42]));
     supplied.world.restore(altered);
     assert_eq!(visible_before, supplied.world.snapshot_json_like());
 

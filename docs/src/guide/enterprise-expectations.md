@@ -17,7 +17,7 @@ print(a[0]) // 1
 
 ## 2) Pipelines Enforce Purity (or Readonly)
 
-Pipeline stages (`|>`) must be pure or `readonly`. Functions whose body only uses local variables, arithmetic, and pure builtins are automatically inferred as pure — no `pure fn` annotation needed. Functions that perform ECS reads (e.g., `get`, `has`, `entities`, `lookup`, `get_resource`) can be declared `readonly fn` and are also allowed in pipelines. If a function is used as a pipeline stage and it performs side effects (ECS mutation, non-pure/non-readonly calls, or `print` inside nested calls), the checker rejects it. Direct use of `print` in a pipeline is not blocked by the same mechanism as `set` / `spawn`; prefer keeping I/O outside pipelines for clarity ([Language Guarantees](../reference/guarantees.md) §3).
+Pipeline stages (`|>`) must be pure or `readonly`. Functions whose body only uses local variables, arithmetic, and pure builtins are automatically inferred as pure — no `pure fn` annotation needed. Functions that perform ECS reads (e.g., `get`, `has`, `entities`, `lookup`, `get_resource`) can be declared `readonly fn` and are also allowed in pipelines. If a function is used as a direct pipeline stage or callback and performs side effects (ECS mutation, non-pure/non-readonly calls, `print`, or other I/O), the checker rejects it ([Language Guarantees](../reference/guarantees.md) §3).
 
 ```rad
 fn plus_one(x) { return x + 1 }

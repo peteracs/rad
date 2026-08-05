@@ -99,7 +99,7 @@ readonly fn get_hp(e: entity) -> int {
 let low_hp = entities(Health) |> filter(fn(e) { return get_hp(e) < 50 })
 ```
 
-Both `pure` and `readonly` functions are allowed in pipelines. The compiler enforces that pipeline stages cannot call side-effecting builtins (`set`, `spawn`, `emit`) or user functions with those effects. ECS **read** builtins (`get`, `has`, `entities`, `query_where`, `query_map`, `query_count`, `with_field`, `peek`, `lookup`, `get_resource`) are classified as `readonly` and permitted in pipelines. (`print` is not blocked by the same path as `set`; see [Language Guarantees](../reference/guarantees.md) §3.)
+Both `pure` and `readonly` functions are allowed in pipelines. The compiler rejects side-effecting builtins (`set`, `spawn`, `emit`, `print`, file/network I/O, and the persistence write family) both as direct stages and inside callbacks, along with user functions that transitively carry those effects. ECS **read** builtins (`get`, `has`, `entities`, `query_where`, `query_map`, `query_count`, `with_field`, `peek`, `lookup`, `get_resource`) are classified as `readonly` and permitted in pipelines.
 
 If you forget to mark a function as `pure` or `readonly`, the compiler infers purity where it can; otherwise it traces the call chain and points at the annotations you need.
 

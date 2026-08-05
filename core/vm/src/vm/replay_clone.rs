@@ -812,7 +812,7 @@ mod tests {
     use crate::gc::GcHeap;
     use crate::value::Value;
     use crate::world::World;
-    use std::collections::HashMap;
+    use std::collections::{BTreeSet, HashMap};
     use std::sync::Arc;
 
     #[test]
@@ -827,12 +827,12 @@ mod tests {
         assert_ne!(digest, fingerprint_world_snapshot(&next_id));
 
         let mut free_ids = baseline.clone();
-        free_ids.free_ids = vec![7, 3];
+        free_ids.free_ids = Arc::new(BTreeSet::from([3, 7]));
         assert_eq!(visible, free_ids.snapshot_json_like());
         let free_digest = fingerprint_world_snapshot(&free_ids);
         assert_ne!(digest, free_digest);
-        free_ids.free_ids.reverse();
-        assert_ne!(free_digest, fingerprint_world_snapshot(&free_ids));
+        free_ids.free_ids = Arc::new([7, 3].into_iter().collect());
+        assert_eq!(free_digest, fingerprint_world_snapshot(&free_ids));
 
         let mut types = baseline.clone();
         types.type_registry = Arc::new(HashMap::from([("HiddenType".to_string(), 9)]));

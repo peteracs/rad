@@ -53,7 +53,7 @@ assert_only_changed(before, after, [Health]) would fail here:
 | Capability | Builtins / commands |
 |---|---|
 | Speculative execution | `fork()`, `simulate()`, `simulate_par()`, `peek()`, `commit()` |
-| Untrusted code, safely | `sandbox_run(source, fork, caps)`, `rad sandbox serve` |
+| Capability-restricted speculative execution | `sandbox_run(source, fork, caps)`, `rad sandbox serve` |
 | Three-way state merge | `merge_forks()`, `merge_forks_with()`, `fork_to_bytes()` |
 | Record & replay | `rad app.rad --record trace.radr`, `rad replay` |
 | Time-travel debugging | `rad replay trace.radr --serve` (`goto_frame`, `diff_frames`, `why`) |
@@ -65,9 +65,10 @@ fork's RNG seed is derived from `(seed, index)` via a SplitMix64 finalizer. A
 static effect system rejects systems that do IO or call `commit()` inside
 `simulate()`, including through their transitive event-handler chains.
 
-`sandbox_run` runs untrusted Rad source against a fork behind three independent
-layers — a deny-by-default builtin mask, a component-write ACL, and fuel/memory
-budgets — so the host decides what commits.
+`sandbox_run` runs Rad source against a fork behind three independent layers —
+a deny-by-default builtin mask, a component-write ACL, and fuel/memory budgets —
+so the host decides what commits. These are explicit containment mechanisms,
+not a claim of third-party-audited hostile-tenant isolation.
 
 ## Why ECS, pipelines, and events
 

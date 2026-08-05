@@ -175,9 +175,8 @@ impl VM {
                 };
                 comps.push(data);
             }
-            if !w.insert_entity_with_components(eid, name, comps) {
-                return Err(format!("fork_from_bytes: duplicate entity id {}", eid));
-            }
+            w.restore_entity_with_components(eid, name, comps)
+                .map_err(|error| format!("fork_from_bytes: {error}"))?;
         }
 
         for rentry in body["resources"].as_array().into_iter().flatten() {

@@ -241,9 +241,9 @@ impl Archetype {
         &mut self,
         eid: u32,
         mut components: HashMap<TypeId, ComponentData>,
-    ) -> Result<(), &'static str> {
+    ) -> Result<(), EntityAllocationError> {
         if self.entity_row.contains_key(&eid) {
-            return Err("entity.archetype_duplicate");
+            return Err(EntityAllocationError::ArchetypeDuplicate(eid));
         }
         let row = self.entities.len();
         Arc::make_mut(&mut self.entities).push(eid);
@@ -305,7 +305,7 @@ impl Archetype {
 pub struct World {
     next_id: u32,
     fresh_ids_exhausted: bool,
-    free_ids: Vec<u32>,
+    free_ids: Arc<BTreeSet<u32>>,
     /// Current committed lifetime for every allocated entity slot. Relation
     /// values bind `(slot, generation)` so a recycled ECS id cannot silently
     /// retarget an authoritative fact.

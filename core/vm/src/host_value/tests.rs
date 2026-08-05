@@ -227,7 +227,7 @@ mod tests {
     #[test]
     fn component_and_resource_exports_apply_one_cumulative_budget() {
         let mut vm = VM::new();
-        let entity = vm.world.spawn_entity(Some("hero"));
+        let entity = vm.world.spawn_entity(Some("hero")).unwrap();
         let component = ComponentData {
             type_name: "Pair".into(),
             layout: Arc::new(vec!["left".into(), "right".into()]),

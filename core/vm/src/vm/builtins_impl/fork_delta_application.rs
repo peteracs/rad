@@ -272,8 +272,8 @@ impl VM {
                         w.add_component(eid, data);
                     }
                 }
-            } else if !w.insert_entity_with_components(eid, name, comps) {
-                return Err(format!("fork_apply: duplicate entity id {}", eid));
+            } else if let Err(error) = w.insert_entity_with_components(eid, name, comps) {
+                return Err(format!("fork_apply: {error}"));
             }
         }
 

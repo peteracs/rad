@@ -1,8 +1,9 @@
 # Rad Language Roadmap
 
-> Last updated: 2026-03-31
+> Last updated: 2026-08-05
 >
-> This roadmap is a living document. Priorities shift based on community feedback.
+> This roadmap is a living document. Priorities shift based on dogfood,
+> verification findings, and community feedback.
 > Open an [RFC](rfcs.md) or a Language Design Discussion on GitHub to propose changes.
 
 ## Status Key

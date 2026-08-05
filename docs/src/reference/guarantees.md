@@ -125,7 +125,7 @@ let hps = entities(Health) |> map(get_hp)
 | `set_resource` | Mutates a global resource |
 | `flush_events` | Runs pending event handlers for the current flush phase |
 | `transition` | Mutates state machine state |
-| `print` | Side effect (I/O) — the builtin signature is not `pure`, but the pipeline checker does not block `print` the way it blocks ECS mutators (`set`, `spawn`, …), so `print` can appear in pipeline position for quick debugging |
+| `print` | Side effect (I/O); rejected both as a direct stage and inside pipeline callbacks |
 
 ### Which builtins are `readonly` (allowed in pipelines)?
 

@@ -52,11 +52,11 @@ impl WorldSnapshot {
             }
         }
 
-        out.text("rad-operational-world/v2");
+        out.text("rad-operational-world/v3");
         out.u32(self.next_id);
         out.bool(self.fresh_ids_exhausted);
         out.usize(self.free_ids.len());
-        for id in &self.free_ids {
+        for id in self.free_ids.iter() {
             out.u32(*id);
         }
         let mut generations = self.generations.iter().collect::<Vec<_>>();

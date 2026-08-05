@@ -83,8 +83,8 @@ fn allocator_transport_rejects_duplicate_free_ids_before_mutation() {
     // still fresh and can be allocated exactly once afterward.
     let mut vm = run_vm("let _ready = 1");
     assert!(load_world_result(&mut vm, &body).is_err());
-    assert_eq!(vm.get_world_mut().try_spawn_entity(None), Ok(0));
-    assert_eq!(vm.get_world_mut().try_spawn_entity(None), Ok(1));
+    assert_eq!(vm.get_world_mut().spawn_entity(None), Ok(0));
+    assert_eq!(vm.get_world_mut().spawn_entity(None), Ok(1));
 }
 
 #[test]
@@ -210,13 +210,13 @@ fn allocator_transport_accepts_a_canonical_retired_slot() {
     let mut world_vm = run_vm("let _ready = 1");
     load_world_result(&mut world_vm, &body)
         .expect("retired slot is valid allocator state");
-    assert_eq!(world_vm.get_world_mut().try_spawn_entity(None), Ok(2));
+    assert_eq!(world_vm.get_world_mut().spawn_entity(None), Ok(2));
 
     let mut fork_vm = run_vm("let _ready = 1");
     let snapshot = decode_fork_result(&mut fork_vm, &body).expect("retired fork slot is valid");
     let mut fork_world = crate::world::World::new();
     fork_world.restore(snapshot);
-    assert_eq!(fork_world.try_spawn_entity(None), Ok(2));
+    assert_eq!(fork_world.spawn_entity(None), Ok(2));
 }
 
 #[test]
@@ -248,9 +248,9 @@ fn mixed_live_free_and_retired_partition_round_trips_exactly() {
         .expect("saved allocator partition reloads");
     assert_eq!(restored_vm.get_world().allocator_state(), (5, false, vec![3]));
     assert_eq!(restored_vm.get_world().generation_entries(), generations);
-    assert_eq!(restored_vm.get_world_mut().try_spawn_entity(None), Ok(3));
+    assert_eq!(restored_vm.get_world_mut().spawn_entity(None), Ok(3));
     assert_eq!(restored_vm.get_world().entity_ref(3).unwrap().generation, 10);
-    assert_eq!(restored_vm.get_world_mut().try_spawn_entity(None), Ok(5));
+    assert_eq!(restored_vm.get_world_mut().spawn_entity(None), Ok(5));
 
     let mut fork_vm = run_vm("let _ready = 1");
     let snapshot = decode_fork_result(&mut fork_vm, &body).expect("mixed fork partition loads");
@@ -266,13 +266,13 @@ fn mixed_live_free_and_retired_partition_round_trips_exactly() {
     fork_world.restore(snapshot);
     assert_eq!(fork_world.allocator_state(), (5, false, vec![3]));
     assert_eq!(fork_world.generation_entries(), generations);
-    assert_eq!(fork_world.try_spawn_entity(None), Ok(3));
+    assert_eq!(fork_world.spawn_entity(None), Ok(3));
     assert_eq!(fork_world.entity_ref(3).unwrap().generation, 10);
-    assert_eq!(fork_world.try_spawn_entity(None), Ok(5));
+    assert_eq!(fork_world.spawn_entity(None), Ok(5));
 }
 
 #[test]
-fn maximum_generation_free_slot_retires_after_round_trip() {
+fn maximum_generation_free_slot_is_rejected_as_noncanonical() {
     let body = allocator_transport_body(
         serde_json::json!([[1, null, []]]),
         serde_json::json!([0]),
@@ -281,15 +281,5 @@ fn maximum_generation_free_slot_retires_after_round_trip() {
         serde_json::json!([[0, u32::MAX]]),
     );
 
-    let mut world_vm = run_vm("let _ready = 1");
-    load_world_result(&mut world_vm, &body).expect("exhausted reusable slot loads");
-    assert_eq!(world_vm.get_world_mut().try_spawn_entity(None), Ok(2));
-    assert_eq!(world_vm.get_world().generation_entries(), vec![(0, u32::MAX)]);
-
-    let mut fork_vm = run_vm("let _ready = 1");
-    let snapshot = decode_fork_result(&mut fork_vm, &body).expect("exhausted fork slot loads");
-    let mut fork_world = crate::world::World::new();
-    fork_world.restore(snapshot);
-    assert_eq!(fork_world.try_spawn_entity(None), Ok(2));
-    assert_eq!(fork_world.generation_entries(), vec![(0, u32::MAX)]);
+    assert_allocator_transport_rejected(&body, "must be retired, not free");
 }

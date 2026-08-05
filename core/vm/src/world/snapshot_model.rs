@@ -115,17 +115,17 @@ fn dump_world_json(
 
 #[derive(Clone)]
 pub struct WorldSnapshot {
-    pub next_id: u32,
-    pub fresh_ids_exhausted: bool,
-    pub free_ids: Vec<u32>,
-    pub generations: Arc<HashMap<u32, u32>>,
-    pub name_to_id: Arc<HashMap<String, u32>>,
-    pub id_to_name: Arc<HashMap<u32, String>>,
-    pub type_registry: Arc<HashMap<String, TypeId>>,
-    pub next_type_id: TypeId,
+    pub(crate) next_id: u32,
+    pub(crate) fresh_ids_exhausted: bool,
+    pub(crate) free_ids: Arc<BTreeSet<u32>>,
+    pub(crate) generations: Arc<HashMap<u32, u32>>,
+    pub(crate) name_to_id: Arc<HashMap<String, u32>>,
+    pub(crate) id_to_name: Arc<HashMap<u32, String>>,
+    pub(crate) type_registry: Arc<HashMap<String, TypeId>>,
+    pub(crate) next_type_id: TypeId,
     pub(crate) archetypes: Vec<Archetype>,
-    pub archetype_map: Arc<HashMap<Vec<TypeId>, ArchetypeId>>,
-    pub entity_archetype: Arc<HashMap<u32, ArchetypeId>>,
+    pub(crate) archetype_map: Arc<HashMap<Vec<TypeId>, ArchetypeId>>,
+    pub(crate) entity_archetype: Arc<HashMap<u32, ArchetypeId>>,
     indexed_fields: Arc<HashMap<String, HashSet<String>>>,
     indices: Arc<HashMap<IndexKey, Vec<u32>>>,
     resources: Arc<ResourceMap>,
@@ -138,7 +138,7 @@ pub struct WorldSnapshot {
     pub(crate) events: Arc<Vec<(String, Value, u64)>>,
     /// Causality emit-record ids, parallel to `events` (provenance survives
     /// the fork/commit roundtrip).
-    pub emit_ids: Arc<Vec<u64>>,
+    pub(crate) emit_ids: Arc<Vec<u64>>,
     /// Delayed (`emit … after N`) timers at capture time: `(ticks_left,
     /// event, payload, emit_id)`. Same principle as `events` — timers are
     /// program state; a snapshot that drops them loses every scheduled
@@ -148,7 +148,7 @@ pub struct WorldSnapshot {
     /// (the sender's ledger closure), carried through `merge_forks`, and
     /// ingested into the local ledger by `commit()`. `None` for local forks
     /// — their provenance already lives in the VM's ledger.
-    pub provenance: Option<Arc<crate::causality::WireProvenance>>,
+    pub(crate) provenance: Option<Arc<crate::causality::WireProvenance>>,
     /// The effective RNG seed the rollout that produced this snapshot ran
     /// under, when it came out of the simulate family (`simulate_par`,
     /// `simulate_many`, `simulate_seeded`). `fork_seed()` reads it, making a
@@ -158,7 +158,7 @@ pub struct WorldSnapshot {
     /// identity because `fork_seed()` makes it observable. Cleared by
     /// `with_resource` (an overridden copy is a new candidate, not the
     /// rollout's output).
-    pub rollout_seed: Option<u64>,
+    pub(crate) rollout_seed: Option<u64>,
 }
 
 /// Versioned sink for the complete execution-relevant state of a

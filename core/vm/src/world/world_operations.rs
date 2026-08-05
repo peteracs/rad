@@ -18,7 +18,7 @@ impl World {
         World {
             next_id: 0,
             fresh_ids_exhausted: false,
-            free_ids: Vec::new(),
+            free_ids: Arc::new(BTreeSet::new()),
             generations: Arc::new(HashMap::new()),
             name_to_id: Arc::new(HashMap::new()),
             id_to_name: Arc::new(HashMap::new()),
@@ -194,22 +194,28 @@ impl World {
 
     /// Forks assign ids independently; when merging, entities that exist in
     /// only one fork must keep the id every value in that fork refers to.
-    /// Maintains the id-allocator invariants: ids skipped over become free,
-    /// reused free ids leave the free list. Returns false if `eid` is live.
-    pub fn insert_entity_with_id(&mut self, eid: u32, name: Option<&str>) -> bool {
-        if self.claim_explicit_entity_id(eid).is_err() {
-            return false;
+    /// Maintains the id-allocator invariants for the bounded internal merge
+    /// path. Full transport restoration installs a validated allocator state
+    /// instead of inferring and expanding gaps from entity rows.
+    pub(crate) fn insert_entity_with_id(
+        &mut self,
+        eid: u32,
+        name: Option<&str>,
+    ) -> Result<(), EntityAllocationError> {
+        if self.entity_archetype.contains_key(&eid) {
+            return Err(EntityAllocationError::IdAlreadyLive(eid));
         }
+        if self.archetype_map.get(&Vec::new()).is_some_and(|aid| {
+            self.archetypes[*aid as usize].entity_row.contains_key(&eid)
+        }) {
+            return Err(EntityAllocationError::ArchetypeDuplicate(eid));
+        }
+        self.claim_explicit_entity_id(eid)?;
         let aid = self.get_or_create_archetype(Vec::new());
-        if self.archetypes[aid as usize]
-            .push_entity(eid, HashMap::new())
-            .is_err()
-        {
-            return false;
-        }
+        self.archetypes[aid as usize].push_entity(eid, HashMap::new())?;
         Arc::make_mut(&mut self.entity_archetype).insert(eid, aid);
         self.set_entity_name(eid, name);
-        true
+        Ok(())
     }
 
     /// Insert a fresh entity with all of its components in **one archetype
@@ -222,9 +228,31 @@ impl World {
         eid: u32,
         name: Option<&str>,
         components: Vec<ComponentData>,
-    ) -> bool {
-        if self.claim_explicit_entity_id(eid).is_err() {
-            return false;
+    ) -> Result<(), EntityAllocationError> {
+        self.claim_explicit_entity_id(eid)?;
+        self.insert_entity_components_storage(eid, name, components)
+    }
+
+    /// Reconstruct one already-validated transport row without inferring the
+    /// allocator from its numeric ID. The sealed allocator partition is
+    /// installed atomically after every row has been decoded.
+    pub(crate) fn restore_entity_with_components(
+        &mut self,
+        eid: u32,
+        name: Option<&str>,
+        components: Vec<ComponentData>,
+    ) -> Result<(), EntityAllocationError> {
+        self.insert_entity_components_storage(eid, name, components)
+    }
+
+    fn insert_entity_components_storage(
+        &mut self,
+        eid: u32,
+        name: Option<&str>,
+        components: Vec<ComponentData>,
+    ) -> Result<(), EntityAllocationError> {
+        if self.entity_archetype.contains_key(&eid) {
+            return Err(EntityAllocationError::IdAlreadyLive(eid));
         }
 
         let mut by_tid: HashMap<TypeId, ComponentData> = HashMap::with_capacity(components.len());
@@ -244,18 +272,13 @@ impl World {
             .cloned()
             .collect();
 
-        if self.archetypes[aid as usize]
-            .push_entity(eid, by_tid)
-            .is_err()
-        {
-            return false;
-        }
+        self.archetypes[aid as usize].push_entity(eid, by_tid)?;
         Arc::make_mut(&mut self.entity_archetype).insert(eid, aid);
         self.set_entity_name(eid, name);
         for data in &indexed {
             self.add_component_indices(eid, data);
         }
-        true
+        Ok(())
     }
 
     /// Set, change, or clear (None) an entity's name, keeping both name maps
@@ -410,7 +433,9 @@ impl World {
         if let Some(name) = Arc::make_mut(&mut self.id_to_name).remove(&eid) {
             Arc::make_mut(&mut self.name_to_id).remove(&name);
         }
-        self.free_ids.push(eid);
+        if self.generations.get(&eid).copied().unwrap_or(0) != u32::MAX {
+            Arc::make_mut(&mut self.free_ids).insert(eid);
+        }
         true
     }
 
@@ -459,9 +484,9 @@ impl World {
         }
         for spawn in spawns {
             let slot = candidate_world
-                .try_spawn_entity(spawn.name.as_deref())
-                .map_err(|code| crate::relation_runtime::RelationRuntimeError {
-                    code,
+                .spawn_entity(spawn.name.as_deref())
+                .map_err(|error| crate::relation_runtime::RelationRuntimeError {
+                    code: error.code(),
                     detail: "candidate entity allocation failed".into(),
                 })?;
             handles.insert(

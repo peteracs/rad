@@ -15,7 +15,7 @@ mod tests {
     #[test]
     fn spawn_entity_with_name_sets_bidirectional_maps() {
         let mut w = World::new();
-        let e = w.spawn_entity(Some("hero"));
+        let e = w.spawn_entity(Some("hero")).unwrap();
         assert_eq!(w.name_to_id.get("hero"), Some(&e));
         assert_eq!(w.id_to_name.get(&e), Some(&"hero".to_string()));
     }
@@ -23,8 +23,8 @@ mod tests {
     #[test]
     fn duplicate_name_cleans_up_old_entity_mapping() {
         let mut w = World::new();
-        let e0 = w.spawn_entity(Some("player"));
-        let e1 = w.spawn_entity(Some("player"));
+        let e0 = w.spawn_entity(Some("player")).unwrap();
+        let e1 = w.spawn_entity(Some("player")).unwrap();
         assert_ne!(e0, e1);
         assert_eq!(w.name_to_id.get("player"), Some(&e1));
         assert_eq!(w.id_to_name.get(&e1), Some(&"player".to_string()));
@@ -34,8 +34,8 @@ mod tests {
     #[test]
     fn destroy_after_name_reuse_cleans_up_correctly() {
         let mut w = World::new();
-        let e0 = w.spawn_entity(Some("npc"));
-        let e1 = w.spawn_entity(Some("npc"));
+        let e0 = w.spawn_entity(Some("npc")).unwrap();
+        let e1 = w.spawn_entity(Some("npc")).unwrap();
         w.destroy_entity(e1);
         assert!(!w.name_to_id.contains_key("npc"));
         assert!(!w.id_to_name.contains_key(&e1));
@@ -45,8 +45,8 @@ mod tests {
     #[test]
     fn destroy_old_entity_after_name_reuse_does_not_remove_new_mapping() {
         let mut w = World::new();
-        let e0 = w.spawn_entity(Some("npc"));
-        let _e1 = w.spawn_entity(Some("npc"));
+        let e0 = w.spawn_entity(Some("npc")).unwrap();
+        let _e1 = w.spawn_entity(Some("npc")).unwrap();
         w.destroy_entity(e0);
         assert_eq!(w.name_to_id.get("npc"), Some(&_e1));
         assert_eq!(w.id_to_name.get(&_e1), Some(&"npc".to_string()));
@@ -55,7 +55,7 @@ mod tests {
     #[test]
     fn spawn_unnamed_entity_does_not_pollute_name_maps() {
         let mut w = World::new();
-        let e = w.spawn_entity(None);
+        let e = w.spawn_entity(None).unwrap();
         assert!(w.name_to_id.is_empty());
         assert!(w.id_to_name.is_empty());
         assert!(w.entity_archetype.contains_key(&e));
@@ -64,7 +64,7 @@ mod tests {
     #[test]
     fn spawn_empty_name_does_not_pollute_name_maps() {
         let mut w = World::new();
-        w.spawn_entity(Some(""));
+        w.spawn_entity(Some("")).unwrap();
         assert!(w.name_to_id.is_empty());
         assert!(w.id_to_name.is_empty());
     }
@@ -72,42 +72,96 @@ mod tests {
     #[test]
     fn destroyed_entity_id_is_reused() {
         let mut w = World::new();
-        let e0 = w.spawn_entity(None);
+        let e0 = w.spawn_entity(None).unwrap();
         w.destroy_entity(e0);
-        let e1 = w.spawn_entity(None);
+        let e1 = w.spawn_entity(None).unwrap();
         assert_eq!(e0, e1);
+    }
+
+    #[test]
+    fn reusable_entities_are_selected_in_canonical_order() {
+        let mut world = World::new();
+        let ids = (0..3)
+            .map(|_| world.spawn_entity(None).unwrap())
+            .collect::<Vec<_>>();
+        for entity in [ids[2], ids[0], ids[1]] {
+            assert!(world.destroy_entity(entity));
+        }
+
+        assert_eq!(world.spawn_entity(None), Ok(ids[0]));
+        assert_eq!(world.spawn_entity(None), Ok(ids[1]));
+        assert_eq!(world.spawn_entity(None), Ok(ids[2]));
+    }
+
+    #[test]
+    fn generation_exhausted_entity_retires_at_destruction() {
+        let mut world = World::new();
+        let entity = world.spawn_entity(None).unwrap();
+        Arc::make_mut(&mut world.generations).insert(entity, u32::MAX);
+
+        assert!(world.destroy_entity(entity));
+        assert!(!world.free_ids.contains(&entity));
+        assert_eq!(world.spawn_entity(None), Ok(1));
+    }
+
+    #[test]
+    fn explicit_entity_gap_limit_rejects_before_allocator_mutation() {
+        let mut world = World::new();
+        let before = world.snapshot();
+
+        assert!(matches!(
+            world.insert_entity_with_id(u32::MAX, None),
+            Err(EntityAllocationError::ExplicitIdGapTooLarge { .. })
+        ));
+        assert_eq!(world.next_id, before.next_id);
+        assert_eq!(world.free_ids, before.free_ids);
+        assert_eq!(world.generations, before.generations);
+        assert!(world.all_entity_ids().is_empty());
+        assert_eq!(world.spawn_entity(None), Ok(0));
+    }
+
+    #[test]
+    fn explicit_entity_claim_rejects_an_unpartitioned_issued_slot() {
+        let mut world = World::new();
+        let mut corrupted = world.snapshot();
+        corrupted.next_id = 1;
+        world.restore(corrupted);
+
+        assert_eq!(
+            world.insert_entity_with_id(0, None),
+            Err(EntityAllocationError::ExplicitIdNotReusable(0))
+        );
+        assert!(world.all_entity_ids().is_empty());
+        assert!(world.free_ids.is_empty());
     }
 
     #[test]
     fn spawn_rejects_a_corrupted_live_free_overlap_without_duplicating_storage() {
         let mut world = World::new();
-        let entity = world.spawn_entity(None);
-        world.free_ids.push(entity);
+        let entity = world.spawn_entity(None).unwrap();
+        Arc::make_mut(&mut world.free_ids).insert(entity);
         let before_rows = world.archetypes[0].entities.clone();
 
         assert_eq!(
-            world.try_spawn_entity(None),
-            Err("entity.allocator_live_free_overlap")
+            world.spawn_entity(None),
+            Err(EntityAllocationError::AllocatorLiveFreeOverlap(entity))
         );
-        assert_eq!(world.free_ids, vec![entity]);
+        assert_eq!(world.free_ids.iter().copied().collect::<Vec<_>>(), vec![entity]);
         assert_eq!(world.all_entity_ids(), vec![entity]);
         assert_eq!(world.archetypes[0].entities, before_rows);
     }
 
     #[test]
-    fn duplicate_free_identity_can_be_allocated_only_once() {
+    fn reusable_identity_set_cannot_queue_one_slot_twice() {
         let mut world = World::new();
-        let entity = world.spawn_entity(None);
+        let entity = world.spawn_entity(None).unwrap();
         assert!(world.destroy_entity(entity));
-        world.free_ids.push(entity);
+        assert!(!Arc::make_mut(&mut world.free_ids).insert(entity));
 
-        assert_eq!(world.try_spawn_entity(None), Ok(entity));
-        assert_eq!(
-            world.try_spawn_entity(None),
-            Err("entity.allocator_live_free_overlap")
-        );
-        assert_eq!(world.all_entity_ids(), vec![entity]);
-        assert_eq!(world.archetypes[0].entities.as_slice(), &[entity]);
+        assert_eq!(world.spawn_entity(None), Ok(entity));
+        assert_eq!(world.spawn_entity(None), Ok(1));
+        assert_eq!(world.all_entity_ids(), vec![entity, 1]);
+        assert_eq!(world.archetypes[0].entities.as_slice(), &[entity, 1]);
         assert_eq!(world.archetypes[0].entity_row.get(&entity), Some(&0));
     }
 
@@ -117,7 +171,7 @@ mod tests {
         assert_eq!(archetype.push_entity(7, HashMap::new()), Ok(()));
         assert_eq!(
             archetype.push_entity(7, HashMap::new()),
-            Err("entity.archetype_duplicate")
+            Err(EntityAllocationError::ArchetypeDuplicate(7))
         );
         assert_eq!(archetype.entities.as_slice(), &[7]);
         assert_eq!(archetype.entity_row.get(&7), Some(&0));
@@ -126,7 +180,7 @@ mod tests {
     #[test]
     fn add_and_get_component() {
         let mut w = World::new();
-        let e = w.spawn_entity(Some("hero"));
+        let e = w.spawn_entity(Some("hero")).unwrap();
         w.add_component(
             e,
             ComponentData {
@@ -149,7 +203,7 @@ mod tests {
     #[test]
     fn remove_component_clears_from_query() {
         let mut w = World::new();
-        let e = w.spawn_entity(None);
+        let e = w.spawn_entity(None).unwrap();
         w.add_component(e, comp("Pos"));
         assert!(w.has_component(e, "Pos"));
         w.remove_component(e, "Pos");
@@ -160,8 +214,8 @@ mod tests {
     #[test]
     fn query_returns_entities_with_all_requested_components() {
         let mut w = World::new();
-        let e0 = w.spawn_entity(None);
-        let e1 = w.spawn_entity(None);
+        let e0 = w.spawn_entity(None).unwrap();
+        let e1 = w.spawn_entity(None).unwrap();
         w.add_component(e0, comp("Pos"));
         w.add_component(e0, comp("Vel"));
         w.add_component(e1, comp("Pos"));
@@ -175,7 +229,7 @@ mod tests {
     #[test]
     fn destroy_entity_removes_from_all_queries() {
         let mut w = World::new();
-        let e = w.spawn_entity(Some("tmp"));
+        let e = w.spawn_entity(Some("tmp")).unwrap();
         w.add_component(e, comp("Pos"));
         w.destroy_entity(e);
         assert!(w.query(&["Pos".to_string()], &[]).is_empty());
@@ -186,7 +240,7 @@ mod tests {
     #[test]
     fn archetype_migration_preserves_existing_components() {
         let mut w = World::new();
-        let e = w.spawn_entity(None);
+        let e = w.spawn_entity(None).unwrap();
         w.add_component(
             e,
             ComponentData {
@@ -204,7 +258,7 @@ mod tests {
     #[test]
     fn set_component_overwrites_in_place() {
         let mut w = World::new();
-        let e = w.spawn_entity(None);
+        let e = w.spawn_entity(None).unwrap();
         let layout = std::sync::Arc::new(vec!["hp".to_string()]);
         w.add_component(
             e,
@@ -229,9 +283,9 @@ mod tests {
     #[test]
     fn query_with_many_archetypes() {
         let mut w = World::new();
-        let e0 = w.spawn_entity(None);
-        let e1 = w.spawn_entity(None);
-        let e2 = w.spawn_entity(None);
+        let e0 = w.spawn_entity(None).unwrap();
+        let e1 = w.spawn_entity(None).unwrap();
+        let e2 = w.spawn_entity(None).unwrap();
         w.add_component(e0, comp("A"));
         w.add_component(e0, comp("B"));
         w.add_component(e1, comp("A"));
@@ -250,7 +304,7 @@ mod tests {
     fn snapshot_keeps_string_field_alive_after_overwrite() {
         let mut w = World::new();
         let mut gc = crate::gc::GcHeap::new();
-        let e = w.spawn_entity(None);
+        let e = w.spawn_entity(None).unwrap();
         let layout = std::sync::Arc::new(vec!["name".to_string()]);
 
         w.add_component(
@@ -289,7 +343,7 @@ mod tests {
             std::collections::HashSet::from(["name".to_string()]),
         );
         w.set_indexed_fields(indexed);
-        let e = w.spawn_entity(None);
+        let e = w.spawn_entity(None).unwrap();
         w.add_component(
             e,
             ComponentData {
@@ -313,7 +367,7 @@ mod tests {
             std::collections::HashSet::from(["name".to_string()]),
         );
         w.set_indexed_fields(indexed);
-        let e = w.spawn_entity(None);
+        let e = w.spawn_entity(None).unwrap();
         let layout = std::sync::Arc::new(vec!["name".to_string()]);
         w.add_component(
             e,
@@ -350,7 +404,7 @@ mod tests {
             std::collections::HashSet::from(["score".to_string()]),
         );
         w.set_indexed_fields(indexed);
-        let e = w.spawn_entity(None);
+        let e = w.spawn_entity(None).unwrap();
         w.add_component(
             e,
             ComponentData {
