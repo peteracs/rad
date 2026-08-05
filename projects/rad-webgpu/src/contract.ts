@@ -15,6 +15,32 @@ export const AVATAR_FIELD_NAMES = [
 
 export type AvatarFieldName = (typeof AVATAR_FIELD_NAMES)[number];
 
+export const AVATAR_HEADER_FIELD_NAMES = [
+  'magic',
+  'version',
+  'record_words',
+  'count',
+  'stream_id_low',
+  'stream_id_high',
+  'sequence_low',
+  'sequence_high',
+  'frame_low',
+  'frame_high',
+  'packet_kind',
+  'base_sequence_low',
+  'base_sequence_high',
+  'flags',
+  'reserved_0',
+  'reserved_1',
+] as const;
+
+export type AvatarHeaderFieldName = (typeof AVATAR_HEADER_FIELD_NAMES)[number];
+
+export interface PresentationPacketKinds {
+  readonly full: number;
+  readonly delta: number;
+}
+
 export interface AvatarPresentationDescriptor {
   readonly magic: number;
   readonly version: number;
@@ -26,12 +52,20 @@ export interface AvatarPresentationDescriptor {
   readonly defaultMaxEntitiesScanned: number;
   readonly hardMaxEntitiesScanned: number;
   readonly modelNames: readonly string[];
+  readonly packetKinds: PresentationPacketKinds;
+  readonly headerFields: Readonly<Record<AvatarHeaderFieldName, number>>;
   readonly fields: Readonly<Record<AvatarFieldName, number>>;
 }
 
+export type PresentationPacketKind = 'full' | 'delta';
+
 export interface AvatarPacketHeader {
   readonly count: number;
+  readonly streamId: bigint;
+  readonly sequence: bigint;
   readonly frame: bigint;
+  readonly packetKind: PresentationPacketKind;
+  readonly baseSequence: bigint;
   readonly flags: number;
 }
 
@@ -55,10 +89,19 @@ export function parseAvatarDescriptor(runtimeFeatures: string | unknown): Avatar
   const root = typeof runtimeFeatures === 'string' ? parseJson(runtimeFeatures) : runtimeFeatures;
   const raw = objectAt(objectAt(root, 'presentation'), 'avatar_instances');
   const fieldsRaw = objectAt(raw, 'fields');
+  const headerFieldsRaw = objectAt(raw, 'header_fields');
+  const packetKindsRaw = objectAt(raw, 'packet_kinds');
   const recordWords = unsignedIntegerAt(raw, 'record_words');
   const fields = Object.fromEntries(
     AVATAR_FIELD_NAMES.map((name) => [name, unsignedIntegerAt(fieldsRaw, name)]),
   ) as Record<AvatarFieldName, number>;
+  const headerFields = Object.fromEntries(
+    AVATAR_HEADER_FIELD_NAMES.map((name) => [name, unsignedIntegerAt(headerFieldsRaw, name)]),
+  ) as Record<AvatarHeaderFieldName, number>;
+  const packetKinds = {
+    full: unsignedIntegerAt(packetKindsRaw, 'full'),
+    delta: unsignedIntegerAt(packetKindsRaw, 'delta'),
+  };
   const modelNames = stringArrayAt(raw, 'model_names');
   if (new Set(modelNames).size !== modelNames.length) {
     throw new Error('presentation.descriptor_duplicate_model_name');
@@ -71,11 +114,22 @@ export function parseAvatarDescriptor(runtimeFeatures: string | unknown): Avatar
   if (offsets.some((offset) => offset >= recordWords)) {
     throw new Error('presentation.descriptor_field_out_of_record');
   }
+  const headerOffsets = Object.values(headerFields);
+  if (new Set(headerOffsets).size !== headerOffsets.length) {
+    throw new Error('presentation.descriptor_duplicate_header_field_offset');
+  }
+  const headerWords = positiveIntegerAt(raw, 'header_words');
+  if (headerOffsets.some((offset) => offset >= headerWords)) {
+    throw new Error('presentation.descriptor_header_field_out_of_header');
+  }
+  if (packetKinds.full === packetKinds.delta) {
+    throw new Error('presentation.descriptor_duplicate_packet_kind');
+  }
 
   const descriptor: AvatarPresentationDescriptor = {
     magic: unsignedIntegerAt(raw, 'magic'),
     version: positiveIntegerAt(raw, 'version'),
-    headerWords: positiveIntegerAt(raw, 'header_words'),
+    headerWords,
     recordWords,
     supportedFlags: unsignedIntegerAt(raw, 'supported_flags'),
     defaultMaxRecords: positiveIntegerAt(raw, 'default_max_records'),
@@ -83,9 +137,13 @@ export function parseAvatarDescriptor(runtimeFeatures: string | unknown): Avatar
     defaultMaxEntitiesScanned: positiveIntegerAt(raw, 'default_max_entities_scanned'),
     hardMaxEntitiesScanned: positiveIntegerAt(raw, 'hard_max_entities_scanned'),
     modelNames: Object.freeze(modelNames),
+    packetKinds: Object.freeze(packetKinds),
+    headerFields,
     fields,
   };
-  if (descriptor.headerWords < 8) throw new Error('presentation.descriptor_header_too_small');
+  if (descriptor.headerWords < AVATAR_HEADER_FIELD_NAMES.length) {
+    throw new Error('presentation.descriptor_header_too_small');
+  }
   if (descriptor.recordWords === 0) throw new Error('presentation.descriptor_empty_record');
   if (descriptor.defaultMaxRecords > descriptor.hardMaxRecords) {
     throw new Error('presentation.descriptor_default_exceeds_hard_limit');
@@ -93,7 +151,11 @@ export function parseAvatarDescriptor(runtimeFeatures: string | unknown): Avatar
   if (descriptor.defaultMaxEntitiesScanned > descriptor.hardMaxEntitiesScanned) {
     throw new Error('presentation.descriptor_default_scan_exceeds_hard_limit');
   }
-  return Object.freeze({ ...descriptor, fields: Object.freeze({ ...fields }) });
+  return Object.freeze({
+    ...descriptor,
+    headerFields: Object.freeze({ ...headerFields }),
+    fields: Object.freeze({ ...fields }),
+  });
 }
 
 export function parseAvatarPacket(
@@ -108,20 +170,53 @@ export function parseAvatarPacket(
     throw new Error('presentation.host_record_limit_exceeds_runtime');
   }
   if (words.length < descriptor.headerWords) throw new Error('presentation.packet_header_too_small');
-  if (words[0] !== descriptor.magic) throw new Error('presentation.packet_magic_mismatch');
-  if (words[1] !== descriptor.version) throw new Error('presentation.packet_version_mismatch');
-  if (words[2] !== descriptor.recordWords) throw new Error('presentation.packet_stride_mismatch');
+  const header = descriptor.headerFields;
+  if (words[header.magic] !== descriptor.magic) throw new Error('presentation.packet_magic_mismatch');
+  if (words[header.version] !== descriptor.version) {
+    throw new Error('presentation.packet_version_mismatch');
+  }
+  if (words[header.record_words] !== descriptor.recordWords) {
+    throw new Error('presentation.packet_stride_mismatch');
+  }
 
-  const count = words[3] ?? 0;
+  const count = words[header.count] ?? 0;
   if (count > acceptedMaxRecords) throw new Error('presentation.packet_record_limit');
   const recordWordCount = checkedProduct(count, descriptor.recordWords);
   const expectedWords = checkedSum(descriptor.headerWords, recordWordCount);
   if (words.length !== expectedWords) throw new Error('presentation.packet_length_mismatch');
-  const flags = words[6] ?? 0;
+  const flags = words[header.flags] ?? 0;
   if ((flags & ~descriptor.supportedFlags) !== 0) {
     throw new Error('presentation.packet_unsupported_flags');
   }
-  if ((words[7] ?? 0) !== 0) throw new Error('presentation.packet_reserved_header_nonzero');
+  if ((words[header.reserved_0] ?? 0) !== 0 || (words[header.reserved_1] ?? 0) !== 0) {
+    throw new Error('presentation.packet_reserved_header_nonzero');
+  }
+  const packetKindWord = words[header.packet_kind] ?? 0;
+  const packetKind = packetKindWord === descriptor.packetKinds.full
+    ? 'full'
+    : packetKindWord === descriptor.packetKinds.delta
+      ? 'delta'
+      : null;
+  if (packetKind === null) throw new Error('presentation.packet_unknown_kind');
+  const baseSequence = joinU64(
+    words[header.base_sequence_low] ?? 0,
+    words[header.base_sequence_high] ?? 0,
+  );
+  if (packetKind === 'full' && baseSequence !== 0n) {
+    throw new Error('presentation.packet_full_has_base_sequence');
+  }
+  const streamId = joinU64(
+    words[header.stream_id_low] ?? 0,
+    words[header.stream_id_high] ?? 0,
+  );
+  if (streamId === 0n) throw new Error('presentation.packet_zero_stream_id');
+  const sequence = joinU64(
+    words[header.sequence_low] ?? 0,
+    words[header.sequence_high] ?? 0,
+  );
+  if (packetKind === 'delta' && baseSequence >= sequence) {
+    throw new Error('presentation.packet_invalid_delta_base');
+  }
   const floats = new Float32Array(words.buffer, words.byteOffset, words.length);
   for (let index = 0; index < count; index += 1) {
     const offset = descriptor.headerWords + index * descriptor.recordWords;
@@ -143,7 +238,11 @@ export function parseAvatarPacket(
 
   return Object.freeze({
     count,
-    frame: joinU64(words[4] ?? 0, words[5] ?? 0),
+    streamId,
+    sequence,
+    frame: joinU64(words[header.frame_low] ?? 0, words[header.frame_high] ?? 0),
+    packetKind,
+    baseSequence,
     flags,
   });
 }

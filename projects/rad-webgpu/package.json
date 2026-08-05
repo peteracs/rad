@@ -18,13 +18,17 @@
     "dev": "vite",
     "check": "tsc --noEmit",
     "test": "npm run check && tsc -p tsconfig.test.json && node --test .tmp-test/test/*.test.js",
+    "test:browser": "tsc -p tsconfig.browser.json && playwright test",
     "build:lib": "tsc -p tsconfig.build.json",
     "build:demo": "vite build",
     "build": "npm run build:lib && npm run build:demo"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "@types/node": "^25.0.3",
+    "@types/pngjs": "^6.0.5",
     "@webgpu/types": "^0.1.67",
+    "pngjs": "^7.0.0",
     "typescript": "^6.0.3",
     "vite": "^8.0.16"
   }

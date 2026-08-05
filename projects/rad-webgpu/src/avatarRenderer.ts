@@ -2,12 +2,13 @@ import type {
   AvatarPresentationDescriptor,
   AvatarPresentationPacket,
 } from './contract.js';
-import { AVATAR_FIELD_NAMES } from './contract.js';
+import { AVATAR_FIELD_NAMES, AVATAR_HEADER_FIELD_NAMES } from './contract.js';
 import { GpuBufferMirror } from './bufferMirror.js';
 import {
   WebGpuDeviceHost,
   type WebGpuDeviceSession,
 } from './deviceHost.js';
+import { PresentationLineage } from './lineage.js';
 
 export interface AvatarRendererOptions {
   readonly worldWidth?: number;
@@ -30,7 +31,7 @@ interface DeviceResources {
 export class AvatarRenderer {
   private resources: DeviceResources | null = null;
   private readonly removeSessionListener: () => void;
-  private lastFrame: bigint | null = null;
+  private readonly lineage = new PresentationLineage();
   private destroyed = false;
 
   constructor(
@@ -38,64 +39,89 @@ export class AvatarRenderer {
     private readonly descriptor: AvatarPresentationDescriptor,
     private readonly options: AvatarRendererOptions = {},
   ) {
-    this.removeSessionListener = host.onSession((session) => this.installDevice(session));
+    const session = host.session;
+    if (!session) throw new Error('webgpu.renderer_requires_device_session');
+    this.installDevice(session);
+    this.removeSessionListener = host.onSession((next) => {
+      if (this.resources?.epoch !== next.epoch) this.installDevice(next);
+    });
   }
 
   render(packet: AvatarPresentationPacket): boolean {
     if (this.destroyed) throw new Error('webgpu.renderer_destroyed');
     assertSameDescriptor(packet.descriptor, this.descriptor);
-    if (this.lastFrame !== null && packet.header.frame < this.lastFrame) {
-      throw new Error('presentation.stale_frame');
-    }
-    this.lastFrame = packet.header.frame;
-
     const session = this.host.session;
+    if (!session) return false;
+    if (!this.resources || this.resources.epoch !== session.epoch) this.installDevice(session);
     const resources = this.resources;
-    if (!session || !resources || resources.epoch !== session.epoch) return false;
+    if (!resources) return false;
+    if (packet.header.packetKind === 'full' && packet.dirtyRanges !== undefined) {
+      throw new Error('presentation.full_packet_has_dirty_ranges');
+    }
+    if (packet.header.packetKind === 'delta' && packet.dirtyRanges === undefined) {
+      throw new Error('presentation.delta_packet_missing_dirty_ranges');
+    }
 
-    const recordsBuffer = resources.records.upload(packet.records, packet.dirtyRanges);
-    if (resources.boundRecords !== recordsBuffer) {
-      resources.bindGroup = session.device.createBindGroup({
-        label: 'RAD avatar presentation bindings',
-        layout: resources.pipeline.getBindGroupLayout(0),
-        entries: [
-          { binding: 0, resource: { buffer: recordsBuffer } },
-          { binding: 1, resource: { buffer: resources.uniform } },
-        ],
+    const adoption = this.lineage.inspect(packet.header);
+    if (adoption.resetMirror) {
+      resources.records.destroy();
+      resources.bindGroup = null;
+      resources.boundRecords = null;
+    }
+    try {
+      const recordsBuffer = resources.records.upload(packet.records, packet.dirtyRanges);
+      if (resources.boundRecords !== recordsBuffer) {
+        resources.bindGroup = session.device.createBindGroup({
+          label: 'RAD avatar presentation bindings',
+          layout: resources.pipeline.getBindGroupLayout(0),
+          entries: [
+            { binding: 0, resource: { buffer: recordsBuffer } },
+            { binding: 1, resource: { buffer: resources.uniform } },
+          ],
+        });
+        resources.boundRecords = recordsBuffer;
+      }
+
+      const textureView = session.context.getCurrentTexture().createView();
+      const encoder = session.device.createCommandEncoder({ label: 'RAD avatar frame' });
+      const pass = encoder.beginRenderPass({
+        label: 'RAD avatar pass',
+        colorAttachments: [{
+          view: textureView,
+          clearValue: this.options.clearColor ?? { r: 0.025, g: 0.035, b: 0.07, a: 1 },
+          loadOp: 'clear',
+          storeOp: 'store',
+        }],
       });
-      resources.boundRecords = recordsBuffer;
+      if (packet.header.count > 0 && resources.bindGroup) {
+        pass.setPipeline(resources.pipeline);
+        pass.setBindGroup(0, resources.bindGroup);
+        pass.draw(6, packet.header.count);
+      }
+      pass.end();
+      session.device.queue.submit([encoder.finish()]);
+      this.lineage.commit(packet.header);
+      return true;
+    } catch (error) {
+      resources.records.destroy();
+      resources.bindGroup = null;
+      resources.boundRecords = null;
+      this.lineage.invalidateBaseline();
+      throw error;
     }
-
-    const textureView = session.context.getCurrentTexture().createView();
-    const encoder = session.device.createCommandEncoder({ label: 'RAD avatar frame' });
-    const pass = encoder.beginRenderPass({
-      label: 'RAD avatar pass',
-      colorAttachments: [{
-        view: textureView,
-        clearValue: this.options.clearColor ?? { r: 0.025, g: 0.035, b: 0.07, a: 1 },
-        loadOp: 'clear',
-        storeOp: 'store',
-      }],
-    });
-    if (packet.header.count > 0 && resources.bindGroup) {
-      pass.setPipeline(resources.pipeline);
-      pass.setBindGroup(0, resources.bindGroup);
-      pass.draw(6, packet.header.count);
-    }
-    pass.end();
-    session.device.queue.submit([encoder.finish()]);
-    return true;
   }
 
   destroy(): void {
     if (this.destroyed) return;
     this.destroyed = true;
     this.removeSessionListener();
+    this.lineage.reset();
     this.destroyResources();
   }
 
   private installDevice(session: WebGpuDeviceSession): void {
     this.destroyResources();
+    this.lineage.invalidateBaseline();
     const maxRecords = this.options.maxRecords ?? this.descriptor.defaultMaxRecords;
     if (!Number.isInteger(maxRecords) || maxRecords <= 0) {
       throw new Error('webgpu.invalid_avatar_record_limit');
@@ -113,41 +139,49 @@ export class AvatarRenderer {
       throw new Error('webgpu.avatar_storage_limit_too_small');
     }
 
-    const records = new GpuBufferMirror(session.device, {
-      label: 'RAD avatar presentation records',
-      usage: GPUBufferUsage.STORAGE,
-      maxBytes,
-    });
-    const uniform = session.device.createBuffer({
-      label: 'RAD avatar view uniform',
-      size: 16,
-      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-    });
-    session.device.queue.writeBuffer(uniform, 0, new Float32Array([
-      positive(this.options.worldWidth ?? 200, 'world_width'),
-      positive(this.options.worldHeight ?? 120, 'world_height'),
-      positive(this.options.avatarRadius ?? 3.5, 'avatar_radius'),
-      0,
-    ]));
-    const module = session.device.createShaderModule({
-      label: 'RAD avatar shader',
-      code: avatarShader(this.descriptor),
-    });
-    const pipeline = session.device.createRenderPipeline({
-      label: 'RAD avatar pipeline',
-      layout: 'auto',
-      vertex: { module, entryPoint: 'vertex_main' },
-      fragment: { module, entryPoint: 'fragment_main', targets: [{ format: session.format }] },
-      primitive: { topology: 'triangle-list' },
-    });
-    this.resources = {
-      epoch: session.epoch,
-      records,
-      uniform,
-      pipeline,
-      bindGroup: null,
-      boundRecords: null,
-    };
+    let records: GpuBufferMirror | null = null;
+    let uniform: GPUBuffer | null = null;
+    try {
+      records = new GpuBufferMirror(session.device, {
+        label: 'RAD avatar presentation records',
+        usage: GPUBufferUsage.STORAGE,
+        maxBytes,
+      });
+      uniform = session.device.createBuffer({
+        label: 'RAD avatar view uniform',
+        size: 16,
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+      });
+      session.device.queue.writeBuffer(uniform, 0, new Float32Array([
+        positive(this.options.worldWidth ?? 200, 'world_width'),
+        positive(this.options.worldHeight ?? 120, 'world_height'),
+        positive(this.options.avatarRadius ?? 3.5, 'avatar_radius'),
+        0,
+      ]));
+      const module = session.device.createShaderModule({
+        label: 'RAD avatar shader',
+        code: avatarShader(this.descriptor),
+      });
+      const pipeline = session.device.createRenderPipeline({
+        label: 'RAD avatar pipeline',
+        layout: 'auto',
+        vertex: { module, entryPoint: 'vertex_main' },
+        fragment: { module, entryPoint: 'fragment_main', targets: [{ format: session.format }] },
+        primitive: { topology: 'triangle-list' },
+      });
+      this.resources = {
+        epoch: session.epoch,
+        records,
+        uniform,
+        pipeline,
+        bindGroup: null,
+        boundRecords: null,
+      };
+    } catch (error) {
+      records?.destroy();
+      uniform?.destroy();
+      throw error;
+    }
   }
 
   private destroyResources(): void {
@@ -227,6 +261,11 @@ function assertSameDescriptor(
     actual.headerWords !== expected.headerWords ||
     actual.recordWords !== expected.recordWords ||
     actual.supportedFlags !== expected.supportedFlags ||
+    actual.packetKinds.full !== expected.packetKinds.full ||
+    actual.packetKinds.delta !== expected.packetKinds.delta ||
+    AVATAR_HEADER_FIELD_NAMES.some(
+      (name) => actual.headerFields[name] !== expected.headerFields[name],
+    ) ||
     AVATAR_FIELD_NAMES.some((name) => actual.fields[name] !== expected.fields[name])
   ) {
     throw new Error('presentation.renderer_descriptor_mismatch');

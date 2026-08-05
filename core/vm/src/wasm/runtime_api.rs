@@ -13,6 +13,25 @@ impl RadRuntime {
         Compiler::new().with_features(vec!["causal_laws".to_string()])
     }
 
+    fn invalidate_presentation_stream(&mut self) {
+        self.render_buffer.clear();
+        self.presentation_next_sequence = None;
+        self.presentation_stream_active = false;
+    }
+
+    fn next_presentation_stream_id(&self) -> Result<u64, String> {
+        self.presentation_stream_id
+            .checked_add(1)
+            .ok_or_else(|| "presentation.stream_id_exhausted".to_string())
+    }
+
+    fn begin_presentation_stream(&mut self, stream_id: u64) {
+        self.presentation_stream_id = stream_id;
+        self.presentation_next_sequence = Some(0);
+        self.presentation_stream_active = true;
+        self.render_buffer.clear();
+    }
+
     #[cfg_attr(target_arch = "wasm32", wasm_bindgen(constructor))]
     pub fn new() -> Self {
         Self {
@@ -20,6 +39,9 @@ impl RadRuntime {
             output: Vec::new(),
             render_buffer: Vec::new(),
             render_entity_scratch: Vec::new(),
+            presentation_stream_id: 0,
+            presentation_next_sequence: None,
+            presentation_stream_active: false,
             session_base: None,
             session_cursor: 0,
             undo_stack: Vec::new(),
@@ -61,7 +83,7 @@ impl RadRuntime {
             "features": [
                 "streaming-session",
                 "render-delta",
-                "render-buffer-v2",
+                "render-buffer-v3",
                 "session-state",
                 "undo-redo",
                 "inspect-why",
@@ -109,6 +131,7 @@ impl RadRuntime {
     }
 
     pub fn load_and_run(&mut self, chunk: WasmChunk) -> Result<String, String> {
+        self.invalidate_presentation_stream();
         self.output.clear();
         self.vm.print_buffer.clear();
         // SAFETY: WasmChunk owns the exact heap used for every heap-backed
@@ -196,6 +219,7 @@ impl RadRuntime {
         &mut self,
         source: &str,
     ) -> Result<String, crate::constraint_types::VmFailure> {
+        self.invalidate_presentation_stream();
         self.vm = VM::new();
         self.output.clear();
 
@@ -403,6 +427,7 @@ impl RadRuntime {
         self.undo_stack.clear();
         self.redo_stack.clear();
         self.render_base = None;
+        self.invalidate_presentation_stream();
     }
 
     // -----------------------------------------------------------------------
@@ -422,12 +447,15 @@ impl RadRuntime {
     /// The RNG is seeded deterministically so every replica that starts the
     /// same source converges to the same initial state.
     pub fn session_start(&mut self, source: &str) -> Result<String, String> {
+        let stream_id = self.next_presentation_stream_id()?;
+        self.invalidate_presentation_stream();
         self.session_base = None;
         self.session_cursor = 0;
         // Determinism across replicas is non-negotiable for convergence.
         let out = self.compile_and_run_seeded(source, 7)?;
         self.session_base = Some(self.current_fork()?);
         self.session_cursor = self.vm.print_buffer.len();
+        self.begin_presentation_stream(stream_id);
         Ok(out)
     }
 
@@ -541,6 +569,7 @@ impl RadRuntime {
     /// Adopt a full state (`session_state` from another session): decode,
     /// commit, and rebase. The late-join handshake.
     pub fn session_load(&mut self, state: &str) -> Result<(), String> {
+        let stream_id = self.next_presentation_stream_id()?;
         let sv = Value::from_string(self.vm.gc_mut(), state.to_string());
         let decoded = self
             .vm
@@ -565,6 +594,7 @@ impl RadRuntime {
             .call_builtin(crate::value::Builtin::Commit, vec![fork])?;
         self.session_base = Some(self.current_fork()?);
         self.session_cursor = self.vm.print_buffer.len();
+        self.begin_presentation_stream(stream_id);
         Ok(())
     }
 
@@ -613,15 +643,25 @@ impl RadRuntime {
         max_records: u32,
         max_entities_scanned: u32,
     ) -> Result<(), String> {
+        if !self.presentation_stream_active {
+            return Err("presentation.no_active_stream".to_string());
+        }
+        let sequence = self
+            .presentation_next_sequence
+            .ok_or("presentation.sequence_exhausted")?;
         let cur = self.current_fork()?;
         presentation::encode_avatar_packet(
             &cur,
+            self.presentation_stream_id,
+            sequence,
             self.vm.causality_frame,
             &mut self.render_buffer,
             &mut self.render_entity_scratch,
             max_records,
             max_entities_scanned,
-        )
+        )?;
+        self.presentation_next_sequence = sequence.checked_add(1);
+        Ok(())
     }
 
     pub fn session_render_buffer_ptr(&self) -> u32 {

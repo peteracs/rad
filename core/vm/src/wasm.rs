@@ -22,6 +22,13 @@ pub struct RadRuntime {
     render_buffer: Vec<u32>,
     /// Reused canonical entity selection for presentation encoding.
     render_entity_scratch: Vec<u32>,
+    /// Runtime-local lineage for presentation packets. A successful session
+    /// start creates a new stream; GPU hosts must never apply deltas across it.
+    presentation_stream_id: u64,
+    /// Sequence assigned to the next packet in the active stream. `None`
+    /// means the active stream exhausted its sequence space.
+    presentation_next_sequence: Option<u64>,
+    presentation_stream_active: bool,
     /// Streaming-session state (D4). `session_base` is the snapshot the next
     /// `session_delta()` diffs against — held as a bare `Arc`, NOT a gc
     /// `Value`: the collector cannot see RadRuntime fields as roots, and a

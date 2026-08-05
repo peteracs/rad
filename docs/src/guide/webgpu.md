@@ -53,7 +53,8 @@ app.render();
 
 `RadRuntime.runtime_features()` publishes the descriptor for the current
 `avatar_instances` stream. It includes the magic, version, header and record
-widths, every field offset, and default/hard record and entity-scan ceilings.
+widths, every header/record field offset, packet-kind identities, and
+default/hard record and entity-scan ceilings.
 Browser code validates this descriptor rather than copying Rust constants.
 
 The packet is an array of `u32` words. Entity slot, generation, player ID,
@@ -71,6 +72,14 @@ The encoder:
 - rejects non-finite or non-`f32` coordinates;
 - binds entity generation so reused slots are different lifetimes.
 
+Every successful `session_start()` begins a new presentation stream. Packets
+bind a `stream_id`, monotonic `packet_sequence`, full/delta kind, causal frame,
+and (for deltas) the exact baseline sequence. The current encoder emits only
+full packets. A host accepts a new stream only at full sequence zero; future
+deltas must extend the exact last accepted sequence. A session restart
+therefore discards the old GPU mirror instead of being confused with a stale
+frame from the prior world.
+
 The WASM view is reacquired after every runtime call. A call can grow WebAssembly
 memory and detach all older typed-array views.
 
@@ -82,15 +91,25 @@ The host performs these checks before allocating or writing:
 - storage size is capped by `maxBufferSize` and
   `maxStorageBufferBindingSize`;
 - buffers grow geometrically and replaced buffers are destroyed;
-- dirty word ranges, when supplied by a future stream, are bounds-checked;
+- dirty word ranges, when supplied by a future delta stream, are bounds-checked;
 - canvas dimensions are capped by `maxTextureDimension2D` and device-pixel
   ratio is capped by the embedder;
-- stale presentation frame numbers reject.
+- stale packet sequences and wrong-stream delta baselines reject.
 
 The implementation observes `GPUDevice.lost`, discards every device-owned
 resource, retries device creation with bounded backoff, and rebuilds on the
 next RAD packet. This follows WebGPU's device-loss model: resources created by
 the old device are no longer usable and must be recreated on a new device.
+Lifecycle generations are checked after every asynchronous adapter/device
+request, so destroying the host cannot be undone by an older promise. Rapid
+losses coalesce into recovery work without dropping the newest loss, and
+exceptions in error/session observers cannot interrupt recovery.
+
+CI also launches Chromium against its explicit SwiftShader WebGPU test adapter,
+renders the dogfood, inspects the resulting canvas pixels, resizes, restarts the
+RAD session, forces device loss, and verifies that the same world is visible on
+the replacement device. This software-adapter smoke complements, rather than
+replaces, hardware-browser testing.
 
 ## Authority rule
 
@@ -115,11 +134,11 @@ The current packet is a deliberately narrow avatar materializer replacing the
 old lossy all-`f32` MOBA bridge. It is not a claim that every scene belongs in
 one avatar record.
 
-New streams should be generated from sealed schemas and normally sourced from
+New stream types should be generated from sealed schemas and normally sourced from
 read-only derived relations. Each stream needs its own descriptor, limits,
-stable asset identity, and packet version. Large scenes can then add stable
-instance slots and runtime-produced dirty ranges without changing the GPU host
-or turning rendering into an authoritative writer.
+stable asset identity, packet version, and independent lineage. Large scenes
+can then add stable instance slots and runtime-produced dirty ranges without
+changing the GPU host or turning rendering into an authoritative writer.
 
 The intended evolution is:
 

@@ -1,7 +1,15 @@
+export type RadWebGpuRequiredLimitName =
+  | 'maxBufferSize'
+  | 'maxStorageBufferBindingSize';
+
+export type RadWebGpuRequiredLimits = Readonly<
+  Partial<Record<RadWebGpuRequiredLimitName, number>>
+>;
+
 export interface WebGpuDeviceHostOptions {
   readonly powerPreference?: GPUPowerPreference;
   readonly requiredFeatures?: readonly GPUFeatureName[];
-  readonly requiredLimits?: Record<string, number>;
+  readonly requiredLimits?: RadWebGpuRequiredLimits;
   readonly alphaMode?: GPUCanvasAlphaMode;
   readonly maxDevicePixelRatio?: number;
   readonly onError?: (error: Error) => void;
@@ -22,8 +30,10 @@ export class WebGpuDeviceHost {
   private readonly listeners = new Set<SessionListener>();
   private resizeObserver: ResizeObserver | null = null;
   private destroyed = false;
+  private lifecycle = 0;
   private epoch = 0;
   private recovery: Promise<void> | null = null;
+  private recoveryRequested = false;
 
   private constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -41,9 +51,16 @@ export class WebGpuDeviceHost {
       throw new Error('webgpu.invalid_max_device_pixel_ratio');
     }
     const host = new WebGpuDeviceHost(canvas, options);
-    await host.initialize();
-    host.installResizeObserver();
-    return host;
+    try {
+      if (!await host.initialize(host.lifecycle)) {
+        throw new Error('webgpu.host_destroyed_during_initialization');
+      }
+      host.installResizeObserver();
+      return host;
+    } catch (error) {
+      host.destroy();
+      throw error;
+    }
   }
 
   get session(): WebGpuDeviceSession | null {
@@ -51,8 +68,8 @@ export class WebGpuDeviceHost {
   }
 
   onSession(listener: SessionListener): () => void {
-    if (this.sessionValue) listener(this.sessionValue);
     this.listeners.add(listener);
+    if (this.sessionValue) this.notifyListener(listener, this.sessionValue);
     return () => this.listeners.delete(listener);
   }
 
@@ -71,7 +88,10 @@ export class WebGpuDeviceHost {
   }
 
   destroy(): void {
+    if (this.destroyed) return;
     this.destroyed = true;
+    this.lifecycle += 1;
+    this.recoveryRequested = false;
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
     const session = this.sessionValue;
@@ -81,12 +101,13 @@ export class WebGpuDeviceHost {
     this.listeners.clear();
   }
 
-  private async initialize(): Promise<void> {
-    if (this.destroyed) return;
+  private async initialize(attempt: number): Promise<boolean> {
+    if (!this.isCurrent(attempt)) return false;
     if (!navigator.gpu) throw new Error('webgpu.unavailable');
     const adapter = await navigator.gpu.requestAdapter({
       powerPreference: this.options.powerPreference ?? 'high-performance',
     });
+    if (!this.isCurrent(attempt)) return false;
     if (!adapter) throw new Error('webgpu.adapter_unavailable');
 
     const requiredFeatures = [...(this.options.requiredFeatures ?? [])];
@@ -99,56 +120,93 @@ export class WebGpuDeviceHost {
       requiredFeatures,
       ...(requiredLimits ? { requiredLimits } : {}),
     });
+    if (!this.isCurrent(attempt)) {
+      device.destroy();
+      return false;
+    }
+
     const context = this.canvas.getContext('webgpu');
     if (!context) {
       device.destroy();
       throw new Error('webgpu.canvas_context_unavailable');
     }
     const format = navigator.gpu.getPreferredCanvasFormat();
-    context.configure({
-      device,
-      format,
-      alphaMode: this.options.alphaMode ?? 'opaque',
-    });
+    try {
+      context.configure({
+        device,
+        format,
+        alphaMode: this.options.alphaMode ?? 'opaque',
+      });
+    } catch (error) {
+      device.destroy();
+      throw error;
+    }
+    if (!this.isCurrent(attempt)) {
+      context.unconfigure();
+      device.destroy();
+      return false;
+    }
+
     const session = Object.freeze({ device, context, format, epoch: ++this.epoch });
     this.sessionValue = session;
     device.onuncapturederror = (event) => this.report(new Error(event.error.message));
     void device.lost.then((info) => this.handleLoss(device, info));
     this.resize();
-    try {
-      for (const listener of this.listeners) listener(session);
-    } catch (error) {
-      this.sessionValue = null;
-      context.unconfigure();
-      device.destroy();
-      throw error;
-    }
+    for (const listener of this.listeners) this.notifyListener(listener, session);
+
+    // Let an already-resolved `device.lost` callback invalidate this session
+    // before a recovery attempt reports success.
+    await Promise.resolve();
+    return this.isCurrent(attempt) && this.sessionValue?.device === device;
   }
 
   private handleLoss(device: GPUDevice, info: GPUDeviceLostInfo): void {
     if (this.destroyed || this.sessionValue?.device !== device) return;
+    this.sessionValue.context.unconfigure();
     this.sessionValue = null;
-    if (info.reason === 'destroyed') return;
     this.report(new Error(`webgpu.device_lost:${info.reason}:${info.message}`));
-    if (!this.recovery) {
-      this.recovery = this.recover().finally(() => {
-        this.recovery = null;
-      });
+    this.requestRecovery();
+  }
+
+  private requestRecovery(): void {
+    if (this.destroyed) return;
+    this.recoveryRequested = true;
+    if (this.recovery) return;
+    this.recovery = this.recoverUntilStable().finally(() => {
+      this.recovery = null;
+      if (this.recoveryRequested && !this.destroyed && !this.sessionValue) {
+        this.requestRecovery();
+      }
+    });
+  }
+
+  private async recoverUntilStable(): Promise<void> {
+    while (!this.destroyed && this.recoveryRequested) {
+      this.recoveryRequested = false;
+      const attempt = this.lifecycle;
+      let installed = false;
+      for (const delay of [0, 100, 500, 2_000]) {
+        if (!this.isCurrent(attempt)) return;
+        if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
+        if (!this.isCurrent(attempt)) return;
+        this.recoveryRequested = false;
+        try {
+          installed = await this.initialize(attempt);
+          if (installed) break;
+        } catch (error) {
+          this.report(asError(error));
+        }
+      }
+      if (installed && this.sessionValue && !this.recoveryRequested) return;
+      if (!installed && !this.recoveryRequested) {
+        this.report(new Error('webgpu.device_recovery_exhausted'));
+        return;
+      }
     }
   }
 
-  private async recover(): Promise<void> {
-    for (const delay of [0, 100, 500, 2_000]) {
-      if (this.destroyed) return;
-      if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
-      try {
-        await this.initialize();
-        return;
-      } catch (error) {
-        this.report(asError(error));
-      }
-    }
-    this.report(new Error('webgpu.device_recovery_exhausted'));
+  private isCurrent(attempt: number): boolean {
+    return !this.destroyed && attempt === this.lifecycle;
   }
 
   private installResizeObserver(): void {
@@ -157,8 +215,20 @@ export class WebGpuDeviceHost {
     this.resizeObserver.observe(this.canvas);
   }
 
+  private notifyListener(listener: SessionListener, session: WebGpuDeviceSession): void {
+    try {
+      listener(session);
+    } catch (error) {
+      this.report(new Error('webgpu.session_listener_failed', { cause: error }));
+    }
+  }
+
   private report(error: Error): void {
-    this.options.onError?.(error);
+    try {
+      this.options.onError?.(error);
+    } catch {
+      // Observers never own or interrupt the GPU lifecycle.
+    }
   }
 }
 
@@ -168,15 +238,16 @@ function asError(error: unknown): Error {
 
 function validateRequiredLimits(
   adapter: GPUAdapter,
-  requiredLimits: Record<string, number> | undefined,
+  requiredLimits: RadWebGpuRequiredLimits | undefined,
 ): void {
   for (const [name, required] of Object.entries(requiredLimits ?? {})) {
+    if (name !== 'maxBufferSize' && name !== 'maxStorageBufferBindingSize') {
+      throw new Error(`webgpu.unsupported_required_limit:${name}`);
+    }
     if (!Number.isSafeInteger(required) || required < 0) {
       throw new Error(`webgpu.invalid_required_limit:${name}`);
     }
-    const supported = Reflect.get(adapter.limits, name) as unknown;
-    if (typeof supported !== 'number' || required > supported) {
-      throw new Error(`webgpu.limit_unavailable:${name}`);
-    }
+    const supported = adapter.limits[name];
+    if (required > supported) throw new Error(`webgpu.limit_unavailable:${name}`);
   }
 }

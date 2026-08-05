@@ -12,6 +12,8 @@ RAD world -> bounded presentation packet -> WebGPU storage buffer -> draw
 The packet descriptor comes from `RadRuntime.runtime_features()`. Consumers do
 not copy layout constants. Integer identities are exact `u32` words; floats use
 their IEEE-754 bit representation and upload directly to a storage buffer.
+Stream IDs and packet sequences make session restarts explicit and bind future
+deltas to one exact full-packet baseline.
 
 ```ts
 const app = await RadWebGpuApp.create(canvas, runtime, wasm.memory, {
@@ -33,4 +35,9 @@ npm run dev
 ```
 
 GPU handles never enter RAD snapshots or replay. A lost device is replaced and
-the next render call rematerializes the current packet on the new device.
+the next render call rematerializes the current full packet on the new device.
+Async adapter/device requests are lifecycle-generation checked, so a destroyed
+host cannot be resurrected by an in-flight request.
+
+`npm run test:browser` runs the real Chromium/SwiftShader pixel, resize,
+session-restart, and device-recovery smoke after the WASM package is built.

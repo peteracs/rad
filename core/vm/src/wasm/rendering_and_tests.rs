@@ -229,7 +229,7 @@ print(require(hero, Health).hp)
         assert_eq!(features["relations_frontend"], 1);
         assert_eq!(features["causal_constraints"], 1);
         assert_eq!(features["host_values"], 1);
-        assert_eq!(features["presentation"]["avatar_instances"]["version"], 2);
+        assert_eq!(features["presentation"]["avatar_instances"]["version"], 3);
         assert_eq!(
             features["presentation"]["avatar_instances"]["fields"]["entity_generation"],
             1
@@ -263,9 +263,55 @@ print(require(hero, Health).hp)
         assert_eq!(runtime.render_buffer[0], presentation::MAGIC);
         assert_eq!(runtime.render_buffer[1], presentation::VERSION);
         assert_eq!(runtime.render_buffer[3], 4);
+        assert_eq!(runtime.render_buffer[4], 1);
+        assert_eq!(runtime.render_buffer[6], 0);
         assert_eq!(
             runtime.render_buffer.len(),
             presentation::HEADER_WORDS + 4 * presentation::RECORD_WORDS
+        );
+    }
+
+    #[test]
+    fn presentation_restart_changes_stream_and_resets_sequence() {
+        let mut runtime = RadRuntime::new();
+        assert_eq!(
+            runtime.session_render_buffer_refresh().unwrap_err(),
+            "presentation.no_active_stream"
+        );
+        let source = include_str!("../../../../projects/rad-webgpu/demo/world.rad");
+        runtime.session_start(source).expect("first session starts");
+        runtime
+            .session_render_buffer_refresh()
+            .expect("first packet encodes");
+        assert_eq!(runtime.render_buffer[4], 1);
+        assert_eq!(runtime.render_buffer[6], 0);
+        runtime
+            .session_render_buffer_refresh()
+            .expect("second packet encodes");
+        assert_eq!(runtime.render_buffer[4], 1);
+        assert_eq!(runtime.render_buffer[6], 1);
+
+        runtime.session_start(source).expect("replacement session starts");
+        runtime
+            .session_render_buffer_refresh()
+            .expect("replacement stream packet encodes");
+        assert_eq!(runtime.render_buffer[4], 2);
+        assert_eq!(runtime.render_buffer[6], 0);
+
+        let state = runtime.session_state().expect("full session state encodes");
+        runtime
+            .session_load(&state)
+            .expect("full session state is adopted");
+        runtime
+            .session_render_buffer_refresh()
+            .expect("adopted state starts a replacement stream");
+        assert_eq!(runtime.render_buffer[4], 3);
+        assert_eq!(runtime.render_buffer[6], 0);
+
+        runtime.reset();
+        assert_eq!(
+            runtime.session_render_buffer_refresh().unwrap_err(),
+            "presentation.no_active_stream"
         );
     }
 

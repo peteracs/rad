@@ -17,3 +17,20 @@ declare module '*rad_vm.js' {
 
   export default function init(input?: URL | RequestInfo | Response | BufferSource | WebAssembly.Module): Promise<InitOutput>;
 }
+
+interface RadWebGpuDogfoodSnapshot {
+  readonly canvasWidth: number;
+  readonly deviceEpoch: number;
+  readonly errors: readonly string[];
+  readonly renderedFrames: number;
+  readonly sequence: string;
+  readonly streamId: string;
+}
+
+interface RadWebGpuDogfoodHarness {
+  loseDevice(): void;
+  restart(): void;
+  snapshot(): RadWebGpuDogfoodSnapshot;
+}
+
+declare var __radWebGpuDogfood: RadWebGpuDogfoodHarness | undefined;

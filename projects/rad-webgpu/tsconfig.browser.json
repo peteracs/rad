@@ -1,0 +1,8 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["node", "@webgpu/types"],
+    "noEmit": true
+  },
+  "include": ["browser-test", "demo/env.d.ts", "playwright.config.ts"]
+}

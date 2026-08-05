@@ -305,6 +305,12 @@ jobs:
       - name: Build package and dogfood
         run: npm run build
         working-directory: projects/rad-webgpu
+      - name: Install browser rendering dependency
+        run: npx --no-install playwright install --with-deps chromium
+        working-directory: projects/rad-webgpu
+      - name: WebGPU pixel, resize, restart, and recovery smoke
+        run: npm run test:browser
+        working-directory: projects/rad-webgpu
 
   moba-rad-server:
     runs-on: ubuntu-latest

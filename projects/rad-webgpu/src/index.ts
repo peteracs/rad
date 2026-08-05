@@ -3,4 +3,5 @@ export * from './avatarRenderer.js';
 export * from './bufferMirror.js';
 export * from './contract.js';
 export * from './deviceHost.js';
+export * from './lineage.js';
 export * from './source.js';
