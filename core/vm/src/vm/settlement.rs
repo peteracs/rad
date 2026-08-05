@@ -21,3 +21,5 @@ include!("settlement/commit.rs");
 include!("settlement/relation_tests.rs");
 #[cfg(test)]
 include!("settlement/fact_access_tests.rs");
+#[cfg(test)]
+include!("settlement/world_law_gameplay_tests.rs");

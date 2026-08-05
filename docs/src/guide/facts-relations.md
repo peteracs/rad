@@ -1,7 +1,7 @@
 # Facts, Relations, and Derived Facts
 
-RFC-0003 is the accepted semantic contract for RAD's next World-Law
-Programming layer. Its bounded experimental front end now parses, checks,
+RFC-0003 is the implemented experimental contract for RAD's third World-Law
+Programming layer. Its bounded front end parses, checks,
 formats, and seals relation declarations and derivation rules. The
 authoritative ordered-map store now executes `Insert`, `Remove`, and
 `ReplaceBy` as atomic candidate patches. The production full-recompute
@@ -217,12 +217,11 @@ no-match smoke requires more than 100x fewer physical comparisons.
 
 V0 intentionally excludes component-backed derivation views, recursion,
 unrestricted negation, priorities, fixed points, and storage-layout semantics.
-Any later runtime will provide generic relation, join, aggregate, indexing,
-transaction, and provenance mechanisms; domain models remain ordinary RAD
-code.
+The runtime provides generic relation, join, aggregate, indexing, transaction,
+and provenance mechanisms; domain models remain ordinary RAD code.
 
-See [RFC-0003](../rfcs/0003-first-class-relations.md) for the accepted contract
-and the executable oracle in `core/vm/tests/rfc0003_reference.rs`. The
+See [RFC-0003](../rfcs/0003-first-class-relations.md) for the implemented
+experimental contract and `core/vm/tests/rfc0003_reference.rs`. The
 production front end lives in `core/vm/src/relation_frontend/`. The separate
 `core/vm/src/relation_runtime/` consumes only its sealed artifacts; relation
 rows, assertion lifetimes, unique indexes, entity generations, and manifest
@@ -241,5 +240,7 @@ The embedding transaction may also carry candidate-local spawns and component
 writes. Candidate handles resolve before schema validation; duplicate component
 writes coalesce only when their values agree. Any relation, foreign-key,
 uniqueness, component, or allocator failure discards the complete candidate.
-The current runtime is intentionally an ordered-map reference implementation;
-it does not evaluate `derive` rules yet.
+The authoritative store remains deliberately ordered and simple. Production
+derivation runs through an independent indexed evaluator, retains bounded
+proof alternatives, and invalidates only dependency-reachable derived heads;
+full recomputation remains the differential semantic truth.

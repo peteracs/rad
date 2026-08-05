@@ -1,0 +1,46 @@
+relation Owns(owner: entity on delete cascade, item: entity on delete cascade)
+unique item
+
+relation ItemWeight(item: entity on delete cascade, weight: int)
+unique item
+
+relation CarryCapacity(person: entity on delete cascade, capacity: int)
+unique person
+
+relation Status(subject: entity on delete cascade, effect: text)
+
+relation Hostile(attacker: entity on delete cascade, target: entity on delete cascade)
+unique attacker
+
+relation AttackPower(attacker: entity on delete cascade, power: int)
+unique attacker
+
+relation Armor(target: entity on delete cascade, defense: int)
+unique target
+
+derive TotalWeight(person, sum(weight))
+when Owns(person, item)
+and ItemWeight(item, weight)
+
+derive Encumbered(person)
+when TotalWeight(person, total)
+and CarryCapacity(person, capacity)
+and total > capacity
+
+derive Rooted(subject)
+when Status(subject, "rooted")
+
+derive Silenced(subject)
+when Status(subject, "silenced")
+
+derive Shielded(subject)
+when Status(subject, "shielded")
+
+derive IncomingDamage(target, sum(power))
+when Hostile(attacker, target)
+and AttackPower(attacker, power)
+
+derive InDanger(target)
+when IncomingDamage(target, incoming)
+and Armor(target, defense)
+and incoming > defense

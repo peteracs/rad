@@ -10,6 +10,13 @@ All notable changes to the Rad language are documented here.
 
 ### Added
 
+- **RFC-0003 is implemented experimentally end to end.** The headless
+  `world-law-rpg` dogfood drives resolver-owned inventory and trading,
+  aggregate encumbrance, movement/status/combat constraints, sandboxed AI,
+  failed-attempt replay, relation-aware persistence, complete fact
+  explanations, and lifecycle cascades through one authoritative/derived
+  world. The feature remains gated while `0.x` APIs are unstable.
+
 - **Derived relations now have independent indexed maintenance.** Canonical
   per-column indexes skip no-match comparisons, authoritative deltas
   invalidate only dependency-reachable heads, and unchanged proof sets are

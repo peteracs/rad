@@ -1,6 +1,6 @@
 # RFC-0003: First-Class Facts, Relations, and Derived Facts
 
-- **Status:** Accepted
+- **Status:** Implemented experimentally
 - **Product name:** RAD World Facts
 - **Paradigm:** World-Law Programming
 - **Author:** peteracs
@@ -799,8 +799,10 @@ movement denied
 5. indexed incremental maintenance with differential tests
    (**implemented with affected-head invalidation and canonical full-limit
    preflight**);
-6. candidate constraints, provenance, ACL, wire, WASM, and replay integration;
-7. dogfood, fuzzing, benchmarks, and operational tooling.
+6. candidate constraints, provenance, ACL, wire, WASM, and replay integration
+   (**implemented across the atomic candidate and operational state**);
+7. dogfood, fuzzing, benchmarks, and operational tooling
+   (**implemented for the headless world-law RPG vertical slice**).
 
 The reference fixtures, candidate-phase placement, canonical row encoding,
 proof and work limits, capability-redaction contract, component conflict
@@ -823,9 +825,10 @@ from each authoritative `FactChange` set. It independently constructs the
 maintained answer; an indexed full preflight supplies the exact reference work
 limit class without copying its result. Permanent tests require identical
 facts/proofs and more than a 100x reduction in physical comparisons for a
-large no-match join.
-RFC-0003 becomes **Implemented experimentally** only after the complete
-settlement/constraint dogfood and independent indexed differential suite pass.
+large no-match join. The complete settlement/constraint dogfood and independent
+indexed differential suite now pass, so RFC-0003 is **Implemented
+experimentally**. The feature remains gated while its syntax and runtime APIs
+are intentionally unstable during the `0.x` series.
 
 ## Explicit non-goals
 

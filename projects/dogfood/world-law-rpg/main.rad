@@ -1,0 +1,230 @@
+// Headless RFC-0001/0002/0003 dogfood. The Rust acceptance harness installs
+// relations.rad, drives these public commands, and checks the resulting facts,
+// explanations, replay, persistence, sandbox, and lifecycle behavior.
+
+component Position { x: int = 0 }
+
+component Vital { hp: int = 100 }
+
+component Mana { points: int = 20 }
+
+component BotIntent { kind: str = "wait", target: str = "" }
+
+intent ConfigureActor {
+    key actor: entity,
+    capacity: int,
+    armor: int,
+}
+
+intent EquipItem {
+    key owner: entity,
+    item: entity,
+    weight: int,
+}
+
+intent TransferItem {
+    key item: entity,
+    new_owner: entity,
+}
+
+intent MoveActor { key actor: entity, distance: int }
+
+intent StrikeActor { key target: entity, source: entity, damage: int }
+
+intent CastSpell { key caster: entity, cost: int }
+
+intent ApplyStatus { key target: entity, effect: str }
+
+intent ClearStatus { key target: entity, effect: str }
+
+intent DeclareThreat { key attacker: entity, target: entity, power: int }
+
+law Configure(actor: entity, capacity: int, armor: int) {
+    propose ConfigureActor { actor: actor, capacity: capacity, armor: armor }
+}
+
+law Equip(owner: entity, item: entity, weight: int) {
+    propose EquipItem { owner: owner, item: item, weight: weight }
+}
+
+law Trade(item: entity, new_owner: entity) {
+    propose TransferItem { item: item, new_owner: new_owner }
+}
+
+law Move(actor: entity, distance: int) {
+    propose MoveActor { actor: actor, distance: distance }
+}
+
+law Strike(source: entity, target: entity, damage: int) {
+    propose StrikeActor { target: target, source: source, damage: damage }
+}
+
+law Cast(caster: entity, cost: int) {
+    propose CastSpell { caster: caster, cost: cost }
+}
+
+law AddStatus(target: entity, effect: str) {
+    propose ApplyStatus { target: target, effect: effect }
+}
+
+law RemoveStatus(target: entity, effect: str) {
+    propose ClearStatus { target: target, effect: effect }
+}
+
+law Threat(attacker: entity, target: entity, power: int) {
+    propose DeclareThreat { attacker: attacker, target: target, power: power }
+}
+
+resolver ResolveActorConfiguration for ConfigureActor(actor, proposals) {
+    let chosen = proposals[0]
+    insert_fact("game::worldlaw::CarryCapacity", [actor, chosen.capacity])
+    insert_fact("game::worldlaw::Armor", [actor, chosen.armor])
+}
+
+resolver ResolveEquipment for EquipItem(owner, proposals) {
+    let chosen = proposals[0]
+    insert_fact("game::worldlaw::Owns", [owner, chosen.item])
+    insert_fact("game::worldlaw::ItemWeight", [chosen.item, chosen.weight])
+}
+
+resolver ResolveTrade for TransferItem(item, proposals) {
+    replace_fact_by(
+        "game::worldlaw::Owns",
+        "item",
+        [item],
+        [proposals[0].new_owner, item],
+    )
+}
+
+resolver ResolveMovement for MoveActor(actor, proposals) {
+    let old = require(actor, Position)
+    let distance = proposals |> map(fn(proposal) { proposal.distance }) |> sum()
+    next(actor, Position { x: old.x + distance })
+}
+
+resolver ResolveStrike for StrikeActor(target, proposals) {
+    let old = require(target, Vital)
+    let damage = proposals |> map(fn(proposal) { proposal.damage }) |> sum()
+    next(target, Vital { hp: old.hp - damage })
+}
+
+resolver ResolveCast for CastSpell(caster, proposals) {
+    let old = require(caster, Mana)
+    let cost = proposals |> map(fn(proposal) { proposal.cost }) |> sum()
+    next(caster, Mana { points: old.points - cost })
+}
+
+resolver ResolveStatusApplication for ApplyStatus(target, proposals) {
+    for proposal in proposals {
+        insert_fact("game::worldlaw::Status", [target, proposal.effect])
+    }
+}
+
+resolver ResolveStatusRemoval for ClearStatus(target, proposals) {
+    for proposal in proposals {
+        remove_fact("game::worldlaw::Status", [target, proposal.effect])
+    }
+}
+
+resolver ResolveThreat for DeclareThreat(attacker, proposals) {
+    let chosen = proposals[0]
+    insert_fact("game::worldlaw::Hostile", [attacker, chosen.target])
+    insert_fact("game::worldlaw::AttackPower", [attacker, chosen.power])
+}
+
+constraint MovementPermission for Position(subject, proposed) {
+    require !candidate_fact("game::worldlaw::Encumbered", [subject])
+    else "movement.encumbered"
+    require !candidate_fact("game::worldlaw::Rooted", [subject])
+    else "movement.rooted"
+}
+
+constraint CombatPermission for Vital(subject, proposed) {
+    require !candidate_fact("game::worldlaw::Shielded", [subject])
+    else "combat.shielded"
+    require proposed.hp >= 0 else "combat.overkill"
+}
+
+constraint CastingPermission for Mana(subject, proposed) {
+    require !candidate_fact("game::worldlaw::Silenced", [subject])
+    else "casting.silenced"
+    require proposed.points >= 0 else "casting.insufficient_mana"
+}
+
+entity hero { Position {}, Vital {}, Mana {}, BotIntent {} }
+
+entity merchant { Position {}, Vital {}, Mana {}, BotIntent {} }
+
+entity goblin { Position { x: 4 }, Vital { hp: 30 }, Mana {}, BotIntent {} }
+
+entity anvil {}
+
+fn configure_world() {
+    settle {
+        Configure(hero, 25, 5)
+        Configure(merchant, 100, 50)
+        Threat(goblin, hero, 20)
+    }
+}
+
+fn equip_anvil() { settle { Equip(hero, anvil, 40) } }
+
+fn trade_anvil() { settle { Trade(anvil, merchant) } }
+
+fn move_hero() { settle { Move(hero, 3) } }
+
+fn strike_hero() { settle { Strike(goblin, hero, 20) } }
+
+fn cast_hero() { settle { Cast(hero, 7) } }
+
+fn root_hero() { settle { AddStatus(hero, "rooted") } }
+
+fn unroot_hero() { settle { RemoveStatus(hero, "rooted") } }
+
+fn silence_hero() { settle { AddStatus(hero, "silenced") } }
+
+fn unsilence_hero() { settle { RemoveStatus(hero, "silenced") } }
+
+fn shield_hero() { settle { AddStatus(hero, "shielded") } }
+
+fn unshield_hero() { settle { RemoveStatus(hero, "shielded") } }
+
+fn bot_turn() -> str {
+    let bot = f"""
+component BotIntent { kind: "wait", target: "" }
+let input = sandbox_input()
+let me = require_entity(input["unit"])
+update(me, BotIntent) { kind = "attack", target = input["target"] }
+"""
+    let caps = f"""{ "write": ["BotIntent"], "fuel": 100000, "seed": 7 }"""
+    match sandbox_run(bot, fork(), caps, { "unit": "goblin", "target": "hero" }) {
+        Ok(candidate) => {
+            let order = peek(candidate, goblin, BotIntent) |> unwrap
+            if order.kind == "attack" and order.target == "hero" {
+                settle { Strike(goblin, hero, 20) }
+                return "attack"
+            }
+            return "unexpected order"
+        }
+        Err(message) => { return message }
+    }
+}
+
+fn hero_x() -> int { return require(hero, Position).x }
+
+fn hero_hp() -> int { return require(hero, Vital).hp }
+
+fn hero_mana() -> int { return require(hero, Mana).points }
+
+fn goblin_order() -> str { return require(goblin, BotIntent).kind }
+
+fn explain_danger() -> str {
+    return why_fact("game::worldlaw::InDanger", [hero])
+}
+
+fn persistence_roundtrip() -> bool {
+    let before = world_digest()
+    let saved = save_world()
+    let loaded = load_world(saved)
+    return loaded >= 0 and world_digest() == before and save_world() == saved
+}
