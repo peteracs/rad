@@ -19,8 +19,8 @@
 //! re-encode-is-byte-identical guarantee possible.
 
 use crate::causality::{
-    Cause, EmitRecord, ProposalRecord, ResolutionRecord, SettlementRecord, WireProvenance,
-    WriteKind, WriteRecord,
+    Cause, EmitRecord, ProposalRecord, RelationAssertionRecord, ResolutionRecord, SettlementRecord,
+    WireProvenance, WriteKind, WriteRecord,
 };
 use crate::value::{Allocator, MapKey, MapStorage, Value};
 use std::fmt::Write;
@@ -29,7 +29,7 @@ use std::fmt::Write;
 // Provenance section: the sender's ledger closure rides the fork payload so
 // the receiver can answer why() for state it never computed.
 //
-//   "prov":[[writes...],[emits...],[settlements...],[proposals...],[resolutions...]]
+//   "prov":[writes,emits,settlements,proposals,resolutions,relation_assertions]
 //   write: [frame, entity|null, name|null, component, value, kind, cause, origin|null,
 //           resolution_id|null]
 //   emit:  [id, event, frame, payload, cause, origin|null]
@@ -60,16 +60,6 @@ fn encode_opt_str_into(s: &Option<String>, out: &mut String) {
 }
 
 pub fn encode_prov_into(prov: &WireProvenance, out: &mut String) {
-    // Preserve the pre-RFC wire bytes for worlds without causal fan-in. The
-    // five-section form is negotiated by the `causal_laws` capability and is
-    // emitted only when it actually carries settlement records.
-    let extended = !prov.settlements.is_empty()
-        || !prov.proposals.is_empty()
-        || !prov.resolutions.is_empty()
-        || prov
-            .writes
-            .iter()
-            .any(|write| write.resolution_id.is_some());
     out.push_str("[[");
     for (i, w) in prov.writes.iter().enumerate() {
         if i > 0 {
@@ -98,14 +88,12 @@ pub fn encode_prov_into(prov: &WireProvenance, out: &mut String) {
         encode_cause_into(&w.by, out);
         out.push(',');
         encode_opt_str_into(&w.origin, out);
-        if extended {
-            out.push(',');
-            match w.resolution_id {
-                Some(id) => {
-                    let _ = write!(out, "{}", id);
-                }
-                None => out.push_str("null"),
+        out.push(',');
+        match w.resolution_id {
+            Some(id) => {
+                let _ = write!(out, "{}", id);
             }
+            None => out.push_str("null"),
         }
         out.push(']');
     }
@@ -123,10 +111,6 @@ pub fn encode_prov_into(prov: &WireProvenance, out: &mut String) {
         out.push(',');
         encode_opt_str_into(&e.origin, out);
         out.push(']');
-    }
-    if !extended {
-        out.push_str("]]");
-        return;
     }
     out.push_str("],[");
     for (i, settlement) in prov.settlements.iter().enumerate() {
@@ -167,6 +151,27 @@ pub fn encode_prov_into(prov: &WireProvenance, out: &mut String) {
             let _ = write!(out, "{}", proposal_id);
         }
         out.push_str("]]");
+    }
+    out.push_str("],[");
+    for (index, assertion) in prov.relation_assertions.iter().enumerate() {
+        if index > 0 {
+            out.push(',');
+        }
+        let _ = write!(out, "[{},{},", assertion.frame, assertion.assertion_id);
+        escape_json_into(
+            out,
+            &crate::relation_runtime::fact_key_transport_hex(&assertion.fact_key),
+        );
+        out.push_str(",[");
+        for (resolution_index, resolution_id) in assertion.resolution_ids.iter().enumerate() {
+            if resolution_index > 0 {
+                out.push(',');
+            }
+            let _ = write!(out, "{}", resolution_id);
+        }
+        out.push_str("],");
+        encode_opt_str_into(&assertion.origin, out);
+        out.push(']');
     }
     out.push_str("]]");
 }
@@ -250,13 +255,13 @@ fn decode_u32(j: &serde_json::Value, field: &str) -> Result<u32, String> {
 pub fn decode_prov(j: &serde_json::Value) -> Result<WireProvenance, String> {
     let sections = j
         .as_array()
-        .filter(|a| a.len() == 2 || a.len() == 5)
+        .filter(|a| a.len() == 6)
         .ok_or("prov: malformed section")?;
     let mut writes = Vec::new();
     for w in sections[0].as_array().ok_or("prov: malformed writes")? {
         let f = w
             .as_array()
-            .filter(|a| a.len() == 8 || a.len() == 9)
+            .filter(|a| a.len() == 9)
             .ok_or("prov: malformed write")?;
         writes.push(WriteRecord {
             frame: f[0].as_u64().ok_or("prov: malformed write")?,
@@ -299,73 +304,102 @@ pub fn decode_prov(j: &serde_json::Value) -> Result<WireProvenance, String> {
     let mut settlements = Vec::new();
     let mut proposals = Vec::new();
     let mut resolutions = Vec::new();
-    if sections.len() == 5 {
-        for settlement in sections[2]
+    let mut relation_assertions = Vec::new();
+    for settlement in sections[2]
+        .as_array()
+        .ok_or("prov: malformed settlements")?
+    {
+        let fields = settlement
             .as_array()
-            .ok_or("prov: malformed settlements")?
-        {
-            let fields = settlement
-                .as_array()
-                .filter(|fields| fields.len() == 3)
-                .ok_or("prov: malformed settlement")?;
-            settlements.push(SettlementRecord {
-                id: fields[0].as_u64().ok_or("prov: malformed settlement")?,
-                frame: fields[1].as_u64().ok_or("prov: malformed settlement")?,
-                by: decode_cause(&fields[2])?,
-            });
-        }
-        for proposal in sections[3].as_array().ok_or("prov: malformed proposals")? {
-            let fields = proposal
-                .as_array()
-                .filter(|fields| fields.len() == 7)
-                .ok_or("prov: malformed proposal")?;
-            proposals.push(ProposalRecord {
-                id: fields[0].as_u64().ok_or("prov: malformed proposal")?,
-                settlement_id: fields[1].as_u64().ok_or("prov: malformed proposal")?,
-                intent: fields[2]
-                    .as_str()
-                    .ok_or("prov: malformed proposal")?
-                    .to_string(),
-                key: decode_u32(&fields[3], "prov: proposal key")?,
-                payload: fields[4]
-                    .as_str()
-                    .ok_or("prov: malformed proposal")?
-                    .to_string(),
-                law: fields[5]
-                    .as_str()
-                    .ok_or("prov: malformed proposal")?
-                    .to_string(),
-                source_line: decode_u32(&fields[6], "prov: proposal source line")?,
-            });
-        }
-        for resolution in sections[4]
+            .filter(|fields| fields.len() == 3)
+            .ok_or("prov: malformed settlement")?;
+        settlements.push(SettlementRecord {
+            id: fields[0].as_u64().ok_or("prov: malformed settlement")?,
+            frame: fields[1].as_u64().ok_or("prov: malformed settlement")?,
+            by: decode_cause(&fields[2])?,
+        });
+    }
+    for proposal in sections[3].as_array().ok_or("prov: malformed proposals")? {
+        let fields = proposal
             .as_array()
-            .ok_or("prov: malformed resolutions")?
-        {
-            let fields = resolution
+            .filter(|fields| fields.len() == 7)
+            .ok_or("prov: malformed proposal")?;
+        proposals.push(ProposalRecord {
+            id: fields[0].as_u64().ok_or("prov: malformed proposal")?,
+            settlement_id: fields[1].as_u64().ok_or("prov: malformed proposal")?,
+            intent: fields[2]
+                .as_str()
+                .ok_or("prov: malformed proposal")?
+                .to_string(),
+            key: decode_u32(&fields[3], "prov: proposal key")?,
+            payload: fields[4]
+                .as_str()
+                .ok_or("prov: malformed proposal")?
+                .to_string(),
+            law: fields[5]
+                .as_str()
+                .ok_or("prov: malformed proposal")?
+                .to_string(),
+            source_line: decode_u32(&fields[6], "prov: proposal source line")?,
+        });
+    }
+    for resolution in sections[4]
+        .as_array()
+        .ok_or("prov: malformed resolutions")?
+    {
+        let fields = resolution
+            .as_array()
+            .filter(|fields| fields.len() == 6)
+            .ok_or("prov: malformed resolution")?;
+        resolutions.push(ResolutionRecord {
+            id: fields[0].as_u64().ok_or("prov: malformed resolution")?,
+            settlement_id: fields[1].as_u64().ok_or("prov: malformed resolution")?,
+            intent: fields[2]
+                .as_str()
+                .ok_or("prov: malformed resolution")?
+                .to_string(),
+            key: decode_u32(&fields[3], "prov: resolution key")?,
+            resolver: fields[4]
+                .as_str()
+                .ok_or("prov: malformed resolution")?
+                .to_string(),
+            proposal_ids: fields[5]
                 .as_array()
-                .filter(|fields| fields.len() == 6)
-                .ok_or("prov: malformed resolution")?;
-            resolutions.push(ResolutionRecord {
-                id: fields[0].as_u64().ok_or("prov: malformed resolution")?,
-                settlement_id: fields[1].as_u64().ok_or("prov: malformed resolution")?,
-                intent: fields[2]
+                .ok_or("prov: malformed resolution")?
+                .iter()
+                .map(|id| id.as_u64().ok_or("prov: malformed resolution"))
+                .collect::<Result<Vec<_>, _>>()?,
+        });
+    }
+    for assertion in sections[5]
+        .as_array()
+        .ok_or("prov: malformed relation assertions")?
+    {
+        let fields = assertion
+            .as_array()
+            .filter(|fields| fields.len() == 5)
+            .ok_or("prov: malformed relation assertion")?;
+        relation_assertions.push(RelationAssertionRecord {
+            frame: fields[0]
+                .as_u64()
+                .ok_or("prov: malformed relation assertion")?,
+            assertion_id: fields[1]
+                .as_u64()
+                .ok_or("prov: malformed relation assertion")?,
+            fact_key: crate::relation_runtime::fact_key_from_transport_hex(
+                fields[2]
                     .as_str()
-                    .ok_or("prov: malformed resolution")?
-                    .to_string(),
-                key: decode_u32(&fields[3], "prov: resolution key")?,
-                resolver: fields[4]
-                    .as_str()
-                    .ok_or("prov: malformed resolution")?
-                    .to_string(),
-                proposal_ids: fields[5]
-                    .as_array()
-                    .ok_or("prov: malformed resolution")?
-                    .iter()
-                    .map(|id| id.as_u64().ok_or("prov: malformed resolution"))
-                    .collect::<Result<Vec<_>, _>>()?,
-            });
-        }
+                    .ok_or("prov: malformed relation assertion")?,
+            )
+            .map_err(|error| error.to_string())?,
+            resolution_ids: fields[3]
+                .as_array()
+                .ok_or("prov: malformed relation assertion")?
+                .iter()
+                .map(|id| id.as_u64().ok_or("prov: malformed relation assertion"))
+                .collect::<Result<Vec<_>, _>>()?,
+            origin: decode_opt_str(&fields[4]),
+        });
     }
     Ok(WireProvenance {
         origin: String::new(),
@@ -374,6 +408,7 @@ pub fn decode_prov(j: &serde_json::Value) -> Result<WireProvenance, String> {
         settlements,
         proposals,
         resolutions,
+        relation_assertions,
     })
 }
 
@@ -879,6 +914,7 @@ mod tests {
                 [],
                 [],
                 [],
+                [],
                 []
             ]);
             let error = decode_prov(&write).expect_err("write entity overflow");
@@ -889,6 +925,7 @@ mod tests {
                 [],
                 [[1, 0, [0]]],
                 [[1, 1, "Damage", overflow, "{}", "Hit", 1]],
+                [],
                 []
             ]);
             let error = decode_prov(&proposal_key).expect_err("proposal key overflow");
@@ -899,6 +936,7 @@ mod tests {
                 [],
                 [[1, 0, [0]]],
                 [[1, 1, "Damage", 0, "{}", "Hit", overflow]],
+                [],
                 []
             ]);
             let error = decode_prov(&proposal_line).expect_err("source line overflow");
@@ -912,7 +950,8 @@ mod tests {
                 [],
                 [[1, 0, [0]]],
                 [],
-                [[1, 1, "Damage", overflow, "ResolveDamage", []]]
+                [[1, 1, "Damage", overflow, "ResolveDamage", []]],
+                []
             ]);
             let error = decode_prov(&resolution).expect_err("resolution key overflow");
             assert!(error.contains("resolution key exceeds u32"), "{error}");

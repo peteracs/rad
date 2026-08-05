@@ -122,6 +122,35 @@ fn pending_fact_values(
 }
 
 impl VM {
+    pub(crate) fn bi_why_fact(&mut self, args: Vec<Value>) -> Result<Value, String> {
+        if args.len() != 2 {
+            return Err(format!(
+                "why_fact() requires exactly (relation_identity, tuple), got {} arguments",
+                args.len()
+            ));
+        }
+        if self.sandbox_caps.is_some() {
+            return Err(
+                "sandbox: fact explanations require capability-filtered proof rendering".into(),
+            );
+        }
+        let relation = args[0]
+            .as_str()
+            .ok_or_else(|| "why_fact() relation identity must be a string".to_string())?;
+        let values = args[1]
+            .as_list()
+            .ok_or_else(|| "why_fact() tuple must be a list".to_string())?;
+        let snapshot = self.world.snapshot();
+        let key = runtime_fact_key(&snapshot, relation, values, false)?;
+        let explanation = crate::relation_derivation::explain_fact(
+            &key,
+            snapshot.relation_state(),
+            snapshot.derived_relation_state(),
+            &self.ledger,
+        );
+        Ok(Value::from_string(&mut self.gc, explanation))
+    }
+
     pub(crate) fn bi_constraint_fact(
         &mut self,
         args: Vec<Value>,

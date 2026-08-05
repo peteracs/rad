@@ -10,6 +10,14 @@ All notable changes to the Rad language are documented here.
 
 ### Added
 
+- **Derived facts now explain their complete causal ancestry.** `why_fact()`
+  walks an exact bounded proof branch through sealed rules and intermediate
+  derived supports to authoritative assertion lifetimes, resolver fan-in,
+  proposals, laws, settlement origin, and event ancestry. Typed relation
+  assertion records participate in checkpoint and fork provenance; the
+  pre-release provenance wire now has one canonical six-section shape rather
+  than preserving unused pre-RFC encodings.
+
 - **Compiled resolvers can now author authoritative relation patches.**
   Resolver-only `insert_fact()`, `remove_fact()`, and `replace_fact_by()`
   validate sealed relation identities, tuple values, generational entity

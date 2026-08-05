@@ -681,6 +681,14 @@ impl VM {
                         Some(eid) => w.contains_entity(eid),
                         None => resource_names.contains(&rec.component),
                     },
+                    |record| {
+                        w.relation_state()
+                            .assertions()
+                            .get(&record.fact_key)
+                            .is_some_and(|assertion| {
+                                assertion.assertion_id == record.assertion_id
+                            })
+                    },
                     &emit_ids
                         .iter()
                         .copied()

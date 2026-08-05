@@ -252,6 +252,7 @@ pub(super) fn builtin_required_effects(name: &str) -> Vec<crate::types::Effect> 
         // boundary blind to them — dogfood table-parity audit, seq 254
         // residual list item 2).
         | "save_world" | "world_digest" | "schema_digest" | "why" | "why_resource"
+        | "why_fact"
         | "fork_seed" => {
             vec![Effect::ReadECS]
         }

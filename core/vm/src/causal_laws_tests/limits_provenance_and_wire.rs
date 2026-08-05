@@ -811,7 +811,9 @@ flush_events()
     let mut sender = compile_vm(source);
     sender.run(0).expect("sender settlement");
     let hero = sender.get_world().get_entity_by_name("hero").unwrap();
-    let closure = sender.causality_ledger().provenance_closure(|_| true, &[]);
+    let closure = sender
+        .causality_ledger()
+        .provenance_closure(|_| true, |_| true, &[]);
     let mut encoded = String::new();
     crate::wire::encode_prov_into(&closure, &mut encoded);
     let json = serde_json::from_str(&encoded).expect("encoded provenance JSON");
@@ -899,7 +901,9 @@ settle {{ for sequence in range(0, {count}) {{ Hit(hero, sequence) }} }}
         );
         let mut vm = compile_vm(&source);
         vm.run(0).expect("fan-in baseline settlement");
-        let closure = vm.causality_ledger().provenance_closure(|_| true, &[]);
+        let closure = vm
+            .causality_ledger()
+            .provenance_closure(|_| true, |_| true, &[]);
         let mut wire = String::new();
         crate::wire::encode_prov_into(&closure, &mut wire);
         let why = vm

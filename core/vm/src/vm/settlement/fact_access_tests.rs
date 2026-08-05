@@ -41,6 +41,9 @@ entity hero { Position {} }
 entity anvil {}
 fn equip() { settle { Equip(hero, anvil, 40, 25) } }
 fn attempt_move() { settle { Move(hero, 3) } }
+fn explain_encumbrance() {
+    return why_fact("game::derived::Encumbered", [hero])
+}
 "#;
     let mut vm = crate::causal_laws_tests::compile_vm(source);
     vm.run(0).expect("initialize movement program");
@@ -92,6 +95,43 @@ derive Encumbered(person)
             "resolution:ResolveEquip:EquipIntent:0:proposals=",
         )
     }));
+    let ownership_key = ownership.fact_key.clone();
+    let ownership_assertion_id = ownership.assertion_id;
+    let closure = vm
+        .causality_ledger()
+        .provenance_closure(|_| true, |_| true, &[]);
+    assert_eq!(closure.relation_assertions.len(), 3);
+    let mut encoded = String::new();
+    crate::wire::encode_prov_into(&closure, &mut encoded);
+    let json = serde_json::from_str(&encoded).expect("typed provenance is canonical JSON");
+    let mut decoded = crate::wire::decode_prov(&json).expect("typed provenance decodes");
+    decoded.origin = "fact-wire".into();
+    let mut receiver = crate::causality::CausalityLedger::default();
+    receiver.ingest(&decoded, &std::collections::HashMap::new());
+    let remote_why =
+        receiver.explain_relation_assertion(&ownership_key, ownership_assertion_id);
+    assert!(remote_why.contains("resolver `ResolveEquip`"), "{remote_why}");
+    assert!(remote_why.contains("[via fact-wire"), "{remote_why}");
+
+    let explanation = vm
+        .call_global("explain_encumbrance", &[])
+        .expect("derived explanation renders");
+    let crate::host_value::FrozenValue::String(explanation) = explanation else {
+        panic!("why_fact must return a string")
+    };
+    for expected in [
+        "game::derived::Encumbered",
+        "game::derived::TotalWeight",
+        "game::derived::Owns",
+        "authoritative assertion",
+        "resolver `ResolveEquip`",
+        "proposal",
+        "law `Equip`",
+        "settlement origin",
+        "by top-level code",
+    ] {
+        assert!(explanation.contains(expected), "missing {expected}:\n{explanation}");
+    }
 
     let before = vm.observable_state_signature();
     let failure = vm.call_global_detailed("attempt_move", &[]).unwrap_err();

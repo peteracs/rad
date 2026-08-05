@@ -298,6 +298,19 @@ impl WorldSnapshot {
                     out.u64(*proposal_id);
                 }
             }
+            out.usize(provenance.relation_assertions.len());
+            for assertion in &provenance.relation_assertions {
+                out.u64(assertion.frame);
+                out.u64(assertion.assertion_id);
+                out.text(&crate::relation_runtime::fact_key_transport_hex(
+                    &assertion.fact_key,
+                ));
+                out.usize(assertion.resolution_ids.len());
+                for resolution_id in &assertion.resolution_ids {
+                    out.u64(*resolution_id);
+                }
+                out.optional_text(assertion.origin.as_deref());
+            }
         }
         // rollout_seed is excluded from content digests and wire snapshots,
         // but included here because fork_seed() makes it observable.

@@ -1,7 +1,7 @@
 
 
 impl Builtin {
-    pub const ALL: [Builtin; 225] = [
+    pub const ALL: [Builtin; 226] = [
         Builtin::BaseFact,
         Builtin::CandidateFact,
         Builtin::InsertFact,
@@ -216,6 +216,7 @@ impl Builtin {
         Builtin::AssertOnlyChanged,
         Builtin::Why,
         Builtin::WhyResource,
+        Builtin::WhyFact,
         Builtin::SaveWorld,
         Builtin::LoadWorld,
         Builtin::TryLoadWorld,
@@ -440,6 +441,7 @@ impl Builtin {
             Builtin::AssertOnlyChanged => "assert_only_changed",
             Builtin::Why => "why",
             Builtin::WhyResource => "why_resource",
+            Builtin::WhyFact => "why_fact",
             Builtin::SaveWorld => "save_world",
             Builtin::WorldDigest => "world_digest",
             Builtin::SchemaDigest => "schema_digest",

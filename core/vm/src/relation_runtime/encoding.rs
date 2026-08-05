@@ -1,5 +1,24 @@
 use super::{AuthoritativeRelationState, FactAssertion, FactKey, FactValue, UniqueIndexKey};
 
+pub(crate) fn fact_key_transport_hex(fact: &FactKey) -> String {
+    let mut out = Vec::new();
+    encode_fact(&mut out, fact);
+    hex::encode(out)
+}
+
+pub(crate) fn fact_key_from_transport_hex(encoded: &str) -> super::RelationRuntimeResult<FactKey> {
+    let bytes = hex::decode(encoded).map_err(|_| {
+        super::RelationRuntimeError::new(
+            "relation.transport_invalid_hex",
+            "fact key is not valid hexadecimal",
+        )
+    })?;
+    let mut input = Reader::new(&bytes);
+    let fact = input.fact()?;
+    input.finish()?;
+    Ok(fact)
+}
+
 impl AuthoritativeRelationState {
     /// Canonical inventory of every future-determining authoritative relation
     /// field. `WorldSnapshot` stores this exact state object and delegates its

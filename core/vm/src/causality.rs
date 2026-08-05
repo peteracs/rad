@@ -23,7 +23,7 @@
 //! server: "why, as of timeline index k" = writes with `frame < k`.
 
 mod settlement;
-pub use settlement::{ProposalRecord, ResolutionRecord, SettlementRecord};
+pub use settlement::{ProposalRecord, RelationAssertionRecord, ResolutionRecord, SettlementRecord};
 pub(crate) use settlement::{SettlementProposalInput, SettlementResolutionInput};
 
 /// Who performed a write or an emit.
@@ -100,6 +100,7 @@ pub struct WireProvenance {
     pub settlements: Vec<SettlementRecord>,
     pub proposals: Vec<ProposalRecord>,
     pub resolutions: Vec<ResolutionRecord>,
+    pub relation_assertions: Vec<RelationAssertionRecord>,
 }
 
 /// High-bit namespace tag for emit ids that came over the wire. Local ledger

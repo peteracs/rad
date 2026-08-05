@@ -16,6 +16,7 @@ pub use candidate::{
     PendingRelationOperation, PendingRelationValue, PendingSpawn, RelationCandidate,
     RelationTransaction,
 };
+pub(crate) use encoding::{fact_key_from_transport_hex, fact_key_transport_hex};
 pub use manifest::{RelationRuntimeManifest, RuntimeRelationSchema};
 pub use store::{
     AuthoritativeRelationState, FactAssertion, FactChange, FactChangeKind, LogicalFactRow,

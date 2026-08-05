@@ -82,6 +82,15 @@ stages no live-world mutation. Relation conflicts or derivation failures
 reject the complete candidate before adoption. Positive, nonrecursive rules
 derive read-only facts from that complete relation candidate.
 
+`why_fact("module::Relation", [tuple...])` renders the bounded proof tree for
+an authoritative or derived fact. Derived branches name the exact sealed rule
+and proof identity; authoritative leaves retain the exact assertion lifetime
+and continue through the owning resolver, proposal fan-in, law, settlement,
+and event ancestry. The typed assertion bridge is part of checkpoint and fork
+provenance, so explanations survive transport without parsing diagnostic
+strings. Sandboxed fact explanations fail closed until capability-filtered
+proof rendering can preserve hidden-branch noninterference.
+
 ```text
 authoritative component + relation candidate
         ↓

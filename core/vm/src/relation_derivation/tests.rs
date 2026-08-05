@@ -272,3 +272,34 @@ derive Joined(left, right)
         before
     );
 }
+
+#[test]
+fn explanation_caps_construction_for_one_large_value() {
+    let artifacts = artifacts("relation Note(value: text)\n");
+    let mut world = World::new();
+    install(&mut world, &artifacts);
+    let value = "x".repeat(256 * 1024);
+    world
+        .apply_relation_transaction(&RelationTransaction {
+            operations: vec![insert(
+                "game::derived::Note",
+                vec![PendingRelationValue::Text(value.clone())],
+                OperationMetadata::cause("large-note"),
+            )],
+            ..RelationTransaction::default()
+        })
+        .unwrap();
+    let fact = FactKey::new("game::derived::Note", vec![FactValue::Text(value)]);
+    let explanation = explain_fact(
+        &fact,
+        world.relation_state(),
+        world.derived_relation_state(),
+        &crate::causality::CausalityLedger::default(),
+    );
+    assert!(explanation.len() <= 64 * 1024, "{}", explanation.len());
+    assert!(
+        explanation.ends_with("… (explanation byte limit reached)"),
+        "{}",
+        explanation.len()
+    );
+}

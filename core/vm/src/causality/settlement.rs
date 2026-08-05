@@ -31,6 +31,19 @@ pub struct ResolutionRecord {
     pub proposal_ids: Vec<u64>,
 }
 
+/// Exact provenance bridge between one durable authoritative assertion
+/// lifetime and the resolver fan-in that created it. Unlike the diagnostic
+/// `WriteRecord` summary, this record retains the typed canonical FactKey.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RelationAssertionRecord {
+    pub frame: u64,
+    pub assertion_id: u64,
+    pub fact_key: crate::relation_runtime::FactKey,
+    pub resolution_ids: Vec<u64>,
+    /// Set when the record crossed a save/fork boundary.
+    pub origin: Option<String>,
+}
+
 #[derive(Clone, Debug)]
 pub(crate) struct SettlementProposalInput {
     pub runtime_id: u64,
@@ -128,12 +141,32 @@ impl CausalityLedger {
         self.evict_overflow();
     }
 
+    pub(crate) fn record_relation_assertion(
+        &mut self,
+        frame: u64,
+        assertion_id: u64,
+        fact_key: crate::relation_runtime::FactKey,
+        mut resolution_ids: Vec<u64>,
+    ) {
+        resolution_ids.sort_unstable();
+        resolution_ids.dedup();
+        self.relation_assertions.push_back(RelationAssertionRecord {
+            frame,
+            assertion_id,
+            fact_key,
+            resolution_ids,
+            origin: None,
+        });
+        self.evict_overflow();
+    }
+
     pub(super) fn render_resolution(&self, resolution_id: u64) -> Option<String> {
         let resolution = self
             .resolutions
             .iter()
             .find(|resolution| resolution.id == resolution_id)?;
-        self.settlements
+        let settlement = self
+            .settlements
             .iter()
             .find(|settlement| settlement.id == resolution.settlement_id)?;
         let key_label = self
@@ -177,6 +210,8 @@ impl CausalityLedger {
                 resolution.proposal_ids.len() - shown
             ));
         }
+        out.push_str("\n\n     settlement origin:");
+        out.push_str(&self.render_cause_chain(&settlement.by));
         Some(out)
     }
 }

@@ -27,6 +27,7 @@ pub struct CausalityLedger {
     pub settlements: std::collections::VecDeque<SettlementRecord>,
     pub proposals: std::collections::VecDeque<ProposalRecord>,
     pub resolutions: std::collections::VecDeque<ResolutionRecord>,
+    pub relation_assertions: std::collections::VecDeque<RelationAssertionRecord>,
     pub(crate) next_settlement_id: u64,
     pub(crate) next_proposal_id: u64,
     pub(crate) next_resolution_id: u64,
@@ -54,6 +55,7 @@ impl Default for CausalityLedger {
             settlements: std::collections::VecDeque::new(),
             proposals: std::collections::VecDeque::new(),
             resolutions: std::collections::VecDeque::new(),
+            relation_assertions: std::collections::VecDeque::new(),
             next_settlement_id: 1,
             next_proposal_id: 1,
             next_resolution_id: 1,
@@ -172,6 +174,20 @@ impl CausalityLedger {
             }
         }
 
+        out.usize(self.relation_assertions.len());
+        for assertion in &self.relation_assertions {
+            out.u64(assertion.frame);
+            out.u64(assertion.assertion_id);
+            out.text(&crate::relation_runtime::fact_key_transport_hex(
+                &assertion.fact_key,
+            ));
+            out.usize(assertion.resolution_ids.len());
+            for resolution_id in &assertion.resolution_ids {
+                out.u64(*resolution_id);
+            }
+            out.optional_text(assertion.origin.as_deref());
+        }
+
         out.u64(self.next_settlement_id);
         out.u64(self.next_proposal_id);
         out.u64(self.next_resolution_id);
@@ -231,6 +247,10 @@ impl CausalityLedger {
             self.resolutions.pop_front();
             self.truncated = true;
         }
+        while self.relation_assertions.len() > self.cap {
+            self.relation_assertions.pop_front();
+            self.truncated = true;
+        }
     }
 
     /// Returns the emit id used by `Cause::Handler` links (1-based; 0 is
@@ -284,6 +304,7 @@ impl CausalityLedger {
     pub fn provenance_closure(
         &self,
         keep: impl Fn(&WriteRecord) -> bool,
+        keep_relation: impl Fn(&RelationAssertionRecord) -> bool,
         queue_ids: &[u64],
     ) -> WireProvenance {
         use std::collections::{HashMap, HashSet};
@@ -307,10 +328,21 @@ impl CausalityLedger {
         // Settlement writes carry a fan-in tree. Keep only the resolution
         // records reachable from the live writes in this fork, along with
         // their proposals and owning settlement records.
-        let wanted_resolution_ids: HashSet<u64> = newest
+        let relation_assertions: Vec<RelationAssertionRecord> = self
+            .relation_assertions
+            .iter()
+            .filter(|record| keep_relation(record))
+            .cloned()
+            .collect();
+        let mut wanted_resolution_ids: HashSet<u64> = newest
             .values()
             .filter_map(|write| write.resolution_id)
             .collect();
+        wanted_resolution_ids.extend(
+            relation_assertions
+                .iter()
+                .flat_map(|record| record.resolution_ids.iter().copied()),
+        );
         let resolutions: Vec<ResolutionRecord> = self
             .resolutions
             .iter()
@@ -402,6 +434,7 @@ impl CausalityLedger {
             settlements,
             proposals,
             resolutions,
+            relation_assertions,
         }
     }
 
@@ -509,6 +542,34 @@ impl CausalityLedger {
             });
             resolution_id_map.insert(resolution.id, id);
         }
+        for relation_assertion in &prov.relation_assertions {
+            let mut fact_key = relation_assertion.fact_key.clone();
+            for value in &mut fact_key.tuple {
+                if let crate::relation_runtime::FactValue::Entity(entity) = value {
+                    entity.slot = entity_remap
+                        .get(&entity.slot)
+                        .copied()
+                        .unwrap_or(entity.slot);
+                }
+            }
+            self.relation_assertions
+                .push_back(RelationAssertionRecord {
+                    frame: relation_assertion.frame,
+                    assertion_id: relation_assertion.assertion_id,
+                    fact_key,
+                    resolution_ids: relation_assertion
+                        .resolution_ids
+                        .iter()
+                        .filter_map(|id| resolution_id_map.get(id).copied())
+                        .collect(),
+                    origin: Some(
+                        relation_assertion
+                            .origin
+                            .clone()
+                            .unwrap_or_else(|| origin.clone()),
+                    ),
+                });
+        }
         for w in &prov.writes {
             let by = match &w.by {
                 Cause::Handler { event, emit_id } => Cause::Handler {
@@ -580,6 +641,98 @@ impl CausalityLedger {
             &format!("{} of {}", component, name),
             up_to_exclusive,
         )
+    }
+
+    pub fn explain_relation_assertion(
+        &self,
+        fact_key: &crate::relation_runtime::FactKey,
+        assertion_id: u64,
+    ) -> String {
+        let Some(record) = self
+            .relation_assertions
+            .iter()
+            .rev()
+            .find(|record| {
+                record.assertion_id == assertion_id && record.fact_key == *fact_key
+            })
+        else {
+            return format!(
+                "assertion #{}: exact causal record unavailable",
+                assertion_id
+            );
+        };
+        let mut out = format!(
+            "assertion #{} of {} {:?}   (created in frame {})",
+            assertion_id, fact_key.relation, fact_key.tuple, record.frame
+        );
+        if let Some(origin) = &record.origin {
+            out.push_str(&format!("   [via {origin}, remote frame]"));
+        }
+        if record.resolution_ids.is_empty() {
+            out.push_str("\n  <- no retained resolver fan-in");
+        } else {
+            for resolution_id in &record.resolution_ids {
+                if let Some(tree) = self.render_resolution(*resolution_id) {
+                    out.push_str(&tree);
+                } else {
+                    out.push_str(
+                        "\n  note: settlement fan-in provenance was evicted by the retention window",
+                    );
+                }
+            }
+        }
+        out
+    }
+
+    pub(super) fn render_cause_chain(&self, initial: &Cause) -> String {
+        let mut out = String::new();
+        let mut cause = initial;
+        let mut terminated = false;
+        for _ in 0..CHAIN_DEPTH_CAP {
+            match cause {
+                Cause::Main => {
+                    out.push_str("\n  <- by top-level code");
+                    terminated = true;
+                    break;
+                }
+                Cause::System { name } => {
+                    out.push_str(&format!("\n  <- by system {name}"));
+                    terminated = true;
+                    break;
+                }
+                Cause::Handler { event, emit_id } => {
+                    out.push_str(&format!("\n  <- by `on {event}` handler"));
+                    match self.emit_by_id(*emit_id) {
+                        Some(emit) => {
+                            if emit.payload.starts_with(&emit.event) {
+                                out.push_str(&format!(
+                                    "\n  <- {} emitted in frame {}",
+                                    emit.payload, emit.frame
+                                ));
+                            } else {
+                                out.push_str(&format!(
+                                    "\n  <- {} {} emitted in frame {}",
+                                    emit.event, emit.payload, emit.frame
+                                ));
+                            }
+                            if let Some(origin) = &emit.origin {
+                                out.push_str(&format!(" [via {origin}]"));
+                            }
+                            cause = &emit.by;
+                        }
+                        None => {
+                            out.push_str("\n  <- (emit record unavailable)");
+                            terminated = true;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        if !terminated {
+            out.push_str("\n  <- … (causal chain truncated)");
+        }
+        out
     }
 
     fn explain(
@@ -654,9 +807,11 @@ impl CausalityLedger {
             out.push_str(&format!("   [via {}, remote frame]", origin));
         }
 
+        let mut resolution_rendered = false;
         if let Some(resolution_id) = w.resolution_id {
             if let Some(tree) = self.render_resolution(resolution_id) {
                 out.push_str(&tree);
+                resolution_rendered = true;
             } else {
                 out.push_str(
                     "\n  note: settlement fan-in provenance was evicted by the retention window",
@@ -665,53 +820,8 @@ impl CausalityLedger {
         }
 
         // Walk the causal chain: write -> cause -> (emit -> cause)*.
-        let mut cause = &w.by;
-        let mut terminated = false;
-        for _ in 0..CHAIN_DEPTH_CAP {
-            match cause {
-                Cause::Main => {
-                    out.push_str("\n  <- by top-level code");
-                    terminated = true;
-                    break;
-                }
-                Cause::System { name } => {
-                    out.push_str(&format!("\n  <- by system {}", name));
-                    terminated = true;
-                    break;
-                }
-                Cause::Handler { event, emit_id } => {
-                    out.push_str(&format!("\n  <- by `on {}` handler", event));
-                    match self.emit_by_id(*emit_id) {
-                        Some(emit) => {
-                            // Component payloads display as `Name { … }` —
-                            // avoid doubling the event name.
-                            if emit.payload.starts_with(&emit.event) {
-                                out.push_str(&format!(
-                                    "\n  <- {} emitted in frame {}",
-                                    emit.payload, emit.frame
-                                ));
-                            } else {
-                                out.push_str(&format!(
-                                    "\n  <- {} {} emitted in frame {}",
-                                    emit.event, emit.payload, emit.frame
-                                ));
-                            }
-                            if let Some(origin) = &emit.origin {
-                                out.push_str(&format!(" [via {}]", origin));
-                            }
-                            cause = &emit.by;
-                        }
-                        None => {
-                            out.push_str("\n  <- (emit record unavailable)");
-                            terminated = true;
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-        if !terminated {
-            out.push_str("\n  <- … (causal chain truncated)");
+        if !resolution_rendered {
+            out.push_str(&self.render_cause_chain(&w.by));
         }
         // The commit seam, disclosed: if a fork was committed after this
         // write (by ledger order, which resolves within-frame ties), the

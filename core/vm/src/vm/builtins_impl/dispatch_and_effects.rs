@@ -295,6 +295,7 @@ impl VM {
             Builtin::AssertOnlyChanged => self.bi_assert_only_changed(args),
             Builtin::Why => self.bi_why(args),
             Builtin::WhyResource => self.bi_why_resource(args),
+            Builtin::WhyFact => self.bi_why_fact(args),
             Builtin::SaveWorld => self.bi_save_world(args),
             Builtin::WorldDigest => self.bi_world_digest(args),
             Builtin::SchemaDigest => self.bi_schema_digest(args),

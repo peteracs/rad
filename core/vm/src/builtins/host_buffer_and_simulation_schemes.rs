@@ -649,6 +649,12 @@ fn builtin_type_scheme_simulation(name: &str) -> Option<BuiltinSig> {
             ret: Ty::Str,
             is_pure: false,
         },
+        "why_fact" => BuiltinSig {
+            type_params: vec![],
+            params: vec![Ty::Str, Ty::List(Box::new(Ty::Any))],
+            ret: Ty::Str,
+            is_pure: false,
+        },
         // Schema migration (#5): serialization is pure, io stays io —
         // compose with write_file/read_file for persistence.
         "save_world" => BuiltinSig {

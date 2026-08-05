@@ -689,12 +689,28 @@ impl VM {
                         Some(e) => keep_ids.contains(&e),
                         None => keep_res.contains(w.component.as_str()),
                     });
+                    filtered.relation_assertions.retain(|record| {
+                        wf.relation_state()
+                            .assertions()
+                            .get(&record.fact_key)
+                            .is_some_and(|assertion| {
+                                assertion.assertion_id == record.assertion_id
+                            })
+                    });
                     filtered
                 }
                 None => self.ledger.provenance_closure(
                     |w| match w.entity {
                         Some(e) => keep_ids.contains(&e),
                         None => keep_res.contains(w.component.as_str()),
+                    },
+                    |record| {
+                        wf.relation_state()
+                            .assertions()
+                            .get(&record.fact_key)
+                            .is_some_and(|assertion| {
+                                assertion.assertion_id == record.assertion_id
+                            })
                     },
                     &fork
                         .emit_ids

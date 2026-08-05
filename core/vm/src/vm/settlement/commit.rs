@@ -288,6 +288,7 @@ impl VM {
             let component = format!("relation::{}", change.fact_key.relation);
             let value = format!("{:?} {:?}", change.kind, change.fact_key.tuple);
             let mut recorded = false;
+            let mut relation_resolution_ids = Vec::new();
             for (patch_index, patch) in context.patches.iter().enumerate() {
                 let cause = relation_resolution_cause(
                     &patch.resolver,
@@ -299,6 +300,9 @@ impl VM {
                     continue;
                 }
                 recorded = true;
+                if let Some(resolution_id) = resolution_ids.get(patch_index).copied() {
+                    relation_resolution_ids.push(resolution_id);
+                }
                 self.ledger.record_write_with_resolution(
                     self.causality_frame,
                     patch.key,
@@ -319,6 +323,21 @@ impl VM {
                     crate::causality::WriteKind::Set,
                     context.origin.clone(),
                 );
+            }
+            if change.kind == crate::relation_runtime::FactChangeKind::Insert {
+                if let Some(assertion) = self
+                    .world
+                    .relation_state()
+                    .assertions()
+                    .get(&change.fact_key)
+                {
+                    self.ledger.record_relation_assertion(
+                        self.causality_frame,
+                        assertion.assertion_id,
+                        assertion.fact_key.clone(),
+                        relation_resolution_ids,
+                    );
+                }
             }
         }
     }

@@ -482,6 +482,13 @@ DerivedFact
     ← proposal fan-in and event ancestry
 ```
 
+The production `why_fact(relation, tuple)` bridge stores exact typed
+`FactKey + assertion_id + resolution_ids` records rather than attempting to
+recover identity from truncated write summaries. These records participate in
+attempt checkpoints and fork provenance, remap entity slots during ingest,
+and retain the event cause of the owning settlement. Rendering is capped
+independently from the semantic proof graph.
+
 Opaque record IDs do not participate in semantic equality. Proof alternatives
 are ordered by canonical rule identity and support keys. Duplicate paths are
 deduplicated. Hosts apply capability filtering before rendering; a hidden fact

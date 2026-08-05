@@ -497,6 +497,7 @@ pub enum Builtin {
     AssertOnlyChanged,
     Why,
     WhyResource,
+    WhyFact,
     SaveWorld,
     LoadWorld,
     TryLoadWorld,
