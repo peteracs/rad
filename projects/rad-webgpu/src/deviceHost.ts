@@ -12,8 +12,6 @@ export interface WebGpuDeviceHostOptions {
   readonly requiredLimits?: RadWebGpuRequiredLimits;
   readonly alphaMode?: GPUCanvasAlphaMode;
   readonly maxDevicePixelRatio?: number;
-  /** Enables explicit GPU readback for screenshots and conformance tests. */
-  readonly allowCanvasReadback?: boolean;
   readonly onError?: (error: Error) => void;
 }
 
@@ -21,7 +19,6 @@ export interface WebGpuDeviceSession {
   readonly device: GPUDevice;
   readonly context: GPUCanvasContext;
   readonly format: GPUTextureFormat;
-  readonly canvasReadbackEnabled: boolean;
   readonly epoch: number;
 }
 
@@ -141,9 +138,6 @@ export class WebGpuDeviceHost {
         device,
         format,
         alphaMode: this.options.alphaMode ?? 'opaque',
-        ...(this.options.allowCanvasReadback
-          ? { usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC }
-          : {}),
       });
     } catch (error) {
       device.destroy();
@@ -159,7 +153,6 @@ export class WebGpuDeviceHost {
       device,
       context,
       format,
-      canvasReadbackEnabled: this.options.allowCanvasReadback === true,
       epoch: ++this.epoch,
     });
     this.sessionValue = session;

@@ -20,7 +20,6 @@ async function start(): Promise<void> {
     source: { maxRecords: 4096, maxEntitiesScanned: 16_384 },
     renderer: { worldWidth: 200, worldHeight: 120, avatarRadius: 4 },
     device: {
-      allowCanvasReadback: true,
       maxDevicePixelRatio: 2,
       onError(error) {
         errors.push(error.message);

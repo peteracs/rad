@@ -21,8 +21,9 @@ All notable changes to the Rad language are documented here.
   binds session stream, packet sequence, full/delta kind, and exact delta base;
   lifecycle generations prevent in-flight adapter/device requests from
   resurrecting a destroyed host, rapid losses remain recoverable, and a real
-  Chromium/SwiftShader smoke verifies pixels through bounded GPU texture
-  readback, plus resize, restart, and recovery.
+  Chromium/SwiftShader smoke verifies pixels through a caller-bounded offscreen
+  GPU texture readback of the real render pass, plus resize, restart, and
+  recovery.
 
 - **RFC-0003 is implemented experimentally end to end.** The headless
   `world-law-rpg` dogfood drives resolver-owned inventory and trading,

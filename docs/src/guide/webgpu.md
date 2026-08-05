@@ -106,11 +106,12 @@ losses coalesce into recovery work without dropping the newest loss, and
 exceptions in error/session observers cannot interrupt recovery.
 
 CI also launches Chromium against its explicit SwiftShader WebGPU test adapter,
-renders the dogfood, copies the exact rendered canvas texture through an opt-in
-bounded GPU readback, resizes, restarts the RAD session, forces device loss, and
-verifies that the same world is visible on the replacement device. Ordinary
-hosts do not enable canvas readback. This software-adapter smoke complements,
-rather than replaces, hardware-browser testing.
+renders the dogfood, encodes the same pass into the canvas and a caller-bounded
+offscreen texture, reads that texture back through the GPU, resizes, restarts the
+RAD session, forces device loss, and verifies that the same world is visible on
+the replacement device. The offscreen proof does not change ordinary canvas
+usage. This software-adapter smoke complements, rather than replaces,
+hardware-browser testing.
 
 ## Authority rule
 

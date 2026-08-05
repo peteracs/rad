@@ -37,6 +37,7 @@ interface DeviceResources {
 
 interface ReadbackSubmission {
   readonly buffer: GPUBuffer;
+  readonly texture: GPUTexture;
   readonly width: number;
   readonly height: number;
   readonly bytesPerRow: number;
@@ -67,7 +68,7 @@ export class AvatarRenderer {
     return this.submit(packet) !== null;
   }
 
-  /** Renders and copies that exact canvas texture into a bounded CPU-visible buffer. */
+  /** Renders the same pass offscreen; `maxBytes` bounds texture plus staging buffer. */
   async readback(
     packet: AvatarPresentationPacket,
     maxBytes: number,
@@ -91,6 +92,7 @@ export class AvatarRenderer {
     } finally {
       if (mapped) submission.buffer.unmap();
       submission.buffer.destroy();
+      submission.texture.destroy();
     }
   }
 
@@ -104,9 +106,6 @@ export class AvatarRenderer {
     assertSameDescriptor(packet.descriptor, this.descriptor);
     const session = this.host.session;
     if (!session) return null;
-    if (readbackLimit !== undefined && !session.canvasReadbackEnabled) {
-      throw new Error('webgpu.canvas_readback_not_enabled');
-    }
     if (!this.resources || this.resources.epoch !== session.epoch) this.installDevice(session);
     const resources = this.resources;
     if (!resources) return null;
@@ -138,38 +137,55 @@ export class AvatarRenderer {
         resources.boundRecords = recordsBuffer;
       }
 
-      const texture = session.context.getCurrentTexture();
-      const textureView = texture.createView();
-      const encoder = session.device.createCommandEncoder({ label: 'RAD avatar frame' });
-      const pass = encoder.beginRenderPass({
-        label: 'RAD avatar pass',
-        colorAttachments: [{
-          view: textureView,
-          clearValue: this.options.clearColor ?? { r: 0.025, g: 0.035, b: 0.07, a: 1 },
-          loadOp: 'clear',
-          storeOp: 'store',
-        }],
-      });
-      if (packet.header.count > 0 && resources.bindGroup) {
-        pass.setPipeline(resources.pipeline);
-        pass.setBindGroup(0, resources.bindGroup);
-        pass.draw(6, packet.header.count);
-      }
-      pass.end();
+      const canvasTexture = session.context.getCurrentTexture();
       readback = readbackLimit === undefined
         ? null
-        : createReadbackSubmission(session, texture, encoder, readbackLimit);
+        : createReadbackSubmission(session, canvasTexture, readbackLimit);
+      const encoder = session.device.createCommandEncoder({ label: 'RAD avatar frame' });
+      this.encodePass(encoder, canvasTexture.createView(), resources, packet.header.count);
+      if (readback) {
+        this.encodePass(encoder, readback.texture.createView(), resources, packet.header.count);
+        encoder.copyTextureToBuffer(
+          { texture: readback.texture },
+          { buffer: readback.buffer, bytesPerRow: readback.bytesPerRow, rowsPerImage: readback.height },
+          { width: readback.width, height: readback.height, depthOrArrayLayers: 1 },
+        );
+      }
       session.device.queue.submit([encoder.finish()]);
       this.lineage.commit(packet.header);
       return readback ?? true;
     } catch (error) {
       readback?.buffer.destroy();
+      readback?.texture.destroy();
       resources.records.destroy();
       resources.bindGroup = null;
       resources.boundRecords = null;
       this.lineage.invalidateBaseline();
       throw error;
     }
+  }
+
+  private encodePass(
+    encoder: GPUCommandEncoder,
+    view: GPUTextureView,
+    resources: DeviceResources,
+    recordCount: number,
+  ): void {
+    const pass = encoder.beginRenderPass({
+      label: 'RAD avatar pass',
+      colorAttachments: [{
+        view,
+        clearValue: this.options.clearColor ?? { r: 0.025, g: 0.035, b: 0.07, a: 1 },
+        loadOp: 'clear',
+        storeOp: 'store',
+      }],
+    });
+    if (recordCount > 0 && resources.bindGroup) {
+      pass.setPipeline(resources.pipeline);
+      pass.setBindGroup(0, resources.bindGroup);
+      pass.draw(6, recordCount);
+    }
+    pass.end();
   }
 
   destroy(): void {
@@ -314,33 +330,34 @@ fn fragment_main(input: VertexOutput) -> @location(0) vec4<f32> {
 
 function createReadbackSubmission(
   session: WebGpuDeviceSession,
-  texture: GPUTexture,
-  encoder: GPUCommandEncoder,
+  canvasTexture: GPUTexture,
   maxBytes: number,
 ): ReadbackSubmission {
-  if (!session.canvasReadbackEnabled) throw new Error('webgpu.canvas_readback_not_enabled');
-  const width = Number(texture.width);
-  const height = Number(texture.height);
+  const width = Number(canvasTexture.width);
+  const height = Number(canvasTexture.height);
   const unpaddedBytesPerRow = checkedProduct(width, 4, 'readback_row');
   const bytesPerRow = alignTo(unpaddedBytesPerRow, 256);
   const byteLength = checkedProduct(bytesPerRow, height, 'readback_size');
-  if (byteLength > maxBytes || byteLength > Number(session.device.limits.maxBufferSize)) {
+  const textureBytes = checkedProduct(unpaddedBytesPerRow, height, 'readback_texture_size');
+  const allocationBytes = checkedSum(textureBytes, byteLength, 'readback_allocation');
+  if (allocationBytes > maxBytes || byteLength > Number(session.device.limits.maxBufferSize)) {
     throw new Error('webgpu.readback_limit_exceeded');
   }
-  const buffer = session.device.createBuffer({
-    label: 'RAD avatar frame readback',
-    size: byteLength,
-    usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
+  const texture = session.device.createTexture({
+    label: 'RAD avatar frame readback target',
+    size: { width, height },
+    format: session.format,
+    usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC,
   });
   try {
-    encoder.copyTextureToBuffer(
-      { texture },
-      { buffer, bytesPerRow, rowsPerImage: height },
-      { width, height, depthOrArrayLayers: 1 },
-    );
-    return { buffer, width, height, bytesPerRow, format: session.format };
+    const buffer = session.device.createBuffer({
+      label: 'RAD avatar frame readback',
+      size: byteLength,
+      usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
+    });
+    return { buffer, texture, width, height, bytesPerRow, format: session.format };
   } catch (error) {
-    buffer.destroy();
+    texture.destroy();
     throw error;
   }
 }
@@ -351,6 +368,14 @@ function checkedProduct(left: number, right: number, name: string): number {
     throw new Error(`webgpu.invalid_${name}`);
   }
   return product;
+}
+
+function checkedSum(left: number, right: number, name: string): number {
+  const sum = left + right;
+  if (!Number.isSafeInteger(sum) || sum <= 0) {
+    throw new Error(`webgpu.invalid_${name}`);
+  }
+  return sum;
 }
 
 function alignTo(value: number, alignment: number): number {
