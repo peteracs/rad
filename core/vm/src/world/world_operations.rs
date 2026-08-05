@@ -1,15 +1,6 @@
 
 
 impl World {
-    fn set_entity_generation(&mut self, entity: u32, generation: u32) {
-        let generations = Arc::make_mut(&mut self.generations);
-        if generation == 0 {
-            generations.remove(&entity);
-        } else {
-            generations.insert(entity, generation);
-        }
-    }
-
     pub fn trace(&self, marked: &mut HashSet<usize>) {
         for archetype in &self.archetypes {
             for col in archetype.columns.values() {
@@ -137,112 +128,14 @@ impl World {
         self.name_to_id.get(name).copied()
     }
 
-    pub fn try_spawn_entity(&mut self, name: Option<&str>) -> Result<u32, &'static str> {
-        let (eid, generation) = loop {
-            let reusable_index = self
-                .free_ids
-                .iter()
-                .enumerate()
-                .min_by_key(|(_, id)| **id)
-                .map(|(index, _)| index);
-            let reusable = reusable_index.map(|index| self.free_ids.swap_remove(index));
-            match reusable {
-                Some(reused) => {
-                    let previous = self.generations.get(&reused).copied().unwrap_or(0);
-                    if let Some(generation) = previous.checked_add(1) {
-                        break (reused, generation);
-                    }
-                    // An exhausted slot is retired permanently. Continue in
-                    // exact allocator order instead of wrapping its lifetime.
-                }
-                None => {
-                    if self.fresh_ids_exhausted {
-                        return Err("entity.id_space_exhausted");
-                    }
-                    let fresh = self.next_id;
-                    if fresh == u32::MAX {
-                        self.fresh_ids_exhausted = true;
-                    } else {
-                        self.next_id = fresh + 1;
-                    }
-                    break (fresh, 0);
-                }
-            }
-        };
-        self.set_entity_generation(eid, generation);
-        let aid = self.get_or_create_archetype(Vec::new());
-        self.archetypes[aid as usize].push_entity(eid, HashMap::new());
-        Arc::make_mut(&mut self.entity_archetype).insert(eid, aid);
-        if let Some(n) = name {
-            if !n.is_empty() {
-                if let Some(old_eid) =
-                    Arc::make_mut(&mut self.name_to_id).insert(n.to_string(), eid)
-                {
-                    Arc::make_mut(&mut self.id_to_name).remove(&old_eid);
-                }
-                Arc::make_mut(&mut self.id_to_name).insert(eid, n.to_string());
-            }
-        }
-        Ok(eid)
-    }
-
-    pub fn spawn_entity(&mut self, name: Option<&str>) -> u32 {
-        self.try_spawn_entity(name)
-            .expect("Entity ID overflow: exceeded 2^32 entity lifetimes")
-    }
-
     /// Insert an entity under a **caller-chosen id** (world merge, #7).
     /// Whether `eid` is currently live in the world.
     pub fn entity_exists(&self, eid: u32) -> bool {
         self.entity_archetype.contains_key(&eid)
     }
 
-    pub fn entity_ref(&self, eid: u32) -> Option<crate::relation_runtime::EntityRef> {
-        self.entity_exists(eid)
-            .then(|| crate::relation_runtime::EntityRef {
-                slot: eid,
-                generation: self.generations.get(&eid).copied().unwrap_or(0),
-            })
-    }
-
     pub fn relation_state(&self) -> &crate::relation_runtime::AuthoritativeRelationState {
         &self.authoritative_relations
-    }
-
-    pub(crate) fn generation_entries(&self) -> Vec<(u32, u32)> {
-        let mut entries = self
-            .generations
-            .iter()
-            .map(|(slot, generation)| (*slot, *generation))
-            .collect::<Vec<_>>();
-        entries.sort_unstable();
-        entries
-    }
-
-    pub(crate) fn allocator_state(&self) -> (u32, bool, Vec<u32>) {
-        let mut free_ids = self.free_ids.clone();
-        free_ids.sort_unstable();
-        (self.next_id, self.fresh_ids_exhausted, free_ids)
-    }
-
-    pub(crate) fn restore_generation_entries(
-        &mut self,
-        entries: Vec<(u32, u32)>,
-    ) -> Result<(), &'static str> {
-        let entry_count = entries.len();
-        let generations = entries.into_iter().collect::<HashMap<_, _>>();
-        if generations.len() != entry_count {
-            return Err("generation table contains duplicate slots");
-        }
-        if generations.iter().any(|(slot, generation)| {
-            *generation == 0
-                || *slot > self.next_id
-                || (*slot == self.next_id && !self.fresh_ids_exhausted)
-        }) {
-            return Err("generation table contains a noncanonical entry");
-        }
-        self.generations = Arc::new(generations);
-        Ok(())
     }
 
     pub(crate) fn restore_relation_transport(
@@ -304,34 +197,16 @@ impl World {
     /// Maintains the id-allocator invariants: ids skipped over become free,
     /// reused free ids leave the free list. Returns false if `eid` is live.
     pub fn insert_entity_with_id(&mut self, eid: u32, name: Option<&str>) -> bool {
-        if self.entity_archetype.contains_key(&eid) {
+        if self.claim_explicit_entity_id(eid).is_err() {
             return false;
         }
-        let Some(generation) = self
-            .generations
-            .get(&eid)
-            .copied()
-            .map_or(Some(0), |generation| generation.checked_add(1))
-        else {
-            return false;
-        };
-        if self.fresh_ids_exhausted {
-            self.free_ids.retain(|&f| f != eid);
-        } else if eid >= self.next_id {
-            for skipped in self.next_id..eid {
-                self.free_ids.push(skipped);
-            }
-            if eid == u32::MAX {
-                self.fresh_ids_exhausted = true;
-            } else {
-                self.next_id = eid + 1;
-            }
-        } else {
-            self.free_ids.retain(|&f| f != eid);
-        }
-        self.set_entity_generation(eid, generation);
         let aid = self.get_or_create_archetype(Vec::new());
-        self.archetypes[aid as usize].push_entity(eid, HashMap::new());
+        if self.archetypes[aid as usize]
+            .push_entity(eid, HashMap::new())
+            .is_err()
+        {
+            return false;
+        }
         Arc::make_mut(&mut self.entity_archetype).insert(eid, aid);
         self.set_entity_name(eid, name);
         true
@@ -348,32 +223,9 @@ impl World {
         name: Option<&str>,
         components: Vec<ComponentData>,
     ) -> bool {
-        if self.entity_archetype.contains_key(&eid) {
+        if self.claim_explicit_entity_id(eid).is_err() {
             return false;
         }
-        let Some(generation) = self
-            .generations
-            .get(&eid)
-            .copied()
-            .map_or(Some(0), |generation| generation.checked_add(1))
-        else {
-            return false;
-        };
-        if self.fresh_ids_exhausted {
-            self.free_ids.retain(|&f| f != eid);
-        } else if eid >= self.next_id {
-            for skipped in self.next_id..eid {
-                self.free_ids.push(skipped);
-            }
-            if eid == u32::MAX {
-                self.fresh_ids_exhausted = true;
-            } else {
-                self.next_id = eid + 1;
-            }
-        } else {
-            self.free_ids.retain(|&f| f != eid);
-        }
-        self.set_entity_generation(eid, generation);
 
         let mut by_tid: HashMap<TypeId, ComponentData> = HashMap::with_capacity(components.len());
         for mut data in components {
@@ -392,52 +244,18 @@ impl World {
             .cloned()
             .collect();
 
-        self.archetypes[aid as usize].push_entity(eid, by_tid);
+        if self.archetypes[aid as usize]
+            .push_entity(eid, by_tid)
+            .is_err()
+        {
+            return false;
+        }
         Arc::make_mut(&mut self.entity_archetype).insert(eid, aid);
         self.set_entity_name(eid, name);
         for data in &indexed {
             self.add_component_indices(eid, data);
         }
         true
-    }
-
-    /// Overwrite the id-allocator state (wire codec: `fork_from_bytes`
-    /// reconstructs the sender's exact allocator so post-transfer spawns
-    /// allocate identically on both sides). Rejects state that contradicts
-    /// the live entity set.
-    pub fn set_id_allocator(&mut self, next_id: u32, free_ids: Vec<u32>) -> Result<(), String> {
-        self.set_id_allocator_state(next_id, false, free_ids)
-    }
-
-    pub(crate) fn set_id_allocator_state(
-        &mut self,
-        next_id: u32,
-        fresh_ids_exhausted: bool,
-        free_ids: Vec<u32>,
-    ) -> Result<(), String> {
-        for &eid in self.entity_archetype.keys() {
-            if eid > next_id || (eid == next_id && !fresh_ids_exhausted) {
-                return Err(format!(
-                    "id allocator: next_id {} but entity {} exists",
-                    next_id, eid
-                ));
-            }
-        }
-        for &fid in &free_ids {
-            if self.entity_archetype.contains_key(&fid) {
-                return Err(format!("id allocator: free id {} is a live entity", fid));
-            }
-            if fid > next_id || (fid == next_id && !fresh_ids_exhausted) {
-                return Err(format!(
-                    "id allocator: free id {} >= next_id {}",
-                    fid, next_id
-                ));
-            }
-        }
-        self.next_id = next_id;
-        self.fresh_ids_exhausted = fresh_ids_exhausted;
-        self.free_ids = free_ids;
-        Ok(())
     }
 
     /// Set, change, or clear (None) an entity's name, keeping both name maps
@@ -494,16 +312,27 @@ impl World {
             return true;
         }
 
+        let mut new_type_set = self.archetypes[old_aid as usize].type_set.clone();
+        new_type_set.push(tid);
+        let new_aid = self.get_or_create_archetype(new_type_set);
+        if self.archetypes[new_aid as usize]
+            .entity_row
+            .contains_key(&eid)
+        {
+            Value::release_component_data(&data);
+            return false;
+        }
+
         let mut components = self.archetypes[old_aid as usize]
             .remove_entity(eid)
             .unwrap_or_default();
-
-        let mut new_type_set = self.archetypes[old_aid as usize].type_set.clone();
-        new_type_set.push(tid);
-
-        let new_aid = self.get_or_create_archetype(new_type_set);
         components.insert(tid, data);
-        self.archetypes[new_aid as usize].push_entity(eid, components);
+        if self.archetypes[new_aid as usize]
+            .push_entity(eid, components)
+            .is_err()
+        {
+            return false;
+        }
         Arc::make_mut(&mut self.entity_archetype).insert(eid, new_aid);
         if let Some(updated) = self.get_component(eid, &type_name) {
             self.add_component_indices(eid, &updated);
@@ -532,6 +361,20 @@ impl World {
             return false;
         }
 
+        let new_type_set: Vec<TypeId> = self.archetypes[old_aid as usize]
+            .type_set
+            .iter()
+            .filter(|&&t| t != tid)
+            .copied()
+            .collect();
+        let new_aid = self.get_or_create_archetype(new_type_set);
+        if self.archetypes[new_aid as usize]
+            .entity_row
+            .contains_key(&eid)
+        {
+            return false;
+        }
+
         if let Some(old_component) = self.get_component(eid, ctype) {
             self.remove_component_indices(eid, &old_component);
         }
@@ -543,15 +386,12 @@ impl World {
             Value::release_component_data(&removed_component);
         }
 
-        let new_type_set: Vec<TypeId> = self.archetypes[old_aid as usize]
-            .type_set
-            .iter()
-            .filter(|&&t| t != tid)
-            .copied()
-            .collect();
-
-        let new_aid = self.get_or_create_archetype(new_type_set);
-        self.archetypes[new_aid as usize].push_entity(eid, components);
+        if self.archetypes[new_aid as usize]
+            .push_entity(eid, components)
+            .is_err()
+        {
+            return false;
+        }
         Arc::make_mut(&mut self.entity_archetype).insert(eid, new_aid);
         true
     }

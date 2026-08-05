@@ -20,3 +20,4 @@ fn field_of(data: &crate::value::ComponentData, name: &str) -> Value {
 // Lexical sections preserve one private semantic namespace.
 include!("migration_tests/migration_semantics.rs");
 include!("migration_tests/persistence_identity.rs");
+include!("migration_tests/allocator_transport.rs");

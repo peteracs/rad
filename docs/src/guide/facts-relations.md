@@ -199,6 +199,13 @@ production front end lives in `core/vm/src/relation_frontend/`. The separate
 rows, assertion lifetimes, unique indexes, entity generations, and manifest
 identity ride the same `WorldSnapshot` inventory as ECS state.
 
+World and fork loading seal the entity allocator before reconstructing ECS
+rows. The transmitted live, reusable-free, and generation-exhausted retired
+slots must be a canonical, disjoint, exact partition of every issued slot.
+Duplicate or out-of-order entries, overlaps, gaps, and noncanonical exhaustion
+state reject before insertion, so a compact hostile payload cannot expand a
+sparse identity range or allocate one reusable identity twice.
+
 The embedding transaction may also carry candidate-local spawns and component
 writes. Candidate handles resolve before schema validation; duplicate component
 writes coalesce only when their values agree. Any relation, foreign-key,

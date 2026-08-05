@@ -472,6 +472,7 @@ impl VM {
             w.set_resource(rname, row);
         }
 
+        let allocator = allocator.validate(&w.all_entity_ids(), "fork_apply")?;
         self.restore_authoritative_world_transport_with_allocator(
             &mut w,
             &body,

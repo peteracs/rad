@@ -722,6 +722,7 @@ fn fuzz_adversarial_semantic_payloads() {
     let poisons: Vec<(&str, String)> = vec![
         ("duplicate_ids", body(format!("{},{}", row("0", "\"a\""), row("0", "\"b\"")), "[]", "1")),
         ("free_alive_id", body(row("0", "\"a\""), "[0]", "1")),
+        ("duplicate_free_ids", body(row("0", "\"a\""), "[1,1]", "2")),
         ("allocator_behind", body(format!("{},{}", row("5", "\"a\""), row("9", "\"b\"")), "[]", "2")),
         ("sparse_large_id", body(row("2147483648", "\"a\""), "[]", "2147483649")),
         ("u64_max_id", body(row("18446744073709551615", "\"a\""), "[]", "1")),

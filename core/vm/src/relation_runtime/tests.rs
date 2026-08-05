@@ -765,7 +765,11 @@ fn relation_conflict_rolls_back_candidate_spawn_and_component_write() {
 #[test]
 fn entity_allocator_uses_the_last_fresh_slot_then_fails_as_typed_data() {
     let mut world = World::new();
-    world.set_id_allocator(u32::MAX, Vec::new()).unwrap();
+    // This fixture jumps the fresh cursor to its final value so the boundary
+    // is testable without materializing the preceding 2^32 identities.
+    let mut snapshot = world.snapshot();
+    snapshot.next_id = u32::MAX;
+    world.restore(snapshot);
     assert_eq!(world.try_spawn_entity(Some("last")).unwrap(), u32::MAX);
     assert_eq!(
         world.try_spawn_entity(Some("overflow")),

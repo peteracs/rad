@@ -237,7 +237,14 @@ impl Archetype {
         tids.iter().all(|t| !self.type_set.contains(t))
     }
 
-    fn push_entity(&mut self, eid: u32, mut components: HashMap<TypeId, ComponentData>) {
+    fn push_entity(
+        &mut self,
+        eid: u32,
+        mut components: HashMap<TypeId, ComponentData>,
+    ) -> Result<(), &'static str> {
+        if self.entity_row.contains_key(&eid) {
+            return Err("entity.archetype_duplicate");
+        }
         let row = self.entities.len();
         Arc::make_mut(&mut self.entities).push(eid);
         Arc::make_mut(&mut self.entity_row).insert(eid, row);
@@ -257,6 +264,7 @@ impl Archetype {
                 .or_insert_with(|| SoAColumn::new(type_name, layout))
                 .push(data);
         }
+        Ok(())
     }
 
     fn remove_entity(&mut self, eid: u32) -> Option<HashMap<TypeId, ComponentData>> {

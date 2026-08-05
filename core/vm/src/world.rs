@@ -23,6 +23,7 @@ enum IndexValue {
 }
 // Lexical sections preserve one private semantic namespace.
 include!("world/storage.rs");
+include!("world/entity_allocator.rs");
 include!("world/world_operations.rs");
 include!("world/snapshot_model.rs");
 include!("world/snapshot_encoding.rs");

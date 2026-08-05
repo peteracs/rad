@@ -314,6 +314,16 @@ the complete candidate rejects with `entity.id_space_exhausted`; allocation
 never panics or wraps. Ordered retired slots and the fresh-space exhaustion bit
 are part of operational checkpoint identity and restoration.
 
+Canonical world and fork decoders prove the issued slot universe as one exact,
+disjoint partition before inserting any entity. Live rows and reusable free
+slots are unique and strictly ascending. Generation entries are unique,
+strictly ascending, nonzero, and range-bound. A slot is retired exactly when
+its stored generation is `u32::MAX` and it is neither live nor free. The live,
+free, and retired cardinalities must cover every issued slot exactly once;
+fresh-space exhaustion is canonical only with `next_id == u32::MAX`. The proof
+uses only transmitted rows and generation entries and never expands the issued
+numeric range.
+
 ## Derived facts
 
 V0 derivations are positive, nonrecursive, and stratified by a finite

@@ -83,13 +83,11 @@ impl VM {
         };
         let mut plans: std::collections::HashMap<String, Plan> = std::collections::HashMap::new();
 
-        // Allocator first, entities second. Every consistent world satisfies
-        // next_id == live + free (every issued id is one or the other), so a
-        // payload whose next_id exceeds what its own tables account for is
-        // malformed — and validating that *before* inserting is what keeps a
-        // hostile id (fuzzer finding: a single entity with id 2^64-1) from
-        // flooding the free-list gap-fill for 60 seconds and then aborting
-        // on u32 overflow.
+        // Allocator first, entities second. Every issued identity belongs to
+        // exactly one of the live, reusable-free, or permanently-retired
+        // sets. Proving that partition before insertion keeps hostile sparse
+        // ids from flooding the free-list gap-fill and rejects duplicate
+        // reusable identities before they can create duplicate ECS rows.
         let allocator =
             Self::decode_validated_transport_entity_allocator(&body, "fork_from_bytes")?;
 

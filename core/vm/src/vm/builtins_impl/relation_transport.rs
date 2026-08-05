@@ -5,6 +5,23 @@ struct TransportEntityAllocator {
     generations: Vec<(u32, u32)>,
 }
 
+impl TransportEntityAllocator {
+    fn validate(
+        self,
+        live_ids: &[u32],
+        operation: &str,
+    ) -> Result<crate::world::ValidatedEntityAllocatorState, String> {
+        crate::world::ValidatedEntityAllocatorState::try_new(
+            self.next_id,
+            self.exhausted,
+            self.free_ids,
+            self.generations,
+            live_ids,
+        )
+        .map_err(|error| format!("{operation}: {error}"))
+    }
+}
+
 impl VM {
     fn append_authoritative_world_transport(
         world: &crate::world::World,
@@ -94,45 +111,37 @@ impl VM {
         })
     }
 
-    /// Validate allocator accounting before entity insertion can materialize
-    /// a hostile sparse identity gap as billions of free-list entries.
+    fn decode_transport_live_entity_ids(
+        body: &serde_json::Value,
+        operation: &str,
+    ) -> Result<Vec<u32>, String> {
+        body.get("entities")
+            .and_then(serde_json::Value::as_array)
+            .ok_or_else(|| format!("{operation}: malformed or missing entity rows"))?
+            .iter()
+            .map(|entity| {
+                let row = entity
+                    .as_array()
+                    .filter(|row| row.len() == 3)
+                    .ok_or_else(|| format!("{operation}: malformed entity entry"))?;
+                row[0]
+                    .as_u64()
+                    .and_then(|id| u32::try_from(id).ok())
+                    .ok_or_else(|| format!("{operation}: entity ID out of range"))
+            })
+            .collect()
+    }
+
+    /// Prove the exact live/free/retired allocator partition before entity
+    /// insertion can materialize a hostile sparse identity gap or duplicate
+    /// a physical ECS row.
     fn decode_validated_transport_entity_allocator(
         body: &serde_json::Value,
         operation: &str,
-    ) -> Result<TransportEntityAllocator, String> {
+    ) -> Result<crate::world::ValidatedEntityAllocatorState, String> {
         let allocator = Self::decode_transport_entity_allocator(body, operation)?;
-        let entities = body["entities"].as_array();
-        let live_count = entities.map_or(0, Vec::len) as u64;
-        let issued_count = if allocator.exhausted {
-            u64::from(u32::MAX) + 1
-        } else {
-            u64::from(allocator.next_id)
-        };
-        let accounted_count = live_count.saturating_add(allocator.free_ids.len() as u64);
-        if issued_count > accounted_count {
-            return Err(format!(
-                "{operation}: allocator claims {issued_count} ids issued but the payload \
-                 accounts for only {accounted_count} ({live_count} live + {} free)",
-                allocator.free_ids.len()
-            ));
-        }
-
-        for entity in entities.into_iter().flatten() {
-            let Some(id) = entity
-                .as_array()
-                .and_then(|parts| parts.first())
-                .and_then(serde_json::Value::as_u64)
-            else {
-                continue;
-            };
-            if id >= issued_count {
-                return Err(format!(
-                    "{operation}: entity id {id} is outside the allocator range \
-                     ({issued_count} ids issued)"
-                ));
-            }
-        }
-        Ok(allocator)
+        let live_ids = Self::decode_transport_live_entity_ids(body, operation)?;
+        allocator.validate(&live_ids, operation)
     }
 
     fn restore_authoritative_world_transport_with_allocator(
@@ -140,18 +149,9 @@ impl VM {
         world: &mut crate::world::World,
         body: &serde_json::Value,
         operation: &str,
-        allocator: TransportEntityAllocator,
+        allocator: crate::world::ValidatedEntityAllocatorState,
     ) -> Result<(), String> {
-        world
-            .set_id_allocator_state(
-                allocator.next_id,
-                allocator.exhausted,
-                allocator.free_ids,
-            )
-            .map_err(|error| format!("{operation}: {error}"))?;
-        world
-            .restore_generation_entries(allocator.generations)
-            .map_err(|error| format!("{operation}: {error}"))?;
+        world.restore_validated_entity_allocator(allocator);
 
         let relations = body
             .get("relations")

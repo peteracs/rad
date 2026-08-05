@@ -79,6 +79,51 @@ mod tests {
     }
 
     #[test]
+    fn spawn_rejects_a_corrupted_live_free_overlap_without_duplicating_storage() {
+        let mut world = World::new();
+        let entity = world.spawn_entity(None);
+        world.free_ids.push(entity);
+        let before_rows = world.archetypes[0].entities.clone();
+
+        assert_eq!(
+            world.try_spawn_entity(None),
+            Err("entity.allocator_live_free_overlap")
+        );
+        assert_eq!(world.free_ids, vec![entity]);
+        assert_eq!(world.all_entity_ids(), vec![entity]);
+        assert_eq!(world.archetypes[0].entities, before_rows);
+    }
+
+    #[test]
+    fn duplicate_free_identity_can_be_allocated_only_once() {
+        let mut world = World::new();
+        let entity = world.spawn_entity(None);
+        assert!(world.destroy_entity(entity));
+        world.free_ids.push(entity);
+
+        assert_eq!(world.try_spawn_entity(None), Ok(entity));
+        assert_eq!(
+            world.try_spawn_entity(None),
+            Err("entity.allocator_live_free_overlap")
+        );
+        assert_eq!(world.all_entity_ids(), vec![entity]);
+        assert_eq!(world.archetypes[0].entities.as_slice(), &[entity]);
+        assert_eq!(world.archetypes[0].entity_row.get(&entity), Some(&0));
+    }
+
+    #[test]
+    fn archetype_rejects_duplicate_physical_entity_rows() {
+        let mut archetype = Archetype::new(Vec::new());
+        assert_eq!(archetype.push_entity(7, HashMap::new()), Ok(()));
+        assert_eq!(
+            archetype.push_entity(7, HashMap::new()),
+            Err("entity.archetype_duplicate")
+        );
+        assert_eq!(archetype.entities.as_slice(), &[7]);
+        assert_eq!(archetype.entity_row.get(&7), Some(&0));
+    }
+
+    #[test]
     fn add_and_get_component() {
         let mut w = World::new();
         let e = w.spawn_entity(Some("hero"));
