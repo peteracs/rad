@@ -90,20 +90,8 @@ impl VM {
         // hostile id (fuzzer finding: a single entity with id 2^64-1) from
         // flooding the free-list gap-fill for 60 seconds and then aborting
         // on u32 overflow.
-        let ents_len = body["entities"].as_array().map_or(0, |a| a.len()) as u64;
-        let allocator = Self::decode_transport_entity_allocator(&body, "fork_from_bytes")?;
-        let next_id_u64 = u64::from(allocator.next_id);
-        if next_id_u64 > ents_len + allocator.free_ids.len() as u64 {
-            return Err(format!(
-                "fork_from_bytes: allocator claims {} ids issued but the payload \
-                 accounts for only {} ({} live + {} free)",
-                next_id_u64,
-                ents_len + allocator.free_ids.len() as u64,
-                ents_len,
-                allocator.free_ids.len()
-            ));
-        }
-        let next_id = allocator.next_id;
+        let allocator =
+            Self::decode_validated_transport_entity_allocator(&body, "fork_from_bytes")?;
 
         let mut w = crate::world::World::new();
         // Seed the program's `indexed` declarations BEFORE inserting rows:
@@ -122,16 +110,9 @@ impl VM {
             let eid_u64 = parts[0]
                 .as_u64()
                 .ok_or("fork_from_bytes: entity without id")?;
-            let eid = u32::try_from(eid_u64)
-                .ok()
-                .filter(|&id| id < next_id)
-                .ok_or_else(|| {
-                    format!(
-                        "fork_from_bytes: entity id {} is outside the allocator \
-                         range (next_id {})",
-                        eid_u64, next_id
-                    )
-                })?;
+            let eid = u32::try_from(eid_u64).map_err(|_| {
+                format!("fork_from_bytes: entity id {eid_u64} is outside the u32 range")
+            })?;
             let name = parts[1].as_str();
             Self::validate_loaded_entity_name("fork_from_bytes", name, &mut seen_names)?;
             let comps_json = parts[2]

@@ -723,6 +723,7 @@ fn fuzz_adversarial_semantic_payloads() {
         ("duplicate_ids", body(format!("{},{}", row("0", "\"a\""), row("0", "\"b\"")), "[]", "1")),
         ("free_alive_id", body(row("0", "\"a\""), "[0]", "1")),
         ("allocator_behind", body(format!("{},{}", row("5", "\"a\""), row("9", "\"b\"")), "[]", "2")),
+        ("sparse_large_id", body(row("2147483648", "\"a\""), "[]", "2147483649")),
         ("u64_max_id", body(row("18446744073709551615", "\"a\""), "[]", "1")),
         ("negative_id", body(row("-1", "\"a\""), "[]", "1")),
         ("float_id", body(row("0.5", "\"a\""), "[]", "1")),
@@ -799,6 +800,23 @@ fn fuzz_adversarial_semantic_payloads() {
         poisons.len(),
         accepted
     );
+}
+
+#[test]
+fn load_world_rejects_sparse_large_entity_id_before_mutation() {
+    let schema = r#"[["Alpha",["n","f","s","b"]],["Counter",["total","tag"]]]"#;
+    let body = format!(
+        r#"{{"entities":[[2147483648,"a",[["Alpha",[1,0.5,"s",true]]]]],"events":[],"entity_allocator":[2147483649,false,[],[]],"relations":null,"resources":[],"schema":{schema},"prov":[]}}"#
+    );
+    let payload = reseal("RADWORLD3", &body);
+    let mut vm = fresh_vm(&format!("{}\nlet _ready = 1", DECLS));
+    let before = vm.attempt_checkpoint_digest().unwrap();
+    let payload = Value::from_string(vm.gc_mut(), payload);
+    let error = vm
+        .call_builtin(Builtin::LoadWorld, vec![payload])
+        .expect_err("sparse allocator gap must reject before insertion");
+    assert!(error.contains("allocator claims"), "got: {error}");
+    assert_eq!(vm.attempt_checkpoint_digest().unwrap(), before);
 }
 
 /// Fuzzing the fuzzer: prove the harness actually detects a panic and

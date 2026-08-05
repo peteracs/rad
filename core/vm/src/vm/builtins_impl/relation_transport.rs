@@ -39,18 +39,6 @@ impl VM {
         Ok(())
     }
 
-    fn restore_authoritative_world_transport(
-        &self,
-        world: &mut crate::world::World,
-        body: &serde_json::Value,
-        operation: &str,
-    ) -> Result<(), String> {
-        let allocator = Self::decode_transport_entity_allocator(body, operation)?;
-        self.restore_authoritative_world_transport_with_allocator(
-            world, body, operation, allocator,
-        )
-    }
-
     fn decode_transport_entity_allocator(
         body: &serde_json::Value,
         operation: &str,
@@ -104,6 +92,47 @@ impl VM {
             free_ids,
             generations,
         })
+    }
+
+    /// Validate allocator accounting before entity insertion can materialize
+    /// a hostile sparse identity gap as billions of free-list entries.
+    fn decode_validated_transport_entity_allocator(
+        body: &serde_json::Value,
+        operation: &str,
+    ) -> Result<TransportEntityAllocator, String> {
+        let allocator = Self::decode_transport_entity_allocator(body, operation)?;
+        let entities = body["entities"].as_array();
+        let live_count = entities.map_or(0, Vec::len) as u64;
+        let issued_count = if allocator.exhausted {
+            u64::from(u32::MAX) + 1
+        } else {
+            u64::from(allocator.next_id)
+        };
+        let accounted_count = live_count.saturating_add(allocator.free_ids.len() as u64);
+        if issued_count > accounted_count {
+            return Err(format!(
+                "{operation}: allocator claims {issued_count} ids issued but the payload \
+                 accounts for only {accounted_count} ({live_count} live + {} free)",
+                allocator.free_ids.len()
+            ));
+        }
+
+        for entity in entities.into_iter().flatten() {
+            let Some(id) = entity
+                .as_array()
+                .and_then(|parts| parts.first())
+                .and_then(serde_json::Value::as_u64)
+            else {
+                continue;
+            };
+            if id >= issued_count {
+                return Err(format!(
+                    "{operation}: entity id {id} is outside the allocator range \
+                     ({issued_count} ids issued)"
+                ));
+            }
+        }
+        Ok(allocator)
     }
 
     fn restore_authoritative_world_transport_with_allocator(

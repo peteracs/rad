@@ -246,6 +246,8 @@ impl VM {
     fn load_world_body(&mut self, body_text: &str) -> Result<Value, String> {
         let body: serde_json::Value = serde_json::from_str(body_text)
             .map_err(|e| format!("load_world(): invalid JSON: {}", e))?;
+        let allocator =
+            Self::decode_validated_transport_entity_allocator(&body, "load_world()")?;
 
         let mut schema: std::collections::HashMap<String, Vec<String>> =
             std::collections::HashMap::new();
@@ -464,7 +466,12 @@ impl VM {
             ));
         }
 
-        self.restore_authoritative_world_transport(&mut target, &body, "load_world()")?;
+        self.restore_authoritative_world_transport_with_allocator(
+            &mut target,
+            &body,
+            "load_world()",
+            allocator,
+        )?;
         self.world = target;
         for (entity, component, kind, summary) in writes {
             self.record_causal_write(entity, &component, kind, summary);
