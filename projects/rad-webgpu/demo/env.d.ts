@@ -28,10 +28,17 @@ interface RadWebGpuDogfoodSnapshot {
   readonly streamId: string;
 }
 
+interface RadWebGpuPixelProof {
+  readonly changedPixels: number;
+  readonly height: number;
+  readonly recordCount: number;
+  readonly width: number;
+}
+
 interface RadWebGpuDogfoodHarness {
+  capture(): Promise<RadWebGpuPixelProof>;
   loseDevice(): void;
   restart(): void;
-  settle(): Promise<void>;
   snapshot(): RadWebGpuDogfoodSnapshot;
 }
 

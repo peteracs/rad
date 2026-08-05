@@ -18,6 +18,14 @@ export interface AvatarRendererOptions {
   readonly maxRecords?: number;
 }
 
+export interface AvatarFrameReadback {
+  readonly width: number;
+  readonly height: number;
+  readonly bytesPerRow: number;
+  readonly format: GPUTextureFormat;
+  readonly pixels: Uint8Array;
+}
+
 interface DeviceResources {
   readonly epoch: number;
   readonly records: GpuBufferMirror;
@@ -25,6 +33,14 @@ interface DeviceResources {
   readonly pipeline: GPURenderPipeline;
   bindGroup: GPUBindGroup | null;
   boundRecords: GPUBuffer | null;
+}
+
+interface ReadbackSubmission {
+  readonly buffer: GPUBuffer;
+  readonly width: number;
+  readonly height: number;
+  readonly bytesPerRow: number;
+  readonly format: GPUTextureFormat;
 }
 
 /** Materializes avatar presentation records without owning simulation state. */
@@ -48,13 +64,52 @@ export class AvatarRenderer {
   }
 
   render(packet: AvatarPresentationPacket): boolean {
+    return this.submit(packet) !== null;
+  }
+
+  /** Renders and copies that exact canvas texture into a bounded CPU-visible buffer. */
+  async readback(
+    packet: AvatarPresentationPacket,
+    maxBytes: number,
+  ): Promise<AvatarFrameReadback | null> {
+    if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0) {
+      throw new Error('webgpu.invalid_readback_limit');
+    }
+    const submission = this.submit(packet, maxBytes);
+    if (!submission) return null;
+    let mapped = false;
+    try {
+      await submission.buffer.mapAsync(GPUMapMode.READ);
+      mapped = true;
+      return Object.freeze({
+        width: submission.width,
+        height: submission.height,
+        bytesPerRow: submission.bytesPerRow,
+        format: submission.format,
+        pixels: new Uint8Array(submission.buffer.getMappedRange()).slice(),
+      });
+    } finally {
+      if (mapped) submission.buffer.unmap();
+      submission.buffer.destroy();
+    }
+  }
+
+  private submit(packet: AvatarPresentationPacket): true | null;
+  private submit(packet: AvatarPresentationPacket, readbackLimit: number): ReadbackSubmission | null;
+  private submit(
+    packet: AvatarPresentationPacket,
+    readbackLimit?: number,
+  ): ReadbackSubmission | true | null {
     if (this.destroyed) throw new Error('webgpu.renderer_destroyed');
     assertSameDescriptor(packet.descriptor, this.descriptor);
     const session = this.host.session;
-    if (!session) return false;
+    if (!session) return null;
+    if (readbackLimit !== undefined && !session.canvasReadbackEnabled) {
+      throw new Error('webgpu.canvas_readback_not_enabled');
+    }
     if (!this.resources || this.resources.epoch !== session.epoch) this.installDevice(session);
     const resources = this.resources;
-    if (!resources) return false;
+    if (!resources) return null;
     if (packet.header.packetKind === 'full' && packet.dirtyRanges !== undefined) {
       throw new Error('presentation.full_packet_has_dirty_ranges');
     }
@@ -68,6 +123,7 @@ export class AvatarRenderer {
       resources.bindGroup = null;
       resources.boundRecords = null;
     }
+    let readback: ReadbackSubmission | null = null;
     try {
       const recordsBuffer = resources.records.upload(packet.records, packet.dirtyRanges);
       if (resources.boundRecords !== recordsBuffer) {
@@ -82,7 +138,8 @@ export class AvatarRenderer {
         resources.boundRecords = recordsBuffer;
       }
 
-      const textureView = session.context.getCurrentTexture().createView();
+      const texture = session.context.getCurrentTexture();
+      const textureView = texture.createView();
       const encoder = session.device.createCommandEncoder({ label: 'RAD avatar frame' });
       const pass = encoder.beginRenderPass({
         label: 'RAD avatar pass',
@@ -99,10 +156,14 @@ export class AvatarRenderer {
         pass.draw(6, packet.header.count);
       }
       pass.end();
+      readback = readbackLimit === undefined
+        ? null
+        : createReadbackSubmission(session, texture, encoder, readbackLimit);
       session.device.queue.submit([encoder.finish()]);
       this.lineage.commit(packet.header);
-      return true;
+      return readback ?? true;
     } catch (error) {
+      readback?.buffer.destroy();
       resources.records.destroy();
       resources.bindGroup = null;
       resources.boundRecords = null;
@@ -249,6 +310,51 @@ fn fragment_main(input: VertexOutput) -> @location(0) vec4<f32> {
   return vec4(input.color, 1.0);
 }
 `;
+}
+
+function createReadbackSubmission(
+  session: WebGpuDeviceSession,
+  texture: GPUTexture,
+  encoder: GPUCommandEncoder,
+  maxBytes: number,
+): ReadbackSubmission {
+  if (!session.canvasReadbackEnabled) throw new Error('webgpu.canvas_readback_not_enabled');
+  const width = Number(texture.width);
+  const height = Number(texture.height);
+  const unpaddedBytesPerRow = checkedProduct(width, 4, 'readback_row');
+  const bytesPerRow = alignTo(unpaddedBytesPerRow, 256);
+  const byteLength = checkedProduct(bytesPerRow, height, 'readback_size');
+  if (byteLength > maxBytes || byteLength > Number(session.device.limits.maxBufferSize)) {
+    throw new Error('webgpu.readback_limit_exceeded');
+  }
+  const buffer = session.device.createBuffer({
+    label: 'RAD avatar frame readback',
+    size: byteLength,
+    usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
+  });
+  try {
+    encoder.copyTextureToBuffer(
+      { texture },
+      { buffer, bytesPerRow, rowsPerImage: height },
+      { width, height, depthOrArrayLayers: 1 },
+    );
+    return { buffer, width, height, bytesPerRow, format: session.format };
+  } catch (error) {
+    buffer.destroy();
+    throw error;
+  }
+}
+
+function checkedProduct(left: number, right: number, name: string): number {
+  const product = left * right;
+  if (!Number.isSafeInteger(product) || product <= 0) {
+    throw new Error(`webgpu.invalid_${name}`);
+  }
+  return product;
+}
+
+function alignTo(value: number, alignment: number): number {
+  return Math.ceil(value / alignment) * alignment;
 }
 
 function assertSameDescriptor(

@@ -1,30 +1,29 @@
 import { expect, test } from '@playwright/test';
-import { PNG } from 'pngjs';
 
 test('renders pixels across resize, session restart, and device recovery', async ({ page }) => {
   await page.goto('/');
   const status = page.locator('#status');
   await expect(status).toHaveAttribute('data-kind', 'ok', { timeout: 30_000 });
   const canvas = page.locator('#viewport');
-  await settlePresentation(page);
+  const initialPixels = await capturePresentation(page);
+  expect(initialPixels.recordCount).toBeGreaterThan(0);
+  expect(initialPixels.changedPixels).toBeGreaterThan(200);
   const ready = await snapshot(page);
-  expect(ready.recordCount).toBeGreaterThan(0);
   expect(ready.errors).toEqual([]);
-  await expectVisibleAvatarPixels(canvas);
 
   const initial = ready;
   await canvas.evaluate((element) => { element.style.width = '520px'; });
   await expect.poll(async () => (await snapshot(page)).canvasWidth).not.toBe(initial.canvasWidth);
-  await settlePresentation(page);
-  await expectVisibleAvatarPixels(canvas);
+  const resizedPixels = await capturePresentation(page);
+  expect(resizedPixels.width).not.toBe(initialPixels.width);
+  expect(resizedPixels.changedPixels).toBeGreaterThan(200);
 
   await page.evaluate(() => globalThis.__radWebGpuDogfood?.restart());
   await expect.poll(async () => BigInt((await snapshot(page)).streamId)).toBeGreaterThan(
     BigInt(initial.streamId),
   );
   await expect(status).toHaveAttribute('data-kind', 'ok');
-  await settlePresentation(page);
-  await expectVisibleAvatarPixels(canvas);
+  expect((await capturePresentation(page)).changedPixels).toBeGreaterThan(200);
   expect((await snapshot(page)).errors).toEqual([]);
 
   const beforeLoss = await snapshot(page);
@@ -33,33 +32,11 @@ test('renders pixels across resize, session restart, and device recovery', async
     beforeLoss.deviceEpoch,
   );
   await expect(status).toHaveAttribute('data-kind', 'ok');
-  await settlePresentation(page);
-  await expectVisibleAvatarPixels(canvas);
+  expect((await capturePresentation(page)).changedPixels).toBeGreaterThan(200);
   const recovered = await snapshot(page);
   expect(recovered.errors.length).toBeGreaterThanOrEqual(1);
   expect(recovered.errors.every((error) => error.startsWith('webgpu.device_lost:'))).toBe(true);
 });
-
-async function expectVisibleAvatarPixels(canvas: import('@playwright/test').Locator): Promise<void> {
-  const png = PNG.sync.read(await canvas.screenshot());
-  const reference = pixelAt(png, 8, 8);
-  let changed = 0;
-  for (let y = 8; y < png.height - 8; y += 1) {
-    for (let x = 8; x < png.width - 8; x += 1) {
-      const pixel = pixelAt(png, x, y);
-      const distance = Math.abs(pixel[0] - reference[0])
-        + Math.abs(pixel[1] - reference[1])
-        + Math.abs(pixel[2] - reference[2]);
-      if (distance > 60) changed += 1;
-    }
-  }
-  expect(changed).toBeGreaterThan(200);
-}
-
-function pixelAt(png: PNG, x: number, y: number): readonly [number, number, number] {
-  const offset = (y * png.width + x) * 4;
-  return [png.data[offset] ?? 0, png.data[offset + 1] ?? 0, png.data[offset + 2] ?? 0];
-}
 
 async function snapshot(page: import('@playwright/test').Page) {
   const value = await page.evaluate(() => globalThis.__radWebGpuDogfood?.snapshot());
@@ -67,6 +44,8 @@ async function snapshot(page: import('@playwright/test').Page) {
   return value;
 }
 
-async function settlePresentation(page: import('@playwright/test').Page): Promise<void> {
-  await page.evaluate(() => globalThis.__radWebGpuDogfood?.settle());
+async function capturePresentation(page: import('@playwright/test').Page) {
+  const proof = await page.evaluate(() => globalThis.__radWebGpuDogfood?.capture());
+  if (!proof) throw new Error('RAD WebGPU pixel proof is unavailable');
+  return proof;
 }

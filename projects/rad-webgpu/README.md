@@ -41,3 +41,5 @@ host cannot be resurrected by an in-flight request.
 
 `npm run test:browser` runs the real Chromium/SwiftShader pixel, resize,
 session-restart, and device-recovery smoke after the WASM package is built.
+It uses an opt-in, explicitly bounded GPU texture readback; ordinary hosts keep
+the minimal render-attachment-only canvas usage.
