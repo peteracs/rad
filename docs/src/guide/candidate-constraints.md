@@ -55,6 +55,27 @@ constraint ForwardOnly for Position(subject, proposed) {
 A constraint cannot read another entity. It cannot observe another
 constraint's outcome.
 
+When an RFC-0003 relation program is installed, constraints can test one
+exact authoritative or derived tuple in either immutable world:
+
+```rad
+constraint MovementPermission for Position(subject, proposed) {
+    require !candidate_fact("game::inventory::Encumbered", [subject])
+        else "movement.encumbered"
+}
+```
+
+- `base_fact("module::Relation", [tuple...])` observes pre-settlement truth.
+- `candidate_fact("module::Relation", [tuple...])` observes the complete
+  authoritative candidate and its fully recomputed derived facts.
+
+The relation identity and tuple container are static literals in v0. The
+runtime validates exact arity and value types against the immutable relation
+manifest, canonicalizes symmetric tuples, and charges the lookup before it
+runs. Relation fact reads currently fail closed in sandbox guests until the
+relation capability-label grant is part of the public sandbox profile; this
+prevents a hidden proof from becoming a boolean side channel.
+
 ## Watched components
 
 Cross-component invariants declare their same-entity trigger dependencies:

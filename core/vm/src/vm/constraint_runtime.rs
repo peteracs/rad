@@ -29,6 +29,7 @@ enum NativeProofClass {
     Replace,
     TextScan,
     TypeName,
+    FactLookup,
 }
 
 #[derive(Clone, Copy, Debug)]

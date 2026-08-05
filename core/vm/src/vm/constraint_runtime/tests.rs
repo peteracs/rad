@@ -19,6 +19,7 @@ mod resource_contract_tests {
     fn constraint_native_whitelist_is_closed_and_enumerated() {
         let expected = BTreeSet::from([
             "abs",
+            "base_fact",
             "bitset_clear",
             "bitset_has",
             "bitset_new",
@@ -26,6 +27,7 @@ mod resource_contract_tests {
             "byte_at",
             "byte_len",
             "ceil",
+            "candidate_fact",
             "chr",
             "clamp",
             "ctz",
@@ -191,7 +193,9 @@ mod resource_contract_tests {
             .filter(|contract| {
                 !matches!(
                     contract.proof_class,
-                    NativeProofClass::Fixed | NativeProofClass::TextScan
+                    NativeProofClass::Fixed
+                        | NativeProofClass::TextScan
+                        | NativeProofClass::FactLookup
                 )
             })
             .map(|contract| contract.builtin.name())

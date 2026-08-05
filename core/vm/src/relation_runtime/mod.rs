@@ -24,6 +24,7 @@ pub use store::{
 pub use transaction_profile::{
     BoundedRelationTransaction, BoundedRelationTransactionBuilder, RelationTransactionProfile,
 };
+pub(crate) use value::canonical_fact_key;
 pub use value::{
     EntityOperand, EntityRef, FactKey, FactValue, OperationMetadata, RelationRuntimeError,
     RelationRuntimeResult,

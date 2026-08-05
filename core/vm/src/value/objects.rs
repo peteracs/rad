@@ -524,4 +524,6 @@ pub enum Builtin {
     All,
     DropFirst,
     RecentEvents,
+    BaseFact,
+    CandidateFact,
 }

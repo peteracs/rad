@@ -16,6 +16,8 @@ macro_rules! native_contracts {
 // Adding a constraint-safe native therefore requires a named proof class and
 // makes the boundary/peak/work suite fail until that class supplies cases.
 native_contracts!(
+    (BaseFact, "relation.fact-lookup.v1", FactLookup),
+    (CandidateFact, "relation.fact-lookup.v1", FactLookup),
     (Filled, "filled.v1", Filled),
     (Range, "range.checked-plan.v2", Range),
     (BitsetNew, "bitset.fixed.v1", Fixed),
@@ -115,6 +117,28 @@ pub(crate) fn builtin_resource_charge(
     let fixed = || sized(1, object.saturating_add(128));
 
     let charge = match builtin {
+        Builtin::BaseFact | Builtin::CandidateFact => {
+            let relation_bytes = text_len(0).unwrap_or(0);
+            let count = list_len(1).unwrap_or(0);
+            let tuple_text_bytes = args
+                .get(1)
+                .and_then(Value::as_list)
+                .map(|values| {
+                    values
+                        .iter()
+                        .filter_map(Value::as_str)
+                        .map(str::len)
+                        .fold(0usize, usize::saturating_add)
+                })
+                .unwrap_or(0);
+            let copied_bytes = relation_bytes.saturating_add(tuple_text_bytes);
+            sized(
+                count.saturating_add(copied_bytes).max(1),
+                values(count)
+                    .saturating_add(copied_bytes.saturating_mul(2))
+                    .saturating_add(object),
+            )
+        }
         Builtin::Filled => {
             let count = count_arg(0).unwrap_or(0);
             sized(count.max(1), values(count))

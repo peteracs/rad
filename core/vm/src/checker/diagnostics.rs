@@ -206,6 +206,8 @@ pub(super) fn is_readonly_builtin(name: &str) -> bool {
             | "get_entity"
             | "require_entity"
             | "recent_events"
+            | "base_fact"
+            | "candidate_fact"
     )
 }
 

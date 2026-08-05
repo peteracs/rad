@@ -10,6 +10,18 @@ All notable changes to the Rad language are documented here.
 
 ### Added
 
+- **Candidate constraints can now inspect exact authoritative and derived
+  relation tuples.** Constraint-only `base_fact()` and `candidate_fact()`
+  reads validate module-qualified identities and exact tuple shape against the
+  immutable relation manifest, share canonical symmetry/type normalization
+  with writes and derivation, and receive deterministic native work/heap
+  pricing. The candidate form observes derived facts recomputed from the
+  complete component/relation/lifecycle candidate before validation. Relation
+  reads fail closed in sandbox guests until relation capability-label grants
+  can prevent hidden-proof boolean side channels. Ownership/weight/capacity
+  dogfood now derives `Encumbered` and atomically rejects movement without
+  changing the world.
+
 - **RFC-0003 authoritative facts now produce bounded derived reality in the
   production world.** Checker-sealed typed rule plans are retained by the
   immutable runtime manifest and evaluated in canonical nonrecursive

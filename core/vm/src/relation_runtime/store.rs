@@ -1,11 +1,11 @@
-use crate::relation_frontend::{OnDelete, RelationKind, RelationSchema};
+use crate::relation_frontend::{OnDelete, RelationSchema};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use super::{
-    CandidateEntityState, EntityRef, FactKey, FactValue, OperationMetadata, PendingDespawn,
-    PendingRelationOperation, RelationCandidate, RelationRuntimeError, RelationRuntimeManifest,
-    RelationRuntimeResult, RelationTransaction,
+    canonical_fact_key, CandidateEntityState, EntityRef, FactKey, FactValue, OperationMetadata,
+    PendingDespawn, PendingRelationOperation, RelationCandidate, RelationRuntimeError,
+    RelationRuntimeManifest, RelationRuntimeResult, RelationTransaction,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -360,7 +360,7 @@ impl AuthoritativeRelationState {
                 };
                 RelationRuntimeError::new(code, key.relation.clone())
             })?;
-        canonical_key(schema.schema(), key)
+        canonical_fact_key(schema.schema(), key)
     }
 
     fn apply_explicit_operations(
@@ -406,7 +406,7 @@ impl AuthoritativeRelationState {
                         .iter()
                         .map(|value| value.resolve(handles))
                         .collect::<RelationRuntimeResult<Vec<_>>>()?;
-                    let target = canonical_key(
+                    let target = canonical_fact_key(
                         schema.schema(),
                         FactKey::new(
                             relation,
@@ -554,33 +554,6 @@ fn build_unique_indexes(
         }
     }
     Ok(indexes)
-}
-
-fn canonical_key(schema: &RelationSchema, mut key: FactKey) -> RelationRuntimeResult<FactKey> {
-    if schema.kind != RelationKind::Authoritative {
-        return Err(RelationRuntimeError::new(
-            "relation.operation_targets_derived",
-            schema.identity.clone(),
-        ));
-    }
-    if key.tuple.len() != schema.columns.len() {
-        return Err(RelationRuntimeError::new(
-            "relation.arity",
-            schema.identity.clone(),
-        ));
-    }
-    for (value, column) in key.tuple.iter().zip(&schema.columns) {
-        if value.relation_type() != column.value_type {
-            return Err(RelationRuntimeError::new(
-                "relation.type_mismatch",
-                format!("{}::{}", schema.identity, column.name),
-            ));
-        }
-    }
-    if schema.symmetric && key.tuple[1] < key.tuple[0] {
-        key.tuple.swap(0, 1);
-    }
-    Ok(key)
 }
 
 fn unique_columns(schema: &RelationSchema, name: &str) -> RelationRuntimeResult<Vec<usize>> {

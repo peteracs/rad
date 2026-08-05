@@ -482,33 +482,19 @@ fn build_head(
             }),
         })
         .collect::<DerivationResult<Vec<_>>>()?;
-    canonical_fact(
-        schemas
-            .get(&rule.typed_plan().head_relation)
-            .copied()
-            .ok_or_else(|| {
-                DerivationError::new("derivation.invalid_sealed_rule", "unknown head schema")
-            })?,
-        tuple,
-    )
-}
-
-fn canonical_fact(schema: &RelationSchema, mut tuple: Vec<FactValue>) -> DerivationResult<FactKey> {
-    if tuple.len() != schema.columns.len()
-        || tuple
-            .iter()
-            .zip(&schema.columns)
-            .any(|(value, column)| value.relation_type() != column.value_type)
-    {
-        return Err(DerivationError::new(
-            "derivation.invalid_sealed_rule",
-            "head does not match its inferred schema",
-        ));
-    }
-    if schema.symmetric && tuple[1] < tuple[0] {
-        tuple.swap(0, 1);
-    }
-    Ok(FactKey::new(&schema.identity, tuple))
+    let schema = schemas
+        .get(&rule.typed_plan().head_relation)
+        .copied()
+        .ok_or_else(|| {
+            DerivationError::new("derivation.invalid_sealed_rule", "unknown head schema")
+        })?;
+    crate::relation_runtime::canonical_fact_key(schema, FactKey::new(&schema.identity, tuple))
+        .map_err(|error| {
+            DerivationError::new(
+                "derivation.invalid_sealed_rule",
+                format!("head does not match its inferred schema: {}", error.detail),
+            )
+        })
 }
 
 fn literal_value(value: &Literal) -> FactValue {

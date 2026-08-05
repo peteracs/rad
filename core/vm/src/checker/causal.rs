@@ -488,6 +488,9 @@ impl Checker {
         args: &[Expr],
         span: &Span,
     ) -> Option<Ty> {
+        if matches!(read_kind, "base_fact" | "candidate_fact") {
+            return self.check_constraint_fact_read_call(read_kind, args, span);
+        }
         if read_kind != "base" && read_kind != "candidate" {
             return None;
         }
@@ -556,6 +559,53 @@ impl Checker {
             );
         }
         Some(Ty::Component(component))
+    }
+
+    fn check_constraint_fact_read_call(
+        &mut self,
+        read_kind: &str,
+        args: &[Expr],
+        span: &Span,
+    ) -> Option<Ty> {
+        if !matches!(
+            self.scopes.last().map(|scope| &scope.causal_context),
+            Some(CausalContext::Constraint { .. })
+        ) {
+            self.error(
+                span,
+                format!("`{read_kind}` is only valid inside a constraint"),
+                None,
+            );
+        }
+        if args.len() != 2 {
+            self.error(
+                span,
+                format!("`{read_kind}` expects (\"module::Relation\", [tuple values])"),
+                None,
+            );
+            for arg in args {
+                self.check_expr(arg);
+            }
+            return Some(Ty::Bool);
+        }
+        match &args[0] {
+            Expr::StrLit(identity, _) if !identity.is_empty() && identity.contains("::") => {}
+            _ => self.error(
+                args[0].span(),
+                format!("`{read_kind}` requires a module-qualified relation string literal"),
+                Some("Use a sealed identity such as \"game::rules::Encumbered\"".into()),
+            ),
+        }
+        if !matches!(&args[1], Expr::ListLit(..)) {
+            self.error(
+                args[1].span(),
+                format!("`{read_kind}` requires a tuple list literal"),
+                Some("Tuple shape is validated against the installed relation manifest".into()),
+            );
+        }
+        self.check_expr(&args[0]);
+        self.check_expr(&args[1]);
+        Some(Ty::Bool)
     }
 
     pub(super) fn check_settle_stmt(&mut self, stmt: &SettleStmt) {

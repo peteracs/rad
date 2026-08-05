@@ -226,6 +226,8 @@ impl Builtin {
             "fork_from_bytes" => Some(Builtin::ForkFromBytes),
             "fork_delta" => Some(Builtin::ForkDelta),
             "fork_apply" => Some(Builtin::ForkApply),
+            "base_fact" => Some(Builtin::BaseFact),
+            "candidate_fact" => Some(Builtin::CandidateFact),
             _ => None,
         }
     }
@@ -277,6 +279,8 @@ impl Builtin {
             Builtin::Keys => Ty::List(Box::new(Ty::Any)),
             Builtin::Contains
             | Builtin::Has
+            | Builtin::BaseFact
+            | Builtin::CandidateFact
             | Builtin::Remove
             | Builtin::Despawn
             | Builtin::StartsWith

@@ -1,7 +1,9 @@
 
 
 impl Builtin {
-    pub const ALL: [Builtin; 220] = [
+    pub const ALL: [Builtin; 222] = [
+        Builtin::BaseFact,
+        Builtin::CandidateFact,
         Builtin::GetOr,
         Builtin::Clamp,
         Builtin::IndexOf,
@@ -446,6 +448,8 @@ impl Builtin {
             Builtin::ForkFromBytes => "fork_from_bytes",
             Builtin::ForkDelta => "fork_delta",
             Builtin::ForkApply => "fork_apply",
+            Builtin::BaseFact => "base_fact",
+            Builtin::CandidateFact => "candidate_fact",
         }
     }
 }

@@ -422,6 +422,14 @@ authoritative and derived relation facts. Derivation itself reads relations
 only. A constraint cannot observe partially maintained indexes or another
 constraint's result.
 
+The production v0 bridge exposes exact tuple membership as
+`base_fact("module::Relation", [tuple...])` and
+`candidate_fact("module::Relation", [tuple...])`. Both are constraint-only,
+read-only, manifest-validated, canonically metered operations. The latter
+reads the derived state recomputed from the complete authoritative candidate,
+never a partially updated proof index. Sandboxed relation reads fail closed
+until capability-label grants can preserve the same noninterference contract.
+
 Any derivation error or resource exceed rejects before adoption and leaves the
 world, relation store, derived indexes, provenance, events, output, RNG, and
 tasks unchanged.

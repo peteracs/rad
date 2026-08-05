@@ -83,6 +83,8 @@ impl VM {
         args: Vec<Value>,
     ) -> Result<Value, String> {
         match builtin {
+            Builtin::BaseFact => self.bi_constraint_fact(args, false),
+            Builtin::CandidateFact => self.bi_constraint_fact(args, true),
             Builtin::Print => self.bi_print(args),
             Builtin::Len => bi_len(&mut self.gc, args),
             Builtin::TypeOf => bi_typeof(&mut self.gc, args),

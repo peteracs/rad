@@ -15,6 +15,9 @@ use std::sync::Arc;
 // Lexical sections preserve one private semantic namespace.
 include!("settlement/model.rs");
 include!("settlement/candidate.rs");
+include!("settlement/fact_reads.rs");
 include!("settlement/commit.rs");
 #[cfg(test)]
 include!("settlement/relation_tests.rs");
+#[cfg(test)]
+include!("settlement/fact_read_tests.rs");

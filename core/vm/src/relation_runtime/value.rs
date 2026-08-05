@@ -73,6 +73,35 @@ impl FactKey {
     }
 }
 
+/// Validate and canonicalize one fact tuple against its sealed schema.
+///
+/// Relation kind is deliberately not checked here: authoritative writes,
+/// derived evaluation, and immutable fact reads have different kind policies,
+/// but must share the exact arity/type/symmetry normalization contract.
+pub(crate) fn canonical_fact_key(
+    schema: &crate::relation_frontend::RelationSchema,
+    mut key: FactKey,
+) -> RelationRuntimeResult<FactKey> {
+    if key.tuple.len() != schema.columns.len() {
+        return Err(RelationRuntimeError::new(
+            "relation.arity",
+            schema.identity.clone(),
+        ));
+    }
+    for (value, column) in key.tuple.iter().zip(&schema.columns) {
+        if value.relation_type() != column.value_type {
+            return Err(RelationRuntimeError::new(
+                "relation.type_mismatch",
+                format!("{}::{}", schema.identity, column.name),
+            ));
+        }
+    }
+    if schema.symmetric && key.tuple[1] < key.tuple[0] {
+        key.tuple.swap(0, 1);
+    }
+    Ok(key)
+}
+
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct OperationMetadata {
     pub causes: BTreeSet<String>,

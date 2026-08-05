@@ -7,6 +7,24 @@ impl WorldSnapshot {
         &self.authoritative_relations
     }
 
+    pub(crate) fn derived_relation_state(
+        &self,
+    ) -> &crate::relation_derivation::DerivedRelationState {
+        &self.derived_relations
+    }
+
+    pub(crate) fn entity_ref(
+        &self,
+        entity: u32,
+    ) -> Option<crate::relation_runtime::EntityRef> {
+        self.entity_archetype
+            .contains_key(&entity)
+            .then(|| crate::relation_runtime::EntityRef {
+                slot: entity,
+                generation: self.generations.get(&entity).copied().unwrap_or(0),
+            })
+    }
+
     /// Encode the complete operational world state in one deterministic
     /// inventory. Unlike [`WorldSnapshot::snapshot_json_like`], this is not a
     /// presentation format: it includes allocator/type state, exact storage

@@ -55,6 +55,29 @@ constraint WorldBounds for Position(subject, proposed) {
 }
 
 #[test]
+fn relation_fact_reads_are_constraint_only_and_statically_shaped() {
+    let errors = check_causal_source(
+        r#"
+fn outside() { candidate_fact("game::facts::Marker", [1]) }
+component Position { x: int = 0 }
+constraint InvalidFactRead for Position(subject, proposed) {
+    let relation = "game::facts::Marker"
+    require base_fact(relation, proposed) else "fact.invalid"
+}
+"#,
+    );
+    assert!(errors
+        .iter()
+        .any(|error| error.message.contains("only valid inside a constraint")));
+    assert!(errors.iter().any(|error| error
+        .message
+        .contains("module-qualified relation string literal")));
+    assert!(errors
+        .iter()
+        .any(|error| error.message.contains("tuple list literal")));
+}
+
+#[test]
 fn break_and_continue_cannot_escape_to_a_loop_outside_settlement() {
     let errors = check_causal_source(
         r#"
