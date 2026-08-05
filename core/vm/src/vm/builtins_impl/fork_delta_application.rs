@@ -1,4 +1,94 @@
+struct ValidatedForkDeltaEntityPlan {
+    allocator: crate::world::ValidatedEntityAllocatorState,
+    despawns: Vec<u32>,
+    upserts: Vec<u32>,
+    final_live_ids: Vec<u32>,
+}
+
 impl VM {
+    fn decode_fork_delta_entity_plan(
+        base: &crate::world::WorldSnapshot,
+        body: &serde_json::Value,
+    ) -> Result<ValidatedForkDeltaEntityPlan, String> {
+        fn ordered_id(
+            value: &serde_json::Value,
+            previous: &mut Option<u32>,
+            kind: &str,
+        ) -> Result<u32, String> {
+            let id = value
+                .as_u64()
+                .and_then(|number| u32::try_from(number).ok())
+                .ok_or_else(|| format!("fork_apply: {kind} entity ID out of range"))?;
+            if let Some(previous) = *previous {
+                if id == previous {
+                    return Err(format!("fork_apply: duplicate {kind} entity ID {id}"));
+                }
+                if id < previous {
+                    return Err(format!(
+                        "fork_apply: {kind} entity IDs are not strictly ascending"
+                    ));
+                }
+            }
+            *previous = Some(id);
+            Ok(id)
+        }
+
+        let mut final_live = base
+            .sorted_entity_ids()
+            .into_iter()
+            .collect::<std::collections::BTreeSet<_>>();
+        let despawn_rows = body
+            .get("despawns")
+            .and_then(serde_json::Value::as_array)
+            .ok_or("fork_apply: malformed or missing despawn list")?;
+        let mut despawns = Vec::with_capacity(despawn_rows.len());
+        let mut previous = None;
+        for value in despawn_rows {
+            let id = ordered_id(value, &mut previous, "despawn")?;
+            if !final_live.remove(&id) {
+                return Err(format!(
+                    "fork_apply: delta despawns entity {id} which the base does not have"
+                ));
+            }
+            despawns.push(id);
+        }
+
+        let upsert_rows = body
+            .get("upserts")
+            .and_then(serde_json::Value::as_array)
+            .ok_or("fork_apply: malformed or missing upsert list")?;
+        let despawn_set = despawns
+            .iter()
+            .copied()
+            .collect::<std::collections::BTreeSet<_>>();
+        let mut upserts = Vec::with_capacity(upsert_rows.len());
+        let mut previous = None;
+        for value in upsert_rows {
+            let row = value
+                .as_array()
+                .filter(|row| row.len() == 3)
+                .ok_or("fork_apply: malformed upsert entry")?;
+            let id = ordered_id(&row[0], &mut previous, "upsert")?;
+            if despawn_set.contains(&id) {
+                return Err(format!(
+                    "fork_apply: entity {id} cannot be both despawned and upserted"
+                ));
+            }
+            final_live.insert(id);
+            upserts.push(id);
+        }
+
+        let final_live_ids = final_live.into_iter().collect::<Vec<_>>();
+        let allocator = Self::decode_transport_entity_allocator(body, "fork_apply")?
+            .validate(&final_live_ids, "fork_apply")?;
+        Ok(ValidatedForkDeltaEntityPlan {
+            allocator,
+            despawns,
+            upserts,
+            final_live_ids,
+        })
+    }
+
     fn apply_fork_delta(
         &mut self,
         base: &std::sync::Arc<crate::world::WorldSnapshot>,
@@ -72,6 +162,12 @@ impl VM {
             }
         }
 
+        // Validate the complete final allocator partition before reconstructing
+        // any row. Final upserts cannot price identity history: a fork may
+        // allocate and destroy an entity without retaining an upsert. The
+        // transported live/free/retired partition is the exact authority.
+        let entity_plan = Self::decode_fork_delta_entity_plan(base, &body)?;
+
         // Schema of shipped types only.
         let mut schema: std::collections::HashMap<String, Vec<String>> =
             std::collections::HashMap::new();
@@ -126,45 +222,12 @@ impl VM {
         };
         let mut plans: std::collections::HashMap<String, Plan> = std::collections::HashMap::new();
 
-        // Allocator first, mutations second: each upsert can issue at most
-        // one fresh id past the (trusted, local) base allocator, so the
-        // delta's next_id is bounded by base + upsert count and every
-        // shipped id must sit under it. Validating here — before any
-        // insert — is what keeps a hostile id from flooding the free-list
-        // gap-fill or overflowing the allocator (fuzzer finding).
-        let upserts_len = body["upserts"].as_array().map_or(0, |a| a.len()) as u64;
-        let allocator = Self::decode_transport_entity_allocator(&body, "fork_apply")?;
-        let next_id_u64 = u64::from(allocator.next_id);
-        if next_id_u64 > base.next_id as u64 + upserts_len {
-            return Err(format!(
-                "fork_apply: delta allocator claims {} ids but base {} + {} \
-                 upserts can issue at most {}",
-                next_id_u64,
-                base.next_id,
-                upserts_len,
-                base.next_id as u64 + upserts_len
-            ));
-        }
-        let next_id = allocator.next_id;
-
         // CoW restore of the local base: untouched columns stay shared with
         // it, which is what keeps the later merge O(divergence).
         let mut w = crate::world::World::new();
         w.restore((**base).clone());
 
-        for d in body["despawns"].as_array().into_iter().flatten() {
-            // try_from, not `as`: a truncating cast would silently despawn
-            // whatever entity the low 32 bits happen to name.
-            let eid = d
-                .as_u64()
-                .and_then(|n| u32::try_from(n).ok())
-                .ok_or("fork_apply: malformed despawn id")?;
-            if !w.contains_entity(eid) {
-                return Err(format!(
-                    "fork_apply: delta despawns entity {} which the base does not have",
-                    eid
-                ));
-            }
+        for &eid in &entity_plan.despawns {
             if !w.destroy_entity_storage(eid) {
                 return Err(format!(
                     "fork_apply: failed to remove entity {eid} from the candidate"
@@ -172,22 +235,16 @@ impl VM {
             }
         }
 
-        for ent in body["upserts"].as_array().into_iter().flatten() {
+        for (ent, &eid) in body["upserts"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .zip(&entity_plan.upserts)
+        {
             let parts = ent
                 .as_array()
                 .filter(|a| a.len() == 3)
                 .ok_or("fork_apply: malformed upsert entry")?;
-            let eid_u64 = parts[0].as_u64().ok_or("fork_apply: upsert without id")?;
-            let eid = u32::try_from(eid_u64)
-                .ok()
-                .filter(|&id| id < next_id)
-                .ok_or_else(|| {
-                    format!(
-                        "fork_apply: upsert id {} is outside the allocator \
-                         range (next_id {})",
-                        eid_u64, next_id
-                    )
-                })?;
             let name = parts[1].as_str();
             let comps_json = parts[2]
                 .as_array()
@@ -272,7 +329,7 @@ impl VM {
                         w.add_component(eid, data);
                     }
                 }
-            } else if let Err(error) = w.insert_entity_with_components(eid, name, comps) {
+            } else if let Err(error) = w.restore_entity_with_components(eid, name, comps) {
                 return Err(format!("fork_apply: {error}"));
             }
         }
@@ -472,12 +529,16 @@ impl VM {
             w.set_resource(rname, row);
         }
 
-        let allocator = allocator.validate(&w.all_entity_ids(), "fork_apply")?;
+        if w.all_entity_ids() != entity_plan.final_live_ids {
+            return Err(
+                "fork_apply: reconstructed entity set differs from validated plan".to_string(),
+            );
+        }
         self.restore_authoritative_world_transport_with_allocator(
             &mut w,
             &body,
             "fork_apply",
-            allocator,
+            entity_plan.allocator,
         )?;
 
         let mut events: Vec<(String, Value, u64)> = Vec::new();

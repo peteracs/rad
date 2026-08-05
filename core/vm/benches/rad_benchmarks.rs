@@ -151,6 +151,11 @@ fn bench_entity_allocator_churn(c: &mut Criterion) {
     let mut group = c.benchmark_group("world/entity_allocator/reuse");
     group.sample_size(10);
     for count in [1_000usize, 10_000] {
+        // Setup is excluded by `iter_batched`: it creates `count` generation-0
+        // identities and destroys them in reverse order. Each measured
+        // iteration then consumes the complete reusable set in canonical
+        // ascending-ID order; no retired identities are present (canonical
+        // worlds remove those at destruction, so they cannot be rescanned).
         group.throughput(Throughput::Elements(count as u64));
         group.bench_with_input(BenchmarkId::from_parameter(count), &count, |b, &count| {
             b.iter_batched(

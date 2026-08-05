@@ -10,6 +10,16 @@ All notable changes to the Rad language are documented here.
 
 ### Added
 
+- **Fork deltas now validate the exact final entity partition, including
+  transient allocation histories.** A fork may spawn and despawn identities
+  without leaving final upsert rows, so delta admission derives the final live
+  set from the base, canonical despawns, and canonical upserts, then validates
+  the transported live/free/retired allocator partition before decoding any
+  row. The old `base cursor + upsert count` heuristic is gone. Single and
+  multiple transient spawns, reuse/generation advance followed by despawn,
+  malformed-partition atomicity, safe host API sealing, and multi-spawn
+  exhaustion rollback are permanent regressions.
+
 - **Frankl dogfood now proves bounded join-generator and projected-quotient
   theorem classes.** Incidence columns compile a `g`-generator family into a
   Boolean-cube quotient. An exact all-width scan proves Frankl for at most

@@ -218,24 +218,9 @@ impl World {
         Ok(())
     }
 
-    /// Insert a fresh entity with all of its components in **one archetype
-    /// hop** — the bulk path for world reconstruction (wire decode, merge,
-    /// load). The incremental path (`insert_entity_with_id` + N×
-    /// `add_component`) costs N archetype migrations, each copying every
-    /// already-attached row; this costs one row push.
-    pub(crate) fn insert_entity_with_components(
-        &mut self,
-        eid: u32,
-        name: Option<&str>,
-        components: Vec<ComponentData>,
-    ) -> Result<(), EntityAllocationError> {
-        self.claim_explicit_entity_id(eid)?;
-        self.insert_entity_components_storage(eid, name, components)
-    }
-
-    /// Reconstruct one already-validated transport row without inferring the
-    /// allocator from its numeric ID. The sealed allocator partition is
-    /// installed atomically after every row has been decoded.
+    /// Reconstruct one already-validated transport row in one archetype hop,
+    /// without inferring allocator history from its numeric ID. The sealed
+    /// allocator partition is installed after every row has been decoded.
     pub(crate) fn restore_entity_with_components(
         &mut self,
         eid: u32,
@@ -661,7 +646,7 @@ impl World {
 
     /// Share another world's index *declarations* (cheap Arc clone, no
     /// rebuild). Decode paths build worlds from scratch; seeding the
-    /// declarations first means `insert_entity_with_components` populates
+    /// declarations first means `restore_entity_with_components` populates
     /// the indices as rows land, so a snapshot that crossed a wire carries
     /// working indices instead of silently wiping them on commit.
     pub fn share_indexed_fields_from(&mut self, other: &World) {

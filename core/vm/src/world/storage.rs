@@ -302,6 +302,14 @@ impl Archetype {
     }
 }
 
+/// Mutable world storage. Explicit entity identities are deliberately not a
+/// public construction surface: transport and merge code must first prove a
+/// complete allocator partition.
+///
+/// ```compile_fail
+/// let mut world = rad_vm::world::World::new();
+/// world.insert_entity_with_id(42, Some("forged"));
+/// ```
 pub struct World {
     next_id: u32,
     fresh_ids_exhausted: bool,

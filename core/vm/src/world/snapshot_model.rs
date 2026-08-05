@@ -113,6 +113,14 @@ fn dump_world_json(
     s
 }
 
+/// A sealed operational snapshot. Safe host code can retain and inspect the
+/// supported views, but cannot fabricate or replace allocator internals.
+///
+/// ```compile_fail
+/// fn forge(snapshot: rad_vm::world::WorldSnapshot) {
+///     let _ = snapshot.next_id;
+/// }
+/// ```
 #[derive(Clone)]
 pub struct WorldSnapshot {
     pub(crate) next_id: u32,

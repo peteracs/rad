@@ -783,6 +783,79 @@ fn entity_allocator_uses_the_last_fresh_slot_then_fails_as_typed_data() {
 }
 
 #[test]
+fn multi_spawn_exhaustion_rejects_the_complete_relation_candidate_atomically() {
+    let mut world = World::new();
+    install(&mut world, "relation Note(value: int)\n");
+    world
+        .apply_relation_transaction(&RelationTransaction {
+            operations: vec![insert(
+                "game::inventory::Note",
+                vec![PendingRelationValue::Int(1)],
+                "base",
+            )],
+            ..RelationTransaction::default()
+        })
+        .unwrap();
+
+    // Jump to the final fresh identity so the two-spawn boundary is testable
+    // without materializing the preceding identity universe.
+    let mut exhausted_candidate = world.snapshot();
+    exhausted_candidate.next_id = u32::MAX;
+    world.restore(exhausted_candidate);
+    let before_entities = world.all_entity_ids();
+    let before_relations = world.relation_state().operational_checkpoint_bytes();
+    let before_allocator = world.allocator_state();
+
+    let error = world
+        .apply_relation_transaction(&RelationTransaction {
+            spawns: vec![
+                PendingSpawn {
+                    handle: 1,
+                    name: Some("last".into()),
+                },
+                PendingSpawn {
+                    handle: 2,
+                    name: Some("overflow".into()),
+                },
+            ],
+            component_writes: vec![PendingComponentWrite {
+                entity: EntityOperand::Candidate(1),
+                component: component("Marker"),
+            }],
+            operations: vec![insert(
+                "game::inventory::Note",
+                vec![PendingRelationValue::Int(2)],
+                "candidate",
+            )],
+            despawns: Vec::new(),
+        })
+        .unwrap_err();
+
+    assert_eq!(error.code, "entity.id_space_exhausted");
+    assert_eq!(world.all_entity_ids(), before_entities);
+    assert_eq!(world.allocator_state(), before_allocator);
+    assert_eq!(
+        world.relation_state().operational_checkpoint_bytes(),
+        before_relations
+    );
+    assert!(world.get_entity_by_name("last").is_none());
+    assert!(world.get_entity_by_name("overflow").is_none());
+
+    // Allocation exhaustion does not poison unrelated candidates.
+    world
+        .apply_relation_transaction(&RelationTransaction {
+            operations: vec![insert(
+                "game::inventory::Note",
+                vec![PendingRelationValue::Int(2)],
+                "after-failure",
+            )],
+            ..RelationTransaction::default()
+        })
+        .unwrap();
+    assert_eq!(world.relation_state().assertions().len(), 2);
+}
+
+#[test]
 fn exhausted_reusable_generation_is_retired_without_blocking_other_capacity() {
     let mut world = World::new();
     let retired = world.spawn_entity(None).unwrap();

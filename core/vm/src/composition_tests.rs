@@ -17,3 +17,4 @@ use crate::vm::VM;
 // Lexical sections preserve one private semantic namespace.
 include!("composition_tests/core_composition.rs");
 include!("composition_tests/components_and_causality.rs");
+include!("composition_tests/fork_delta_allocator.rs");
