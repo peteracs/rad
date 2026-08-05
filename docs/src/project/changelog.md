@@ -10,6 +10,17 @@ All notable changes to the Rad language are documented here.
 
 ### Added
 
+- **RFC-0003 authoritative facts now produce bounded derived reality in the
+  production world.** Checker-sealed typed rule plans are retained by the
+  immutable runtime manifest and evaluated in canonical nonrecursive
+  dependency order after every authoritative candidate. The full-recompute
+  engine implements joins, predicates, symmetric logical rows, exact integer
+  aggregates, separate proof alternatives, transitive capability labels, and
+  deterministic work/result limits. Derived state is adopted atomically with
+  authoritative assertions, participates in world content and operational
+  checkpoint identity, and is byte-for-byte differential-checked against the
+  accepted RFC-0003 oracle.
+
 - **Fork deltas now validate the exact final entity partition, including
   transient allocation histories.** A fork may spawn and despawn identities
   without leaving final upsert rows, so delta admission derives the final live

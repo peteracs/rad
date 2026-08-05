@@ -329,4 +329,5 @@ pub struct World {
     indices: Arc<HashMap<IndexKey, Vec<u32>>>,
     resources: Arc<ResourceMap>,
     authoritative_relations: crate::relation_runtime::AuthoritativeRelationState,
+    derived_relations: crate::relation_derivation::DerivedRelationState,
 }

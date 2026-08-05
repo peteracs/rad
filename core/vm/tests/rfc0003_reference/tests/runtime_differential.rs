@@ -1,5 +1,9 @@
 use super::*;
-use rad_vm::relation_frontend::{compile, FrontendOptions};
+use rad_vm::relation_derivation as production_derivation;
+use rad_vm::relation_frontend::{
+    compile, AggregateKind as ProductionAggregateKind, FrontendOptions, Literal, RuleTerm,
+    SealedRulePlan,
+};
 use rad_vm::relation_runtime as runtime;
 use rad_vm::world::World;
 use std::sync::Arc;
@@ -249,6 +253,51 @@ fn runtime_text(value: &runtime::FactValue) -> String {
     }
 }
 
+fn oracle_rule(plan: &SealedRulePlan) -> RulePlan {
+    fn term(value: &RuleTerm) -> Term {
+        match value {
+            RuleTerm::Variable(name) => Term::Variable(name.clone()),
+            RuleTerm::Literal(Literal::Int(value)) => Term::Constant(FactValue::Int(*value)),
+            RuleTerm::Literal(Literal::Count(value)) => Term::Constant(FactValue::Count(*value)),
+            RuleTerm::Literal(Literal::Text(value)) => {
+                Term::Constant(FactValue::Text(value.clone()))
+            }
+        }
+    }
+
+    let typed = plan.typed_plan();
+    RulePlan {
+        id: plan.identity().to_owned(),
+        head_relation: typed.head_relation.clone(),
+        head: typed.head.iter().map(term).collect(),
+        atoms: typed
+            .atoms
+            .iter()
+            .map(|atom| Atom::new(&atom.relation, atom.terms.iter().map(term).collect()))
+            .collect(),
+        predicates: typed
+            .predicates
+            .iter()
+            .map(|predicate| match predicate {
+                rad_vm::relation_frontend::RulePredicate::Greater(left, right) => {
+                    Predicate::Greater(left.clone(), right.clone())
+                }
+            })
+            .collect(),
+        aggregate: typed.aggregate.as_ref().map(|aggregate| AggregateSpec {
+            kind: match aggregate.kind {
+                ProductionAggregateKind::Count => AggregateKind::Count,
+                ProductionAggregateKind::Sum => AggregateKind::Sum,
+                ProductionAggregateKind::Min => AggregateKind::Min,
+                ProductionAggregateKind::Max => AggregateKind::Max,
+            },
+            input: aggregate.input.clone(),
+            output: aggregate.output.clone(),
+            group_by: aggregate.group_by.clone(),
+        }),
+    }
+}
+
 fn permutations(actions: &[Action]) -> Vec<Vec<Action>> {
     fn build(prefix: Vec<Action>, rest: Vec<Action>, out: &mut Vec<Vec<Action>>) {
         if rest.is_empty() {
@@ -350,5 +399,123 @@ fn replacement_lifetime_matches_the_accepted_oracle() {
     assert_eq!(
         oracle.relations.next_assertion_id,
         runtime.relation_state().next_assertion_id()
+    );
+}
+
+#[test]
+fn production_full_recompute_derivation_matches_the_accepted_oracle_bytes() {
+    const VISIBLE: &str = "diff::Visible";
+    const HIDDEN: &str = "diff::Hidden";
+    const MARKED: &str = "diff::Marked";
+    const COUNTED: &str = "diff::Counted";
+    const PUBLIC: &str = "diff::Public";
+
+    let source = r#"
+relation Visible(value: int)
+relation Hidden(value: int)
+derive Marked(value)
+    when Visible(value)
+derive Marked(value)
+    when Hidden(value)
+derive Counted(count())
+    when Marked(value)
+derive Public(count)
+    when Counted(count)
+"#;
+    let artifacts = compile(
+        source,
+        &FrontendOptions {
+            enabled: true,
+            module_id: "diff".into(),
+            ..FrontendOptions::default()
+        },
+    )
+    .unwrap();
+
+    let mut oracle = WorldModel::default();
+    oracle
+        .relations
+        .register(RelationSchema::new(
+            VISIBLE,
+            vec![ColumnSchema::new("value", ValueKind::Int)],
+        ))
+        .unwrap();
+    oracle
+        .relations
+        .register(RelationSchema::new(
+            HIDDEN,
+            vec![ColumnSchema::new("value", ValueKind::Int)],
+        ))
+        .unwrap();
+    oracle
+        .apply_transaction(Transaction {
+            operations: vec![
+                insert(pending_key(VISIBLE, vec![int(7)]), "visible"),
+                PendingOperation::Insert(
+                    pending_key(HIDDEN, vec![int(7)]),
+                    OperationMetadata::cause("hidden").with_capability("secret"),
+                ),
+            ],
+            ..Transaction::default()
+        })
+        .unwrap();
+
+    let derived_schemas = [
+        RelationSchema::new(MARKED, vec![ColumnSchema::new("value", ValueKind::Int)]),
+        RelationSchema::new(COUNTED, vec![ColumnSchema::new("count", ValueKind::Count)]),
+        RelationSchema::new(PUBLIC, vec![ColumnSchema::new("count", ValueKind::Count)]),
+    ]
+    .into_iter()
+    .map(|schema| (schema.name.clone(), schema))
+    .collect::<BTreeMap<_, _>>();
+    let oracle_rules = artifacts
+        .rules
+        .iter()
+        .map(|plan| oracle_rule(plan))
+        .collect::<Vec<_>>();
+    let oracle_derived = derive_all(
+        &oracle.relations,
+        &derived_schemas,
+        &oracle_rules,
+        DerivationLimits::generous(),
+    )
+    .unwrap();
+
+    let manifest = Arc::new(runtime::RelationRuntimeManifest::from_frontend(&artifacts).unwrap());
+    let mut world = World::new();
+    world
+        .install_relation_manifest(manifest, artifacts.manifest_digest)
+        .unwrap();
+    world
+        .apply_relation_transaction(&runtime::RelationTransaction {
+            operations: vec![
+                runtime::PendingRelationOperation::Insert {
+                    fact: runtime::PendingFactKey::new(
+                        VISIBLE,
+                        vec![runtime::PendingRelationValue::Int(7)],
+                    ),
+                    metadata: runtime::OperationMetadata::cause("visible"),
+                },
+                runtime::PendingRelationOperation::Insert {
+                    fact: runtime::PendingFactKey::new(
+                        HIDDEN,
+                        vec![runtime::PendingRelationValue::Int(7)],
+                    ),
+                    metadata: runtime::OperationMetadata::cause("hidden").with_capability("secret"),
+                },
+            ],
+            ..runtime::RelationTransaction::default()
+        })
+        .unwrap();
+    let production_derived = production_derivation::derive_all(
+        world.relation_state(),
+        world.relation_state().manifest().unwrap(),
+        production_derivation::DerivationLimits::default(),
+    )
+    .unwrap();
+
+    assert_eq!(
+        production_derived.canonical_bytes(),
+        canonical_derivation_bytes(&oracle_derived)
     );
 }

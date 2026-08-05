@@ -71,6 +71,11 @@ impl WorldSnapshot {
         for byte in relation_bytes {
             out.byte(byte);
         }
+        let derived_bytes = self.derived_relations.canonical_bytes();
+        out.usize(derived_bytes.len());
+        for byte in derived_bytes {
+            out.byte(byte);
+        }
 
         let mut names = self.name_to_id.iter().collect::<Vec<_>>();
         names.sort_by(|left, right| left.0.cmp(right.0));
@@ -836,6 +841,7 @@ impl World {
             indices: Arc::clone(&self.indices),
             resources: Arc::clone(&self.resources),
             authoritative_relations: self.authoritative_relations.clone(),
+            derived_relations: self.derived_relations.clone(),
             // Events live in the VM, not the World; the VM attaches them
             // (`VM::snapshot_with_events`) wherever in-flight state matters.
             events: Arc::new(Vec::new()),
@@ -867,6 +873,7 @@ impl World {
             indices,
             resources,
             authoritative_relations,
+            derived_relations,
             events: _,
             emit_ids: _,
             delayed: _,
@@ -888,6 +895,7 @@ impl World {
         self.indices = indices;
         self.resources = resources;
         self.authoritative_relations = authoritative_relations;
+        self.derived_relations = derived_relations;
     }
 }
 

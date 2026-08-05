@@ -130,6 +130,91 @@ pub(crate) struct RawRuleAst {
     pub aggregate: Option<RawAggregate>,
 }
 
+/// Executable, checker-sealed term. The production derivation runtime consumes
+/// this representation; it never reparses canonical bytes or trusts raw ASTs.
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum RuleTerm {
+    Variable(String),
+    Literal(Literal),
+}
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct RuleAtom {
+    pub relation: String,
+    pub terms: Vec<RuleTerm>,
+}
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum RulePredicate {
+    Greater(String, String),
+}
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct RuleAggregate {
+    pub kind: AggregateKind,
+    pub input: Option<String>,
+    pub output: String,
+    pub group_by: Vec<String>,
+}
+
+/// Immutable semantic rule body paired with one [`SealedRulePlan`]. It is
+/// created only after schema, range-restriction, aggregate, and dependency
+/// checking succeeds.
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct TypedRulePlan {
+    pub head_relation: String,
+    pub head: Vec<RuleTerm>,
+    pub atoms: Vec<RuleAtom>,
+    pub predicates: Vec<RulePredicate>,
+    pub aggregate: Option<RuleAggregate>,
+}
+
+impl TypedRulePlan {
+    pub(super) fn from_raw(rule: &RawRuleAst) -> Self {
+        fn term(value: &RawTerm) -> RuleTerm {
+            match value {
+                RawTerm::Variable(name) => RuleTerm::Variable(name.clone()),
+                RawTerm::Literal(value) => RuleTerm::Literal(value.clone()),
+            }
+        }
+
+        let mut atoms = rule.atoms.iter().collect::<Vec<_>>();
+        atoms.sort_by_key(|atom| super::canonical::atom_bytes(atom));
+        let mut predicates = rule.predicates.iter().collect::<Vec<_>>();
+        predicates.sort_by_key(|predicate| super::canonical::predicate_bytes(predicate));
+        let mut aggregate = rule.aggregate.clone();
+        if let Some(aggregate) = &mut aggregate {
+            aggregate.group_by.sort();
+        }
+
+        Self {
+            head_relation: rule.head_relation.clone(),
+            head: rule.head.iter().map(term).collect(),
+            atoms: atoms
+                .into_iter()
+                .map(|atom| RuleAtom {
+                    relation: atom.relation.clone(),
+                    terms: atom.terms.iter().map(term).collect(),
+                })
+                .collect(),
+            predicates: predicates
+                .into_iter()
+                .map(|predicate| match predicate {
+                    RawPredicate::Greater(left, right) => {
+                        RulePredicate::Greater(left.clone(), right.clone())
+                    }
+                })
+                .collect(),
+            aggregate: aggregate.as_ref().map(|aggregate| RuleAggregate {
+                kind: aggregate.kind,
+                input: aggregate.input.clone(),
+                output: aggregate.output.clone(),
+                group_by: aggregate.group_by.clone(),
+            }),
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct RawRuleSummary {
     pub maximum_identifier_length: usize,
@@ -255,9 +340,10 @@ pub struct StaticResourceQuote {
     pub canonical_bytes: usize,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SealedRulePlan {
     identity: String,
+    typed_plan: TypedRulePlan,
     canonical_bytes: Arc<[u8]>,
     digest: [u8; 32],
     dependencies: Arc<[String]>,
@@ -272,6 +358,10 @@ impl SealedRulePlan {
 
     pub fn canonical_bytes(&self) -> &[u8] {
         &self.canonical_bytes
+    }
+
+    pub fn typed_plan(&self) -> &TypedRulePlan {
+        &self.typed_plan
     }
 
     pub fn digest(&self) -> [u8; 32] {
@@ -292,6 +382,7 @@ impl SealedRulePlan {
 
     pub(crate) fn new(
         identity: String,
+        typed_plan: TypedRulePlan,
         canonical_bytes: Vec<u8>,
         digest: [u8; 32],
         dependencies: Vec<String>,
@@ -300,6 +391,7 @@ impl SealedRulePlan {
     ) -> Self {
         Self {
             identity,
+            typed_plan,
             canonical_bytes: canonical_bytes.into(),
             digest,
             dependencies: dependencies.into(),

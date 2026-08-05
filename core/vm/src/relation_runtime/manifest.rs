@@ -1,5 +1,5 @@
 use crate::relation_frontend::{
-    FrontendArtifacts, FrontendManifestDigest, RelationKind, RelationSchema,
+    FrontendArtifacts, FrontendManifestDigest, RelationKind, RelationSchema, SealedRulePlan,
 };
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
@@ -26,6 +26,7 @@ impl RuntimeRelationSchema {
 pub struct RelationRuntimeManifest {
     frontend_digest: FrontendManifestDigest,
     schemas: Arc<[RuntimeRelationSchema]>,
+    rules: Arc<[Arc<SealedRulePlan>]>,
     canonical_bytes: Arc<[u8]>,
     digest: [u8; 32],
 }
@@ -72,6 +73,7 @@ impl RelationRuntimeManifest {
         Ok(Self {
             frontend_digest: artifacts.manifest_digest,
             schemas: schemas.into(),
+            rules: Arc::clone(&artifacts.rules),
             canonical_bytes: out.into(),
             digest,
         })
@@ -90,6 +92,10 @@ impl RelationRuntimeManifest {
             .binary_search_by(|schema| schema.schema.identity.as_str().cmp(identity))
             .ok()
             .map(|index| &self.schemas[index])
+    }
+
+    pub fn rules(&self) -> &[Arc<SealedRulePlan>] {
+        &self.rules
     }
 
     pub fn authoritative_schema(&self, identity: &str) -> Option<&RuntimeRelationSchema> {

@@ -15,6 +15,7 @@ pub mod constraint_types;
 pub mod host_value;
 pub mod merge;
 pub mod radpack;
+pub mod relation_derivation;
 pub mod relation_frontend;
 pub mod relation_runtime;
 pub mod wire;

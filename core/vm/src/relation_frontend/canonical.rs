@@ -148,14 +148,14 @@ fn schema(out: &mut Vec<u8>, value: &RelationSchema) {
     }
 }
 
-fn atom_bytes(atom: &RawAtom) -> Vec<u8> {
+pub(super) fn atom_bytes(atom: &RawAtom) -> Vec<u8> {
     let mut out = Vec::new();
     text(&mut out, &atom.relation);
     terms(&mut out, &atom.terms);
     out
 }
 
-fn predicate_bytes(predicate: &RawPredicate) -> Vec<u8> {
+pub(super) fn predicate_bytes(predicate: &RawPredicate) -> Vec<u8> {
     let mut out = Vec::new();
     match predicate {
         RawPredicate::Greater(left, right) => {

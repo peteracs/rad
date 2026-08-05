@@ -31,6 +31,7 @@ impl World {
             indices: Arc::new(HashMap::new()),
             resources: Arc::new(ResourceMap::default()),
             authoritative_relations: crate::relation_runtime::AuthoritativeRelationState::default(),
+            derived_relations: crate::relation_derivation::DerivedRelationState::default(),
         }
     }
 
@@ -138,6 +139,10 @@ impl World {
         &self.authoritative_relations
     }
 
+    pub fn derived_relation_state(&self) -> &crate::relation_derivation::DerivedRelationState {
+        &self.derived_relations
+    }
+
     pub(crate) fn restore_relation_transport(
         &mut self,
         encoded: &str,
@@ -147,7 +152,9 @@ impl World {
             encoded, manifest,
         )?;
         state.validate_live_entity_set(&self.live_relation_entities())?;
+        let derived = Self::derive_relations(&state)?;
         self.authoritative_relations = state;
+        self.derived_relations = derived;
         Ok(())
     }
 
@@ -156,8 +163,12 @@ impl World {
         manifest: std::sync::Arc<crate::relation_runtime::RelationRuntimeManifest>,
         expected: crate::relation_frontend::FrontendManifestDigest,
     ) -> crate::relation_runtime::RelationRuntimeResult<()> {
-        self.authoritative_relations
-            .install_manifest(manifest, expected)
+        let mut authoritative = self.authoritative_relations.clone();
+        authoritative.install_manifest(manifest, expected)?;
+        let derived = Self::derive_relations(&authoritative)?;
+        self.authoritative_relations = authoritative;
+        self.derived_relations = derived;
+        Ok(())
     }
 
     pub(crate) fn live_relation_entities(
@@ -188,8 +199,32 @@ impl World {
     pub(crate) fn adopt_relation_candidate(
         &mut self,
         candidate: crate::relation_runtime::RelationCandidate,
-    ) -> Vec<crate::relation_runtime::FactChange> {
-        self.authoritative_relations.adopt(candidate)
+    ) -> crate::relation_runtime::RelationRuntimeResult<Vec<crate::relation_runtime::FactChange>> {
+        let mut authoritative = self.authoritative_relations.clone();
+        let changes = authoritative.adopt(candidate);
+        let derived = Self::derive_relations(&authoritative)?;
+        self.authoritative_relations = authoritative;
+        self.derived_relations = derived;
+        Ok(changes)
+    }
+
+    fn derive_relations(
+        authoritative: &crate::relation_runtime::AuthoritativeRelationState,
+    ) -> crate::relation_runtime::RelationRuntimeResult<
+        crate::relation_derivation::DerivedRelationState,
+    > {
+        let Some(manifest) = authoritative.manifest() else {
+            return Ok(crate::relation_derivation::DerivedRelationState::default());
+        };
+        crate::relation_derivation::derive_all(
+            authoritative,
+            manifest,
+            crate::relation_derivation::DerivationLimits::default(),
+        )
+        .map_err(|error| crate::relation_runtime::RelationRuntimeError {
+            code: error.code,
+            detail: error.detail,
+        })
     }
 
     /// Forks assign ids independently; when merging, entities that exist in
@@ -551,7 +586,7 @@ impl World {
             let removed = candidate_world.destroy_entity_storage(entity.slot);
             debug_assert!(removed);
         }
-        let changes = candidate_world.adopt_relation_candidate(candidate);
+        let changes = candidate_world.adopt_relation_candidate(candidate)?;
         self.restore(candidate_world.snapshot());
         Ok(changes)
     }
@@ -793,6 +828,8 @@ impl World {
         canon.push_str(&hex::encode(
             self.authoritative_relations.semantic_content_bytes(),
         ));
+        canon.push_str("|derived:");
+        canon.push_str(&hex::encode(self.derived_relations.canonical_bytes()));
         blake3::hash(canon.as_bytes()).to_hex().to_string()
     }
 

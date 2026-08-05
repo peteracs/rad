@@ -205,7 +205,11 @@ impl VM {
                 .map_err(|error| {
                     format!("Settlement aborted: {}\nNo world state was changed.", error)
                 })?;
-            relation_changes = candidate.adopt_relation_candidate(relation_candidate);
+            relation_changes = candidate
+                .adopt_relation_candidate(relation_candidate)
+                .map_err(|error| {
+                    format!("Settlement aborted: {}\nNo world state was changed.", error)
+                })?;
         }
 
         let committed = candidate.snapshot();

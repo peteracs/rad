@@ -768,8 +768,9 @@ movement denied
 2. bounded parser, AST, checker, formatter/symbol surfaces, and module identity
    (**experimental front end implemented**);
 3. authoritative relation store, indexes, and transactional patches
-   (**ordered-map runtime implemented; derived evaluation intentionally absent**);
-4. nonrecursive rule planner and full reference evaluation;
+   (**ordered-map runtime implemented**);
+4. nonrecursive rule planner and full-recompute production evaluation
+   (**implemented and byte-for-byte differential-tested against the oracle**);
 5. indexed incremental maintenance with differential tests;
 6. candidate constraints, provenance, ACL, wire, WASM, and replay integration;
 7. dogfood, fuzzing, benchmarks, and operational tooling.
@@ -783,11 +784,14 @@ installed into the authoritative ordered-map runtime, whose copy-on-write
 candidate normalizes component writes, candidate-local spawns, despawns, and
 relation patches before one adoption. Relation assertions, unique indexes,
 generational entity lifetimes, and allocator exhaustion state share the
-operational `WorldSnapshot` inventory. The production implementation is
-differentially checked against this RFC's frozen oracle for authoritative
-rows and assertion lifetimes. Derived facts are not evaluated yet. RFC-0003 becomes
-**Implemented experimentally** only after the parser/checker, full-recompute
-runtime, dogfood, and independent indexed differential suite pass.
+operational `WorldSnapshot` inventory. Every authoritative candidate now runs
+the immutable sealed rule plans before adoption; derived facts, bounded proof
+alternatives, capability requirements, aggregate results, and canonical bytes
+are stored in the same world snapshot and content identity. The production
+implementation is differentially checked against this RFC's frozen oracle for
+authoritative rows, assertion lifetimes, and full-recompute derivation bytes.
+RFC-0003 becomes **Implemented experimentally** only after the complete
+settlement/constraint dogfood and independent indexed differential suite pass.
 
 ## Explicit non-goals
 

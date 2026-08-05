@@ -92,6 +92,19 @@ fn accepted_rfc_examples_emit_sealed_frontend_artifacts() {
         assert_eq!(rule.digest(), canonical::digest(rule.canonical_bytes()));
         assert!(!rule.canonical_bytes().is_empty());
     }
+    let total_weight = artifacts
+        .rules
+        .iter()
+        .find(|rule| rule.typed_plan().head_relation.ends_with("::TotalWeight"))
+        .expect("sealed executable TotalWeight plan");
+    assert_eq!(total_weight.typed_plan().atoms.len(), 2);
+    assert!(matches!(
+        total_weight.typed_plan().aggregate,
+        Some(RuleAggregate {
+            kind: AggregateKind::Sum,
+            ..
+        })
+    ));
 }
 
 #[test]

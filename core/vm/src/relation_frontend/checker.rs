@@ -219,6 +219,7 @@ pub(crate) fn check_and_seal(
             let digest = canonical::digest(&canonical_bytes);
             sealed.push(Arc::new(SealedRulePlan::new(
                 identity,
+                TypedRulePlan::from_raw(&bounded.ast),
                 canonical_bytes,
                 digest,
                 dependencies,

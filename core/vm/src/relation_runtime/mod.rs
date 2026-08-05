@@ -1,8 +1,8 @@
 //! RFC-0003 authoritative relation runtime.
 //!
-//! This layer deliberately stops before derived evaluation. It installs the
-//! immutable front-end manifest, stores authoritative assertion lifetimes,
-//! and constructs relation candidates without mutating the live world.
+//! It installs the immutable front-end manifest, stores authoritative
+//! assertion lifetimes, and constructs relation candidates without mutating
+//! the live world. Candidate adoption triggers the separate derivation layer.
 
 mod candidate;
 mod encoding;

@@ -15,8 +15,8 @@ pub use ast::{
     AggregateKind, BoundedRawProgram, BoundedRawRule, DerivationDependencyDag, FrontendArtifacts,
     FrontendManifestDigest, Literal, OnDelete, RawInputStats, RawOperationValue, RawRuleSummary,
     RelationColumn, RelationKind, RelationManifest, RelationOperation, RelationOperationKind,
-    RelationSchema, RelationType, SealedRulePlan, SourceSpan, StaticResourceQuote,
-    UniqueConstraint,
+    RelationSchema, RelationType, RuleAggregate, RuleAtom, RulePredicate, RuleTerm, SealedRulePlan,
+    SourceSpan, StaticResourceQuote, TypedRulePlan, UniqueConstraint,
 };
 pub use limits::{RawInputLimits, SealedPlanLimits};
 
