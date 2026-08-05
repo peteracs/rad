@@ -627,7 +627,8 @@ replays deterministically, while Three.js only hides the visual discontinuity.
 - `client/src/scene.ts` disposes geometries, materials, and the WebGL renderer
   through `MobaRadScene.dispose()`, draining the mesh pool on teardown.
 - `client/src/radHost.ts` caches the fixed tick event payload and refreshes the
-  hot avatar render state from a direct WASM-memory `Float32Array` view.
+  hot avatar render state from exact `Uint32Array` and bitcast `Float32Array`
+  views over one WASM packet.
 - `session_render_delta()` remains only for cold resource/config bootstrap; it
   is not used for movement-frame avatar refreshes.
 
@@ -635,28 +636,36 @@ replays deterministically, while Three.js only hides the visual discontinuity.
 
 The local browser RAD session exposes hot avatar render state through
 `RadRuntime.session_render_buffer_refresh()`, `session_render_buffer_ptr()`, and
-`session_render_buffer_f32_len()`. Rust owns the backing `Vec<f32>` inside
-`RadRuntime`; JS reads a `Float32Array` view over the same WASM linear memory.
+`session_render_buffer_u32_len()`. Rust owns the backing `Vec<u32>` inside
+`RadRuntime`; JS reads exact words and floating-point bit patterns over the same
+WASM linear memory. The layout and limits come from `runtime_features()` rather
+than copied client constants. The shared decoder lives in `projects/rad-webgpu`.
 The view is rebuilt only if the pointer, length, or `memory.buffer` identity
 changes.
 
 Layout:
 
 ```text
-[0] version = 1
-[1] stride = 9
-[2] count
+[0] magic = "RADP"
+[1] version = 2
+[2] stride = 12 words
+[3] count
+[4..5] causal frame (u64)
+[6] flags
+[7] reserved
 
 per avatar record:
-  [0] entity_id
-  [1] player_id
-  [2] x
-  [3] y
-  [4] target_x
-  [5] target_y
-  [6] target_active
-  [7] command_id
-  [8] model_code
+  [0] entity slot
+  [1] entity generation
+  [2] player_id
+  [3] x as f32 bits
+  [4] y as f32 bits
+  [5] target_x as f32 bits
+  [6] target_y as f32 bits
+  [7] target_active
+  [8..9] command_id as exact i64 bits
+  [10] model_id
+  [11] reserved
 ```
 
 `client/src/radHost.ts` applies those scalar records into stable `RadEntity`

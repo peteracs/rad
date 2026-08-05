@@ -2,48 +2,83 @@ import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 
 import {
-  RENDER_BUFFER_HEADER_F32,
-  RENDER_BUFFER_STRIDE_F32,
+  type AvatarPresentationDescriptor,
   isRenderableEntityId,
+  parseAvatarDescriptor,
+  parseAvatarPacket,
+  signedI64AsSafeNumber,
 } from '../src/render/renderBufferContract.js';
 
-// Regression: the locally-seeded champion is always the first-allocated RAD
-// entity (id 0). A `<= 0` guard dropped it, so it froze at spawn while the
-// server ghost rendered. Id 0 MUST be renderable.
-test('entity id 0 (the locally seeded champion) is renderable', () => {
-  assert.equal(isRenderableEntityId(0), true);
+const descriptor: AvatarPresentationDescriptor = parseAvatarDescriptor({
+  presentation: {
+    avatar_instances: {
+      magic: 0x50444152,
+      version: 2,
+      header_words: 8,
+      record_words: 12,
+      supported_flags: 0,
+      default_max_records: 128,
+      hard_max_records: 1024,
+      default_max_entities_scanned: 4096,
+      hard_max_entities_scanned: 8192,
+      model_names: ['', 'clockwork_mage'],
+      fields: {
+        entity_slot: 0,
+        entity_generation: 1,
+        player_id: 2,
+        x: 3,
+        y: 4,
+        target_x: 5,
+        target_y: 6,
+        target_active: 7,
+        command_id_low: 8,
+        command_id_high: 9,
+        model_id: 10,
+        reserved: 11,
+      },
+    },
+  },
 });
 
-test('positive entity ids are renderable', () => {
+test('entity zero remains a valid render identity', () => {
+  assert.equal(isRenderableEntityId(0), true);
   assert.equal(isRenderableEntityId(1), true);
-  assert.equal(isRenderableEntityId(4096), true);
 });
 
 test('malformed entity ids are rejected', () => {
   assert.equal(isRenderableEntityId(-1), false);
   assert.equal(isRenderableEntityId(Number.NaN), false);
-  assert.equal(isRenderableEntityId(Number.POSITIVE_INFINITY), false);
+  assert.equal(isRenderableEntityId(0x1_0000_0000), false);
 });
 
-// Decoding a buffer whose single record is entity 0 must surface that record,
-// mirroring applyRenderBuffer's loop guard.
-test('a render buffer whose only record is entity 0 yields one renderable avatar', () => {
-  const count = 1;
-  const buffer = new Float32Array(RENDER_BUFFER_HEADER_F32 + count * RENDER_BUFFER_STRIDE_F32);
-  buffer[0] = 1; // version
-  buffer[1] = RENDER_BUFFER_STRIDE_F32;
-  buffer[2] = count;
-  // record: entity_id=0, player_id=1, x=10, y=20, ...
-  buffer[RENDER_BUFFER_HEADER_F32 + 0] = 0;
-  buffer[RENDER_BUFFER_HEADER_F32 + 1] = 1;
+test('an exact packet whose only record is entity zero is accepted', () => {
+  const buffer = new Uint32Array(descriptor.headerWords + descriptor.recordWords);
+  buffer.set([descriptor.magic, descriptor.version, descriptor.recordWords, 1, 17, 0, 0, 0]);
+  buffer[descriptor.headerWords + descriptor.fields.entity_slot] = 0;
+  buffer[descriptor.headerWords + descriptor.fields.entity_generation] = 3;
+  buffer[descriptor.headerWords + descriptor.fields.player_id] = 1;
 
-  const surfaced: number[] = [];
-  for (let i = 0; i < count; i += 1) {
-    const offset = RENDER_BUFFER_HEADER_F32 + i * RENDER_BUFFER_STRIDE_F32;
-    const entityId = Math.trunc(buffer[offset] ?? -1);
-    if (!isRenderableEntityId(entityId)) continue;
-    surfaced.push(entityId);
-  }
+  const header = parseAvatarPacket(buffer, descriptor);
+  assert.equal(header.frame, 17n);
+  assert.equal(header.count, 1);
+});
 
-  assert.deepEqual(surfaced, [0]);
+test('packet parser rejects trailing and stale representations', () => {
+  const valid = new Uint32Array(descriptor.headerWords);
+  valid.set([descriptor.magic, descriptor.version, descriptor.recordWords, 0]);
+  assert.equal(parseAvatarPacket(valid, descriptor).count, 0);
+
+  const stale = valid.slice();
+  stale[1] -= 1;
+  assert.throws(() => parseAvatarPacket(stale, descriptor), /packet_version_mismatch/);
+
+  const trailing = new Uint32Array(descriptor.headerWords + 1);
+  trailing.set(valid);
+  assert.throws(() => parseAvatarPacket(trailing, descriptor), /packet_length_mismatch/);
+});
+
+test('signed command IDs stay exact until JavaScript safe-number boundary', () => {
+  assert.equal(signedI64AsSafeNumber(0xffff_ffff, 0xffff_ffff), -1);
+  assert.equal(signedI64AsSafeNumber(123, 0), 123);
+  assert.equal(signedI64AsSafeNumber(0, 0x0020_0000), null);
 });

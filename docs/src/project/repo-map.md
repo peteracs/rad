@@ -74,6 +74,7 @@ dogfood projects, but they are not the language implementation.
 | `projects/dogfood/frankl-search/` | Computational-mathematics dogfood: exhaustive small case, deterministic `N=13` generator search, exact cyclic-universe/deletion-obstruction study, causal explanations, and independent certificate verifiers. |
 | `projects/dogfood/collatz-lab/` | Structural Collatz dogfood: pruned affine residue universes, bounded-support and natural-tail/ballot certificates, forked exact-state frontier synthesis, cycle-word equations, Causal Laws/constraints/causality/replay, and Python-bigint certificate verifiers. |
 | `projects/moba-rad/` | Networked MOBA dogfood stack: RAD authority server, Rust WebTransport edge proxy, and browser client. The authority owns all game rules; the proxy forwards opaque datagrams and must stay dumb. |
+| `projects/rad-webgpu/` | Reusable TypeScript WebGPU host plus runnable RAD-driven dogfood. It validates runtime-described packets and owns only disposable GPU materialization. |
 | `projects/playground/` | Browser hosts, interactive demos, relay, JS session tests, and public playground shell. |
 | `projects/playground/demos/` | Standalone browser visual prototypes and their local assets. |
 | `projects/tutorial/` | Tutorial projects. |

@@ -19,6 +19,7 @@ impl RadRuntime {
             vm: VM::new(),
             output: Vec::new(),
             render_buffer: Vec::new(),
+            render_entity_scratch: Vec::new(),
             session_base: None,
             session_cursor: 0,
             undo_stack: Vec::new(),
@@ -56,10 +57,11 @@ impl RadRuntime {
                 "max_violations_per_settlement": constraint_limits.max_violations_per_settlement(),
                 "max_serialized_outcome_bytes": constraint_limits.max_serialized_outcome_bytes()
             },
+            "presentation": presentation::descriptor_json(),
             "features": [
                 "streaming-session",
                 "render-delta",
-                "render-buffer-v1",
+                "render-buffer-v2",
                 "session-state",
                 "undo-redo",
                 "inspect-why",
@@ -591,74 +593,42 @@ impl RadRuntime {
         Ok(json)
     }
 
-    /// Zero-copy render buffer for hot browser hosts.
+    /// Refresh the exact, versioned avatar presentation packet.
     ///
-    /// Layout is `f32` values:
-    /// `[version, stride, count, entity_id, player_id, x, y, target_x, target_y,
-    /// target_active, command_id, model_code, ...]`.
-    ///
-    /// This intentionally exports the stable MOBA render contract rather than
-    /// arbitrary component JSON. Scene/resources can still be read through the
-    /// rare `session_render_delta()` path; movement frames read this buffer.
+    /// The packet is word-oriented rather than a homogeneous float array:
+    /// entity generations and 64-bit command IDs remain exact, while floating
+    /// fields use their IEEE-754 bit patterns. WebGPU can upload the record
+    /// region directly and decode it as `array<u32>`/`bitcast<f32>`.
     pub fn session_render_buffer_refresh(&mut self) -> Result<(), String> {
-        const VERSION: f32 = 1.0;
-        const STRIDE: usize = 9;
-        const HEADER: usize = 3;
+        self.session_render_buffer_refresh_bounded(
+            presentation::DEFAULT_MAX_RECORDS,
+            presentation::DEFAULT_MAX_ENTITIES_SCANNED,
+        )
+    }
 
+    /// Refresh with host-selected record and entity-scan ceilings. Both are
+    /// capped by the runtime profile advertised in `runtime_features()`.
+    pub fn session_render_buffer_refresh_bounded(
+        &mut self,
+        max_records: u32,
+        max_entities_scanned: u32,
+    ) -> Result<(), String> {
         let cur = self.current_fork()?;
-        let ids = cur.sorted_entity_ids();
-        let mut count = 0usize;
-        self.render_buffer.clear();
-        self.render_buffer.resize(HEADER, 0.0);
-
-        for eid in ids {
-            let components = cur.components_of(eid);
-            let Some(player_id) = component_int_field(&components, "PlayerControlled", "player_id")
-            else {
-                continue;
-            };
-            let Some(x) = component_float_field(&components, "Position", "x") else {
-                continue;
-            };
-            let Some(y) = component_float_field(&components, "Position", "y") else {
-                continue;
-            };
-
-            let target_x = component_float_field(&components, "MoveTarget", "x").unwrap_or(x);
-            let target_y = component_float_field(&components, "MoveTarget", "y").unwrap_or(y);
-            let target_active =
-                component_bool_field(&components, "MoveTarget", "active").unwrap_or(false);
-            let command_id =
-                component_int_field(&components, "MoveTarget", "command_id").unwrap_or(0);
-            let model = component_str_field(&components, "RenderAvatar", "model")
-                .map(render_model_code)
-                .unwrap_or(0.0);
-
-            self.render_buffer.extend_from_slice(&[
-                eid as f32,
-                player_id as f32,
-                x as f32,
-                y as f32,
-                target_x as f32,
-                target_y as f32,
-                if target_active { 1.0 } else { 0.0 },
-                command_id as f32,
-                model,
-            ]);
-            count += 1;
-        }
-
-        self.render_buffer[0] = VERSION;
-        self.render_buffer[1] = STRIDE as f32;
-        self.render_buffer[2] = count as f32;
-        Ok(())
+        presentation::encode_avatar_packet(
+            &cur,
+            self.vm.causality_frame,
+            &mut self.render_buffer,
+            &mut self.render_entity_scratch,
+            max_records,
+            max_entities_scanned,
+        )
     }
 
     pub fn session_render_buffer_ptr(&self) -> u32 {
         self.render_buffer.as_ptr() as u32
     }
 
-    pub fn session_render_buffer_f32_len(&self) -> u32 {
+    pub fn session_render_buffer_u32_len(&self) -> u32 {
         self.render_buffer.len() as u32
     }
 

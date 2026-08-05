@@ -143,6 +143,7 @@
     <h1>Rad Playground</h1>
     <span class="subtitle">The Three-Law Language</span>
     <div class="toolbar">
+      <button id="webgpuBtn" title="Open the RAD WebGPU dogfood">WebGPU</button>
       <select id="examples" title="Load example">
         <option value="">-- Examples --</option>
         <option value="hello">Hello World</option>
@@ -327,6 +328,9 @@ function run() {
 }
 
 document.getElementById('runBtn').addEventListener('click', run);
+document.getElementById('webgpuBtn').addEventListener('click', () => {
+  window.location.assign('./webgpu/');
+});
 document.getElementById('clearBtn').addEventListener('click', () => {
   document.getElementById('editor').value = '';
   document.getElementById('output').textContent = '';

@@ -1,4 +1,7 @@
-
+pub(crate) enum EntitySelectionError {
+    LimitExceeded { actual: usize },
+    AllocationFailed,
+}
 
 impl WorldSnapshot {
     pub(crate) fn relation_state(
@@ -393,6 +396,43 @@ impl WorldSnapshot {
         ids
     }
 
+    pub(crate) fn collect_sorted_entity_ids_with_components(
+        &self,
+        ctypes: &[&str],
+        max_entities: usize,
+        output: &mut Vec<u32>,
+    ) -> Result<(), EntitySelectionError> {
+        output.clear();
+        let matches = |archetype: &Archetype| {
+            ctypes.iter().all(|name| {
+                self.type_registry
+                    .get(*name)
+                    .is_some_and(|type_id| archetype.columns.contains_key(type_id))
+            })
+        };
+        let mut count = 0usize;
+        for archetype in &self.archetypes {
+            if matches(archetype) {
+                count = count
+                    .checked_add(archetype.entities.len())
+                    .ok_or(EntitySelectionError::LimitExceeded { actual: usize::MAX })?;
+            }
+        }
+        if count > max_entities {
+            return Err(EntitySelectionError::LimitExceeded { actual: count });
+        }
+        output
+            .try_reserve(count)
+            .map_err(|_| EntitySelectionError::AllocationFailed)?;
+        for archetype in &self.archetypes {
+            if matches(archetype) {
+                output.extend(archetype.entities.iter().copied());
+            }
+        }
+        output.sort_unstable();
+        Ok(())
+    }
+
     /// Renderer-facing INCREMENTAL dump: what changed since `prev`.
     /// `{"upsert":[entity rows],"remove":[ids],"resources":{changed only}}`
     /// — the fix for the full-world-JSON-per-keystroke firehose.
@@ -568,6 +608,15 @@ impl WorldSnapshot {
         let &aid = self.entity_archetype.get(&eid)?;
         let tid = self.type_registry.get(ctype).copied()?;
         self.archetypes[aid as usize].get_component(eid, tid)
+    }
+
+    pub(crate) fn component_view(&self, eid: u32, ctype: &str) -> Option<ComponentView<'_>> {
+        let &aid = self.entity_archetype.get(&eid)?;
+        let tid = self.type_registry.get(ctype).copied()?;
+        let archetype = &self.archetypes[aid as usize];
+        let &row = archetype.entity_row.get(&eid)?;
+        let column = archetype.columns.get(&tid)?;
+        Some(ComponentView::new(column, row))
     }
 
     pub(crate) fn get_resource(&self, name: &str) -> Option<ComponentData> {

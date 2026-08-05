@@ -10,6 +10,7 @@ on:
       - 'core/vm/Cargo.toml'
       - 'core/vm/Cargo.lock'
       - 'projects/playground/**'
+      - 'projects/rad-webgpu/**'
   workflow_dispatch:
 
 permissions:
@@ -39,11 +40,23 @@ jobs:
       - name: Build WASM
         run: wasm-pack build --target web core/vm/
 
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: projects/rad-webgpu/package-lock.json
+
+      - name: Build WebGPU dogfood
+        run: |
+          npm ci --prefix projects/rad-webgpu
+          npm run build --prefix projects/rad-webgpu
+
       - name: Prepare site
         run: |
           mkdir -p _site
           cp projects/playground/index.html _site/
           cp -r core/vm/pkg _site/pkg
+          cp -r projects/rad-webgpu/demo-dist _site/webgpu
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5

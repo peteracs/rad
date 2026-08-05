@@ -10,6 +10,15 @@ All notable changes to the Rad language are documented here.
 
 ### Added
 
+- **RAD now has a recoverable WebGPU presentation host.** The WASM runtime
+  exports a bounded, exact `u32` avatar packet with a runtime-published layout
+  descriptor instead of routing entity and command identities through `f32`.
+  `projects/rad-webgpu` validates the descriptor and packet, caps allocations
+  against runtime and device limits, uploads directly to storage buffers, and
+  recreates device-owned resources after loss without changing RAD state. A
+  runnable browser dogfood, shared MOBA decoder, focused Node/Rust tests, CI,
+  and Pages deployment cover the complete host boundary.
+
 - **RFC-0003 is implemented experimentally end to end.** The headless
   `world-law-rpg` dogfood drives resolver-owned inventory and trading,
   aggregate encumbrance, movement/status/combat constraints, sandboxed AI,

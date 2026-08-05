@@ -32,6 +32,7 @@ jobs:
           npm audit --package-lock-only --ignore-scripts --audit-level=high --prefix projects/playground/relay
           npm audit --package-lock-only --ignore-scripts --audit-level=high --prefix projects/moba-rad/server
           npm audit --package-lock-only --ignore-scripts --audit-level=high --prefix projects/moba-rad/client
+          npm audit --package-lock-only --ignore-scripts --audit-level=high --prefix projects/rad-webgpu
 
   rust-tests:
     runs-on: ubuntu-latest
@@ -276,6 +277,34 @@ jobs:
       - name: Production build
         run: npm run build
         working-directory: projects/moba-rad/client
+
+  rad-webgpu:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Install Rust with WASM target
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+        with:
+          toolchain: stable
+          targets: wasm32-unknown-unknown
+      - name: Install wasm-pack
+        run: cargo install wasm-pack --version 0.15.0 --locked
+      - name: Build browser runtime
+        run: wasm-pack build --target web core/vm
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: projects/rad-webgpu/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+        working-directory: projects/rad-webgpu
+      - name: Typecheck and unit tests
+        run: npm test
+        working-directory: projects/rad-webgpu
+      - name: Build package and dogfood
+        run: npm run build
+        working-directory: projects/rad-webgpu
 
   moba-rad-server:
     runs-on: ubuntu-latest

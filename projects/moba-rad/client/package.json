@@ -9,7 +9,7 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "check": "tsc --noEmit",
-    "test": "npm run check && tsc -p tsconfig.test.json && node --test .tmp-test/test/*.test.js"
+    "test": "npm run check && tsc -p tsconfig.test.json && node --test .tmp-test/projects/moba-rad/client/test/*.test.js"
   },
   "dependencies": {
     "three": "^0.184.0"

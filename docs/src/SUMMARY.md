@@ -31,6 +31,7 @@
 - [Async and Parallel Execution](./guide/async-and-parallel.md)
 - [WebTransport Edge Networking](./guide/webtransport-networking.md)
 - [Game Embedding & MOBA Dogfood](./guide/game-embedding.md)
+- [WebGPU Presentation Host](./guide/webgpu.md)
 
 # Reference
 

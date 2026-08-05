@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RAD WebGPU</title>
+    <style>
+      :root { color-scheme: dark; font-family: Inter, system-ui, sans-serif; }
+      * { box-sizing: border-box; }
+      body { margin: 0; min-height: 100vh; background: #060914; color: #dfe7ff; }
+      main { width: min(1100px, calc(100% - 32px)); margin: 0 auto; padding: 28px 0; }
+      h1 { margin: 0 0 8px; font-size: clamp(1.8rem, 4vw, 3.4rem); }
+      p { color: #9baace; max-width: 70ch; }
+      canvas { display: block; width: 100%; aspect-ratio: 5 / 3; border: 1px solid #24365f; border-radius: 14px; }
+      #status { display: inline-block; margin: 14px 0; color: #b5c5ea; }
+      #status[data-kind="ok"] { color: #77e0a0; }
+      #status[data-kind="error"] { color: #ff8296; }
+      code { color: #8fb7ff; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>RAD reality, WebGPU materialization</h1>
+      <p>
+        RAD advances the authoritative world and emits an exact presentation packet.
+        WebGPU owns only disposable buffers, pipelines, and drawing.
+      </p>
+      <canvas id="viewport" aria-label="RAD WebGPU avatar demo"></canvas>
+      <div id="status">Starting bounded RAD and WebGPU hosts…</div>
+      <p><code>Device loss rebuilds GPU resources without mutating RAD state.</code></p>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

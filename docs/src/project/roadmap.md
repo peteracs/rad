@@ -68,6 +68,7 @@
 | :green_circle: | **Async events** — `async on Event` with cooperative scheduling | Shipped |
 | :white_circle: | **Debug adapter protocol** — step-through debugging in VS Code | #TBD |
 | :white_circle: | **Property-based testing** — `rad test --fuzz` for system invariants | #TBD |
+| :green_circle: | **WebGPU presentation host** — exact bounded WASM packets, storage-buffer materialization, resize and device-loss recovery | Shipped |
 
 ## 2027 H1 — Long-term Vision
 

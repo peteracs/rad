@@ -3,10 +3,10 @@ import { FIXED_DT } from './netcode/constants';
 import type { ServerState } from './transport/serverState';
 import { radSources } from 'moba-rad/rad-sources';
 import {
-  RENDER_BUFFER_HEADER_F32,
-  RENDER_BUFFER_STRIDE_F32,
-  RENDER_BUFFER_VERSION,
+  type AvatarPresentationPacket,
   isRenderableEntityId,
+  signedI64AsSafeNumber,
+  WasmAvatarPresentationSource,
 } from './render/renderBufferContract';
 
 const POSITION_COMPONENT = 0;
@@ -103,17 +103,15 @@ export class RadGameSession {
   private readonly fixedTickPayload = JSON.stringify({ dt: FIXED_DT });
   private readonly entityIndexById = new Map<number, number>();
   private readonly avatarEntityGenerations = new Map<number, number>();
+  private readonly entityLifetimeGenerations = new Map<number, number>();
   private readonly avatarEntityIds: number[] = [];
   private readonly world: RadWorld = { entities: [], resources: {} };
-  private renderBufferView: Float32Array | null = null;
-  private renderBufferPtr = 0;
-  private renderBufferLen = 0;
   private renderGeneration = 0;
   private renderBufferWarned = false;
 
   private constructor(
     private readonly runtime: RadRuntime,
-    private readonly wasmMemory: WebAssembly.Memory,
+    private readonly presentationSource: WasmAvatarPresentationSource,
   ) {}
 
   static async create(playerId: number): Promise<RadGameSession> {
@@ -145,7 +143,8 @@ export class RadGameSession {
       );
       throw error;
     }
-    const session = new RadGameSession(runtime, wasm.memory);
+    const presentationSource = new WasmAvatarPresentationSource(runtime, wasm.memory);
+    const session = new RadGameSession(runtime, presentationSource);
     // Identity is owned by the client (app/matchIdentity.ts persists a unique
     // id per tab), so the local avatar is seeded HERE with this client's id
     // rather than a hardcoded player 1 in the RAD source. Two tabs therefore
@@ -170,7 +169,6 @@ export class RadGameSession {
   }
 
   refresh(): RadWorld {
-    this.runtime.session_render_buffer_refresh();
     this.applyRenderBuffer();
     return this.world;
   }
@@ -243,26 +241,22 @@ export class RadGameSession {
   }
 
   private applyRenderBuffer(): void {
-    const view = this.renderBuffer();
-    if (view.length < RENDER_BUFFER_HEADER_F32) return this.warnRenderBufferOnce('header too small', view.length);
-    if (Math.trunc(view[0] ?? 0) !== RENDER_BUFFER_VERSION) {
-      return this.warnRenderBufferOnce('version mismatch (stale wasm?)', Math.trunc(view[0] ?? 0));
+    let packet: AvatarPresentationPacket;
+    try {
+      packet = this.presentationSource.refresh();
+    } catch (error) {
+      return this.warnRenderBufferOnce(String(error));
     }
-    const stride = Math.trunc(view[1] ?? 0);
-    const count = Math.trunc(view[2] ?? 0);
-    if (stride !== RENDER_BUFFER_STRIDE_F32) {
-      return this.warnRenderBufferOnce('stride mismatch (stale wasm?)', stride);
-    }
-    if (view.length < RENDER_BUFFER_HEADER_F32 + count * stride) {
-      return this.warnRenderBufferOnce('buffer truncated', view.length);
-    }
+    const { words, header } = packet;
+    const floats = new Float32Array(words.buffer, words.byteOffset, words.length);
+    const presentation = packet.descriptor;
 
     this.renderGeneration += 1;
-    for (let i = 0; i < count; i += 1) {
-      const offset = RENDER_BUFFER_HEADER_F32 + i * stride;
-      const entityId = Math.trunc(view[offset] ?? -1);
+    for (let i = 0; i < header.count; i += 1) {
+      const offset = presentation.headerWords + i * presentation.recordWords;
+      const entityId = words[offset + presentation.fields.entity_slot] ?? -1;
       if (!isRenderableEntityId(entityId)) continue;
-      this.writeAvatarEntityFromBuffer(entityId, view, offset);
+      this.writeAvatarEntityFromBuffer(entityId, words, floats, offset, presentation);
     }
 
     let i = 0;
@@ -281,41 +275,39 @@ export class RadGameSession {
     }
   }
 
-  // The avatar render bridge reads a packed Float32 buffer straight out of wasm
-  // memory each frame. If that buffer is malformed (most commonly a stale or
+  // The avatar render bridge reads an exact word packet straight out of WASM
+  // memory each frame. If that packet is malformed (most commonly a stale or
   // mismatched `playground/pkg` build) the world never gains the controlled
   // avatar, the prediction runner can only emit null samples, and the local
   // champion freezes at spawn while the packet-fed authority ghost keeps moving.
   // Fail loud once instead of silently swallowing the mismatch.
-  private warnRenderBufferOnce(reason: string, observed: number): void {
+  private warnRenderBufferOnce(reason: string): void {
     if (this.renderBufferWarned) return;
     this.renderBufferWarned = true;
+    const presentation = this.presentationSource.descriptor;
     // eslint-disable-next-line no-console
     console.error(
-      `[moba-rad] render buffer rejected (${reason}); observed=${observed}, ` +
-        `expected version=${RENDER_BUFFER_VERSION} stride=${RENDER_BUFFER_STRIDE_F32}. ` +
+      `[moba-rad] render buffer rejected (${reason}); ` +
+        `expected version=${presentation.version} stride=${presentation.recordWords}. ` +
         'The local champion will not move until playground/pkg (the RAD wasm) is rebuilt.',
     );
   }
 
-  private renderBuffer(): Float32Array {
-    const ptr = this.runtime.session_render_buffer_ptr();
-    const len = this.runtime.session_render_buffer_f32_len();
-    if (
-      !this.renderBufferView ||
-      ptr !== this.renderBufferPtr ||
-      len !== this.renderBufferLen ||
-      this.renderBufferView.buffer !== this.wasmMemory.buffer
-    ) {
-      this.renderBufferPtr = ptr;
-      this.renderBufferLen = len;
-      this.renderBufferView = new Float32Array(this.wasmMemory.buffer, ptr, len);
-    }
-    return this.renderBufferView;
-  }
-
-  private writeAvatarEntityFromBuffer(entityId: number, view: Float32Array, offset: number): void {
+  private writeAvatarEntityFromBuffer(
+    entityId: number,
+    words: Uint32Array,
+    floats: Float32Array,
+    offset: number,
+    presentation: AvatarPresentationPacket['descriptor'],
+  ): void {
+    const field = presentation.fields;
+    const lifetimeGeneration = words[offset + field.entity_generation] ?? 0;
     let entity = this.entityById(entityId);
+    if (entity && this.entityLifetimeGenerations.get(entityId) !== lifetimeGeneration) {
+      const index = this.entityIndexById.get(entityId);
+      entity = createAvatarEntity(entityId);
+      if (index !== undefined) this.world.entities[index] = entity;
+    }
     if (!entity) {
       entity = createAvatarEntity(entityId);
       this.entityIndexById.set(entityId, this.world.entities.length);
@@ -323,20 +315,24 @@ export class RadGameSession {
       this.world.entities.push(entity);
     }
     this.avatarEntityGenerations.set(entityId, this.renderGeneration);
+    this.entityLifetimeGenerations.set(entityId, lifetimeGeneration);
 
     const position = entity.components[POSITION_COMPONENT].fields;
     const target = entity.components[MOVE_TARGET_COMPONENT].fields;
     const render = entity.components[RENDER_AVATAR_COMPONENT].fields;
     const player = entity.components[PLAYER_CONTROLLED_COMPONENT].fields;
 
-    player.player_id = Math.trunc(view[offset + 1] ?? 0);
-    position.x = view[offset + 2] ?? 0;
-    position.y = view[offset + 3] ?? 0;
-    target.x = view[offset + 4] ?? 0;
-    target.y = view[offset + 5] ?? 0;
-    target.active = (view[offset + 6] ?? 0) !== 0;
-    target.command_id = Math.trunc(view[offset + 7] ?? 0);
-    render.model = modelFromCode(Math.trunc(view[offset + 8] ?? 0));
+    player.player_id = words[offset + field.player_id] ?? 0;
+    position.x = floats[offset + field.x] ?? 0;
+    position.y = floats[offset + field.y] ?? 0;
+    target.x = floats[offset + field.target_x] ?? 0;
+    target.y = floats[offset + field.target_y] ?? 0;
+    target.active = (words[offset + field.target_active] ?? 0) !== 0;
+    target.command_id = signedI64AsSafeNumber(
+      words[offset + field.command_id_low] ?? 0,
+      words[offset + field.command_id_high] ?? 0,
+    ) ?? 0;
+    render.model = presentation.modelNames[words[offset + field.model_id] ?? 0] ?? '';
   }
 
   private entityById(entityId: number): RadEntity | null {
@@ -352,6 +348,7 @@ export class RadGameSession {
     const last = this.world.entities.pop();
     this.entityIndexById.delete(entityId);
     this.avatarEntityGenerations.delete(entityId);
+    this.entityLifetimeGenerations.delete(entityId);
     if (!last || index >= this.world.entities.length) return;
 
     this.world.entities[index] = last;
@@ -361,6 +358,7 @@ export class RadGameSession {
   private clearEntityCache(): void {
     this.entityIndexById.clear();
     this.avatarEntityGenerations.clear();
+    this.entityLifetimeGenerations.clear();
     this.avatarEntityIds.length = 0;
     this.world.entities.length = 0;
   }
@@ -377,11 +375,4 @@ function createAvatarEntity(entityId: number): RadEntity {
       { type: 'PlayerControlled', fields: { player_id: 0 } },
     ],
   };
-}
-
-function modelFromCode(code: number): string {
-  switch (code) {
-    case 1: return 'clockwork_mage';
-    default: return '';
-  }
 }

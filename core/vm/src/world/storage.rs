@@ -117,6 +117,25 @@ pub struct SoAColumn {
     fields: Vec<Arc<ValueColumn>>,
 }
 
+/// Borrowed, allocation-free access to one component row in a frozen world.
+/// Presentation and other read-only adapters can inspect fields without
+/// materializing an owned `ComponentData` vector for every entity.
+pub(crate) struct ComponentView<'a> {
+    column: &'a SoAColumn,
+    row: usize,
+}
+
+impl<'a> ComponentView<'a> {
+    fn new(column: &'a SoAColumn, row: usize) -> Self {
+        Self { column, row }
+    }
+
+    pub(crate) fn field(&self, name: &str) -> Option<Value> {
+        let index = self.column.layout.iter().position(|field| field == name)?;
+        self.column.fields.get(index)?.as_slice().get(self.row).copied()
+    }
+}
+
 impl SoAColumn {
     fn new(type_name: String, layout: Arc<Vec<String>>) -> Self {
         let field_count = layout.len();

@@ -59,6 +59,7 @@ assert_only_changed(before, after, [Health]) would fail here:
 | Time-travel debugging | `rad replay trace.radr --serve` (`goto_frame`, `diff_frames`, `why`) |
 | Retroactive edits | `rad replay trace.radr --with fixed.rad` |
 | Causal settlements (experimental) | `intent`, `law`, `resolver`, `constraint`, `settle`, atomic commit/rejection, `why()` fan-in |
+| WebGPU presentation host | Exact bounded WASM packets, disposable GPU resources, device-loss recovery |
 
 `simulate_par` is bit-identical for the same inputs at any thread count — each
 fork's RNG seed is derived from `(seed, index)` via a SplitMix64 finalizer. A
@@ -121,6 +122,7 @@ and known limits are in the [Introduction](docs/src/introduction.md#status).
 - [Language spec](docs/src/reference/spec.md)
 - [Causal Laws guide](docs/src/guide/causal-laws.md) — experimental typed intents and atomic settlements
 - [Candidate Constraints guide](docs/src/guide/candidate-constraints.md) — order-independent validation of complete candidate patches
+- [WebGPU presentation host](docs/src/guide/webgpu.md) — render RAD state through a recoverable, bounded GPU adapter
 - [RFC-0001](docs/rfcs/0001-causal-settlements.md) — normative v0 semantics
 - [RFC-0002](docs/rfcs/0002-candidate-constraints.md) — validation-only candidate constraints
 - [Performance](docs/src/reference/performance.md)

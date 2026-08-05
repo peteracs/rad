@@ -6,58 +6,6 @@ impl Default for RadRuntime {
     }
 }
 
-fn component_field<'a>(
-    components: &'a [ComponentData],
-    component_type: &str,
-    field_name: &str,
-) -> Option<&'a Value> {
-    let component = components.iter().find(|c| c.type_name == component_type)?;
-    let index = component
-        .layout
-        .iter()
-        .position(|name| name == field_name)?;
-    component.values.get(index)
-}
-
-fn component_float_field(
-    components: &[ComponentData],
-    component_type: &str,
-    field_name: &str,
-) -> Option<f64> {
-    component_field(components, component_type, field_name)?.as_float()
-}
-
-fn component_int_field(
-    components: &[ComponentData],
-    component_type: &str,
-    field_name: &str,
-) -> Option<i64> {
-    component_field(components, component_type, field_name)?.as_int()
-}
-
-fn component_bool_field(
-    components: &[ComponentData],
-    component_type: &str,
-    field_name: &str,
-) -> Option<bool> {
-    component_field(components, component_type, field_name)?.as_bool()
-}
-
-fn component_str_field<'a>(
-    components: &'a [ComponentData],
-    component_type: &str,
-    field_name: &str,
-) -> Option<&'a str> {
-    component_field(components, component_type, field_name)?.as_str()
-}
-
-fn render_model_code(model: &str) -> f32 {
-    match model {
-        "clockwork_mage" => 1.0,
-        _ => 0.0,
-    }
-}
-
 /// Bytecode chunk plus an internal scratch `GcHeap` holding heap constants (`from_int` / `from_string`,
 /// etc.). On [`RadRuntime::load_and_run`], that heap is **merged** into the VM heap before the
 /// chunk is installed, so constant pointers stay valid.
@@ -281,6 +229,11 @@ print(require(hero, Health).hp)
         assert_eq!(features["relations_frontend"], 1);
         assert_eq!(features["causal_constraints"], 1);
         assert_eq!(features["host_values"], 1);
+        assert_eq!(features["presentation"]["avatar_instances"]["version"], 2);
+        assert_eq!(
+            features["presentation"]["avatar_instances"]["fields"]["entity_generation"],
+            1
+        );
         assert_eq!(features["causal_value_limits"]["max_depth"], 128);
         assert_eq!(
             features["causal_value_limits"]["max_encoded_bytes"],
@@ -289,6 +242,30 @@ print(require(hero, Health).hp)
         assert_eq!(
             features["constraint_limits"]["max_aggregate_fuel"],
             crate::constraint_types::ConstraintLimitProfile::HARD_MAX_AGGREGATE_FUEL
+        );
+    }
+
+    #[test]
+    fn webgpu_dogfood_compiles_ticks_and_exports_exact_packet() {
+        let mut runtime = RadRuntime::new();
+        runtime
+            .session_start(include_str!(
+                "../../../../projects/rad-webgpu/demo/world.rad"
+            ))
+            .expect("WebGPU dogfood source should compile");
+        runtime
+            .session_emit("Tick", r#"{"dt":0.016}"#)
+            .expect("tick should enqueue");
+        runtime.session_pump().expect("tick should execute");
+        runtime
+            .session_render_buffer_refresh_bounded(4, 4)
+            .expect("four avatars fit the packet profile");
+        assert_eq!(runtime.render_buffer[0], presentation::MAGIC);
+        assert_eq!(runtime.render_buffer[1], presentation::VERSION);
+        assert_eq!(runtime.render_buffer[3], 4);
+        assert_eq!(
+            runtime.render_buffer.len(),
+            presentation::HEADER_WORDS + 4 * presentation::RECORD_WORDS
         );
     }
 

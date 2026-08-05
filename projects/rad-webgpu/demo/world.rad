@@ -1,0 +1,71 @@
+component Position {
+    x: float = 0.0,
+    y: float = 0.0
+}
+
+component Velocity {
+    x: float = 0.0,
+    y: float = 0.0
+}
+
+component PlayerControlled {
+    indexed player_id: int = 0
+}
+
+component RenderAvatar {
+    model: str = ""
+}
+
+event Tick {
+    dt: float
+}
+
+entity blue {
+    Position { x: -70.0, y: -35.0 },
+    Velocity { x: 26.0, y: 19.0 },
+    PlayerControlled { player_id: 1 },
+    RenderAvatar { model: "clockwork_mage" }
+}
+
+entity red {
+    Position { x: 60.0, y: -20.0 },
+    Velocity { x: -18.0, y: 23.0 },
+    PlayerControlled { player_id: 2 },
+    RenderAvatar {}
+}
+
+entity green {
+    Position { x: -25.0, y: 38.0 },
+    Velocity { x: 30.0, y: -16.0 },
+    PlayerControlled { player_id: 3 },
+    RenderAvatar {}
+}
+
+entity gold {
+    Position { x: 45.0, y: 32.0 },
+    Velocity { x: -24.0, y: -21.0 },
+    PlayerControlled { player_id: 4 },
+    RenderAvatar {}
+}
+
+on Tick(e) {
+    for avatar in entities(Velocity) {
+        let position = get(avatar, Position) |> unwrap
+        let velocity = get(avatar, Velocity) |> unwrap
+        let next_x = position.x + velocity.x * e.dt
+        let next_y = position.y + velocity.y * e.dt
+        if next_x > 96.0 or next_x < -96.0 {
+            update(avatar, Velocity) { x = 0.0 - velocity.x }
+        }
+        if next_y > 56.0 or next_y < -56.0 {
+            update(avatar, Velocity) { y = 0.0 - velocity.y }
+        }
+        let updated_velocity = get(avatar, Velocity) |> unwrap
+        update(avatar, Position) {
+            x = position.x + updated_velocity.x * e.dt,
+            y = position.y + updated_velocity.y * e.dt
+        }
+    }
+}
+
+fn main() -> nil {}

@@ -2,7 +2,7 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "outDir": ".tmp-test",
-    "rootDir": ".",
+    "rootDir": "../../..",
     "types": ["node"],
     "noEmit": false,
     "isolatedModules": false

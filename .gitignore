@@ -74,6 +74,8 @@ coverage.xml
 /projects/moba-rad/server/edge-proxy/.dev-certs/
 /projects/moba-rad/client/.tmp-test/
 /projects/moba-rad/client/dist/
+/projects/rad-webgpu/.tmp-test/
+/projects/rad-webgpu/demo-dist/
 /projects/moba-rad/server/moba-rad-match.replay
 
 # Logs

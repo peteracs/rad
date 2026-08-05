@@ -8,14 +8,20 @@ use crate::gc::GcHeap;
 use crate::lexer::Lexer;
 use crate::opcode::{Chunk, Op};
 use crate::parser::Parser;
-use crate::value::{ComponentData, Value};
+use crate::value::Value;
 use crate::vm::VM;
+
+mod presentation;
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 pub struct RadRuntime {
     vm: VM,
     output: Vec<String>,
-    render_buffer: Vec<f32>,
+    /// Exact word-oriented presentation packet. Integer identities stay
+    /// lossless; floating fields are stored as IEEE-754 `f32::to_bits()`.
+    render_buffer: Vec<u32>,
+    /// Reused canonical entity selection for presentation encoding.
+    render_entity_scratch: Vec<u32>,
     /// Streaming-session state (D4). `session_base` is the snapshot the next
     /// `session_delta()` diffs against — held as a bare `Arc`, NOT a gc
     /// `Value`: the collector cannot see RadRuntime fields as roots, and a
