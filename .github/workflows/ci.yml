@@ -306,7 +306,7 @@ jobs:
         run: npm run build
         working-directory: projects/rad-webgpu
       - name: Install browser rendering dependency
-        run: npx --no-install playwright install --with-deps chromium
+        run: npx --no-install playwright install --with-deps --no-shell chromium
         working-directory: projects/rad-webgpu
       - name: WebGPU pixel, resize, restart, and recovery smoke
         run: npm run test:browser

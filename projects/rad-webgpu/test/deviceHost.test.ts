@@ -147,6 +147,30 @@ test('required limits are whitelisted and reject before creating a device', asyn
   }
 });
 
+test('adapter power preference is opt-in', async () => {
+  const requests: Array<GPURequestAdapterOptions | undefined> = [];
+  const devices = [new FakeDevice(), new FakeDevice()];
+  const restoreNavigator = installNavigatorGpu({
+    requestAdapter(options?: GPURequestAdapterOptions) {
+      requests.push(options);
+      const device = devices.shift();
+      return Promise.resolve(device ? adapterFor(device) : null);
+    },
+    getPreferredCanvasFormat: () => 'bgra8unorm',
+  });
+  try {
+    const defaultHost = await WebGpuDeviceHost.create(fakeCanvas());
+    const lowPowerHost = await WebGpuDeviceHost.create(fakeCanvas(), {
+      powerPreference: 'low-power',
+    });
+    assert.deepEqual(requests, [undefined, { powerPreference: 'low-power' }]);
+    defaultHost.destroy();
+    lowPowerHost.destroy();
+  } finally {
+    restoreNavigator();
+  }
+});
+
 class FakeCanvas {
   clientWidth = 640;
   clientHeight = 360;

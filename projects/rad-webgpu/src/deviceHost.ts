@@ -104,9 +104,11 @@ export class WebGpuDeviceHost {
   private async initialize(attempt: number): Promise<boolean> {
     if (!this.isCurrent(attempt)) return false;
     if (!navigator.gpu) throw new Error('webgpu.unavailable');
-    const adapter = await navigator.gpu.requestAdapter({
-      powerPreference: this.options.powerPreference ?? 'high-performance',
-    });
+    const adapter = await navigator.gpu.requestAdapter(
+      this.options.powerPreference === undefined
+        ? undefined
+        : { powerPreference: this.options.powerPreference },
+    );
     if (!this.isCurrent(attempt)) return false;
     if (!adapter) throw new Error('webgpu.adapter_unavailable');
 
