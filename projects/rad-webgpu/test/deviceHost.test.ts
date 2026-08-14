@@ -4,7 +4,11 @@ import { test } from 'node:test';
 import {
   WebGpuDeviceHost,
   type RadWebGpuRequiredLimits,
-} from '../src/deviceHost.js';
+} from '../src/gpu/deviceHost.js';
+
+Object.assign(globalThis, {
+  GPUTextureUsage: { COPY_DST: 2, RENDER_ATTACHMENT: 16 },
+});
 
 test('device loss installs a fresh epoch without retaining old GPU state', async () => {
   const first = new FakeDevice();
@@ -171,12 +175,33 @@ test('adapter power preference is opt-in', async () => {
   }
 });
 
+test('canvas is configured for persistent-target copies', async () => {
+  const restoreNavigator = installNavigatorGpu(gpuFromDevices([new FakeDevice()]));
+  const canvas = new FakeCanvas();
+  try {
+    const host = await WebGpuDeviceHost.create(canvas as unknown as HTMLCanvasElement);
+    assert.equal(
+      canvas.configuration?.usage,
+      GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_DST,
+    );
+    host.destroy();
+  } finally {
+    restoreNavigator();
+  }
+});
+
 class FakeCanvas {
   clientWidth = 640;
   clientHeight = 360;
   width = 0;
   height = 0;
-  readonly context = { configure() {}, unconfigure() {} };
+  configuration: GPUCanvasConfiguration | null = null;
+  readonly context = {
+    configure: (configuration: GPUCanvasConfiguration) => {
+      this.configuration = configuration;
+    },
+    unconfigure() {},
+  };
 
   getContext(name: string): typeof this.context | null {
     return name === 'webgpu' ? this.context : null;

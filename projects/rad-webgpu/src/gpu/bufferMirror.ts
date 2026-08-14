@@ -1,4 +1,7 @@
-import type { WordRange } from './contract.js';
+import {
+  validateWordRanges,
+  type WordRange,
+} from '../presentation/contract.js';
 
 export interface GpuBufferMirrorOptions {
   readonly label: string;
@@ -41,7 +44,7 @@ export class GpuBufferMirror {
   }
 
   upload(words: Uint32Array, ranges?: readonly WordRange[]): GPUBuffer {
-    if (ranges) validateRanges(ranges, words.length);
+    if (ranges) validateWordRanges(ranges, words.length);
     const byteLength = words.byteLength;
     const previous = this.bufferValue;
     const buffer = this.ensureCapacity(Math.max(byteLength, 4));
@@ -52,7 +55,6 @@ export class GpuBufferMirror {
       return buffer;
     }
     for (const range of ranges) {
-      if (range.wordCount === 0) continue;
       const slice = words.subarray(range.firstWord, range.firstWord + range.wordCount);
       this.device.queue.writeBuffer(
         buffer,
@@ -86,27 +88,6 @@ export class GpuBufferMirror {
     this.bufferValue = replacement;
     this.capacityBytesValue = alignTo4(capacity);
     return replacement;
-  }
-}
-
-function validateRanges(ranges: readonly WordRange[], totalWords: number): void {
-  let previousEnd = 0;
-  for (const range of ranges) {
-    validateRange(range, totalWords);
-    if (range.firstWord < previousEnd) throw new Error('webgpu.dirty_ranges_not_canonical');
-    previousEnd = range.firstWord + range.wordCount;
-  }
-}
-
-function validateRange(range: WordRange, totalWords: number): void {
-  if (!Number.isSafeInteger(range.firstWord) || range.firstWord < 0) {
-    throw new Error('webgpu.invalid_dirty_range');
-  }
-  if (!Number.isSafeInteger(range.wordCount) || range.wordCount < 0) {
-    throw new Error('webgpu.invalid_dirty_range');
-  }
-  if (range.firstWord + range.wordCount > totalWords) {
-    throw new Error('webgpu.dirty_range_out_of_bounds');
   }
 }
 

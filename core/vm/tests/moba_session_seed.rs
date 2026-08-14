@@ -91,17 +91,14 @@ fn render_buffer_exposes_the_seeded_avatar() {
     rt.session_render_buffer_refresh()
         .expect("render buffer refresh");
 
-    // Header layout: [magic, version, stride, count, frame_lo, frame_hi,
-    // flags, reserved, ...]. The client reads this exact
-    // buffer out of wasm memory; a count of 0 is precisely the frozen-champion
-    // symptom (controlled avatar for player_id=1 not found, present ids []).
-    // Header is 8 words and each avatar record is 12 words, so a seeded world
-    // yields at least 20; an empty world (the bug) yields exactly 8.
+    // Presentation v3 uses a 16-word lineage header and 12-word avatar records.
+    // The client reads this exact buffer from WASM memory; a count of zero is
+    // precisely the frozen-champion symptom.
     let len = rt.session_render_buffer_u32_len();
     assert!(
-        len >= 20,
-        "render buffer must expose at least the seeded local avatar (header 8 + \
-         stride 12), got word_len={len} (8 == empty world == frozen champion)"
+        len >= 28,
+        "render buffer must expose at least the seeded local avatar (header 16 + \
+         stride 12), got word_len={len} (16 == empty world == frozen champion)"
     );
 }
 
@@ -128,9 +125,9 @@ fn authoritative_state_with_integer_field_keeps_the_avatar_renderable() {
     rt.session_render_buffer_refresh().expect("render refresh");
     let len = rt.session_render_buffer_u32_len();
     assert!(
-        len >= 20,
+        len >= 28,
         "the avatar must survive an AuthoritativeState carrying integer-valued \
-         float fields, got word_len={len} (8 == dropped avatar == frozen champion)"
+         float fields, got word_len={len} (16 == dropped avatar == frozen champion)"
     );
 
     // The float field must actually be stored as a float (`0.0`, not `0`), or

@@ -1,40 +1,35 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 
-import { PresentationLineage } from '../src/lineage.js';
+import { PresentationLineage } from '../src/presentation/lineage.js';
 import { packetHeader } from './fixtures.js';
 
-test('new streams require an initial full packet and reset the mirror', () => {
+test('new streams require an initial full packet at sequence zero', () => {
   const lineage = new PresentationLineage();
-  assert.equal(lineage.inspect(packetHeader()).resetMirror, true);
-  lineage.commit(packetHeader());
-
-  const nextStream = packetHeader({ streamId: 2n });
-  assert.equal(lineage.inspect(nextStream).resetMirror, true);
+  lineage.accept(packetHeader());
+  lineage.accept(packetHeader({ streamId: 2n }));
   assert.throws(
-    () => lineage.inspect(packetHeader({ streamId: 3n, packetKind: 'delta' })),
+    () => lineage.accept(packetHeader({ streamId: 3n, packetKind: 'delta' })),
     /new_stream_requires_full/,
   );
   assert.throws(
-    () => lineage.inspect(packetHeader({ streamId: 3n, sequence: 1n })),
+    () => lineage.accept(packetHeader({ streamId: 3n, sequence: 1n })),
     /new_stream_sequence_not_zero/,
   );
 });
 
-test('deltas extend exactly one accepted stream baseline', () => {
+test('deltas extend exactly one accepted logical publication', () => {
   const lineage = new PresentationLineage();
-  lineage.commit(packetHeader());
+  lineage.accept(packetHeader());
   const delta = packetHeader({
     sequence: 1n,
     packetKind: 'delta',
     baseSequence: 0n,
   });
-  assert.equal(lineage.inspect(delta).resetMirror, false);
-  lineage.commit(delta);
-
-  assert.throws(() => lineage.inspect(delta), /stale_sequence/);
+  lineage.accept(delta);
+  assert.throws(() => lineage.accept(delta), /stale_sequence/);
   assert.throws(
-    () => lineage.inspect(packetHeader({
+    () => lineage.accept(packetHeader({
       sequence: 3n,
       packetKind: 'delta',
       baseSequence: 1n,
@@ -42,7 +37,7 @@ test('deltas extend exactly one accepted stream baseline', () => {
     /delta_sequence_gap/,
   );
   assert.throws(
-    () => lineage.inspect(packetHeader({
+    () => lineage.accept(packetHeader({
       sequence: 2n,
       packetKind: 'delta',
       baseSequence: 0n,
@@ -51,17 +46,12 @@ test('deltas extend exactly one accepted stream baseline', () => {
   );
 });
 
-test('device invalidation requires a full baseline without changing stream identity', () => {
+test('logical packet lineage is independent from GPU device epochs', () => {
   const lineage = new PresentationLineage();
-  lineage.commit(packetHeader());
-  lineage.invalidateBaseline();
-  assert.throws(
-    () => lineage.inspect(packetHeader({
-      sequence: 1n,
-      packetKind: 'delta',
-      baseSequence: 0n,
-    })),
-    /delta_without_baseline/,
-  );
-  assert.equal(lineage.inspect(packetHeader({ sequence: 2n })).resetMirror, true);
+  lineage.accept(packetHeader());
+  lineage.accept(packetHeader({
+    sequence: 1n,
+    packetKind: 'delta',
+    baseSequence: 0n,
+  }));
 });

@@ -7,10 +7,10 @@ export {
   type AvatarPresentationDescriptor,
   type AvatarPacketHeader,
   type AvatarPresentationPacket,
-} from '../../../../rad-webgpu/src/contract.js';
+} from '../../../../rad-webgpu/src/presentation/contract.js';
 export {
   WasmAvatarPresentationSource,
   type RadPresentationRuntime,
-} from '../../../../rad-webgpu/src/source.js';
+} from '../../../../rad-webgpu/src/runtime/wasmAvatarPresentationSource.js';
 
-export { isU32 as isRenderableEntityId } from '../../../../rad-webgpu/src/contract.js';
+export { isU32 as isRenderableEntityId } from '../../../../rad-webgpu/src/presentation/contract.js';

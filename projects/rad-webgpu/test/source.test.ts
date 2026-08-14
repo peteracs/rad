@@ -1,8 +1,8 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 
-import type { RadPresentationRuntime } from '../src/source.js';
-import { WasmAvatarPresentationSource } from '../src/source.js';
+import type { RadPresentationRuntime } from '../src/runtime/wasmAvatarPresentationSource.js';
+import { WasmAvatarPresentationSource } from '../src/runtime/wasmAvatarPresentationSource.js';
 import { runtimeFeatures } from './fixtures.js';
 
 const descriptor = runtimeFeatures();

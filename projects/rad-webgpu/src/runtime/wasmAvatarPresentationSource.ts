@@ -3,7 +3,7 @@ import {
   parseAvatarPacket,
   type AvatarPresentationDescriptor,
   type AvatarPresentationPacket,
-} from './contract.js';
+} from '../presentation/contract.js';
 
 export interface RadPresentationRuntime {
   runtime_features(): string;
@@ -72,6 +72,9 @@ export class WasmAvatarPresentationSource {
 
     const words = new Uint32Array(this.memory.buffer, pointer, length);
     const header = parseAvatarPacket(words, this.descriptor, this.maxRecords);
+    if (header.packetKind === 'delta') {
+      throw new Error('presentation.delta_packet_requires_explicit_dirty_ranges');
+    }
     return Object.freeze({
       words,
       records: words.subarray(this.descriptor.headerWords),

@@ -15,6 +15,19 @@ their IEEE-754 bit representation and upload directly to a storage buffer.
 Stream IDs and packet sequences make session restarts explicit and bind future
 deltas to one exact full-packet baseline.
 
+The update and display paths are deliberately separate:
+
+```text
+fixed RAD settlement -> publish() -> owned logical publication
+display cadence      -> renderLatest() -> persistent GPU target -> canvas
+diagnostics          -> captureLastFrame() -> bounded staging copy
+```
+
+`publish()` is the only path that touches WASM. `renderLatest()` never advances
+RAD, and readback never refreshes, uploads, or redraws the scene. Device loss
+discards only GPU residency; logical stream lineage and the latest owned
+publication remain available for rematerialization.
+
 ```ts
 const app = await RadWebGpuApp.create(canvas, runtime, wasm.memory, {
   source: { maxRecords: 100_000 },
@@ -22,7 +35,8 @@ const app = await RadWebGpuApp.create(canvas, runtime, wasm.memory, {
 
 runtime.session_emit('Tick', '{"dt":0.016}');
 runtime.session_pump();
-app.render();
+app.publish();
+app.renderLatest();
 ```
 
 Run the dogfood after building `core/vm/pkg` with `wasm-pack`:
@@ -34,12 +48,15 @@ npm run build
 npm run dev
 ```
 
-GPU handles never enter RAD snapshots or replay. A lost device is replaced and
-the next render call rematerializes the current full packet on the new device.
+GPU handles never enter RAD snapshots or replay. Publications are copied out of
+borrowed WASM memory and retained independently from GPU residency. A lost
+device is replaced and `renderLatest()` rematerializes the last accepted
+publication on the new device without advancing RAD.
 Async adapter/device requests are lifecycle-generation checked, so a destroyed
 host cannot be resurrected by an in-flight request.
 
-`npm run test:browser` runs the real Chromium/SwiftShader pixel, resize,
-session-restart, and device-recovery smoke after the WASM package is built.
-It uses an explicitly bounded offscreen GPU texture readback of the same render
-pass, without changing ordinary canvas usage.
+The dogfood runs fixed simulation steps independently from display cadence.
+Each presentation is rendered once into a persistent target and copied to the
+transient canvas texture. `npm run test:browser` passively reads that exact
+target through a caller-bounded staging buffer, then proves pixels, resize,
+session restart, and device recovery in Chromium's SwiftShader test adapter.

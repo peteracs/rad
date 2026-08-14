@@ -22,6 +22,11 @@ export interface WebGpuDeviceSession {
   readonly epoch: number;
 }
 
+export interface WebGpuSurfaceSize {
+  readonly width: number;
+  readonly height: number;
+}
+
 type SessionListener = (session: WebGpuDeviceSession) => void;
 
 /** Owns browser GPU lifecycle. RAD state is never stored here. */
@@ -65,6 +70,10 @@ export class WebGpuDeviceHost {
 
   get session(): WebGpuDeviceSession | null {
     return this.sessionValue;
+  }
+
+  get surfaceSize(): WebGpuSurfaceSize {
+    return Object.freeze({ width: this.canvas.width, height: this.canvas.height });
   }
 
   onSession(listener: SessionListener): () => void {
@@ -138,6 +147,7 @@ export class WebGpuDeviceHost {
         device,
         format,
         alphaMode: this.options.alphaMode ?? 'opaque',
+        usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_DST,
       });
     } catch (error) {
       device.destroy();

@@ -1,3 +1,18 @@
+// The Clockwork Eye
+//
+// Renderer-friendly version:
+// - many entities
+// - clearly readable rings
+// - synchronized global phase changes
+// - collapse / burst / reform motion
+//
+// Eye phases:
+//   0 = orbit
+//   1 = charge
+//   2 = collapse
+//   3 = burst
+//   4 = reform
+
 component Position {
     x: float = 0.0,
     y: float = 0.0
@@ -8,6 +23,22 @@ component Velocity {
     y: float = 0.0
 }
 
+component EyeClock {
+    phase: int = 0,
+    timer: float = 0.0
+}
+
+component Role {
+    indexed kind: int = 0
+    // 0 = core
+    // 1 = inner ring
+    // 2 = middle ring
+    // 3 = outer ring
+    // 4 = hunter
+}
+
+// Required by the WebGPU avatar presentation stream.
+// Only entities with PlayerControlled + Position are drawn.
 component PlayerControlled {
     indexed player_id: int = 0
 }
@@ -16,54 +47,507 @@ component RenderAvatar {
     model: str = ""
 }
 
+intent Shift {
+    key target: entity,
+    dx: float,
+    dy: float
+}
+
+intent Impulse {
+    key target: entity,
+    dvx: float,
+    dvy: float
+}
+
+intent SetClock {
+    key target: entity,
+    phase: int,
+    timer: float
+}
+
+intent Presentation {
+    key target: entity,
+    mode: int
+}
+
+
+// -----------------------------------------------------------------------------
+// Basic motion
+// -----------------------------------------------------------------------------
+
+law Drift(target: entity, dt: float) {
+    let velocity = get(target, Velocity) |> unwrap
+    propose Shift {
+        target: target,
+        dx: velocity.x * dt,
+        dy: velocity.y * dt
+    }
+}
+
+law Drag(target: entity, dt: float) {
+    let velocity = get(target, Velocity) |> unwrap
+    propose Impulse {
+        target: target,
+        dvx: (0.0 - velocity.x) * 0.20 * dt,
+        dvy: (0.0 - velocity.y) * 0.20 * dt
+    }
+}
+
+
+// Tangential spin around the origin.
+// spin = 1 clockwise, spin = -1 counter-clockwise.
+
+law Spin(target: entity, spin: int, strength: float, dt: float) {
+    let position = get(target, Position) |> unwrap
+
+    if spin == 1 {
+        if position.y > 0.0 {
+            propose Impulse { target: target, dvx: strength * dt, dvy: 0.0 }
+        }
+        if position.y < 0.0 {
+            propose Impulse { target: target, dvx: (0.0 - strength) * dt, dvy: 0.0 }
+        }
+        if position.x > 0.0 {
+            propose Impulse { target: target, dvx: 0.0, dvy: (0.0 - strength) * dt }
+        }
+        if position.x < 0.0 {
+            propose Impulse { target: target, dvx: 0.0, dvy: strength * dt }
+        }
+    }
+
+    if spin == -1 {
+        if position.y > 0.0 {
+            propose Impulse { target: target, dvx: (0.0 - strength) * dt, dvy: 0.0 }
+        }
+        if position.y < 0.0 {
+            propose Impulse { target: target, dvx: strength * dt, dvy: 0.0 }
+        }
+        if position.x > 0.0 {
+            propose Impulse { target: target, dvx: 0.0, dvy: strength * dt }
+        }
+        if position.x < 0.0 {
+            propose Impulse { target: target, dvx: 0.0, dvy: (0.0 - strength) * dt }
+        }
+    }
+}
+
+
+// Keep an entity inside a rough radial band without sqrt.
+// min_r2 / max_r2 define the preferred ring.
+
+law RadiusBand(target: entity, min_r2: float, max_r2: float, strength: float, dt: float) {
+    let position = get(target, Position) |> unwrap
+    let r2 = position.x * position.x + position.y * position.y
+
+    if r2 > max_r2 {
+        if position.x > 0.0 {
+            propose Impulse { target: target, dvx: (0.0 - strength) * dt, dvy: 0.0 }
+        }
+        if position.x < 0.0 {
+            propose Impulse { target: target, dvx: strength * dt, dvy: 0.0 }
+        }
+        if position.y > 0.0 {
+            propose Impulse { target: target, dvx: 0.0, dvy: (0.0 - strength) * dt }
+        }
+        if position.y < 0.0 {
+            propose Impulse { target: target, dvx: 0.0, dvy: strength * dt }
+        }
+    }
+
+    if r2 < min_r2 {
+        if position.x > 0.0 {
+            propose Impulse { target: target, dvx: strength * dt, dvy: 0.0 }
+        }
+        if position.x < 0.0 {
+            propose Impulse { target: target, dvx: (0.0 - strength) * dt, dvy: 0.0 }
+        }
+        if position.y > 0.0 {
+            propose Impulse { target: target, dvx: 0.0, dvy: strength * dt }
+        }
+        if position.y < 0.0 {
+            propose Impulse { target: target, dvx: 0.0, dvy: (0.0 - strength) * dt }
+        }
+    }
+}
+
+law ArenaBounce(target: entity, dt: float) {
+    let position = get(target, Position) |> unwrap
+    let velocity = get(target, Velocity) |> unwrap
+
+    if position.x >= 92.0 and velocity.x > 0.0 {
+        propose Impulse { target: target, dvx: -40.0 * dt, dvy: 0.0 }
+    }
+    if position.x <= -92.0 and velocity.x < 0.0 {
+        propose Impulse { target: target, dvx: 40.0 * dt, dvy: 0.0 }
+    }
+    if position.y >= 52.0 and velocity.y > 0.0 {
+        propose Impulse { target: target, dvx: 0.0, dvy: -40.0 * dt }
+    }
+    if position.y <= -52.0 and velocity.y < 0.0 {
+        propose Impulse { target: target, dvx: 0.0, dvy: 40.0 * dt }
+    }
+}
+
+
+// -----------------------------------------------------------------------------
+// Global eye phase
+// -----------------------------------------------------------------------------
+
+law EyeCycle(eye: entity, dt: float) {
+    let clock = get(eye, EyeClock) |> unwrap
+
+    let mut next_phase = clock.phase
+    let mut next_timer = clock.timer + dt
+
+    if clock.phase == 0 and next_timer >= 5.0 {
+        next_phase = 1
+        next_timer = 0.0
+    }
+
+    if clock.phase == 1 and next_timer >= 2.0 {
+        next_phase = 2
+        next_timer = 0.0
+    }
+
+    if clock.phase == 2 and next_timer >= 1.6 {
+        next_phase = 3
+        next_timer = 0.0
+    }
+
+    if clock.phase == 3 and next_timer >= 1.2 {
+        next_phase = 4
+        next_timer = 0.0
+    }
+
+    if clock.phase == 4 and next_timer >= 2.4 {
+        next_phase = 0
+        next_timer = 0.0
+    }
+
+    propose SetClock {
+        target: eye,
+        phase: next_phase,
+        timer: next_timer
+    }
+}
+
+
+// -----------------------------------------------------------------------------
+// Phase-driven spectacle
+// -----------------------------------------------------------------------------
+
+// Light center pull at all times, stronger in charge/collapse.
+
+law EyeGravity(target: entity, eye: entity, dt: float) {
+    let position = get(target, Position) |> unwrap
+    let clock = get(eye, EyeClock) |> unwrap
+
+    let mut pull = 1.2
+
+    if clock.phase == 1 { pull = 3.0 }
+    if clock.phase == 2 { pull = 6.0 }
+    if clock.phase == 3 { pull = 0.4 }
+    if clock.phase == 4 { pull = 1.4 }
+
+    if position.x > 0.0 {
+        propose Impulse { target: target, dvx: (0.0 - pull) * dt, dvy: 0.0 }
+    }
+    if position.x < 0.0 {
+        propose Impulse { target: target, dvx: pull * dt, dvy: 0.0 }
+    }
+    if position.y > 0.0 {
+        propose Impulse { target: target, dvx: 0.0, dvy: (0.0 - pull) * dt }
+    }
+    if position.y < 0.0 {
+        propose Impulse { target: target, dvx: 0.0, dvy: pull * dt }
+    }
+}
+
+
+// During burst, the eye violently ejects everything outward.
+
+law EyeBurst(target: entity, eye: entity, strength: float, dt: float) {
+    let clock = get(eye, EyeClock) |> unwrap
+    let position = get(target, Position) |> unwrap
+
+    if clock.phase == 3 {
+        if position.x > 0.0 {
+            propose Impulse { target: target, dvx: strength * dt, dvy: 0.0 }
+        }
+        if position.x < 0.0 {
+            propose Impulse { target: target, dvx: (0.0 - strength) * dt, dvy: 0.0 }
+        }
+        if position.y > 0.0 {
+            propose Impulse { target: target, dvx: 0.0, dvy: strength * dt }
+        }
+        if position.y < 0.0 {
+            propose Impulse { target: target, dvx: 0.0, dvy: (0.0 - strength) * dt }
+        }
+    }
+}
+
+
+// Hunters cut through the rings during charge and collapse.
+
+law HunterDive(target: entity, eye: entity, dt: float) {
+    let clock = get(eye, EyeClock) |> unwrap
+    let position = get(target, Position) |> unwrap
+
+    if clock.phase == 1 or clock.phase == 2 {
+        if position.x > 0.0 {
+            propose Impulse { target: target, dvx: -10.0 * dt, dvy: 0.0 }
+        }
+        if position.x < 0.0 {
+            propose Impulse { target: target, dvx: 10.0 * dt, dvy: 0.0 }
+        }
+        if position.y > 0.0 {
+            propose Impulse { target: target, dvx: 0.0, dvy: -10.0 * dt }
+        }
+        if position.y < 0.0 {
+            propose Impulse { target: target, dvx: 0.0, dvy: 10.0 * dt }
+        }
+    }
+
+    if clock.phase == 4 {
+        if position.x > 0.0 {
+            propose Impulse { target: target, dvx: 7.0 * dt, dvy: 0.0 }
+        }
+        if position.x < 0.0 {
+            propose Impulse { target: target, dvx: -7.0 * dt, dvy: 0.0 }
+        }
+        if position.y > 0.0 {
+            propose Impulse { target: target, dvx: 0.0, dvy: 7.0 * dt }
+        }
+        if position.y < 0.0 {
+            propose Impulse { target: target, dvx: 0.0, dvy: -7.0 * dt }
+        }
+    }
+}
+
+
+// Presentation switching.
+// Even if the renderer ignores these strings, the motion still carries the demo.
+
+law CorePresentation(target: entity, eye: entity) {
+    let clock = get(eye, EyeClock) |> unwrap
+
+    if clock.phase == 0 {
+        propose Presentation { target: target, mode: 90 }
+    }
+    if clock.phase == 1 {
+        propose Presentation { target: target, mode: 91 }
+    }
+    if clock.phase == 2 {
+        propose Presentation { target: target, mode: 92 }
+    }
+    if clock.phase == 3 {
+        propose Presentation { target: target, mode: 93 }
+    }
+    if clock.phase == 4 {
+        propose Presentation { target: target, mode: 94 }
+    }
+}
+
+law RingPresentation(target: entity, eye: entity, base_mode: int) {
+    let clock = get(eye, EyeClock) |> unwrap
+
+    if clock.phase == 0 {
+        propose Presentation { target: target, mode: base_mode }
+    }
+    if clock.phase == 1 {
+        propose Presentation { target: target, mode: base_mode + 10 }
+    }
+    if clock.phase == 2 {
+        propose Presentation { target: target, mode: base_mode + 20 }
+    }
+    if clock.phase == 3 {
+        propose Presentation { target: target, mode: base_mode + 30 }
+    }
+    if clock.phase == 4 {
+        propose Presentation { target: target, mode: base_mode + 40 }
+    }
+}
+
+
+// -----------------------------------------------------------------------------
+// Resolvers
+// -----------------------------------------------------------------------------
+
+resolver ResolveShift for Shift(target, proposals) {
+    let position = require(target, Position)
+
+    let total_dx = proposals |> map(fn(proposal) { return proposal.dx }) |> sum()
+    let total_dy = proposals |> map(fn(proposal) { return proposal.dy }) |> sum()
+
+    next(target, Position {
+        x: max(-95.0, min(95.0, position.x + total_dx)),
+        y: max(-55.0, min(55.0, position.y + total_dy))
+    })
+}
+
+resolver ResolveImpulse for Impulse(target, proposals) {
+    let velocity = require(target, Velocity)
+
+    let total_dvx = proposals |> map(fn(proposal) { return proposal.dvx }) |> sum()
+    let total_dvy = proposals |> map(fn(proposal) { return proposal.dvy }) |> sum()
+
+    next(target, Velocity {
+        x: max(-36.0, min(36.0, velocity.x + total_dvx)),
+        y: max(-36.0, min(36.0, velocity.y + total_dvy))
+    })
+}
+
+resolver ResolveClock for SetClock(target, proposals) {
+    let mut next_phase = 0
+    let mut next_timer = 0.0
+
+    for proposal in proposals {
+        next_phase = proposal.phase
+        next_timer = proposal.timer
+    }
+
+    next(target, EyeClock {
+        phase: next_phase,
+        timer: next_timer
+    })
+}
+
+resolver ResolvePresentation for Presentation(target, proposals) {
+    let mut mode = 0
+
+    for proposal in proposals {
+        if proposal.mode > mode {
+            mode = proposal.mode
+        }
+    }
+
+    let mut model = "shape"
+
+    if mode == 90 { model = "clockwork_eye_idle" }
+    if mode == 91 { model = "clockwork_eye_charge" }
+    if mode == 92 { model = "clockwork_eye_collapse" }
+    if mode == 93 { model = "clockwork_eye_burst" }
+    if mode == 94 { model = "clockwork_eye_reform" }
+
+    if mode == 10 { model = "inner_idle" }
+    if mode == 20 { model = "inner_charge" }
+    if mode == 30 { model = "inner_collapse" }
+    if mode == 40 { model = "inner_burst" }
+    if mode == 50 { model = "inner_reform" }
+
+    if mode == 11 { model = "middle_idle" }
+    if mode == 21 { model = "middle_charge" }
+    if mode == 31 { model = "middle_collapse" }
+    if mode == 41 { model = "middle_burst" }
+    if mode == 51 { model = "middle_reform" }
+
+    if mode == 12 { model = "outer_idle" }
+    if mode == 22 { model = "outer_charge" }
+    if mode == 32 { model = "outer_collapse" }
+    if mode == 42 { model = "outer_burst" }
+    if mode == 52 { model = "outer_reform" }
+
+    if mode == 13 { model = "hunter_idle" }
+    if mode == 23 { model = "hunter_charge" }
+    if mode == 33 { model = "hunter_collapse" }
+    if mode == 43 { model = "hunter_burst" }
+    if mode == 53 { model = "hunter_reform" }
+
+    next(target, RenderAvatar {
+        model: model
+    })
+}
+
+
+// -----------------------------------------------------------------------------
+// World
+// -----------------------------------------------------------------------------
+
 event Tick {
     dt: float
 }
 
-entity blue {
-    Position { x: -70.0, y: -35.0 },
-    Velocity { x: 26.0, y: 19.0 },
+entity eye {
+    Position { x: 0.0, y: 0.0 },
+    EyeClock {},
+    Role { kind: 0 },
     PlayerControlled { player_id: 1 },
-    RenderAvatar { model: "clockwork_mage" }
-}
-
-entity red {
-    Position { x: 60.0, y: -20.0 },
-    Velocity { x: -18.0, y: 23.0 },
-    PlayerControlled { player_id: 2 },
     RenderAvatar {}
 }
 
-entity green {
-    Position { x: -25.0, y: 38.0 },
-    Velocity { x: 30.0, y: -16.0 },
-    PlayerControlled { player_id: 3 },
-    RenderAvatar {}
-}
+// Inner ring
+entity i0 { Position { x: 18.0, y: 0.0 }, Velocity {}, Role { kind: 1 }, PlayerControlled { player_id: 2 }, RenderAvatar {} }
+entity i1 { Position { x: 13.0, y: 13.0 }, Velocity {}, Role { kind: 1 }, PlayerControlled { player_id: 2 }, RenderAvatar {} }
+entity i2 { Position { x: 0.0, y: 18.0 }, Velocity {}, Role { kind: 1 }, PlayerControlled { player_id: 2 }, RenderAvatar {} }
+entity i3 { Position { x: -13.0, y: 13.0 }, Velocity {}, Role { kind: 1 }, PlayerControlled { player_id: 2 }, RenderAvatar {} }
+entity i4 { Position { x: -18.0, y: 0.0 }, Velocity {}, Role { kind: 1 }, PlayerControlled { player_id: 2 }, RenderAvatar {} }
+entity i5 { Position { x: -13.0, y: -13.0 }, Velocity {}, Role { kind: 1 }, PlayerControlled { player_id: 2 }, RenderAvatar {} }
+entity i6 { Position { x: 0.0, y: -18.0 }, Velocity {}, Role { kind: 1 }, PlayerControlled { player_id: 2 }, RenderAvatar {} }
+entity i7 { Position { x: 13.0, y: -13.0 }, Velocity {}, Role { kind: 1 }, PlayerControlled { player_id: 2 }, RenderAvatar {} }
 
-entity gold {
-    Position { x: 45.0, y: 32.0 },
-    Velocity { x: -24.0, y: -21.0 },
-    PlayerControlled { player_id: 4 },
-    RenderAvatar {}
-}
+// Middle ring
+entity m0 { Position { x: 32.0, y: 0.0 }, Velocity {}, Role { kind: 2 }, PlayerControlled { player_id: 3 }, RenderAvatar {} }
+entity m1 { Position { x: 23.0, y: 23.0 }, Velocity {}, Role { kind: 2 }, PlayerControlled { player_id: 3 }, RenderAvatar {} }
+entity m2 { Position { x: 0.0, y: 32.0 }, Velocity {}, Role { kind: 2 }, PlayerControlled { player_id: 3 }, RenderAvatar {} }
+entity m3 { Position { x: -23.0, y: 23.0 }, Velocity {}, Role { kind: 2 }, PlayerControlled { player_id: 3 }, RenderAvatar {} }
+entity m4 { Position { x: -32.0, y: 0.0 }, Velocity {}, Role { kind: 2 }, PlayerControlled { player_id: 3 }, RenderAvatar {} }
+entity m5 { Position { x: -23.0, y: -23.0 }, Velocity {}, Role { kind: 2 }, PlayerControlled { player_id: 3 }, RenderAvatar {} }
+entity m6 { Position { x: 0.0, y: -32.0 }, Velocity {}, Role { kind: 2 }, PlayerControlled { player_id: 3 }, RenderAvatar {} }
+entity m7 { Position { x: 23.0, y: -23.0 }, Velocity {}, Role { kind: 2 }, PlayerControlled { player_id: 3 }, RenderAvatar {} }
+
+// Outer ring
+entity o0 { Position { x: 48.0, y: 0.0 }, Velocity {}, Role { kind: 3 }, PlayerControlled { player_id: 4 }, RenderAvatar {} }
+entity o1 { Position { x: 34.0, y: 34.0 }, Velocity {}, Role { kind: 3 }, PlayerControlled { player_id: 4 }, RenderAvatar {} }
+entity o2 { Position { x: 0.0, y: 48.0 }, Velocity {}, Role { kind: 3 }, PlayerControlled { player_id: 4 }, RenderAvatar {} }
+entity o3 { Position { x: -34.0, y: 34.0 }, Velocity {}, Role { kind: 3 }, PlayerControlled { player_id: 4 }, RenderAvatar {} }
+entity o4 { Position { x: -48.0, y: 0.0 }, Velocity {}, Role { kind: 3 }, PlayerControlled { player_id: 4 }, RenderAvatar {} }
+entity o5 { Position { x: -34.0, y: -34.0 }, Velocity {}, Role { kind: 3 }, PlayerControlled { player_id: 4 }, RenderAvatar {} }
+entity o6 { Position { x: 0.0, y: -48.0 }, Velocity {}, Role { kind: 3 }, PlayerControlled { player_id: 4 }, RenderAvatar {} }
+entity o7 { Position { x: 34.0, y: -34.0 }, Velocity {}, Role { kind: 3 }, PlayerControlled { player_id: 4 }, RenderAvatar {} }
+
+// Hunters
+entity h0 { Position { x: 72.0, y: 0.0 }, Velocity {}, Role { kind: 4 }, PlayerControlled { player_id: 5 }, RenderAvatar {} }
+entity h1 { Position { x: 0.0, y: 44.0 }, Velocity {}, Role { kind: 4 }, PlayerControlled { player_id: 5 }, RenderAvatar {} }
+entity h2 { Position { x: -72.0, y: 0.0 }, Velocity {}, Role { kind: 4 }, PlayerControlled { player_id: 5 }, RenderAvatar {} }
+entity h3 { Position { x: 0.0, y: -44.0 }, Velocity {}, Role { kind: 4 }, PlayerControlled { player_id: 5 }, RenderAvatar {} }
+
+
+// -----------------------------------------------------------------------------
+// Settlement
+// -----------------------------------------------------------------------------
 
 on Tick(e) {
-    for avatar in entities(Velocity) {
-        let position = get(avatar, Position) |> unwrap
-        let velocity = get(avatar, Velocity) |> unwrap
-        let next_x = position.x + velocity.x * e.dt
-        let next_y = position.y + velocity.y * e.dt
-        if next_x > 96.0 or next_x < -96.0 {
-            update(avatar, Velocity) { x = 0.0 - velocity.x }
-        }
-        if next_y > 56.0 or next_y < -56.0 {
-            update(avatar, Velocity) { y = 0.0 - velocity.y }
-        }
-        let updated_velocity = get(avatar, Velocity) |> unwrap
-        update(avatar, Position) {
-            x = position.x + updated_velocity.x * e.dt,
-            y = position.y + updated_velocity.y * e.dt
+    settle {
+        EyeCycle(eye, e.dt)
+        CorePresentation(eye, eye)
+
+        for target in entities(Role) {
+            let role = get(target, Role) |> unwrap
+            if role.kind == 1 {
+                Drift(target, e.dt) Drag(target, e.dt) Spin(target, 1, 11.0, e.dt)
+                RadiusBand(target, 180.0, 520.0, 9.0, e.dt)
+                EyeGravity(target, eye, e.dt) EyeBurst(target, eye, 24.0, e.dt)
+                ArenaBounce(target, e.dt) RingPresentation(target, eye, 10)
+            }
+            if role.kind == 2 {
+                Drift(target, e.dt) Drag(target, e.dt) Spin(target, -1, 8.0, e.dt)
+                RadiusBand(target, 700.0, 1300.0, 7.0, e.dt)
+                EyeGravity(target, eye, e.dt) EyeBurst(target, eye, 20.0, e.dt)
+                ArenaBounce(target, e.dt) RingPresentation(target, eye, 11)
+            }
+            if role.kind == 3 {
+                Drift(target, e.dt) Drag(target, e.dt) Spin(target, 1, 6.0, e.dt)
+                RadiusBand(target, 1700.0, 2900.0, 6.0, e.dt)
+                EyeGravity(target, eye, e.dt) EyeBurst(target, eye, 16.0, e.dt)
+                ArenaBounce(target, e.dt) RingPresentation(target, eye, 12)
+            }
+            if role.kind == 4 {
+                Drift(target, e.dt) Drag(target, e.dt) Spin(target, -1, 4.0, e.dt)
+                RadiusBand(target, 1200.0, 3400.0, 5.0, e.dt)
+                EyeGravity(target, eye, e.dt) HunterDive(target, eye, e.dt)
+                EyeBurst(target, eye, 28.0, e.dt) ArenaBounce(target, e.dt)
+                RingPresentation(target, eye, 13)
+            }
         }
     }
 }

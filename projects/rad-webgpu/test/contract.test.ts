@@ -1,7 +1,7 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 
-import { parseAvatarDescriptor, parseAvatarPacket } from '../src/contract.js';
+import { parseAvatarDescriptor, parseAvatarPacket } from '../src/presentation/contract.js';
 import { runtimeFeatures } from './fixtures.js';
 
 test('runtime descriptor is the single packet-layout authority', () => {

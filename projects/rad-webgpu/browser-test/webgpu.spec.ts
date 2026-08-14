@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { callHarness } from './harness.js';
 
 test('renders pixels across resize, session restart, and device recovery', async ({ page }) => {
   await page.goto('/');
@@ -8,49 +9,41 @@ test('renders pixels across resize, session restart, and device recovery', async
   const initialPixels = await capturePresentation(page);
   expect(initialPixels.recordCount).toBeGreaterThan(0);
   expect(initialPixels.changedPixels).toBeGreaterThan(200);
-  const ready = await snapshot(page);
+  const ready = await callHarness(page, 'snapshot');
   expect(ready.errors).toEqual([]);
 
   const initial = ready;
   await canvas.evaluate((element) => { element.style.width = '520px'; });
-  await expect.poll(async () => (await snapshot(page)).canvasWidth).not.toBe(initial.canvasWidth);
+  await expect.poll(async () => (await callHarness(page, 'snapshot')).canvasWidth).not.toBe(initial.canvasWidth);
   const resizedPixels = await capturePresentation(page);
   expect(resizedPixels.width).not.toBe(initialPixels.width);
   expect(resizedPixels.changedPixels).toBeGreaterThan(200);
 
-  await page.evaluate(() => globalThis.__radWebGpuDogfood?.restart());
-  await expect.poll(async () => BigInt((await snapshot(page)).streamId)).toBeGreaterThan(
+  await callHarness(page, 'restart');
+  await expect.poll(async () => BigInt((await callHarness(page, 'snapshot')).streamId)).toBeGreaterThan(
     BigInt(initial.streamId),
   );
   await expect(status).toHaveAttribute('data-kind', 'ok');
   expect((await capturePresentation(page)).changedPixels).toBeGreaterThan(200);
-  expect((await snapshot(page)).errors).toEqual([]);
+  expect((await callHarness(page, 'snapshot')).errors).toEqual([]);
 
-  const beforeLoss = await snapshot(page);
-  await page.evaluate(() => globalThis.__radWebGpuDogfood?.loseDevice());
-  await expect.poll(async () => (await snapshot(page)).deviceEpoch, { timeout: 30_000 }).toBeGreaterThan(
+  const beforeLoss = await callHarness(page, 'snapshot');
+  await callHarness(page, 'loseDevice');
+  await expect.poll(async () => (await callHarness(page, 'snapshot')).deviceEpoch, { timeout: 30_000 }).toBeGreaterThan(
     beforeLoss.deviceEpoch,
   );
   await expect(status).toHaveAttribute('data-kind', 'ok');
   expect((await capturePresentation(page)).changedPixels).toBeGreaterThan(200);
-  const recovered = await snapshot(page);
+  const recovered = await callHarness(page, 'snapshot');
   expect(recovered.errors.length).toBeGreaterThanOrEqual(1);
-  expect(recovered.errors.every((error) => error.startsWith('webgpu.device_lost:'))).toBe(true);
+  expect(recovered.errors.every((error: string) => error.startsWith('webgpu.device_lost:'))).toBe(true);
 });
-
-async function snapshot(page: import('@playwright/test').Page) {
-  const value = await page.evaluate(() => globalThis.__radWebGpuDogfood?.snapshot());
-  if (!value) throw new Error('RAD WebGPU dogfood harness is unavailable');
-  return value;
-}
 
 async function capturePresentation(page: import('@playwright/test').Page) {
   try {
-    const proof = await page.evaluate(() => globalThis.__radWebGpuDogfood?.capture());
-    if (!proof) throw new Error('RAD WebGPU pixel proof is unavailable');
-    return proof;
+    return await callHarness(page, 'capture');
   } catch (error) {
-    const state = await snapshot(page);
+    const state = await callHarness(page, 'snapshot');
     throw new Error(`RAD WebGPU pixel readback failed: ${JSON.stringify(state)}`, { cause: error });
   }
 }

@@ -1,4 +1,4 @@
-import type { AvatarPacketHeader } from '../src/contract.js';
+import type { AvatarPacketHeader } from '../src/presentation/contract.js';
 
 export function runtimeFeatures() {
   return {

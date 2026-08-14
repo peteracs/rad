@@ -21,9 +21,10 @@ All notable changes to the Rad language are documented here.
   binds session stream, packet sequence, full/delta kind, and exact delta base;
   lifecycle generations prevent in-flight adapter/device requests from
   resurrecting a destroyed host, rapid losses remain recoverable, and a real
-  Chromium/SwiftShader smoke verifies pixels through a caller-bounded offscreen
-  GPU texture readback of the real render pass, plus resize, restart, and
-  recovery.
+  fixed-step dogfood publishes independently from display cadence, one
+  persistent target is both copied to canvas and passively read back, and a
+  Chromium/SwiftShader smoke verifies pixels, resize, restart, and recovery
+  without a second RAD refresh or render pass.
 
 - **RFC-0003 is implemented experimentally end to end.** The headless
   `world-law-rpg` dogfood drives resolver-owned inventory and trading,

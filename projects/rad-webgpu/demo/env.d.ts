@@ -6,6 +6,7 @@ declare module '*rad_vm.js' {
   }
 
   export class RadRuntime {
+    free(): void;
     runtime_features(): string;
     session_start(source: string): string;
     session_emit(event: string, fieldsJson: string): void;
@@ -18,28 +19,10 @@ declare module '*rad_vm.js' {
   export default function init(input?: URL | RequestInfo | Response | BufferSource | WebAssembly.Module): Promise<InitOutput>;
 }
 
-interface RadWebGpuDogfoodSnapshot {
-  readonly canvasWidth: number;
-  readonly deviceEpoch: number;
-  readonly errors: readonly string[];
-  readonly recordCount: number;
-  readonly renderedFrames: number;
-  readonly sequence: string;
-  readonly streamId: string;
+import type { RadWebGpuBrowserHarness } from './testing/browserHarness.js';
+
+declare global {
+  var __radWebGpuDogfood: RadWebGpuBrowserHarness | undefined;
 }
 
-interface RadWebGpuPixelProof {
-  readonly changedPixels: number;
-  readonly height: number;
-  readonly recordCount: number;
-  readonly width: number;
-}
-
-interface RadWebGpuDogfoodHarness {
-  capture(): Promise<RadWebGpuPixelProof>;
-  loseDevice(): void;
-  restart(): void;
-  snapshot(): RadWebGpuDogfoodSnapshot;
-}
-
-declare var __radWebGpuDogfood: RadWebGpuDogfoodHarness | undefined;
+export {};

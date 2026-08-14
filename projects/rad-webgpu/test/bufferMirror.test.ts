@@ -1,7 +1,7 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 
-import { GpuBufferMirror } from '../src/bufferMirror.js';
+import { GpuBufferMirror } from '../src/gpu/bufferMirror.js';
 
 const usage = { COPY_DST: 8, STORAGE: 128 };
 Object.assign(globalThis, { GPUBufferUsage: usage });
@@ -54,6 +54,10 @@ test('buffer mirror enforces byte and dirty-range bounds', () => {
       { firstWord: 0, wordCount: 1 },
     ]),
     /dirty_ranges_not_canonical/,
+  );
+  assert.throws(
+    () => mirror.upload(new Uint32Array(2), [{ firstWord: 0, wordCount: 0 }]),
+    /invalid_dirty_range/,
   );
   assert.throws(
     () => new GpuBufferMirror(device, { label: 'bad', usage: usage.STORAGE, maxBytes: 15 }),

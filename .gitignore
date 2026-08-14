@@ -76,6 +76,8 @@ coverage.xml
 /projects/moba-rad/client/dist/
 /projects/rad-webgpu/.tmp-test/
 /projects/rad-webgpu/demo-dist/
+/projects/rad-webgpu/test-results/
+/projects/rad-webgpu/playwright-report/
 /projects/moba-rad/server/moba-rad-match.replay
 
 # Logs

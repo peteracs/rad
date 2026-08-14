@@ -75,14 +75,37 @@ export interface WordRange {
 }
 
 export interface AvatarPresentationPacket {
-  /** Ephemeral view into WASM memory; do not retain across another WASM call. */
+  /** Complete packet image. Sources may document a shorter borrowing lifetime. */
   readonly words: Uint32Array;
-  /** Record-only bytes, ready for a WebGPU storage-buffer upload. */
+  /** Complete record image, ready for a WebGPU storage-buffer upload. */
   readonly records: Uint32Array;
   readonly header: AvatarPacketHeader;
   readonly descriptor: AvatarPresentationDescriptor;
   /** Optional record-relative ranges supplied by a future incremental stream. */
   readonly dirtyRanges?: readonly WordRange[];
+}
+
+export function validateWordRanges(
+  ranges: readonly WordRange[],
+  totalWords: number,
+): void {
+  let previousEnd = 0;
+  for (const range of ranges) {
+    if (!Number.isSafeInteger(range.firstWord) || range.firstWord < 0) {
+      throw new Error('webgpu.invalid_dirty_range');
+    }
+    if (!Number.isSafeInteger(range.wordCount) || range.wordCount <= 0) {
+      throw new Error('webgpu.invalid_dirty_range');
+    }
+    const end = range.firstWord + range.wordCount;
+    if (!Number.isSafeInteger(end) || end > totalWords) {
+      throw new Error('webgpu.dirty_range_out_of_bounds');
+    }
+    if (range.firstWord < previousEnd) {
+      throw new Error('webgpu.dirty_ranges_not_canonical');
+    }
+    previousEnd = end;
+  }
 }
 
 export function parseAvatarDescriptor(runtimeFeatures: string | unknown): AvatarPresentationDescriptor {

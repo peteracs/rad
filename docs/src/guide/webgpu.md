@@ -42,7 +42,8 @@ const app = await RadWebGpuApp.create(canvas, runtime, wasm.memory, {
 
 runtime.session_emit('Tick', '{"dt":0.016}');
 runtime.session_pump();
-app.render();
+app.publish();
+app.renderLatest();
 ```
 
 `RadWebGpuApp` is only a composition root. Applications can independently use
@@ -80,8 +81,10 @@ deltas must extend the exact last accepted sequence. A session restart
 therefore discards the old GPU mirror instead of being confused with a stale
 frame from the prior world.
 
-The WASM view is reacquired after every runtime call. A call can grow WebAssembly
-memory and detach all older typed-array views.
+The WASM view is reacquired after every runtime call because memory growth can
+detach older typed-array views. `publish()` copies the bounded packet before it
+returns, so logical publication, display cadence, readback, and device recovery
+all consume one owned snapshot without refreshing RAD again.
 
 ## GPU lifecycle and limits
 
@@ -97,21 +100,22 @@ The host performs these checks before allocating or writing:
 - stale packet sequences and wrong-stream delta baselines reject.
 
 The implementation observes `GPUDevice.lost`, discards every device-owned
-resource, retries device creation with bounded backoff, and rebuilds on the
-next RAD packet. This follows WebGPU's device-loss model: resources created by
-the old device are no longer usable and must be recreated on a new device.
+resource, retries device creation with bounded backoff, and rebuilds from the
+last accepted publication. This follows WebGPU's device-loss model: resources
+created by the old device are no longer usable and must be recreated on a new
+device.
 Lifecycle generations are checked after every asynchronous adapter/device
 request, so destroying the host cannot be undone by an older promise. Rapid
 losses coalesce into recovery work without dropping the newest loss, and
 exceptions in error/session observers cannot interrupt recovery.
 
-CI also launches Chromium against its explicit SwiftShader WebGPU test adapter,
-renders the dogfood, encodes the same pass into the canvas and a caller-bounded
-offscreen texture, reads that texture back through the GPU, resizes, restarts the
-RAD session, forces device loss, and verifies that the same world is visible on
-the replacement device. The offscreen proof does not change ordinary canvas
-usage. This software-adapter smoke complements, rather than replaces,
-hardware-browser testing.
+The renderer draws once into a persistent presentation target, then copies that
+exact texture into the transient canvas texture. CI launches Chromium with its
+documented SwiftShader WebGPU test adapter and passively copies the persistent
+target into a caller-bounded staging buffer. It proves pixels, resize, session
+restart, forced device loss, and rematerialization on the replacement device
+without issuing a second RAD refresh or avatar draw. This software-adapter smoke
+complements, rather than replaces, hardware-browser testing.
 
 ## Authority rule
 
