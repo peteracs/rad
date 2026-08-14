@@ -150,6 +150,14 @@ All notable changes to the Rad language are documented here.
 
 ### Fixed
 
+- **Persistent RAD maps no longer depend on the unmaintained `im` collection
+  stack.** `MapStorage` now owns a narrow adapter over `rpds`'s synchronized
+  persistent hash trie, preserving O(1) structural-sharing clones and
+  path-copying updates while removing the newly disclosed `im`, `bitmaps`, and
+  `sized-chunks` RustSec advisories. Canonical encoders and map builtins remain
+  independent of hash-trie iteration order, and focused regressions cover
+  clone isolation, replacement, removal, and collection semantics.
+
 - **Entity identity allocation is canonical, fallible, and fast under churn.** Reusable IDs now live in an ordered set, making deterministic minimum reuse logarithmic instead of scanning the complete free list for every spawn. Generation-exhausted slots retire immediately, explicit merge/delta identity claims are crate-private and gap-bounded, malformed issued slots reject as typed data, and the public Rust spawn API returns `EntityAllocationError` instead of panicking. A persistent 1,000/10,000-identity churn benchmark guards the allocator path.
 
 - **Parallel worker VMs no longer abort nondeterministically during Windows process teardown.** Every pooled `simulate_par()` worker VM unnecessarily owned a nested OS-thread I/O pool even though worker execution forbids I/O. Because the VM itself lives in Rayon thread-local storage, Windows could begin destroying process threads before that TLS value joined its nested I/O thread, making Rust abort after a successful program with `threads should not terminate unexpectedly`. Worker VMs now use an explicitly disabled zero-thread I/O pool; the main VM retains its normal I/O workers. The Frankl search dogfood supplied the repeatable high-allocation parallel reproducer.

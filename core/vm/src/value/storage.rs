@@ -393,7 +393,124 @@ impl fmt::Display for MapKey {
     }
 }
 
-pub type MapStorage = im::HashMap<MapKey, Value>;
+/// Persistent map storage with O(1) clones and path-copying updates.
+///
+/// Keep the collection implementation behind this narrow adapter: RAD's VM
+/// needs the conventional mutable-map surface while snapshots and values rely
+/// on structural sharing. Callers must not depend on hash-trie iteration order;
+/// every observable encoding and collection builtin canonicalizes keys.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MapStorage(rpds::HashTrieMapSync<MapKey, Value>);
+
+impl MapStorage {
+    pub fn new() -> Self {
+        Self(rpds::HashTrieMap::new_sync())
+    }
+
+    #[inline]
+    pub fn len(&self) -> usize {
+        self.0.size()
+    }
+
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    #[inline]
+    pub fn get(&self, key: &MapKey) -> Option<&Value> {
+        self.0.get(key)
+    }
+
+    #[inline]
+    pub fn contains_key(&self, key: &MapKey) -> bool {
+        self.0.contains_key(key)
+    }
+
+    pub fn insert(&mut self, key: MapKey, value: Value) -> Option<Value> {
+        let previous = self.0.get(&key).copied();
+        self.0.insert_mut(key, value);
+        previous
+    }
+
+    pub fn remove(&mut self, key: &MapKey) -> Option<Value> {
+        let previous = self.0.get(key).copied();
+        self.0.remove_mut(key);
+        previous
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (&MapKey, &Value)> {
+        self.0.iter()
+    }
+
+    pub fn keys(&self) -> impl Iterator<Item = &MapKey> {
+        self.0.keys()
+    }
+
+    pub fn values(&self) -> impl Iterator<Item = &Value> {
+        self.0.values()
+    }
+}
+
+impl Default for MapStorage {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl std::iter::FromIterator<(MapKey, Value)> for MapStorage {
+    fn from_iter<T: IntoIterator<Item = (MapKey, Value)>>(entries: T) -> Self {
+        let mut map = Self::new();
+        for (key, value) in entries {
+            map.insert(key, value);
+        }
+        map
+    }
+}
+
+impl std::ops::Index<&MapKey> for MapStorage {
+    type Output = Value;
+
+    fn index(&self, key: &MapKey) -> &Self::Output {
+        &self.0[key]
+    }
+}
+
+#[cfg(test)]
+mod map_storage_tests {
+    use super::*;
+
+    #[test]
+    fn cloned_maps_share_history_without_sharing_mutation() {
+        let mut original = MapStorage::new();
+        original.insert(MapKey::Int(1), Value::TRUE);
+
+        let mut changed = original.clone();
+        changed.insert(MapKey::Int(2), Value::FALSE);
+        changed.remove(&MapKey::Int(1));
+
+        assert_eq!(original.len(), 1);
+        assert_eq!(original.get(&MapKey::Int(1)), Some(&Value::TRUE));
+        assert!(!original.contains_key(&MapKey::Int(2)));
+        assert!(changed.get(&MapKey::Int(1)).is_none());
+        assert_eq!(changed.get(&MapKey::Int(2)), Some(&Value::FALSE));
+    }
+
+    #[test]
+    fn collection_and_replacement_match_rad_map_semantics() {
+        let map = [
+            (MapKey::Int(1), Value::FALSE),
+            (MapKey::Int(1), Value::TRUE),
+            (MapKey::Int(2), Value::NIL),
+        ]
+        .into_iter()
+        .collect::<MapStorage>();
+
+        assert_eq!(map.len(), 2);
+        assert_eq!(map[&MapKey::Int(1)], Value::TRUE);
+        assert_eq!(map[&MapKey::Int(2)], Value::NIL);
+    }
+}
 
 /// NaN-boxed runtime value for the Rad VM.
 ///

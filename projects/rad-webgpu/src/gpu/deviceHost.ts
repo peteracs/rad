@@ -16,6 +16,7 @@ export interface WebGpuDeviceHostOptions {
 }
 
 export interface WebGpuDeviceSession {
+  readonly adapter: GPUAdapter;
   readonly device: GPUDevice;
   readonly context: GPUCanvasContext;
   readonly format: GPUTextureFormat;
@@ -160,6 +161,7 @@ export class WebGpuDeviceHost {
     }
 
     const session = Object.freeze({
+      adapter,
       device,
       context,
       format,

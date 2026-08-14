@@ -176,10 +176,15 @@ test('adapter power preference is opt-in', async () => {
 });
 
 test('canvas is configured for persistent-target copies', async () => {
-  const restoreNavigator = installNavigatorGpu(gpuFromDevices([new FakeDevice()]));
+  const adapter = adapterFor(new FakeDevice());
+  const restoreNavigator = installNavigatorGpu({
+    requestAdapter: async () => adapter,
+    getPreferredCanvasFormat: () => 'bgra8unorm',
+  });
   const canvas = new FakeCanvas();
   try {
     const host = await WebGpuDeviceHost.create(canvas as unknown as HTMLCanvasElement);
+    assert.equal(host.session?.adapter, adapter);
     assert.equal(
       canvas.configuration?.usage,
       GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_DST,

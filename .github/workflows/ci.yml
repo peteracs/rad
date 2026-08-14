@@ -309,7 +309,7 @@ jobs:
         run: npx --no-install playwright install --with-deps --no-shell chromium
         working-directory: projects/rad-webgpu
       - name: WebGPU pixel, resize, restart, and recovery smoke
-        run: npm run test:browser
+        run: xvfb-run --auto-servernum npm run test:browser
         working-directory: projects/rad-webgpu
 
   moba-rad-server:

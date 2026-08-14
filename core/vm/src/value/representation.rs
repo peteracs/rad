@@ -520,7 +520,7 @@ impl Value {
     }
 
     /// Extract the map, cloning from the GC-managed Object.
-    /// im::HashMap clone is O(1) via structural sharing.
+    /// The persistent hash-trie clone is O(1) via structural sharing.
     pub fn into_map(self) -> Option<MapStorage> {
         self.as_object().and_then(|obj| match obj {
             Object::Map(m) => Some(m.clone()),

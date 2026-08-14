@@ -258,7 +258,10 @@ print(require(hero, Health).hp)
             .expect("tick should enqueue");
         runtime.session_pump().expect("tick should execute");
         runtime
-            .session_render_buffer_refresh_bounded(4, 4)
+            .session_render_buffer_refresh_bounded(
+                4,
+                presentation::DEFAULT_MAX_ENTITIES_SCANNED,
+            )
             .expect("four avatars fit the packet profile");
         assert_eq!(runtime.render_buffer[0], presentation::MAGIC);
         assert_eq!(runtime.render_buffer[1], presentation::VERSION);
