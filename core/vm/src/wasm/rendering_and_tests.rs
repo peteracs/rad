@@ -259,18 +259,18 @@ print(require(hero, Health).hp)
         runtime.session_pump().expect("tick should execute");
         runtime
             .session_render_buffer_refresh_bounded(
-                4,
+                presentation::DEFAULT_MAX_RECORDS,
                 presentation::DEFAULT_MAX_ENTITIES_SCANNED,
             )
-            .expect("four avatars fit the packet profile");
+            .expect("dogfood avatars fit the default packet profile");
         assert_eq!(runtime.render_buffer[0], presentation::MAGIC);
         assert_eq!(runtime.render_buffer[1], presentation::VERSION);
-        assert_eq!(runtime.render_buffer[3], 4);
+        assert_eq!(runtime.render_buffer[3], 29);
         assert_eq!(runtime.render_buffer[4], 1);
         assert_eq!(runtime.render_buffer[6], 0);
         assert_eq!(
             runtime.render_buffer.len(),
-            presentation::HEADER_WORDS + 4 * presentation::RECORD_WORDS
+            presentation::HEADER_WORDS + 29 * presentation::RECORD_WORDS
         );
     }
 
