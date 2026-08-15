@@ -22,5 +22,6 @@ pub(crate) struct PersistentStore;
 // Lexical sections preserve one private semantic namespace.
 include!("value/storage.rs");
 include!("value/representation.rs");
+include!("value/builtin_catalog.rs");
 include!("value/objects.rs");
 include!("value/builtins_and_tests.rs");

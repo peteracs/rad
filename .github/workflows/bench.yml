@@ -71,8 +71,8 @@ jobs:
 
       - name: Build Rust VM (debug + release)
         run: |
-          cargo build -p rad-vm --quiet
-          cargo build -p rad-vm --release --quiet
+          cargo build -p rad-cli --quiet
+          cargo build -p rad-cli --release --quiet
 
       - name: Run debug vs release comparison
         run: python benches/compare.py --runs 5 | tee bench-compare.txt

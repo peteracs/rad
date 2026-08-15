@@ -92,7 +92,7 @@ fn emit_compiler_reactor_stub_module_impl() -> Vec<u8> {
 }
 
 /// Phase 3 reactor stub: imports `env.vfs_read`, exports memory and `rad_*` entrypoints.
-/// Full `compiler.wasm` replaces this once [`emit_wasm.rad`](../../core/c-backend/src/emit_wasm.rad) lowers the self-hosted compiler.
+/// Full `compiler.wasm` replaces this once [`emit_wasm.rad`](../../experiments/c-backend/src/emit_wasm.rad) lowers the self-hosted compiler.
 pub fn emit_compiler_reactor_stub_module() -> Vec<u8> {
     emit_compiler_reactor_stub_module_impl()
 }

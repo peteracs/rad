@@ -46,9 +46,9 @@ The browser playground compiles the VM to WebAssembly.
 - **Embeds / hosts:** `VM::import_value`, `call_global`, `export_global`, `component_value`, `resource_value`, and `enqueue_frozen_event` are the safe Rust surface. The internal NaN-boxed `Value`, `GcHeap`, raw calls, globals, component rows, and value codecs are crate-private. All floating NaNs are canonicalized before boxing so no IEEE payload can overlap an object tag.
 - **Possible future layout:** Splitting stack/frames from `GcHeap` in the Rust VM could reduce borrow-checker friction in a few hot paths. That would be a larger internal refactor; behavior and bytecode would stay the same.
 
-### Frozen legacy C backend
+### Frozen experimental C backend
 
-`core/c-backend/` is preserved historical code, not active architecture. It is
+`experiments/c-backend/` is preserved historical code, not active architecture. It is
 not the source of truth for parser, checker, runtime, WASM, playground, or
 language support. See [C Backend Freeze](../project/c-backend-freeze.md).
 
@@ -57,7 +57,7 @@ architecture work should use `core/vm/`.
 
 ### Historical C backend: `rad_dispatch_system` and Fast-Path Unrolling
 
-The self-hosted C emitter (`core/c-backend/src/emit_c.rad`) generates **`rad_dispatch_system`** as an **O(1) sparse hash table** keyed by a **32-bit DJB2-style hash** of the system name, modulo a compile-time table size chosen so every zero-argument “system” function maps to a **distinct slot**. Dispatch is **hash → modulo → function pointer + expected name → one `strcmp` to verify** the string at that slot. This is not a classical minimal perfect hash with zero verification; the bounded `strcmp` confirms the slot matches the runtime string (including rejecting collisions from arbitrary input strings).
+The self-hosted C emitter (`experiments/c-backend/src/emit_c.rad`) generates **`rad_dispatch_system`** as an **O(1) sparse hash table** keyed by a **32-bit DJB2-style hash** of the system name, modulo a compile-time table size chosen so every zero-argument “system” function maps to a **distinct slot**. Dispatch is **hash → modulo → function pointer + expected name → one `strcmp` to verify** the string at that slot. This is not a classical minimal perfect hash with zero verification; the bounded `strcmp` confirms the slot matches the runtime string (including rejecting collisions from arbitrary input strings).
 
 For maximum performance, the C backend also implements **Fast-Path Unrolling**. If `simulate()` is called with a static literal list of `system::…` references (e.g., `simulate(fork, [system::physics, system::render], 1)`), the compiler completely bypasses the dynamic dispatcher and emits inline, direct C function calls (`rad_u_physics(); rad_u_render();`), resulting in zero-overhead speculative execution.
 
@@ -71,38 +71,38 @@ The C runtime (`runtime.c`) uses stack-local buffers and `malloc`/`free` for tem
 
 ### Historical C backend: file map and examples
 
-The frozen C backend lives entirely under `core/c-backend/` and has three
+The frozen C backend lives entirely under `experiments/c-backend/` and has three
 categories: historical compiler/runtime source, old validation harnesses, and
 focused reproductions.
-Generated C and executables belong under `core/c-backend/target/`.
+Generated C and executables belong under `experiments/c-backend/target/`.
 
 | Path | Category | Purpose |
 |---|---|---|
-| `core/c-backend/src/lexer.rad` | Frozen source | Historical self-hosted lexer and token definitions. |
-| `core/c-backend/src/parser.rad` | Frozen source | Historical AST component schema and parser. |
-| `core/c-backend/src/checker.rad` | Frozen source | Historical static checker used before C emission. |
-| `core/c-backend/src/emit_c.rad` | Frozen source | Historical Rad-to-C emitter. |
-| `core/c-backend/src/main.rad` | Frozen source | Historical CLI-style wrapper for `compile` and `compile-separate`. |
-| `core/c-backend/src/runtime.c`, `runtime.h` | Frozen source | Historical C runtime for emitted programs. |
-| `core/c-backend/src/tcc_compat.c` | Frozen source | TCC-on-Windows shim for the old conformance runner. |
-| `core/c-backend/src/emit_wasm.rad`, `wasm_encode.rad` | Frozen source | Historical WASM lowering experiment. |
-| `core/c-backend/test_conformance_c.py` | Frozen harness | Old batch C conformance runner; requires `RAD_RUN_FROZEN_C_BACKEND=1`. |
-| `core/c-backend/test_c_backend.py` | Frozen harness | Old stress harness; requires `RAD_RUN_FROZEN_C_BACKEND=1`. |
-| `core/c-backend/repro/` | Frozen repro | Historical reproductions. |
+| `experiments/c-backend/src/lexer.rad` | Frozen source | Historical self-hosted lexer and token definitions. |
+| `experiments/c-backend/src/parser.rad` | Frozen source | Historical AST component schema and parser. |
+| `experiments/c-backend/src/checker.rad` | Frozen source | Historical static checker used before C emission. |
+| `experiments/c-backend/src/emit_c.rad` | Frozen source | Historical Rad-to-C emitter. |
+| `experiments/c-backend/src/main.rad` | Frozen source | Historical CLI-style wrapper for `compile` and `compile-separate`. |
+| `experiments/c-backend/src/runtime.c`, `runtime.h` | Frozen source | Historical C runtime for emitted programs. |
+| `experiments/c-backend/src/tcc_compat.c` | Frozen source | TCC-on-Windows shim for the old conformance runner. |
+| `experiments/c-backend/src/emit_wasm.rad`, `wasm_encode.rad` | Frozen source | Historical WASM lowering experiment. |
+| `experiments/c-backend/test_conformance_c.py` | Frozen harness | Old batch C conformance runner; requires `RAD_RUN_FROZEN_C_BACKEND=1`. |
+| `experiments/c-backend/test_c_backend.py` | Frozen harness | Old stress harness; requires `RAD_RUN_FROZEN_C_BACKEND=1`. |
+| `experiments/c-backend/repro/` | Frozen repro | Historical reproductions. |
 
 Example: emit one checked C file and compile it manually:
 
 ```powershell
-cargo build -p rad-vm --release
-target\release\rad.exe core\c-backend\src\main.rad compile tests\conformance\basic_arithmetic.rad core\c-backend\target\basic_arithmetic.c
-gcc -O2 core\c-backend\target\basic_arithmetic.c -I core\c-backend\src -o core\c-backend\target\basic_arithmetic.exe
-core\c-backend\target\basic_arithmetic.exe
+cargo build -p rad-cli --release
+target\release\rad.exe experiments\c-backend\src\main.rad compile tests\conformance\basic_arithmetic.rad experiments\c-backend\target\basic_arithmetic.c
+gcc -O2 experiments\c-backend\target\basic_arithmetic.c -I experiments\c-backend\src -o experiments\c-backend\target\basic_arithmetic.exe
+experiments\c-backend\target\basic_arithmetic.exe
 ```
 
 Example: emit a separate-compilation bundle:
 
 ```powershell
-target\release\rad.exe core\c-backend\src\main.rad compile-separate tests\conformance\test_separate_multi.rad core\c-backend\target\separate_test
+target\release\rad.exe experiments\c-backend\src\main.rad compile-separate tests\conformance\test_separate_multi.rad experiments\c-backend\target\separate_test
 ```
 
 Example: run the historical C-backend checks, only when intentionally
@@ -110,15 +110,15 @@ investigating the frozen backend:
 
 ```powershell
 $env:RAD_RUN_FROZEN_C_BACKEND = "1"
-py core\c-backend\test_conformance_c.py --compiler auto
-py core\c-backend\test_c_backend.py --debug-arena
+py experiments\c-backend\test_conformance_c.py --compiler auto
+py experiments\c-backend\test_c_backend.py --debug-arena
 ```
 
 ## Source layout
 
 | Path | Purpose |
 |---|---|
-| `core/vm/src/main.rs` | `rad` CLI entry point |
+| `adapters/cli/src/main.rs` | `rad` CLI composition root and process boundary |
 | `rad` | The main Rad CLI (run, test, fmt, lint, new, snapshot, play, `build --target wasm`, `lsp`) |
 | `core/vm/src/wasm_compiler_host.rs` | Phase 3: wasmtime host, `vfs_read`, guest `rad_*` exports (requires `native-wasm-phase3`) |
 | [`docs/src/reference/wasm-phase3.md`](wasm-phase3.md) | Phase 3 ABI, `rad build`, LSP env vars (`RAD_WASM_PHASE3`, `RAD_COMPILER_WASM`, `RAD_VFS_ROOT`) |
@@ -131,8 +131,8 @@ py core\c-backend\test_c_backend.py --debug-arena
 | `core/vm/src/world.rs` | ECS world (archetypes, SoA columns, CoW snapshots, indexed field hash maps, global resources) |
 | `core/vm/src/wasm.rs` | WebAssembly bindings for browser |
 | `core/vm/src/formatter.rs` | Native formatter used by `rad fmt` and LSP formatting |
-| `core/vm/src/lsp.rs` | Language server implementation |
-| `core/c-backend/` | Frozen legacy C/AOT backend experiment. Not part of normal development or health checks. |
+| `adapters/lsp/src/lib.rs` | Language Server Protocol adapter over public VM APIs |
+| `experiments/c-backend/` | Frozen experimental C/AOT backend experiment. Not part of normal development or health checks. |
 | `rad lsp` | Language server (diagnostics, hover, go-to-def, completions, formatting) |
 | `tooling/editors/vscode/` | VS Code extension (TextMate grammar, language config) |
 | `projects/playground/` | Browser playground (HTML + WASM) |
@@ -157,11 +157,11 @@ py core\c-backend\test_c_backend.py --debug-arena
 cargo test -p rad-vm
 # Alternative: cargo test --manifest-path core/vm/Cargo.toml
 #
-# Includes parser/checker/VM tests and DX/unit coverage for formatter (`formatter.rs`),
-# linter (`linter.rs`), and LSP (`lsp.rs`) that previously lived in removed Python harnesses.
+# Includes parser/checker/VM tests and DX/unit coverage for formatter and linter.
+cargo test -p rad-lsp
 
 # Snapshot / conformance baselines — every .rad under the directory tree that has a sibling .snap
-# is checked. CI runs: cargo run -p rad-vm --bin rad -- snapshot tests/
+# is checked. CI runs: cargo run -p rad-cli --bin rad -- snapshot tests/
 rad snapshot tests/
 # After building: target/debug/rad snapshot tests/   (Windows: target\debug\rad.exe)
 rad snapshot tests/ --create   # write missing .snap files

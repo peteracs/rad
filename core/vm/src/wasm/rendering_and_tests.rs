@@ -250,7 +250,7 @@ print(require(hero, Health).hp)
         let mut runtime = RadRuntime::new();
         runtime
             .session_start(include_str!(
-                "../../../../projects/rad-webgpu/demo/world.rad"
+                "../../../../adapters/webgpu/demo/world.rad"
             ))
             .expect("WebGPU dogfood source should compile");
         runtime
@@ -281,7 +281,7 @@ print(require(hero, Health).hp)
             runtime.session_render_buffer_refresh().unwrap_err(),
             "presentation.no_active_stream"
         );
-        let source = include_str!("../../../../projects/rad-webgpu/demo/world.rad");
+        let source = include_str!("../../../../adapters/webgpu/demo/world.rad");
         runtime.session_start(source).expect("first session starts");
         runtime
             .session_render_buffer_refresh()

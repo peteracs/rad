@@ -65,7 +65,7 @@ body:
         - [ ] `split("hello", "")` returns `["h", "e", "l", "l", "o"]`
         - [ ] Conformance test passes in the Rust VM
         - [ ] `cargo test -p rad-vm` passes
-        - [ ] `cargo run -p rad-vm --bin rad -- snapshot tests/` passes (after `cargo build -p rad-vm` if needed)
+        - [ ] `cargo run -p rad-cli --bin rad -- snapshot tests/` passes (after `cargo build -p rad-cli` if needed)
     validations:
       required: true
 

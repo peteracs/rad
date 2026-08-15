@@ -1,10 +1,10 @@
 use super::*;
-use rad_vm::relation_derivation as production_derivation;
-use rad_vm::relation_frontend::{
+use rad_vm::relation::derivation as production_derivation;
+use rad_vm::relation::frontend::{
     compile, AggregateKind as ProductionAggregateKind, FrontendOptions, Literal, RuleTerm,
     SealedRulePlan,
 };
-use rad_vm::relation_runtime as runtime;
+use rad_vm::relation::runtime;
 use rad_vm::world::World;
 use std::sync::Arc;
 
@@ -279,7 +279,7 @@ fn oracle_rule(plan: &SealedRulePlan) -> RulePlan {
             .predicates
             .iter()
             .map(|predicate| match predicate {
-                rad_vm::relation_frontend::RulePredicate::Greater(left, right) => {
+                rad_vm::relation::frontend::RulePredicate::Greater(left, right) => {
                     Predicate::Greater(left.clone(), right.clone())
                 }
             })

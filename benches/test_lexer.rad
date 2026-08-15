@@ -1,4 +1,4 @@
-use "../core/c-backend/src/lexer.rad"
+use "../experiments/c-backend/src/lexer.rad"
 
 fn main() -> nil {
     let src = "let mut x = 42 + 3\nif x > 10 { print(x) }\nfn foo(a: int) { return a + 1 }"

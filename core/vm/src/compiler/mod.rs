@@ -35,6 +35,6 @@ pub struct CompileWarning {
     pub line: u32,
     pub col: u32,
 }
-// Lexical sections preserve one private semantic namespace.
-include!("mod/model.rs");
-include!("mod/lifecycle.rs");
+// Compiler state and lifecycle share one private implementation namespace.
+include!("state.rs");
+include!("lifecycle.rs");

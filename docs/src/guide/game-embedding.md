@@ -16,7 +16,7 @@ The app code lives in:
 
 - `projects/dogfood/orianna_gui/arena_schema.rad` - public ECS schema and host event
   contract.
-- `projects/dogfood/moba/map4_data.rad` - generated browser-moba map4 metadata,
+- `projects/moba/kit/map4_data.rad` - generated browser-moba map4 metadata,
   lane landmarks, and spawn points consumed by the Orianna schema.
 - `projects/dogfood/orianna_gui/moba_stack.rad` - reusable game helpers.
 - `projects/dogfood/orianna_gui/orianna_arena.rad` - Orianna-specific spell logic.
@@ -41,25 +41,25 @@ The Orianna ability lab uses the primary VM path:
    `session_render_delta()`, `session_checkpoint()`, `session_undo()`,
    `session_redo()`, and `session_why()`.
 
-The lab does not run through `core/c-backend/`, and it does not call
-`core/simcore/`. `core/simcore/` is the separate compiled MOBA damage kernel
-used by the broader MOBA dogfood path and golden corpus; `core/c-backend/` is
-frozen legacy code and is not part of the browser/game runtime.
+The lab does not run through `experiments/c-backend/`, and it does not call
+`projects/moba/simcore/`. `projects/moba/simcore/` is the separate compiled MOBA damage kernel
+used by the broader MOBA dogfood path and golden corpus; `experiments/c-backend/` is
+frozen experimental code and is not part of the browser/game runtime.
 
 ## `moba-rad` Phase 3: UDP Authority + WebTransport Client
 
-`projects/moba-rad/` is the clean client/server dogfood scaffold for the next
+`projects/moba/vertical-slice/` is the clean client/server dogfood scaffold for the next
 MOBA runtime. The project root intentionally contains only `client/`,
 `server/`, and `docs/`.
 
 For the full browser networking boundary and rationale, see
 [WebTransport Edge Networking](./webtransport-networking.md).
-For the project-local runbook, see `projects/moba-rad/docs/`.
+For the project-local runbook, see `projects/moba/vertical-slice/docs/`.
 
 Run the client:
 
 ```powershell
-cd path\to\rad\projects\moba-rad\client
+cd path\to\rad\projects\moba\vertical-slice\client
 npm run dev
 # open http://127.0.0.1:5174/
 ```
@@ -67,7 +67,7 @@ npm run dev
 Run the RAD authority server:
 
 ```powershell
-cd path\to\rad\projects\moba-rad\server
+cd path\to\rad\projects\moba\vertical-slice\server
 npm run dev
 # UDP match socket: 127.0.0.1:8788
 ```
@@ -79,7 +79,7 @@ The server `npm run dev` script invokes the local RAD CLI on
 Run the browser edge proxy in another terminal:
 
 ```powershell
-cd path\to\rad\projects\moba-rad\server
+cd path\to\rad\projects\moba\vertical-slice\server
 npm run proxy
 # WebTransport: https://localhost:4433/match
 # Forwards datagram payloads to UDP authority: 127.0.0.1:8788
@@ -112,7 +112,7 @@ Phase 3 keeps the local feel loop while making the authoritative path explicit:
    assigns a monotonically reserved target simulation tick.
 4. The browser transport is `WebTransport` datagrams. It sends the same compact
    match packets as the native UDP path; there is no HTTP polling bridge.
-5. `server/edge-proxy` terminates HTTP/3/QUIC WebTransport sessions and
+5. `edge-proxy` terminates HTTP/3/QUIC WebTransport sessions and
    forwards packet payloads to the RAD UDP authority. RAD owns the game
    protocol and simulation, not the QUIC implementation.
 6. The RAD server binds UDP on `127.0.0.1:8788` and accepts compact
@@ -124,10 +124,10 @@ Phase 3 keeps the local feel loop while making the authoritative path explicit:
    active `player_id` ownership, handles disconnect packets, expires idle peer
    entities, advances a fixed-tick accumulator, and sends binary state
    datagram snapshots to connected peers.
-8. `projects/moba-rad/server/src/sim/components.rad` owns `Position`,
+8. `projects/moba/vertical-slice/server/src/sim/components.rad` owns `Position`,
    `MoveTarget`, `MoveSpeed`, `RenderAvatar`, `PlayerControlled`,
    `MoveOrder`, `Tick`, and `AuthoritativeState`; movement behavior lives in
-   `projects/moba-rad/server/src/sim/movement.rad`.
+   `projects/moba/vertical-slice/server/src/sim/movement.rad`.
 9. The client bundles that same simulation RAD source into WASM; the server
    imports it from `server/src/sim`.
 10. `Tick { dt }` advances the controlled avatar toward the clamped target inside RAD on both
@@ -137,78 +137,78 @@ Phase 3 keeps the local feel loop while making the authoritative path explicit:
 
 Relevant files:
 
-- `projects/moba-rad/server/src/sim/movement.rad` - one RAD source of truth for
+- `projects/moba/vertical-slice/server/src/sim/movement.rad` - one RAD source of truth for
   movement behavior, prediction ticks, and authoritative state application.
-- `projects/moba-rad/server/src/sim/components.rad` - shared ECS components and
+- `projects/moba/vertical-slice/server/src/sim/components.rad` - shared ECS components and
   event declarations.
-- `projects/moba-rad/server/src/world/scene.rad` - map-plane dimensions and
+- `projects/moba/vertical-slice/server/src/world/scene.rad` - map-plane dimensions and
   world clamping helpers.
-- `projects/moba-rad/server/src/world/avatars.rad` - player avatar lookup,
+- `projects/moba/vertical-slice/server/src/world/avatars.rad` - player avatar lookup,
   seeding, and render model metadata.
-- `projects/moba-rad/server/src/server/state.rad` - server config, stats,
+- `projects/moba/vertical-slice/server/src/server/state.rad` - server config, stats,
   sequence counters, lifecycle control, shutdown events, and typed stat events.
-- `projects/moba-rad/server/src/server/clock.rad` - fixed-tick accumulator and
+- `projects/moba/vertical-slice/server/src/server/clock.rad` - fixed-tick accumulator and
   catch-up cap.
-- `projects/moba-rad/server/src/server/input_queue.rad` - target-tick jitter
+- `projects/moba/vertical-slice/server/src/server/input_queue.rad` - target-tick jitter
   buffer with late/future/duplicate input rejection, shared peer-status helpers,
   and receipt/applied ACK tracking for move and cast inputs.
-- `projects/moba-rad/server/src/protocol/match_protocol.rad` - compact UDP
+- `projects/moba/vertical-slice/server/src/protocol/match_protocol.rad` - compact UDP
   packet encode/decode helpers.
-- `projects/moba-rad/server/src/transport/udp_match.rad` - bounded datagram
+- `projects/moba/vertical-slice/server/src/transport/udp_match.rad` - bounded datagram
   receive loop and state snapshot sends.
-- `projects/moba-rad/server/edge-proxy/src/main.rs` - WebTransport edge
+- `projects/moba/vertical-slice/edge-proxy/src/main.rs` - WebTransport edge
   process that forwards browser datagrams to the RAD UDP authority.
-- `projects/moba-rad/client/src/rad/main.rad` - client host contract and
+- `projects/moba/vertical-slice/client/src/rad/main.rad` - client host contract and
   world seeding.
-- `projects/moba-rad/client/src/radHost.ts` - browser session wrapper over
+- `projects/moba/vertical-slice/client/src/radHost.ts` - browser session wrapper over
   `session_start`, `session_emit`, `session_pump`, `session_render_delta`, and
   authoritative reconciliation.
-- `projects/moba-rad/client/src/transport/serverState.ts` - transport-neutral
+- `projects/moba/vertical-slice/client/src/transport/serverState.ts` - transport-neutral
   authoritative state shape.
-- `projects/moba-rad/client/src/transport/matchProtocol.ts` - client-side
+- `projects/moba/vertical-slice/client/src/transport/matchProtocol.ts` - client-side
   binary packet encode/decode helpers.
-- `projects/moba-rad/client/src/transport/matchWire.ts` - browser-side
+- `projects/moba/vertical-slice/client/src/transport/matchWire.ts` - browser-side
   little-endian and fixed-point wire primitives shared by packet encoders and
   parsers.
-- `projects/moba-rad/client/src/transport/serverStateBuffer.ts` - reusable
+- `projects/moba/vertical-slice/client/src/transport/serverStateBuffer.ts` - reusable
   `ServerState` buffers, record resizing, and copy helpers for pooled snapshot
   parsing.
-- `projects/moba-rad/client/src/transport/webTransportStateRouter.ts` -
+- `projects/moba/vertical-slice/client/src/transport/webTransportStateRouter.ts` -
   parsed-state pools, bounded latest-state inbox routing, and ACK-qualified
   sync waiters.
-- `projects/moba-rad/client/src/transport/matchTransport.ts` - client-side
+- `projects/moba/vertical-slice/client/src/transport/matchTransport.ts` - client-side
   transport interface used by the game loop, including the `close()` lifecycle
   hook.
-- `projects/moba-rad/client/src/transport/webTransport.ts` - browser
+- `projects/moba/vertical-slice/client/src/transport/webTransport.ts` - browser
   WebTransport datagram implementation for the match transport interface.
-- `projects/moba-rad/client/src/netcode/` - fixed client clock and typed-array
+- `projects/moba/vertical-slice/client/src/netcode/` - fixed client clock and typed-array
   prediction/reconciliation buffers.
-- `projects/moba-rad/client/src/app/clientInputController.ts` - DOM listener
+- `projects/moba/vertical-slice/client/src/app/clientInputController.ts` - DOM listener
   lifecycle, pointer memory, Q aim state, resize/debug dispatch, and clean
   move/cast intent callbacks.
-- `projects/moba-rad/client/src/app/clientAuthorityApplier.ts` - accepted
+- `projects/moba/vertical-slice/client/src/app/clientAuthorityApplier.ts` - accepted
   authority snapshot application: ACK updates, visual projection, clock sync,
   applied-input cleanup, reconciliation decision, correction signaling, and
   prediction-runner replay.
-- `projects/moba-rad/client/src/app/clientAuthorityRequester.ts` -
+- `projects/moba/vertical-slice/client/src/app/clientAuthorityRequester.ts` -
   ACK-qualified authority sync/poll cadence, in-flight guard, RTT/jitter timing,
   and transport-failure telemetry.
-- `projects/moba-rad/client/src/app/clientCommandDispatcher.ts` - target-tick
+- `projects/moba/vertical-slice/client/src/app/clientCommandDispatcher.ts` - target-tick
   move/cast command reservation, prediction-ring writes, first retransmit
   scheduling, and fresh input send handoff.
-- `projects/moba-rad/client/src/app/clientInputTransport.ts` - fresh move/cast
+- `projects/moba/vertical-slice/client/src/app/clientInputTransport.ts` - fresh move/cast
   datagram sends, bounded resend cadence, oldest-unacked input selection, and
   transport-failure telemetry.
-- `projects/moba-rad/client/src/app/clientPredictionRunner.ts` - local RAD
+- `projects/moba/vertical-slice/client/src/app/clientPredictionRunner.ts` - local RAD
   fixed-tick stepping, simulated-tick frontier, per-tick prediction samples,
   local scene samples, and authoritative replay after correction.
-- `projects/moba-rad/client/src/scene.ts` - Three.js plane, right-click raycast, target
+- `projects/moba/vertical-slice/client/src/scene.ts` - Three.js plane, right-click raycast, target
   marker, and snapshot-to-mesh projection.
-- `projects/moba-rad/client/src/main.ts` - browser bootstrap and page lifecycle.
-- `projects/moba-rad/client/src/app/MobaRadClient.ts` - app lifecycle owner:
+- `projects/moba/vertical-slice/client/src/main.ts` - browser bootstrap and page lifecycle.
+- `projects/moba/vertical-slice/client/src/app/MobaRadClient.ts` - app lifecycle owner:
   RAF scheduling, authority consumption, reconciliation orchestration, transport
   close, and scene disposal.
-- `projects/moba-rad/server/src/main.rad` - RAD orchestration: UDP bind,
+- `projects/moba/vertical-slice/server/src/main.rad` - RAD orchestration: UDP bind,
   fixed-tick loop, bounded input pump, snapshot fanout, and graceful `udp_close`
   on shutdown.
 

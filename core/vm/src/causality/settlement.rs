@@ -38,7 +38,7 @@ pub struct ResolutionRecord {
 pub struct RelationAssertionRecord {
     pub frame: u64,
     pub assertion_id: u64,
-    pub fact_key: crate::relation_runtime::FactKey,
+    pub fact_key: crate::relation::runtime::FactKey,
     pub resolution_ids: Vec<u64>,
     /// Set when the record crossed a save/fork boundary.
     pub origin: Option<String>,
@@ -145,7 +145,7 @@ impl CausalityLedger {
         &mut self,
         frame: u64,
         assertion_id: u64,
-        fact_key: crate::relation_runtime::FactKey,
+        fact_key: crate::relation::runtime::FactKey,
         mut resolution_ids: Vec<u64>,
     ) {
         resolution_ids.sort_unstable();

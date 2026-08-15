@@ -1,5 +1,5 @@
-use "../core/c-backend/src/lexer.rad"
-use "../core/c-backend/src/parser.rad"
+use "../experiments/c-backend/src/lexer.rad"
+use "../experiments/c-backend/src/parser.rad"
 
 fn main() -> nil {
     let src = "fn main() -> nil { let x = 10 + 20\n print(x) }"

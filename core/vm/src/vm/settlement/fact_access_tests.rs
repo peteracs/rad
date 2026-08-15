@@ -1,6 +1,6 @@
 #[test]
 fn derived_fact_rejects_movement_inside_the_atomic_candidate() {
-    use crate::relation_frontend::{compile, FrontendOptions};
+    use crate::relation::frontend::{compile, FrontendOptions};
 
     let source = r#"
 component Position { x: int = 0 }
@@ -45,7 +45,7 @@ fn explain_encumbrance() {
     return why_fact("game::derived::Encumbered", [hero])
 }
 "#;
-    let mut vm = crate::causal_laws_tests::compile_vm(source);
+    let mut vm = crate::internal_tests::causal_laws::compile_vm(source);
     vm.run(0).expect("initialize movement program");
 
     let artifacts = compile(
@@ -78,9 +78,9 @@ derive Encumbered(person)
 
     let hero = vm.world.get_entity_by_name("hero").unwrap();
     let hero_ref = vm.world.entity_ref(hero).unwrap();
-    let encumbered = crate::relation_runtime::FactKey::new(
+    let encumbered = crate::relation::runtime::FactKey::new(
         "game::derived::Encumbered",
-        vec![crate::relation_runtime::FactValue::Entity(hero_ref)],
+        vec![crate::relation::runtime::FactValue::Entity(hero_ref)],
     );
     assert!(vm.world.derived_relation_state().facts().contains_key(&encumbered));
     let ownership = vm
@@ -145,8 +145,8 @@ derive Encumbered(person)
 
 #[test]
 fn resolver_fact_replace_and_remove_preserve_assertion_lifetimes() {
-    use crate::relation_frontend::{compile, FrontendOptions};
-    use crate::relation_runtime::{FactKey, FactValue};
+    use crate::relation::frontend::{compile, FrontendOptions};
+    use crate::relation::runtime::{FactKey, FactValue};
 
     let source = r#"
 intent AssignOwnership { key item: entity, owner: entity }
@@ -176,7 +176,7 @@ fn assign_alice() { settle { Assign(sword, alice) } }
 fn assign_bob() { settle { Assign(sword, bob) } }
 fn release_bob() { settle { Release(sword, bob) } }
 "#;
-    let mut vm = crate::causal_laws_tests::compile_vm(source);
+    let mut vm = crate::internal_tests::causal_laws::compile_vm(source);
     vm.run(0).expect("initialize ownership program");
     let artifacts = compile(
         "relation Owns(owner: entity, item: entity)\n    unique item\n",
@@ -252,7 +252,7 @@ fn fact_reads_are_sandbox_closed() {
 
 #[test]
 fn fact_lookup_resource_quote_dominates_native_temporary_allocation() {
-    use crate::relation_frontend::{compile, FrontendOptions};
+    use crate::relation::frontend::{compile, FrontendOptions};
     use crate::value::Builtin;
     use crate::vm::constraint_runtime::builtin_resource_charge;
 
@@ -312,7 +312,7 @@ fn fact_lookup_resource_quote_dominates_native_temporary_allocation() {
 
 #[test]
 fn invalid_resolver_fact_write_rolls_back_the_complete_settlement() {
-    use crate::relation_frontend::{compile, FrontendOptions};
+    use crate::relation::frontend::{compile, FrontendOptions};
 
     let source = r#"
 component Counter { value: int = 0 }
@@ -325,7 +325,7 @@ resolver ResolveBroken for BreakCandidate(target, proposals) {
 entity hero { Counter {} }
 fn attempt() { settle { Break(hero) } }
 "#;
-    let mut vm = crate::causal_laws_tests::compile_vm(source);
+    let mut vm = crate::internal_tests::causal_laws::compile_vm(source);
     vm.run(0).expect("initialize rollback program");
     let artifacts = compile(
         "relation Known(subject: entity)\n",
@@ -348,7 +348,7 @@ fn attempt() { settle { Break(hero) } }
 
 #[test]
 fn resolver_fact_writes_obey_the_sandbox_write_grant() {
-    use crate::relation_frontend::{compile, FrontendOptions};
+    use crate::relation::frontend::{compile, FrontendOptions};
 
     let artifacts = compile(
         "relation Marker(subject: entity)\n",

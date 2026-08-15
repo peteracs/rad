@@ -5,7 +5,7 @@ This log captures issues observed while running `tests/conformance/push_limits_e
 ## Scope
 
 - Stress suite: `tests/conformance/push_limits_enterprise_weird.rad` (27 checks)
-- Full conformance: `cargo run -p rad-vm --bin rad -- snapshot tests/` (from repo root; compares `tests/**/*.rad` against sibling `.snap` files), plus `cargo test -p rad-vm`
+- Full conformance: `cargo run -p rad-cli --bin rad -- snapshot tests/` (from repo root; compares `tests/**/*.rad` against sibling `.snap` files), plus `cargo test -p rad-vm`
 
 ## Findings
 

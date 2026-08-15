@@ -15,7 +15,7 @@ RAD_CLI = os.path.join(REPO_ROOT, "target", "release", RAD_CLI_NAME)
 def main():
     if not os.path.exists(RAD_CLI):
         print(f"Error: {RAD_CLI} not found.")
-        print("Please build the VM first: cargo build -p rad-vm --release")
+        print("Please build the VM first: cargo build -p rad-cli --release")
         return 2
 
     os.makedirs(REPORTS_DIR, exist_ok=True)

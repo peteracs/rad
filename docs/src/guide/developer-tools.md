@@ -112,14 +112,14 @@ separate from the host value boundary and closure backup collector. See
 
 ### Frozen C backend
 
-`core/c-backend/` is frozen legacy code. It is not part of normal developer
+`experiments/c-backend/` is frozen experimental code. It is not part of normal developer
 tooling, not a release health gate, and not a source of truth for language
 behavior. See [C Backend Freeze](../project/c-backend-freeze.md).
 
 Any detailed C-backend status below is historical and not current maintenance
 guidance.
 
-Historical note: the self-hosted compiler (`core/c-backend/src/emit_c.rad`) was typechecked by the default Rust VM checker.
+Historical note: the self-hosted compiler (`experiments/c-backend/src/emit_c.rad`) was typechecked by the default Rust VM checker.
 All compiler sources (`emit_c.rad`, `parser.rad`, `checker.rad`) have been converted to use f-strings for improved readability. The C backend passes 14/15 benchmark stress tests (the remaining `test_diamond` — the compiler compiling itself — is a known performance limitation). We are incrementally rolling out `--strict-types` compliance across the compiler sources:
 - `lexer.rad` is fully strict-types clean.
 - `parser.rad`, `checker.rad`, and `emit_c.rad` are in progress.
@@ -128,13 +128,13 @@ The old entry points are opt-in only and require `RAD_RUN_FROZEN_C_BACKEND=1`:
 
 | Command | Use |
 |---|---|
-| `RAD_RUN_FROZEN_C_BACKEND=1 py core\c-backend\test_conformance_c.py` | Historical C conformance harness. |
-| `RAD_RUN_FROZEN_C_BACKEND=1 py core\c-backend\test_c_backend.py` | Historical stress harness. |
+| `RAD_RUN_FROZEN_C_BACKEND=1 py experiments\c-backend\test_conformance_c.py` | Historical C conformance harness. |
+| `RAD_RUN_FROZEN_C_BACKEND=1 py experiments\c-backend\test_c_backend.py` | Historical stress harness. |
 
 Generated C, temporary emitter scripts, and binaries belong under
-`core/c-backend/target/`. Source-level notes about the C backend belong in
+`experiments/c-backend/target/`. Source-level notes about the C backend belong in
 [Architecture](../reference/architecture.md), [Phase 3 WASM](../reference/wasm-phase3.md),
-or this page, not in ad hoc files under `core/c-backend/`.
+or this page, not in ad hoc files under `experiments/c-backend/`.
 
 ## Formatter
 

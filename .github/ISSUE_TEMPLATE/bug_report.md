@@ -38,4 +38,4 @@ What actually happened. Include the full error output if applicable.
 
 - OS: [e.g., Windows 11, macOS 14, Ubuntu 22.04]
 - Rust version: [e.g., 1.76] — primary for `rad` and `rad lsp` (LSP is implemented in Rust, not Python)
-- Python version: [e.g., 3.11] — only if the bug involves Python helper scripts (e.g. `core/c-backend/test_conformance_c.py`, `core/c-backend/test_c_backend.py`, `benches/compare.py`)
+- Python version: [e.g., 3.11] — only if the bug involves Python helper scripts (e.g. `experiments/c-backend/test_conformance_c.py`, `experiments/c-backend/test_c_backend.py`, `benches/compare.py`)

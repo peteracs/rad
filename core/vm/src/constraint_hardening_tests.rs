@@ -1,7 +1,7 @@
 //! Focused regressions for RFC-0002 resource, output, and replay hardening.
 
-use crate::causal_laws_tests::compile_vm;
 use crate::host_value::FrozenValue;
+use crate::internal_tests::causal_laws::compile_vm;
 use crate::value::{Builtin, Value};
 use crate::vm::VM;
 use crate::CausalValueLimits;

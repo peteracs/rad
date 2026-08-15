@@ -11,7 +11,7 @@ Status key:
 - **Active docs**: canonical documentation source.
 - **Validation**: automated or manual checks.
 - **Tooling**: support code that should not define language semantics.
-- **Frozen legacy**: preserved code that is not part of normal development.
+- **Frozen experiment**: preserved code that is not part of normal development.
 - **Generated**: ignored local output; do not commit it.
 
 ## Top Level
@@ -19,10 +19,12 @@ Status key:
 | Path | Status | Notes |
 |---|---|---|
 | `.github/` | Tooling | CI, issue templates, PR template, and release notes template. |
+| `adapters/` | Tooling | CLI, LSP, and WebGPU host boundaries that depend on the core VM. |
 | `benches/` | Validation | Stress programs, bootstrap benchmarks, profile comparisons, and external baselines. |
-| `core/` | Active core | Language/runtime implementation and core-adjacent Rust crates. |
+| `core/` | Active core | Authoritative language/runtime implementation only. |
 | `docs/` | Active docs | mdBook source and theme. |
 | `examples/` | Active project | Canonical small examples and host examples. |
+| `experiments/` | Frozen experiment | Non-authoritative implementation research. |
 | `projects/` | Active project | Larger dogfood apps, playground, and tutorials. |
 | `tests/` | Validation | Snapshot/conformance tests, focused feature fixtures, and manual checks. |
 | `tooling/` | Tooling | Editor support, helper scripts, and `rad new` templates. |
@@ -39,21 +41,23 @@ the [Core VM Source Audit](core-vm-source-audit.md).
 
 | Path | Status | Notes |
 |---|---|---|
-| `core/vm/` | Active core | Rust crate for the CLI, VM, checker, compiler, formatter, LSP, WASM bindings, and tests. |
+| `core/vm/` | Active core | Rust library for syntax, checking, bytecode, VM, world state, replay, relations, and WASM bindings. |
 | `core/vm/src/checker/` | Active core | Static analysis and type checking. |
 | `core/vm/src/compiler/` | Active core | Rust AST-to-bytecode compiler. |
 | `core/vm/src/lexer/` | Active core | Lexer submodules. |
 | `core/vm/src/parser/` | Active core | Parser submodules. |
+| `core/vm/src/relation/` | Active core | Relation front end, authoritative store, and derivation under one bounded context. |
 | `core/vm/src/vm/` | Active core | Bytecode VM internals and builtins. |
+| `core/vm/src/internal_tests/` | Validation | Cross-module tests that require crate-private state. |
 | `core/vm/tests/` | Validation | Rust integration tests for the VM crate. |
 | `core/vm/benches/` | Validation | Criterion benchmarks tied to the VM crate. |
 | `core/vm/scripts/` | Tooling | VM-specific doc/example helper scripts. |
-| `core/c-backend/` | Frozen legacy | Historical C/AOT backend experiment. Not authoritative; see [C Backend Freeze](c-backend-freeze.md). |
-| `core/c-backend/src/` | Frozen legacy | Rad compiler sources plus C runtime support files, preserved but not maintained. |
-| `core/c-backend/repro/` | Frozen legacy | Historical reproductions only. |
-| `core/simcore/` | Active core | Rust/native/wasm simulation core used by the MOBA dogfood path. |
-| `core/simcore/src/` | Active core | Sim core implementation. |
-| `core/simcore/tests/` | Validation | Golden corpus tests. |
+| `experiments/c-backend/` | Frozen experiment | Historical C/AOT backend experiment. Not authoritative; see [C Backend Freeze](c-backend-freeze.md). |
+| `experiments/c-backend/src/` | Frozen experiment | Rad compiler sources plus C runtime support files, preserved but not maintained. |
+| `experiments/c-backend/repro/` | Frozen experiment | Historical reproductions only. |
+| `projects/moba/simcore/` | Active project | Rust/native/wasm simulation core owned by the MOBA project. |
+| `projects/moba/simcore/src/` | Active project | Project-specific accelerated implementation. |
+| `projects/moba/simcore/tests/` | Validation | Golden corpus tests. |
 
 ## Docs
 
@@ -76,10 +80,12 @@ the [Core VM Source Audit](core-vm-source-audit.md).
 | `projects/dogfood/budget/` | Active project | Budget dogfood app. |
 | `projects/dogfood/causality/` | Active project | Provenance/why dogfood app. |
 | `projects/dogfood/deathsight/` | Active project | Browser/game dogfood source. |
-| `projects/dogfood/moba/` | Active project | MOBA simulation dogfood. |
-| `projects/dogfood/moba/gen/` | Active project | Checked-in generated Rad content used by the MOBA corpus. |
-| `projects/dogfood/moba/kit/` | Active project | Champion/ability kit modules. |
-| `projects/dogfood/moba/tools/` | Tooling | Generators for MOBA content. |
+| `projects/moba/kit/` | Active project | MOBA simulation dogfood. |
+| `projects/moba/kit/gen/` | Active project | Checked-in generated Rad content used by the MOBA corpus. |
+| `projects/moba/kit/kit/` | Active project | Champion/ability kit modules. |
+| `projects/moba/kit/tools/` | Tooling | Generators for MOBA content. |
+| `projects/moba/vertical-slice/` | Active project | Networked client, RAD authority, edge proxy, and shared protocol. |
+| `projects/moba/vertical-slice/protocol/` | Active project | Canonical wire contract and generated-binding tool. |
 | `projects/dogfood/opsdesk/` | Active project | Operations desk dogfood app. |
 | `projects/dogfood/orianna_gui/` | Active project | Orianna browser arena source. |
 | `projects/dogfood/radgui/` | Active project | Generic GUI dogfood source. |
@@ -99,14 +105,14 @@ the [Core VM Source Audit](core-vm-source-audit.md).
 | `projects/dogfood/timetravel/` | Active project | Replay/time-travel dogfood app. |
 | `projects/dogfood/todo/` | Active project | Todo dogfood app. |
 | `projects/dogfood/worldmerge/` | Active project | Merge/conflict dogfood app. |
-| `projects/moba-rad/` | Active project | Networked MOBA dogfood stack: RAD authority server, Rust WebTransport edge proxy, and a browser client. |
-| `projects/moba-rad/client/` | Active project | Vite + TypeScript + Three.js client owning input, prediction, reconciliation, and rendering. |
-| `projects/moba-rad/client/src/netcode/` | Active project | Prediction, reconciliation, and ack/diagnostic logic. |
-| `projects/moba-rad/client/test/` | Validation | Node-based unit tests for the client netcode and transport modules. |
-| `projects/moba-rad/docs/` | Active docs | Stack-local overview, runbook, protocol ownership, and netcode notes. |
-| `projects/moba-rad/server/` | Active project | RAD authority server: simulation, packet grammar, validation, snapshots, and replay. |
-| `projects/moba-rad/server/src/test/` | Validation | `.rad` smoke suites run via `npm test`. |
-| `projects/moba-rad/server/edge-proxy/` | Active project | Rust WebTransport/HTTP3 terminator. Deliberately outside the root Cargo workspace so QUIC dependencies stay out of the main build. |
+| `projects/moba/vertical-slice/` | Active project | Networked MOBA dogfood stack: RAD authority server, Rust WebTransport edge proxy, and a browser client. |
+| `projects/moba/vertical-slice/client/` | Active project | Vite + TypeScript + Three.js client owning input, prediction, reconciliation, and rendering. |
+| `projects/moba/vertical-slice/client/src/netcode/` | Active project | Prediction, reconciliation, and ack/diagnostic logic. |
+| `projects/moba/vertical-slice/client/test/` | Validation | Node-based unit tests for the client netcode and transport modules. |
+| `projects/moba/vertical-slice/docs/` | Active docs | Stack-local overview, runbook, protocol ownership, and netcode notes. |
+| `projects/moba/vertical-slice/server/` | Active project | RAD authority server: simulation, packet grammar, validation, snapshots, and replay. |
+| `projects/moba/vertical-slice/server/src/test/` | Validation | `.rad` smoke suites run via `npm test`. |
+| `projects/moba/vertical-slice/edge-proxy/` | Active project | Rust WebTransport/HTTP3 terminator. Deliberately outside the root Cargo workspace so QUIC dependencies stay out of the main build. |
 | `projects/playground/` | Active project | Browser playground, hosts, demos, relay, and JS tests. |
 | `projects/playground/demos/` | Active project | Standalone browser visual prototypes and their local assets. |
 | `projects/playground/relay/` | Tooling | WebSocket relay for collaborative playground tests. |
@@ -147,5 +153,5 @@ the [Core VM Source Audit](core-vm-source-audit.md).
 There is no intentional `archive/`, `deprecated/`, or `old/` source tree.
 Local scratch belongs outside the repo or in ignored root folders such as
 `scratch/` and `temp/`. Generated output belongs under ignored build/output
-directories such as `target/`, `docs/book/`, `core/c-backend/target/`,
+directories such as `target/`, `docs/book/`, `experiments/c-backend/target/`,
 `core/vm/pkg/`, and `projects/playground/pkg*/`.

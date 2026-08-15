@@ -28,21 +28,21 @@ fn dogfood_text(vm: &mut VM, function: &str) -> String {
 
 fn dogfood_fact(
     relation: &str,
-    tuple: Vec<crate::relation_runtime::FactValue>,
-) -> crate::relation_runtime::FactKey {
-    crate::relation_runtime::FactKey::new(format!("game::worldlaw::{relation}"), tuple)
+    tuple: Vec<crate::relation::runtime::FactValue>,
+) -> crate::relation::runtime::FactKey {
+    crate::relation::runtime::FactKey::new(format!("game::worldlaw::{relation}"), tuple)
 }
 
 #[test]
 fn world_law_rpg_runs_the_complete_authoritative_derived_candidate() {
     use crate::constraint_types::{SettlementAttemptOutcome, VmFailure};
-    use crate::relation_frontend::{compile, FrontendOptions};
-    use crate::relation_runtime::{
+    use crate::relation::frontend::{compile, FrontendOptions};
+    use crate::relation::runtime::{
         FactValue, OperationMetadata, PendingDespawn, RelationRuntimeManifest,
         RelationTransaction,
     };
 
-    let mut vm = crate::causal_laws_tests::compile_vm(WORLD_LAW_RPG_SOURCE);
+    let mut vm = crate::internal_tests::causal_laws::compile_vm(WORLD_LAW_RPG_SOURCE);
     vm.run(0).expect("initialize headless gameplay world");
     let artifacts = compile(
         WORLD_LAW_RPG_RELATIONS,

@@ -10,7 +10,7 @@ on:
       - 'core/vm/Cargo.toml'
       - 'core/vm/Cargo.lock'
       - 'projects/playground/**'
-      - 'projects/rad-webgpu/**'
+      - 'adapters/webgpu/**'
   workflow_dispatch:
 
 permissions:
@@ -44,19 +44,19 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: projects/rad-webgpu/package-lock.json
+          cache-dependency-path: adapters/webgpu/package-lock.json
 
       - name: Build WebGPU dogfood
         run: |
-          npm ci --prefix projects/rad-webgpu
-          npm run build --prefix projects/rad-webgpu
+          npm ci --prefix adapters/webgpu
+          npm run build --prefix adapters/webgpu
 
       - name: Prepare site
         run: |
           mkdir -p _site
           cp projects/playground/index.html _site/
           cp -r core/vm/pkg _site/pkg
-          cp -r projects/rad-webgpu/demo-dist _site/webgpu
+          cp -r adapters/webgpu/demo-dist _site/webgpu
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5

@@ -1,4 +1,4 @@
-use "../core/c-backend/src/lexer.rad"
+use "../experiments/c-backend/src/lexer.rad"
 fn main() -> nil {
   let src = "fn main() -> nil { print(42) }"
   let tokens = lex(src)

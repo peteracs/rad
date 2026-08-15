@@ -8,11 +8,11 @@
 fn runtime_fact_value(
     snapshot: &WorldSnapshot,
     relation: &str,
-    column: &crate::relation_frontend::RelationColumn,
+    column: &crate::relation::frontend::RelationColumn,
     value: &Value,
-) -> Result<crate::relation_runtime::FactValue, String> {
-    use crate::relation_frontend::RelationType;
-    use crate::relation_runtime::FactValue;
+) -> Result<crate::relation::runtime::FactValue, String> {
+    use crate::relation::frontend::RelationType;
+    use crate::relation::runtime::FactValue;
 
     match column.value_type {
         RelationType::Entity => value
@@ -53,9 +53,9 @@ fn runtime_fact_value(
 fn runtime_fact_values(
     snapshot: &WorldSnapshot,
     relation: &str,
-    columns: &[crate::relation_frontend::RelationColumn],
+    columns: &[crate::relation::frontend::RelationColumn],
     values: &crate::value::RadList,
-) -> Result<Vec<crate::relation_runtime::FactValue>, String> {
+) -> Result<Vec<crate::relation::runtime::FactValue>, String> {
     if values.len() != columns.len() {
         return Err(format!(
             "relation '{}' expects {} tuple values, got {}",
@@ -76,7 +76,7 @@ fn runtime_fact_key(
     relation: &str,
     values: &crate::value::RadList,
     authoritative_only: bool,
-) -> Result<crate::relation_runtime::FactKey, String> {
+) -> Result<crate::relation::runtime::FactKey, String> {
     let manifest = snapshot
         .relation_state()
         .manifest()
@@ -96,17 +96,17 @@ fn runtime_fact_key(
     };
     let schema = runtime_schema.schema();
     let tuple = runtime_fact_values(snapshot, relation, &schema.columns, values)?;
-    crate::relation_runtime::canonical_fact_key(
+    crate::relation::runtime::canonical_fact_key(
         schema,
-        crate::relation_runtime::FactKey::new(relation, tuple),
+        crate::relation::runtime::FactKey::new(relation, tuple),
     )
     .map_err(|error| error.to_string())
 }
 
 fn pending_fact_values(
-    values: Vec<crate::relation_runtime::FactValue>,
-) -> Vec<crate::relation_runtime::PendingRelationValue> {
-    use crate::relation_runtime::{EntityOperand, FactValue, PendingRelationValue};
+    values: Vec<crate::relation::runtime::FactValue>,
+) -> Vec<crate::relation::runtime::PendingRelationValue> {
+    use crate::relation::runtime::{EntityOperand, FactValue, PendingRelationValue};
 
     values
         .into_iter()
@@ -142,7 +142,7 @@ impl VM {
             .ok_or_else(|| "why_fact() tuple must be a list".to_string())?;
         let snapshot = self.world.snapshot();
         let key = runtime_fact_key(&snapshot, relation, values, false)?;
-        let explanation = crate::relation_derivation::explain_fact(
+        let explanation = crate::relation::derivation::explain_fact(
             &key,
             snapshot.relation_state(),
             snapshot.derived_relation_state(),
@@ -200,11 +200,11 @@ impl VM {
             .expect("fact key validation resolved schema")
             .schema();
         let exists = match schema.kind {
-            crate::relation_frontend::RelationKind::Authoritative => snapshot
+            crate::relation::frontend::RelationKind::Authoritative => snapshot
                 .relation_state()
                 .assertions()
                 .contains_key(&key),
-            crate::relation_frontend::RelationKind::Derived => {
+            crate::relation::frontend::RelationKind::Derived => {
                 snapshot.derived_relation_state().facts().contains_key(&key)
             }
         };
@@ -216,7 +216,7 @@ impl VM {
         args: Vec<Value>,
         builtin: Builtin,
     ) -> Result<Value, String> {
-        use crate::relation_runtime::{
+        use crate::relation::runtime::{
             OperationMetadata, PendingFactKey, PendingRelationOperation,
         };
 

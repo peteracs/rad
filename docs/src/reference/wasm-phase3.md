@@ -14,14 +14,14 @@ See [`core/vm/src/compiler_abi.rs`](../../../core/vm/src/compiler_abi.rs): packe
 ## Self-hosted Rad
 
 - Historical frozen helpers live under
-  [`core/c-backend/src/wasm_encode.rad`](../../../core/c-backend/src/wasm_encode.rad)
-  and [`core/c-backend/src/emit_wasm.rad`](../../../core/c-backend/src/emit_wasm.rad).
+  [`experiments/c-backend/src/wasm_encode.rad`](../../../experiments/c-backend/src/wasm_encode.rad)
+  and [`experiments/c-backend/src/emit_wasm.rad`](../../../experiments/c-backend/src/emit_wasm.rad).
   They are not the active WASM source of truth.
 
 The stateful reactor ABI is documented here and implemented on the Rust host
 side by `core/vm/src/wasm_compiler_host.rs` plus the current stub emitter in
 `core/vm/src/wasm_binary_emit.rs`. There is no separate source note file under
-`core/c-backend/`; that directory is frozen legacy code.
+`experiments/c-backend/`; that directory is frozen experimental code.
 
 ## `rad build`
 
@@ -61,9 +61,11 @@ constant storage is merged into the VM. This API is not exposed as a safe raw
 value path to Rust hosts. See the [architecture guide](architecture.md) for the
 VM memory model.
 
-## Recovery note (`core/vm/src/main.rs`)
+## CLI ownership (`adapters/cli/src/main.rs`)
 
-The full CLI (including `fmt`, `lint`, `test`, `new`, `snapshot`, `play`, **`build`**) lives in [`core/vm/src/main.rs`](../../../core/vm/src/main.rs). If the file was ever truncated locally, recover from version control or editor history.
+The full CLI (including `fmt`, `lint`, `test`, `new`, `snapshot`, `play`, and
+**`build`**) is owned by the `rad-cli` adapter. Native Phase 3 diagnostics in
+`rad-lsp` propagate the matching `rad-vm/native-wasm-phase3` feature explicitly.
 
 ## Cutover target
 

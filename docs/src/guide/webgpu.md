@@ -19,18 +19,18 @@ does not roll back or change because a GPU disappeared.
 ## Use it
 
 The reusable host lives in
-[`projects/rad-webgpu`](../../../projects/rad-webgpu/README.md).
+[`adapters/webgpu`](../../../adapters/webgpu/README.md).
 Build the VM package and the host:
 
 ```bash
 wasm-pack build --target web core/vm
-npm ci --prefix projects/rad-webgpu
-npm test --prefix projects/rad-webgpu
-npm run build --prefix projects/rad-webgpu
+npm ci --prefix adapters/webgpu
+npm test --prefix adapters/webgpu
+npm run build --prefix adapters/webgpu
 ```
 
-The dogfood is emitted to `projects/rad-webgpu/demo-dist/`. In development,
-run `npm run dev --prefix projects/rad-webgpu`.
+The dogfood is emitted to `adapters/webgpu/demo-dist/`. In development,
+run `npm run dev --prefix adapters/webgpu`.
 
 An embed composes the already-running RAD session with a canvas:
 

@@ -23,6 +23,14 @@ impl fmt::Display for Effect {
 }
 
 impl Effect {
+    pub const ALL: [Effect; 5] = [
+        Effect::IO,
+        Effect::ECS,
+        Effect::ReadECS,
+        Effect::Event,
+        Effect::Async,
+    ];
+
     pub fn from_name(name: &str) -> Option<Self> {
         match name {
             "io" => Some(Effect::IO),
@@ -35,13 +43,7 @@ impl Effect {
     }
 
     pub fn all() -> HashSet<Effect> {
-        let mut s = HashSet::new();
-        s.insert(Effect::IO);
-        s.insert(Effect::ECS);
-        s.insert(Effect::ReadECS);
-        s.insert(Effect::Event);
-        s.insert(Effect::Async);
-        s
+        Self::ALL.into_iter().collect()
     }
 }
 
@@ -106,6 +108,18 @@ impl EffectSet {
             .filter(|e| !self.allows(**e))
             .copied()
             .collect()
+    }
+
+    /// Effects in stable diagnostic order. Builtin metadata uses this as the
+    /// single bridge from its canonical [`EffectSet`] to checker diagnostics.
+    pub fn effects(&self) -> Vec<Effect> {
+        match self {
+            EffectSet::Unrestricted => Effect::ALL.to_vec(),
+            EffectSet::Restricted(set) => Effect::ALL
+                .into_iter()
+                .filter(|effect| set.contains(effect))
+                .collect(),
+        }
     }
 }
 

@@ -1,5 +1,10 @@
 [workspace]
-members = ["core/vm", "core/simcore"]
+members = [
+    "adapters/cli",
+    "adapters/lsp",
+    "core/vm",
+    "projects/moba/simcore",
+]
 resolver = "2"
 
 # One shared `target/` at the repo root instead of per-crate target directories

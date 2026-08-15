@@ -137,8 +137,8 @@ pub struct WorldSnapshot {
     indexed_fields: Arc<HashMap<String, HashSet<String>>>,
     indices: Arc<HashMap<IndexKey, Vec<u32>>>,
     resources: Arc<ResourceMap>,
-    authoritative_relations: crate::relation_runtime::AuthoritativeRelationState,
-    derived_relations: crate::relation_derivation::DerivedRelationState,
+    authoritative_relations: crate::relation::runtime::AuthoritativeRelationState,
+    derived_relations: crate::relation::derivation::DerivedRelationState,
     /// In-flight events at capture time: `(event, payload, trace_id)`.
     /// Events are program state — a snapshot that drops them is not a
     /// snapshot. Payloads are persisted on capture. `fork()` fills this,

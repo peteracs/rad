@@ -49,8 +49,8 @@ a.out
 # Copied or synced next to playground HTML (same artifacts as core/vm/pkg)
 /projects/playground/pkg/
 /projects/playground/pkg-node/
-/core/simcore/pkg/
-/core/simcore/pkg-node/
+/projects/moba/simcore/pkg/
+/projects/moba/simcore/pkg-node/
 
 # JavaScript (VS Code extension / future tooling)
 node_modules/
@@ -69,16 +69,16 @@ coverage.xml
 .env
 .env.*
 !.env.example
-/projects/moba-rad/server/edge-proxy/certs/
+/projects/moba/vertical-slice/edge-proxy/certs/
 # Persisted self-signed WebTransport dev cert (stable hash across reboots)
-/projects/moba-rad/server/edge-proxy/.dev-certs/
-/projects/moba-rad/client/.tmp-test/
-/projects/moba-rad/client/dist/
-/projects/rad-webgpu/.tmp-test/
-/projects/rad-webgpu/demo-dist/
-/projects/rad-webgpu/test-results/
-/projects/rad-webgpu/playwright-report/
-/projects/moba-rad/server/moba-rad-match.replay
+/projects/moba/vertical-slice/edge-proxy/.dev-certs/
+/projects/moba/vertical-slice/client/.tmp-test/
+/projects/moba/vertical-slice/client/dist/
+/adapters/webgpu/.tmp-test/
+/adapters/webgpu/demo-dist/
+/adapters/webgpu/test-results/
+/adapters/webgpu/playwright-report/
+/projects/moba/vertical-slice/server/moba-rad-match.replay
 
 # Logs
 *.log
@@ -110,7 +110,7 @@ Trace-*.json
 /projects/dogfood/tactics/session_play.txt
 /projects/dogfood/todo/session*.txt
 /projects/dogfood/syncdesk/session_*.txt
-/projects/dogfood/moba/golden_treeline.txt
+/projects/moba/kit/golden_treeline.txt
 /projects/tutorial/task-board/sync_demo/
 
 # Generated reports
@@ -118,7 +118,7 @@ Trace-*.json
 
 # Docs site (mdBook)
 /docs/book/
-/projects/moba-rad/docs/book/
+/projects/moba/vertical-slice/docs/book/
 
 # Dev scratch / temp files
 /temp/

@@ -1,6 +1,6 @@
 # C Backend Freeze
 
-`core/c-backend/` is frozen legacy code. It is not part of normal Rad language
+`experiments/c-backend/` is frozen experimental code. It is not part of normal Rad language
 development, and it is not a source of truth for syntax, checking, runtime
 semantics, docs, playground behavior, or feature support.
 
@@ -13,11 +13,11 @@ The ground truth is `core/vm/`:
 - Dogfood and playground behavior that runs through `rad-vm`.
 - The documentation in `docs/src/`.
 
-When `core/vm` and `core/c-backend` disagree, `core/vm` wins.
+When `core/vm` and `experiments/c-backend` disagree, `core/vm` wins.
 
 ## What Frozen Means
 
-- Do not touch `core/c-backend/` during normal feature work.
+- Do not touch `experiments/c-backend/` during normal feature work.
 - Do not patch C-backend warnings or failures while developing `core/vm`.
 - Do not require C-backend tests in CI or release health checks.
 - Do not cite C-backend behavior as current language support.

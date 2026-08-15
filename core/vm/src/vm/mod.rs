@@ -61,7 +61,7 @@ pub(crate) struct VmSharedState {
     pub(crate) global_names: Arc<Vec<String>>,
     pub(crate) program_source_identity: Option<Arc<str>>,
     pub(crate) relation_runtime_manifest:
-        Option<Arc<crate::relation_runtime::RelationRuntimeManifest>>,
+        Option<Arc<crate::relation::runtime::RelationRuntimeManifest>>,
     pub(crate) state_machines: Arc<HashMap<String, HashMap<String, Vec<StateTransitionInfo>>>>,
     pub(crate) event_handlers: Arc<HashMap<String, Vec<HandlerEntry>>>,
     pub(crate) systems: Arc<HashMap<String, SystemRuntimeInfo>>,
@@ -106,7 +106,7 @@ pub struct WorkerResult {
     pub cmds: Vec<EcsCommand>,
     pub(crate) evts: Vec<(String, Value, u64)>,
 }
-// Lexical sections preserve one private semantic namespace.
-include!("mod/model.rs");
-include!("mod/program_and_state.rs");
-include!("mod/loading_and_execution.rs");
+// VM state, program state, and lifecycle share one private implementation namespace.
+include!("state.rs");
+include!("program_state.rs");
+include!("lifecycle.rs");

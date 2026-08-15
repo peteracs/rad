@@ -1,7 +1,7 @@
 #[test]
 fn relation_patch_requires_a_resolver_and_preserves_proposal_fan_in() {
-    use crate::relation_frontend::{compile, FrontendOptions};
-    use crate::relation_runtime::{
+    use crate::relation::frontend::{compile, FrontendOptions};
+    use crate::relation::runtime::{
         OperationMetadata, PendingFactKey, PendingRelationOperation, PendingRelationValue,
         RelationTransaction,
     };

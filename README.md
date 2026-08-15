@@ -95,14 +95,14 @@ rad projects/dogfood/causal-laws/main.rad --experimental-laws # typed causal fan
 Build:
 
 ```bash
-cargo build -p rad-vm
+cargo build -p rad-cli
 target/debug/rad examples/demo.rad
 ```
 
 On Windows:
 
 ```powershell
-cargo build -p rad-vm
+cargo build -p rad-cli
 target\debug\rad.exe examples\demo.rad
 ```
 

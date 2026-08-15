@@ -12,8 +12,13 @@
 /// grantable — only the host commits.
 pub fn builtin_allowed_in_sandbox(builtin: Builtin) -> bool {
     match builtin {
-        // Buffered, host-inspectable output.
-        Builtin::Print | Builtin::Eprint => true,
+        // Buffered, host-inspectable output and the deliberately narrow,
+        // data-only guest boundary. These carry an honest IO effect but are
+        // safe here because no ambient host handle crosses the boundary.
+        Builtin::Print
+        | Builtin::Eprint
+        | Builtin::SandboxInput
+        | Builtin::SandboxOutput => true,
         // Guest randomness is a supported, deterministic feature: every
         // sandboxed run is seeded (DEFAULT_SEED or the grant's seed), so
         // rand_* stays allowed even though its honest effect row is IO.

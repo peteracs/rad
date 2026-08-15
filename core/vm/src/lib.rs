@@ -15,22 +15,16 @@ pub mod constraint_types;
 pub mod host_value;
 pub mod merge;
 pub mod radpack;
-pub mod relation_derivation;
-pub mod relation_frontend;
-pub mod relation_runtime;
+pub mod relation;
 pub mod wire;
 
 #[cfg(test)]
 mod bench_tests;
 #[cfg(test)]
 mod bytecode_boundary_tests;
-#[cfg(test)]
-mod causal_laws_tests;
 pub mod checker;
 pub mod compiler;
 pub mod compiler_abi;
-#[cfg(test)]
-mod composition_tests;
 #[cfg(test)]
 mod constraint_hardening_tests;
 #[cfg(test)]
@@ -43,14 +37,12 @@ pub(crate) mod gc;
 #[cfg(test)]
 mod index_tests;
 #[cfg(test)]
+mod internal_tests;
+#[cfg(test)]
 mod leak_lab;
 pub mod lexer;
 pub mod linter;
-#[cfg(not(target_arch = "wasm32"))]
-pub mod lsp;
 pub mod manifest;
-#[cfg(test)]
-mod migration_tests;
 pub mod module_loader;
 #[cfg(test)]
 mod sheet_property_tests;

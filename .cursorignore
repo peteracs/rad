@@ -3,11 +3,11 @@ target/
 target-*/
 target_*/
 /core/vm/pkg/
-/core/simcore/pkg/
+/projects/moba/simcore/pkg/
 /projects/playground/pkg/
 /projects/playground/pkg-node/
 /docs/book/
-/projects/moba-rad/docs/book/
+/projects/moba/vertical-slice/docs/book/
 /reports/
 
 # Tooling caches

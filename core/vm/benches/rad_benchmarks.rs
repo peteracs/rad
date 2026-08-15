@@ -10,9 +10,9 @@ use rad_vm::host_value::FrozenValue;
 use rad_vm::lexer::Lexer;
 use rad_vm::module_loader::load_program_with_uses;
 use rad_vm::parser::Parser;
-use rad_vm::relation_derivation::{derive_all, derive_indexed_all, DerivationLimits};
-use rad_vm::relation_frontend::{compile as compile_relations, FrontendOptions};
-use rad_vm::relation_runtime::{
+use rad_vm::relation::derivation::{derive_all, derive_indexed_all, DerivationLimits};
+use rad_vm::relation::frontend::{compile as compile_relations, FrontendOptions};
+use rad_vm::relation::runtime::{
     OperationMetadata, PendingFactKey, PendingRelationOperation, PendingRelationValue,
     RelationRuntimeManifest, RelationTransaction,
 };

@@ -30,8 +30,8 @@ impl World {
             indexed_fields: Arc::new(HashMap::new()),
             indices: Arc::new(HashMap::new()),
             resources: Arc::new(ResourceMap::default()),
-            authoritative_relations: crate::relation_runtime::AuthoritativeRelationState::default(),
-            derived_relations: crate::relation_derivation::DerivedRelationState::default(),
+            authoritative_relations: crate::relation::runtime::AuthoritativeRelationState::default(),
+            derived_relations: crate::relation::derivation::DerivedRelationState::default(),
         }
     }
 
@@ -135,20 +135,20 @@ impl World {
         self.entity_archetype.contains_key(&eid)
     }
 
-    pub fn relation_state(&self) -> &crate::relation_runtime::AuthoritativeRelationState {
+    pub fn relation_state(&self) -> &crate::relation::runtime::AuthoritativeRelationState {
         &self.authoritative_relations
     }
 
-    pub fn derived_relation_state(&self) -> &crate::relation_derivation::DerivedRelationState {
+    pub fn derived_relation_state(&self) -> &crate::relation::derivation::DerivedRelationState {
         &self.derived_relations
     }
 
     pub(crate) fn restore_relation_transport(
         &mut self,
         encoded: &str,
-        manifest: std::sync::Arc<crate::relation_runtime::RelationRuntimeManifest>,
-    ) -> crate::relation_runtime::RelationRuntimeResult<()> {
-        let state = crate::relation_runtime::AuthoritativeRelationState::from_transport_hex(
+        manifest: std::sync::Arc<crate::relation::runtime::RelationRuntimeManifest>,
+    ) -> crate::relation::runtime::RelationRuntimeResult<()> {
+        let state = crate::relation::runtime::AuthoritativeRelationState::from_transport_hex(
             encoded, manifest,
         )?;
         state.validate_live_entity_set(&self.live_relation_entities())?;
@@ -160,9 +160,9 @@ impl World {
 
     pub fn install_relation_manifest(
         &mut self,
-        manifest: std::sync::Arc<crate::relation_runtime::RelationRuntimeManifest>,
-        expected: crate::relation_frontend::FrontendManifestDigest,
-    ) -> crate::relation_runtime::RelationRuntimeResult<()> {
+        manifest: std::sync::Arc<crate::relation::runtime::RelationRuntimeManifest>,
+        expected: crate::relation::frontend::FrontendManifestDigest,
+    ) -> crate::relation::runtime::RelationRuntimeResult<()> {
         let mut authoritative = self.authoritative_relations.clone();
         authoritative.install_manifest(manifest, expected)?;
         let derived = Self::derive_relations(&authoritative)?;
@@ -173,7 +173,7 @@ impl World {
 
     pub(crate) fn live_relation_entities(
         &self,
-    ) -> std::collections::BTreeSet<crate::relation_runtime::EntityRef> {
+    ) -> std::collections::BTreeSet<crate::relation::runtime::EntityRef> {
         self.entity_archetype
             .keys()
             .filter_map(|id| self.entity_ref(*id))
@@ -182,14 +182,14 @@ impl World {
 
     pub(crate) fn prepare_relation_candidate(
         &self,
-        transaction: &crate::relation_runtime::RelationTransaction,
-        live_after: std::collections::BTreeSet<crate::relation_runtime::EntityRef>,
-        handles: std::collections::BTreeMap<u32, crate::relation_runtime::EntityRef>,
-    ) -> crate::relation_runtime::RelationRuntimeResult<crate::relation_runtime::RelationCandidate>
+        transaction: &crate::relation::runtime::RelationTransaction,
+        live_after: std::collections::BTreeSet<crate::relation::runtime::EntityRef>,
+        handles: std::collections::BTreeMap<u32, crate::relation::runtime::EntityRef>,
+    ) -> crate::relation::runtime::RelationRuntimeResult<crate::relation::runtime::RelationCandidate>
     {
         self.authoritative_relations.prepare_candidate(
             transaction,
-            &crate::relation_runtime::CandidateEntityState {
+            &crate::relation::runtime::CandidateEntityState {
                 live_after,
                 candidate_handles: handles,
             },
@@ -198,8 +198,8 @@ impl World {
 
     pub(crate) fn adopt_relation_candidate(
         &mut self,
-        candidate: crate::relation_runtime::RelationCandidate,
-    ) -> crate::relation_runtime::RelationRuntimeResult<Vec<crate::relation_runtime::FactChange>> {
+        candidate: crate::relation::runtime::RelationCandidate,
+    ) -> crate::relation::runtime::RelationRuntimeResult<Vec<crate::relation::runtime::FactChange>> {
         let mut authoritative = self.authoritative_relations.clone();
         let changes = authoritative.adopt(candidate);
         let derived = Self::maintain_relations(
@@ -213,42 +213,42 @@ impl World {
     }
 
     fn maintain_relations(
-        previous: &crate::relation_derivation::DerivedRelationState,
-        authoritative: &crate::relation_runtime::AuthoritativeRelationState,
-        changes: &[crate::relation_runtime::FactChange],
-    ) -> crate::relation_runtime::RelationRuntimeResult<
-        crate::relation_derivation::DerivedRelationState,
+        previous: &crate::relation::derivation::DerivedRelationState,
+        authoritative: &crate::relation::runtime::AuthoritativeRelationState,
+        changes: &[crate::relation::runtime::FactChange],
+    ) -> crate::relation::runtime::RelationRuntimeResult<
+        crate::relation::derivation::DerivedRelationState,
     > {
         let Some(manifest) = authoritative.manifest() else {
-            return Ok(crate::relation_derivation::DerivedRelationState::default());
+            return Ok(crate::relation::derivation::DerivedRelationState::default());
         };
-        crate::relation_derivation::maintain_indexed(
+        crate::relation::derivation::maintain_indexed(
             previous,
             authoritative,
             manifest,
             changes,
-            crate::relation_derivation::DerivationLimits::default(),
+            crate::relation::derivation::DerivationLimits::default(),
         )
-        .map_err(|error| crate::relation_runtime::RelationRuntimeError {
+        .map_err(|error| crate::relation::runtime::RelationRuntimeError {
             code: error.code,
             detail: error.detail,
         })
     }
 
     fn derive_relations(
-        authoritative: &crate::relation_runtime::AuthoritativeRelationState,
-    ) -> crate::relation_runtime::RelationRuntimeResult<
-        crate::relation_derivation::DerivedRelationState,
+        authoritative: &crate::relation::runtime::AuthoritativeRelationState,
+    ) -> crate::relation::runtime::RelationRuntimeResult<
+        crate::relation::derivation::DerivedRelationState,
     > {
         let Some(manifest) = authoritative.manifest() else {
-            return Ok(crate::relation_derivation::DerivedRelationState::default());
+            return Ok(crate::relation::derivation::DerivedRelationState::default());
         };
-        crate::relation_derivation::derive_all(
+        crate::relation::derivation::derive_all(
             authoritative,
             manifest,
-            crate::relation_derivation::DerivationLimits::default(),
+            crate::relation::derivation::DerivationLimits::default(),
         )
-        .map_err(|error| crate::relation_runtime::RelationRuntimeError {
+        .map_err(|error| crate::relation::runtime::RelationRuntimeError {
             code: error.code,
             detail: error.detail,
         })
@@ -493,13 +493,13 @@ impl World {
         if self.authoritative_relations.manifest().is_none() {
             return self.destroy_entity_storage(eid);
         }
-        let transaction = crate::relation_runtime::RelationTransaction {
+        let transaction = crate::relation::runtime::RelationTransaction {
             spawns: Vec::new(),
             component_writes: Vec::new(),
             operations: Vec::new(),
-            despawns: vec![crate::relation_runtime::PendingDespawn {
+            despawns: vec![crate::relation::runtime::PendingDespawn {
                 entity,
-                metadata: crate::relation_runtime::OperationMetadata::cause("entity.despawn"),
+                metadata: crate::relation::runtime::OperationMetadata::cause("entity.despawn"),
             }],
         };
         self.apply_relation_transaction(&transaction).is_ok()
@@ -510,8 +510,8 @@ impl World {
     /// assertion identities, indexes, and provenance untouched.
     pub fn apply_relation_transaction(
         &mut self,
-        transaction: &crate::relation_runtime::RelationTransaction,
-    ) -> crate::relation_runtime::RelationRuntimeResult<Vec<crate::relation_runtime::FactChange>>
+        transaction: &crate::relation::runtime::RelationTransaction,
+    ) -> crate::relation::runtime::RelationRuntimeResult<Vec<crate::relation::runtime::FactChange>>
     {
         // Construct the complete ECS + relation candidate in an isolated CoW
         // world. No allocator, component, entity, assertion, or index state is
@@ -523,7 +523,7 @@ impl World {
         spawns.sort_by_key(|spawn| spawn.handle);
         for pair in spawns.windows(2) {
             if pair[0].handle == pair[1].handle {
-                return Err(crate::relation_runtime::RelationRuntimeError {
+                return Err(crate::relation::runtime::RelationRuntimeError {
                     code: "entity.duplicate_candidate_handle",
                     detail: pair[0].handle.to_string(),
                 });
@@ -532,7 +532,7 @@ impl World {
         for spawn in spawns {
             let slot = candidate_world
                 .spawn_entity(spawn.name.as_deref())
-                .map_err(|error| crate::relation_runtime::RelationRuntimeError {
+                .map_err(|error| crate::relation::runtime::RelationRuntimeError {
                     code: error.code(),
                     detail: "candidate entity allocation failed".into(),
                 })?;
@@ -545,21 +545,21 @@ impl World {
         }
 
         let mut component_writes = std::collections::BTreeMap::<
-            (crate::relation_runtime::EntityRef, String),
+            (crate::relation::runtime::EntityRef, String),
             crate::value::ComponentData,
         >::new();
         for write in &transaction.component_writes {
             let entity = match write.entity {
-                crate::relation_runtime::EntityOperand::Existing(entity) => entity,
-                crate::relation_runtime::EntityOperand::Candidate(handle) => *handles
+                crate::relation::runtime::EntityOperand::Existing(entity) => entity,
+                crate::relation::runtime::EntityOperand::Candidate(handle) => *handles
                     .get(&handle)
-                    .ok_or_else(|| crate::relation_runtime::RelationRuntimeError {
+                    .ok_or_else(|| crate::relation::runtime::RelationRuntimeError {
                         code: "entity.unknown_candidate_handle",
                         detail: handle.to_string(),
                     })?,
             };
             if candidate_world.entity_ref(entity.slot) != Some(entity) {
-                return Err(crate::relation_runtime::RelationRuntimeError {
+                return Err(crate::relation::runtime::RelationRuntimeError {
                     code: "component.entity_not_live",
                     detail: format!("{}:{}", entity.slot, entity.generation),
                 });
@@ -567,7 +567,7 @@ impl World {
             let key = (entity, write.component.type_name.clone());
             match component_writes.get(&key) {
                 Some(existing) if existing != &write.component => {
-                    return Err(crate::relation_runtime::RelationRuntimeError {
+                    return Err(crate::relation::runtime::RelationRuntimeError {
                         code: "component.write_conflict",
                         detail: format!("{}:{}::{}", entity.slot, entity.generation, key.1),
                     });
@@ -580,7 +580,7 @@ impl World {
         }
         for ((entity, _), component) in component_writes {
             if !candidate_world.add_component(entity.slot, component) {
-                return Err(crate::relation_runtime::RelationRuntimeError {
+                return Err(crate::relation::runtime::RelationRuntimeError {
                     code: "component.write_failed",
                     detail: format!("{}:{}", entity.slot, entity.generation),
                 });
@@ -595,7 +595,7 @@ impl World {
             .collect::<std::collections::BTreeSet<_>>();
         for entity in &despawn_entities {
             if !live_after.remove(entity) {
-                return Err(crate::relation_runtime::RelationRuntimeError {
+                return Err(crate::relation::runtime::RelationRuntimeError {
                     code: "entity.not_live",
                     detail: format!(
                         "{}:{} is not a live entity lifetime",
@@ -622,8 +622,8 @@ impl World {
     /// before this method can clone or mutate the candidate world.
     pub fn apply_bounded_relation_transaction(
         &mut self,
-        transaction: &crate::relation_runtime::BoundedRelationTransaction,
-    ) -> crate::relation_runtime::RelationRuntimeResult<Vec<crate::relation_runtime::FactChange>>
+        transaction: &crate::relation::runtime::BoundedRelationTransaction,
+    ) -> crate::relation::runtime::RelationRuntimeResult<Vec<crate::relation::runtime::FactChange>>
     {
         self.apply_relation_transaction(transaction.transaction())
     }

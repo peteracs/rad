@@ -5,7 +5,7 @@
 Requires Rust 1.70+.
 
 ```bash
-cargo build -p rad-vm --release
+cargo build -p rad-cli --release
 ```
 
 In this workspace, the binary is written to **`target/release/rad`** at the **repository root** (shared `target/` for all workspace members). Run files directly:

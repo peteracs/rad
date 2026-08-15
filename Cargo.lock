@@ -1371,6 +1371,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8dcc9c7d52a811697d2151c701e0d08956f92b0e24136cf4cf27b57a6a0d9bf"
 
 [[package]]
+name = "rad-cli"
+version = "0.5.0"
+dependencies = [
+ "hex",
+ "rad-lsp",
+ "rad-vm",
+ "tokio",
+ "tower-lsp",
+]
+
+[[package]]
+name = "rad-lsp"
+version = "0.5.0"
+dependencies = [
+ "rad-vm",
+ "tokio",
+ "tower-lsp",
+]
+
+[[package]]
 name = "rad-vm"
 version = "0.5.0"
 dependencies = [
@@ -1392,7 +1412,6 @@ dependencies = [
  "serde_json",
  "sha2",
  "tokio",
- "tower-lsp",
  "ureq",
  "wasm-bindgen",
  "wasm-encoder 0.220.1",

@@ -7,8 +7,8 @@ For the full architecture, runtime path, and source feature ledger, see
 [Game Embedding & MOBA Dogfood](../guide/game-embedding.md).
 
 Runtime summary: the lab uses the primary `core/vm` WASM `RadRuntime` through
-`projects/playground/moba_host.js`. It does not run through `core/c-backend/`
-or call `core/simcore/`.
+`projects/playground/moba_host.js`. It does not run through `experiments/c-backend/`
+or call `projects/moba/simcore/`.
 
 Run:
 
@@ -27,7 +27,7 @@ node --test projects\playground\test\orianna_arena.test.mjs
 Files:
 
 - `arena_schema.rad` - public ECS schema and host event contract.
-- `projects/dogfood/moba/map4_data.rad` - browser-moba map4 source data.
+- `projects/moba/kit/map4_data.rad` - browser-moba map4 source data.
 - `moba_stack.rad` - Vec2, spatial queries, cooldown helpers, ability specs,
   logging, buffs, and fail-fast entity lookup.
 - `orianna_arena.rad` - Orianna's Q/W/E/R/passive implementation plus the

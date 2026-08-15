@@ -18,7 +18,7 @@ flowchart TD
     Edge -->|"WebTransport datagrams"| Browser
 ```
 
-This is the supported browser networking boundary for `projects/moba-rad`.
+This is the supported browser networking boundary for `projects/moba/vertical-slice`.
 There is no HTTP polling bridge and no browser raw-UDP path.
 
 ## Responsibility Split
@@ -96,30 +96,30 @@ application stay in server/sim modules.
 
 ## Current MOBA POC
 
-The current movement POC lives under `projects/moba-rad`, whose root contains
+The current movement POC lives under `projects/moba/vertical-slice`, whose root contains
 `client/`, `server/`, and a project-local wiki in `docs/`.
 
 For project-local runbooks and ownership rules, see
-`projects/moba-rad/docs/`.
+`projects/moba/vertical-slice/docs/`.
 
 Run the RAD authority:
 
 ```powershell
-cd path\to\rad\projects\moba-rad\server
+cd path\to\rad\projects\moba\vertical-slice\server
 npm run dev
 ```
 
 Run the WebTransport edge proxy:
 
 ```powershell
-cd path\to\rad\projects\moba-rad\server
+cd path\to\rad\projects\moba\vertical-slice\server
 npm run proxy
 ```
 
 Run the browser client:
 
 ```powershell
-cd path\to\rad\projects\moba-rad\client
+cd path\to\rad\projects\moba\vertical-slice\client
 npm run dev
 ```
 
@@ -174,8 +174,8 @@ Single source of truth:
 
 | Side | File |
 |---|---|
-| RAD server | `projects/moba-rad/server/src/protocol/match_protocol.rad` |
-| Browser client | `projects/moba-rad/client/src/transport/matchProtocol.ts` |
+| RAD server | `projects/moba/vertical-slice/server/src/protocol/match_protocol.rad` |
+| Browser client | `projects/moba/vertical-slice/client/src/transport/matchProtocol.ts` |
 | Edge proxy | forwards bytes only; no grammar |
 
 Browser-side protocol support is split by responsibility:

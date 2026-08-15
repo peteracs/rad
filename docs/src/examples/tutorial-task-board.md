@@ -30,7 +30,7 @@ You need a [Rust toolchain](https://rustup.rs/). Then:
 ```bash
 git clone https://github.com/peteracs/rad.git
 cd rad
-cargo build -p rad-vm --release
+cargo build -p rad-cli --release
 ```
 
 The binary lands at `target/release/rad`. Sanity check:

@@ -107,5 +107,5 @@ pub struct WireProvenance {
 /// ids are sequential and will never reach this range honestly.
 pub const FOREIGN_EMIT_BIT: u64 = 1 << 63;
 // Lexical sections preserve one private semantic namespace.
-include!("causality_sections/ledger.rs");
-include!("causality_sections/tests.rs");
+include!("causality/ledger.rs");
+include!("causality/tests.rs");

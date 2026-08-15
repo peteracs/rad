@@ -64,11 +64,11 @@ All mutations go through `Arc::make_mut()` which only clones when the refcount >
 
 ## C Backend Stress Test Results
 
-Historical note: `core/c-backend/` is frozen legacy code. These numbers are
+Historical note: `experiments/c-backend/` is frozen experimental code. These numbers are
 kept for archaeology and are not current project health criteria.
 
 ### Test Environment
-- **Harness**: `core/c-backend/test_c_backend.py` — emits C via `emit_c.rad`, compiles with GCC, diffs against Rust VM reference output
+- **Harness**: `experiments/c-backend/test_c_backend.py` — emits C via `emit_c.rad`, compiles with GCC, diffs against Rust VM reference output
 - **Compiler**: GCC (MinGW-w64 on Windows), 32 MB stack size (`-Wl,--stack,33554432`)
 
 ### Results (14/15 pass)

@@ -44,7 +44,7 @@ pub(crate) struct ResolutionPatch {
     pub(crate) key: u32,
     pub(crate) proposal_ids: Vec<u64>,
     pub(crate) writes: Vec<CandidateWrite>,
-    pub(crate) relation_operations: Vec<crate::relation_runtime::PendingRelationOperation>,
+    pub(crate) relation_operations: Vec<crate::relation::runtime::PendingRelationOperation>,
 }
 
 #[derive(Clone, Debug)]
@@ -54,7 +54,7 @@ pub(crate) struct ActiveResolution {
     pub(crate) key: u32,
     pub(crate) proposal_ids: Vec<u64>,
     pub(crate) writes: Vec<CandidateWrite>,
-    pub(crate) relation_operations: Vec<crate::relation_runtime::PendingRelationOperation>,
+    pub(crate) relation_operations: Vec<crate::relation::runtime::PendingRelationOperation>,
 }
 
 fn relation_resolution_cause(
@@ -146,7 +146,7 @@ pub(crate) struct SettlementContext {
     pub(crate) proposals: Vec<Proposal>,
     pub(crate) patches: Vec<ResolutionPatch>,
     pub(crate) candidate: Option<WorldSnapshot>,
-    pub(crate) relation_changes: Vec<crate::relation_runtime::FactChange>,
+    pub(crate) relation_changes: Vec<crate::relation::runtime::FactChange>,
     pub(crate) active: Option<ActiveResolution>,
     pub(crate) active_constraint: Option<ActiveConstraint>,
     pub(crate) next_proposal_id: u64,

@@ -160,7 +160,7 @@ pub fn encode_prov_into(prov: &WireProvenance, out: &mut String) {
         let _ = write!(out, "[{},{},", assertion.frame, assertion.assertion_id);
         escape_json_into(
             out,
-            &crate::relation_runtime::fact_key_transport_hex(&assertion.fact_key),
+            &crate::relation::runtime::fact_key_transport_hex(&assertion.fact_key),
         );
         out.push_str(",[");
         for (resolution_index, resolution_id) in assertion.resolution_ids.iter().enumerate() {
@@ -386,7 +386,7 @@ pub fn decode_prov(j: &serde_json::Value) -> Result<WireProvenance, String> {
             assertion_id: fields[1]
                 .as_u64()
                 .ok_or("prov: malformed relation assertion")?,
-            fact_key: crate::relation_runtime::fact_key_from_transport_hex(
+            fact_key: crate::relation::runtime::fact_key_from_transport_hex(
                 fields[2]
                     .as_str()
                     .ok_or("prov: malformed relation assertion")?,

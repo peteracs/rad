@@ -68,6 +68,7 @@
 # Project
 
 - [Repository Map](./project/repo-map.md)
+- [Folder Tree](./project/folder_tree.md)
 - [Repository Audit](./project/repo-audit.md)
 - [Core VM Source Audit](./project/core-vm-source-audit.md)
 - [C Backend Freeze](./project/c-backend-freeze.md)

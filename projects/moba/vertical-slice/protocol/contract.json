@@ -1,0 +1,207 @@
+{
+  "name": "moba/udp-v10-peer-snapshot",
+  "version": 10,
+  "endianness": "little",
+  "coordinateScale": 1000,
+  "header": {
+    "bytes": 3,
+    "magic": 77,
+    "fields": {
+      "magic": 0,
+      "version": 1,
+      "kind": 2
+    }
+  },
+  "packets": {
+    "sync": {
+      "kind": 1,
+      "bytes": 15,
+      "fields": {
+        "clientSeq": 3,
+        "sessionId": 7,
+        "playerId": 11
+      }
+    },
+    "move": {
+      "kind": 2,
+      "bytes": 31,
+      "fields": {
+        "clientSeq": 3,
+        "sessionId": 7,
+        "playerId": 11,
+        "targetTick": 15,
+        "commandId": 19,
+        "targetX": 23,
+        "targetY": 27
+      }
+    },
+    "disconnect": {
+      "kind": 3,
+      "bytes": 15,
+      "fields": {
+        "clientSeq": 3,
+        "sessionId": 7,
+        "playerId": 11
+      }
+    },
+    "state": {
+      "kind": 4,
+      "headerBytes": 92,
+      "fields": {
+        "serverMs": 3,
+        "serverTick": 7,
+        "serverSeq": 11,
+        "sessionId": 15,
+        "playerId": 19,
+        "ackClientSeq": 23,
+        "ackBits": 27,
+        "commandId": 31,
+        "x": 35,
+        "y": 39,
+        "targetX": 43,
+        "targetY": 47,
+        "targetActive": 51,
+        "status": 52,
+        "correctionReason": 53,
+        "avatarCount": 54,
+        "projectileCount": 55,
+        "peerCount": 56,
+        "maxPeers": 57,
+        "inputQueueSlots": 58,
+        "pendingMoveInputs": 59,
+        "pendingCastInputs": 60,
+        "peerConnected": 61,
+        "projectileImpactCount": 62,
+        "peerRecordCount": 63,
+        "lateInputs": 64,
+        "futureInputs": 68,
+        "duplicateInputs": 72,
+        "overwrittenInputs": 76,
+        "lastClientSeq": 80,
+        "lastAppliedClientSeq": 84,
+        "appliedAckBits": 88
+      },
+      "records": {
+        "peer": {
+          "bytes": 44,
+          "fields": {
+            "playerId": 0,
+            "sessionId": 4,
+            "lastClientSeq": 8,
+            "receivedClientSeq": 12,
+            "lastAppliedClientSeq": 16,
+            "appliedAckBits": 20,
+            "pendingMoveInputs": 24,
+            "pendingCastInputs": 25,
+            "connected": 26,
+            "reserved": 27,
+            "lateInputs": 28,
+            "futureInputs": 32,
+            "duplicateInputs": 36,
+            "overwrittenInputs": 40
+          }
+        },
+        "avatar": {
+          "bytes": 26,
+          "fields": {
+            "playerId": 0,
+            "commandId": 4,
+            "x": 8,
+            "y": 12,
+            "targetX": 16,
+            "targetY": 20,
+            "targetActive": 24,
+            "model": 25
+          }
+        },
+        "projectile": {
+          "bytes": 36,
+          "fields": {
+            "projectileId": 0,
+            "ownerId": 4,
+            "commandId": 8,
+            "x": 12,
+            "y": 16,
+            "velocityX": 20,
+            "velocityY": 24,
+            "spawnTick": 28,
+            "fireViewTick": 32
+          }
+        },
+        "projectileImpact": {
+          "bytes": 25,
+          "fields": {
+            "eventId": 0,
+            "projectileId": 4,
+            "ownerId": 8,
+            "targetId": 12,
+            "x": 16,
+            "y": 20,
+            "reason": 24
+          }
+        }
+      }
+    },
+    "error": {
+      "kind": 5,
+      "bytes": 4,
+      "fields": {
+        "status": 3
+      }
+    },
+    "cast": {
+      "kind": 6,
+      "bytes": 35,
+      "fields": {
+        "clientSeq": 3,
+        "sessionId": 7,
+        "playerId": 11,
+        "targetTick": 15,
+        "commandId": 19,
+        "directionX": 23,
+        "directionY": 27,
+        "fireViewTick": 31
+      }
+    }
+  },
+  "statuses": [
+    { "name": "sync", "code": 1 },
+    { "name": "queued", "code": 2 },
+    { "name": "duplicate", "code": 3 },
+    { "name": "late", "code": 4 },
+    { "name": "too-far-ahead", "code": 5 },
+    { "name": "applied", "code": 6 },
+    { "name": "snapshot", "code": 7 },
+    { "name": "player-conflict", "code": 8, "aliases": ["player already connected"] },
+    { "name": "peer-table-full", "code": 9, "aliases": ["peer table full"] },
+    { "name": "rejected", "code": 10 },
+    { "name": "expired", "code": 11 },
+    { "name": "bye", "code": 12 },
+    { "name": "bye-miss", "code": 13 },
+    { "name": "full-sync", "code": 14 },
+    { "name": "cast-queued", "code": 15 },
+    { "name": "cast", "code": 16 }
+  ],
+  "correctionReasons": [
+    { "name": "applied", "code": 1 },
+    { "name": "late", "code": 2 },
+    { "name": "too-far-ahead", "code": 3 },
+    { "name": "duplicate", "code": 4 },
+    { "name": "expired", "code": 5 },
+    { "name": "queued", "code": 6, "aliases": ["cast-queued"] },
+    { "name": "sync", "code": 7, "aliases": ["full-sync"] },
+    { "name": "snapshot", "code": 8 },
+    { "name": "player-conflict", "code": 9, "aliases": ["player already connected"] },
+    { "name": "peer-table-full", "code": 10, "aliases": ["peer table full"] },
+    { "name": "rejected", "code": 11 },
+    { "name": "cast", "code": 12 }
+  ],
+  "avatarModels": [
+    { "name": "clockwork_mage", "code": 1 }
+  ],
+  "projectileImpactReasons": [
+    { "name": "hit", "code": 1 },
+    { "name": "range", "code": 2 },
+    { "name": "lifetime", "code": 3 }
+  ]
+}

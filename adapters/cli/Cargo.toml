@@ -1,0 +1,19 @@
+[package]
+name = "rad-cli"
+version = "0.5.0"
+edition = "2021"
+description = "Command-line adapter for the RAD language runtime"
+license = "MIT"
+repository = "https://github.com/peteracs/rad"
+publish = false
+
+[[bin]]
+name = "rad"
+path = "src/main.rs"
+
+[dependencies]
+hex = "0.4"
+rad-lsp = { path = "../lsp" }
+rad-vm = { path = "../../core/vm" }
+tokio = { version = "1.36.0", features = ["full"] }
+tower-lsp = "0.20.0"

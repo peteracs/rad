@@ -6,23 +6,23 @@ pub(crate) enum EntitySelectionError {
 impl WorldSnapshot {
     pub(crate) fn relation_state(
         &self,
-    ) -> &crate::relation_runtime::AuthoritativeRelationState {
+    ) -> &crate::relation::runtime::AuthoritativeRelationState {
         &self.authoritative_relations
     }
 
     pub(crate) fn derived_relation_state(
         &self,
-    ) -> &crate::relation_derivation::DerivedRelationState {
+    ) -> &crate::relation::derivation::DerivedRelationState {
         &self.derived_relations
     }
 
     pub(crate) fn entity_ref(
         &self,
         entity: u32,
-    ) -> Option<crate::relation_runtime::EntityRef> {
+    ) -> Option<crate::relation::runtime::EntityRef> {
         self.entity_archetype
             .contains_key(&entity)
-            .then(|| crate::relation_runtime::EntityRef {
+            .then(|| crate::relation::runtime::EntityRef {
                 slot: entity,
                 generation: self.generations.get(&entity).copied().unwrap_or(0),
             })
@@ -305,7 +305,7 @@ impl WorldSnapshot {
             for assertion in &provenance.relation_assertions {
                 out.u64(assertion.frame);
                 out.u64(assertion.assertion_id);
-                out.text(&crate::relation_runtime::fact_key_transport_hex(
+                out.text(&crate::relation::runtime::fact_key_transport_hex(
                     &assertion.fact_key,
                 ));
                 out.usize(assertion.resolution_ids.len());

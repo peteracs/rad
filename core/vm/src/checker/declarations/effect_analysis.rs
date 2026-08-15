@@ -472,10 +472,8 @@ impl Checker {
                             .and_then(|argument| self.find_expr_purity_breach(argument));
                     }
                     // Read-tolerant mode (`find_block_readonly_breach`):
-                    // world reads are not breaches. The read set is the
-                    // curated `is_readonly_builtin` list, which shares no
-                    // member with `is_impure_builtin` (rand_*, IO, writes,
-                    // fork/commit all stay breaches).
+                    // world reads are not breaches. Both predicates derive
+                    // from the builtin catalog's canonical effect metadata.
                     let read_ok = self.purity_allow_read_ecs.get()
                         && super::diagnostics::is_readonly_builtin(name);
                     if !read_ok {

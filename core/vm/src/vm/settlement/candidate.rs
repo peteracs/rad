@@ -255,7 +255,7 @@ impl VM {
     /// and differential tests the real settlement atomicity boundary.
     pub fn stage_relation_operation(
         &mut self,
-        mut operation: crate::relation_runtime::PendingRelationOperation,
+        mut operation: crate::relation::runtime::PendingRelationOperation,
     ) -> Result<(), String> {
         let context = self
             .settlement

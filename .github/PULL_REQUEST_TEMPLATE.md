@@ -17,7 +17,7 @@
 ## Checklist
 
 - [ ] `cargo test -p rad-vm` passes
-- [ ] `cargo run -p rad-vm --bin rad -- snapshot tests/` passes
+- [ ] `cargo run -p rad-cli --bin rad -- snapshot tests/` passes
 - [ ] `cargo clippy -p rad-vm -- -D warnings` is clean
 - [ ] New/changed behavior has a conformance test in `tests/conformance/`
 - [ ] `docs/src/reference/spec.md` updated (if syntax/semantics changed)

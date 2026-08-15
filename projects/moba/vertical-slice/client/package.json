@@ -1,0 +1,24 @@
+{
+  "name": "moba-rad-client",
+  "private": true,
+  "version": "0.1.0",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "protocol:check": "node ../protocol/generate.mjs --check",
+    "dev": "vite",
+    "build": "npm run protocol:check && tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "check": "npm run protocol:check && tsc --noEmit",
+    "test": "npm run check && tsc -p tsconfig.test.json && node --test .tmp-test/projects/moba/vertical-slice/client/test/*.test.js"
+  },
+  "dependencies": {
+    "three": "^0.184.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.0.3",
+    "@types/three": "^0.184.1",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.16"
+  }
+}

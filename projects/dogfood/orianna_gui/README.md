@@ -25,9 +25,9 @@ Canonical docs live in `docs/src/examples/orianna-ability-lab.md` and
 Run from the repo root:
 
 ```powershell
-cargo build -p rad-vm --bin rad
+cargo build -p rad-cli --bin rad
 target\debug\rad.exe projects\dogfood\orianna_gui\orianna_arena.rad --deny-warnings
-target\debug\rad.exe projects\dogfood\moba\kit\orianna_dsl.rad --deny-warnings
+target\debug\rad.exe projects\moba\kit\kit\orianna_dsl.rad --deny-warnings
 ```
 
 The first Rad file is the GUI/session module. The second prints the raw

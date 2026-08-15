@@ -25,7 +25,7 @@ jobs:
           python-version: '3.12'
 
       - name: Build VM
-        run: cargo build -p rad-vm --release
+        run: cargo build -p rad-cli --release
 
       - name: Run Matrix Script
         run: python tooling/scripts/gen_matrix.py

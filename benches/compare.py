@@ -76,8 +76,8 @@ def main():
             "ERROR: Missing Rust VM binaries. Build both with:",
             file=sys.stderr,
         )
-        print("  cargo build -p rad-vm", file=sys.stderr)
-        print("  cargo build -p rad-vm --release", file=sys.stderr)
+        print("  cargo build -p rad-cli", file=sys.stderr)
+        print("  cargo build -p rad-cli --release", file=sys.stderr)
         sys.exit(1)
 
     with tempfile.NamedTemporaryFile(

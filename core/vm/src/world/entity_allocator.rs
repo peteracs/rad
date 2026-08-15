@@ -290,9 +290,9 @@ impl World {
         Ok(eid)
     }
 
-    pub fn entity_ref(&self, eid: u32) -> Option<crate::relation_runtime::EntityRef> {
+    pub fn entity_ref(&self, eid: u32) -> Option<crate::relation::runtime::EntityRef> {
         self.entity_exists(eid)
-            .then(|| crate::relation_runtime::EntityRef {
+            .then(|| crate::relation::runtime::EntityRef {
                 slot: eid,
                 generation: self.generations.get(&eid).copied().unwrap_or(0),
             })

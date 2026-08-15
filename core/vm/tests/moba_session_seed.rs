@@ -20,13 +20,13 @@ fn read(rel: &str) -> String {
 }
 
 fn concatenated_client_sources() -> String {
-    // Mirror projects/moba-rad/client/vite.config.ts radSourcesPlugin order.
+    // Mirror projects/moba/vertical-slice/client/vite.config.ts radSourcesPlugin order.
     [
-        read("../../projects/moba-rad/server/src/sim/components.rad"),
-        read("../../projects/moba-rad/server/src/world/scene.rad"),
-        read("../../projects/moba-rad/server/src/world/avatars.rad"),
-        read("../../projects/moba-rad/server/src/sim/movement.rad"),
-        read("../../projects/moba-rad/client/src/rad/main.rad"),
+        read("../../projects/moba/vertical-slice/server/src/sim/components.rad"),
+        read("../../projects/moba/vertical-slice/server/src/world/scene.rad"),
+        read("../../projects/moba/vertical-slice/server/src/world/avatars.rad"),
+        read("../../projects/moba/vertical-slice/server/src/sim/movement.rad"),
+        read("../../projects/moba/vertical-slice/client/src/rad/main.rad"),
     ]
     .join("\n")
 }

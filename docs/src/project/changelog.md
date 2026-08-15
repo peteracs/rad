@@ -13,7 +13,7 @@ All notable changes to the Rad language are documented here.
 - **RAD now has a recoverable WebGPU presentation host.** The WASM runtime
   exports a bounded, exact `u32` avatar packet with a runtime-published layout
   descriptor instead of routing entity and command identities through `f32`.
-  `projects/rad-webgpu` validates the descriptor and packet, caps allocations
+  `adapters/webgpu` validates the descriptor and packet, caps allocations
   against runtime and device limits, uploads directly to storage buffers, and
   recreates device-owned resources after loss without changing RAD state. A
   runnable browser dogfood, shared MOBA decoder, focused Node/Rust tests, CI,
@@ -192,7 +192,7 @@ All notable changes to the Rad language are documented here.
 
 ## [0.5.0] - 2026-07-25
 
-> **Note on the C backend entries in this release.** `core/c-backend/` was **frozen**
+> **Note on the C backend entries in this release.** `experiments/c-backend/` was **frozen**
 > during this release cycle. The self-hosted C compiler work recorded below — including
 > the "100% parity (176/176 tests passing)" conformance milestone and the per-feature
 > "Supported in both the Rust VM and the C backend" claims — describes that backend as
@@ -233,7 +233,7 @@ All notable changes to the Rad language are documented here.
 
 ### Changed (tooling / diagnostics)
 
-- **C backend conformance runner (`core/c-backend/test_conformance_c.py`):** New `--compiler {gcc,tcc,auto}` flag with TCC ([Tiny C Compiler](https://bellard.org/tcc/)) as the preferred default. TCC compiles the full 176-test suite in ~5 s vs ~30 s with GCC on Windows. Batch emission, parallel compile/run, live progress bars, and robust child-process cleanup on interrupt. New `core/c-backend/src/tcc_compat.c` provides a `_findfirst`/`_findnext`-based POSIX `opendir`/`readdir`/`closedir` implementation for TCC on Windows (where MinGW's `libmingwex.a` is unavailable).
+- **C backend conformance runner (`experiments/c-backend/test_conformance_c.py`):** New `--compiler {gcc,tcc,auto}` flag with TCC ([Tiny C Compiler](https://bellard.org/tcc/)) as the preferred default. TCC compiles the full 176-test suite in ~5 s vs ~30 s with GCC on Windows. Batch emission, parallel compile/run, live progress bars, and robust child-process cleanup on interrupt. New `experiments/c-backend/src/tcc_compat.c` provides a `_findfirst`/`_findnext`-based POSIX `opendir`/`readdir`/`closedir` implementation for TCC on Windows (where MinGW's `libmingwex.a` is unavailable).
 - **`simulate()` static schedule errors:** Purity / simulation-breach diagnostics for systems listed in `simulate(fork, [system::…], …)` now use the **`system::…` reference’s span** instead of the whole call, so editors underline the offending entry when multiple systems appear in one list.
 - **Bootstrap artifact removed:** The checked-in generated `bootstrap.c`, its update/parity scripts, and the bootstrap-only GitHub Actions workflow were removed. The Rust VM remains the supported Rad CLI build path, and generated C belongs under ignored build output directories.
 
@@ -258,7 +258,7 @@ All notable changes to the Rad language are documented here.
 
 ### Changed (C backend)
 
-- **C backend frozen (`core/c-backend/`):** The self-hosted C backend is now frozen legacy code, kept for historical reference and a possible future AOT/self-hosting revival. `core/vm` is the sole ground truth for syntax, checking, runtime behavior, tests, WASM bindings, playground behavior, and developer documentation; when the two disagree, `core/vm` wins. The C backend is not updated during normal language development, is not required in CI or release health checks, and its old test harnesses (including the conformance and stress runners referenced above) now require an explicit `RAD_RUN_FROZEN_C_BACKEND=1` opt-in so their results are not mistaken for project health. The other C-backend entries in this release predate the freeze. See [C Backend Freeze](c-backend-freeze.md) and `core/c-backend/FROZEN.txt`.
+- **C backend frozen (`experiments/c-backend/`):** The self-hosted C backend is now frozen experimental code, kept for historical reference and a possible future AOT/self-hosting revival. `core/vm` is the sole ground truth for syntax, checking, runtime behavior, tests, WASM bindings, playground behavior, and developer documentation; when the two disagree, `core/vm` wins. The C backend is not updated during normal language development, is not required in CI or release health checks, and its old test harnesses (including the conformance and stress runners referenced above) now require an explicit `RAD_RUN_FROZEN_C_BACKEND=1` opt-in so their results are not mistaken for project health. The other C-backend entries in this release predate the freeze. See [C Backend Freeze](c-backend-freeze.md) and `experiments/c-backend/FROZEN.txt`.
 - **Scratch arena removal:** The C backend runtime (`runtime.c`) no longer uses a global scratch arena for temporary allocations. Functions like `rad_str_concat`, `rad_format_float_text`, and ~16 other helpers now use stack-local buffers or `malloc`/`free`, eliminating a class of stale-pointer bugs. The scratch-arena infrastructure remains available behind `#ifdef RAD_SCRATCH_ARENA` for future use.
 - **F-string conversion of compiler sources:** All string-concatenation patterns in `emit_c.rad` (~387 sites), `parser.rad` (~60 sites), and `checker.rad` (~25 sites) were manually converted to f-strings, improving readability and reducing error-prone multi-part concatenations throughout the self-hosted compiler.
 - **C backend stress test suite (`test_c_backend.py`):** 14 of 15 benchmark stress tests now pass (up from 7/15), including `test_parser_standalone`, `test_emit_c_standalone`, `test_platinum`, and others. The remaining test (`test_diamond` — the compiler compiling itself) is a known performance limitation due to O(n) `rad_value_deep_copy` overhead at scale, not a correctness bug.

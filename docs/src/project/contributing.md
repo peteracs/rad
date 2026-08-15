@@ -13,7 +13,7 @@ This repository is a **Cargo workspace**: build artifacts go to **`target/` at t
 
 ```bash
 # Build the Rad CLI
-cargo build -p rad-vm
+cargo build -p rad-cli
 
 # Run a .rad file (use target\debug\rad.exe on Windows)
 target/debug/rad examples/demo.rad
@@ -27,39 +27,28 @@ target/debug/rad snapshot tests/
 
 For the shorter mental model, start with the [Repository Map](repo-map.md).
 
-```
-core/vm/                # Rust language core and the `rad` CLI binary
+```text
+core/vm/                    # authoritative Rust language/runtime library
   src/
-    main.rs        # CLI entry point
-    lib.rs         # Library root
-    ast.rs         # AST node definitions
-    lexer.rs       # Tokenizer (+ lexer/ submodules)
-    parser.rs      # Parser (+ parser/ submodules)
-    checker/       # Static type checker
-    compiler/      # AST -> bytecode
-    vm/            # Virtual machine
-    value.rs       # Runtime value types + builtin registry
-    world.rs       # ECS world
-    opcode.rs      # Bytecode opcodes
-    types.rs       # Type system types
-    formatter.rs   # Native formatter used by `rad fmt` and LSP formatting
-    lsp.rs         # Language server implementation
-    wasm.rs        # WASM bindings
-    module_loader.rs  # Module/use statement handling
-  benches/
-    rad_benchmarks.rs  # Criterion benchmarks
-core/c-backend/          # Frozen legacy C/AOT backend experiment; not normal development
-tooling/editors/           # IDE support
-  vscode/          # VS Code extension (TextMate grammar, language config)
-projects/playground/        # Browser playground (HTML + WASM)
-examples/          # 45+ example .rad programs (including 5 flagship demos)
-tests/
-  conformance/     # Runtime conformance tests (.rad + .snap baselines)
-tooling/scripts/           # Helpers: rust_vm_locator, gen_matrix (optional)
-docs/         # mdBook documentation site and canonical wiki source
-benches/
-  compare.py       # Rust debug vs release comparison
-projects/          # Dogfood apps, browser playground, and tutorial projects
+    lexer/ parser/          # source front end
+    checker/ compiler/      # semantic checking and bytecode lowering
+    vm/ world/ relation/    # execution and world models
+    internal_tests/         # tests that genuinely need private state
+
+adapters/
+  cli/                      # `rad` executable and process I/O
+  lsp/                      # Language Server Protocol transport
+  webgpu/                   # browser/GPU presentation materializer
+
+projects/
+  dogfood/                  # cross-boundary workloads
+  moba/                     # one MOBA ownership namespace
+  playground/ tutorial/     # browser host and teaching projects
+
+experiments/c-backend/      # frozen, non-authoritative C/AOT experiment
+tests/conformance/          # canonical language behavior
+docs/                       # RFC authority and mdBook source
+tooling/                    # gates, editor support, scripts, templates
 ```
 
 ### Projects and local experiments
@@ -105,14 +94,17 @@ Orianna example keeps its runtime path and feature ledger in
 
 Every feature must preserve Rust VM runtime behavior and language semantics. Follow this checklist:
 
-### The 6-File Checklist (Rust)
+### The compiler-pipeline checklist (Rust)
 
 1. **`core/vm/src/lexer.rs`** — Add new tokens if needed
 2. **`core/vm/src/ast.rs`** — Add/modify AST nodes
-3. **`core/vm/src/parser.rs`** — Parse the new syntax into AST
-4. **`core/vm/src/checker.rs`** — Add type checking / static analysis
-5. **`core/vm/src/compiler.rs`** — Emit bytecode for the new feature
-6. **`core/vm/src/vm.rs`** — Handle new opcodes at runtime (if needed)
+3. **`core/vm/src/parser/`** — Parse the new syntax into AST
+4. **`core/vm/src/checker/`** — Add type checking / static analysis
+5. **`core/vm/src/compiler/`** — Emit bytecode for the feature
+6. **`core/vm/src/vm/`** — Handle runtime behavior when needed
+
+Host-only behavior belongs in the matching adapter. Project-specific behavior
+belongs in its project. Do not make `core/vm` depend on either one.
 
 ### Required for Every Feature
 
@@ -144,14 +136,18 @@ Run `rad snapshot tests/conformance/` (or `rad snapshot tests/`) to execute conf
 # Rust unit tests (includes checker, compiler, parser, VM tests)
 cargo test -p rad-vm
 
-# Conformance / snapshot tests (from repo root, after `cargo build -p rad-vm`)
+# Conformance / snapshot tests (from repo root, after `cargo build -p rad-cli`)
 target/debug/rad snapshot tests/
 
 # Update baselines after intentional output changes
 target/debug/rad snapshot tests/ --update
 
 # Rust clippy (linting)
-cargo clippy -p rad-vm -- -D warnings
+cargo clippy --workspace --all-targets -- -D warnings
+
+# Repository ownership and 1,000-line SRP policy
+python tooling/check_architecture.py
+python tooling/check_line_limits.py
 
 # Benchmarks
 cargo bench -p rad-vm
@@ -160,7 +156,7 @@ py benches/compare.py
 
 ### Frozen C backend
 
-`core/c-backend/` is frozen legacy code. It is not part of normal feature work,
+`experiments/c-backend/` is frozen experimental code. It is not part of normal feature work,
 not a release health gate, and not a source of truth for language behavior. See
 [C Backend Freeze](c-backend-freeze.md).
 
@@ -171,8 +167,8 @@ harnesses remain only for archaeology and possible future revival, and require
 Historical harness entry points:
 
 ```bash
-RAD_RUN_FROZEN_C_BACKEND=1 py core/c-backend/test_conformance_c.py
-RAD_RUN_FROZEN_C_BACKEND=1 py core/c-backend/test_c_backend.py
+RAD_RUN_FROZEN_C_BACKEND=1 py experiments/c-backend/test_conformance_c.py
+RAD_RUN_FROZEN_C_BACKEND=1 py experiments/c-backend/test_c_backend.py
 ```
 
 Do not run these commands as part of normal project health. Historical flags
@@ -225,7 +221,7 @@ For changes that affect syntax, semantics, or the type system:
 
 1. **Start a discussion** — open a [Language Design Discussion](https://github.com/peteracs/rad/issues/new?template=language_design.yml) to gauge interest
 2. **Write an RFC** — once the idea is fleshed out, copy the [RFC template](rfc-template.md) and open a PR
-3. **Implement** — after the RFC is accepted, follow the 6-file checklist above
+3. **Implement** — after the RFC is accepted, follow the compiler-pipeline checklist above
 
 See the [RFC process](rfcs.md) and the [public roadmap](roadmap.md) for what's planned and where to focus.
 

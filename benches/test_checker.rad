@@ -1,6 +1,6 @@
-use "core/c-backend/src/lexer.rad"
-use "core/c-backend/src/parser.rad"
-use "core/c-backend/src/checker.rad"
+use "experiments/c-backend/src/lexer.rad"
+use "experiments/c-backend/src/parser.rad"
+use "experiments/c-backend/src/checker.rad"
 
 fn main() -> nil {
     // Test 1: Valid program - should have 0 errors

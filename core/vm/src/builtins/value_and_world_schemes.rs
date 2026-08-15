@@ -23,9 +23,10 @@ pub fn builtin_effect(name: &str) -> EffectSet {
         // builtin_required_effects and in is_impure_builtin): the sandbox
         // mask, this table's one functional consumer, carries an explicit
         // allow arm for them so seeded guest randomness keeps working.
-        "print" | "now_unix_s" | "now_unix_ms" | "clock" | "load_extension" | "gc_collect"
+        "print" | "sys_args" | "now_unix_s" | "now_unix_ms" | "clock" | "load_extension" | "gc_collect"
         | "eprint" | "write_stdout" | "write_stderr" | "flush_stdout" | "sleep_ms" | "log"
-        | "metric" | "rand_int" | "rand_float" | "rand_bool" | "rand_seed" => {
+        | "metric" | "rand_int" | "rand_float" | "rand_bool" | "rand_seed" | "sandbox_input"
+        | "sandbox_output" | "sandbox_last_output" | "sandbox_last_fuel" => {
             EffectSet::single(Effect::IO)
         }
         "input"
@@ -131,7 +132,7 @@ pub fn builtin_signature_help(name: &str) -> Option<String> {
 
 pub fn builtin_type_scheme(name: &str) -> Option<BuiltinSig> {
     match name {
-        "len" | "typeof" | "variant_of" | "sys_args" | "str" | "int" | "int_div" | "float" | "abs" | "sign" | "popcount" | "ctz" | "shl" | "shr" | "filled" | "set_at" | "sum" | "product" | "get_or" | "clamp" | "index_of" | "any" | "all" | "min" | "max" | "log" | "metric" | "trace_id" | "flush_events" | "print" | "debug_trace" | "pop" | "pop_last" | "drop_last" | "drop_first" | "recent_events" | "sort" | "reverse" | "sort_by" | "slice" | "map" | "filter" | "reduce" | "range" | "keys" | "contains" | "format" | "format_value" | "entries" | "merge" | "remove_key" | "group_by" | "split" | "join" | "trim" | "replace" | "starts_with" | "ends_with" | "append" | "extend" | "zip" | "flat_map" | "enumerate" | "find" | "max_by" | "min_by" | "try_int" | "try_float" => builtin_type_scheme_values(name),
+        "len" | "typeof" | "variant_of" | "sys_args" | "str" | "int" | "int_div" | "float" | "abs" | "sign" | "popcount" | "ctz" | "shl" | "shr" | "filled" | "set_at" | "sum" | "product" | "get_or" | "clamp" | "index_of" | "any" | "all" | "min" | "max" | "log" | "metric" | "trace_id" | "flush_events" | "print" | "debug_trace" | "push" | "pop" | "pop_last" | "drop_last" | "drop_first" | "recent_events" | "sort" | "reverse" | "sort_by" | "slice" | "map" | "filter" | "reduce" | "range" | "keys" | "contains" | "format" | "format_value" | "entries" | "merge" | "remove_key" | "group_by" | "split" | "join" | "trim" | "replace" | "starts_with" | "ends_with" | "append" | "extend" | "zip" | "flat_map" | "enumerate" | "find" | "max_by" | "min_by" | "try_int" | "try_float" => builtin_type_scheme_values(name),
         "get" | "res" | "get_resource" | "set_resource" | "lookup" | "lookup_all" | "require" | "get_entity" | "require_entity" | "require_all" | "set" | "has" | "spawn" | "remove" | "despawn" | "name_of" | "id_of" | "entities" | "transition" | "emit" | "unwrap" | "expect" | "unwrap_or" | "map_or" | "is_some" | "is_none" | "chr" | "ord" | "chars" | "to_upper" | "to_lower" | "values" | "byte_at" | "substring_bytes" | "byte_len" | "base_fact" | "candidate_fact" | "insert_fact" | "remove_fact" | "replace_fact_by" => builtin_type_scheme_world(name),
         "read_file" | "write_file" | "http_get" | "regex_is_match" | "regex_find" | "now_unix_s" | "now_unix_ms" | "round" | "floor" | "ceil" | "sqrt" | "pow" | "to_fixed" | "json_stringify" | "json_parse" | "rand_int" | "rand_float" | "rand_bool" | "rand_seed" | "gen_int" | "gen_float" | "gen_str" | "gen_bool" | "gen_list" | "input" | "readline" | "assert" | "assert_eq" | "load_extension" | "gc_collect" | "eprint" | "write_stdout" | "write_stderr" | "read_stdin_all" | "flush_stdout" | "sleep_ms" | "append_file" | "file_exists" | "remove_file" | "list_dir" | "create_dir" | "remove_dir" | "read_file_bytes" | "write_file_bytes" | "http_post" | "http_post_json" | "http_request" | "tcp_connect" | "tcp_listen" | "tcp_accept" | "tcp_accept_timeout" | "tcp_read" | "tcp_write" | "tcp_close" | "udp_bind" | "udp_recv_from" | "udp_recv_from_timeout" | "udp_recv_from_bytes" | "udp_recv_from_bytes_timeout" | "udp_recv_bytebuf" | "udp_recv_bytebuf_timeout" | "udp_send_to" | "udp_send_to_bytes" | "udp_send_bytebuf" | "udp_close" => builtin_type_scheme_host(name),
         "query_where" | "query_map" | "query_count" | "with_field" | "bitset_new" | "bitset_set" | "bitset_has" | "bitset_clear" | "buffer_new" | "buffer_append" | "buffer_to_str" | "bytebuf_new" | "bytebuf_len" | "bytebuf_get" | "bytebuf_set_u8" | "bytebuf_set_u32_le" | "bytebuf_set_i32_le" | "bytebuf_get_u32_le" | "bytebuf_get_i32_le" | "bytebuf_to_list" | "bytebuf_from_list" => builtin_type_scheme_buffers(name),
@@ -315,6 +316,12 @@ fn builtin_type_scheme_values(name: &str) -> Option<BuiltinSig> {
             type_params: tp_a(),
             params: vec![a()],
             ret: a(),
+            is_pure: true,
+        },
+        "push" => BuiltinSig {
+            type_params: tp_a(),
+            params: vec![Ty::List(Box::new(a())), a()],
+            ret: Ty::List(Box::new(a())),
             is_pure: true,
         },
         "pop" => BuiltinSig {

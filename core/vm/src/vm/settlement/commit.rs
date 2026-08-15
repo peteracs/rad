@@ -190,7 +190,7 @@ impl VM {
             .collect::<Vec<_>>();
         let mut relation_changes = Vec::new();
         if !relation_operations.is_empty() {
-            let transaction = crate::relation_runtime::RelationTransaction {
+            let transaction = crate::relation::runtime::RelationTransaction {
                 spawns: Vec::new(),
                 component_writes: Vec::new(),
                 operations: relation_operations,
@@ -324,7 +324,7 @@ impl VM {
                     context.origin.clone(),
                 );
             }
-            if change.kind == crate::relation_runtime::FactChangeKind::Insert {
+            if change.kind == crate::relation::runtime::FactChangeKind::Insert {
                 if let Some(assertion) = self
                     .world
                     .relation_state()

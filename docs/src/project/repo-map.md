@@ -1,108 +1,174 @@
 # Repository Map
 
-This repository is organized around five living areas: the Rad language core,
-documentation, programs built with Rad, validation, and supporting tooling.
-When a file does not clearly fit one of those areas, it probably should not be
-checked in. For a folder-by-folder status ledger, see the
-[Repository Audit](repo-audit.md).
+RAD is organized by authority: put a change in the directory that owns the
+decision, state, or external boundary it implements. The exhaustive visual
+directory inventory is the [Folder Tree](folder_tree.md); this page defines the
+dependency rules behind that tree.
 
-## Language Core
+## Dependency direction
 
-The core is the implementation of Rad itself.
+```text
+projects ─────┐
+adapters ─────┼──> core/vm
+tests ────────┘
 
-### Core implementation roles
+core/vm ──X──> adapters
+core/vm ──X──> projects
+```
 
-These names are easy to confuse because they all sit under `core/`, but they
-serve different jobs:
+`core/vm` is the authoritative language/runtime library. Adapters translate
+that library into a process, protocol, editor, browser, or GPU environment.
+Projects consume the language and may own specialized acceleration. Tests
+verify the public contract. Experiments are non-authoritative.
 
-| Name | Role | When it is used |
-|---|---|---|
-| `core/vm/` | Primary Rad implementation: native `rad` CLI, parser, checker, bytecode compiler, VM, formatter, LSP, snapshot runner, and WASM `RadRuntime`. | Normal language development, CLI runs, tests, playground sessions, browser embeds, and documentation receipts. |
-| `core/c-backend/` | Frozen legacy C/AOT experiment. It is preserved for history and possible future revival, but it is not authoritative. | Do not use for normal development or health checks. See [C Backend Freeze](c-backend-freeze.md). |
-| `core/simcore/` | Specialized Rust/native/WASM simulation kernel for the MOBA damage core, mirrored against the debuggable Rad spec. | Hot-path MOBA damage batches and golden-corpus checks. It is not the general Rad language runtime. |
+The Rust workspace encodes the build side of this model. Cargo workspaces share
+dependency resolution and build output, while separate packages keep host
+adapters from becoming modules of the VM library.
 
-| Path | Purpose |
+## Top-level ownership
+
+| Path | Owner and responsibility |
 |---|---|
-| `core/vm/` | Rust implementation of the Rad CLI, parser, checker, bytecode compiler, VM, formatter, LSP, WASM bindings, and snapshot runner. |
-| `core/vm/src/lexer.rs`, `core/vm/src/lexer/` | Tokenization. |
-| `core/vm/src/parser.rs`, `core/vm/src/parser/` | Syntax parsing. |
-| `core/vm/src/ast.rs` | Shared AST definitions. |
-| `core/vm/src/checker/` | Static analysis and type checking. |
-| `core/vm/src/compiler/` | AST-to-bytecode lowering inside the Rust VM. |
-| `core/vm/src/vm/` | Bytecode execution and builtin implementation. |
-| `core/vm/src/{parser,checker,compiler}/causal.rs`, `core/vm/src/vm/settlement.rs` | Experimental RFC-0001/RFC-0002 Causal Laws front end, settlement kernel, and candidate validation. |
-| `core/vm/src/{constraint_types,constraint_reference}.rs` | Pointer-free rejection contracts, versioned limits, attempt replay data, and the pure constraint oracle. |
-| `core/vm/src/boolean_lattice.rs` | Exact finite OR-closure, frequency, separation, signature, and closure-audit kernels used by computational-mathematics workloads. |
-| `core/vm/src/causality/settlement.rs` | Settlement/proposal/resolution fan-in provenance and `why()` rendering. |
-| `core/vm/src/value.rs`, `core/vm/src/world.rs` | Runtime values and ECS world storage. |
-| `core/c-backend/` | Frozen legacy C backend, with source, runtime, old harnesses, and reproductions kept out of normal health checks. |
-| `core/simcore/` | Native/wasm Rust sim core used by the MOBA dogfood path. |
+| `core/vm/` | RAD syntax, checking, bytecode, world model, execution, replay, persistence, WASM runtime boundary, and public Rust API. |
+| `adapters/` | Host-facing composition that depends on the VM: CLI, LSP, and WebGPU materialization. |
+| `projects/` | Applications, dogfood, tutorials, playgrounds, and project-owned acceleration. |
+| `experiments/` | Frozen or exploratory implementations that are not language authority. |
+| `tests/` | Implementation-independent language fixtures and repository-level contracts. |
+| `examples/` | Small canonical programs and embedding examples. |
+| `docs/` | Canonical RFC archive and mdBook source. |
+| `tooling/` | Repository checks, editor support, generators, and project templates. |
+| `benches/` | Bench workloads, comparison harnesses, and external baselines. |
+| `.github/` | CI, soundness, deployment, and contribution workflows. |
 
-Generated compiler output belongs under ignored build directories such as
-`target/` or `core/c-backend/target/`, not in source control.
+Generated output belongs in ignored build directories such as `target/`,
+`dist/`, or `demo-dist/`, never beside authoritative source.
 
-## Documentation
+## Core VM bounded contexts
 
-The canonical documentation lives in `docs/`.
+The familiar compilation flow remains inside the core:
 
-| Path | Purpose |
+```text
+source -> lexer -> parser -> AST -> checker -> compiler -> bytecode -> VM
+```
+
+| Path | Responsibility |
 |---|---|
-| `README.md` | Short entry point and quick build instructions. |
-| `docs/src/SUMMARY.md` | mdBook table of contents. |
-| `docs/src/guide/` | User-facing language guide. |
-| `docs/src/reference/` | Spec, builtins, architecture, memory model, performance, and compatibility references. |
-| `docs/src/examples/` | Narrative docs for examples and dogfood projects. |
-| `docs/src/project/` | Changelog, roadmap, contributing guide, RFC process, and repository map. |
-| `docs/theme/` | mdBook theme overrides. |
+| `core/vm/src/lexer.rs`, `lexer/` | Tokenization, strings, and lexer-local tests. |
+| `core/vm/src/parser.rs`, `parser/` | Syntax and declaration/expression parsing. |
+| `core/vm/src/checker/` | Name/type/effect/lifecycle validation. |
+| `core/vm/src/compiler/` | Checked AST to verified bytecode and runtime metadata. |
+| `core/vm/src/vm/` | Execution, settlement, builtins, replay cloning, and VM-owned runtime state. |
+| `core/vm/src/world.rs`, `world/` | ECS storage, allocator, operations, snapshots, and canonical encoding. |
+| `core/vm/src/relation/` | One first-class relation context: front end, authoritative runtime, and derived-fact evaluation. |
+| `core/vm/src/causality.rs`, `causality/` | Provenance ledger and settlement ancestry. |
+| `core/vm/src/internal_tests/` | Crate-private integration suites that require private state. |
+| `core/vm/tests/` | Public Rust API and subsystem integration tests. |
+| `core/vm/benches/` | Criterion benchmarks tied to the core library. |
 
-Source discoveries must update the relevant page under `docs/src/`; do not add
-one-off notes elsewhere in the repository. If a new page is truly needed, add
-it to `docs/src/SUMMARY.md` in the same change and link it from the closest
-existing guide/reference/example page.
+Some large private composition roots use `include!` to retain one semantic
+namespace. The 1,000-line gate does not treat that as architectural
+modularity. When a file reaches the threshold, review the whole responsibility
+and its call sites; split only if privacy can enforce a real boundary. The gate
+prints the full SRP review checklist on every run.
 
-## Programs Built With Rad
+### Why WASM remains in core
 
-These folders are consumers of the language. They are useful examples and
-dogfood projects, but they are not the language implementation.
+The CLI and LSP consume public `rad-vm` APIs and therefore live in separate
+adapter crates. Current WASM bindings translate private VM/GC values and own a
+runtime session facade. Moving those files today would either expose unsafe
+internals or make core depend on an adapter. Extract WASM only after a stable
+public session interface exists.
 
-| Path | Purpose |
+### Shared builtin authority
+
+`core/vm/src/value/builtin_catalog.rs` owns every builtin enum identity and
+source spelling. `core/vm/src/builtins/` owns signatures and one canonical
+effect table. Checker purity/read-only/effect diagnostics delegate to that
+table; they do not maintain independent allowlists.
+
+## Adapters
+
+| Path | Responsibility |
 |---|---|
-| `examples/` | Canonical example `.rad` programs and host examples. |
-| `projects/dogfood/` | Larger dogfood applications and feature stress projects. |
-| `projects/dogfood/causal-laws/` | RFC-0001 damage settlement vertical slice. |
-| `projects/dogfood/causal-constraints/` | RFC-0002 movement validation commit/rejection dogfood. |
-| `projects/dogfood/frankl-search/` | Computational-mathematics dogfood: exhaustive small case, deterministic `N=13` generator search, exact cyclic-universe/deletion-obstruction study, causal explanations, and independent certificate verifiers. |
-| `projects/dogfood/collatz-lab/` | Structural Collatz dogfood: pruned affine residue universes, bounded-support and natural-tail/ballot certificates, forked exact-state frontier synthesis, cycle-word equations, Causal Laws/constraints/causality/replay, and Python-bigint certificate verifiers. |
-| `projects/moba-rad/` | Networked MOBA dogfood stack: RAD authority server, Rust WebTransport edge proxy, and browser client. The authority owns all game rules; the proxy forwards opaque datagrams and must stay dumb. |
-| `projects/rad-webgpu/` | Reusable TypeScript WebGPU host plus runnable RAD-driven dogfood. It validates runtime-described packets and owns only disposable GPU materialization. |
-| `projects/playground/` | Browser hosts, interactive demos, relay, JS session tests, and public playground shell. |
-| `projects/playground/demos/` | Standalone browser visual prototypes and their local assets. |
-| `projects/tutorial/` | Tutorial projects. |
+| `adapters/cli/` | `rad` executable, command parsing, process I/O, and command composition. |
+| `adapters/lsp/` | LSP transport, documents, diagnostics, symbols, hover, and formatting requests. |
+| `adapters/webgpu/` | Bounded presentation packet validation and disposable browser/GPU resources. |
 
-## Validation
+The adapter model follows dependency inversion: policy stays in core; host
+mechanisms depend on its public contract.
 
-Validation proves that the language behavior is stable.
+## MOBA ownership
 
-| Path | Purpose |
+All MOBA code has one obvious owner:
+
+```text
+projects/moba/
+├── kit/             RAD gameplay corpus and golden fixtures
+├── simcore/         project-owned native/WASM hot path
+└── vertical-slice/
+    ├── protocol/    shared wire authority and generator
+    ├── client/      browser endpoint
+    ├── server/      RAD authority endpoint
+    └── edge-proxy/  opaque transport endpoint
+```
+
+`protocol/contract.json` is the only hand-edited packet layout and code-table
+authority. Generated endpoint bindings are checked in and `--check` is part of
+both package test commands. The edge proxy is a sibling because it forwards
+opaque traffic; it is not part of the server's simulation authority.
+
+## Documentation and RFC authority
+
+| Path | Responsibility |
 |---|---|
-| `tests/conformance/` | Snapshot-backed language behavior tests. |
-| `tests/features/` | Focused feature attack/regression fixtures. |
-| `tests/manual/` | Manual local checks that are not part of the automated contract. |
-| `core/vm/src/*tests*.rs` | Rust unit, property, composition, migration, and fuzz-oriented tests. |
-| `projects/moba-rad/client/test/` | Node unit tests for client netcode, prediction, and transport. |
-| `projects/moba-rad/server/src/test/` | `.rad` smoke suites for the authority server. |
-| `benches/` | Stress inputs, benchmark harnesses, and external baselines. |
+| `docs/rfcs/` | Canonical RFC bodies. |
+| `docs/src/rfcs/` | One-line mdBook <code>&#123;&#123;#include path&#125;&#125;</code> wrappers only. |
+| `docs/src/guide/` | User workflows and concepts. |
+| `docs/src/reference/` | Language/runtime contracts and architecture. |
+| `docs/src/examples/` | Narrative project and example documentation. |
+| `docs/src/project/` | Roadmap, changelog, contribution policy, and repository maps. |
 
-## Tooling
+The architecture gate rejects a missing, orphaned, or independently editable
+RFC wrapper.
 
-Tooling supports development but should not carry core semantics.
+## Test taxonomy
 
-| Path | Purpose |
+| Location | Contract |
 |---|---|
-| `.github/` | CI, soundness, playground deploy, issue templates, and PR template. |
-| `tooling/editors/` | Editor integration such as the VS Code extension. |
-| `tooling/scripts/` | Repo helper scripts. |
-| `tooling/templates/` | `rad new` templates. |
+| Module-local `#[cfg(test)]` | Private implementation behavior close to its owner. |
+| `core/vm/src/internal_tests/` | Cross-module tests that genuinely require crate-private state. |
+| `core/vm/tests/` | Public Rust API, wire, and subsystem integration. |
+| `tests/conformance/` | Canonical implementation-independent language behavior and snapshots. |
+| `tests/features/` | Focused language attacks and feature regressions. |
+| `tests/fixtures/` | Shared input data, including causal snapshot fixtures. |
+| `tests/manual/` | Explicitly manual, environment-dependent checks. |
+| `projects/*/test*` | Application-specific behavior and endpoint contracts. |
 
-If something is generated, stale, or only useful for one local debugging
-session, keep it out of the repo.
+Top-level `tests/` therefore means repository/language contracts; conformance
+is its most authoritative subset, not an exception to the rule.
+
+## Dogfood and experiments
+
+`projects/dogfood/` keeps stable workload names flat because the same workload
+often spans app, security, persistence, and language research responsibilities.
+Its README provides discoverability groups without path churn. Small examples
+belong under `examples/`; MOBA code belongs under `projects/moba/`.
+
+`experiments/c-backend/` is a frozen experimental C/AOT implementation. It is
+kept outside core because it does not define current syntax, checking, runtime,
+WASM, or release behavior.
+
+## Mechanical enforcement
+
+Run:
+
+```text
+python tooling/check_architecture.py
+python tooling/check_line_limits.py
+node projects/moba/vertical-slice/protocol/generate.mjs --check
+```
+
+CI enforces ownership paths, dependency direction, RFC source authority,
+generated protocol parity, and the 1,000-line SRP gate. The line limit permits
+exact-path exceptions with concrete justifications; it expressly forbids fake
+quota fragments, minification, or moving one arbitrary function merely to pass.

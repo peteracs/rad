@@ -22,7 +22,7 @@ jobs:
         run: |
           cargo install cargo-audit --version 0.22.2 --locked
           cargo audit --deny warnings
-          cargo audit --deny warnings --file projects/moba-rad/server/edge-proxy/Cargo.lock
+          cargo audit --deny warnings --file projects/moba/vertical-slice/edge-proxy/Cargo.lock
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: '22'
@@ -30,9 +30,9 @@ jobs:
         run: |
           npm audit --package-lock-only --ignore-scripts --audit-level=high --prefix benches/baselines/collab
           npm audit --package-lock-only --ignore-scripts --audit-level=high --prefix projects/playground/relay
-          npm audit --package-lock-only --ignore-scripts --audit-level=high --prefix projects/moba-rad/server
-          npm audit --package-lock-only --ignore-scripts --audit-level=high --prefix projects/moba-rad/client
-          npm audit --package-lock-only --ignore-scripts --audit-level=high --prefix projects/rad-webgpu
+          npm audit --package-lock-only --ignore-scripts --audit-level=high --prefix projects/moba/vertical-slice/server
+          npm audit --package-lock-only --ignore-scripts --audit-level=high --prefix projects/moba/vertical-slice/client
+          npm audit --package-lock-only --ignore-scripts --audit-level=high --prefix adapters/webgpu
 
   rust-tests:
     runs-on: ubuntu-latest
@@ -50,6 +50,11 @@ jobs:
             ~/.cargo/git
             target
           key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
+      - name: Repository architecture and line-limit policy
+        run: |
+          python3 -m unittest tooling.test_check_architecture tooling.test_check_line_limits
+          python3 tooling/check_architecture.py
+          python3 tooling/check_line_limits.py
       - name: cargo fmt
         run: cargo fmt --all -- --check
       - name: cargo check
@@ -71,26 +76,26 @@ jobs:
       - name: Frankl computational-mathematics dogfood
         run: |
           python3 -m pip install --requirement projects/dogfood/frankl-search/requirements.txt
-          cargo run -p rad-vm --bin rad -- projects/dogfood/frankl-search/exhaustive_n4.rad
-          cargo run -p rad-vm --bin rad -- projects/dogfood/frankl-search/search.rad --experimental-laws --record projects/dogfood/frankl-search/out/ci.radr -- 1 4 2 1 24 quick
+          cargo run -p rad-cli --bin rad -- projects/dogfood/frankl-search/exhaustive_n4.rad
+          cargo run -p rad-cli --bin rad -- projects/dogfood/frankl-search/search.rad --experimental-laws --record projects/dogfood/frankl-search/out/ci.radr -- 1 4 2 1 24 quick
           target/debug/rad replay projects/dogfood/frankl-search/out/ci.radr
           python3 -m unittest discover -s projects/dogfood/frankl-search -p 'test_*.py' -v
           python3 projects/dogfood/frankl-search/verify_certificate.py projects/dogfood/frankl-search/out/latest.json
           python3 -O projects/dogfood/frankl-search/verify_certificate.py projects/dogfood/frankl-search/out/latest.json
-          cargo run -p rad-vm --bin rad -- projects/dogfood/frankl-search/cyclic_universes.rad --experimental-laws
+          cargo run -p rad-cli --bin rad -- projects/dogfood/frankl-search/cyclic_universes.rad --experimental-laws
           python3 projects/dogfood/frankl-search/verify_structure.py projects/dogfood/frankl-search/out/cyclic-universes.json --quick
       - name: Collatz structural dogfood
         run: |
-          cargo run -p rad-vm --bin rad -- projects/dogfood/collatz-lab/main.rad --experimental-laws --record projects/dogfood/collatz-lab/out/ci.radr
+          cargo run -p rad-cli --bin rad -- projects/dogfood/collatz-lab/main.rad --experimental-laws --record projects/dogfood/collatz-lab/out/ci.radr
           target/debug/rad replay projects/dogfood/collatz-lab/out/ci.radr
           python3 projects/dogfood/collatz-lab/verify_certificate.py projects/dogfood/collatz-lab/out/certificate.json --report projects/dogfood/collatz-lab/out/ci-verification.json
-          cargo run -p rad-vm --bin rad -- projects/dogfood/collatz-lab/natural_tail.rad --experimental-laws --record projects/dogfood/collatz-lab/out/ci-natural-tail.radr
+          cargo run -p rad-cli --bin rad -- projects/dogfood/collatz-lab/natural_tail.rad --experimental-laws --record projects/dogfood/collatz-lab/out/ci-natural-tail.radr
           target/debug/rad replay projects/dogfood/collatz-lab/out/ci-natural-tail.radr
           python3 projects/dogfood/collatz-lab/verify_natural_tail.py projects/dogfood/collatz-lab/out/natural-tail-certificate.json --report projects/dogfood/collatz-lab/out/ci-natural-tail-verification.json
-          cargo run -p rad-vm --bin rad -- projects/dogfood/collatz-lab/support_pressure.rad --experimental-laws --record projects/dogfood/collatz-lab/out/ci-support-pressure.radr -- projects/dogfood/collatz-lab/out/support-pressure-certificate.json 7
+          cargo run -p rad-cli --bin rad -- projects/dogfood/collatz-lab/support_pressure.rad --experimental-laws --record projects/dogfood/collatz-lab/out/ci-support-pressure.radr -- projects/dogfood/collatz-lab/out/support-pressure-certificate.json 7
           target/debug/rad replay projects/dogfood/collatz-lab/out/ci-support-pressure.radr
           python3 projects/dogfood/collatz-lab/verify_support_pressure.py projects/dogfood/collatz-lab/out/support-pressure-certificate.json --report projects/dogfood/collatz-lab/out/ci-support-pressure-verification.json
-          cargo run -p rad-vm --bin rad -- projects/dogfood/collatz-lab/frontier_probe.rad --experimental-laws --record projects/dogfood/collatz-lab/out/ci-frontier.radr -- 1024 14 64 > projects/dogfood/collatz-lab/out/ci-frontier.json
+          cargo run -p rad-cli --bin rad -- projects/dogfood/collatz-lab/frontier_probe.rad --experimental-laws --record projects/dogfood/collatz-lab/out/ci-frontier.radr -- 1024 14 64 > projects/dogfood/collatz-lab/out/ci-frontier.json
           python3 projects/dogfood/collatz-lab/verify_frontier.py projects/dogfood/collatz-lab/out/ci-frontier.json --output projects/dogfood/collatz-lab/out/ci-frontier-verification.json
           target/debug/rad replay projects/dogfood/collatz-lab/out/ci-frontier.radr
 
@@ -111,9 +116,9 @@ jobs:
             target
           key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
       - name: Run conformance snapshots without experimental features
-        run: cargo run -p rad-vm --bin rad -- snapshot tests/conformance
+        run: cargo run -p rad-cli --bin rad -- snapshot tests/conformance
       - name: Run feature snapshots without experimental features
-        run: cargo run -p rad-vm --bin rad -- snapshot tests/features
+        run: cargo run -p rad-cli --bin rad -- snapshot tests/features
 
   causal-snapshots:
     runs-on: ubuntu-latest
@@ -132,9 +137,9 @@ jobs:
             target
           key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
       - name: Run Causal Laws snapshots with the experimental feature
-        run: cargo run -p rad-vm --bin rad -- snapshot --experimental-laws tests/fixtures/causal-laws
+        run: cargo run -p rad-cli --bin rad -- snapshot --experimental-laws tests/fixtures/causal-laws
       - name: Run Candidate Constraint snapshots with the experimental feature
-        run: cargo run -p rad-vm --bin rad -- snapshot --experimental-laws tests/fixtures/causal-constraints
+        run: cargo run -p rad-cli --bin rad -- snapshot --experimental-laws tests/fixtures/causal-constraints
       - name: Verify Causal Laws remain gated without the feature
         run: cargo test -p rad-vm causal_syntax_is_rejected_without_the_experimental_feature --verbose
 
@@ -188,7 +193,7 @@ jobs:
         with:
           toolchain: stable
       - name: Build rad CLI
-        run: cargo build -p rad-vm
+        run: cargo build -p rad-cli
       - name: Entry main must declare return type (no bare fn main() {)
         run: |
           if grep -rE "fn\s+main\s*\(\s*\)\s*\{" examples tooling/templates tests/conformance benches --include='*.rad' 2>/dev/null; then
@@ -245,10 +250,10 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            projects/moba-rad/server/edge-proxy/target
-          key: ${{ runner.os }}-edge-proxy-${{ hashFiles('projects/moba-rad/server/edge-proxy/Cargo.toml') }}
+            projects/moba/vertical-slice/edge-proxy/target
+          key: ${{ runner.os }}-edge-proxy-${{ hashFiles('projects/moba/vertical-slice/edge-proxy/Cargo.toml') }}
       - name: cargo test
-        run: cargo test --manifest-path projects/moba-rad/server/edge-proxy/Cargo.toml
+        run: cargo test --manifest-path projects/moba/vertical-slice/edge-proxy/Cargo.toml
 
   moba-rad-client:
     runs-on: ubuntu-latest
@@ -267,16 +272,16 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: projects/moba-rad/client/package-lock.json
+          cache-dependency-path: projects/moba/vertical-slice/client/package-lock.json
       - name: Install dependencies
         run: npm ci
-        working-directory: projects/moba-rad/client
+        working-directory: projects/moba/vertical-slice/client
       - name: Typecheck and unit tests
         run: npm test
-        working-directory: projects/moba-rad/client
+        working-directory: projects/moba/vertical-slice/client
       - name: Production build
         run: npm run build
-        working-directory: projects/moba-rad/client
+        working-directory: projects/moba/vertical-slice/client
 
   rad-webgpu:
     runs-on: ubuntu-latest
@@ -295,22 +300,22 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: projects/rad-webgpu/package-lock.json
+          cache-dependency-path: adapters/webgpu/package-lock.json
       - name: Install dependencies
         run: npm ci
-        working-directory: projects/rad-webgpu
+        working-directory: adapters/webgpu
       - name: Typecheck and unit tests
         run: npm test
-        working-directory: projects/rad-webgpu
+        working-directory: adapters/webgpu
       - name: Build package and dogfood
         run: npm run build
-        working-directory: projects/rad-webgpu
+        working-directory: adapters/webgpu
       - name: Install browser rendering dependency
         run: npx --no-install playwright install --with-deps --no-shell chromium
-        working-directory: projects/rad-webgpu
+        working-directory: adapters/webgpu
       - name: WebGPU pixel, resize, restart, and recovery smoke
         run: xvfb-run --auto-servernum npm run test:browser
-        working-directory: projects/rad-webgpu
+        working-directory: adapters/webgpu
 
   moba-rad-server:
     runs-on: ubuntu-latest
@@ -325,7 +330,7 @@ jobs:
         with:
           toolchain: stable
       - name: Build rad CLI
-        run: cargo build -p rad-vm --bin rad
+        run: cargo build -p rad-cli --bin rad
       - name: RAD authority smoke suites
         run: npm test
-        working-directory: projects/moba-rad/server
+        working-directory: projects/moba/vertical-slice/server

@@ -131,7 +131,7 @@ handler, not a closure in a def), struct spread in stacking policies
 (`BuffInstance { remaining: d, ..live }`), sum-type-valued struct field
 defaults, `list<Struct>` component fields, and f-string format specs.
 
-The dogfood file: `projects/dogfood/moba/buffcore.rad` — buff stacking policies
+The dogfood file: `projects/moba/kit/buffcore.rad` — buff stacking policies
 (Renew/Replace/Extend/StackUpTo) as a sum type matched exhaustively,
 tenacity-scaled CC, periodic pulses, cleanse with dispellability, the
 4-bucket stat fold, and dirty-flag recompute, in ~340 lines.
@@ -142,7 +142,7 @@ tenacity-scaled CC, periodic pulses, cleanse with dispellability, the
 
 Same method, next cluster: the attack cycle + projectile flight
 (sim/systems/attack.ts 21KB + projectiles.ts 19KB) as
-`projects/dogfood/moba/missilework.rad`. Chase/windup/fire/recover as a sum type
+`projects/moba/kit/missilework.rad`. Chase/windup/fire/recover as a sum type
 whose STATES CARRY THEIR DATA (Windup knows its ticks and crit roll —
 no flag soup), homing missiles that fizzle when their target dies,
 piercing skillshots, leash-break windup cancels.
@@ -177,7 +177,7 @@ organically, exactly the era rule the comment promised.
 # Round 4: the SPELLWORK fake port (casting + CC)
 
 Next cluster: the cast pipeline + crowd control gates
-(sim/systems/casting.ts + cc.ts) as `projects/dogfood/moba/spellwork.rad`.
+(sim/systems/casting.ts + cc.ts) as `projects/moba/kit/spellwork.rad`.
 Ready -> Winding -> Channeling as a NATIVE state machine, cast
 completion as a delayed event, validation as Result values, the cancel
 gate as a transition.
@@ -216,7 +216,7 @@ n-ary tuple destructure over lists). Still open by design:
 # Round 5: the SHOPWORK fake port (economy)
 
 Next cluster: the shop economy (ui/hud/shop/model.ts + content/items)
-as `projects/dogfood/moba/shopwork.rad`. The catalog as a `pub let` CONSTANT map
+as `projects/moba/kit/shopwork.rad`. The catalog as a `pub let` CONSTANT map
 of structs (not a per-call table-builder), era-accurate purchases (pay
 total minus owned components, consume them — duplicate recipe refs each
 eat one copy), recursive combine-cost over the build tree, 70% sell-back,
@@ -246,7 +246,7 @@ caught the aliasing assumption immediately.
 # Round 6: the SIGHTWORK fake port (fog of war)
 
 The biggest unclaimed sim file: vision.ts (39KB) as
-`projects/dogfood/moba/sightwork.rad` — the RULES at unit granularity (the grid/
+`projects/moba/kit/sightwork.rad` — the RULES at unit granularity (the grid/
 raycast model is that file's perf representation). Per-team visibility,
 the CanSeeCallback stealth rule (own team always sees; enemies only
 where true sight covers), the brush rule (hidden from enemies whose
@@ -279,7 +279,7 @@ and the whole brush/stealth/ghost choreography in ~180 lines.
 # Round 7: the WAREWORK fake port (waves + aggro)
 
 The wave director + the call-for-help ladder (barracks.ts +
-callForHelp.ts) as `projects/dogfood/moba/warework.rad`. Waves are delayed-event
+callForHelp.ts) as `projects/moba/kit/warework.rad`. Waves are delayed-event
 chains re-arming themselves; the cannon rides the cadence; and aggro is
 the era's priority table — where the dream insisted a ranking IS a key.
 
@@ -315,7 +315,7 @@ through the same scan, different table. Every blue unit converges
 
 # Round 8: the ORDERWORK fake port (the order pipeline)
 
-The biggest sim file: commands.ts (53KB) as `projects/dogfood/moba/orderwork.rad`.
+The biggest sim file: commands.ts (53KB) as `projects/moba/kit/orderwork.rad`.
 Orders are a sum type, the per-unit queue is a list of them (plain
 replaces, shift appends), the hard-CC gate DISCARDS incoming orders, and
 exotic CC FORCES the effective order without touching the queue — taunt
@@ -349,7 +349,7 @@ arm guards, and the era's full CC-gate choreography in ~190 lines.
 # Round 9: the EZREAL KIT fake port (multi-module composition)
 
 The structural question every real port lives on: can a champion kit be
-a thin CONTENT file over shared system libraries? `projects/dogfood/moba/kit/`:
+a thin CONTENT file over shared system libraries? `projects/moba/kit/kit/`:
 core.rad (vocabulary: Pos/Vitals/Damage event/vector helpers),
 surge.rad (the stacking-buff slice), missiles.rad (skillshots with
 pierce, affect flags, per-hit index), and ezreal.rad — the kit: era
@@ -377,7 +377,7 @@ reads like the content sheet it is.
 
 # Round 10: the RECAPWORK fake port (death recap + kill economy)
 
-game/deathRecap + sim/progression.ts as `projects/dogfood/moba/recapwork.rad`.
+game/deathRecap + sim/progression.ts as `projects/moba/kit/recapwork.rad`.
 The recap is a QUERY OVER THE PAST — window the victim's damage history,
 group per source, rank, mark KILLER + two ASSISTs — and the dream
 insisted the event system itself should remember.
@@ -406,7 +406,7 @@ over brand's 300 over the tower's 190, and the next kill mints a plain
 # Round 11: the MATCHWORK fake port (the match frame)
 
 The outermost loop: structureGating.ts + endOfGame.ts + respawn.ts +
-fountain.ts as `projects/dogfood/moba/matchwork.rad`. The backdoor-protection
+fountain.ts as `projects/moba/kit/matchwork.rad`. The backdoor-protection
 chain is DATA — each structure names its protectors, invulnerability is
 DERIVED (`protected_by |> any(alive)`) instead of expose/shield calls
 threaded through death handlers. The nexus falling flips a Match
@@ -434,7 +434,7 @@ gates, the compiled backends) — not language shape.
 
 After two gap-free sim rounds, the pressure moved to the game's most
 ALGORITHMIC corner: the navgrid (nav/navmesh.ts + game/navPull.ts + the
-original's TestNavGrid). `projects/dogfood/moba/navwork.rad` is grid A* with
+original's TestNavGrid). `projects/moba/kit/navwork.rad` is grid A* with
 string pulling and the RE'd right-click nav-pull — and the data-
 structure domain delivered three real gaps where the ECS rounds had
 none:
@@ -475,7 +475,7 @@ the 0x7df10c reverse engineering notes.
 # Round 13: the SPATIALWORK fake port (the bucket grid)
 
 sim/spatial.ts — the proximity index behind every "who is near X"
-question — as `projects/dogfood/moba/spatialwork.rad`: tuple-keyed buckets,
+question — as `projects/moba/kit/spatialwork.rad`: tuple-keyed buckets,
 max-radius query inflation, floor-divided cells (negative coords!),
 canonical ascending-eid order. The data-structure domain delivered
 again — five features/fixes and TWO real VM bugs:
@@ -526,7 +526,7 @@ group_by census keyed by cell tuples.
 # Round 14: the REPLAYWORK fake port (replay/spectate)
 
 The era's replay file is a COMMAND LOG: deterministic sim + timestamped
-orders, nothing else. `projects/dogfood/moba/replaywork.rad` builds the whole
+orders, nothing else. `projects/moba/kit/replaywork.rad` builds the whole
 genre on rad's native machinery — checkpoints are `fork()`s, seek is
 `commit(nearest)` + replay the remainder, what-if is the same pipeline
 pointed forward. Two features harvested:
@@ -561,7 +561,7 @@ IS the feature set.
 
 # Round 15: the SCENEWORK fake port (the scenario system)
 
-game/scenarios as `projects/dogfood/moba/scenework.rad`: scenarios are DATA
+game/scenarios as `projects/moba/kit/scenework.rad`: scenarios are DATA
 (id, describe, staging closure, tick budget, verdict closure), booted
 through the same seams as a real match, each one running in a FORK so
 isolation is the type system instead of a convention. The harness is
@@ -655,7 +655,7 @@ semantics.
 # Round 16: the CAPWORK fake port (capture points)
 
 The biggest unclaimed gameplay file: capturePoints.ts (~20KB, the
-Dominion objective system) as `projects/dogfood/moba/capwork.rad`. Progress is
+Dominion objective system) as `projects/moba/kit/capwork.rad`. Progress is
 ONE SIGNED NUMBER, west-positive — every era rule is arithmetic on it
 (exclusive capture with diminishing stacking, owner regen to the pole,
 neutral decay to zero, contested freeze) and the two-stage flip
@@ -741,7 +741,7 @@ nuke after the five seconds expire.
 # Round 18: the GROWWORK fake port (XP + leveling)
 
 The last unclaimed progression half: ExpCurve.ini + Mission.ini
-[Experience] as `projects/dogfood/moba/growwork.rad`. The curve is a ladder,
+[Experience] as `projects/moba/kit/growwork.rad`. The curve is a ladder,
 the death sweep splits by the SplitXP table (solo lanes 92%, duo
 lanes mint 110% split 55/55 — the patch-history-verified era math),
 grants cascade through multiple rungs, and ranks gate by
@@ -838,7 +838,7 @@ The bare-metal arc, opened on legion. One source of truth — the 84
 extracted stat rows — now feeds TWO backends: gen_legion.py emits the
 rad modules AND `arena/src/gen_legion.rs`; `legion_trace.rad` is the
 SPEC (six checkpoint lines + 84 per-champion endgame lines + END, all
-floats at 6 decimals, `projects/dogfood/moba/golden_legion.txt`); and
+floats at 6 decimals, `projects/moba/kit/golden_legion.txt`); and
 `arena legion` (arena/src/legion.rs) is the compiled twin.
 
 **Bit-identical on the first run — in full float math.** Treeline

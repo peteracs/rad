@@ -222,8 +222,8 @@ and provenance mechanisms; domain models remain ordinary RAD code.
 
 See [RFC-0003](../rfcs/0003-first-class-relations.md) for the implemented
 experimental contract and `core/vm/tests/rfc0003_reference.rs`. The
-production front end lives in `core/vm/src/relation_frontend/`. The separate
-`core/vm/src/relation_runtime/` consumes only its sealed artifacts; relation
+production front end lives in `core/vm/src/relation/frontend/`. The separate
+`core/vm/src/relation/runtime/` consumes only its sealed artifacts; relation
 rows, assertion lifetimes, unique indexes, entity generations, and manifest
 identity ride the same `WorldSnapshot` inventory as ECS state.
 

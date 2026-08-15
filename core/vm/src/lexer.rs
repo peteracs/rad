@@ -7,6 +7,6 @@ mod expr;
 mod stmt;
 
 pub use decl::reserved_keyword_rename_hints;
-// Lexical sections preserve one private semantic namespace.
-include!("lexer_sections/tokens_and_lexer.rs");
-include!("lexer_sections/tests.rs");
+// The token engine shares the lexer's private cursor and diagnostic state.
+include!("lexer/engine.rs");
+include!("lexer/tests.rs");

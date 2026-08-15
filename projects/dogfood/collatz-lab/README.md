@@ -18,7 +18,7 @@ The program attacks the two exhaustive possibilities:
 ## Run
 
 ```powershell
-cargo build --release -p rad-vm
+cargo build --release -p rad-cli
 projects/dogfood/native-math-kernels/build.ps1
 target/release/rad.exe projects/dogfood/collatz-lab/main.rad `
   --experimental-laws `
