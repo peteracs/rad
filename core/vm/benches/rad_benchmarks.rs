@@ -47,8 +47,7 @@ fn full_pipeline(filepath: &str) -> Result<(), String> {
     if !errors.is_empty() {
         return Err(errors[0].message.clone());
     }
-    let for_iter_hints = checker.for_iter_kinds();
-    let compiler = Compiler::new().with_for_iter_kinds(for_iter_hints);
+    let compiler = Compiler::new().with_checker_output(checker.output());
     let compile_result = compiler.compile(&program).map_err(|e| e.message)?;
     let mut vm = VM::new();
     vm.suppress_output();
@@ -195,8 +194,7 @@ fib(20)
             let program = parser.parse();
             let mut checker = Checker::new();
             let _ = checker.check(&program);
-            let for_iter_hints = checker.for_iter_kinds();
-            let compiler = Compiler::new().with_for_iter_kinds(for_iter_hints);
+            let compiler = Compiler::new().with_checker_output(checker.output());
             let compile_result = compiler.compile(&program).unwrap();
             let mut vm = VM::new();
             vm.suppress_output();

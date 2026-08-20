@@ -342,6 +342,7 @@ only (lossless); a `float -> int` write is lossy and surfaces as a real error.
 | Errors are explicit | Runtime errors with descriptive messages; `try_*` for safe conversion |
 | No hidden state | ECS is the only channel for world mutation |
 | System authority is bounded | Synchronous reads/writes/emits/IO/async must fit query parameters and explicit grants; scheduler uses the same call-site-specialized graph |
+| Checked semantics are indivisible | Compiler validates semantic-input configuration and complete-product integrity before installing any checker-derived map |
 | Simulations are isolated | IO, `commit()`, unsafe event-effect calls, and unsafe handler chains are statically forbidden inside `simulate()` |
 | Unique bindings are never aliased | `let unique` enforces single ownership at compile time; see §7 |
 | Ghost effects are optional | Observational intrinsics may be elided in release builds; see §8 |

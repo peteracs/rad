@@ -49,7 +49,8 @@ fn run_authority_command(query: AuthorityQuery, filepath: String, json: bool) {
         }
         had_errors = true;
     }
-    let report = checker.output().authority;
+    let checker_output = checker.output();
+    let report = checker_output.authority();
     let query_result = match query {
         AuthorityQuery::Effects { symbol } => report.resolve(&symbol).map(|callable| {
             if json {

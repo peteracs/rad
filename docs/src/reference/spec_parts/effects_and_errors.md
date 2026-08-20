@@ -136,10 +136,13 @@ Write these keys as quoted grants in source, for example
 `reads "$entity_names"`. The scheduler uses them for conflicts between lookup
 and name publication/removal.
 
-The checker product carries a BLAKE3 fingerprint of the checked AST and sorted
-module declarations. Compilation recomputes it before consuming authority or
-scheduler metadata; checker output from a different program or module graph is
-rejected rather than trusted.
+The checker product is opaque outside the VM crate. Its BLAKE3 semantic-input
+fingerprint covers the checked AST, deterministically ordered module
+declarations, enabled language features, and every checker option that changes
+semantic interpretation. A separate integrity digest covers every derived map
+in the product. Compilation validates both digests before installing any map;
+fingerprint-less, mutated, differently configured, or different-program output
+is rejected as a whole.
 
 The graph and reverse indexes are available without rescanning source:
 

@@ -1,5 +1,53 @@
 
 
+fn document_end_position(text: &str) -> Position {
+    let mut line = 0u32;
+    let mut character = 0u32;
+    let mut chars = text.chars().peekable();
+    while let Some(ch) = chars.next() {
+        match ch {
+            '\r' => {
+                if chars.peek() == Some(&'\n') {
+                    chars.next();
+                }
+                line += 1;
+                character = 0;
+            }
+            '\n' => {
+                line += 1;
+                character = 0;
+            }
+            _ => character += ch.len_utf16() as u32,
+        }
+    }
+    Position::new(line, character)
+}
+
+/// LSP `Position.character` is a UTF-16 code unit offset from the start of the line (LSP 3.16).
+fn utf16_col_to_char_idx(line: &str, utf16_col: u32) -> usize {
+    let mut utf16_seen = 0u32;
+    for (idx, ch) in line.chars().enumerate() {
+        let u = ch.len_utf16() as u32;
+        if utf16_seen + u > utf16_col {
+            return idx;
+        }
+        utf16_seen += u;
+    }
+    line.chars().count()
+}
+
+#[inline]
+fn is_system_path_delimiter(c: char) -> bool {
+    matches!(c, ',' | ']' | ')' | ';')
+}
+
+fn skip_chars_ws(chars: &[char], mut pos: usize) -> usize {
+    while pos < chars.len() && chars[pos].is_whitespace() {
+        pos += 1;
+    }
+    pos
+}
+
 /// Parse `system::` path starting at `pos`, reading only `chars[pos..limit)` (exclusive).
 fn parse_system_ref_path_prefix(
     chars: &[char],

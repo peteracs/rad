@@ -107,6 +107,7 @@ impl Compiler {
             component_versions: HashMap::new(),
             declared_systems: std::collections::HashSet::new(),
             checker_output: None,
+            expected_checker_options: None,
             authority: None,
             authority_errors: Vec::new(),
             allow_pipe_fusion: false,
@@ -127,7 +128,19 @@ impl Compiler {
     }
 
     pub fn with_features(mut self, features: Vec<String>) -> Self {
-        self.features = features;
+        self.features = features.clone();
+        if let Some(options) = &mut self.expected_checker_options {
+            options.features = features;
+        }
+        self
+    }
+
+    pub fn with_checker_options(
+        mut self,
+        options: crate::checker::CheckerOptions,
+    ) -> Self {
+        self.features = options.features.clone();
+        self.expected_checker_options = Some(options);
         self
     }
 
@@ -266,23 +279,17 @@ impl Compiler {
         None
     }
 
-    pub fn with_for_iter_kinds(mut self, hints: HashMap<NodeId, ForIterKind>) -> Self {
-        self.for_iter_kinds = hints;
+    pub fn with_checker_output(mut self, output: CheckerOutput) -> Self {
+        self.checker_output = Some(output);
         self
     }
 
-    pub fn with_checker_output(mut self, output: CheckerOutput) -> Self {
-        if output.program_fingerprint.is_some() {
-            self.authority = Some(output.authority.clone());
-            self.authority_errors = output.authority_errors.clone();
-        } else {
-            self.authority = None;
-            self.authority_errors.clear();
-        }
-        self.checker_output = Some(output.clone());
-        self.for_iter_kinds = output.for_iter_kinds;
-        self.checker_components = output.components;
-        self.checker_resources = output.resources;
+    fn install_checker_output(&mut self, output: CheckerOutput) {
+        self.authority = Some(output.authority.clone());
+        self.authority_errors = output.authority_errors.clone();
+        self.for_iter_kinds = output.for_iter_kinds.clone();
+        self.checker_components = output.components.clone();
+        self.checker_resources = output.resources.clone();
         for (name, rs) in &self.checker_resources {
             self.checker_components.insert(
                 name.clone(),
@@ -295,23 +302,109 @@ impl Compiler {
                 },
             );
         }
-        for (name, st) in output.structs {
+        for (name, st) in &output.structs {
             self.checker_components.insert(
-                name,
+                name.clone(),
                 ComponentType {
-                    name: st.name,
-                    fields: st.fields,
+                    name: st.name.clone(),
+                    fields: st.fields.clone(),
                     is_pub: st.is_pub,
                     file_id: st.file_id,
                     indexed_fields: std::collections::HashSet::new(),
                 },
             );
         }
-        self.checker_sum_types = output.sum_types;
-        self.type_redirects = output.type_redirects;
-        self.variant_shorthand = output.variant_shorthand;
-        self.spread_lengths = output.spread_lengths;
-        self
+        self.checker_sum_types = output.sum_types.clone();
+        self.type_redirects = output.type_redirects.clone();
+        self.variant_shorthand = output.variant_shorthand.clone();
+        self.spread_lengths = output.spread_lengths.clone();
+        self.checker_output = Some(output);
+    }
+
+    fn semantic_product_error(program: &Program, message: impl Into<String>) -> CompileError {
+        let span = program
+            .declarations
+            .first()
+            .and_then(Decl::span)
+            .cloned()
+            .unwrap_or_default();
+        CompileError {
+            message: message.into(),
+            line: span.line,
+            col: span.col,
+        }
+    }
+
+    fn normalized_checker_options(
+        options: &crate::checker::CheckerOptions,
+    ) -> crate::checker::CheckerOptions {
+        let mut normalized = options.clone();
+        normalized.features.sort();
+        normalized.features.dedup();
+        normalized
+    }
+
+    fn validate_checker_output(
+        &self,
+        program: &Program,
+        output: &CheckerOutput,
+    ) -> Result<(), CompileError> {
+        let Some(expected_input) = output.semantic_input_fingerprint else {
+            return Err(Self::semantic_product_error(
+                program,
+                "Checker output is not a checked semantic product; run Checker::check before compiling",
+            ));
+        };
+        let Some(options) = output.semantic_options.as_ref() else {
+            return Err(Self::semantic_product_error(
+                program,
+                "Checker output is missing its semantic configuration",
+            ));
+        };
+        let Some(expected_product) = output.product_fingerprint else {
+            return Err(Self::semantic_product_error(
+                program,
+                "Checker output is missing its semantic product integrity digest",
+            ));
+        };
+        if crate::types::semantic_product_fingerprint(output) != expected_product {
+            return Err(Self::semantic_product_error(
+                program,
+                "Checker output failed semantic product integrity validation",
+            ));
+        }
+        let actual_input =
+            crate::types::semantic_program_fingerprint(program, &self.alias_decls, options);
+        if actual_input != expected_input {
+            return Err(Self::semantic_product_error(
+                program,
+                "Checker output belongs to a different program or module graph, or was produced under a different semantic configuration; check and compile the same semantic input",
+            ));
+        }
+
+        let mut checked_features = options.features.clone();
+        checked_features.sort();
+        checked_features.dedup();
+        let mut compiler_features = self.features.clone();
+        compiler_features.sort();
+        compiler_features.dedup();
+        if checked_features != compiler_features {
+            return Err(Self::semantic_product_error(
+                program,
+                "Checker output was produced under a different enabled-feature configuration",
+            ));
+        }
+        if let Some(expected_options) = &self.expected_checker_options {
+            if Self::normalized_checker_options(expected_options)
+                != Self::normalized_checker_options(options)
+            {
+                return Err(Self::semantic_product_error(
+                    program,
+                    "Checker output was produced under different checker semantic options",
+                ));
+            }
+        }
+        Ok(())
     }
 
     pub(crate) fn ensure_global_slot(&mut self, name: &str) -> u16 {
@@ -417,25 +510,9 @@ impl Compiler {
     }
 
     pub fn compile(mut self, program: &Program) -> Result<CompileResult, CompileError> {
-        if let Some(expected) = self
-            .checker_output
-            .as_ref()
-            .and_then(|output| output.program_fingerprint)
-        {
-            let actual = crate::types::semantic_program_fingerprint(program, &self.alias_decls);
-            if actual != expected {
-                let span = program
-                    .declarations
-                    .first()
-                    .and_then(Decl::span)
-                    .cloned()
-                    .unwrap_or_default();
-                return Err(CompileError {
-                    message: "Checker output belongs to a different program or module graph; check and compile the same semantic input".to_string(),
-                    line: span.line,
-                    col: span.col,
-                });
-            }
+        if let Some(output) = self.checker_output.take() {
+            self.validate_checker_output(program, &output)?;
+            self.install_checker_output(output);
         }
         // Authority is mandatory even for direct compiler callers. Keep the
         // inferred graph separate from the optional full checker product so

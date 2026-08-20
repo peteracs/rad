@@ -3,6 +3,11 @@ use std::fmt;
 
 use serde::Serialize;
 
+mod semantic_product;
+
+pub use semantic_product::CheckerOutput;
+pub(crate) use semantic_product::{semantic_product_fingerprint, semantic_program_fingerprint};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Effect {
     IO,
@@ -437,57 +442,6 @@ impl fmt::Display for Ty {
             }
         }
     }
-}
-
-#[derive(Debug, Clone, Default)]
-pub struct CheckerOutput {
-    /// Fingerprint of the exact AST plus aliased module declarations checked
-    /// to produce every map below. `None` means there is no semantic product
-    /// to trust (for example `CheckerOutput::default()`).
-    pub(crate) program_fingerprint: Option<[u8; 32]>,
-    pub for_iter_kinds: HashMap<crate::ast::NodeId, ForIterKind>,
-    pub components: HashMap<String, ComponentType>,
-    pub resources: HashMap<String, ResourceType>,
-    pub structs: HashMap<String, StructType>,
-    pub(crate) functions: HashMap<String, crate::checker::FunctionSig>,
-    pub systems: HashMap<String, SystemType>,
-    pub sum_types: HashMap<String, SumTypeDef>,
-    /// StateRef nodes the checker resolved as zero-field sum variant constructors.
-    /// Keyed by (type_name, variant_name) so the compiler can emit MakeVariant
-    /// without re-deriving the disambiguation.
-    pub variant_shorthand: std::collections::HashSet<(String, String)>,
-    pub spread_lengths: HashMap<crate::ast::Span, usize>,
-    pub type_redirects: HashMap<String, String>,
-    /// Fine-grained, transitive world-authority effects and the cached call
-    /// graph used by `rad effects`, `writers`, `readers`, and `path`.
-    pub authority: AuthorityReport,
-    /// Authority violations are retained separately so every compiler entry
-    /// point enforces them even when callers use the lower-level API without
-    /// requesting the checker's unrelated type/style diagnostics.
-    pub(crate) authority_errors: Vec<crate::checker::TypeError>,
-}
-
-pub(crate) fn semantic_program_fingerprint(
-    program: &crate::ast::Program,
-    aliases: &HashMap<String, Vec<crate::ast::Decl>>,
-) -> [u8; 32] {
-    fn update_segment(hasher: &mut blake3::Hasher, bytes: &[u8]) {
-        hasher.update(&(bytes.len() as u64).to_le_bytes());
-        hasher.update(bytes);
-    }
-
-    let mut hasher = blake3::Hasher::new();
-    hasher.update(b"RAD_CHECKED_PROGRAM_V1");
-    let program_debug = format!("{program:#?}");
-    update_segment(&mut hasher, program_debug.as_bytes());
-    let mut alias_names = aliases.keys().collect::<Vec<_>>();
-    alias_names.sort();
-    for alias in alias_names {
-        update_segment(&mut hasher, alias.as_bytes());
-        let declarations = format!("{:#?}", aliases[alias]);
-        update_segment(&mut hasher, declarations.as_bytes());
-    }
-    *hasher.finalize().as_bytes()
 }
 
 /// The authority-visible effects of one callable. Names are canonical

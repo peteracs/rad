@@ -789,7 +789,7 @@ fn main() {
         }
     }
 
-    let mut checker_output = rad_vm::types::CheckerOutput::default();
+    let mut checker_output = None;
     if !skip_check {
         let mut checker = Checker::new_with_options(CheckerOptions {
             compat_v0_5_dx,
@@ -799,7 +799,7 @@ fn main() {
         });
         checker.set_aliases(aliases.clone());
         let errors = checker.check(&program);
-        checker_output = checker.output();
+        checker_output = Some(checker.output());
         if !errors.is_empty() {
             for err in &errors {
                 let (src, path) =
@@ -835,8 +835,7 @@ fn main() {
         process::exit(1);
     }
 
-    let compiler = Compiler::new()
-        .with_checker_output(checker_output)
+    let mut compiler = Compiler::new()
         .with_aliases(aliases)
         .with_features(features.clone())
         .with_program_source_identity(
@@ -844,6 +843,9 @@ fn main() {
                 .digest(&source)
                 .expect("module loader produced an invalid source layout"),
         );
+    if let Some(output) = checker_output {
+        compiler = compiler.with_checker_output(output);
+    }
     let compile_result = match compiler.compile(&program) {
         Ok(c) => c,
         Err(e) => {

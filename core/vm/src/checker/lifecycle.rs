@@ -178,7 +178,7 @@ impl Checker {
             event_handler_blocks: std::collections::HashMap::new(),
             system_list_consts: std::collections::HashMap::new(),
             authority: crate::types::AuthorityReport::default(),
-            program_fingerprint: None,
+            semantic_input_fingerprint: None,
         }
     }
 
@@ -277,14 +277,15 @@ impl Checker {
     }
 
     pub fn check(&mut self, program: &Program) -> Vec<TypeError> {
-        self.program_fingerprint = Some(crate::types::semantic_program_fingerprint(
-            program,
-            &self.alias_decls,
-        ));
         for feature in self.options.features.clone() {
             let name = format!("FEATURE_{}", feature.to_uppercase());
             self.define(&name, Ty::Bool, false, Span::default(), false, false);
         }
+        self.semantic_input_fingerprint = Some(crate::types::semantic_program_fingerprint(
+            program,
+            &self.alias_decls,
+            &self.options,
+        ));
         self.collect_declarations(program);
         self.collect_system_list_consts(program);
         // handler bodies indexed before any system is checked: the
@@ -614,8 +615,10 @@ impl Checker {
         self.for_iter_kinds.clone()
     }
     pub fn output(&self) -> crate::types::CheckerOutput {
-        crate::types::CheckerOutput {
-            program_fingerprint: self.program_fingerprint,
+        let mut output = crate::types::CheckerOutput {
+            semantic_input_fingerprint: self.semantic_input_fingerprint,
+            semantic_options: self.semantic_input_fingerprint.map(|_| self.options.clone()),
+            product_fingerprint: None,
             for_iter_kinds: self.for_iter_kinds.clone(),
             components: self.components.clone(),
             resources: self.resources.clone(),
@@ -628,7 +631,11 @@ impl Checker {
             type_redirects: self.type_redirects.clone(),
             authority: self.authority.clone(),
             authority_errors: self.authority_errors.clone(),
+        };
+        if output.semantic_input_fingerprint.is_some() {
+            output.product_fingerprint = Some(crate::types::semantic_product_fingerprint(&output));
         }
+        output
     }
     pub fn warnings(&self) -> Vec<TypeWarning> {
         self.warnings.clone()

@@ -70,6 +70,7 @@ rad/
           - `core/vm/src/relation/runtime/` - Authoritative relation store, candidates, manifests, encoding, and profiles.
         - `core/vm/src/replay/` - Replay codecs, identity, execution, and verification tests.
         - `core/vm/src/sandbox/` - Capability policy, isolation, and speculative-execution tests.
+        - `core/vm/src/types/` - Checked semantic-product identity, configuration binding, and integrity verification.
         - `core/vm/src/value/` - NaN-boxed values, persistent collections, objects, and value builtins.
         - `core/vm/src/vm/` - Bytecode execution, scheduling, builtins, manifests, and settlement integration.
           - `core/vm/src/vm/builtins_impl/` - Runtime builtin implementations grouped by stable domain responsibility.
