@@ -7,7 +7,7 @@ component Bonus { amount: 0 }
 // Extension 4: Typed event fields
 event Award { target: str, points: int }
 
-system ComputeBonus(s: Score) {
+system ComputeBonus(s: Score, emits Award) {
     if s.value > 50 {
         emit Award { target: s.label, points: s.value / 10 }
     }

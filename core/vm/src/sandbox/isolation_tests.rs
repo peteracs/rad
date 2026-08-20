@@ -800,7 +800,7 @@ mod escape_tests {
             &mut vm,
             r#"
                 component Vault { gold: 5000 }
-                system Peeker(v: Vault) {
+                system Peeker(v: Vault, io true) {
                     print(f"peeked {v.gold}")
                 }
                 schedule [system::Peeker]

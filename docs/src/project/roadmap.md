@@ -69,14 +69,14 @@
 | :white_circle: | **Debug adapter protocol** — step-through debugging in VS Code | #TBD |
 | :white_circle: | **Property-based testing** — `rad test --fuzz` for system invariants | #TBD |
 | :green_circle: | **WebGPU presentation host** — exact bounded WASM packets, storage-buffer materialization, resize and device-loss recovery | Shipped |
-| :green_circle: | **Transitive authority enforcement** — direct/synchronous/complete callable effects, enforced system bounds, exact scheduler metadata, and `effects`/`writers`/`readers`/`path` inspection | Shipped |
+| :green_circle: | **Transitive authority enforcement** — direct/synchronous/complete callable reports; enforced read/write/emit/IO/async system bounds; call-site-specialized scheduler metadata; and `effects`/`writers`/`readers`/`path` inspection | Shipped |
 
 ## 2027 H1 — Long-term Vision
 
 | Item | Notes |
 |------|-------|
 | **FFI / host bindings** | Shipped — native extensions register Rust/C-compatible functions through `rad_extension_init`; host I/O is also available through builtins. |
-| **Conflict-aware system batching** | Shipped — `schedule` topologically orders systems and partitions them with exact synchronous authority sets. |
+| **Conflict-aware system batching** | Shipped — `schedule` topologically orders systems and partitions them with call-site-specialized synchronous authority sets. |
 | **Multithreaded parallel system runs** | Shipped on native targets — conflict-free batches execute through Rayon worker VMs; WASM preserves the same isolated deterministic semantics sequentially. |
 | **Parallel fork simulation** | Shipped — `simulate_par()` and `simulate_many()` evaluate deterministic speculative futures concurrently on native targets. |
 | **Fork diff/merge** | Shipped — `diff()`, `fork_delta()`, `merge_forks()`, and `merge_forks_with()` inspect and combine worlds without committing either input. |

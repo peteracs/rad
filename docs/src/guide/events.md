@@ -159,7 +159,7 @@ The type checker walks every handler reachable from events emitted by a simulate
 ```rad
 event Hit { target: entity, amount: 0 }
 
-system PredictAttack(target: Health) {
+system PredictAttack(target: Health, emits Hit) {
     emit Hit { target: self, amount: 3 }
 }
 

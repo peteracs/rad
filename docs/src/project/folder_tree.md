@@ -42,6 +42,7 @@ rad/
         - `core/vm/src/builtins/` - Builtin signatures grouped by value, world, host, and simulation roles.
         - `core/vm/src/causality/` - Settlement provenance model and explanation rendering.
         - `core/vm/src/checker/` - Static semantics, effects, scopes, diagnostics, and type checking.
+          - `core/vm/src/checker/authority/` - Authority graph propagation, call-site specialization, reverse indexes, and system-bound enforcement.
           - `core/vm/src/checker/declarations/` - Declaration registration and effect-analysis phases.
           - `core/vm/src/checker/tests/` - Behavior-grouped checker regression suites.
           - `core/vm/src/checker/typeck/` - Expression, statement, query, pattern, and builtin type checking.

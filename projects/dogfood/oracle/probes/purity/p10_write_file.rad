@@ -4,7 +4,7 @@
 // WATCH: existence of D:\Temp\ESCAPED-P10.txt after the run.
 component C { v: int = 0 }
 
-system Leak(c: mut C) {
+system Leak(c: mut C, io true, async true) {
     c.v = c.v + 1
     write_file("D:\\Temp\\ESCAPED-P10.txt", "speculation escaped to disk")
 }

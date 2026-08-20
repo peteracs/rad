@@ -23,7 +23,7 @@ component Cell {
     v: int = 1
 }
 
-system Spin(c: mut Cell, m: mut Meter) {
+system Spin(c: mut Cell, m: mut Meter, io true) {
     let r = rand_int(1, 9)
     c.v = c.v + r
     m.total = m.total + r

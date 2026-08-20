@@ -605,6 +605,9 @@ impl Checker {
                 if authority == "*" {
                     continue;
                 }
+                if matches!(authority.as_str(), "$entity_names" | "$entity_identity") {
+                    continue;
+                }
                 let resolved = self.resolve_canonical_name(authority);
                 if !self.components.contains_key(&resolved)
                     && !self.resources.contains_key(&resolved)
@@ -621,6 +624,37 @@ impl Checker {
                         )),
                     );
                 }
+            }
+        }
+        let mut seen_emits = std::collections::HashSet::new();
+        for authority in &decl.authority_emits {
+            if !seen_emits.insert(authority) {
+                self.error(
+                    &decl.span,
+                    format!(
+                        "System '{}' declares 'emits {}' more than once",
+                        decl.name, authority
+                    ),
+                    Some("Remove the duplicate event permission".to_string()),
+                );
+                continue;
+            }
+            if authority == "*" || matches!(authority.as_str(), "$events" | "$transition") {
+                continue;
+            }
+            let resolved = self.resolve_canonical_name(authority);
+            if !self.events.contains_key(&resolved) {
+                self.error(
+                    &decl.span,
+                    format!(
+                        "System '{}' declares emission authority over unknown event '{}'",
+                        decl.name, authority
+                    ),
+                    Some(format!(
+                        "Declare event '{}', import it, or correct the `emits` permission",
+                        authority
+                    )),
+                );
             }
         }
         for dep in &decl.after {

@@ -197,6 +197,7 @@ system ExploreHypergraph(
     candidate: mut HypergraphCandidate,
     telemetry: mut HypergraphTelemetry,
     reads HypergraphTarget,
+    io true,
 ) {
     let target = res(HypergraphTarget).family_size
     let lane_minimum = target

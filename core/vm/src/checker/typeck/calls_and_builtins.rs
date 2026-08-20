@@ -524,6 +524,31 @@ impl Checker {
             }
         }
 
+        // `push` is intentionally overloaded at runtime: lists append one
+        // value, while strings concatenate one string. The generic builtin
+        // scheme models the list family; preserve the string family here so
+        // statement-level `s << suffix` (lowered to `push`) and direct calls
+        // receive the same static contract as the VM.
+        if name == "push"
+            && arg_tys
+                .first()
+                .is_some_and(|ty| self.resolve_ty(ty) == Ty::Str)
+        {
+            if arg_tys.len() != 2 {
+                self.error(
+                    _span,
+                    format!(
+                        "Function 'push' expects 2 argument(s), got {}",
+                        arg_tys.len()
+                    ),
+                    Some("signature: push(str, str) -> str".to_string()),
+                );
+            } else {
+                self.validate_call_args("push", &[Ty::Str, Ty::Str], arg_tys, _span);
+            }
+            return Ty::Str;
+        }
+
         if let Some(bsig) = crate::builtins::builtin_type_scheme(name) {
             let sig = FunctionSig {
                 type_params: bsig.type_params,

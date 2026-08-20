@@ -10,7 +10,7 @@ on Ping(ev) {
     print(f"ESCAPED-P04 io ran in an event handler inside simulate n={ev.n}")
 }
 
-system Leak(c: mut C) {
+system Leak(c: mut C, emits Ping) {
     c.v = c.v + 1
     emit Ping { n: c.v }
 }

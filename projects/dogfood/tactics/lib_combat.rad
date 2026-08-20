@@ -103,7 +103,7 @@ on Sapped(e) {
 // legal exactly here: simulate_par seeds every fork explicitly.
 // ---------------------------------------------------------------------------
 
-pub system TargetNearest(i: mut Intent, p: Pos, s: Stats, t: Team) {
+pub system TargetNearest(i: mut Intent, p: Pos, s: Stats, t: Team, reads "$entity_identity", reads "$entity_names", io true) {
     if s.hp <= 0 { return }
     if i.kind != "wait" { return }   // a unit already commanded keeps its order
     let mut best = ""
@@ -144,7 +144,7 @@ pub system TargetNearest(i: mut Intent, p: Pos, s: Stats, t: Team) {
     }
 }
 
-pub system SimResolve(i: mut Intent, p: mut Pos, s: mut Stats, _t: Team) after TargetNearest {
+pub system SimResolve(i: mut Intent, p: mut Pos, s: mut Stats, _t: Team, reads "$entity_names") after TargetNearest {
     if s.hp <= 0 { return }
     if i.kind == "move" {
         p = Pos { x: i.tx, y: i.ty }

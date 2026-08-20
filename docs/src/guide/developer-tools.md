@@ -185,8 +185,28 @@ effects; `writers` and `readers` use cached reverse indexes; `path` returns the
 shortest callable chain or reports that none exists. All commands reject
 ambiguous short names and accept `--json` for machine-readable output.
 
-The compiler uses this exact graph both to enforce system authority and to
-build parallel conflict batches; lint does not maintain a separate model.
+The compiler uses this graph both to enforce system authority and to build
+parallel conflict batches; lint does not maintain a separate model. System
+roots are specialized for statically resolved callback arguments before
+enforcement and batching. A generic helper's standalone report can
+conservatively union callback targets from multiple call sites.
+
+System permissions cover the complete synchronous effect record:
+
+```rad
+system RemoveEntity(
+    live: mut LiveMembership,
+    writes WireIdentity,
+    emits EntityRetired,
+    io false,
+    async false,
+) { ... }
+```
+
+`io` and `async` default to `false`; write `true` only to grant the effect.
+`emits *`, `reads *`, and `writes *` are explicit wildcard grants. Runtime
+entity-name indexes use quoted keys: `"$entity_names"` and
+`"$entity_identity"`.
 
 ## Lint Presets
 

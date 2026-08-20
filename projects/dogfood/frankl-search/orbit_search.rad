@@ -261,6 +261,7 @@ system ExploreOrbitBases(
     candidate: mut OrbitCandidate,
     config: OrbitSearchConfig,
     telemetry: mut OrbitTelemetry,
+    io true,
 ) {
     let mut best = candidate
     let mut have_distinct = false

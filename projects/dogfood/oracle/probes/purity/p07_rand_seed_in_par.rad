@@ -4,7 +4,7 @@
 // EXPECT: compile-time rejection.
 component C { v: int = 0 }
 
-system Leak(c: mut C) {
+system Leak(c: mut C, io true) {
     rand_seed(42)
     c.v = c.v + rand_int(1, 6)
 }

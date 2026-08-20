@@ -170,7 +170,7 @@ system HaulOre(st: mut Store) {
 // a resource from inside a system loses all but one write once the system is
 // scheduled alongside another; events survive the merge intact, so counting
 // happens in the handler where it is exact.
-system FeedMachines(m: Machine, f: mut Fsm, j: mut Job, st: mut Store, c: Clock) after HaulOre {
+system FeedMachines(m: Machine, f: mut Fsm, j: mut Job, st: mut Store, c: Clock, emits $transition, emits JobStarted, emits Stalled) after HaulOre {
     let good = input_of(m.kind)
 
     let mut have = 0
@@ -199,7 +199,7 @@ system FeedMachines(m: Machine, f: mut Fsm, j: mut Job, st: mut Store, c: Clock)
 }
 
 // Running machines burn down their job clock and announce completion.
-system AdvanceJobs(m: Machine, f: Fsm, j: mut Job, c: Clock) after FeedMachines {
+system AdvanceJobs(m: Machine, f: Fsm, j: mut Job, c: Clock, emits JobFinished) after FeedMachines {
     if f.state is Running {
         j.remaining = j.remaining - 1
         if j.remaining <= 0 {
@@ -210,7 +210,7 @@ system AdvanceJobs(m: Machine, f: Fsm, j: mut Job, c: Clock) after FeedMachines 
 }
 
 // Wear only accrues under load. Crossing the limit arms a breakdown.
-system AccrueWear(m: Machine, f: Fsm, w: mut Wear, c: Clock) after AdvanceJobs {
+system AccrueWear(m: Machine, f: Fsm, w: mut Wear, c: Clock, emits BrokeDown) after AdvanceJobs {
     if f.state is Running {
         w.level = w.level + 1
         if w.level >= w.limit {

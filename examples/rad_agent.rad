@@ -188,6 +188,9 @@ system ExecuteAction(
     s: mut Stats,
     mem: mut Memory,
     reads AgentPool,
+    emits AgentAction,
+    emits TaskCompleted,
+    emits TaskFailed,
 ) {
     if tq.current_task == "" { return }
     let pool = get_resource(AgentPool) ?
@@ -220,7 +223,7 @@ system ExecuteAction(
     }
 }
 
-system AdvanceQueue(p: AgentProfile, tq: mut TaskQueue) {
+system AdvanceQueue(p: AgentProfile, tq: mut TaskQueue, emits AgentAction, emits TaskAssigned) {
     if tq.current_task != "" { return }
     if len(tq.pending) == 0 { return }
     tq.current_task = tq.pending[0]

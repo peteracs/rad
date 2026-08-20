@@ -11,7 +11,7 @@ on Land(e) {
     update(e.who, Hits) { n = require(e.who, Hits).n + 1 }
 }
 
-system planter(Hits) {
+system planter(Hits, emits Land) {
     emit Land { who: self } after 1
 }
 

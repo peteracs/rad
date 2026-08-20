@@ -24,7 +24,7 @@ pub event SkillshotHit {
     slot: str, rank: int, hit_index: int,
 }
 
-pub system fly_skillshots(m: mut Skillshot, p: mut Pos, reads Vitals, writes *) {
+pub system fly_skillshots(m: mut Skillshot, p: mut Pos, reads Vitals, writes *, emits SkillshotHit) {
     let step = m.speed * DT
     p.at = p.at + m.dir * step
     m.flown = m.flown + step

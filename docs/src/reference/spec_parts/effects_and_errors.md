@@ -106,9 +106,40 @@ effect RemoveEntity {
 
 The graph follows ordinary calls, imported helpers, closures, callback arguments, static schedules, state transitions, resource operations, and emitted-event handler chains. Callback parameters typed `pure fn(...)` contribute no authority; `readonly fn(...)` contributes a bounded whole-world read; a bare `fn(...)` call is unbounded and sets `unknown`. Restricted callers reject `unknown` instead of assuming a dynamic target is safe.
 
+Higher-order analysis has two views. Generic callable reports conservatively
+union callback targets observed at their known call sites. System roots are
+instead specialized by the statically resolved callback tuple at each call
+site. Enforcement and scheduling consume the specialized system view, so
+`invoke(write_x, ...)` and `invoke(write_y, ...)` do not give their callers one
+another's writes.
+
 Each callable exposes three useful views. `direct` is written in that body. `synchronous` includes calls that execute before crossing a queued event or separately scheduled system boundary. `transitive` also follows those deferred edges and is the complete impact report. System sandbox enforcement and parallel batching use `synchronous`; inspection commands use the complete transitive graph.
 
-For systems, named query/resource parameters and `reads`/`writes` authority-only entries form an enforced upper bound (§3.5). `mut` grants read and write, an immutable parameter grants read only, and `writes X` does not silently grant a read. Wildcard authority must be written explicitly. The inferred effect report records actual access, never unused grants.
+For systems, named query/resource parameters and authority-only entries form an
+enforced upper bound (§3.5) over the complete synchronous effect record. `mut`
+grants read and write, an immutable parameter grants read only, and `writes X`
+does not silently grant a read. `emits Event`, `io true`, and `async true` grant
+event emission, host effects, and async execution respectively. Wildcard state
+or event authority must be written explicitly. The inferred effect report
+records actual effects, never unused grants.
+
+Entity-name publication is shared runtime state with narrow synthetic keys:
+
+```text
+get_entity / require_entity    reads  $entity_names
+name_of                        reads  $entity_identity
+named spawn                    writes $entity_names, $entity_identity
+despawn                        writes $entity_names, $entity_identity, *
+```
+
+Write these keys as quoted grants in source, for example
+`reads "$entity_names"`. The scheduler uses them for conflicts between lookup
+and name publication/removal.
+
+The checker product carries a BLAKE3 fingerprint of the checked AST and sorted
+module declarations. Compilation recomputes it before consuming authority or
+scheduler metadata; checker output from a different program or module graph is
+rejected rather than trusted.
 
 The graph and reverse indexes are available without rescanning source:
 

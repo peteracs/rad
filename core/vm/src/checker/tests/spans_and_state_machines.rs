@@ -311,6 +311,9 @@
                     accum_params: vec![],
                     authority_reads: vec![],
                     authority_writes: vec![],
+                    authority_emits: vec![],
+                    authority_io: false,
+                    authority_async: false,
                     after: vec![],
                     before: vec![],
                     body: Block {

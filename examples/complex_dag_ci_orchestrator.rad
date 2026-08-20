@@ -124,7 +124,7 @@ system AdvanceRunning(t: mut Task) {
     }
 }
 
-system CompleteTasks(t: mut Task, reads ClusterPool, writes ClusterPool) {
+system CompleteTasks(t: mut Task, reads ClusterPool, writes ClusterPool, emits TaskDone) {
     if t.phase != task_running() {
         return
     }

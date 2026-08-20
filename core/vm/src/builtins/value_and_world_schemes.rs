@@ -116,6 +116,7 @@ pub fn builtin_signature_help(name: &str) -> Option<String> {
         "replace" => "replace(s, from, to) -> str",
         "split" => "split(s, separator) -> list<str>",
         "join" => "join(list, separator) -> str",
+        "push" => "push(list<T>, T) -> list<T> | push(str, str) -> str",
         "sandbox_run" => {
             "sandbox_run(source, fork, caps_json, input?) -> Result<world_fork, str>"
         }

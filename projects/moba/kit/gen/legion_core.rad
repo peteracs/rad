@@ -59,7 +59,7 @@ pub pure fn ldist(a: (float, float), b: (float, float)) -> float {
 }
 
 // the brawl: walk at the nearest living enemy, swing when in reach
-pub system brawl(me: mut LChamp, p: mut LPos) {
+pub system brawl(me: mut LChamp, p: mut LPos, emits LHit) {
     if not me.alive { return }
     let foes = query { LChamp, LPos } |> filter(fn(e) {
         let c = require(e, LChamp)

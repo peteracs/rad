@@ -560,6 +560,9 @@
                     params: vec![("pos".to_string(), true, "Position".to_string())],
                     authority_reads: vec![],
                     authority_writes: vec![],
+                    authority_emits: vec![],
+                    authority_io: false,
+                    authority_async: false,
                     body: Block {
                         id: nid(),
                         span: span(2),

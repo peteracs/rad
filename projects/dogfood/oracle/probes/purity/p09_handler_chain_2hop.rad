@@ -15,7 +15,7 @@ on Beta(ev) {
     print(f"ESCAPED-P09 io ran two event hops deep inside simulate n={ev.n}")
 }
 
-system Leak(c: mut C) {
+system Leak(c: mut C, emits Alpha) {
     c.v = c.v + 1
     emit Alpha { n: c.v }
 }

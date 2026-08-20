@@ -65,7 +65,7 @@
             on Deferred(e) { set_resource(Audit, Audit { n: e.n }) }
 
             system WritesNow(t: Tick, writes Audit) { hidden_write() }
-            system EmitsLater(t: Tick) { emit Deferred { n: t.n } }
+            system EmitsLater(t: Tick, emits Deferred) { emit Deferred { n: t.n } }
         "#;
         let mut lexer = Lexer::new(source);
         let tokens = lexer.tokenize().0;
@@ -90,6 +90,74 @@
             .params
             .iter()
             .any(|param| param.comp_type == "Audit" || param.comp_type == "*"));
+    }
+
+    #[test]
+    fn checker_output_cannot_authorize_a_different_program() {
+        let parse = |source: &str| {
+            let tokens = Lexer::new(source).tokenize().0;
+            Parser::new(tokens).parse()
+        };
+        let program_a = parse(
+            r#"
+            component Root {}
+            component Hidden {}
+            system Run(root: Root) {}
+            "#,
+        );
+        let program_b = parse(
+            r#"
+            component Root {}
+            component Hidden {}
+            fn hidden_write(target: entity) { set(target, Hidden {}) }
+            system Run(root: Root) { hidden_write(self) }
+            "#,
+        );
+        let mut checker = crate::checker::Checker::new();
+        let errors = checker.check(&program_a);
+        assert!(errors.is_empty(), "Program A should check: {errors:?}");
+        let checked_a = checker.output();
+
+        Compiler::new()
+            .with_checker_output(checked_a.clone())
+            .compile(&program_a)
+            .expect("the matching semantic product must compile");
+        let mismatch = Compiler::new()
+            .with_checker_output(checked_a)
+            .compile(&program_b)
+            .expect_err("Program A's checker output must never authorize Program B");
+        assert!(mismatch.message.contains("different program or module graph"));
+    }
+
+    #[test]
+    fn scheduler_metadata_uses_call_site_specialized_callback_effects() {
+        let source = r#"
+            component Root {}
+            component X {}
+            component Y {}
+            fn invoke(callback: fn(entity) -> nil, target: entity) { callback(target) }
+            fn write_x(target: entity) { set(target, X {}) }
+            fn write_y(target: entity) { set(target, Y {}) }
+            system SystemX(root: Root, writes X) { invoke(write_x, self) }
+            system SystemY(root: Root, writes Y) { invoke(write_y, self) }
+        "#;
+        let tokens = Lexer::new(source).tokenize().0;
+        let program = Parser::new(tokens).parse();
+        let result = Compiler::new().compile(&program).expect("compile");
+        let body_writes = |name: &str| {
+            result
+                .systems
+                .iter()
+                .find(|system| system.name == name)
+                .expect("system metadata")
+                .params
+                .iter()
+                .filter(|param| param.name == "__body_write")
+                .map(|param| param.comp_type.as_str())
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(body_writes("SystemX"), vec!["X"]);
+        assert_eq!(body_writes("SystemY"), vec!["Y"]);
     }
 
     #[test]

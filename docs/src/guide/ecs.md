@@ -402,7 +402,7 @@ resource Damage { total: 0 }
 component HP { value: 100 }
 event Hit { amount: 0 }
 
-system Strike(h: mut HP) {
+system Strike(h: mut HP, emits Hit) {
     let dmg = 25
     h.value = h.value - dmg
     emit Hit { amount: dmg }        // detect: write my own component, announce the rest
@@ -471,16 +471,23 @@ Inside a system body, **`self` is the entity being visited**. Access that should
 not alter the entity query is declared with authority-only entries:
 
 ```
-system age_buffs(b: mut Buffs, writes StatsDirty) {
+system age_buffs(b: mut Buffs, writes StatsDirty, emits BuffExpired) {
     emit BuffExpired { unit: self, buff: "ghost" }
     remove(self, StatsDirty)
 }
 ```
 
-`reads Type` and `writes Type` grant transitive access without adding a binding,
-resource injection, or query filter. `reads *` / `writes *` are explicit broad
-grants. Helpers, imported functions, closures, callbacks, and synchronous event
-flushes cannot hide additional access from this contract.
+`reads Type`, `writes Type`, and `emits Event` grant transitive effects without
+adding a binding, resource injection, or query filter. `io true` and `async true`
+grant host and async effects; both are denied by default. `reads *`, `writes *`,
+and `emits *` are explicit broad grants. Helpers, imported functions, closures,
+callbacks, and synchronous event flushes cannot hide additional effects from
+this contract. Higher-order helpers are specialized per system call site, so
+unrelated callback effects do not create false scheduler conflicts.
+
+Entity-name indexes are explicit shared state: `get_entity`/`require_entity`
+read `"$entity_names"`, and `name_of` reads `"$entity_identity"`. Systems that
+publish, remove, or inspect names declare those quoted synthetic authorities.
 
 A **bare component name** is a type-only filter param: the system only visits
 entities carrying it, without binding data you'd never read — the
@@ -577,7 +584,7 @@ The runtime automatically writes back any changes to the `mut` bindings at the e
 Systems can declare execution order with `before` and `after`:
 
 ```
-system Render(p: Position) after Physics {
+system Render(p: Position, io true) after Physics {
     print(p.x, p.y)
 }
 ```

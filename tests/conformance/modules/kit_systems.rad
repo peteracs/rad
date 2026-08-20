@@ -7,7 +7,7 @@ pub component Bolt { source: entity, speed: float = 10.0, radius: float = 1.0 }
 
 pub event BoltHit { source: entity, target: entity }
 
-pub system fly_bolts(b: Bolt, p: mut Pos, reads Vitals, writes *) {
+pub system fly_bolts(b: Bolt, p: mut Pos, reads Vitals, writes *, emits BoltHit) {
     let (x, y) = p.at
     p.at = (x + b.speed / 30.0, y)
     for (u, v, up) in query { Vitals, Pos } {

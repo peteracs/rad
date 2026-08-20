@@ -4,7 +4,7 @@
 // EXPECT: compile-time rejection.
 component C { v: int = 0 }
 
-system Leak(c: mut C) {
+system Leak(c: mut C, io true) {
     let picked = query_where(C, fn(id: entity) -> bool {
         print("ESCAPED-P11 io ran inside a closure inside simulate")
         return true

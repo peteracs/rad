@@ -178,6 +178,7 @@ impl Checker {
             event_handler_blocks: std::collections::HashMap::new(),
             system_list_consts: std::collections::HashMap::new(),
             authority: crate::types::AuthorityReport::default(),
+            program_fingerprint: None,
         }
     }
 
@@ -276,6 +277,10 @@ impl Checker {
     }
 
     pub fn check(&mut self, program: &Program) -> Vec<TypeError> {
+        self.program_fingerprint = Some(crate::types::semantic_program_fingerprint(
+            program,
+            &self.alias_decls,
+        ));
         for feature in self.options.features.clone() {
             let name = format!("FEATURE_{}", feature.to_uppercase());
             self.define(&name, Ty::Bool, false, Span::default(), false, false);
@@ -610,6 +615,7 @@ impl Checker {
     }
     pub fn output(&self) -> crate::types::CheckerOutput {
         crate::types::CheckerOutput {
+            program_fingerprint: self.program_fingerprint,
             for_iter_kinds: self.for_iter_kinds.clone(),
             components: self.components.clone(),
             resources: self.resources.clone(),

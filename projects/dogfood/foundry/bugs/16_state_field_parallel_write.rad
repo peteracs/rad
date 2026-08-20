@@ -28,7 +28,7 @@ resource G1 { n: 0 }
 resource G2 { n: 0 }
 
 // writes a STATE value into a component field, in a parallel batch
-system Flip(f: mut Fsm, v: mut Visits, _g: mut G1) {
+system Flip(f: mut Fsm, v: mut Visits, _g: mut G1, emits $transition) {
     f.state = unwrap(transition(f.state, "go"))
     if f.state is B {
         v.b = v.b + 1

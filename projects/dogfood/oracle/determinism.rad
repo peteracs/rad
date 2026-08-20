@@ -39,7 +39,7 @@ system Count(p: mut Pot) {
 }
 
 // Stochastic: legal only under simulate_par, where the fork is seeded.
-system Gamble(c: mut Coin, p: mut Pot) {
+system Gamble(c: mut Coin, p: mut Pot, io true) {
     let roll = rand_int(1, 6)
     c.v = c.v + roll
     p.gold = p.gold + roll

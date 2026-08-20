@@ -1,7 +1,7 @@
 // Attack: phase with a single system — trivial expansion
 component C { v: 0 }
 
-system Solo(c: C) { print("solo") }
+system Solo(c: C, io true) { print("solo") }
 
 phase One { Solo }
 

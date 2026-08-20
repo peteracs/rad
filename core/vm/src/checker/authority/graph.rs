@@ -63,93 +63,167 @@ impl Checker {
             nodes.insert(seed.name.clone(), node);
         }
 
-        connect_callbacks(&mut nodes, call_sites);
+        connect_forwarded_parameter_requirements(&mut nodes, &call_sites);
         connect_handlers(&mut nodes, &handlers);
-        let enforcement_report = freeze_graph(&nodes, false);
-        self.enforce_system_authority(&nodes, &enforcement_report);
-        let mut report = freeze_graph(&nodes, true);
+        let base_nodes = nodes;
+        let mut union_nodes = base_nodes.clone();
+        connect_callbacks(&mut union_nodes, call_sites.clone());
+        let union_synchronous = freeze_graph(&union_nodes, false);
+        let mut report = freeze_graph(&union_nodes, true);
         for (name, callable) in &mut report.callables {
-            if let Some(synchronous) = enforcement_report.callables.get(name) {
+            if let Some(synchronous) = union_synchronous.callables.get(name) {
                 callable.synchronous = synchronous.transitive.clone();
             }
         }
-        self.authority = report;
-    }
 
-    fn enforce_system_authority(
-        &mut self,
-        nodes: &BTreeMap<String, NodeDraft>,
-        report: &AuthorityReport,
-    ) {
-        for node in nodes.values() {
+        for node in base_nodes.values() {
             if node.seed.kind != AuthorityCallableKind::System {
                 continue;
             }
-            let Some(inferred) = report.callables.get(&node.seed.name) else {
-                continue;
-            };
-            let mut allowed_reads = node
-                .seed
-                .system_params
-                .values()
-                .map(|(name, _)| name.as_str())
-                .collect::<HashSet<_>>();
-            allowed_reads.extend(node.seed.authority_reads.iter().map(String::as_str));
-            let mut allowed_writes = node
-                .seed
-                .system_params
-                .values()
-                .filter(|(_, mutable)| *mutable)
-                .map(|(name, _)| name.as_str())
-                .collect::<HashSet<_>>();
-            allowed_writes.extend(node.seed.authority_writes.iter().map(String::as_str));
-            let reads_all = allowed_reads.contains(WHOLE_WORLD);
-            let writes_all = allowed_writes.contains(WHOLE_WORLD);
-            let denied_reads = inferred
-                .transitive
-                .reads
-                .iter()
-                .filter(|name| !reads_all && !allowed_reads.contains(name.as_str()))
-                .cloned()
-                .collect::<Vec<_>>();
-            let denied_writes = inferred
-                .transitive
-                .writes
-                .iter()
-                .filter(|name| {
-                    !writes_all
-                        && !allowed_writes.contains(name.as_str())
-                        && !node.parameter_assignments.contains(name.as_str())
+            let specialized = specialize_system_graph(&base_nodes, &call_sites, &node.seed.name);
+            let synchronous = freeze_graph(&specialized, false);
+            self.enforce_system_authority(node, &synchronous);
+            let full = freeze_graph(&specialized, true);
+            for (name, mut callable) in full.callables {
+                if let Some(sync) = synchronous.callables.get(&name) {
+                    callable.synchronous = sync.transitive.clone();
+                }
+                report.callables.insert(name, callable);
+            }
+        }
+        rebuild_reverse_indexes(&mut report);
+        self.authority = report;
+    }
+
+    fn enforce_system_authority(&mut self, node: &NodeDraft, report: &AuthorityReport) {
+        let Some(inferred) = report.callables.get(&node.seed.name) else {
+            return;
+        };
+        let mut allowed_reads = node
+            .seed
+            .system_params
+            .values()
+            .map(|(name, _)| name.as_str())
+            .collect::<HashSet<_>>();
+        allowed_reads.extend(node.seed.authority_reads.iter().map(String::as_str));
+        let mut allowed_writes = node
+            .seed
+            .system_params
+            .values()
+            .filter(|(_, mutable)| *mutable)
+            .map(|(name, _)| name.as_str())
+            .collect::<HashSet<_>>();
+        allowed_writes.extend(node.seed.authority_writes.iter().map(String::as_str));
+        let allowed_emits = node
+            .seed
+            .authority_emits
+            .iter()
+            .map(String::as_str)
+            .collect::<HashSet<_>>();
+        let reads_all = allowed_reads.contains(WHOLE_WORLD);
+        let writes_all = allowed_writes.contains(WHOLE_WORLD);
+        let emits_all = allowed_emits.contains(WHOLE_WORLD);
+        let denied_reads = inferred
+            .transitive
+            .reads
+            .iter()
+            .filter(|name| !reads_all && !allowed_reads.contains(name.as_str()))
+            .cloned()
+            .collect::<Vec<_>>();
+        let denied_writes = inferred
+            .transitive
+            .writes
+            .iter()
+            .filter(|name| {
+                !writes_all
+                    && !allowed_writes.contains(name.as_str())
+                    && !node.parameter_assignments.contains(name.as_str())
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        let denied_emits = inferred
+            .transitive
+            .emits
+            .iter()
+            .filter(|name| !emits_all && !allowed_emits.contains(name.as_str()))
+            .cloned()
+            .collect::<Vec<_>>();
+        let denied_io = inferred.transitive.io && !node.seed.authority_io;
+        let denied_async = inferred.transitive.async_effect && !node.seed.authority_async;
+        if denied_reads.is_empty()
+            && denied_writes.is_empty()
+            && denied_emits.is_empty()
+            && !denied_io
+            && !denied_async
+            && !inferred.transitive.unknown
+        {
+            return;
+        }
+        let mut violations = Vec::new();
+        if !denied_reads.is_empty() {
+            violations.push(format!("reads [{}]", denied_reads.join(", ")));
+        }
+        if !denied_writes.is_empty() {
+            violations.push(format!("writes [{}]", denied_writes.join(", ")));
+        }
+        if !denied_emits.is_empty() {
+            violations.push(format!("emits [{}]", denied_emits.join(", ")));
+        }
+        if denied_io {
+            violations.push("performs IO".to_string());
+        }
+        if denied_async {
+            violations.push("reaches async execution".to_string());
+        }
+        if inferred.transitive.unknown {
+            violations.push("invokes an unbounded function value".to_string());
+        }
+        let evidence = denied_writes
+            .first()
+            .map(|name| (name.as_str(), true))
+            .or_else(|| denied_reads.first().map(|name| (name.as_str(), false)))
+            .and_then(|(name, write)| effect_path(report, &node.seed.name, name, write))
+            .or_else(|| {
+                denied_emits.first().and_then(|name| {
+                    effect_path_matching(report, &node.seed.name, |effects| {
+                        effects.emits.iter().any(|event| event == name)
+                    })
                 })
-                .cloned()
-                .collect::<Vec<_>>();
-            if denied_reads.is_empty() && denied_writes.is_empty() && !inferred.transitive.unknown {
-                continue;
+            })
+            .or_else(|| {
+                denied_io
+                    .then(|| effect_path_matching(report, &node.seed.name, |effects| effects.io))?
+            })
+            .or_else(|| {
+                denied_async.then(|| {
+                    effect_path_matching(report, &node.seed.name, |effects| effects.async_effect)
+                })?
+            })
+            .or_else(|| {
+                inferred
+                    .transitive
+                    .unknown
+                    .then(|| unknown_effect_path(report, &node.seed.name))
+                    .flatten()
+            })
+            .expect("every transitive authority violation must have a direct call path");
+        let mut grants = Vec::new();
+        grants.extend(denied_reads.iter().map(|name| format!("reads {name}")));
+        grants.extend(denied_writes.iter().map(|name| format!("writes {name}")));
+        grants.extend(denied_emits.iter().map(|name| {
+            if name.starts_with('$') {
+                format!("emits \"{name}\"")
+            } else {
+                format!("emits {name}")
             }
-            let mut violations = Vec::new();
-            if !denied_reads.is_empty() {
-                violations.push(format!("reads [{}]", denied_reads.join(", ")));
-            }
-            if !denied_writes.is_empty() {
-                violations.push(format!("writes [{}]", denied_writes.join(", ")));
-            }
-            if inferred.transitive.unknown {
-                violations.push("invokes an unbounded function value".to_string());
-            }
-            let evidence = denied_writes
-                .first()
-                .map(|name| (name.as_str(), true))
-                .or_else(|| denied_reads.first().map(|name| (name.as_str(), false)))
-                .and_then(|(name, write)| effect_path(report, &node.seed.name, name, write))
-                .or_else(|| {
-                    inferred
-                        .transitive
-                        .unknown
-                        .then(|| unknown_effect_path(report, &node.seed.name))
-                        .flatten()
-                })
-                .expect("every transitive authority violation must have a direct call path");
-            self.authority_error(
+        }));
+        if denied_io {
+            grants.push("io true".to_string());
+        }
+        if denied_async {
+            grants.push("async true".to_string());
+        }
+        self.authority_error(
                 &node.seed.span,
                 format!(
                     "System '{}' exceeds its declared authority: {}",
@@ -157,11 +231,11 @@ impl Checker {
                     violations.join("; ")
                 ),
                 Some(format!(
-                    "authority path: {}. Add the required component/resource to the system signature (use `mut` for writes), or move the access behind a separately scheduled authority boundary",
-                    evidence.join(" -> ")
+                    "authority path: {}. Add `{}` to the system signature, or move the effect behind a separately scheduled authority boundary",
+                    evidence.join(" -> "),
+                    grants.join("`, `")
                 )),
             );
-        }
     }
 }
 
@@ -265,8 +339,10 @@ fn fn_seed(function: &FnDecl, alias: Option<&str>, redirects: &HashMap<String, S
         || function.name.clone(),
         |alias| format!("{alias}.{}", function.name),
     );
-    let mut declared = EffectDraft::default();
-    declared.async_effect = function.is_async;
+    let declared = EffectDraft {
+        async_effect: function.is_async,
+        ..EffectDraft::default()
+    };
     Seed {
         name,
         display_name,
@@ -279,6 +355,9 @@ fn fn_seed(function: &FnDecl, alias: Option<&str>, redirects: &HashMap<String, S
         system_params: BTreeMap::new(),
         authority_reads: BTreeSet::new(),
         authority_writes: BTreeSet::new(),
+        authority_emits: BTreeSet::new(),
+        authority_io: false,
+        authority_async: false,
         declared,
         captured_locals: HashMap::new(),
     }
@@ -331,6 +410,13 @@ fn system_seed(
             .iter()
             .map(|authority| canonical_decl_name(authority, redirects, type_redirects))
             .collect(),
+        authority_emits: system
+            .authority_emits
+            .iter()
+            .map(|authority| canonical_decl_name(authority, redirects, type_redirects))
+            .collect(),
+        authority_io: system.authority_io,
+        authority_async: system.authority_async,
         declared: EffectDraft::default(),
         captured_locals: HashMap::new(),
     }
@@ -345,8 +431,10 @@ fn handler_seed(
 ) -> Seed {
     let prefix = alias.map_or_else(String::new, |alias| format!("{alias}."));
     let file = handler.span.file.map_or(0, |file| file.0);
-    let mut declared = EffectDraft::default();
-    declared.async_effect = handler.is_async;
+    let declared = EffectDraft {
+        async_effect: handler.is_async,
+        ..EffectDraft::default()
+    };
     Seed {
         name: format!(
             "@handler:{prefix}{event}:{file}:{}:{}",
@@ -362,6 +450,9 @@ fn handler_seed(
         system_params: BTreeMap::new(),
         authority_reads: BTreeSet::new(),
         authority_writes: BTreeSet::new(),
+        authority_emits: BTreeSet::new(),
+        authority_io: false,
+        authority_async: false,
         declared,
         captured_locals: HashMap::new(),
     }
@@ -396,6 +487,9 @@ fn closure_binding_seed(
         system_params: BTreeMap::new(),
         authority_reads: BTreeSet::new(),
         authority_writes: BTreeSet::new(),
+        authority_emits: BTreeSet::new(),
+        authority_io: false,
+        authority_async: false,
         declared: EffectDraft::default(),
         captured_locals: HashMap::new(),
     }
@@ -434,6 +528,9 @@ fn typed_binding_seed(
         system_params: BTreeMap::new(),
         authority_reads: BTreeSet::new(),
         authority_writes: BTreeSet::new(),
+        authority_emits: BTreeSet::new(),
+        authority_io: false,
+        authority_async: false,
         declared,
         captured_locals: HashMap::new(),
     }
@@ -498,6 +595,207 @@ fn canonical_decl_name(
         current = next.clone();
     }
     current
+}
+
+#[derive(Clone, Default, PartialEq, Eq, PartialOrd, Ord)]
+struct ResolvedCallback {
+    targets: BTreeSet<String>,
+    bound: Option<CallableBound>,
+}
+
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
+struct SpecializedState {
+    callable: String,
+    callbacks: BTreeMap<usize, ResolvedCallback>,
+}
+
+fn specialize_system_graph(
+    nodes: &BTreeMap<String, NodeDraft>,
+    call_sites: &[CallSite],
+    root: &str,
+) -> BTreeMap<String, NodeDraft> {
+    let mut sites_by_caller = BTreeMap::<String, Vec<&CallSite>>::new();
+    for site in call_sites {
+        sites_by_caller
+            .entry(site.caller.clone())
+            .or_default()
+            .push(site);
+    }
+
+    let root_state = SpecializedState {
+        callable: root.to_string(),
+        callbacks: BTreeMap::new(),
+    };
+    let mut pending = VecDeque::from([root_state.clone()]);
+    let mut discovered = BTreeSet::from([root_state]);
+    let mut specialized = BTreeMap::new();
+
+    while let Some(state) = pending.pop_front() {
+        let Some(base) = nodes.get(&state.callable) else {
+            continue;
+        };
+        let key = specialized_state_name(root, &state);
+        let mut node = base.clone();
+        node.seed.name = key.clone();
+        node.calls.clear();
+        node.plain_calls.clear();
+        node.deferred_calls.clear();
+
+        let mut synchronous_children = BTreeSet::new();
+        for (&index, &declared_bound) in &base.dynamic_params {
+            let resolution =
+                state
+                    .callbacks
+                    .get(&index)
+                    .cloned()
+                    .unwrap_or_else(|| ResolvedCallback {
+                        targets: BTreeSet::new(),
+                        bound: Some(declared_bound),
+                    });
+            if let Some(bound) = resolution.bound {
+                let _ = bound.apply(&mut node.direct);
+            }
+            for target in resolution.targets {
+                if nodes.contains_key(&target) {
+                    synchronous_children.insert(SpecializedState {
+                        callable: target,
+                        callbacks: BTreeMap::new(),
+                    });
+                }
+            }
+        }
+
+        if let Some(sites) = sites_by_caller.get(&state.callable) {
+            for site in sites {
+                let Some(callee) = nodes.get(&site.callee) else {
+                    continue;
+                };
+                let mut callbacks = BTreeMap::new();
+                for (&index, &declared_bound) in &callee.dynamic_params {
+                    let argument = site.args.get(index).cloned().unwrap_or_default();
+                    let mut resolved =
+                        if let Some((forwarded, forwarded_bound)) = argument.forwarded_param {
+                            state.callbacks.get(&forwarded).cloned().unwrap_or_else(|| {
+                                ResolvedCallback {
+                                    targets: BTreeSet::new(),
+                                    bound: Some(forwarded_bound),
+                                }
+                            })
+                        } else {
+                            ResolvedCallback {
+                                targets: argument.targets,
+                                bound: argument.bound,
+                            }
+                        };
+                    if resolved.targets.is_empty() && resolved.bound.is_none() {
+                        resolved.bound = Some(declared_bound);
+                    }
+                    callbacks.insert(index, resolved);
+                }
+                synchronous_children.insert(SpecializedState {
+                    callable: site.callee.clone(),
+                    callbacks,
+                });
+            }
+        }
+        for target in &base.plain_calls {
+            if nodes.contains_key(target) {
+                synchronous_children.insert(SpecializedState {
+                    callable: target.clone(),
+                    callbacks: BTreeMap::new(),
+                });
+            }
+        }
+
+        for child in synchronous_children {
+            let child_name = specialized_state_name(root, &child);
+            node.calls.insert(child_name);
+            if discovered.insert(child.clone()) {
+                pending.push_back(child);
+            }
+        }
+        for target in &base.deferred_calls {
+            if !nodes.contains_key(target) {
+                continue;
+            }
+            let child = SpecializedState {
+                callable: target.clone(),
+                callbacks: BTreeMap::new(),
+            };
+            let child_name = specialized_state_name(root, &child);
+            node.deferred_calls.insert(child_name);
+            if discovered.insert(child.clone()) {
+                pending.push_back(child);
+            }
+        }
+        specialized.insert(key, node);
+    }
+    specialized
+}
+
+fn specialized_state_name(root: &str, state: &SpecializedState) -> String {
+    if state.callable == root && state.callbacks.is_empty() {
+        return root.to_string();
+    }
+    fn segment(output: &mut String, value: &str) {
+        output.push_str(&value.len().to_string());
+        output.push(':');
+        output.push_str(value);
+    }
+    let mut output = "@specialized:".to_string();
+    segment(&mut output, root);
+    segment(&mut output, &state.callable);
+    for (index, callback) in &state.callbacks {
+        output.push('|');
+        output.push_str(&index.to_string());
+        output.push(':');
+        output.push(match callback.bound {
+            None => '-',
+            Some(CallableBound::Pure) => 'p',
+            Some(CallableBound::Readonly) => 'r',
+            Some(CallableBound::Unbounded) => 'u',
+        });
+        output.push(':');
+        output.push_str(&callback.targets.len().to_string());
+        for target in &callback.targets {
+            output.push(':');
+            segment(&mut output, target);
+        }
+    }
+    output
+}
+
+fn connect_forwarded_parameter_requirements(
+    nodes: &mut BTreeMap<String, NodeDraft>,
+    call_sites: &[CallSite],
+) {
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for site in call_sites {
+            let dynamic = nodes
+                .get(&site.callee)
+                .map(|node| node.dynamic_params.clone())
+                .unwrap_or_default();
+            for index in dynamic.keys() {
+                let Some((forwarded, bound)) = site
+                    .args
+                    .get(*index)
+                    .and_then(|argument| argument.forwarded_param)
+                else {
+                    continue;
+                };
+                if let Some(caller) = nodes.get_mut(&site.caller) {
+                    if let std::collections::btree_map::Entry::Vacant(entry) =
+                        caller.dynamic_params.entry(forwarded)
+                    {
+                        entry.insert(bound);
+                        changed = true;
+                    }
+                }
+            }
+        }
+    }
 }
 
 fn connect_callbacks(nodes: &mut BTreeMap<String, NodeDraft>, call_sites: Vec<CallSite>) {
@@ -574,7 +872,8 @@ fn connect_callbacks(nodes: &mut BTreeMap<String, NodeDraft>, call_sites: Vec<Ca
             .filter(|target| nodes.contains_key(target))
             .collect::<Vec<_>>();
         if let Some(node) = nodes.get_mut(&callable) {
-            node.calls.extend(known_targets);
+            node.calls.extend(known_targets.iter().cloned());
+            node.plain_calls.extend(known_targets);
             if let Some(bound) = resolution.bound {
                 let _ = bound.apply(&mut node.direct);
             }
@@ -594,7 +893,9 @@ fn connect_handlers(
                     .values()
                     .flat_map(|targets| targets.iter().cloned());
                 if event == EVENT_LOG {
-                    node.calls.extend(targets);
+                    let targets = targets.collect::<Vec<_>>();
+                    node.calls.extend(targets.iter().cloned());
+                    node.plain_calls.extend(targets);
                 } else {
                     node.deferred_calls.extend(targets);
                 }
@@ -694,6 +995,41 @@ fn freeze_graph(nodes: &BTreeMap<String, NodeDraft>, include_deferred: bool) -> 
         names.dedup();
     }
     report
+}
+
+fn rebuild_reverse_indexes(report: &mut AuthorityReport) {
+    report.readers.clear();
+    report.writers.clear();
+    for (key, callable) in &report.callables {
+        // Specialized helper nodes exist to retain exact system call paths.
+        // Their unspecialized callable already represents the helper in the
+        // reverse indexes; including both would duplicate user-facing names.
+        if key.starts_with("@specialized:") {
+            continue;
+        }
+        for read in &callable.transitive.reads {
+            report
+                .readers
+                .entry(read.clone())
+                .or_default()
+                .push(callable.display_name.clone());
+        }
+        for write in &callable.transitive.writes {
+            report
+                .writers
+                .entry(write.clone())
+                .or_default()
+                .push(callable.display_name.clone());
+        }
+    }
+    for names in report
+        .readers
+        .values_mut()
+        .chain(report.writers.values_mut())
+    {
+        names.sort();
+        names.dedup();
+    }
 }
 
 fn effect_path(

@@ -7,7 +7,7 @@ fn sneak(n: int) -> int {
     return n + 1
 }
 
-system Leak(c: mut C) {
+system Leak(c: mut C, io true) {
     c.v = sneak(c.v)
 }
 

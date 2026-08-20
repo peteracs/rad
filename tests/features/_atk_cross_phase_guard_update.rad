@@ -33,7 +33,7 @@ system Regen(h: mut Health) {
     }
 }
 
-system PrintHP(h: Health) {
+system PrintHP(h: Health, io true) {
     print(f"  hp={h.hp}/{h.max_hp}")
 }
 

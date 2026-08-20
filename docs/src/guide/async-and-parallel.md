@@ -44,7 +44,8 @@ single-system batch runs directly, and `--serial-schedule` or `schedule serial`
 provides a differential serial mode. WASM uses the same isolated worker path
 sequentially because the target has no native thread pool.
 
-The batcher consumes each system's exact synchronous transitive authority set,
-including ordinary and imported helper calls. Queued event handlers belong to
-the later event-drain boundary; a system that explicitly calls `flush_events()`
-includes the reached handlers in its synchronous set.
+The batcher consumes each system's call-site-specialized synchronous authority
+set, including ordinary and imported helper calls, concrete callback arguments,
+and synthetic entity-name indexes. Queued event handlers belong to the later
+event-drain boundary; a system that explicitly calls `flush_events()` includes
+the reached handlers in its synchronous set.

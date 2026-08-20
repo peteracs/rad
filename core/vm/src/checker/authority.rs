@@ -18,6 +18,8 @@ const EVENT_LOG: &str = "$events";
 const FORK_STATE: &str = "$fork";
 const SCHEMA: &str = "$schema";
 const STATE_TRANSITION: &str = "$transition";
+const ENTITY_NAMES: &str = "$entity_names";
+const ENTITY_IDENTITY: &str = "$entity_identity";
 
 #[derive(Clone, Default)]
 struct EffectDraft {
@@ -81,11 +83,14 @@ struct Seed {
     system_params: BTreeMap<String, (String, bool)>,
     authority_reads: BTreeSet<String>,
     authority_writes: BTreeSet<String>,
+    authority_emits: BTreeSet<String>,
+    authority_io: bool,
+    authority_async: bool,
     declared: EffectDraft,
     captured_locals: HashMap<String, LocalBinding>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum CallableBound {
     Pure,
     Readonly,
@@ -140,10 +145,16 @@ impl CallableBound {
     }
 }
 
+#[derive(Clone)]
 struct NodeDraft {
     seed: Seed,
     direct: EffectDraft,
     calls: BTreeSet<String>,
+    /// Synchronous edges that do not carry higher-order arguments (builtin
+    /// callbacks, statically named simulation systems, and flushed handlers).
+    /// Ordinary function calls are represented by `CallSite` so system
+    /// specialization can keep their callback tuple separate.
+    plain_calls: BTreeSet<String>,
     deferred_calls: BTreeSet<String>,
     dynamic_params: BTreeMap<usize, CallableBound>,
     /// Writes already diagnosed by the ordinary mutability checker. Keeping
@@ -153,6 +164,7 @@ struct NodeDraft {
     parameter_assignments: BTreeSet<String>,
 }
 
+#[derive(Clone)]
 struct CallSite {
     caller: String,
     callee: String,
@@ -267,6 +279,7 @@ struct Scanner<'a> {
     seed: &'a Seed,
     direct: EffectDraft,
     calls: BTreeSet<String>,
+    plain_calls: BTreeSet<String>,
     deferred_calls: BTreeSet<String>,
     dynamic_params: BTreeMap<usize, CallableBound>,
     parameter_assignments: BTreeSet<String>,
@@ -289,6 +302,7 @@ impl<'a> Scanner<'a> {
             seed,
             direct,
             calls: BTreeSet::new(),
+            plain_calls: BTreeSet::new(),
             deferred_calls: BTreeSet::new(),
             dynamic_params: BTreeMap::new(),
             parameter_assignments: BTreeSet::new(),
@@ -305,6 +319,7 @@ impl<'a> Scanner<'a> {
             seed: self.seed.clone(),
             direct: self.direct,
             calls: self.calls,
+            plain_calls: self.plain_calls,
             deferred_calls: self.deferred_calls,
             dynamic_params: self.dynamic_params,
             parameter_assignments: self.parameter_assignments,
@@ -638,7 +653,9 @@ impl<'a> Scanner<'a> {
             Expr::EntityLiteral(name, components, _) => {
                 if let Some(name) = name {
                     self.scan_expr(name);
+                    self.direct.writes.insert(ENTITY_NAMES.to_string());
                 }
+                self.direct.writes.insert(ENTITY_IDENTITY.to_string());
                 self.record_spawn_entries(components);
             }
         }
@@ -730,8 +747,15 @@ impl<'a> Scanner<'a> {
             "spawn" => self.record_spawn_args(args),
             "despawn" => {
                 self.direct.writes.insert(WHOLE_WORLD.to_string());
+                self.direct.writes.insert(ENTITY_NAMES.to_string());
+                self.direct.writes.insert(ENTITY_IDENTITY.to_string());
             }
-            "get_entity" | "require_entity" | "name_of" => {}
+            "get_entity" | "require_entity" => {
+                self.direct.reads.insert(ENTITY_NAMES.to_string());
+            }
+            "name_of" => {
+                self.direct.reads.insert(ENTITY_IDENTITY.to_string());
+            }
             "fork" | "save_world" | "world_digest" => {
                 self.direct.reads.insert(WHOLE_WORLD.to_string());
             }
@@ -845,7 +869,8 @@ impl<'a> Scanner<'a> {
             return;
         }
         let has_targets = !argument.targets.is_empty();
-        self.calls.extend(argument.targets);
+        self.calls.extend(argument.targets.iter().cloned());
+        self.plain_calls.extend(argument.targets);
         let has_bound = argument.bound.is_some();
         if let Some(bound) = argument.bound {
             let _ = bound.apply(&mut self.direct);
@@ -886,7 +911,8 @@ impl<'a> Scanner<'a> {
                 continue;
             };
             if let Some(target) = self.resolver.system_ref(&path, &self.seed.redirects) {
-                self.calls.insert(target);
+                self.calls.insert(target.clone());
+                self.plain_calls.insert(target);
             } else {
                 self.direct.unknown = true;
             }
@@ -913,6 +939,13 @@ impl<'a> Scanner<'a> {
     }
 
     fn record_spawn_args(&mut self, args: &[&Expr]) {
+        self.direct.writes.insert(ENTITY_IDENTITY.to_string());
+        if args
+            .first()
+            .is_some_and(|arg| !matches!(arg, Expr::ComponentExpr(_, _, _, _)))
+        {
+            self.direct.writes.insert(ENTITY_NAMES.to_string());
+        }
         let mut found = false;
         for arg in args {
             if let Some(name) = self.resolver.data_expr(arg, &self.seed.redirects) {
@@ -1059,6 +1092,9 @@ impl<'a> Scanner<'a> {
             system_params: self.seed.system_params.clone(),
             authority_reads: BTreeSet::new(),
             authority_writes: BTreeSet::new(),
+            authority_emits: BTreeSet::new(),
+            authority_io: false,
+            authority_async: false,
             declared: EffectDraft::default(),
             captured_locals: self.visible_locals(),
         });
@@ -1125,28 +1161,6 @@ fn builtin_has_exact_state_authority(name: &str) -> bool {
     )
 }
 
-#[cfg(test)]
-mod metadata_tests {
-    use super::*;
-    use crate::value::Builtin;
-
-    #[test]
-    fn every_stateful_builtin_has_exact_authority_metadata() {
-        for builtin in Builtin::ALL {
-            let effects = builtins::builtin_effect(builtin.name());
-            let stateful = effects.allows(Effect::ECS)
-                || effects.allows(Effect::ReadECS)
-                || effects.allows(Effect::Event);
-            assert!(
-                !stateful || builtin_has_exact_state_authority(builtin.name()),
-                "stateful builtin '{}' is missing exact authority metadata",
-                builtin.name()
-            );
-        }
-        assert!(builtin_has_exact_state_authority("emit"));
-    }
-}
-
 fn root_ident(expr: &Expr) -> Option<&str> {
     match expr {
         Expr::Ident(name, _) => Some(name),
@@ -1171,5 +1185,27 @@ fn pattern_binding_names(pattern: &Pattern) -> Vec<String> {
         Pattern::Wildcard | Pattern::Literal(_) | Pattern::HasComponent { binding: None, .. } => {
             Vec::new()
         }
+    }
+}
+
+#[cfg(test)]
+mod metadata_tests {
+    use super::*;
+    use crate::value::Builtin;
+
+    #[test]
+    fn every_stateful_builtin_has_exact_authority_metadata() {
+        for builtin in Builtin::ALL {
+            let effects = builtins::builtin_effect(builtin.name());
+            let stateful = effects.allows(Effect::ECS)
+                || effects.allows(Effect::ReadECS)
+                || effects.allows(Effect::Event);
+            assert!(
+                !stateful || builtin_has_exact_state_authority(builtin.name()),
+                "stateful builtin '{}' is missing exact authority metadata",
+                builtin.name()
+            );
+        }
+        assert!(builtin_has_exact_state_authority("emit"));
     }
 }

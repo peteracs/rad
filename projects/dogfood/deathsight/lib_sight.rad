@@ -138,7 +138,7 @@ on Slain(e) {
 // sight goes blind. Runs LAST in each simulated frame: a frame is "the
 // monsters answer your staged move, then imagined-you takes the next turn"
 // — the same order as the live loop.
-pub system FleeOrFight(_w: Will, p: mut Pos, v: mut Vital, roster: MonsterRoster) after Pounce {
+pub system FleeOrFight(_w: Will, p: mut Pos, v: mut Vital, roster: MonsterRoster, reads "$entity_identity", reads "$entity_names", io true) after Pounce {
     if v.hp <= 0 { return }
     let mut target = ""
     let mut weakest = 9999
@@ -184,7 +184,7 @@ pub system FleeOrFight(_w: Will, p: mut Pos, v: mut Vital, roster: MonsterRoster
     p = Pos { x: bx, y: by }
 }
 
-pub system Stalk(i: mut Intent, p: Pos, m: Monster, v: Vital) {
+pub system Stalk(i: mut Intent, p: Pos, m: Monster, v: Vital, reads "$entity_names", io true) {
     if v.hp <= 0 { return }
     let you = require_entity("you")
     let yv = get(you, Vital) |> unwrap
@@ -211,7 +211,7 @@ pub system Stalk(i: mut Intent, p: Pos, m: Monster, v: Vital) {
     i = Intent { kind: "move", tx: nx, ty: ny }
 }
 
-pub system Pounce(i: mut Intent, p: mut Pos, m: Monster, v: mut Vital) after Stalk {
+pub system Pounce(i: mut Intent, p: mut Pos, m: Monster, v: mut Vital, reads "$entity_names") after Stalk {
     if v.hp <= 0 { return }
     if i.kind == "move" {
         if !wall_at(i.tx, i.ty) { p = Pos { x: i.tx, y: i.ty } }

@@ -141,7 +141,7 @@
                 set(retired.target, GraveyardMembership {})
             }
 
-            system Retire(live: mut LiveMembership) {
+            system Retire(live: mut LiveMembership, emits EntityRetired) {
                 emit EntityRetired { target: self }
             }
             "#,
@@ -300,6 +300,122 @@
                 .any(|error| error.message.contains("exceeds its declared authority")),
             "the concrete closure must flow through both callback parameters: {errors:?}"
         );
+    }
+
+    #[test]
+    fn system_effects_are_specialized_for_each_callback_call_site() {
+        let (errors, report) = authority_src(
+            r#"
+            component Root {}
+            component X {}
+            component Y {}
+
+            fn invoke(callback: fn(entity) -> nil, target: entity) {
+                callback(target)
+            }
+            fn write_x(target: entity) { set(target, X {}) }
+            fn write_y(target: entity) { set(target, Y {}) }
+
+            system SystemX(root: Root, writes X) { invoke(write_x, self) }
+            system SystemY(root: Root, writes Y) { invoke(write_y, self) }
+            "#,
+        );
+        assert_eq!(
+            report.resolve("SystemX").unwrap().synchronous.writes,
+            vec!["X"]
+        );
+        assert_eq!(
+            report.resolve("SystemY").unwrap().synchronous.writes,
+            vec!["Y"]
+        );
+        assert!(
+            !errors
+                .iter()
+                .any(|error| error.message.contains("exceeds its declared authority")),
+            "callers must not inherit each other's callback effects: {errors:?}"
+        );
+    }
+
+    #[test]
+    fn undeclared_helper_emission_is_rejected_transitively() {
+        let (errors, _) = authority_src(
+            r#"
+            component Root {}
+            event Retired {}
+            fn publish() { emit Retired {} }
+            system Run(root: Root) { publish() }
+            "#,
+        );
+        assert!(errors.iter().any(|error| {
+            error.message.contains("System 'Run' exceeds its declared authority")
+                && error.message.contains("emits [Retired]")
+                && error.hint.as_deref().is_some_and(|hint| {
+                    hint.contains("Run -> publish") && hint.contains("emits Retired")
+                })
+        }));
+    }
+
+    #[test]
+    fn undeclared_helper_async_reachability_is_rejected_transitively() {
+        let (errors, _) = authority_src(
+            r#"
+            component Root {}
+            async fn background() -> nil {}
+            fn helper() { let _task = background() }
+            system Run(root: Root) { helper() }
+            "#,
+        );
+        assert!(errors.iter().any(|error| {
+            error.message.contains("System 'Run' exceeds its declared authority")
+                && error.message.contains("reaches async execution")
+                && error.hint.as_deref().is_some_and(|hint| {
+                    hint.contains("Run -> helper -> background")
+                        && hint.contains("async true")
+                })
+        }));
+    }
+
+    #[test]
+    fn callback_emission_io_and_async_reachability_require_all_grants() {
+        let source = |grants: &str| {
+            format!(
+                r#"
+                component Root {{}}
+                event CallbackEvent {{}}
+                async fn background() -> nil {{}}
+                fn invoke(callback: fn(entity) -> nil, target: entity) {{ callback(target) }}
+                system Run(root: Root{grants}) {{
+                    invoke(fn(target: entity) -> nil {{
+                        emit CallbackEvent {{}}
+                        print("callback")
+                        let _task = background()
+                    }}, self)
+                }}
+                "#
+            )
+        };
+        let (errors, _) = authority_src(&source(""));
+        let violation = errors
+            .iter()
+            .find(|error| error.message.contains("System 'Run' exceeds its declared authority"))
+            .expect("callback effects must exceed an empty grant");
+        assert!(violation.message.contains("emits [CallbackEvent]"));
+        assert!(violation.message.contains("performs IO"));
+        assert!(violation.message.contains("reaches async execution"));
+
+        let (granted_errors, report) = authority_src(&source(
+            ", emits CallbackEvent, io true, async true",
+        ));
+        assert!(
+            !granted_errors
+                .iter()
+                .any(|error| error.message.contains("exceeds its declared authority")),
+            "complete callback grant should compile: {granted_errors:?}"
+        );
+        let run = report.resolve("Run").unwrap();
+        assert_eq!(run.synchronous.emits, vec!["CallbackEvent"]);
+        assert!(run.synchronous.io);
+        assert!(run.synchronous.async_effect);
     }
 
     #[test]
@@ -471,6 +587,7 @@
                 .contains("System 'Tick' exceeds its declared authority")
                 && error.message.contains("reads [Audit]")
                 && error.message.contains("writes [Audit]")
+                && error.message.contains("emits [$transition]")
         }));
     }
 
@@ -599,6 +716,78 @@
             error.message.contains("System 'FlushNow' exceeds its declared authority")
                 && error.message.contains("writes [HiddenWrite]")
         }));
+    }
+
+    #[test]
+    fn flush_event_handlers_require_synchronous_io_and_async_grants() {
+        let (errors, report) = authority_src(
+            r#"
+            component Trigger {}
+            event Ping {}
+            async on Ping(received) { print("handled") }
+
+            system FlushNow(trigger: Trigger, emits "$events") {
+                flush_events()
+            }
+            "#,
+        );
+        let flush = report.resolve("FlushNow").unwrap();
+        assert!(flush.synchronous.io);
+        assert!(flush.synchronous.async_effect);
+        let violation = errors
+            .iter()
+            .find(|error| {
+                error
+                    .message
+                    .contains("System 'FlushNow' exceeds its declared authority")
+            })
+            .expect("flushed handler effects must stay inside the system sandbox");
+        assert!(violation.message.contains("performs IO"));
+        assert!(violation.message.contains("reaches async execution"));
+        assert!(!violation.message.contains("emits [$events]"));
+    }
+
+    #[test]
+    fn entity_name_and_identity_indexes_have_narrow_explicit_authority() {
+        let (errors, report) = authority_src(
+            r#"
+            component Root {}
+            component Named {}
+
+            system Lookup(root: Root, reads "$entity_names") {
+                let _ = require_entity("boss")
+            }
+            system Reverse(root: Root, reads "$entity_identity") {
+                let _ = name_of(self)
+            }
+            system Publish(
+                root: Root,
+                writes Named,
+                writes "$entity_names",
+                writes "$entity_identity"
+            ) {
+                let _ = spawn("boss", Named {})
+            }
+            "#,
+        );
+        assert!(
+            !errors
+                .iter()
+                .any(|error| error.message.contains("exceeds its declared authority")),
+            "narrow synthetic grants must cover indexed operations: {errors:?}"
+        );
+        assert_eq!(
+            report.resolve("Lookup").unwrap().synchronous.reads,
+            vec!["$entity_names", "Root"]
+        );
+        assert_eq!(
+            report.resolve("Reverse").unwrap().synchronous.reads,
+            vec!["$entity_identity", "Root"]
+        );
+        assert_eq!(
+            report.resolve("Publish").unwrap().synchronous.writes,
+            vec!["$entity_identity", "$entity_names", "Named"]
+        );
     }
 
     #[test]

@@ -31,7 +31,7 @@ mod simulate_par_tests {
         let out = run_host(
             r#"
             component P { v: 0 }
-            system Jitter(p: mut P) {
+            system Jitter(p: mut P, io true) {
                 p = P { v: p.v + rand_int(1, 1000000) }
             }
             let e = spawn("e", P { v: 0 })
@@ -182,7 +182,7 @@ mod simulate_par_tests {
         let out = run_host(
             r#"
             component P { v: 0 }
-            system Jitter(p: mut P) {
+            system Jitter(p: mut P, io true) {
                 p = P { v: p.v + rand_int(1, 1000000) }
             }
             let e = spawn("e", P { v: 0 })

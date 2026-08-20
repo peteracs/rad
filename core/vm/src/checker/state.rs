@@ -305,6 +305,7 @@ pub struct Checker {
     /// Built once per checked program. All authority commands and system
     /// sandbox diagnostics consume this graph instead of rescanning bodies.
     pub(crate) authority: crate::types::AuthorityReport,
+    pub(crate) program_fingerprint: Option<[u8; 32]>,
 }
 
 #[derive(Debug, Clone)]

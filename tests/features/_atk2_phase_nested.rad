@@ -1,9 +1,9 @@
 // Attack: phase referencing another phase name — should error or expand?
 component Counter { value: 0 }
 
-system A(c: Counter) { print("A:", c.value) }
-system B(c: Counter) { print("B:", c.value) }
-system C(c: Counter) { print("C:", c.value) }
+system A(c: Counter, io true) { print("A:", c.value) }
+system B(c: Counter, io true) { print("B:", c.value) }
+system C(c: Counter, io true) { print("C:", c.value) }
 
 phase Inner { A, B }
 phase Outer { Inner, C }

@@ -301,6 +301,12 @@ pub struct SystemDecl {
     /// resource authority explicit without changing execution cardinality.
     pub authority_reads: Vec<String>,
     pub authority_writes: Vec<String>,
+    /// Event effects are also an authority-only upper bound. `"*"` grants
+    /// every event channel, including runtime-owned transition/flush channels.
+    pub authority_emits: Vec<String>,
+    /// Explicit grants for transitive I/O and asynchronous reachability.
+    pub authority_io: bool,
+    pub authority_async: bool,
     pub body: Block,
     pub after: Vec<String>,
     pub before: Vec<String>,

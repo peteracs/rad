@@ -933,6 +933,9 @@ system BallTravelMove(
     reads SpellDef,
     reads Unit,
     writes *,
+    emits BuffApplied,
+    emits DamageRequest,
+    io true,
 ) {
     let caster = lookup(Unit, "id", bt.caster_id) |> unwrap
     let caster_unit = require(caster, Unit)
@@ -997,7 +1000,7 @@ system BallTravelMove(
     }
 }
 
-system ZoneTick(z: mut Zone, reads Buff, reads Position, reads Unit, writes *) {
+system ZoneTick(z: mut Zone, reads Buff, reads Position, reads Unit, writes *, emits BuffApplied) {
     z.ticks_left = z.ticks_left - 1
     z.tick_counter = z.tick_counter + 1
     if z.tick_counter >= z.tick_every {
@@ -1033,7 +1036,7 @@ system ForcedMoveTick(f: mut ForcedMove, pos: mut Position) {
     }
 }
 
-system BuffTick(b: mut Buff, reads Health, reads Unit, writes *) {
+system BuffTick(b: mut Buff, reads Health, reads Unit, writes *, io true) {
     b.ticks_left = b.ticks_left - 1
     if b.ticks_left <= 0 {
         if b.name == "OrianaRedactShield" {

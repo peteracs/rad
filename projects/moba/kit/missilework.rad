@@ -90,6 +90,8 @@ system attack_cycle(
     reads Vitals,
     writes Missile,
     writes Pos,
+    writes "$entity_identity",
+    writes "$entity_names",
 ) {
     let target = a.target
     if target == nil {
@@ -163,6 +165,9 @@ system fly_missiles(
     reads Body,
     reads Vitals,
     writes *,
+    emits AttackLanded,
+    emits MissileFizzled,
+    emits SkillshotHit,
 ) {
     let step = m.speed * DT
     match m.flight {

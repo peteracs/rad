@@ -17,7 +17,7 @@ fn double(n: int) -> int {
     return n * 2
 }
 
-system Work(c: mut C) {
+system Work(c: mut C, emits Tick) {
     c.v = double(c.v) + 1
     emit Tick { n: c.v }
 }
@@ -26,7 +26,7 @@ system Bank(c: C, r: mut R) after Work {
     r.total = r.total + c.v
 }
 
-system Structural(c: C, writes C) after Bank {
+system Structural(c: C, writes C, writes "$entity_identity", writes "$entity_names") after Bank {
     if c.v > 5 {
         spawn("child", C { v: 1 })
     }

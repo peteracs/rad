@@ -238,7 +238,7 @@ system CooldownTick(cd: mut Cooldowns) {
     cd.r = next.r
 }
 
-system BallAttachSync(ball: Ball, pos: mut Position, reads OriannaState) {
+system BallAttachSync(ball: Ball, pos: mut Position, reads OriannaState, reads "$entity_names") {
     let caster = ent(ball.owner_id)
     let state = require(caster, OriannaState)
     if state.ball_attached {
@@ -267,6 +267,11 @@ system BallTravelMove(
     writes OriannaState,
     writes SpellBook,
     writes Unit,
+    reads "$entity_names",
+    writes "$entity_identity",
+    writes "$entity_names",
+    emits DamageRequest,
+    io true,
 ) {
     let caster = ent(bt.caster_id)
     let mut tx = bt.target_x
@@ -341,6 +346,10 @@ system OriannaBallLeash(
     writes Buff,
     writes OriannaState,
     writes SpellBook,
+    reads "$entity_names",
+    writes "$entity_identity",
+    writes "$entity_names",
+    io true,
 ) {
     if has(self, BallTravel) { return }
     let caster = ent(ball.owner_id)
@@ -374,6 +383,7 @@ system ZoneTick(
     reads Position,
     reads Unit,
     writes *,
+    reads "$entity_names",
 ) {
     z.ticks_left = z.ticks_left - 1
     z.tick_counter = z.tick_counter + 1

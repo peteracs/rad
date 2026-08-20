@@ -466,6 +466,40 @@ mod scheduling_tests {
         assert_eq!(out, vec!["101"]);
     }
 
+    #[test]
+    fn entity_name_publication_serializes_before_lookup() {
+        let out = run_source_checked(
+            r#"
+            component Root {}
+            component Named {}
+            resource Seen { found: bool = false }
+
+            system Publish(
+                _root: Root,
+                writes Named,
+                writes "$entity_names",
+                writes "$entity_identity"
+            ) {
+                spawn("boss", Named {})
+            }
+
+            system Lookup(
+                _root: Root,
+                reads "$entity_names",
+                seen: mut Seen
+            ) {
+                let _boss = require_entity("boss")
+                seen.found = true
+            }
+
+            spawn(Root {})
+            schedule [Publish, Lookup]
+            print(res(Seen).found)
+            "#,
+        );
+        assert_eq!(out, vec!["true"]);
+    }
+
     /// A2 seq 124/143 (memory corruption): a pooled worker VM kept its
     /// CREATION-time copy of the main VM's globals whenever the program
     /// (chunks Arc) matched. Global values are main-GC heap handles, and
@@ -528,7 +562,7 @@ mod scheduling_tests {
             resource Bank { gold: int = 100 }
             component Body { tag: str = "", hp: int = 10 }
             system Grow(b: mut Body) { b.hp = b.hp + 1 }
-            system Drift(b: mut Body) after Grow {
+            system Drift(b: mut Body, io true) after Grow {
                 let r = rand_int(-2, 2)
                 b.hp = b.hp + r
             }
@@ -581,8 +615,8 @@ mod scheduling_tests {
             resource GB { n: 0 }
             event EvA { k: int }
             event EvB { k: int }
-            system SysA(t: T, _g: mut GA) { emit EvA { k: t.k } }
-            system SysB(t: T, _g: mut GB) { emit EvB { k: t.k } }
+            system SysA(t: T, _g: mut GA, emits EvA) { emit EvA { k: t.k } }
+            system SysB(t: T, _g: mut GB, emits EvB) { emit EvB { k: t.k } }
             on EvA(e) { update(Log) { s = res(Log).s + "A" + str(e.k) } }
             on EvB(e) { update(Log) { s = res(Log).s + "B" + str(e.k) } }
             for i in range(0, 5) {

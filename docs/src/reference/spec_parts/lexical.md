@@ -88,7 +88,10 @@ state_def      = IDENT "{" { "on" IDENT "->" IDENT [ "when" expr ] [ "," ] } "}"
 system_decl    = "system" IDENT "(" [ sys_param { "," sys_param } ] ")"
                  { "after" IDENT { "," IDENT } | "before" IDENT { "," IDENT } }
                  block ;
-sys_param      = IDENT [ ":" [ "mut" | "accum" ] IDENT ] ;
+sys_param      = IDENT [ ":" [ "mut" | "accum" ] IDENT ]
+               | ( "reads" | "writes" | "emits" ) authority_name
+               | ( "io" | "async" ) ( "true" | "false" ) ;
+authority_name = IDENT [ "." IDENT ] | "*" | STRING ;
 
 event_decl     = "event" IDENT "{" { event_field [ "," ] } "}" ;
 event_field    = IDENT [ ":" type_expr ] ;

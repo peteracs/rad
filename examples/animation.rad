@@ -43,7 +43,7 @@ on AnimComplete(e) {
     print(f"  >> {e.entity_name} animation '{e.anim_name}' complete!")
 }
 
-system Animate(sprite: mut Sprite, name: AnimName) {
+system Animate(sprite: mut Sprite, name: AnimName, emits FrameAdvanced) {
     sprite.frame = sprite.frame + sprite.speed
     emit FrameAdvanced { entity_name: name.value, frame: sprite.frame, total: sprite.total_frames }
 }

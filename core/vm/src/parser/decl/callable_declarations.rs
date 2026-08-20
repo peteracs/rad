@@ -264,14 +264,28 @@ fn parse_pure_fn(&mut self) -> Result<FnDecl, ParseError> {
         let mut accum_params: Vec<String> = Vec::new();
         let mut authority_reads = Vec::new();
         let mut authority_writes = Vec::new();
+        let mut authority_emits = Vec::new();
+        let mut authority_io = None;
+        let mut authority_async = None;
         while !self.check(TokenType::RParen) {
-            let first = self.expect_ident_text()?;
-            if (first == "reads" || first == "writes")
-                && (self.check(TokenType::Ident) || self.check(TokenType::Star))
+            let first = if self.check(TokenType::Async) {
+                self.advance();
+                "async".to_string()
+            } else {
+                self.expect_ident_text()?
+            };
+            if (first == "reads" || first == "writes" || first == "emits")
+                && (self.check(TokenType::Ident)
+                    || self.check(TokenType::Star)
+                    || self.check(TokenType::String))
             {
                 let authority = if self.check(TokenType::Star) {
                     self.advance();
                     "*".to_string()
+                } else if self.check(TokenType::String) {
+                    let token = self.peek().clone();
+                    self.advance();
+                    self.token_str_value(&token, "system authority")?.to_string()
                 } else {
                     let mut name = self.expect_ident_text()?;
                     if self.check(TokenType::Dot) {
@@ -283,8 +297,41 @@ fn parse_pure_fn(&mut self) -> Result<FnDecl, ParseError> {
                 };
                 if first == "reads" {
                     authority_reads.push(authority);
-                } else {
+                } else if first == "writes" {
                     authority_writes.push(authority);
+                } else {
+                    authority_emits.push(authority);
+                }
+                if self.check(TokenType::Comma) {
+                    self.advance();
+                }
+                continue;
+            }
+            if first == "io" || first == "async" {
+                let value = if self.check(TokenType::True) {
+                    self.advance();
+                    true
+                } else if self.check(TokenType::False) {
+                    self.advance();
+                    false
+                } else {
+                    return Err(ParseError {
+                        message: format!("Expected `true` or `false` after system `{first}` permission"),
+                        line: self.peek().line,
+                        col: self.peek().col,
+                    });
+                };
+                let slot = if first == "io" {
+                    &mut authority_io
+                } else {
+                    &mut authority_async
+                };
+                if slot.replace(value).is_some() {
+                    return Err(ParseError {
+                        message: format!("System `{first}` permission is declared more than once"),
+                        line: self.peek().line,
+                        col: self.peek().col,
+                    });
                 }
                 if self.check(TokenType::Comma) {
                     self.advance();
@@ -396,6 +443,9 @@ fn parse_pure_fn(&mut self) -> Result<FnDecl, ParseError> {
             accum_params,
             authority_reads,
             authority_writes,
+            authority_emits,
+            authority_io: authority_io.unwrap_or(false),
+            authority_async: authority_async.unwrap_or(false),
             body,
             after,
             before,

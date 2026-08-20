@@ -351,6 +351,41 @@
         );
     }
 
+    #[test]
+    fn string_push_and_statement_append_share_the_runtime_overload() {
+        let errors = check_src(
+            r#"
+            fn main() -> nil {
+              let mut word = "ra"
+              word << "d"
+              let direct: str = push(word, "!")
+              print(direct)
+            }
+        "#,
+        );
+        assert!(
+            errors.is_empty(),
+            "string append must retain its runtime type, got: {:?}",
+            errors
+        );
+
+        let errors = check_src(
+            r#"
+            fn main() -> nil {
+              let bad = push("rad", 1)
+              print(bad)
+            }
+        "#,
+        );
+        assert!(
+            errors
+                .iter()
+                .any(|error| error.message.contains("expects str, got int")),
+            "string push must reject non-string suffixes, got: {:?}",
+            errors
+        );
+    }
+
     // ---- builtin shadowing (bindings shadow builtins, like the runtime) ----
 
     #[test]

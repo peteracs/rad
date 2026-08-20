@@ -52,7 +52,7 @@ const GAUNTLET: &str = r#"
     resource Score { total: 0 }
     event Bump { who }
 
-    system Wander(p: mut Pos) {
+    system Wander(p: mut Pos, io true) {
         p = Pos { x: p.x + rand_int(1, 6) }
     }
 

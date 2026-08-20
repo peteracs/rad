@@ -55,7 +55,7 @@ pure fn dist(a: (float, float), b: (float, float)) -> float {
 }
 
 // the 1 s beat: all signed arithmetic, west-positive
-system evaluate(pt: mut Point, reads Champ) {
+system evaluate(pt: mut Point, reads Champ, emits Captured, emits Neutralized) {
     let west = champs_on(pt.at, WEST)
     let east = champs_on(pt.at, EAST)
 

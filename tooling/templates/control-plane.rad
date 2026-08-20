@@ -33,7 +33,7 @@ on PageSent(e) {
   print(f"  page[{e.severity}]: {e.message}")
 }
 
-system AutoScale(s: Service, l: Load, c: mut Capacity) {
+system AutoScale(s: Service, l: Load, c: mut Capacity, emits Scaled) {
   if l.qps > (c.instances * 100) and c.instances < c.max_instances {
     let prev = c.instances
     c.instances = c.instances + 1
@@ -41,7 +41,7 @@ system AutoScale(s: Service, l: Load, c: mut Capacity) {
   }
 }
 
-system CheckHealth(s: Service, l: Load, h: mut Health) after AutoScale {
+system CheckHealth(s: Service, l: Load, h: mut Health, emits PageSent) after AutoScale {
   let mut score = 100 - (l.error_rate * 10)
   if score < 0 {
     score = 0

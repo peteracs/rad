@@ -23,7 +23,7 @@ event Ping { who: int }
 // Two systems in ONE schedule call with DISJOINT resources -> parallel batch.
 // PingEach emits one Ping per entity; BumpMut accumulates the BUG 03 way so we
 // can see both numbers side by side under identical conditions.
-system PingEach(t: Tag, _o: mut Other) {
+system PingEach(t: Tag, _o: mut Other, emits Ping) {
     emit Ping { who: t.n }
 }
 

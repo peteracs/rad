@@ -272,8 +272,13 @@ impl Compiler {
     }
 
     pub fn with_checker_output(mut self, output: CheckerOutput) -> Self {
-        self.authority = Some(output.authority.clone());
-        self.authority_errors = output.authority_errors.clone();
+        if output.program_fingerprint.is_some() {
+            self.authority = Some(output.authority.clone());
+            self.authority_errors = output.authority_errors.clone();
+        } else {
+            self.authority = None;
+            self.authority_errors.clear();
+        }
         self.checker_output = Some(output.clone());
         self.for_iter_kinds = output.for_iter_kinds;
         self.checker_components = output.components;
@@ -412,6 +417,26 @@ impl Compiler {
     }
 
     pub fn compile(mut self, program: &Program) -> Result<CompileResult, CompileError> {
+        if let Some(expected) = self
+            .checker_output
+            .as_ref()
+            .and_then(|output| output.program_fingerprint)
+        {
+            let actual = crate::types::semantic_program_fingerprint(program, &self.alias_decls);
+            if actual != expected {
+                let span = program
+                    .declarations
+                    .first()
+                    .and_then(Decl::span)
+                    .cloned()
+                    .unwrap_or_default();
+                return Err(CompileError {
+                    message: "Checker output belongs to a different program or module graph; check and compile the same semantic input".to_string(),
+                    line: span.line,
+                    col: span.col,
+                });
+            }
+        }
         // Authority is mandatory even for direct compiler callers. Keep the
         // inferred graph separate from the optional full checker product so
         // authority enforcement does not silently enable unrelated typed

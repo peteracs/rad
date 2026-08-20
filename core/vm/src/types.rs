@@ -441,6 +441,10 @@ impl fmt::Display for Ty {
 
 #[derive(Debug, Clone, Default)]
 pub struct CheckerOutput {
+    /// Fingerprint of the exact AST plus aliased module declarations checked
+    /// to produce every map below. `None` means there is no semantic product
+    /// to trust (for example `CheckerOutput::default()`).
+    pub(crate) program_fingerprint: Option<[u8; 32]>,
     pub for_iter_kinds: HashMap<crate::ast::NodeId, ForIterKind>,
     pub components: HashMap<String, ComponentType>,
     pub resources: HashMap<String, ResourceType>,
@@ -461,6 +465,29 @@ pub struct CheckerOutput {
     /// point enforces them even when callers use the lower-level API without
     /// requesting the checker's unrelated type/style diagnostics.
     pub(crate) authority_errors: Vec<crate::checker::TypeError>,
+}
+
+pub(crate) fn semantic_program_fingerprint(
+    program: &crate::ast::Program,
+    aliases: &HashMap<String, Vec<crate::ast::Decl>>,
+) -> [u8; 32] {
+    fn update_segment(hasher: &mut blake3::Hasher, bytes: &[u8]) {
+        hasher.update(&(bytes.len() as u64).to_le_bytes());
+        hasher.update(bytes);
+    }
+
+    let mut hasher = blake3::Hasher::new();
+    hasher.update(b"RAD_CHECKED_PROGRAM_V1");
+    let program_debug = format!("{program:#?}");
+    update_segment(&mut hasher, program_debug.as_bytes());
+    let mut alias_names = aliases.keys().collect::<Vec<_>>();
+    alias_names.sort();
+    for alias in alias_names {
+        update_segment(&mut hasher, alias.as_bytes());
+        let declarations = format!("{:#?}", aliases[alias]);
+        update_segment(&mut hasher, declarations.as_bytes());
+    }
+    *hasher.finalize().as_bytes()
 }
 
 /// The authority-visible effects of one callable. Names are canonical
@@ -521,8 +548,10 @@ pub struct CallableAuthority {
     pub kind: AuthorityCallableKind,
     pub direct: AuthorityEffects,
     /// Effects reachable before crossing an event or separately scheduled
-    /// system boundary. This is the exact set used for authority enforcement
-    /// and parallel conflict batching.
+    /// system boundary. System roots carry call-site-specialized callback
+    /// effects; generic callable reports may conservatively union their known
+    /// callback targets. Enforcement and parallel batching use the specialized
+    /// system-root set.
     pub synchronous: AuthorityEffects,
     pub transitive: AuthorityEffects,
     /// Canonical graph keys in deterministic order.
@@ -549,19 +578,21 @@ impl AuthorityReport {
         if let Some(found) = self.callables.get(requested) {
             return Ok(found);
         }
-        let mut matches = self
-            .callables
-            .values()
-            .filter(|item| {
-                item.display_name == requested
-                    || item
-                        .display_name
-                        .strip_prefix("on ")
-                        .is_some_and(|name| name == requested)
-                    || item.name.rsplit("__").next() == Some(requested)
-            })
-            .collect::<Vec<_>>();
+        let mut matches = self.matching_callables(requested);
         matches.sort_by(|a, b| a.display_name.cmp(&b.display_name));
+        let visible = matches
+            .iter()
+            .copied()
+            .filter(|item| !item.name.starts_with("@specialized:"))
+            .collect::<Vec<_>>();
+        if let [only] = visible.as_slice() {
+            if matches
+                .iter()
+                .all(|item| item.display_name == only.display_name)
+            {
+                return Ok(*only);
+            }
+        }
         match matches.as_slice() {
             [only] => Ok(*only),
             [] => Err(format!("unknown callable '{requested}'")),
@@ -585,8 +616,31 @@ impl AuthorityReport {
 
     pub fn path(&self, from: &str, to: &str) -> Result<Option<Vec<String>>, String> {
         let start = self.resolve(from)?;
-        let goal = self.resolve(to)?;
-        if start.name == goal.name {
+        let goals = if let Some(goal) = self.callables.get(to) {
+            vec![goal]
+        } else {
+            self.matching_callables(to)
+        };
+        if goals.is_empty() {
+            return Err(format!("unknown callable '{to}'"));
+        }
+        let goal_displays = goals
+            .iter()
+            .map(|item| item.display_name.as_str())
+            .collect::<HashSet<_>>();
+        if goal_displays.len() > 1 {
+            let mut names = goal_displays.into_iter().collect::<Vec<_>>();
+            names.sort();
+            return Err(format!(
+                "callable '{to}' is ambiguous: {}",
+                names.join(", ")
+            ));
+        }
+        let goal_names = goals
+            .iter()
+            .map(|item| item.name.as_str())
+            .collect::<HashSet<_>>();
+        if goal_names.contains(start.name.as_str()) {
             return Ok(Some(vec![start.display_name.clone()]));
         }
         let mut queue = VecDeque::from([start.name.clone()]);
@@ -601,9 +655,9 @@ impl AuthorityReport {
                     continue;
                 }
                 previous.insert(next.clone(), current.clone());
-                if next == &goal.name {
-                    let mut keys = vec![goal.name.clone()];
-                    let mut cursor = goal.name.clone();
+                if goal_names.contains(next.as_str()) {
+                    let mut keys = vec![next.clone()];
+                    let mut cursor = next.clone();
                     while let Some(parent) = previous.get(&cursor) {
                         if parent.is_empty() {
                             break;
@@ -626,6 +680,20 @@ impl AuthorityReport {
             }
         }
         Ok(None)
+    }
+
+    fn matching_callables(&self, requested: &str) -> Vec<&CallableAuthority> {
+        self.callables
+            .values()
+            .filter(|item| {
+                item.display_name == requested
+                    || item
+                        .display_name
+                        .strip_prefix("on ")
+                        .is_some_and(|name| name == requested)
+                    || item.name.rsplit("__").next() == Some(requested)
+            })
+            .collect()
     }
 }
 
@@ -708,6 +776,9 @@ pub struct SystemType {
     /// Authority-only entries bound access without changing the ECS query.
     pub authority_reads: Vec<String>,
     pub authority_writes: Vec<String>,
+    pub authority_emits: Vec<String>,
+    pub authority_io: bool,
+    pub authority_async: bool,
     /// Why this system may not run under `simulate()` (IO, events, async…),
     /// if anything. `simulate()` is strict: even `rand_*` is banned because
     /// plain forks carry no explicit seed.

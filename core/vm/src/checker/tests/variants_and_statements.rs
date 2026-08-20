@@ -548,6 +548,9 @@
                     accum_params: vec![],
                     authority_reads: vec![],
                     authority_writes: vec![],
+                    authority_emits: vec![],
+                    authority_io: false,
+                    authority_async: false,
                     after: vec![],
                     before: vec![],
                 }),
@@ -748,12 +751,12 @@
     #[test]
     fn simulate_allows_safe_emits_rejects_io_handlers() {
         let errors = check_src(
-            "component C { n: int = 0 }\nevent Ping { v: int }\nsystem s(c: mut C) {\n    emit Ping { v: c.n }\n}\non Ping(e) {\n    let _ = e.v\n}\nfn main() -> nil {\n    let _ = entity { C {} }\n    let _ = simulate(fork(), [system::s], 1)\n}",
+            "component C { n: int = 0 }\nevent Ping { v: int }\nsystem s(c: mut C, emits Ping) {\n    emit Ping { v: c.n }\n}\non Ping(e) {\n    let _ = e.v\n}\nfn main() -> nil {\n    let _ = entity { C {} }\n    let _ = simulate(fork(), [system::s], 1)\n}",
         );
         assert!(errors.is_empty(), "got: {:?}", errors);
 
         let errors = check_src(
-            "component C { n: int = 0 }\nevent Ping { v: int }\nevent Pong { v: int }\nsystem s(c: mut C) {\n    emit Ping { v: c.n }\n}\non Ping(e) {\n    emit Pong { v: e.v }\n}\non Pong(e) {\n    print(e.v)\n}\nfn main() -> nil {\n    let _ = entity { C {} }\n    let _ = simulate(fork(), [system::s], 1)\n}",
+            "component C { n: int = 0 }\nevent Ping { v: int }\nevent Pong { v: int }\nsystem s(c: mut C, emits Ping) {\n    emit Ping { v: c.n }\n}\non Ping(e) {\n    emit Pong { v: e.v }\n}\non Pong(e) {\n    print(e.v)\n}\nfn main() -> nil {\n    let _ = entity { C {} }\n    let _ = simulate(fork(), [system::s], 1)\n}",
         );
         assert!(
             errors

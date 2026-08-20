@@ -68,7 +68,7 @@ lifetime, the test fails and names it.
 | **Cheap alternate futures** | `fork()`, `simulate()`, `simulate_many()`, and `simulate_par()` evaluate copy-on-write worlds without touching live state. |
 | **Blast-radius assertions** | `diff()` and `assert_only_changed()` compare worlds in O(archetypes), without scanning every entity. |
 | **Deterministic parallel simulation** | The same inputs produce bit-identical rollout results at any native worker count; a rollout's seed can reproduce that future alone. |
-| **Compiler-enforced authority** | System signatures are transitive effect bounds across helpers, imports, closures, callbacks, resources, transitions, and synchronously reached event chains. |
+| **Compiler-enforced authority** | System signatures bound transitive reads, writes, event emission, host IO, and async execution across helpers, imports, callbacks, transitions, and synchronous event chains. |
 | **Record, replay, and time travel** | Record a session, inspect earlier frames, ask `why` in the past, or replay the same inputs against edited source. |
 | **Capability sandboxing** | Run proposed Rad code against a fork with a builtin mask, component-write ACL, and fuel/memory budgets; the host decides what commits. |
 | **Mergeable worlds** | Inspect, serialize, diff, patch, and three-way merge forks with deterministic conflict handling. |
@@ -82,14 +82,26 @@ authority that the body—and everything it calls synchronously—may exercise:
 ```rad
 system RemoveEntity(
     live: mut LiveMembership,
-    writes WireIdentity
+    writes WireIdentity,
+    emits EntityRetired,
 ) {
     rewrite_wire(self) // imported/helper writes are checked transitively
+    emit EntityRetired { target: self }
     live.active = false
 }
 ```
 
-Omit `writes WireIdentity` and compilation fails with the concrete call path.
+Omit either grant and compilation fails with the concrete call path. `io true`
+and `async true` explicitly opt a system into transitively reachable host or
+task effects; both are denied by default. Higher-order helpers are specialized
+for each system's statically resolved callback arguments, so unrelated callers
+do not inherit one another's authority.
+
+Entity-name operations use narrow synthetic authorities instead of pretending
+an index lookup is effect-free: `get_entity`/`require_entity` read
+`"$entity_names"`, while `name_of` reads `"$entity_identity"`. Named spawn and
+despawn operations write the corresponding indexes.
+
 Inspect the same graph used by the compiler and parallel scheduler:
 
 ```bash
@@ -99,8 +111,9 @@ rad readers LiveMembership --file app.rad
 rad path mission_frame "->" full_scan --file app.rad
 ```
 
-The reverse writer index is benchmarked at **220.8× faster** than a full scan
-over 50,000 callables. There is one graph for diagnostics, scheduling, and tools.
+The reverse writer index is benchmarked at **307.9× faster** than a full scan
+over 50,000 callables (3.0839 µs versus 949.65 µs median). There is one graph
+for diagnostics, scheduling, and tools.
 
 ## Try it in 60 seconds
 

@@ -144,7 +144,7 @@ pure fn better(left: QuotientCandidate, right: QuotientCandidate) -> bool {
     return false
 }
 
-system ExploreQuotient(candidate: mut QuotientCandidate, telemetry: mut QuotientTelemetry) {
+system ExploreQuotient(candidate: mut QuotientCandidate, telemetry: mut QuotientTelemetry, io true) {
     let base = candidate.generators
     let mut best = candidate
     let mut exact = 0

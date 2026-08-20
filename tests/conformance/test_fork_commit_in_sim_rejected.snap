@@ -4,4 +4,5 @@ exit_code: 1
 ---
 
 ---stderr---
+Error: System 'BadCommit' exceeds its declared authority: reads [*]; writes [*]
 Error: System 'BadCommit' cannot be used in simulate(): calls 'commit' (forbidden in simulation — would corrupt the forked world)

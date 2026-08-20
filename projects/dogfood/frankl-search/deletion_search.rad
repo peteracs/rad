@@ -192,7 +192,7 @@ fn profile_better(left: list<int>, right: list<int>) -> bool {
     return false
 }
 
-system ExploreLegalDeletions(candidate: mut DeletionCandidate, config: DeletionConfig) {
+system ExploreLegalDeletions(candidate: mut DeletionCandidate, config: DeletionConfig, io true) {
     assert(typeof(candidate) != "nil", "deletion candidate resource missing")
     assert(typeof(config) != "nil", "deletion config resource missing")
     // One explicitly seeded native call owns the dense incremental witness

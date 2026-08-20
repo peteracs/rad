@@ -216,7 +216,7 @@ fn mark_dirty(unit: entity) -> nil {
 
 // ------------------------------------------------------------ ticking
 
-system age_buffs(b: mut Buffs, writes StatsDirty) {
+system age_buffs(b: mut Buffs, writes StatsDirty, emits BuffExpired, emits BuffPulsed) {
     let mut expired_any = false
     let mut next = []
     for inst in b.active {

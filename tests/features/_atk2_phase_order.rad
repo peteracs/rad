@@ -1,9 +1,9 @@
 // Attack: phase should preserve declaration order of systems within it
 component C { v: 0 }
 
-system First(c: C) { print("1") }
-system Second(c: C) { print("2") }
-system Third(c: C) { print("3") }
+system First(c: C, io true) { print("1") }
+system Second(c: C, io true) { print("2") }
+system Third(c: C, io true) { print("3") }
 
 phase InOrder { First, Second, Third }
 

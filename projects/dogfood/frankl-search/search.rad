@@ -212,7 +212,7 @@ fn is_better(a: Candidate, b: Candidate) -> bool {
 
 // Only the generator basis mutates.  Candidate state is recomputed from
 // scratch, which makes stale closure/frequency data impossible.
-system ExploreBatch(candidate: mut Candidate, config: SearchConfig, telemetry: mut BatchTelemetry) {
+system ExploreBatch(candidate: mut Candidate, config: SearchConfig, telemetry: mut BatchTelemetry, io true) {
     let base = candidate.generators
     let mut batch_best = candidate
     let mut found_distinct = false

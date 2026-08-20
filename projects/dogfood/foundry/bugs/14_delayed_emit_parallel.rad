@@ -30,7 +30,7 @@ system BumpJob(_m: Machine, g: Gate, j: mut Job) {
     }
 }
 
-system BumpWear(m: Machine, g: Gate, w: mut Wear) {
+system BumpWear(m: Machine, g: Gate, w: mut Wear, emits Toggle) {
     if g.open {
         w.n = w.n + 1
         if w.n % 7 == 0 {

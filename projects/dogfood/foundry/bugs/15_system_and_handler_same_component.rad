@@ -34,7 +34,7 @@ system BumpJob(_m: Machine, g: Gate, j: mut Job) after AgeGate {
     }
 }
 
-system BumpWear(m: Machine, g: Gate, w: mut Wear) after AgeGate {
+system BumpWear(m: Machine, g: Gate, w: mut Wear, emits Toggle) after AgeGate {
     if g.open {
         w.n = w.n + 1
         if w.n % 7 == 0 {

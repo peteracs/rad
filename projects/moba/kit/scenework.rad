@@ -20,7 +20,7 @@ component Melee { reach: float = 3.0, swing: float = 60.0 }
 // asymmetry the mirror scenario exists to catch)
 pub event Hit { target: entity, amount: float }
 
-system combat(a: Pos, m: Melee, v: Vitals) {
+system combat(a: Pos, m: Melee, v: Vitals, emits Hit) {
     if not v.alive { return }
     for (foe, fp, fv) in query { Pos, Vitals } {
         if fv.team == v.team or not fv.alive { continue }

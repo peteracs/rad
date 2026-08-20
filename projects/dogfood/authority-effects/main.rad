@@ -8,6 +8,7 @@ component LiveMembership {
 system RemoveEntity(
     live: mut LiveMembership,
     writes WireIdentity,
+    emits EntityRetired,
 ) {
     authority_helpers.rewrite_wire(self)
     emit EntityRetired { target: self }

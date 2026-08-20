@@ -26,7 +26,7 @@ system Grow(b: mut Body) { b.hp = b.hp + 1 }
 system Think(m: mut Mind) after Grow { m.iq = m.iq + 2 }
 system Earn(b: Body, k: mut Bank) after Think { k.gold = k.gold + b.hp }
 system Owe(m: Mind, k: mut Bank) after Earn { k.debt = k.debt + m.iq / 2 }
-system Drift(b: mut Body) after Grow {
+system Drift(b: mut Body, io true) after Grow {
     let r = rand_int(-2, 2)
     b.hp = b.hp + r
 }

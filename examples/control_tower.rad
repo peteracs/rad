@@ -69,7 +69,7 @@ on OrderDelivered(e) {
     print(f"  delivered: order#{e.order_id} by {(get(e.actor, Name) ?).value}")
 }
 
-system TopUpCritical(name: Name, b: mut Battery) before DrainBattery {
+system TopUpCritical(name: Name, b: mut Battery, io true) before DrainBattery {
     if b.level < 25 {
         b.level = b.level + 35
         if b.level > 100 {
@@ -79,7 +79,7 @@ system TopUpCritical(name: Name, b: mut Battery) before DrainBattery {
     }
 }
 
-system DrainBattery(name: Name, b: mut Battery) {
+system DrainBattery(name: Name, b: mut Battery, emits BatteryWarning) {
     b.level = b.level - b.drain
     if b.level < 0 {
         b.level = 0

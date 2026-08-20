@@ -7,18 +7,18 @@ entity e1 { A { v: 1 } }
 
 entity e2 { B { v: 2 } }
 
-system ShowA(x: A) {
+system ShowA(x: A, io true) {
     print(x.v)
 }
 
-system ShowB(x: B) {
+system ShowB(x: B, io true) {
     print(x.v)
 }
 ShowA()
 // expect: 1
 ShowB()
 // expect: 2
-system SumTag(t: A) {
+system SumTag(t: A, io true) {
     let doubled = t.v + t.v
     print(doubled)
 }
@@ -28,7 +28,7 @@ component Only { z: 0 }
 
 entity solo { Only { z: 5 } }
 
-system Zap(o: Only) {
+system Zap(o: Only, io true) {
     print(o.z)
 }
 Zap()
@@ -37,7 +37,7 @@ component TagN { n: 0 }
 
 entity tn { TagN { n: 8 } }
 
-system ShowN(t: TagN) {
+system ShowN(t: TagN, io true) {
     print(t.n)
 }
 ShowN()

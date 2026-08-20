@@ -25,11 +25,11 @@ resource GuardB { n: 0 }
 
 event Mark { who: int, n: int }
 
-system EmitA(o: Odd, _g: mut GuardA) {
+system EmitA(o: Odd, _g: mut GuardA, emits Mark) {
     emit Mark { who: 1, n: o.n }
 }
 
-system EmitB(e: Even, _g: mut GuardB) {
+system EmitB(e: Even, _g: mut GuardB, emits Mark) {
     emit Mark { who: 2, n: e.n }
 }
 

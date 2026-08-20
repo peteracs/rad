@@ -170,16 +170,53 @@ Declares a system that operates on entities and/or global resources. Named param
 
 **Component parameters** query the entity world: the system iterates over all entities that have ALL the specified component types. **Resource parameters** inject global singletons declared with `resource`. A system may mix both: `system Tally(u: Unit, s: mut Stats) { ... }` iterates entities with `Unit` while injecting the `Stats` resource on each iteration. A **resource-only** system runs exactly once per schedule invocation.
 
-Authority-only entries declare access that must not change iteration cardinality. `reads X` permits a transitive live-world read of `X`; `writes X` permits a transitive write. `reads *` and `writes *` are explicit whole-world grants for operations whose target is intentionally broad. These entries create no binding, inject no resource, and add no component to the entity query:
+Authority-only entries declare effects without changing iteration cardinality:
+
+- `reads X` / `writes X` permit transitive live-world state access.
+- `emits Event` permits transitive emission of that event; `emits *` permits any event.
+- `io true` permits transitively reachable host effects, including console, file,
+  network, clock, sleep, and random builtins. IO is denied when omitted or written
+  as `io false`.
+- `async true` permits transitively reachable async execution. Async is denied
+  when omitted or written as `async false`.
+- `reads *` / `writes *` are explicit whole-world state grants for operations
+  whose target cannot be bounded more narrowly.
+
+These entries create no binding, inject no resource, and add no component to the entity query:
 
 ```rad
-system RemoveEntity(live: mut LiveMembership, writes WireIdentity) {
+system RemoveEntity(
+    live: mut LiveMembership,
+    writes WireIdentity,
+    emits EntityRetired,
+) {
     rewrite_wire(self) // helper may write WireIdentity
+    emit EntityRetired { target: self }
     live.active = false
 }
 ```
 
-The checker infers exact effects through ordinary and imported function calls, closures, callbacks, bounded function values, state transitions, resources, and event-handler chains. A system's query parameters plus authority-only entries are an enforced upper bound; an undeclared read, undeclared write, or unbounded dynamic call is a compile-time error with an authority path. Event emission is a deferred authority boundary, so queued handlers do not borrow the emitter's synchronous authority; `flush_events()` makes the reachable handlers synchronous and therefore part of the caller's bound.
+The checker follows effects through ordinary and imported function calls,
+closures, callbacks, bounded function values, state transitions, resources, and
+event-handler chains. Each system is specialized for its statically resolved
+callback arguments, so two callers of one higher-order helper retain separate
+effect sets. A generic helper report may conservatively union its known callback
+targets, but that union is not used to authorize or batch an unrelated system.
+
+A system's query parameters plus authority-only entries are an enforced upper
+bound over synchronous reads, writes, emissions, IO, and async execution. An
+undeclared effect or unbounded dynamic call is a compile-time error with an
+authority path. Emission itself must be granted with `emits`; queued handlers are
+deferred authority boundaries, so their bodies do not borrow the emitter's
+synchronous state/IO/async grants. `flush_events()` executes reachable handlers
+synchronously and therefore brings their effects into the caller's bound.
+
+Runtime-owned entity indexes have narrow quoted authorities. `get_entity` and
+`require_entity` read `"$entity_names"`; `name_of` reads
+`"$entity_identity"`. Spawning writes `"$entity_identity"` and, when named,
+`"$entity_names"`; despawning writes both indexes as well as the removed
+component world. Systems must declare these authorities exactly like component
+or resource access.
 
 Parallel conflict analysis consumes the same synchronous inferred effects, not a second syntax scan. Consequently a helper-hidden resource write serializes correctly, while a queued handler that runs after the batch does not create a false conflict. The checker still rejects `update(Resource)` and `set_resource(Resource, ...)` inside a system that already holds the same resource as a `mut` parameter to prevent writeback-overwrite bugs.
 

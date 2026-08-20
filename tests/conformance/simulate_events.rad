@@ -9,7 +9,7 @@ event Strike { who: entity }
 
 event Echo { who: entity }
 
-system striker(Tally) {
+system striker(Tally, emits Strike) {
     emit Strike { who: self }
 }
 

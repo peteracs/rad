@@ -3,15 +3,15 @@ component Marker { id: 0 }
 
 entity e { Marker { id: 1 } }
 
-system First(m: Marker) before Second {
+system First(m: Marker, io true) before Second {
     print("first")
 }
 
-system Second(m: Marker) before Third {
+system Second(m: Marker, io true) before Third {
     print("second")
 }
 
-system Third(m: Marker) {
+system Third(m: Marker, io true) {
     print("third")
 }
 

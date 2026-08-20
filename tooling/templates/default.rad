@@ -6,7 +6,7 @@ entity greeter {
   Greeting {}
 }
 
-system SayHello(g: Greeting) {
+system SayHello(g: Greeting, io true) {
   print(g.message)
 }
 

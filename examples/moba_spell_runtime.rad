@@ -391,6 +391,8 @@ system MissileMove(
     reads MatchClock,
     reads Unit,
     writes *,
+    emits DamageApplied,
+    emits VfxRequested,
 ) {
     let target = lookup(Unit, "id", m.target_id)?
     let tp = require(target, Position)
@@ -410,7 +412,7 @@ system MissileMove(
     pos.y = pos.y + (dy / d) * step
 }
 
-system BuffTick(b: mut Buff, writes *) {
+system BuffTick(b: mut Buff, writes *, io true) {
     b.ticks_left = b.ticks_left - 1
     if b.ticks_left <= 0 {
         print(f"buff expired {b.name} on {b.owner_id}")

@@ -35,7 +35,7 @@ on StockWarning(e) {
   print(f"  warning: {e.agent} low stock={e.stock}")
 }
 
-system Produce(a: Agent, inv: mut Inventory, r: Rate) {
+system Produce(a: Agent, inv: mut Inventory, r: Rate, emits Produced) {
   let new_stock = inv.stock + r.production
   if new_stock > inv.capacity {
     inv.stock = inv.capacity
@@ -45,7 +45,7 @@ system Produce(a: Agent, inv: mut Inventory, r: Rate) {
   emit Produced { agent: a.name, units: r.production, stock: inv.stock }
 }
 
-system Consume(a: Agent, inv: mut Inventory, r: Rate) after Produce {
+system Consume(a: Agent, inv: mut Inventory, r: Rate, emits Consumed, emits StockWarning) after Produce {
   if inv.stock >= r.consumption {
     inv.stock = inv.stock - r.consumption
     emit Consumed { agent: a.name, units: r.consumption, stock: inv.stock }

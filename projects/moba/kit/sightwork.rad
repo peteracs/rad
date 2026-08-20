@@ -97,6 +97,8 @@ system update_fog(
     reads Sight,
     reads Stealth,
     reads Unit,
+    emits Faded,
+    emits Spotted,
 ) {
     let mut seen = []
     let mut ghosts = tv.ghosts

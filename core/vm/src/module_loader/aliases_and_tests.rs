@@ -811,4 +811,40 @@ mod tests {
             "qualified match pattern lex.Tok.IntLit should bind and run (Bug #7 if wrong)"
         );
     }
+
+    #[test]
+    fn imported_helper_io_is_enforced_transitively() {
+        let dir = mk_temp_dir();
+        fs::write(
+            dir.join("helpers.rad"),
+            "pub fn noisy() -> nil { print(\"from helper\") }\n",
+        )
+        .unwrap();
+        fs::write(
+            dir.join("main.rad"),
+            concat!(
+                "component Root {}\n",
+                "use \"helpers.rad\" as helpers\n",
+                "system Run(root: Root) { helpers.noisy() }\n",
+            ),
+        )
+        .unwrap();
+
+        let loaded =
+            load_program_with_source_map(dir.join("main.rad").to_str().unwrap()).unwrap();
+        let mut checker = Checker::new_with_options(CheckerOptions::default());
+        checker.set_aliases(loaded.aliases);
+        let errors = checker.check(&loaded.program);
+        assert!(
+            errors.iter().any(|error| {
+                error.message.contains("System 'Run'")
+                    && error.message.contains("performs IO")
+                    && error
+                        .hint
+                        .as_deref()
+                        .is_some_and(|hint| hint.contains("Run -> helpers.noisy"))
+            }),
+            "expected imported helper IO authority violation and path, got {errors:?}"
+        );
+    }
 }

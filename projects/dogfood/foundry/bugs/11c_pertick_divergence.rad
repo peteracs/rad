@@ -26,7 +26,7 @@ resource Tally { starts: 0, finishes: 0, scrapped: 0, breaks: 0 }
 event Finished { code: str }
 event Broke { code: str }
 
-system Feed(m: Machine, f: mut Fsm, j: mut Job) {
+system Feed(m: Machine, f: mut Fsm, j: mut Job, emits $transition, emits Finished) {
     if f.state is Idle {
         j.remaining = m.speed
         f.state = unwrap(transition(f.state, "start"))
@@ -34,7 +34,7 @@ system Feed(m: Machine, f: mut Fsm, j: mut Job) {
     }
 }
 
-system Advance(m: Machine, f: Fsm, j: mut Job) after Feed {
+system Advance(m: Machine, f: Fsm, j: mut Job, emits Finished) after Feed {
     if f.state is Running {
         j.remaining = j.remaining - 1
         if j.remaining <= 0 {
@@ -44,7 +44,7 @@ system Advance(m: Machine, f: Fsm, j: mut Job) after Feed {
     }
 }
 
-system Wearing(m: Machine, f: Fsm, w: mut Wear) after Advance {
+system Wearing(m: Machine, f: Fsm, w: mut Wear, emits Broke) after Advance {
     if f.state is Running {
         w.level = w.level + 1
         if w.level >= w.limit {

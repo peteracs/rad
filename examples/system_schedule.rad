@@ -9,23 +9,23 @@ component Row { id: 0 }
 entity r { Row { id: 1 } }
 
 // Prep must run before S1 (declared from Prep's point of view).
-system Prep(x: Row) before S1 {
+system Prep(x: Row, io true) before S1 {
     print("  step 0: Prep (before S1)")
 }
 
-system S1(x: Row) {
+system S1(x: Row, io true) {
     print("  step 1: S1")
 }
 
-system S2(x: Row) after S1 {
+system S2(x: Row, io true) after S1 {
     print("  step 2: S2 (after S1)")
 }
 
-system S3(x: Row) after S2 {
+system S3(x: Row, io true) after S2 {
     print("  step 3: S3 (after S2)")
 }
 
-system S4(x: Row) after S3 {
+system S4(x: Row, io true) after S3 {
     print("  step 4: S4 (after S3)")
 }
 

@@ -3,7 +3,7 @@
 
 component Dummy { x: 0 }
 
-system BadIO(d: mut Dummy) {
+system BadIO(d: mut Dummy, io true) {
     print("side effect!")
     d = Dummy { x: d.x + 1 }
 }

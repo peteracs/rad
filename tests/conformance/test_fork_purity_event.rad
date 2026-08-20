@@ -3,7 +3,7 @@
 component Dummy { x: 0 }
 event Alert { who: entity }
 
-system Signal(d: mut Dummy) {
+system Signal(d: mut Dummy, emits Alert) {
     d = Dummy { x: d.x + 1 }
     emit Alert { who: self }
 }

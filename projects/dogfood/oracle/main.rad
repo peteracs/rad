@@ -127,7 +127,7 @@ system Clock(l: mut Ledger) after Audit {
 // Harvest shock. rand_int is statically BANNED inside simulate() (a plain
 // fork carries no seed) and permitted inside simulate_par(), whose forks are
 // explicitly seeded. This system is therefore usable only in the search.
-system Weather(st: mut Stock) after Harvest {
+system Weather(st: mut Stock, io true) after Harvest {
     let swing = rand_int(-3, 2)
     st.food = st.food + st.food * swing / 10
 }

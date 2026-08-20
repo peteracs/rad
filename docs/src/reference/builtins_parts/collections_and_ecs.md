@@ -164,9 +164,9 @@ fn encode_move(client_seq: int, target_x: float, target_y: float) -> any {
 | `has(id, Component)` | Check if entity has component |
 | `remove(id, Component)` | Remove component from entity |
 | `entities([ComponentName...])` | Return all entity IDs, or only entities that have all listed component types |
-| `name_of(id)` | Entity's declared name (empty string if unnamed). Readonly. |
-| `get_entity(name)` | Lookup by name — returns `entity \| nil`; narrow with a guard (`if e == nil { return }`). Readonly. |
-| `require_entity(name)` | Fail-fast lookup by name — returns `entity`, errors if missing (the get/require pairing, extended to names). Readonly. |
+| `name_of(id)` | Entity's declared name (empty string if unnamed). Readonly; systems require `reads "$entity_identity"`. |
+| `get_entity(name)` | Lookup by name — returns `entity \| nil`; narrow with a guard (`if e == nil { return }`). Readonly; systems require `reads "$entity_names"`. |
+| `require_entity(name)` | Fail-fast lookup by name — returns `entity`, errors if missing (the get/require pairing, extended to names). Readonly; systems require `reads "$entity_names"`. |
 | `id_of(id)` | Entity's stable integer id. Pure — usable in `pure fn`. Entities also sort by ascending id: `query { C } \|> sort` is the canonical deterministic order. |
 | `query_where(ComponentName..., fn)` | Filter entities having the given components using a predicate evaluated on the entity ID. The predicate may be **pure or read-only** — `get`/`res`/`has`/`readonly fn` calls are allowed (the entity list is snapshotted before the predicate runs), so filtering by component values is direct: `query_where(Hero, fn(id) { return (get(id, Hero) \|> unwrap).level >= 3 })`. Writes, IO, and events in the predicate are compile errors |
 | `query_map(ComponentName..., fn)` | Map over entities having the given components using a function evaluated on the entity ID. Same contract as `query_where`: the mapper may be **pure or read-only** (world reads and `readonly fn` calls allowed); writes, IO, and events in the mapper are compile errors |

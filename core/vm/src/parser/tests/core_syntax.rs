@@ -74,14 +74,26 @@ fn parse_system_ref_qualified_path() {
 #[test]
 fn parse_system_authority_only_signature_entries() {
     let program = parse_source(
-        "system Audit(root: Root, reads Other, writes Log, writes *) {}",
+        "system Audit(root: Root, reads Other, reads \"$entity_names\", writes Log, writes *, emits Changed, emits \"$transition\", io true, async false) {}",
     );
     let Decl::System(system) = &program.declarations[0] else {
         panic!("expected system declaration");
     };
     assert_eq!(system.params, vec![("root".into(), false, "Root".into())]);
-    assert_eq!(system.authority_reads, vec!["Other"]);
+    assert_eq!(system.authority_reads, vec!["Other", "$entity_names"]);
     assert_eq!(system.authority_writes, vec!["Log", "*"]);
+    assert_eq!(system.authority_emits, vec!["Changed", "$transition"]);
+    assert!(system.authority_io);
+    assert!(!system.authority_async);
+}
+
+#[test]
+fn system_effect_permissions_require_booleans_and_are_unique() {
+    let missing = parse_source_err("system Audit(io) {}");
+    assert!(missing.message.contains("Expected `true` or `false`"));
+
+    let duplicate = parse_source_err("system Audit(async true, async false) {}");
+    assert!(duplicate.message.contains("declared more than once"));
 }
 
 #[test]
