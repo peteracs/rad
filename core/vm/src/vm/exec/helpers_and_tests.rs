@@ -434,9 +434,9 @@ mod scheduling_tests {
             resource D2 { x: 0 }
             resource D3 { x: 0 }
             system MutParam(r: mut R1) { r.n = r.n + 100 }
-            system ViaUpdate(_d: mut D1) { update(R1) { n = res(R1).n + 1 } }
-            system UpdA(_d: mut D2) { update(R2) { n = res(R2).n + 100 } }
-            system UpdB(_d: mut D3) { update(R2) { n = res(R2).n + 1 } }
+            system ViaUpdate(_d: mut D1, reads R1, writes R1) { update(R1) { n = res(R1).n + 1 } }
+            system UpdA(_d: mut D2, reads R2, writes R2) { update(R2) { n = res(R2).n + 100 } }
+            system UpdB(_d: mut D3, reads R2, writes R2) { update(R2) { n = res(R2).n + 1 } }
             schedule [MutParam, ViaUpdate]
             print(res(R1).n)
             schedule [UpdA, UpdB]
@@ -458,7 +458,7 @@ mod scheduling_tests {
             resource D1 { x: 0 }
             fn bump3() { update(R3) { n = res(R3).n + 1 } }
             system MutParam3(r: mut R3) { r.n = r.n + 100 }
-            system ViaFn(_d: mut D1) { bump3() }
+            system ViaFn(_d: mut D1, reads R3, writes R3) { bump3() }
             schedule [MutParam3, ViaFn]
             print(res(R3).n)
         "#,

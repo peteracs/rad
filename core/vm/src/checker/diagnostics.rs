@@ -76,6 +76,18 @@ impl Checker {
         });
     }
 
+    pub(super) fn authority_error(&mut self, span: &Span, message: String, hint: Option<String>) {
+        let error = TypeError {
+            line: span.line,
+            col: span.col,
+            file: span.file,
+            message,
+            hint,
+        };
+        self.authority_errors.push(error.clone());
+        self.errors.push(error);
+    }
+
     pub(super) fn warning(&mut self, span: &Span, message: String, hint: Option<String>) {
         self.warnings.push(TypeWarning {
             line: span.line,

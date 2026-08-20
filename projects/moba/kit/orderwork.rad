@@ -110,7 +110,7 @@ fn advance_queue(u: entity) -> nil {
 
 // ------------------------------------------------------------ execution
 
-system act(Brain, p: mut Pos) {
+system act(Brain, p: mut Pos, reads Vitals, writes Brain) {
     match effective_order(self) {
         Order::Move { to: dest } when dist(p.at, dest) <= ARRIVE_M => {
             advance_queue(self)

@@ -89,7 +89,39 @@ effect violation in any restricted context. Module-qualified calls
 (`alias.helper(...)`) are checked against the callee's declared effect row
 like any other named call.
 
-### 8.4 Pipeline restrictions (`|>`)
+### 8.4 Transitive authority effects
+
+Every function, system, event handler, closure, and statically bounded function value has an inferred authority record:
+
+```text
+effect RemoveEntity {
+    reads:  [LiveMembership]
+    writes: [LiveMembership, WireIdentity]
+    emits:  [EntityRetired]
+    io:     false
+    async:  false
+    unknown: false
+}
+```
+
+The graph follows ordinary calls, imported helpers, closures, callback arguments, static schedules, state transitions, resource operations, and emitted-event handler chains. Callback parameters typed `pure fn(...)` contribute no authority; `readonly fn(...)` contributes a bounded whole-world read; a bare `fn(...)` call is unbounded and sets `unknown`. Restricted callers reject `unknown` instead of assuming a dynamic target is safe.
+
+Each callable exposes three useful views. `direct` is written in that body. `synchronous` includes calls that execute before crossing a queued event or separately scheduled system boundary. `transitive` also follows those deferred edges and is the complete impact report. System sandbox enforcement and parallel batching use `synchronous`; inspection commands use the complete transitive graph.
+
+For systems, named query/resource parameters and `reads`/`writes` authority-only entries form an enforced upper bound (§3.5). `mut` grants read and write, an immutable parameter grants read only, and `writes X` does not silently grant a read. Wildcard authority must be written explicitly. The inferred effect report records actual access, never unused grants.
+
+The graph and reverse indexes are available without rescanning source:
+
+```bash
+rad effects RemoveEntity --json
+rad writers LiveMembership
+rad readers WireIdentity
+rad path mission_frame "->" full_scan
+```
+
+Outside a project containing `rad.toml`, add `--file path/to/main.rad`. Names are module-aware; an ambiguous short name is rejected and the diagnostic lists the qualified candidates.
+
+### 8.5 Pipeline restrictions (`|>`)
 
 The pipeline operator evaluates its left-hand side, then evaluates the right-hand side in a **pipeline context** where stricter rules apply (enforced by the static checker):
 
@@ -183,6 +215,5 @@ The following items from earlier drafts are now implemented:
 ## 12. Future Additions
 
 - **Package registry** — `rad install`, `rad publish`, `rad.toml` `[dependencies]` section (struct scaffolding exists, no resolution or fetching logic yet)
-- **Module exports** — `pub fn`, `pub component` visibility control
 - **Standard library** — `std/collections`, `std/math`, `std/text` as distributable RAD modules
 - **AOT compilation** — compile RAD to native binaries via LLVM or Cranelift

@@ -70,9 +70,9 @@ body:
       required: true
 
   - type: textarea
-    id: three_laws
+    id: core_state_model
     attributes:
-      label: Impact on the Three Laws
+      label: Impact on the core state model
       description: |
         How does this interact with RAD's core principles?
         - Does it affect ECS data/logic separation?

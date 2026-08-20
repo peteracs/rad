@@ -465,17 +465,22 @@ system Physics(pos: mut Position, vel: Velocity) {
 }
 ```
 
-`Physics` runs once for every entity that has both `Position` and `Velocity`. The `mut` keyword marks which components the system can write to. That information lets the runtime partition non-conflicting systems into batches (see `core/vm/src/vm/parallel.rs`). Systems in the **same batch** can run **in parallel** when the schedule executes (see [Parallel scheduling](#parallel-scheduling) below).
+`Physics` runs once for every entity that has both `Position` and `Velocity`. The `mut` keyword grants read/write authority and writeback; immutable parameters grant reads. The compiler follows all calls from the body and rejects any live-world access outside that bound. The same inferred effects let the runtime partition non-conflicting systems into batches (see `core/vm/src/vm/parallel.rs`). Systems in the **same batch** can run **in parallel** when the schedule executes (see [Parallel scheduling](#parallel-scheduling) below).
 
-Inside a system body, **`self` is the entity being visited** — use it to emit
-events about the unit, read components outside the signature, or detach tags:
+Inside a system body, **`self` is the entity being visited**. Access that should
+not alter the entity query is declared with authority-only entries:
 
 ```
-system age_buffs(b: mut Buffs) {
+system age_buffs(b: mut Buffs, writes StatsDirty) {
     emit BuffExpired { unit: self, buff: "ghost" }
     remove(self, StatsDirty)
 }
 ```
+
+`reads Type` and `writes Type` grant transitive access without adding a binding,
+resource injection, or query filter. `reads *` / `writes *` are explicit broad
+grants. Helpers, imported functions, closures, callbacks, and synchronous event
+flushes cannot hide additional access from this contract.
 
 A **bare component name** is a type-only filter param: the system only visits
 entities carrying it, without binding data you'd never read — the

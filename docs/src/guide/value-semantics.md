@@ -49,7 +49,7 @@ To update an entity's component, you must call `set`:
 set(hero, Health { hp: 50, max: 100 })
 ```
 
-### Plain-data rule (Law 1 gate)
+### Plain-data boundary
 
 Component and struct fields must be plain data. Function/closure-typed fields are rejected by the checker.
 

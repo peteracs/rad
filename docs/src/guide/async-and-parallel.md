@@ -37,8 +37,14 @@ Two systems conflict when they overlap on:
 - write/read
 - read/write
 
-The runtime partitions systems into conflict-free batches and runs each system **sequentially** (one after another) on the main thread. The static analysis that builds those batches is what would enable safe parallel execution later; multithreaded system execution is not turned on in the VM today (there is no Rayon-based or thread-pool system dispatcher in `core/vm/src/vm/exec.rs`).
+On native targets, the runtime executes each multi-system conflict-free batch
+concurrently through Rayon worker VMs. Every worker starts from the same world
+snapshot; writes and events merge deterministically in schedule order. A
+single-system batch runs directly, and `--serial-schedule` or `schedule serial`
+provides a differential serial mode. WASM uses the same isolated worker path
+sequentially because the target has no native thread pool.
 
-**What is shipped today:** topological ordering, conflict-free batching (`core/vm/src/vm/parallel.rs`), and sequential execution of each system in order.
-
-**What is not shipped:** running different systems in a batch on different CPU cores at the same time.
+The batcher consumes each system's exact synchronous transitive authority set,
+including ordinary and imported helper calls. Queued event handlers belong to
+the later event-drain boundary; a system that explicitly calls `flush_events()`
+includes the reached handlers in its synchronous set.

@@ -1,5 +1,5 @@
-// BUG 03 diagnostic: does the system body run once per entity, or does the
-// resource writeback collapse?
+// REGRESSION 03: proves that the system body runs once per entity and that
+// resource writeback does not collapse.
 //
 // `probe` is a per-entity component: if it reaches 100 on every entity we
 // know the body executed 10 times. `c.n` is the resource accumulator from
@@ -19,7 +19,7 @@ system BumpParam(t: mut Tag, c: mut Acc) {
 }
 
 // same thing, but the resource is touched through update()
-system BumpUpdate(t: Tag, _dummy: mut Acc3) {
+system BumpUpdate(_t: Tag, _dummy: mut Acc3, reads Acc2, writes Acc2) {
     update(Acc2) { n = res(Acc2).n + 1 }
 }
 

@@ -242,6 +242,8 @@ pub struct Compiler {
     /// global call and trap on `nil` at runtime.
     pub(crate) declared_systems: std::collections::HashSet<String>,
     pub(crate) checker_output: Option<CheckerOutput>,
+    pub(crate) authority: Option<AuthorityReport>,
+    pub(crate) authority_errors: Vec<TypeError>,
     /// Pipeline loop-fusion is only stack-safe where the operand stack
     /// is empty (statement roots). Granted by the statement compiler,
     /// consumed by the immediate expression; nested expressions never

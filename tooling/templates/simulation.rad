@@ -57,11 +57,11 @@ system Consume(a: Agent, inv: mut Inventory, r: Rate) after Produce {
 fn main() -> nil {
   print("=== __PROJECT_NAME__ ===")
   print("--- tick 1 ---")
-  run [Consume, Produce]
+  schedule [Consume, Produce]
   print("--- tick 2 ---")
-  run [Consume, Produce]
+  schedule [Consume, Produce]
   print("--- tick 3 ---")
-  run [Consume, Produce]
+  schedule [Consume, Produce]
 
   let stocks = [
     (get(warehouse_a, Inventory) |> unwrap).stock,

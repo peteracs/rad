@@ -1,5 +1,7 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::fmt;
+
+use serde::Serialize;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Effect {
@@ -452,6 +454,191 @@ pub struct CheckerOutput {
     pub variant_shorthand: std::collections::HashSet<(String, String)>,
     pub spread_lengths: HashMap<crate::ast::Span, usize>,
     pub type_redirects: HashMap<String, String>,
+    /// Fine-grained, transitive world-authority effects and the cached call
+    /// graph used by `rad effects`, `writers`, `readers`, and `path`.
+    pub authority: AuthorityReport,
+    /// Authority violations are retained separately so every compiler entry
+    /// point enforces them even when callers use the lower-level API without
+    /// requesting the checker's unrelated type/style diagnostics.
+    pub(crate) authority_errors: Vec<crate::checker::TypeError>,
+}
+
+/// The authority-visible effects of one callable. Names are canonical
+/// component/resource/event names; `"*"` denotes an operation over the whole
+/// entity/world set (for example `entities()` or `despawn()`). Vectors are
+/// sorted and deduplicated so diagnostics and JSON remain deterministic.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct AuthorityEffects {
+    pub reads: Vec<String>,
+    pub writes: Vec<String>,
+    pub emits: Vec<String>,
+    pub io: bool,
+    #[serde(rename = "async")]
+    pub async_effect: bool,
+    /// A first-class function value was invoked without a statically bounded
+    /// target. Restricted callers reject this instead of assuming purity.
+    pub unknown: bool,
+}
+
+impl AuthorityEffects {
+    pub fn is_empty(&self) -> bool {
+        self.reads.is_empty()
+            && self.writes.is_empty()
+            && self.emits.is_empty()
+            && !self.io
+            && !self.async_effect
+            && !self.unknown
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AuthorityCallableKind {
+    Function,
+    System,
+    Handler,
+    Closure,
+}
+
+impl fmt::Display for AuthorityCallableKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Function => write!(f, "function"),
+            Self::System => write!(f, "system"),
+            Self::Handler => write!(f, "handler"),
+            Self::Closure => write!(f, "closure"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct CallableAuthority {
+    /// Stable graph key. Imported declarations use their checker-mangled name
+    /// so two modules cannot collide.
+    pub name: String,
+    /// Human spelling (`physics.integrate`, `on Damage#1`, or a closure site).
+    pub display_name: String,
+    pub kind: AuthorityCallableKind,
+    pub direct: AuthorityEffects,
+    /// Effects reachable before crossing an event or separately scheduled
+    /// system boundary. This is the exact set used for authority enforcement
+    /// and parallel conflict batching.
+    pub synchronous: AuthorityEffects,
+    pub transitive: AuthorityEffects,
+    /// Canonical graph keys in deterministic order.
+    pub calls: Vec<String>,
+    /// Subset of `calls` that executes at a separate event/schedule boundary.
+    /// Reports follow these edges; a caller's synchronous sandbox does not.
+    pub deferred_calls: Vec<String>,
+    pub line: u32,
+    pub col: u32,
+}
+
+/// Cached authority graph plus reverse indexes. Query commands never rescan an
+/// AST: a symbol lookup is logarithmic and readers/writers are direct index
+/// lookups.
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct AuthorityReport {
+    pub callables: BTreeMap<String, CallableAuthority>,
+    pub readers: BTreeMap<String, Vec<String>>,
+    pub writers: BTreeMap<String, Vec<String>>,
+}
+
+impl AuthorityReport {
+    pub fn resolve(&self, requested: &str) -> Result<&CallableAuthority, String> {
+        if let Some(found) = self.callables.get(requested) {
+            return Ok(found);
+        }
+        let mut matches = self
+            .callables
+            .values()
+            .filter(|item| {
+                item.display_name == requested
+                    || item
+                        .display_name
+                        .strip_prefix("on ")
+                        .is_some_and(|name| name == requested)
+                    || item.name.rsplit("__").next() == Some(requested)
+            })
+            .collect::<Vec<_>>();
+        matches.sort_by(|a, b| a.display_name.cmp(&b.display_name));
+        match matches.as_slice() {
+            [only] => Ok(*only),
+            [] => Err(format!("unknown callable '{requested}'")),
+            many => Err(format!(
+                "callable '{requested}' is ambiguous: {}",
+                many.iter()
+                    .map(|item| item.display_name.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )),
+        }
+    }
+
+    pub fn readers_of(&self, authority: &str) -> Vec<String> {
+        indexed_authority_query(&self.readers, authority)
+    }
+
+    pub fn writers_of(&self, authority: &str) -> Vec<String> {
+        indexed_authority_query(&self.writers, authority)
+    }
+
+    pub fn path(&self, from: &str, to: &str) -> Result<Option<Vec<String>>, String> {
+        let start = self.resolve(from)?;
+        let goal = self.resolve(to)?;
+        if start.name == goal.name {
+            return Ok(Some(vec![start.display_name.clone()]));
+        }
+        let mut queue = VecDeque::from([start.name.clone()]);
+        let mut previous = HashMap::<String, String>::new();
+        previous.insert(start.name.clone(), String::new());
+        while let Some(current) = queue.pop_front() {
+            let Some(node) = self.callables.get(&current) else {
+                continue;
+            };
+            for next in &node.calls {
+                if previous.contains_key(next) {
+                    continue;
+                }
+                previous.insert(next.clone(), current.clone());
+                if next == &goal.name {
+                    let mut keys = vec![goal.name.clone()];
+                    let mut cursor = goal.name.clone();
+                    while let Some(parent) = previous.get(&cursor) {
+                        if parent.is_empty() {
+                            break;
+                        }
+                        keys.push(parent.clone());
+                        cursor = parent.clone();
+                    }
+                    keys.reverse();
+                    return Ok(Some(
+                        keys.into_iter()
+                            .filter_map(|key| {
+                                self.callables
+                                    .get(&key)
+                                    .map(|node| node.display_name.clone())
+                            })
+                            .collect(),
+                    ));
+                }
+                queue.push_back(next.clone());
+            }
+        }
+        Ok(None)
+    }
+}
+
+fn indexed_authority_query(index: &BTreeMap<String, Vec<String>>, authority: &str) -> Vec<String> {
+    let mut names = index.get(authority).cloned().unwrap_or_default();
+    if authority != "*" {
+        if let Some(wildcard) = index.get("*") {
+            names.extend(wildcard.iter().cloned());
+        }
+    }
+    names.sort();
+    names.dedup();
+    names
 }
 
 #[derive(Debug, Clone)]
@@ -518,6 +705,9 @@ pub struct SystemType {
     pub is_pub: bool,
     pub file_id: Option<crate::ast::FileId>,
     pub params: Vec<SystemParam>,
+    /// Authority-only entries bound access without changing the ECS query.
+    pub authority_reads: Vec<String>,
+    pub authority_writes: Vec<String>,
     /// Why this system may not run under `simulate()` (IO, events, async…),
     /// if anything. `simulate()` is strict: even `rand_*` is banned because
     /// plain forks carry no explicit seed.

@@ -82,7 +82,15 @@ fn alive(u: entity) -> bool {
 
 // ------------------------------------------------------- attack cycle
 
-system attack_cycle(a: mut Attack, p: Pos, r: Ranged) {
+system attack_cycle(
+    a: mut Attack,
+    p: Pos,
+    r: Ranged,
+    reads Clock,
+    reads Vitals,
+    writes Missile,
+    writes Pos,
+) {
     let target = a.target
     if target == nil {
         a.phase = Cycle::Idle {}
@@ -149,7 +157,13 @@ system attack_cycle(a: mut Attack, p: Pos, r: Ranged) {
 
 // ---------------------------------------------------- projectile flight
 
-system fly_missiles(m: mut Missile, p: mut Pos) {
+system fly_missiles(
+    m: mut Missile,
+    p: mut Pos,
+    reads Body,
+    reads Vitals,
+    writes *,
+) {
     let step = m.speed * DT
     match m.flight {
         Flight::Homing { target: t } => {

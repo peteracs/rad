@@ -193,7 +193,11 @@ pure fn better(left: HypergraphCandidate, right: HypergraphCandidate) -> bool {
     return left.family_size < right.family_size
 }
 
-system ExploreHypergraph(candidate: mut HypergraphCandidate, telemetry: mut HypergraphTelemetry) {
+system ExploreHypergraph(
+    candidate: mut HypergraphCandidate,
+    telemetry: mut HypergraphTelemetry,
+    reads HypergraphTarget,
+) {
     let target = res(HypergraphTarget).family_size
     let lane_minimum = target
     let lane_maximum = target

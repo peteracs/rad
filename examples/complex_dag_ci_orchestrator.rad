@@ -21,7 +21,7 @@
 //  Run: rad examples/complex_dag_ci_orchestrator.rad
 // =====================================================================
 
-// --- Data (Law 1: separate data from logic) ---
+// --- Declared data ---
 
 component Task {
     indexed name: str = "",
@@ -78,7 +78,7 @@ event TaskDone { task_name: str }
 
 event PolicyHook { hook_kind: str, summary: str }
 
-// --- Event handlers (Law 3: communicate via events) ---
+// --- Event handlers ---
 
 // [Extension 7] Guarded handler — only propagate meaningful task names
 on TaskDone(e) where e.task_name != "" {
@@ -113,7 +113,7 @@ on PolicyHook(e) {
     print(f"  [policy] {e.hook_kind}: {e.summary}")
 }
 
-// --- Systems (Law 1) ---
+// --- Systems ---
 
 system AdvanceRunning(t: mut Task) {
     if t.phase != task_running() {
@@ -124,7 +124,7 @@ system AdvanceRunning(t: mut Task) {
     }
 }
 
-system CompleteTasks(t: mut Task) {
+system CompleteTasks(t: mut Task, reads ClusterPool, writes ClusterPool) {
     if t.phase != task_running() {
         return
     }
@@ -152,7 +152,7 @@ system PromoteReady(t: mut Task) {
     }
 }
 
-system AssignWorkers(pool: mut ClusterPool) {
+system AssignWorkers(pool: mut ClusterPool, reads Task, writes Task) {
     while pool.free_workers > 0 {
         let mut cands = []
         for id in query { Task } {

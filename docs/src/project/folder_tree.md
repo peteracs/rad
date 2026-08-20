@@ -99,6 +99,7 @@ rad/
       - `experiments/c-backend/src/` - Self-hosted frontend, C emitter/runtime, and WASM encoder sources.
   - `projects/` - Larger applications, integrations, tutorials, and product dogfood.
     - `projects/dogfood/` - Focused applications that stress language guarantees with real workloads.
+      - `projects/dogfood/authority-effects/` - Transitive authority enforcement and graph-query dogfood.
       - `projects/dogfood/bastion/` - Sandbox capability and resource-exhaustion laboratory.
         - `projects/dogfood/bastion/bugs/` - Reproductions found by the bastion audit.
         - `projects/dogfood/bastion/caps/` - Malformed and adversarial capability fixtures.

@@ -20,6 +20,10 @@ pub component Will { brave: int = 0 } // marker: the imagined player-model
 
 pub resource Run { turn: int = 0, futures: int = 0, log: str = "" }
 
+// Stable, fork-safe authority for simulated player policy. Systems consume
+// this explicit roster instead of discovering every Monster archetype.
+pub resource MonsterRoster { ids: list<entity> = [] }
+
 pub event Clawed { monster: entity, dmg: int }
 
 pub event Smote { target: entity, dmg: int }
@@ -90,7 +94,7 @@ let EXIT_FIELD = bfs_exit()
 // ---------------------------------------------------------------------------
 
 on Clawed(e) {
-    let you = get_entity("you")
+    let you = require_entity("you")
     let v = get(you, Vital) ?
     let mut hp = v.hp - e.dmg
     if hp < 0 { hp = 0 }
@@ -134,11 +138,11 @@ on Slain(e) {
 // sight goes blind. Runs LAST in each simulated frame: a frame is "the
 // monsters answer your staged move, then imagined-you takes the next turn"
 // — the same order as the live loop.
-pub system FleeOrFight(_w: Will, p: mut Pos, v: Vital) after Pounce {
+pub system FleeOrFight(_w: Will, p: mut Pos, v: mut Vital, roster: MonsterRoster) after Pounce {
     if v.hp <= 0 { return }
     let mut target = ""
     let mut weakest = 9999
-    for m in entities(Monster) {
+    for m in roster.ids {
         let mv = get(m, Vital) |> unwrap
         if mv.hp <= 0 { continue }
         let mp = get(m, Pos) |> unwrap
@@ -148,7 +152,7 @@ pub system FleeOrFight(_w: Will, p: mut Pos, v: Vital) after Pounce {
         }
     }
     if target != "" {
-        let m = get_entity(target)
+        let m = require_entity(target)
         let mut hp = weakest - PLAYER_ATK
         if hp < 0 { hp = 0 }
         update(m, Vital) { hp = hp }
@@ -162,7 +166,7 @@ pub system FleeOrFight(_w: Will, p: mut Pos, v: Vital) after Pounce {
         let ny = p.y + d[1]
         if wall_at(nx, ny) { continue }
         let mut nearest = 999
-        for m in entities(Monster) {
+        for m in roster.ids {
             let mv = get(m, Vital) |> unwrap
             if mv.hp <= 0 { continue }
             let mp = get(m, Pos) |> unwrap
@@ -182,7 +186,7 @@ pub system FleeOrFight(_w: Will, p: mut Pos, v: Vital) after Pounce {
 
 pub system Stalk(i: mut Intent, p: Pos, m: Monster, v: Vital) {
     if v.hp <= 0 { return }
-    let you = get_entity("you")
+    let you = require_entity("you")
     let yv = get(you, Vital) |> unwrap
     if yv.hp <= 0 { return }
     let yp = get(you, Pos) |> unwrap
@@ -207,13 +211,13 @@ pub system Stalk(i: mut Intent, p: Pos, m: Monster, v: Vital) {
     i = Intent { kind: "move", tx: nx, ty: ny }
 }
 
-pub system Pounce(i: mut Intent, p: mut Pos, m: Monster, v: Vital) after Stalk {
+pub system Pounce(i: mut Intent, p: mut Pos, m: Monster, v: mut Vital) after Stalk {
     if v.hp <= 0 { return }
     if i.kind == "move" {
         if !wall_at(i.tx, i.ty) { p = Pos { x: i.tx, y: i.ty } }
     }
     if i.kind == "attack" {
-        let you = get_entity("you")
+        let you = require_entity("you")
         let yv = get(you, Vital) |> unwrap
         if yv.hp > 0 {
             let mut hp = yv.hp - m.atk
@@ -241,7 +245,7 @@ pub fn monster_at(x: int, y: int) -> str {
 pub fn blocked_for_monster(x: int, y: int) -> bool {
     if wall_at(x, y) { return true }
     if monster_at(x, y) != "" { return true }
-    let yp = get(get_entity("you"), Pos) |> unwrap
+    let yp = get(require_entity("you"), Pos) |> unwrap
     if yp.x == x and yp.y == y { return true }
     return false
 }
@@ -249,7 +253,7 @@ pub fn blocked_for_monster(x: int, y: int) -> bool {
 // Deterministic (x-axis first) so a rewound timeline replays honestly:
 // the only randomness in this whole program lives inside simulate_par.
 pub fn monsters_act() -> nil {
-    let you = get_entity("you")
+    let you = require_entity("you")
     for m in entities(Monster) {
         let v = get(m, Vital) |> unwrap
         if v.hp <= 0 { continue }
@@ -294,7 +298,7 @@ pub fn monsters_act() -> nil {
 pub struct Cand { label: str = "", dir: str = "stay", kind: str = "stay", tx: int = 0, ty: int = 0, target: str = "" }
 
 pub fn candidates() -> list < Cand > {
-    let you = get_entity("you")
+    let you = require_entity("you")
     let p = get(you, Pos) |> unwrap
     let mut out = [Cand { label: "stay", dir: "stay", kind: "stay", tx: p.x, ty: p.y, target: "" }]
     for d in [("N", 0, - 1), ("S", 0, 1), ("W", - 1, 0), ("E", 1, 0)] {
@@ -312,12 +316,12 @@ pub fn candidates() -> list < Cand > {
 }
 
 pub fn stage(c: Cand) -> nil {
-    let you = get_entity("you")
+    let you = require_entity("you")
     if c.kind == "move" {
         update(you, Pos) { x = c.tx, y = c.ty }
     }
     if c.kind == "attack" {
-        let m = get_entity(c.target)
+        let m = require_entity(c.target)
         let v = get(m, Vital) |> unwrap
         let mut hp = v.hp - PLAYER_ATK
         if hp < 0 { hp = 0 }
@@ -328,7 +332,7 @@ pub fn stage(c: Cand) -> nil {
 // Returns a list of (Cand, deaths-out-of-SAMPLES, hp-sum-across-futures).
 pub fn deathsight() -> list {
     let checkpoint = fork()
-    let you = get_entity("you")
+    let you = require_entity("you")
     let cands = candidates()
     let mut report = []
     let mut explored = 0
@@ -366,7 +370,7 @@ pub fn deathsight() -> list {
 
 pub fn eff_dist(c: Cand) -> int {
     if c.kind == "move" { return EXIT_FIELD[c.ty * W + c.tx] }
-    let p = get(get_entity("you"), Pos) |> unwrap
+    let p = get(require_entity("you"), Pos) |> unwrap
     return EXIT_FIELD[p.y * W + p.x]
 }
 
@@ -403,12 +407,12 @@ pub fn choose_oracle(report: list) -> Cand {
 }
 
 pub fn apply_live(c: Cand) -> nil {
-    let you = get_entity("you")
+    let you = require_entity("you")
     if c.kind == "move" {
         update(you, Pos) { x = c.tx, y = c.ty }
     }
     if c.kind == "attack" {
-        emit Smote { target: get_entity(c.target), dmg: PLAYER_ATK }
+        emit Smote { target: require_entity(c.target), dmg: PLAYER_ATK }
         flush_events()
     }
 }
@@ -422,6 +426,7 @@ pub fn spawn_dungeon() -> nil {
     let mut g = 0
     let mut h = 0
     let mut s = 0
+    let mut roster = []
     for y in range(0, H) {
         let row = chars(MAP[y])
         for x in range(0, W) {
@@ -433,23 +438,27 @@ pub fn spawn_dungeon() -> nil {
                 g = g + 1
                 let _m = spawn(f"ghoul-{g}", Pos { x: x, y: y }, Vital { hp: 6, max_hp: 6 },
                     Monster { kind: "ghoul", atk: 3, rng: 1, mov: 1 }, Intent {})
+                roster << _m
             }
             if ch == "h" {
                 h = h + 1
                 let _m = spawn(f"hound-{h}", Pos { x: x, y: y }, Vital { hp: 4, max_hp: 4 },
                     Monster { kind: "hound", atk: 2, rng: 1, mov: 2 }, Intent {})
+                roster << _m
             }
             if ch == "s" {
                 s = s + 1
                 let _m = spawn(f"spitter-{s}", Pos { x: x, y: y }, Vital { hp: 4, max_hp: 4 },
                     Monster { kind: "spitter", atk: 2, rng: 4, mov: 1 }, Intent {})
+                roster << _m
             }
         }
     }
+    set_resource(MonsterRoster, MonsterRoster { ids: roster })
 }
 
 pub fn dump_units() -> str {
-    let you = get_entity("you")
+    let you = require_entity("you")
     let yp = get(you, Pos) |> unwrap
     let yv = get(you, Vital) |> unwrap
     let mut parts = [f"you you {yp.x} {yp.y} {yv.hp} {yv.max_hp}"]
@@ -470,7 +479,7 @@ pub fn dump_units() -> str {
 // ---------------------------------------------------------------------------
 
 pub fn ghost_loop(start_turn: int, forced_first: str) -> (str, list) {
-    let you = get_entity("you")
+    let you = require_entity("you")
     let mut steps = []
     let mut t = start_turn
     let mut outcome = "timeout"

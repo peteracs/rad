@@ -167,6 +167,27 @@ The `--check` flag is useful in CI pipelines:
 
 The formatter is built natively in Rust and uses the compiler's lexer to safely format code without mangling comments or strings.
 
+## Authority Graph
+
+The checker builds one fine-grained effect graph for functions, systems,
+handlers, closures, callbacks, and imported helpers. Query it directly:
+
+```bash
+rad effects RemoveEntity --json --file app.rad
+rad writers LiveMembership --file app.rad
+rad readers WireIdentity --file app.rad
+rad path mission_frame "->" full_scan --file app.rad
+```
+
+Inside a project with `rad.toml`, `--file` is optional and the configured entry
+file is used. `effects` prints direct, synchronous, and complete transitive
+effects; `writers` and `readers` use cached reverse indexes; `path` returns the
+shortest callable chain or reports that none exists. All commands reject
+ambiguous short names and accept `--json` for machine-readable output.
+
+The compiler uses this exact graph both to enforce system authority and to
+build parallel conflict batches; lint does not maintain a separate model.
+
 ## Lint Presets
 
 `rad lint` combines custom source-level rules with the Rust VM's type checker. Three presets target different project stages:
@@ -182,7 +203,7 @@ rad lint --preset enterprise
 - Requires type annotations on all bindings, parameters, and return types (`--strict-types`, though `pub` exports are always strictly typed and checked for private type leaks)
 - Treats all warnings as errors (`--deny-warnings`)
 - Enforces PascalCase for type, component, resource, state, and event names
-- Flags system bodies that directly access component/resource types missing from their signature (`RAD-L015`/`RAD-L016`)
+- Includes compile-time transitive system-authority enforcement
 - Limits functions to 50 lines
 - Limits files to 500 lines
 
@@ -196,7 +217,7 @@ rad lint --preset strict
 
 - Requires type annotations (`--strict-types`, though `pub` exports are always strictly typed and checked for private type leaks)
 - Treats warnings as errors (`--deny-warnings`) and enables compatibility warnings (`--warn-compat`; use `--no-warn-compat` to silence)
-- Flags system bodies that directly access component/resource types missing from their signature (`RAD-L015`/`RAD-L016`)
+- Includes compile-time transitive system-authority enforcement
 - Limits functions to 80 lines
 - Limits files to 1000 lines
 
@@ -227,12 +248,10 @@ rad lint --preset teaching
 | `RAD-L007` | Trailing whitespace |
 | `RAD-L008` | Entity declarations found without any systems (enterprise/strict) |
 | `RAD-L009` | Systems are declared but never run (enterprise/strict) |
-| `RAD-L015` | System body writes a component/resource that is not in its signature (enterprise/strict) |
-| `RAD-L016` | System body reads a component/resource that is not in its signature (enterprise/strict) |
-
-`RAD-L015`/`RAD-L016` exist because the scheduler's parallel conflict analysis only sees the signature: `mut` parameters count as writes, other parameters as reads. A body that touches other types through the general ECS API is invisible to that analysis, so writes are flagged as scheduling hazards and reads as potential read-write conflicts. The check covers **direct accesses only**: ECS builtin calls (`get`, `set`, `has`, `remove`, `require`, `require_all`, `lookup`, `lookup_all`, `entities`, `query_where`, `query_map`, `query_count`, `with_field`, `spawn`), the resource builtins (`get_resource`, `res`, `set_resource`), the `update` sugar, component literals, `entity { }` literals, and `query { }` expressions. It does not follow calls into helper functions (no transitive analysis), it ignores `peek`/`peek_resource` (they read a fork, not the live world), and event handlers are not systems, so they are never flagged.
-
-In addition to the custom rules above, `rad lint` passes the preset's VM flags to `rad`, so you also get all type checker errors and warnings.
+System authority is not a preset-specific lint rule. Every checker invocation
+enforces it through ordinary/imported calls, closures, callbacks, resources,
+transitions, and synchronous handler chains. `rad lint` runs that checker in
+addition to the custom rules above, so all presets report authority errors.
 
 ## Snapshot Testing
 

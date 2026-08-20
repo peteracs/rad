@@ -1,15 +1,15 @@
-# The Three Laws of Great Software Architecture
-## Why We Built a Language Around Them
+# Core Model
+## Declared state, value-oriented transforms, and causal events
 
-Large codebases that stay workable — games, distributed systems, data pipelines — tend to converge on the same three patterns, and they converge from very different starting points. Separate data from logic. Move data through pipelines. Let components talk via events.
+Large stateful codebases that stay workable—games, distributed systems, and data pipelines—make ownership visible. They separate shared data from the logic that changes it, favor value-oriented transforms, and give cross-system communication an inspectable path.
 
-In most languages these stay conventions: you can follow them, but the compiler has no idea whether you did. So we asked the obvious question. What if they weren't patterns you _apply_ to a language, but properties the language could actually check?
+In most languages these stay conventions: you can follow them, but the compiler has no idea whether you did. Rad puts the relevant boundaries in the language so the compiler and runtime can enforce and inspect them.
 
-That's Rad. The three laws below describe the design goal; each section ends with a precise account of how much of it the compiler really enforces, because the gap between the two is the part worth being honest about.
+This chapter explains that core model and states precisely what is enforced. The distinction between a design preference and a compile-time guarantee remains explicit throughout.
 
 ---
 
-## Law 1: Separate Data from Logic
+## Declared World State
 
 **The Problem:** Object-Oriented Programming bundles data and behavior together. A `Player` class has `hp`, `position`, `inventory`, AND the methods to modify all of them. Change the combat system and you break the inventory. Change the movement code and you break the rendering. Everything touches everything.
 
@@ -25,9 +25,9 @@ system Physics(pos: mut Position, vel: Velocity) {
 }
 ```
 
-The signature is the contract. `Physics` declares that it reads `Velocity` and writes `Position`, so the blast radius of a change to it is written at the top of the block instead of discovered by grepping. That declaration is load-bearing: the scheduler reads it to order systems and to run non-conflicting ones in parallel, treating `mut` parameters as writes and everything else as reads (see [System scheduling](../reference/spec.md#72-system-scheduling)).
+The signature is the contract. `Physics` declares that it reads `Velocity` and writes `Position`, so the blast radius of a change to it is written at the top of the block instead of discovered by grepping. That declaration is load-bearing: the compiler enforces it transitively, and the scheduler uses the same inferred access set to run non-conflicting systems in parallel (see [System scheduling](../reference/spec.md#72-system-scheduling)).
 
-Be precise about what the signature is, though. It is a **declared query**, not a sandbox. It selects the entities the system iterates and the components written back when it returns — but the body can still call `get`/`set` on any component type through the general ECS API. Compilation still rejects none of that; what exists today is an opt-in lint: `rad lint --preset=strict` (or `enterprise`) warns when a system body directly reads (`RAD-L016`) or writes (`RAD-L015`) a component or resource type that is not in its signature. "Directly" is a real limitation — it catches the ECS builtins, `update` sugar, component literals, and `query { }` expressions written in the body itself, but it does not follow calls into helper functions, so an access buried in a `fn` the system calls still gets through. A system that reaches outside its signature is also stepping outside what the scheduler's conflict analysis knows about, which is the practical reason to keep systems honest.
+A named parameter has two jobs: it contributes to the entity query or resource injection, and it grants authority. When authority must not affect iteration, add `reads Type` or `writes Type` without a binding. The checker follows ordinary/imported helpers, closures, callbacks, transitions, resources, and synchronous handler chains; an undeclared access or unbounded function value is a compile error with the exact authority path. Queued event handlers are separate authority boundaries, while an explicit `flush_events()` brings their effects into the caller's synchronous bound. Use `rad effects`, `rad writers`, `rad readers`, and `rad path` to inspect the complete graph.
 
 **In Rad:** ECS isn't a library, it's part of the language. There is no `class` keyword, and you genuinely cannot bundle data with behavior — `component` and `struct` fields are restricted to plain data, and the checker rejects any field whose type is a function or closure.
 
@@ -35,7 +35,7 @@ What Rad does *not* claim is that ECS is the only way to write anything. You als
 
 ---
 
-## Law 2: Move Data Through Pipelines
+## Value-Oriented Transforms
 
 **The Problem:** Shared mutable state is hard to reason about. When data changes in place and several references point at the same object, no single piece of code owns the current value, and answering "who set this, and when?" means reconstructing an aliasing graph at runtime.
 
@@ -55,13 +55,13 @@ Every intermediate value is a new list. The original `scores` is never modified.
 - **Immutable by default.** A `let` binding cannot be reassigned; you must write `let mut` to opt in. Writing into an element of an immutable container is a compile error too.
 - **Value semantics.** Every assignment, argument pass, and return produces an independent copy, so two variables never alias the same mutable state and no function can modify a value you hand it.
 
-**One honest caveat.** Rad is immutable *by default*; it is not a language where nothing is mutated. Law 1's `Physics` system assigns to `pos.x` directly, and that write is real — a system parameter marked `mut` is written back to the component when the system returns. Mutation is a supported tool here.
+**One honest caveat.** Rad is immutable *by default*; it is not a language where nothing is mutated. The earlier `Physics` system assigns to `pos.x` directly, and that write is real—a system parameter marked `mut` is written back to the component when the system returns. Mutation is a supported tool here.
 
 The property worth defending is narrower and more useful than "nothing changes": **every mutation is declared at the point that permits it.** You write `mut` on the binding, or `mut` on the system parameter, and nowhere else can the value change. Combined with value semantics, that means you find every writer by reading declarations rather than by chasing references at runtime — which is the actual debugging cost the pattern is meant to remove.
 
 ---
 
-## Law 3: Components Talk Via Events
+## Causal Event Flow
 
 **The Problem:** Direct function calls create coupling. If module A calls module B, A depends on B's interface. Change B and A breaks. Now multiply this by every module calling every other module. The dependency graph becomes a hairball.
 
@@ -96,7 +96,7 @@ Rad only bounds this where it has a budget to enforce: guest code running in the
 
 ---
 
-## Bonus Law: Make Illegal States Unrepresentable
+## Finite State Machines
 
 Finite State Machines are the oldest and most reliable pattern for managing control flow. A door is Locked, Closed, or Open. A connection is Connecting, Connected, or Disconnected. There is no fourth state. The machine enforces this.
 
@@ -140,7 +140,7 @@ Rad puts the patterns in the grammar so the compiler can check them. That is a r
 What changes is the cost curve, and what moves from "style opinion" to "compile error." Every item below is rejected by the type checker before the program runs — these are the diagnostics you actually get:
 
 - Reassigning an immutable binding, or writing into an immutable container — *"Cannot assign to immutable variable 'x'"*
-- Bundling behavior into data, via a function- or closure-typed `component` or `struct` field — *"Component field 'Handler.cb' cannot have a function type. Components must be plain data (Law 1: Separate Data from Logic)"*
+- Bundling behavior into data, via a function- or closure-typed `component` or `struct` field — *"Component field 'Handler.cb' cannot have a function type. Components must contain data, not executable behavior"*
 - A side-effecting builtin or `emit` in a pipeline stage — *"Cannot call impure builtin 'set' inside a pipeline"*
 - A non-exhaustive `match` on a state machine or sum type — *"Non-exhaustive match: state 'Open' of machine 'DoorState' is not covered"*
 - Aliasing a `let unique` binding — *"Cannot alias unique binding 'xs' into 'ys'"*

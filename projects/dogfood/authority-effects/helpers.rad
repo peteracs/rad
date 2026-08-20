@@ -1,0 +1,9 @@
+use "schema.rad"
+
+pub fn rewrite_wire(target: entity) -> nil {
+    set(target, WireIdentity { serial: 1 })
+}
+
+on EntityRetired(retired) {
+    set(retired.target, GraveyardMembership { retired: true })
+}

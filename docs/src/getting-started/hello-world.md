@@ -62,4 +62,4 @@ HP remaining: 70
 4. **`emit`** fired the event, which was then processed by **`flush_events()`**, triggering the handler
 5. **`?`** took the `Health` value out of the `Option` returned by `get`, or would have exited `main` early if the component were missing
 
-These are Rad's three laws in action: data separated from logic (ECS), data flowing through pipelines, and communication via events. Each one is covered in depth in the [Language Guide](../guide/three-laws.md).
+This example uses Rad's core state model: ECS data, value-oriented transforms, and inspectable event flow. Each part is covered in the [Core Model](../guide/core-model.md).

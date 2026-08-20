@@ -55,7 +55,7 @@ pure fn dist(a: (float, float), b: (float, float)) -> float {
 }
 
 // the 1 s beat: all signed arithmetic, west-positive
-system evaluate(pt: mut Point) {
+system evaluate(pt: mut Point, reads Champ) {
     let west = champs_on(pt.at, WEST)
     let east = champs_on(pt.at, EAST)
 
@@ -91,7 +91,7 @@ system evaluate(pt: mut Point) {
 }
 
 // the score beat: holding more points drains the enemy nexus faster
-system score(Score) {
+system score(Score, reads Point, writes Score) {
     let held_w = query { Point } |> filter(fn(e) { return require(e, Point).owner == WEST }) |> len
     let held_e = query { Point } |> filter(fn(e) { return require(e, Point).owner == EAST }) |> len
     update(Score) {

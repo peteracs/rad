@@ -398,6 +398,8 @@ mod tests {
                     is_mut: true,
                     is_resource: false,
                 }],
+                authority_reads: vec![],
+                authority_writes: vec![],
                 simulation_breach: None,
                 simulation_breach_par: None,
             },

@@ -19,7 +19,7 @@ These examples demonstrate Rad's first-class world forking feature — fork the 
 
 | Example | What it demonstrates |
 |---|---|
-| `demo.rad` | Complete showcase of all three laws |
+| `demo.rad` | Complete showcase of ECS state, value-oriented pipelines, events, and state machines |
 | `pipeline.rad` | Deep dive into map/filter/reduce |
 | `traffic_light.rad` | Pure state machine controller |
 | `sum_types.rad` | Algebraic data types with match |
@@ -69,6 +69,12 @@ These examples demonstrate Rad's first-class world forking feature — fork the 
 |---|---|
 | [`frankl-search`](./frankl-search.md) | Native exact Boolean-quotient kernels, forked `simulate_many()` search, Causal Laws/constraints/`why()`/replay, an all-width theorem for at most seven join-generators, exact eight-generator graph/projected-CNF exclusions, and independently verified certificates |
 | [`collatz-lab`](./collatz-lab.md) | Pruned affine residue trees, bounded-binary-support and natural-tail certificates, counterexample-guided exact-state frontier portfolios, irrational-slope ballot paths, exact odd-cycle equations, COW universes, Causal Laws/constraints/`why()`/replay, and VM-independent verifiers that isolate the forms of a possible Collatz counterexample |
+
+## Language-authority dogfood
+
+| Project | What it demonstrates |
+|---|---|
+| `projects/dogfood/authority-effects/` | Compiler-enforced transitive system authority across imported helpers and flushed event handlers, plus the `effects`, `writers`, `readers`, and `path` graph queries |
 
 ## "Cursed" examples (pushing the language to its limits)
 

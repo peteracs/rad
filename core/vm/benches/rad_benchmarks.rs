@@ -20,6 +20,7 @@ use rad_vm::settlement_reference::{
     settle_reference, ReferenceProposal, ReferenceResolver, ReferenceValue, ReferenceWorld,
     ReferenceWrite,
 };
+use rad_vm::types::{AuthorityCallableKind, AuthorityEffects, AuthorityReport, CallableAuthority};
 use rad_vm::vm::VM;
 use rad_vm::world::World;
 
@@ -511,6 +512,83 @@ fn bench_indexed_derivation(c: &mut Criterion) {
     group.finish();
 }
 
+fn authority_query_fixture(width: usize) -> AuthorityReport {
+    let mut callables = BTreeMap::new();
+    let mut indexed = Vec::new();
+    for index in 0..width {
+        let name = format!("callable_{index:05}");
+        let writes = if index % 997 == 0 {
+            indexed.push(name.clone());
+            vec!["HotAuthority".to_string()]
+        } else {
+            Vec::new()
+        };
+        callables.insert(
+            name.clone(),
+            CallableAuthority {
+                name: name.clone(),
+                display_name: name,
+                kind: AuthorityCallableKind::Function,
+                direct: AuthorityEffects {
+                    writes: writes.clone(),
+                    ..AuthorityEffects::default()
+                },
+                synchronous: AuthorityEffects {
+                    writes: writes.clone(),
+                    ..AuthorityEffects::default()
+                },
+                transitive: AuthorityEffects {
+                    writes,
+                    ..AuthorityEffects::default()
+                },
+                calls: Vec::new(),
+                deferred_calls: Vec::new(),
+                line: 1,
+                col: 1,
+            },
+        );
+    }
+    AuthorityReport {
+        callables,
+        writers: BTreeMap::from([("HotAuthority".to_string(), indexed)]),
+        ..AuthorityReport::default()
+    }
+}
+
+fn scan_writers(report: &AuthorityReport, authority: &str) -> Vec<String> {
+    report
+        .callables
+        .values()
+        .filter(|callable| {
+            callable
+                .transitive
+                .writes
+                .iter()
+                .any(|name| name == authority || name == "*")
+        })
+        .map(|callable| callable.display_name.clone())
+        .collect()
+}
+
+fn bench_authority_reverse_index(c: &mut Criterion) {
+    let width = 50_000usize;
+    let report = authority_query_fixture(width);
+    assert_eq!(
+        report.writers_of("HotAuthority"),
+        scan_writers(&report, "HotAuthority")
+    );
+    let mut group = c.benchmark_group("authority/writers_50k");
+    group.sample_size(20);
+    group.throughput(Throughput::Elements(width as u64));
+    group.bench_function("full_scan", |b| {
+        b.iter(|| scan_writers(black_box(&report), black_box("HotAuthority")))
+    });
+    group.bench_function("reverse_index", |b| {
+        b.iter(|| black_box(&report).writers_of(black_box("HotAuthority")))
+    });
+    group.finish();
+}
+
 fn bench_causal_phase_baselines(c: &mut Criterion) {
     {
         let mut group = c.benchmark_group("causal/phase/proposal_creation");
@@ -609,5 +687,6 @@ criterion_group!(
     bench_causal_phase_baselines,
     bench_candidate_constraints,
     bench_indexed_derivation,
+    bench_authority_reverse_index,
 );
 criterion_main!(benches);

@@ -1,6 +1,6 @@
 [book]
-title = "Rad — The Three-Law Language"
-description = "Beautiful, simple, elegant docs for the Rad language."
+title = "Rad Language Documentation"
+description = "Guide, reference, and implementation notes for the Rad language."
 authors = ["peteracs"]
 language = "en"
 src = "src"
@@ -9,6 +9,7 @@ src = "src"
 build-dir = "book"
 
 [output.html]
+site-url = "/rad/docs/"
 default-theme = "rust"
 preferred-dark-theme = "rust"
 git-repository-url = "https://github.com/peteracs/rad"

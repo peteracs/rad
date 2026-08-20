@@ -126,7 +126,7 @@ pub system TargetNearest(i: mut Intent, p: Pos, s: Stats, t: Team) {
     } else {
         // step toward the target (sim ignores collision: it's a forecast);
         // jittered axis preference = sampled opponent pathing
-        let op = get(get_entity(best), Pos) |> unwrap
+        let op = get(require_entity(best), Pos) |> unwrap
         let mut nx = p.x
         let mut ny = p.y
         if rand_int(0, 1) == 0 {
@@ -144,13 +144,13 @@ pub system TargetNearest(i: mut Intent, p: Pos, s: Stats, t: Team) {
     }
 }
 
-pub system SimResolve(i: mut Intent, p: mut Pos, s: Stats, _t: Team) after TargetNearest {
+pub system SimResolve(i: mut Intent, p: mut Pos, s: mut Stats, _t: Team) after TargetNearest {
     if s.hp <= 0 { return }
     if i.kind == "move" {
         p = Pos { x: i.tx, y: i.ty }
     }
     if i.kind == "attack" {
-        let foe = get_entity(i.target)
+        let foe = require_entity(i.target)
         let fs = get(foe, Stats) |> unwrap
         if fs.hp > 0 {
             let fp = get(foe, Pos) |> unwrap
@@ -162,7 +162,7 @@ pub system SimResolve(i: mut Intent, p: mut Pos, s: Stats, _t: Team) after Targe
         }
     }
     if i.kind == "heal" {
-        let ally = get_entity(i.target)
+        let ally = require_entity(i.target)
         let als = get(ally, Stats) |> unwrap
         if als.hp > 0 {
             let mut hp = als.hp + s.atk
@@ -375,7 +375,7 @@ pub fn act_live(me: entity, a: Act) -> nil {
         update(me, Pos) { x = a.tx, y = a.ty }
     }
     if a.kind == "attack" {
-        let foe = get_entity(a.target)
+        let foe = require_entity(a.target)
         let fp = get(foe, Pos) |> unwrap
         let s = get(me, Stats) |> unwrap
         let d = dist(a.tx, a.ty, fp.x, fp.y)
@@ -383,7 +383,7 @@ pub fn act_live(me: entity, a: Act) -> nil {
         flush_events()
     }
     if a.kind == "heal" {
-        let ally = get_entity(a.target)
+        let ally = require_entity(a.target)
         let s = get(me, Stats) |> unwrap
         emit Healed { healer: me, ally: ally, amount: s.atk }
         flush_events()
@@ -408,7 +408,7 @@ component Intent { kind: "wait", tx: 0, ty: 0, target: "" }
 pure fn dist(ax: int, ay: int, bx: int, by: int) -> int {
     return abs(ax - bx) + abs(ay - by)
 }
-let me = get_entity(sandbox_input()["unit"])
+let me = require_entity(sandbox_input()["unit"])
 """
 
 // Returns (Act, status): status is "ok", or a reason the unit hesitates.

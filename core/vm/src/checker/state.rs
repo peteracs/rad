@@ -256,6 +256,7 @@ pub struct Checker {
     pub(crate) sum_types: HashMap<String, SumTypeDef>,
     pub(crate) type_aliases: HashMap<String, TypeScheme>,
     pub(crate) errors: Vec<TypeError>,
+    pub(crate) authority_errors: Vec<TypeError>,
     pub(crate) warnings: Vec<TypeWarning>,
     pub(crate) system_params: HashMap<String, (String, bool)>,
     pub(crate) current_fn_name: Option<String>,
@@ -301,6 +302,9 @@ pub struct Checker {
     /// seq 22). Only immutable, top-level, all-`system::…`-literal lists
     /// qualify — no dataflow analysis.
     pub(crate) system_list_consts: std::collections::HashMap<String, Vec<crate::ast::Expr>>,
+    /// Built once per checked program. All authority commands and system
+    /// sandbox diagnostics consume this graph instead of rescanning bodies.
+    pub(crate) authority: crate::types::AuthorityReport,
 }
 
 #[derive(Debug, Clone)]

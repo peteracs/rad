@@ -209,7 +209,13 @@ on DamageRequest(e) {
     log(f"{e.tag}: {e.target_id} takes {e.amount}")
 }
 
-system MoveUnits(u: Unit, pos: mut Position, mt: mut MoveTarget, stats: Stats) {
+system MoveUnits(
+    u: Unit,
+    pos: mut Position,
+    mt: mut MoveTarget,
+    stats: Stats,
+    reads MatchClock,
+) {
     if not u.alive { return }
     let here = Position { x: pos.x, y: pos.y }
     let target = Position { x: mt.x, y: mt.y }
@@ -232,7 +238,7 @@ system CooldownTick(cd: mut Cooldowns) {
     cd.r = next.r
 }
 
-system BallAttachSync(ball: Ball, pos: mut Position) {
+system BallAttachSync(ball: Ball, pos: mut Position, reads OriannaState) {
     let caster = ent(ball.owner_id)
     let state = require(caster, OriannaState)
     if state.ball_attached {
@@ -243,7 +249,25 @@ system BallAttachSync(ball: Ball, pos: mut Position) {
     }
 }
 
-system BallTravelMove(bt: BallTravel, pos: mut Position) {
+system BallTravelMove(
+    bt: BallTravel,
+    pos: mut Position,
+    reads BallHitMarker,
+    reads Buff,
+    reads Health,
+    reads MatchClock,
+    reads OriannaState,
+    reads SpellBook,
+    reads Unit,
+    writes BallHitMarker,
+    writes BallTravel,
+    writes Buff,
+    writes Health,
+    writes Lifetime,
+    writes OriannaState,
+    writes SpellBook,
+    writes Unit,
+) {
     let caster = ent(bt.caster_id)
     let mut tx = bt.target_x
     let mut ty = bt.target_y
@@ -307,7 +331,17 @@ system BallTravelMove(bt: BallTravel, pos: mut Position) {
     }
 }
 
-system OriannaBallLeash(ball: Ball, pos: mut Position) {
+system OriannaBallLeash(
+    ball: Ball,
+    pos: mut Position,
+    reads BallTravel,
+    reads Buff,
+    reads OriannaState,
+    reads SpellBook,
+    writes Buff,
+    writes OriannaState,
+    writes SpellBook,
+) {
     if has(self, BallTravel) { return }
     let caster = ent(ball.owner_id)
     let state = require(caster, OriannaState)
@@ -333,7 +367,14 @@ system OriannaBallLeash(ball: Ball, pos: mut Position) {
     }
 }
 
-system ZoneTick(z: mut Zone) {
+system ZoneTick(
+    z: mut Zone,
+    reads Buff,
+    reads Health,
+    reads Position,
+    reads Unit,
+    writes *,
+) {
     z.ticks_left = z.ticks_left - 1
     z.tick_counter = z.tick_counter + 1
     if z.tick_counter >= z.tick_every {
@@ -362,7 +403,7 @@ system ForcedMoveTick(f: mut ForcedMove, pos: mut Position) {
     if f.ticks_left <= 0 { remove(self, ForcedMove) }
 }
 
-system BuffTick(b: mut Buff) {
+system BuffTick(b: mut Buff, reads Health, reads Unit, writes *) {
     b.ticks_left = b.ticks_left - 1
     if b.ticks_left <= 0 {
         if b.kind == "shield" {
@@ -378,7 +419,7 @@ system BuffTick(b: mut Buff) {
     }
 }
 
-system LifetimeTick(l: mut Lifetime) {
+system LifetimeTick(l: mut Lifetime, writes *) {
     l.ticks_left = l.ticks_left - 1
     if l.ticks_left <= 0 { despawn(self) }
 }

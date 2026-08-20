@@ -905,7 +905,12 @@ system CooldownTick(cd: mut Cooldowns) {
     cd.ret = max(0, cd.ret - 1)
 }
 
-system BallAttachSync(ball: Ball, pos: mut Position) {
+system BallAttachSync(
+    ball: Ball,
+    pos: mut Position,
+    reads OriannaState,
+    reads Unit,
+) {
     let caster = lookup(Unit, "id", ball.owner_id) |> unwrap
     let state = require(caster, OriannaState)
     if state.ball_attached {
@@ -916,7 +921,19 @@ system BallAttachSync(ball: Ball, pos: mut Position) {
     }
 }
 
-system BallTravelMove(bt: mut BallTravel, pos: mut Position) {
+system BallTravelMove(
+    bt: mut BallTravel,
+    pos: mut Position,
+    reads BallHitMarker,
+    reads Buff,
+    reads Health,
+    reads MatchClock,
+    reads OriannaState,
+    reads SpellBook,
+    reads SpellDef,
+    reads Unit,
+    writes *,
+) {
     let caster = lookup(Unit, "id", bt.caster_id) |> unwrap
     let caster_unit = require(caster, Unit)
 
@@ -980,7 +997,7 @@ system BallTravelMove(bt: mut BallTravel, pos: mut Position) {
     }
 }
 
-system ZoneTick(z: mut Zone) {
+system ZoneTick(z: mut Zone, reads Buff, reads Position, reads Unit, writes *) {
     z.ticks_left = z.ticks_left - 1
     z.tick_counter = z.tick_counter + 1
     if z.tick_counter >= z.tick_every {
@@ -1016,7 +1033,7 @@ system ForcedMoveTick(f: mut ForcedMove, pos: mut Position) {
     }
 }
 
-system BuffTick(b: mut Buff) {
+system BuffTick(b: mut Buff, reads Health, reads Unit, writes *) {
     b.ticks_left = b.ticks_left - 1
     if b.ticks_left <= 0 {
         if b.name == "OrianaRedactShield" {
@@ -1031,7 +1048,7 @@ system BuffTick(b: mut Buff) {
     }
 }
 
-system LifetimeTick(l: mut Lifetime) {
+system LifetimeTick(l: mut Lifetime, writes *) {
     l.ticks_left = l.ticks_left - 1
     if l.ticks_left <= 0 {
         despawn(self)

@@ -385,7 +385,13 @@ system CooldownTick(cd: mut Cooldowns) {
     cd.r = max(0, cd.r - 1)
 }
 
-system MissileMove(m: Missile, pos: mut Position) {
+system MissileMove(
+    m: Missile,
+    pos: mut Position,
+    reads MatchClock,
+    reads Unit,
+    writes *,
+) {
     let target = lookup(Unit, "id", m.target_id)?
     let tp = require(target, Position)
     let dx = tp.x - pos.x
@@ -404,7 +410,7 @@ system MissileMove(m: Missile, pos: mut Position) {
     pos.y = pos.y + (dy / d) * step
 }
 
-system BuffTick(b: mut Buff) {
+system BuffTick(b: mut Buff, writes *) {
     b.ticks_left = b.ticks_left - 1
     if b.ticks_left <= 0 {
         print(f"buff expired {b.name} on {b.owner_id}")
@@ -412,7 +418,7 @@ system BuffTick(b: mut Buff) {
     }
 }
 
-system LifetimeTick(l: mut Lifetime) {
+system LifetimeTick(l: mut Lifetime, writes *) {
     l.ticks_left = l.ticks_left - 1
     if l.ticks_left <= 0 {
         despawn(self)

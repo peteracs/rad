@@ -912,7 +912,7 @@ impl LanguageServer for LspBackend {
 }
 
 fn format_system_hover_markdown(display_name: &str, sys: &SystemType) -> String {
-    let ps: Vec<String> = sys
+    let mut ps: Vec<String> = sys
         .params
         .iter()
         .map(|p| {
@@ -924,11 +924,17 @@ fn format_system_hover_markdown(display_name: &str, sys: &SystemType) -> String 
             )
         })
         .collect();
+    ps.extend(sys.authority_reads.iter().map(|name| format!("reads {name}")));
+    ps.extend(
+        sys.authority_writes
+            .iter()
+            .map(|name| format!("writes {name}")),
+    );
     format!("```rad\nsystem {}({})\n```", display_name, ps.join(", "))
 }
 
 fn format_system_completion_detail(sys: &SystemType) -> String {
-    let ps: Vec<String> = sys
+    let mut ps: Vec<String> = sys
         .params
         .iter()
         .map(|p| {
@@ -940,6 +946,12 @@ fn format_system_completion_detail(sys: &SystemType) -> String {
             )
         })
         .collect();
+    ps.extend(sys.authority_reads.iter().map(|name| format!("reads {name}")));
+    ps.extend(
+        sys.authority_writes
+            .iter()
+            .map(|name| format!("writes {name}")),
+    );
     format!("system({})", ps.join(", "))
 }
 

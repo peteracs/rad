@@ -1,12 +1,13 @@
-// BUG 04 probe: does parallel conflict analysis see a resource write that is
-// performed with update() rather than through a `mut` parameter?
+// REGRESSION 04: parallel conflict analysis must see a resource write made
+// with update(), including one hidden behind an ordinary helper call.
 //
 // docs/src/guide/ecs.md:400 -- "Resources participate in parallel conflict
 // analysis: two systems that both hold a mutable reference to the same
 // resource are serialized."  Note the wording: "hold a mutable reference",
-// i.e. a `mut` PARAMETER. But update(R) inside a system body is also a write
-// to R. If the analyser only looks at parameter lists, two systems that write
-// the same resource by different means will be wrongly parallelised.
+// i.e. a `mut` PARAMETER. update(R) inside a system body is also a write to R.
+// Authority-only entries below make that permission explicit without changing
+// these resource-only systems' execution cardinality; transitive inference is
+// still responsible for proving the body and scheduler agree with it.
 //
 // Both systems here are RESOURCE-ONLY, which ecs.md:381 says "runs exactly
 // once per schedule invocation". That deliberately keeps BUG 03 (per-entity
@@ -40,15 +41,15 @@ resource D4 { x: 0 }
 system C1_MutParam(r: mut R1) {
     r.n = r.n + 100
 }
-system C1_Update(_d: mut D1) {
+system C1_Update(_d: mut D1, reads R1, writes R1) {
     update(R1) { n = res(R1).n + 1 }
 }
 
 // ---------------- case 2: update() vs update() ----------------
-system C2_UpdateA(_d: mut D2) {
+system C2_UpdateA(_d: mut D2, reads R2, writes R2) {
     update(R2) { n = res(R2).n + 100 }
 }
-system C2_UpdateB(_d: mut D3) {
+system C2_UpdateB(_d: mut D3, reads R2, writes R2) {
     update(R2) { n = res(R2).n + 1 }
 }
 
@@ -60,7 +61,7 @@ fn bump_r3() -> nil {
 system C3_MutParam(r: mut R3) {
     r.n = r.n + 100
 }
-system C3_IndirectUpdate(_d: mut D4) {
+system C3_IndirectUpdate(_d: mut D4, reads R3, writes R3) {
     bump_r3()
 }
 

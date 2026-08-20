@@ -1,4 +1,4 @@
-// Stage 1 — the model. A tiny shared task board, built on rad's three laws:
+// Stage 1 — the model. A tiny shared task board built on declared state:
 // components hold the data, events are the only writers, handlers are the
 // only logic that touches state.
 //

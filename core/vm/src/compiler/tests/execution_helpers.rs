@@ -37,6 +37,62 @@
     }
 
     #[test]
+    fn compiler_entrypoint_enforces_transitive_system_authority() {
+        let message = compile_err(
+            r#"
+            component Tick { n: 0 }
+            resource Audit { n: 0 }
+            fn hidden_write() { set_resource(Audit, Audit { n: 1 }) }
+            system Run(t: Tick) { hidden_write() }
+            "#,
+        );
+        assert!(
+            message.contains("System 'Run' exceeds its declared authority")
+                && message.contains("writes [Audit]")
+                && message.contains("Run -> hidden_write"),
+            "got: {message}"
+        );
+    }
+
+    #[test]
+    fn scheduler_metadata_uses_exact_synchronous_authority() {
+        let source = r#"
+            component Tick { n: 0 }
+            resource Audit { n: 0 }
+            event Deferred { n: int }
+
+            fn hidden_write() { set_resource(Audit, Audit { n: 1 }) }
+            on Deferred(e) { set_resource(Audit, Audit { n: e.n }) }
+
+            system WritesNow(t: Tick, writes Audit) { hidden_write() }
+            system EmitsLater(t: Tick) { emit Deferred { n: t.n } }
+        "#;
+        let mut lexer = Lexer::new(source);
+        let tokens = lexer.tokenize().0;
+        let program = Parser::new(tokens).parse();
+        let result = Compiler::new().compile(&program).expect("compile");
+        let writes_now = result
+            .systems
+            .iter()
+            .find(|system| system.name == "WritesNow")
+            .expect("WritesNow metadata");
+        assert!(writes_now.params.iter().any(|param| {
+            param.name == "__body_write" && param.comp_type == "Audit" && param.is_mut
+        }));
+        assert!(!writes_now.params.iter().any(|param| param.comp_type == "*"));
+
+        let emits_later = result
+            .systems
+            .iter()
+            .find(|system| system.name == "EmitsLater")
+            .expect("EmitsLater metadata");
+        assert!(!emits_later
+            .params
+            .iter()
+            .any(|param| param.comp_type == "Audit" || param.comp_type == "*"));
+    }
+
+    #[test]
     fn phase_declaration_accepts_bracket_and_brace_forms() {
         // spec §3.5.1 and the changelog spell phases with brackets
         // (`phase P [A, B]`, matching `schedule [...]`); the parser

@@ -396,6 +396,89 @@ mod tests {
         ]));
     }
 
+    #[test]
+    fn parse_cli_args_parses_authority_effects_with_json() {
+        let args = vec![
+            "rad".to_string(),
+            "effects".to_string(),
+            "RemoveEntity".to_string(),
+            "--json".to_string(),
+            "--file".to_string(),
+            "mission.rad".to_string(),
+        ];
+
+        match parse_cli_args(&args).unwrap() {
+            CliCommand::Authority {
+                query: AuthorityQuery::Effects { symbol },
+                filepath,
+                json,
+            } => {
+                assert_eq!(symbol, "RemoveEntity");
+                assert_eq!(filepath, "mission.rad");
+                assert!(json);
+            }
+            command => panic!("expected effects command, got {command:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_cli_args_parses_authority_indexes_and_path() {
+        let cases = [
+            ("writers", "LiveMembership"),
+            ("readers", "WireIdentity"),
+        ];
+        for (name, authority) in cases {
+            let args = vec![
+                "rad".to_string(),
+                name.to_string(),
+                authority.to_string(),
+                "--file=mission.rad".to_string(),
+            ];
+            match parse_cli_args(&args).unwrap() {
+                CliCommand::Authority {
+                    query: AuthorityQuery::Writers { authority: actual },
+                    filepath,
+                    json: false,
+                } if name == "writers" => {
+                    assert_eq!(actual, authority);
+                    assert_eq!(filepath, "mission.rad");
+                }
+                CliCommand::Authority {
+                    query: AuthorityQuery::Readers { authority: actual },
+                    filepath,
+                    json: false,
+                } if name == "readers" => {
+                    assert_eq!(actual, authority);
+                    assert_eq!(filepath, "mission.rad");
+                }
+                command => panic!("expected {name} command, got {command:?}"),
+            }
+        }
+
+        let args = vec![
+            "rad".to_string(),
+            "path".to_string(),
+            "mission_frame".to_string(),
+            "->".to_string(),
+            "full_scan".to_string(),
+            "--file".to_string(),
+            "mission.rad".to_string(),
+            "--json".to_string(),
+        ];
+        match parse_cli_args(&args).unwrap() {
+            CliCommand::Authority {
+                query: AuthorityQuery::Path { from, to },
+                filepath,
+                json: true,
+            } => {
+                assert_eq!(from, "mission_frame");
+                assert_eq!(to, "full_scan");
+                assert_eq!(filepath, "mission.rad");
+            }
+            command => panic!("expected path command, got {command:?}"),
+        }
+    }
+
     fn assert_parses_run_with_no_check(args: Vec<String>) {
         let parsed = parse_cli_args(&args).unwrap();
         match parsed {
@@ -407,7 +490,9 @@ mod tests {
                 assert_eq!(filepath, "script.rad");
                 assert!(skip_check);
             }
-            CliCommand::Version => panic!("expected run command"),
+            CliCommand::Version | CliCommand::Authority { .. } => {
+                panic!("expected run command")
+            }
             CliCommand::Fmt { .. } => panic!("expected run command"),
             CliCommand::Lint { .. } => panic!("expected run command"),
             CliCommand::Test { .. } => panic!("expected run command"),
@@ -521,7 +606,9 @@ mod tests {
                 assert!(!strict_types);
                 assert!(!write_lock);
             }
-            CliCommand::Version => panic!("expected run command"),
+            CliCommand::Version | CliCommand::Authority { .. } => {
+                panic!("expected run command")
+            }
             CliCommand::Fmt { .. } => panic!("expected run command"),
             CliCommand::Lint { .. } => panic!("expected run command"),
             CliCommand::Test { .. } => panic!("expected run command"),
@@ -549,7 +636,9 @@ mod tests {
             CliCommand::Run { compat_v0_5_dx, .. } => {
                 assert!(!compat_v0_5_dx);
             }
-            CliCommand::Version => panic!("expected run command"),
+            CliCommand::Version | CliCommand::Authority { .. } => {
+                panic!("expected run command")
+            }
             CliCommand::Fmt { .. } => panic!("expected run command"),
             CliCommand::Lint { .. } => panic!("expected run command"),
             CliCommand::Test { .. } => panic!("expected run command"),
@@ -578,7 +667,9 @@ mod tests {
             CliCommand::Run { compat_v0_5_dx, .. } => {
                 assert!(!compat_v0_5_dx);
             }
-            CliCommand::Version => panic!("expected run command"),
+            CliCommand::Version | CliCommand::Authority { .. } => {
+                panic!("expected run command")
+            }
             CliCommand::Fmt { .. } => panic!("expected run command"),
             CliCommand::Lint { .. } => panic!("expected run command"),
             CliCommand::Test { .. } => panic!("expected run command"),
@@ -622,7 +713,9 @@ mod tests {
                 assert!(!strict_types);
                 assert!(!write_lock);
             }
-            CliCommand::Version => panic!("expected run command"),
+            CliCommand::Version | CliCommand::Authority { .. } => {
+                panic!("expected run command")
+            }
             CliCommand::Fmt { .. } => panic!("expected run command"),
             CliCommand::Lint { .. } => panic!("expected run command"),
             CliCommand::Test { .. } => panic!("expected run command"),
@@ -656,7 +749,9 @@ mod tests {
                 assert!(strict_types);
                 assert!(write_lock);
             }
-            CliCommand::Version => panic!("expected run command"),
+            CliCommand::Version | CliCommand::Authority { .. } => {
+                panic!("expected run command")
+            }
             CliCommand::Fmt { .. } => panic!("expected run command"),
             CliCommand::Lint { .. } => panic!("expected run command"),
             CliCommand::Test { .. } => panic!("expected run command"),
@@ -684,7 +779,9 @@ mod tests {
             CliCommand::Run { profile_copies, .. } => {
                 assert!(profile_copies);
             }
-            CliCommand::Version => panic!("expected run command"),
+            CliCommand::Version | CliCommand::Authority { .. } => {
+                panic!("expected run command")
+            }
             CliCommand::Fmt { .. } => panic!("expected run command"),
             CliCommand::Lint { .. } => panic!("expected run command"),
             CliCommand::Test { .. } => panic!("expected run command"),

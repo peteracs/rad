@@ -22,6 +22,16 @@ fn main() {
         return;
     }
 
+    if let CliCommand::Authority {
+        query,
+        filepath,
+        json,
+    } = command
+    {
+        run_authority_command(query, filepath, json);
+        return;
+    }
+
     if let CliCommand::RelationsCheck {
         filepath,
         module_id,

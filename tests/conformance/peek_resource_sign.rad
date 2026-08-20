@@ -5,7 +5,7 @@ resource Tally { score: float = 100.0 }
 
 component Marker { v: int = 0 }
 
-system drain(Marker) {
+system drain(Marker, reads Tally, writes Tally) {
     update(Tally) { score = res(Tally).score - 2.5 }
 }
 

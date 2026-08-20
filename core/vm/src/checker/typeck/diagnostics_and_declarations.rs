@@ -353,7 +353,7 @@ impl Checker {
                     self.error(
                         &decl.span,
                         format!(
-                            "Component field '{}.{}' cannot have a function type. Components must be plain data (Law 1: Separate Data from Logic)",
+                            "Component field '{}.{}' cannot have a function type. Components must contain data, not executable behavior",
                             decl.name, fname
                         ),
                         Some("Store behavior in systems or event handlers, not in component fields".to_string()),
@@ -394,7 +394,7 @@ impl Checker {
                     self.error(
                         &decl.span,
                         format!(
-                            "Struct field '{}.{}' cannot have a function type. Structs must be plain data (Law 1: Separate Data from Logic)",
+                            "Struct field '{}.{}' cannot have a function type. Structs must contain data, not executable behavior",
                             decl.name, fname
                         ),
                         Some("Store behavior in systems or event handlers, not in struct fields".to_string()),
@@ -585,6 +585,44 @@ impl Checker {
     }
 
     fn check_system_decl(&mut self, decl: &SystemDecl) {
+        for (mode, authorities) in [
+            ("reads", &decl.authority_reads),
+            ("writes", &decl.authority_writes),
+        ] {
+            let mut seen = std::collections::HashSet::new();
+            for authority in authorities {
+                if !seen.insert(authority) {
+                    self.error(
+                        &decl.span,
+                        format!(
+                            "System '{}' declares '{} {}' more than once",
+                            decl.name, mode, authority
+                        ),
+                        Some("Remove the duplicate authority-only signature entry".to_string()),
+                    );
+                    continue;
+                }
+                if authority == "*" {
+                    continue;
+                }
+                let resolved = self.resolve_canonical_name(authority);
+                if !self.components.contains_key(&resolved)
+                    && !self.resources.contains_key(&resolved)
+                {
+                    self.error(
+                        &decl.span,
+                        format!(
+                            "System '{}' declares authority over unknown component/resource '{}'",
+                            decl.name, authority
+                        ),
+                        Some(format!(
+                            "Declare '{}', import it, or correct the authority-only signature entry",
+                            authority
+                        )),
+                    );
+                }
+            }
+        }
         for dep in &decl.after {
             let resolved_dep = self.resolve_canonical_name(dep);
             if !self.systems.contains_key(&resolved_dep) {

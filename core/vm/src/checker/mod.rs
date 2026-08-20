@@ -1,3 +1,4 @@
+mod authority;
 mod causal;
 mod declarations;
 mod diagnostics;

@@ -237,7 +237,12 @@ For fallible conversions without errors, use `try_int` / `try_float` which retur
 Systems and event handlers interact with the world exclusively through the ECS API (`get`, `set`, `spawn`, `despawn`, `has`, `remove`, `entities`, `get_resource`, `set_resource`).
 There is no mutable global variable or implicit shared state between systems. Global singletons are declared explicitly with the `resource` keyword and are tracked by the scheduler for conflict analysis.
 
-Two systems that don't share component or resource types cannot interfere with each other.
+Two systems whose inferred synchronous authority sets do not conflict can run in
+parallel. A system cannot hide authority in a helper: named parameters plus
+`reads`/`writes` entries are an enforced upper bound across ordinary/imported
+calls, closures, callbacks, transitions, resources, and explicit event flushes.
+Queued handlers are separate authority boundaries. Unbounded dynamic calls are
+rejected rather than assumed safe.
 
 ---
 
@@ -329,6 +334,7 @@ only (lossless); a `float -> int` write is lossy and surfaces as a real error.
 | Pipelines are pure/readonly | Side-effecting builtins rejected at compile time; `readonly` ECS reads allowed |
 | Errors are explicit | Runtime errors with descriptive messages; `try_*` for safe conversion |
 | No hidden state | ECS is the only channel for world mutation |
+| System authority is bounded | Transitive reads/writes must fit query parameters and explicit `reads`/`writes` entries; scheduler uses the same graph |
 | Simulations are isolated | IO, `commit()`, unsafe event-effect calls, and unsafe handler chains are statically forbidden inside `simulate()` |
 | Unique bindings are never aliased | `let unique` enforces single ownership at compile time; see §7 |
 | Ghost effects are optional | Observational intrinsics may be elided in release builds; see §8 |

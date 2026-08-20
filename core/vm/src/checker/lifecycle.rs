@@ -153,6 +153,7 @@ impl Checker {
             sum_types,
             type_aliases: HashMap::new(),
             errors: Vec::new(),
+            authority_errors: Vec::new(),
             warnings: Vec::new(),
             system_params: HashMap::new(),
             current_fn_name: None,
@@ -176,6 +177,7 @@ impl Checker {
             sim_breach_allow_rand: false,
             event_handler_blocks: std::collections::HashMap::new(),
             system_list_consts: std::collections::HashMap::new(),
+            authority: crate::types::AuthorityReport::default(),
         }
     }
 
@@ -302,6 +304,10 @@ impl Checker {
             }
         }
         self.register_alias_declarations();
+        // Build the fine-grained graph after aliases and type redirects are
+        // complete, but before body checking, so authority diagnostics are
+        // declaration-order independent just like coarse effect inference.
+        self.infer_and_enforce_authority(program);
         // forward references resolved: re-infer purity/effects with the
         // complete function table (declaration order must not matter)
         self.refine_fn_effects(program);
@@ -614,6 +620,8 @@ impl Checker {
             variant_shorthand: self.variant_shorthand.clone(),
             spread_lengths: self.spread_lengths.clone(),
             type_redirects: self.type_redirects.clone(),
+            authority: self.authority.clone(),
+            authority_errors: self.authority_errors.clone(),
         }
     }
     pub fn warnings(&self) -> Vec<TypeWarning> {

@@ -13,7 +13,7 @@
 
 # Language Guide
 
-- [The Three Laws](./guide/three-laws.md)
+- [Core Model](./guide/core-model.md)
 - [Components, Systems (ECS), & Resources](./guide/ecs.md)
 - [Pipelines](./guide/pipelines.md)
 - [Events](./guide/events.md)

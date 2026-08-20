@@ -56,6 +56,7 @@ source -> lexer -> parser -> AST -> checker -> compiler -> bytecode -> VM
 | `core/vm/src/lexer.rs`, `lexer/` | Tokenization, strings, and lexer-local tests. |
 | `core/vm/src/parser.rs`, `parser/` | Syntax and declaration/expression parsing. |
 | `core/vm/src/checker/` | Name/type/effect/lifecycle validation. |
+| `core/vm/src/checker/authority.rs`, `checker/authority/` | Canonical callable authority graph, transitive inference, reverse indexes, and system-bound enforcement. |
 | `core/vm/src/compiler/` | Checked AST to verified bytecode and runtime metadata. |
 | `core/vm/src/vm/` | Execution, settlement, builtins, replay cloning, and VM-owned runtime state. |
 | `core/vm/src/world.rs`, `world/` | ECS storage, allocator, operations, snapshots, and canonical encoding. |

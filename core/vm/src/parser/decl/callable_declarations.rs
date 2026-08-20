@@ -262,8 +262,35 @@ fn parse_pure_fn(&mut self) -> Result<FnDecl, ParseError> {
         self.expect(TokenType::LParen)?;
         let mut params = Vec::new();
         let mut accum_params: Vec<String> = Vec::new();
+        let mut authority_reads = Vec::new();
+        let mut authority_writes = Vec::new();
         while !self.check(TokenType::RParen) {
             let first = self.expect_ident_text()?;
+            if (first == "reads" || first == "writes")
+                && (self.check(TokenType::Ident) || self.check(TokenType::Star))
+            {
+                let authority = if self.check(TokenType::Star) {
+                    self.advance();
+                    "*".to_string()
+                } else {
+                    let mut name = self.expect_ident_text()?;
+                    if self.check(TokenType::Dot) {
+                        self.advance();
+                        name.push('.');
+                        name.push_str(&self.expect_ident_text()?);
+                    }
+                    name
+                };
+                if first == "reads" {
+                    authority_reads.push(authority);
+                } else {
+                    authority_writes.push(authority);
+                }
+                if self.check(TokenType::Comma) {
+                    self.advance();
+                }
+                continue;
+            }
             if !self.check(TokenType::Colon) {
                 // Bare component name: a type-only filter param. The system
                 // matches entities carrying it without binding the data —
@@ -367,6 +394,8 @@ fn parse_pure_fn(&mut self) -> Result<FnDecl, ParseError> {
             is_pub: false,
             params,
             accum_params,
+            authority_reads,
+            authority_writes,
             body,
             after,
             before,

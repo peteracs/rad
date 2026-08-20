@@ -8,4 +8,5 @@ mod tests {
     include!("closures_and_entrypoints.rs");
     include!("effects_and_mutability.rs");
     include!("readonly_and_recursive_bindings.rs");
+    include!("authority_effects.rs");
 }

@@ -107,6 +107,8 @@ impl Compiler {
             component_versions: HashMap::new(),
             declared_systems: std::collections::HashSet::new(),
             checker_output: None,
+            authority: None,
+            authority_errors: Vec::new(),
             allow_pipe_fusion: false,
             causal_lowering_depth: 0,
         }
@@ -270,6 +272,8 @@ impl Compiler {
     }
 
     pub fn with_checker_output(mut self, output: CheckerOutput) -> Self {
+        self.authority = Some(output.authority.clone());
+        self.authority_errors = output.authority_errors.clone();
         self.checker_output = Some(output.clone());
         self.for_iter_kinds = output.for_iter_kinds;
         self.checker_components = output.components;
@@ -408,6 +412,35 @@ impl Compiler {
     }
 
     pub fn compile(mut self, program: &Program) -> Result<CompileResult, CompileError> {
+        // Authority is mandatory even for direct compiler callers. Keep the
+        // inferred graph separate from the optional full checker product so
+        // authority enforcement does not silently enable unrelated typed
+        // lowering and persisted-world schema validation.
+        if self.authority.is_none() {
+            let mut checker = crate::checker::Checker::new_with_options(
+                crate::checker::CheckerOptions {
+                    features: self.features.clone(),
+                    warn_compat: false,
+                    ..crate::checker::CheckerOptions::default()
+                },
+            );
+            checker.set_aliases(self.alias_decls.clone());
+            let _ = checker.check(program);
+            let output = checker.output();
+            self.authority_errors = output.authority_errors;
+            self.authority = Some(output.authority);
+        }
+        if let Some(error) = self.authority_errors.first() {
+            return Err(CompileError {
+                message: error.hint.as_ref().map_or_else(
+                    || error.message.clone(),
+                    |hint| format!("{}\n  hint: {}", error.message, hint),
+                ),
+                line: error.line,
+                col: error.col,
+            });
+        }
+
         let mut file_private_scopes: HashMap<u32, HashMap<String, String>> = HashMap::new();
         for decl in &program.declarations {
             if let Some(span) = decl.span() {

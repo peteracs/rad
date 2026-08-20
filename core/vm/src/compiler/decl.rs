@@ -475,43 +475,41 @@ impl Compiler {
             })
             .collect();
 
-        // Parallel conflict analysis (vm/parallel.rs) schedules from the
-        // declared signature alone, so a resource written via `update(R)` or
-        // `set_resource(R, ...)` in the body — or in a helper fn the body
-        // calls — was invisible: two conflicting systems could share a
-        // parallel batch and one side's write was silently lost (dogfood
-        // bug seq 45). Collect the body's ECS accesses and append them as
-        // synthetic metadata-only entries. The "__body_" name prefix makes
-        // the executor skip them for injection/writeback/sandbox gating;
-        // only the scheduler consumes them. "*" marks a write whose target
-        // cannot be named statically (dynamic name, or a call to a fn whose
-        // effects allow ECS writes) and conflicts with any ECS toucher.
-        let access = collect_body_ecs_access(&s.body);
-        let mut body_writes: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
-        let mut body_reads: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
-        if access.dynamic_write {
+        let resolved_name = self
+            .resolve_current_alias(&s.name)
+            .unwrap_or_else(|| s.name.clone());
+        // Scheduler metadata comes from the same transitive graph that
+        // enforces system authority. Deferred event/schedule edges execute
+        // outside this batch, so batching uses the synchronous effect set.
+        let effects = {
+            let authority = self
+                .authority
+                .as_ref()
+                .expect("compile installs authority before lowering");
+            authority
+                .resolve(&resolved_name)
+                .or_else(|_| authority.resolve(&s.name))
+                .map(|callable| callable.synchronous.clone())
+                .map_err(|message| CompileError {
+                    message: format!(
+                        "Missing authority graph entry for system '{}': {}",
+                        s.name, message
+                    ),
+                    line: s.span.line,
+                    col: s.span.col,
+                })?
+        };
+        let mut body_writes = effects
+            .writes
+            .into_iter()
+            .collect::<std::collections::BTreeSet<_>>();
+        let mut body_reads = effects
+            .reads
+            .into_iter()
+            .collect::<std::collections::BTreeSet<_>>();
+        if effects.unknown {
             body_writes.insert("*".to_string());
-        }
-        if access.dynamic_read {
             body_reads.insert("*".to_string());
-        }
-        for n in &access.write_names {
-            body_writes.insert(self.resolve_canonical_name(n));
-        }
-        for n in &access.read_names {
-            body_reads.insert(self.resolve_canonical_name(n));
-        }
-        if let Some(co) = &self.checker_output {
-            for f in &access.called_fns {
-                let canon = self.resolve_canonical_name(f);
-                let sig = co.functions.get(&canon).or_else(|| co.functions.get(f));
-                if let Some(sig) = sig {
-                    if sig.effects.allows(crate::types::Effect::ECS) {
-                        body_writes.insert("*".to_string());
-                        break;
-                    }
-                }
-            }
         }
         {
             let declared_mut: std::collections::HashSet<&str> = params
@@ -550,9 +548,6 @@ impl Compiler {
         for dep in &s.before {
             resolved_before.push(self.resolve_canonical_name(dep));
         }
-        let resolved_name = self
-            .resolve_current_alias(&s.name)
-            .unwrap_or_else(|| s.name.clone());
         self.systems.push(SystemChunkInfo {
             name: resolved_name,
             params,
@@ -672,95 +667,4 @@ impl Compiler {
         self.emit_u16(slot, line);
         Ok(())
     }
-}
-
-/// Syntactic ECS accesses of a system body (dogfood bug seq 45): resource
-/// `update`s, `set`/`set_resource`/`remove` writes, `res`/`get_resource`
-/// reads, plus the names of every called function so the caller can consult
-/// checker effects for helpers that may write ECS state transitively. Names
-/// are raw — canonical resolution happens in `compile_system_decl`.
-#[derive(Default)]
-pub(crate) struct BodyEcsAccess {
-    pub(crate) write_names: std::collections::BTreeSet<String>,
-    pub(crate) read_names: std::collections::BTreeSet<String>,
-    pub(crate) called_fns: std::collections::BTreeSet<String>,
-    pub(crate) dynamic_write: bool,
-    pub(crate) dynamic_read: bool,
-}
-
-pub(crate) fn collect_body_ecs_access(body: &crate::ast::Block) -> BodyEcsAccess {
-    use crate::ast::{Expr, Span, Stmt};
-    use crate::visitor::{walk_call_expr, walk_expr, walk_stmt, AstVisitor};
-
-    struct V {
-        acc: BodyEcsAccess,
-    }
-    impl AstVisitor for V {
-        fn visit_stmt(&mut self, stmt: &Stmt) {
-            if let Stmt::Update(u) = stmt {
-                // update(R) writes resource R; update(e, C) writes component C.
-                self.acc.write_names.insert(u.comp_name.clone());
-            }
-            walk_stmt(self, stmt);
-        }
-
-        fn visit_expr(&mut self, expr: &Expr) {
-            // `x |> helper` calls without parentheses: the callee is a bare
-            // ident on the pipe's right-hand side, not an Expr::Call.
-            if let Expr::Pipe(_, rhs, _) = expr {
-                if let Expr::Ident(name, _) = rhs.as_ref() {
-                    self.acc.called_fns.insert(name.clone());
-                }
-            }
-            walk_expr(self, expr);
-        }
-
-        fn visit_call_expr(&mut self, callee: &Expr, args: &[Expr], _span: &Span) {
-            match callee {
-                Expr::Ident(name, _) => match name.as_str() {
-                    "set_resource" => match args.first() {
-                        Some(Expr::Ident(rname, _)) => {
-                            self.acc.write_names.insert(rname.clone());
-                        }
-                        _ => self.acc.dynamic_write = true,
-                    },
-                    "set" => match args.get(1) {
-                        Some(Expr::ComponentExpr(cname, _, _, _)) => {
-                            self.acc.write_names.insert(cname.clone());
-                        }
-                        _ => self.acc.dynamic_write = true,
-                    },
-                    "remove" => match args.get(1) {
-                        Some(Expr::Ident(cname, _)) | Some(Expr::StrLit(cname, _)) => {
-                            self.acc.write_names.insert(cname.clone());
-                        }
-                        _ => self.acc.dynamic_write = true,
-                    },
-                    "res" | "get_resource" => match args.first() {
-                        Some(Expr::Ident(rname, _)) => {
-                            self.acc.read_names.insert(rname.clone());
-                        }
-                        _ => self.acc.dynamic_read = true,
-                    },
-                    _ => {
-                        self.acc.called_fns.insert(name.clone());
-                    }
-                },
-                Expr::Field(base, field, _) => {
-                    // Module-qualified helper calls (`util.give(...)`).
-                    if let Expr::Ident(module, _) = base.as_ref() {
-                        self.acc.called_fns.insert(format!("{}.{}", module, field));
-                    }
-                }
-                _ => {}
-            }
-            walk_call_expr(self, callee, args);
-        }
-    }
-
-    let mut v = V {
-        acc: BodyEcsAccess::default(),
-    };
-    crate::visitor::walk_block(&mut v, body);
-    v.acc
 }

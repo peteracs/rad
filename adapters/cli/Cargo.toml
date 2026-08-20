@@ -15,5 +15,6 @@ path = "src/main.rs"
 hex = "0.4"
 rad-lsp = { path = "../lsp" }
 rad-vm = { path = "../../core/vm" }
+serde_json = "1.0"
 tokio = { version = "1.36.0", features = ["full"] }
 tower-lsp = "0.20.0"

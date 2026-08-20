@@ -9,7 +9,7 @@ system InnerBump(v: mut Val) {
 }
 
 // This system calls fork/simulate INSIDE itself (nested speculation)
-system Speculator(v: mut Val) {
+system Speculator(v: mut Val, reads *) {
     // Increment once
     v = Val { n: v.n + 1 }
 

@@ -26,7 +26,7 @@ system Bank(c: C, r: mut R) after Work {
     r.total = r.total + c.v
 }
 
-system Structural(c: C) after Bank {
+system Structural(c: C, writes C) after Bank {
     if c.v > 5 {
         spawn("child", C { v: 1 })
     }

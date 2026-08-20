@@ -1,15 +1,38 @@
+<div align="center">
+
 # Rad
 
-**A language for debugging and testing stateful simulations.**
+### Stateful programs that explain themselves.
 
-Rad is an imperative language with a Rust bytecode VM. The runtime owns the
-program's persistent state — entities, components, resources, and in-flight
-events all live in a copy-on-write archetype store. That makes a family of
-normally-expensive debugging tools cheap enough to ship as language builtins.
+Rad is a programming language for simulations, game servers, agents, and policy
+engines where state must be inspectable, forkable, replayable, and hard to
+mutate by accident.
 
-Two questions, one line of code each:
+[Playground](https://peteracs.github.io/rad/) ·
+[Documentation](https://peteracs.github.io/rad/docs/) ·
+[Examples](https://peteracs.github.io/rad/docs/examples/catalog.html) ·
+[Language spec](https://peteracs.github.io/rad/docs/reference/spec.html)
 
-**"Why is this value wrong?"**
+[![CI](https://github.com/peteracs/rad/actions/workflows/ci.yml/badge.svg)](https://github.com/peteracs/rad/actions/workflows/ci.yml)
+[![Docs](https://img.shields.io/badge/docs-mdBook-8b5cf6)](https://peteracs.github.io/rad/docs/)
+[![Playground](https://img.shields.io/badge/playground-WASM-0ea5e9)](https://peteracs.github.io/rad/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-22c55e)](LICENSE)
+
+</div>
+
+Most languages can tell you where a value is now. Rad can tell you why it is
+there, fork the entire world to test a change, prove what the change did *not*
+touch, and replay the exact session that produced the bug.
+
+The trick is ownership: Rad's runtime owns persistent program state—entities,
+components, resources, events, and provenance—instead of treating state as an
+opaque side effect of arbitrary objects. That one decision makes debugging
+capabilities that are usually external infrastructure into ordinary language
+operations.
+
+## Debug state, not symptoms
+
+Ask why a resource has its current value:
 
 ```rad
 print(why_resource(Tally))
@@ -24,115 +47,133 @@ resource Tally = { drains: 1 }   (set in frame 4)
   <- by top-level code
 ```
 
-The runtime keeps a provenance ledger of every main-timeline write and emission.
-Handler causes link to the exact emit record of the event *instance* handled, so
-the chain is causal rather than just temporally adjacent.
-
-**"What else did my fix break?"**
+Test a fix against a copy-on-write future, then assert its entire blast radius:
 
 ```rad
-let snap = fork()
-emit Hit { amount: 25 }
-flush_events()
-assert_only_changed(snap, fork(), [Health])   // errors if anything else moved
+let before = fork()
+let candidate = simulate(before, [system::ApplyFix], 1)
+
+assert_only_changed(before, candidate, [Health])
 ```
 
-Tests normally assert what changed. This asserts the negative space across the
-program's state, and costs O(archetypes) `Arc` pointer comparisons rather than a
-world scan. When a "fix" quietly touches something unrelated, it says so —
-from `rad projects/dogfood/speculation/blast_radius.rad`:
+Tests usually assert what changed. `assert_only_changed` checks the negative
+space: if the fix also changes `Gold`, `Position`, a resource, or an entity's
+lifetime, the test fails and names it.
 
-```text
-diff of the 'fix': {"Gold": 1, "Health": 1}
-assert_only_changed(before, after, [Health]) would fail here:
-  -> unexpected changes to [Gold (1 rows)]
-```
+## The features that make Rad different
 
-## The rest of the toolkit
-
-| Capability | Builtins / commands |
+| Capability | What it gives you |
 |---|---|
-| Speculative execution | `fork()`, `simulate()`, `simulate_par()`, `peek()`, `commit()` |
-| Capability-restricted speculative execution | `sandbox_run(source, fork, caps)`, `rad sandbox serve` |
-| Three-way state merge | `merge_forks()`, `merge_forks_with()`, `fork_to_bytes()` |
-| Record & replay | `rad app.rad --record trace.radr`, `rad replay` |
-| Time-travel debugging | `rad replay trace.radr --serve` (`goto_frame`, `diff_frames`, `why`) |
-| Retroactive edits | `rad replay trace.radr --with fixed.rad` |
-| Causal settlements (experimental) | `intent`, `law`, `resolver`, `constraint`, `settle`, atomic commit/rejection, `why()` fan-in |
-| WebGPU presentation host | Exact bounded WASM packets, disposable GPU resources, device-loss recovery |
+| **Causal state** | `why()` and `why_resource()` trace writes through the exact event instances and handlers that caused them. |
+| **Cheap alternate futures** | `fork()`, `simulate()`, `simulate_many()`, and `simulate_par()` evaluate copy-on-write worlds without touching live state. |
+| **Blast-radius assertions** | `diff()` and `assert_only_changed()` compare worlds in O(archetypes), without scanning every entity. |
+| **Deterministic parallel simulation** | The same inputs produce bit-identical rollout results at any native worker count; a rollout's seed can reproduce that future alone. |
+| **Compiler-enforced authority** | System signatures are transitive effect bounds across helpers, imports, closures, callbacks, resources, transitions, and synchronously reached event chains. |
+| **Record, replay, and time travel** | Record a session, inspect earlier frames, ask `why` in the past, or replay the same inputs against edited source. |
+| **Capability sandboxing** | Run proposed Rad code against a fork with a builtin mask, component-write ACL, and fuel/memory budgets; the host decides what commits. |
+| **Mergeable worlds** | Inspect, serialize, diff, patch, and three-way merge forks with deterministic conflict handling. |
+| **Runtime-owned presentation state** | The WASM/WebGPU host consumes exact bounded packets and survives resize and device loss without putting GPU handles into world state. |
 
-`simulate_par` is bit-identical for the same inputs at any thread count — each
-fork's RNG seed is derived from `(seed, index)` via a SplitMix64 finalizer. A
-static effect system rejects systems that do IO or call `commit()` inside
-`simulate()`, including through their transitive event-handler chains.
+## Authority is executable architecture
 
-`sandbox_run` runs Rad source against a fork behind three independent layers —
-a deny-by-default builtin mask, a component-write ACL, and fuel/memory budgets —
-so the host decides what commits. These are explicit containment mechanisms,
-not a claim of third-party-audited hostile-tenant isolation.
+A system signature is not merely a query. It is the maximum live-world
+authority that the body—and everything it calls synchronously—may exercise:
 
-## Why ECS, pipelines, and events
+```rad
+system RemoveEntity(
+    live: mut LiveMembership,
+    writes WireIdentity
+) {
+    rewrite_wire(self) // imported/helper writes are checked transitively
+    live.active = false
+}
+```
 
-They are the substrate, not the headline. Columnar archetype storage behind
-`Arc` is what makes a snapshot a refcount bump and a diff a pointer comparison.
-First-class events with declared handlers are what give `why()` something real
-to attribute a write to. Pipeline purity checking keeps the transform layer free
-of writes. ECS, `|>`, and event-driven messaging are all well-trodden ground on
-their own; spending them on debugging and testing tooling is the point.
-
-## Try it
-
-Runnable demos, each producing the output quoted above:
+Omit `writes WireIdentity` and compilation fails with the concrete call path.
+Inspect the same graph used by the compiler and parallel scheduler:
 
 ```bash
-rad projects/dogfood/causality/main.rad             # why() across two event hops
-rad projects/dogfood/speculation/blast_radius.rad   # diff / assert_only_changed
-rad projects/dogfood/speculation/main.rad           # capability sandbox
-rad projects/dogfood/worldmerge/main.rad            # three-way world merge
-rad projects/dogfood/causal-laws/main.rad --experimental-laws # typed causal fan-in
+rad effects RemoveEntity --json --file app.rad
+rad writers WireIdentity --file app.rad
+rad readers LiveMembership --file app.rad
+rad path mission_frame "->" full_scan --file app.rad
 ```
 
-Build:
+The reverse writer index is benchmarked at **220.8× faster** than a full scan
+over 50,000 callables. There is one graph for diagnostics, scheduling, and tools.
+
+## Try it in 60 seconds
+
+The fastest route is the [WASM playground](https://peteracs.github.io/rad/).
+
+To run the native VM:
 
 ```bash
-cargo build -p rad-cli
-target/debug/rad examples/demo.rad
+git clone https://github.com/peteracs/rad.git
+cd rad
+cargo run --release -p rad-cli -- examples/demo.rad
 ```
 
-On Windows:
+Then try the features that motivated the language:
 
-```powershell
-cargo build -p rad-cli
-target\debug\rad.exe examples\demo.rad
+```bash
+cargo run --release -p rad-cli -- projects/dogfood/causality/main.rad
+cargo run --release -p rad-cli -- projects/dogfood/speculation/blast_radius.rad
+cargo run --release -p rad-cli -- projects/dogfood/worldmerge/main.rad
+cargo run --release -p rad-cli -- projects/dogfood/authority-effects/main.rad
 ```
+
+## A small language with a serious runtime
+
+Rad includes:
+
+- a Rust lexer, parser, type checker, bytecode compiler, and VM;
+- ECS components, singleton resources, indexed fields, systems, phases, and
+  deterministic conflict-aware parallel scheduling;
+- functions, closures, generics, structs, sum types, exhaustive matching,
+  state machines, immutable-by-default bindings, and explicit unique ownership;
+- pure and `readonly` effect contracts, value-oriented pipelines, events,
+  async handlers, modules, strict exports, formatting, linting, snapshots, and
+  an LSP;
+- native extensions, a WASM runtime, a browser playground, and a recoverable
+  WebGPU presentation boundary.
+
+The repository does not stop at syntax samples. [`projects/dogfood`](projects/dogfood)
+contains game runtimes, speculative planners, sandboxes, replay workflows,
+causal constraints, browser presentation, and independently checked exact-search
+projects built on the same shipping VM.
+
+## Where Rad fits
+
+Rad is aimed at systems where proposed changes should be evaluated before they
+become authoritative:
+
+- authoritative game and simulation servers;
+- agent planning and tool-execution sandboxes;
+- policy, workflow, and control-plane engines;
+- deterministic test harnesses and replayable incident reproductions.
+
+It is not trying to replace Rust or C for kernels, drivers, or manual memory
+layout. Rad is the stateful decision layer around those components.
 
 ## Status
 
-Version **0.5.0**, single implementation. The capabilities above are implemented
-and demonstrable today; there is no cross-implementation conformance check and
-no stability promise across 0.x releases. The full per-component status table
-and known limits are in the [Introduction](docs/src/introduction.md#status).
+Rad is pre-release software at version **0.5.0**. The Rust VM is the single
+shipping implementation. The features above are implemented and exercised in
+the repository, but 0.x releases do not carry a compatibility promise yet.
 
-## Documentation
+Start with the [documentation](https://peteracs.github.io/rad/docs/), then see
+the [language guarantees](https://peteracs.github.io/rad/docs/reference/guarantees.html),
+[builtins](https://peteracs.github.io/rad/docs/reference/builtins.html),
+[examples](https://peteracs.github.io/rad/docs/examples/catalog.html), and
+[roadmap](https://peteracs.github.io/rad/docs/project/roadmap.html).
 
-- [Introduction](docs/src/introduction.md) — start here
-- [Language guide](docs/src/SUMMARY.md)
-- [Built-in functions](docs/src/reference/builtins.md) — `why`, `fork`, `diff`, `sandbox_run`, and contracts
-- [Language guarantees](docs/src/reference/guarantees.md) — behavioral contracts with maturity labels
-- [Language spec](docs/src/reference/spec.md)
-- [Causal Laws guide](docs/src/guide/causal-laws.md) — experimental typed intents and atomic settlements
-- [Candidate Constraints guide](docs/src/guide/candidate-constraints.md) — order-independent validation of complete candidate patches
-- [WebGPU presentation host](docs/src/guide/webgpu.md) — render RAD state through a recoverable, bounded GPU adapter
-- [RFC-0001](docs/rfcs/0001-causal-settlements.md) — normative v0 semantics
-- [RFC-0002](docs/rfcs/0002-candidate-constraints.md) — validation-only candidate constraints
-- [Performance](docs/src/reference/performance.md)
-- [Contributing](docs/src/project/contributing.md)
-- [Repository map](docs/src/project/repo-map.md)
-- [Repository audit](docs/src/project/repo-audit.md)
-- [Changelog](docs/src/project/changelog.md)
-- [Roadmap](docs/src/project/roadmap.md)
-- [RFC process](docs/src/project/rfcs.md)
+## Contributing
+
+Issues, language-design discussions, benchmarks, and dogfood reports are
+welcome. See [Contributing](docs/src/project/contributing.md) and the
+[RFC process](docs/src/project/rfcs.md).
 
 ## License
 
-Rad is available under the [MIT License](LICENSE).
+[MIT](LICENSE)

@@ -1,0 +1,34 @@
+use "schema.rad"
+use "helpers.rad" as authority_helpers
+
+component LiveMembership {
+    active: bool = true
+}
+
+system RemoveEntity(
+    live: mut LiveMembership,
+    writes WireIdentity,
+) {
+    authority_helpers.rewrite_wire(self)
+    emit EntityRetired { target: self }
+    live.active = false
+}
+
+pub fn full_scan() -> int {
+    return len(entities())
+}
+
+pub fn mission_frame() -> int {
+    return full_scan()
+}
+
+fn main() -> nil {
+    let retired = entity "retired" {
+        LiveMembership {},
+    }
+    schedule [RemoveEntity]
+    flush_events()
+    assert(require(retired, LiveMembership).active == false, "retired entity left live")
+    assert(require(retired, WireIdentity).serial == 1, "wire identity was not rewritten")
+    assert(require(retired, GraveyardMembership).retired, "graveyard marker was not set")
+}

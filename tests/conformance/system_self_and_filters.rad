@@ -13,7 +13,7 @@ on Scored(e) {
 }
 
 // `Tagged` filters; `self` is the visited entity
-system award(Tagged, s: mut Score) {
+system award(Tagged, s: mut Score, writes Tagged) {
     s.points = s.points + 10
     emit Scored { who: self, total: s.points }
     if s.points >= 20 {

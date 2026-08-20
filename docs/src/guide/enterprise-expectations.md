@@ -72,7 +72,7 @@ The `rad lint` tool provides presets that enforce architectural patterns:
 - **Strict Module Boundaries**: The `enterprise` preset requires aliased imports (`use "foo.rad" as foo`) and can enforce dependency DAGs via `--boundary` flags.
 - **Observability**: The `enterprise` preset warns against bare `print()` calls, nudging teams toward structured `log()` and `metric()` builtins.
 - **Declarative Code**: The linter warns when imperative loops are used solely to build collections, suggesting pipeline equivalents.
-- **Scheduler-Visible System Contracts**: The `enterprise` and `strict` presets flag system bodies that directly read or write component/resource types missing from the system's signature (`RAD-L015`/`RAD-L016`) — such accesses are invisible to the scheduler's parallel conflict analysis. Direct accesses only: helper functions the system calls are not analyzed.
+- **Enforced System Authority**: Every compile and lint preset checks the complete transitive authority graph. Named parameters plus `reads`/`writes` entries are an upper bound across helpers, imports, closures, callbacks, resources, transitions, and synchronous handler chains; the parallel scheduler consumes that same graph.
 
 ## 13) Compatibility Features Are Flag-Gated
 

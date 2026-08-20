@@ -39,6 +39,10 @@ Usage: {program} <file.rad> [--no-check] [--compat-v0.5-dx|--no-compat-v0.5-dx] 
        {program} replay <trace.radr> [--to-frame <n>] [--serve] [--with <fixed.rad>] [--force]
        {program} fmt [--check] [file.rad...]
        {program} lint [--preset=strict] [file.rad...]
+       {program} effects <callable> [--json] [--file <file.rad>]
+       {program} writers <component|resource> [--json] [--file <file.rad>]
+       {program} readers <component|resource> [--json] [--file <file.rad>]
+       {program} path <from> -> <to> [--json] [--file <file.rad>]
        {program} test [dir]
        {program} lsp [--experimental-relations]
        {program} --version
@@ -53,6 +57,90 @@ fn wants_help(args: &[String]) -> bool {
 
 fn parse_cli_args(args: &[String]) -> Result<CliCommand, String> {
     let program = args.first().map(String::as_str).unwrap_or("rad");
+
+    if args.len() > 1
+        && matches!(
+            args[1].as_str(),
+            "effects" | "writers" | "readers" | "path"
+        )
+    {
+        let command = args[1].as_str();
+        let mut json = false;
+        let mut filepath = None;
+        let mut positional = Vec::new();
+        let mut index = 2;
+        while index < args.len() {
+            match args[index].as_str() {
+                "--json" => {
+                    json = true;
+                    index += 1;
+                }
+                "--file" if index + 1 < args.len() => {
+                    filepath = Some(args[index + 1].clone());
+                    index += 2;
+                }
+                value if value.starts_with("--file=") => {
+                    filepath = Some(value["--file=".len()..].to_string());
+                    index += 1;
+                }
+                option if option.starts_with('-') && option != "->" => {
+                    return Err(format!("Unknown option for {command}: {option}"));
+                }
+                value => {
+                    positional.push(value.to_string());
+                    index += 1;
+                }
+            }
+        }
+        if filepath.is_none()
+            && positional
+                .first()
+                .is_some_and(|value| value.ends_with(".rad"))
+        {
+            filepath = Some(positional.remove(0));
+        }
+        let query = match command {
+            "effects" if positional.len() == 1 => AuthorityQuery::Effects {
+                symbol: positional.remove(0),
+            },
+            "writers" if positional.len() == 1 => AuthorityQuery::Writers {
+                authority: positional.remove(0),
+            },
+            "readers" if positional.len() == 1 => AuthorityQuery::Readers {
+                authority: positional.remove(0),
+            },
+            "path" => {
+                positional.retain(|value| value != "->");
+                if positional.len() != 2 {
+                    return Err(format!(
+                        "Expected: {program} path <from> -> <to> [--file <file.rad>]"
+                    ));
+                }
+                AuthorityQuery::Path {
+                    from: positional.remove(0),
+                    to: positional.remove(0),
+                }
+            }
+            _ => {
+                return Err(format!(
+                    "Expected: {program} {command} <name> [--json] [--file <file.rad>]"
+                ));
+            }
+        };
+        let filepath = match filepath {
+            Some(filepath) => filepath,
+            None => project_entry_from_rad_toml().map_err(|error| {
+                format!(
+                    "{error}\nUse `--file <file.rad>` outside a RAD project."
+                )
+            })?,
+        };
+        return Ok(CliCommand::Authority {
+            query,
+            filepath,
+            json,
+        });
+    }
 
     if args.len() > 1 && args[1] == "fmt" {
         let mut check_only = false;

@@ -27,9 +27,9 @@ RFC_WRAPPERS = Path("docs/src/rfcs")
 FOLDER_TREE = Path("docs/src/project/folder_tree.md")
 
 
-def tracked_files(root: Path) -> list[PurePosixPath]:
+def repository_files(root: Path) -> list[PurePosixPath]:
     result = subprocess.run(
-        ["git", "ls-files", "-z"],
+        ["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z"],
         cwd=root,
         check=True,
         stdout=subprocess.PIPE,
@@ -42,7 +42,7 @@ def tracked_files(root: Path) -> list[PurePosixPath]:
 
 
 def audit(root: Path) -> list[str]:
-    files = tracked_files(root)
+    files = repository_files(root)
     errors: list[str] = []
 
     for path in files:
@@ -103,7 +103,7 @@ def audit(root: Path) -> list[str]:
             )
         )
         for missing in sorted(actual_directories - documented_directories):
-            errors.append(f"{FOLDER_TREE}: missing tracked directory {missing}")
+            errors.append(f"{FOLDER_TREE}: missing repository directory {missing}")
         for stale in sorted(documented_directories - actual_directories):
             errors.append(f"{FOLDER_TREE}: documents nonexistent directory {stale}")
 

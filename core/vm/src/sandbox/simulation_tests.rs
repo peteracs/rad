@@ -117,7 +117,7 @@ mod simulate_par_tests {
             r#"
             resource Policy { rate: 1 }
             component Coin { n: 0 }
-            system Mint(c: mut Coin) { c = Coin { n: c.n + res(Policy).rate } }
+            system Mint(c: mut Coin, reads Policy) { c = Coin { n: c.n + res(Policy).rate } }
             let e = spawn("e", Coin { n: 0 })
             let root = fork()
             let cands = [
@@ -144,7 +144,7 @@ mod simulate_par_tests {
         let src = r#"
             resource Policy { rate: 2 }
             component Coin { n: 0 }
-            system Mint(c: mut Coin) { c = Coin { n: c.n + res(Policy).rate } }
+            system Mint(c: mut Coin, reads Policy) { c = Coin { n: c.n + res(Policy).rate } }
             let e = spawn("e", Coin { n: 0 })
             let root = fork()
             let cands = [fork_with(root, Policy { rate: 3 }), fork_with(root, Policy { rate: 7 })]
@@ -226,7 +226,7 @@ mod simulate_par_tests {
             r#"
             resource Policy { rate: 1 }
             component Coin { n: 0 }
-            system Mint(c: mut Coin) { c = Coin { n: c.n + res(Policy).rate } }
+            system Mint(c: mut Coin, reads Policy) { c = Coin { n: c.n + res(Policy).rate } }
             let e = spawn("e", Coin { n: 0 })
             let f = fork()
             let runs = simulate_par(f, [system::Mint], 4, 2, 7, [Policy { rate: 5 }])

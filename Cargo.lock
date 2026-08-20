@@ -1377,6 +1377,7 @@ dependencies = [
  "hex",
  "rad-lsp",
  "rad-vm",
+ "serde_json",
  "tokio",
  "tower-lsp",
 ]

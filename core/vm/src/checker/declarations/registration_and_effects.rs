@@ -409,6 +409,8 @@ impl Checker {
             SystemType {
                 name: decl.name.clone(),
                 params,
+                authority_reads: decl.authority_reads.clone(),
+                authority_writes: decl.authority_writes.clone(),
                 is_pub: decl.is_pub,
                 file_id: decl.span.file,
                 simulation_breach: None,

@@ -25,7 +25,6 @@ pub fn get_preset(name: &str) -> Option<LintPreset> {
             warn_imperative_collection_building: false,
             warn_bare_print: false,
             require_aliased_imports: false,
-            require_system_signature_access: false,
         }),
         "enterprise" => Some(LintPreset {
             description: "Maximum safety for production codebases",
@@ -46,7 +45,6 @@ pub fn get_preset(name: &str) -> Option<LintPreset> {
             warn_imperative_collection_building: true,
             warn_bare_print: true,
             require_aliased_imports: true,
-            require_system_signature_access: true,
         }),
         "strict" => Some(LintPreset {
             description: "Strict type checking with warnings as errors",
@@ -67,7 +65,6 @@ pub fn get_preset(name: &str) -> Option<LintPreset> {
             warn_imperative_collection_building: true,
             warn_bare_print: true,
             require_aliased_imports: true,
-            require_system_signature_access: true,
         }),
         "teaching" => Some(LintPreset {
             description: "Beginner-friendly with helpful suggestions",
@@ -88,7 +85,6 @@ pub fn get_preset(name: &str) -> Option<LintPreset> {
             warn_imperative_collection_building: true,
             warn_bare_print: false,
             require_aliased_imports: false,
-            require_system_signature_access: false,
         }),
         _ => None,
     }
@@ -375,10 +371,6 @@ pub fn lint_ast(
                 }
             }
         }
-    }
-
-    if preset.require_system_signature_access {
-        lint_system_signature_access(program, checker, &mut issues);
     }
 
     if preset.warn_imperative_collection_building
@@ -669,201 +661,6 @@ impl AstLintVisitor {
                     }
                 }
             }
-        }
-    }
-}
-
-/// RAD-L015 (write) / RAD-L016 (read) — opt-in `require_system_signature_access`.
-///
-/// A system's parameter list is what the scheduler's parallel conflict
-/// analysis sees: `mut` parameters count as writes, the rest as reads
-/// (spec §7.2). The body, however, can reach any component or resource
-/// through the general ECS API, and those accesses are invisible to the
-/// scheduler. This lint flags DIRECT out-of-signature accesses in system
-/// bodies so the signature stays an honest conflict declaration.
-///
-/// v1 scope — direct accesses only:
-/// - component-name arguments to the ECS builtins `get`, `has`, `require`,
-///   `require_all`, `remove`, `set`, `lookup`, `lookup_all`, `entities`,
-///   `query_where`, `query_map`, `query_count`, `with_field`
-/// - component literals passed to `set` / `spawn`, and `entity { … }`
-///   literals (the expression form of spawn)
-/// - `query { … }` expressions (`mut` entries count as writes)
-/// - the `update(entity, Comp) { … }` / `update(Resource) { … }` sugar
-/// - resource builtins `get_resource`, `res`, `set_resource` (`res` is
-///   included because it is the same live-world read as `get_resource`)
-///
-/// Deliberately NOT flagged (false-positive rules):
-/// - event handlers (`on Event`) — they are not systems and have no
-///   signature for the scheduler to consult
-/// - a component name in an emitted event payload or in a `match` pattern
-///   (including `has Comp` patterns) — mentioning a type is not an access
-/// - `peek` / `peek_resource` — they read a world FORK, not the live world
-/// - resource parameters in the signature — a declared resource parameter
-///   covers body reads/writes of that resource
-///
-/// v1 limitations (documented, deliberate):
-/// - no transitive analysis: a helper `fn` called from the system that
-///   touches undeclared components is not seen (the simulate() purity
-///   breach walk in the checker shows how a future version could do this)
-/// - accesses through variables (`set(e, h)` where `h` holds a component
-///   value) are not resolved — only literal/name forms are matched
-/// - writes to a component that IS declared but without `mut` are out of
-///   scope here; this lint checks presence in the signature only.
-fn lint_system_signature_access(
-    program: &crate::ast::Program,
-    checker: &crate::checker::Checker,
-    issues: &mut Vec<LintIssue>,
-) {
-    use std::collections::HashSet;
-
-    for decl in &program.declarations {
-        let crate::ast::Decl::System(system) = decl else {
-            continue;
-        };
-        // Imported declarations are merged into the entry program by the
-        // module loader; the entry file is always FileId(0) (or None when
-        // the AST was built without a source map). Restricting to it keeps
-        // every report attributed to the file actually being linted.
-        if !matches!(system.span.file, None | Some(crate::ast::FileId(0))) {
-            continue;
-        }
-        let declared: HashSet<String> = system
-            .params
-            .iter()
-            .map(|(_, _, type_name)| checker.resolve_canonical_name(type_name))
-            .collect();
-        let mut visitor = SystemAccessVisitor {
-            checker,
-            system_name: &system.name,
-            declared,
-            issues,
-        };
-        crate::visitor::AstVisitor::visit_block(&mut visitor, &system.body);
-    }
-}
-
-struct SystemAccessVisitor<'a> {
-    checker: &'a crate::checker::Checker,
-    system_name: &'a str,
-    declared: std::collections::HashSet<String>,
-    issues: &'a mut Vec<LintIssue>,
-}
-
-impl SystemAccessVisitor<'_> {
-    /// Flag `name` if it resolves to a component/resource type that is not
-    /// declared in the system's signature. Unknown names are skipped: only
-    /// types the checker registered can be accesses.
-    fn check_access(&mut self, name: &str, span: &crate::ast::Span, is_write: bool, via: &str) {
-        let canonical = self.checker.resolve_canonical_name(name);
-        let kind = if self.checker.components.contains_key(&canonical) {
-            "component"
-        } else if self.checker.resources.contains_key(&canonical) {
-            "resource"
-        } else {
-            return;
-        };
-        if self.declared.contains(&canonical) {
-            return;
-        }
-        let (code, message) = if is_write {
-            (
-                "RAD-L015",
-                format!(
-                    "System '{}' writes {} '{}' via `{}` but '{}' is not in its signature; parallel scheduling cannot see this write conflict. Declare it as a parameter or move the write into a system that declares it.",
-                    self.system_name, kind, name, via, name
-                ),
-            )
-        } else {
-            (
-                "RAD-L016",
-                format!(
-                    "System '{}' reads {} '{}' via `{}` but '{}' is not in its signature; parallel scheduling cannot see this read-write conflict. Declare it as a parameter.",
-                    self.system_name, kind, name, via, name
-                ),
-            )
-        };
-        self.issues.push(LintIssue {
-            line: span.line,
-            col: span.col,
-            severity: "warning",
-            code,
-            message,
-        });
-    }
-
-    /// Check one component/resource-name argument position. Name-like
-    /// positions (`allow_str`) also accept a string literal, since component
-    /// names are plain strings at runtime (`entities("Position")`).
-    fn check_named_arg(
-        &mut self,
-        arg: &crate::ast::Expr,
-        is_write: bool,
-        allow_str: bool,
-        via: &str,
-    ) {
-        use crate::ast::Expr;
-        match arg {
-            Expr::Ident(name, span) => self.check_access(name, span, is_write, via),
-            Expr::ComponentExpr(name, _, _, span) => self.check_access(name, span, is_write, via),
-            Expr::StrLit(name, span) if allow_str => self.check_access(name, span, is_write, via),
-            _ => {}
-        }
-    }
-
-    /// Match the ECS builtins in v1 scope against an (effective) argument
-    /// list. Callers pass pipe-adjusted arguments so `e |> get(Comp)` sees
-    /// the same positions as `get(e, Comp)`.
-    fn check_builtin_call(&mut self, name: &str, args: &[&crate::ast::Expr]) {
-        use crate::ast::Expr;
-        // User functions shadow builtins (the checker resolves the call to
-        // them first), so a user-defined `get`/`peek`/... is not an ECS
-        // access.
-        if self.checker.functions.contains_key(name) {
-            return;
-        }
-        match name {
-            "get" | "has" | "require" if args.len() == 2 => {
-                self.check_named_arg(args[1], false, false, &format!("{}()", name));
-            }
-            "require_all" if args.len() >= 2 => {
-                for arg in &args[1..] {
-                    self.check_named_arg(arg, false, false, "require_all()");
-                }
-            }
-            "set" if args.len() == 2 => {
-                self.check_named_arg(args[1], true, false, "set()");
-            }
-            "remove" if args.len() == 2 => {
-                self.check_named_arg(args[1], true, false, "remove()");
-            }
-            "lookup" | "lookup_all" if !args.is_empty() => {
-                self.check_named_arg(args[0], false, true, &format!("{}()", name));
-            }
-            "entities" | "query_where" | "query_map" | "query_count" => {
-                // All name-like arguments are queried components; predicate
-                // and mapper arguments simply do not match a name form.
-                for arg in args {
-                    self.check_named_arg(arg, false, true, &format!("{}()", name));
-                }
-            }
-            "with_field" if args.len() >= 2 => {
-                self.check_named_arg(args[1], false, true, "with_field()");
-            }
-            "spawn" => {
-                for arg in args {
-                    if let Expr::ComponentExpr(comp, _, _, span) = arg {
-                        self.check_access(comp, span, true, "spawn()");
-                    }
-                }
-            }
-            "get_resource" | "res" if !args.is_empty() => {
-                self.check_named_arg(args[0], false, false, &format!("{}()", name));
-            }
-            "set_resource" if !args.is_empty() => {
-                self.check_named_arg(args[0], true, false, "set_resource()");
-            }
-            _ => {}
         }
     }
 }

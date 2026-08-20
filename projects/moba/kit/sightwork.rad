@@ -91,7 +91,13 @@ pub fn visible_to(team: int, target: entity) -> bool {
 
 // ------------------------------------------------------------ ticking
 
-system update_fog(tv: mut TeamVision) {
+system update_fog(
+    tv: mut TeamVision,
+    reads Pos,
+    reads Sight,
+    reads Stealth,
+    reads Unit,
+) {
     let mut seen = []
     let mut ghosts = tv.ghosts
     for t in query { Unit, Pos } where Unit.team != tv.team {

@@ -23,7 +23,7 @@ let hero = spawn(Username { name: "Hero" })
 let found = lookup(Username, "name", "Hero")  // Some(hero_entity_id)
 ```
 
-**Plain-data rule (Law 1):** Component fields cannot have function or closure types (including nested list/map/tuple types that contain them). The checker rejects such fields so ECS storage stays data-only. See [Memory model](memory-model.md).
+**Plain-data rule:** Component fields cannot have function or closure types (including nested list/map/tuple types that contain them). The checker rejects such fields so ECS storage stays data-only. See [Memory model](memory-model.md).
 
 ### 3.1.1 Resource Declaration
 
@@ -143,7 +143,12 @@ Declares a finite state machine. Each state lists its valid transitions. Optiona
 ### 3.5 System Declaration
 
 ```
-system <Name>(<param>: [mut|accum] <ComponentType>, ...) [after <System> [, <System> ...]] [before <System> [, <System> ...]] {
+system <Name>(
+    <param>: [mut|accum] <ComponentOrResourceType>,
+    [reads <ComponentOrResourceType>|reads *],
+    [writes <ComponentOrResourceType>|writes *],
+    ...
+) [after <System> [, <System> ...]] [before <System> [, <System> ...]] {
     <body>
 }
 ```
@@ -161,11 +166,22 @@ system Render(p: Position) after Physics {
 }
 ```
 
-Declares a system that operates on entities and/or global resources. Parameters specify which component types to query and which resource types to inject. The `mut` modifier allows write access; without it, field assignment on that parameter is a compile-time error.
+Declares a system that operates on entities and/or global resources. Named parameters specify which component types to query and which resource types to inject. The `mut` modifier grants read/write authority and enables writeback; an immutable parameter grants read authority only.
 
 **Component parameters** query the entity world: the system iterates over all entities that have ALL the specified component types. **Resource parameters** inject global singletons declared with `resource`. A system may mix both: `system Tally(u: Unit, s: mut Stats) { ... }` iterates entities with `Unit` while injecting the `Stats` resource on each iteration. A **resource-only** system runs exactly once per schedule invocation.
 
-Resource parameters participate in parallel conflict analysis: two systems that both hold a mutable reference to the same resource are serialized. The checker rejects `update(Resource)` and `set_resource(Resource, ...)` inside a system that already holds the same resource as a `mut` parameter to prevent writeback-overwrite bugs.
+Authority-only entries declare access that must not change iteration cardinality. `reads X` permits a transitive live-world read of `X`; `writes X` permits a transitive write. `reads *` and `writes *` are explicit whole-world grants for operations whose target is intentionally broad. These entries create no binding, inject no resource, and add no component to the entity query:
+
+```rad
+system RemoveEntity(live: mut LiveMembership, writes WireIdentity) {
+    rewrite_wire(self) // helper may write WireIdentity
+    live.active = false
+}
+```
+
+The checker infers exact effects through ordinary and imported function calls, closures, callbacks, bounded function values, state transitions, resources, and event-handler chains. A system's query parameters plus authority-only entries are an enforced upper bound; an undeclared read, undeclared write, or unbounded dynamic call is a compile-time error with an authority path. Event emission is a deferred authority boundary, so queued handlers do not borrow the emitter's synchronous authority; `flush_events()` makes the reachable handlers synchronous and therefore part of the caller's bound.
+
+Parallel conflict analysis consumes the same synchronous inferred effects, not a second syntax scan. Consequently a helper-hidden resource write serializes correctly, while a queued handler that runs after the batch does not create a false conflict. The checker still rejects `update(Resource)` and `set_resource(Resource, ...)` inside a system that already holds the same resource as a `mut` parameter to prevent writeback-overwrite bugs.
 
 **`accum` resource parameters** (`d: accum DamageLog`) declare an **additive reduction**: the parameter is writable like `mut`, but when the system runs in a parallel batch, each worker's per-field **delta** against the batch's base snapshot is *folded into* the base (in schedule order — deterministic, floats included) instead of last-write-wins. Two `accum`-writers of the same resource therefore commute and may share a batch, while a plain reader or `mut`-writer of that resource still serializes against them. The contract is checked statically: `accum` is only valid on **resource** parameters, and every field of the resource must be `int` or `float` (folding is defined per numeric field). The fold is additive — `d.total = d.total + x` per entity aggregates exactly; non-additive updates (min/max/overwrite) belong in an event handler, which is serial by design.
 

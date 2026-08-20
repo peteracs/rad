@@ -11,8 +11,21 @@ use rad_vm::module_loader::load_program_with_source_map_and_options;
 use rad_vm::parser::ParserOptions;
 use rad_vm::vm::VM;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum AuthorityQuery {
+    Effects { symbol: String },
+    Writers { authority: String },
+    Readers { authority: String },
+    Path { from: String, to: String },
+}
+
 #[derive(Debug)]
 enum CliCommand {
+    Authority {
+        query: AuthorityQuery,
+        filepath: String,
+        json: bool,
+    },
     Run {
         filepath: String,
         skip_check: bool,
@@ -80,5 +93,6 @@ enum CliCommand {
 }
 // CLI argument parsing and command execution share one private adapter state.
 include!("cli/arguments.rs");
+include!("cli/authority_commands.rs");
 include!("cli/run.rs");
 include!("cli/commands_and_diagnostics.rs");

@@ -12,7 +12,8 @@ Use these discoverability groups when choosing a workload:
   `migration-chain`, `schema`.
 - Research workloads: `collatz-lab`, `frankl-search`, `sudoku`.
 - Language and causal verticals: `causal-laws`, `causal-constraints`,
-  `causality`, `speculation`, `timetravel`, `world-law-rpg`.
+  `causality`, `speculation`, `timetravel`, `world-law-rpg`,
+  `authority-effects`.
 - Host/extension proofs: `native-math-kernels`, `orianna_gui`, `radgui`.
 
 Add a new workload here only when it exercises several language/runtime

@@ -6,11 +6,13 @@ labels: enhancement
 assignees: ''
 ---
 
-## Which Law does this relate to?
+## Which area does this relate to?
 
-- [ ] Law 1: ECS (data/logic separation)
-- [ ] Law 2: Pipelines (data flow)
-- [ ] Law 3: Events (communication)
+- [ ] World state (ECS, resources, indexing)
+- [ ] Effects and authority
+- [ ] Speculation, replay, or causality
+- [ ] Pipelines and collections
+- [ ] Events and scheduling
 - [ ] Type system / annotations
 - [ ] Tooling (CLI, LSP, playground)
 - [ ] Documentation

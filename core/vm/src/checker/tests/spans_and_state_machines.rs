@@ -309,6 +309,8 @@
                     name: "BadSystem".to_string(),
                     params: vec![("pos".to_string(), false, "Position".to_string())],
                     accum_params: vec![],
+                    authority_reads: vec![],
+                    authority_writes: vec![],
                     after: vec![],
                     before: vec![],
                     body: Block {

@@ -164,7 +164,7 @@ mod playground_embed_tests {
         let lines: Vec<&str> = out.lines().collect();
         assert!(lines.len() >= 2);
         assert_eq!(lines[0], "Hello from Rad!");
-        assert_eq!(lines[1], "The Three-Law Language:");
+        assert_eq!(lines[1], "Stateful programs that explain themselves:");
     }
 
     #[test]

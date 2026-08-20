@@ -109,7 +109,7 @@ fn threat_rung(me: entity, threat: entity) -> int {
 
 // one acquisition scan, both tables: rank by (inverted rung, distance)
 // — a tuple key, compared lexicographically
-system acquire(a: mut Aggro, p: Pos, s: Soldier) {
+system acquire(a: mut Aggro, p: Pos, s: Soldier, reads Attacking) {
     let me = self
     let table = a.table
     let threats = query { Soldier, Pos } where Soldier.team != s.team

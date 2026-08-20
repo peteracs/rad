@@ -216,7 +216,7 @@ fn mark_dirty(unit: entity) -> nil {
 
 // ------------------------------------------------------------ ticking
 
-system age_buffs(b: mut Buffs) {
+system age_buffs(b: mut Buffs, writes StatsDirty) {
     let mut expired_any = false
     let mut next = []
     for inst in b.active {
@@ -270,7 +270,15 @@ fn active_mods(unit: entity) -> list < StatMod > {
     return out
 }
 
-system recompute_stats(StatsDirty, base: BaseStats, lvl: Level, cs: mut CombatStats, a: mut Actions) {
+system recompute_stats(
+    StatsDirty,
+    base: BaseStats,
+    lvl: Level,
+    cs: mut CombatStats,
+    a: mut Actions,
+    reads Buffs,
+    writes StatsDirty,
+) {
     let g = float(lvl.value - 1)
     let mods = active_mods(self)
 

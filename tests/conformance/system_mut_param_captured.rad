@@ -7,7 +7,7 @@ component Unit { team: int }
 
 component Fog { team: int, seen: int = 0 }
 
-system count_enemies(fog: mut Fog) {
+system count_enemies(fog: mut Fog, reads Unit) {
     // the where-filter captures `fog` (a mut param) into a closure
     let enemies = query { Unit } where Unit.team != fog.team
     fog.seen = enemies |> len

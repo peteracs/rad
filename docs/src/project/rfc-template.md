@@ -55,7 +55,7 @@ What other designs were considered? Why were they rejected?
 - Does this break any existing programs?
 - If so, what is the migration path?
 
-### On the Three Laws
+### On the Core State Model
 
 - Does this affect ECS, pipelines, or events?
 - Does this preserve the purity guarantees of pipelines?

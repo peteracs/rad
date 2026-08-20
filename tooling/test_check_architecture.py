@@ -21,10 +21,13 @@ class ArchitectureGateTests(unittest.TestCase):
         self.temporary.cleanup()
 
     def write(self, path: str, text: str) -> None:
+        self.write_untracked(path, text)
+        subprocess.run(["git", "add", "--", path], cwd=self.root, check=True)
+
+    def write_untracked(self, path: str, text: str) -> None:
         target = self.root / path
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(text, encoding="utf-8")
-        subprocess.run(["git", "add", "--", path], cwd=self.root, check=True)
 
     def test_accepts_authority_oriented_layout(self) -> None:
         self.write("adapters/cli/src/main.rs", "fn main() {}\n")
@@ -33,6 +36,11 @@ class ArchitectureGateTests(unittest.TestCase):
 
     def test_rejects_non_authoritative_code_under_core(self) -> None:
         self.write("core/simcore/src/lib.rs", "// project code\n")
+        errors = check_architecture.audit(self.root)
+        self.assertTrue(any("core/ is reserved" in error for error in errors))
+
+    def test_rejects_untracked_non_authoritative_code_under_core(self) -> None:
+        self.write_untracked("core/simcore/src/lib.rs", "// project code\n")
         errors = check_architecture.audit(self.root)
         self.assertTrue(any("core/ is reserved" in error for error in errors))
 
@@ -60,7 +68,7 @@ class ArchitectureGateTests(unittest.TestCase):
             "```text\n  - `core/` - Core.\n```\n",
         )
         errors = check_architecture.audit(self.root)
-        self.assertTrue(any("missing tracked directory" in error for error in errors))
+        self.assertTrue(any("missing repository directory" in error for error in errors))
 
 
 if __name__ == "__main__":

@@ -72,6 +72,19 @@ fn parse_system_ref_qualified_path() {
 }
 
 #[test]
+fn parse_system_authority_only_signature_entries() {
+    let program = parse_source(
+        "system Audit(root: Root, reads Other, writes Log, writes *) {}",
+    );
+    let Decl::System(system) = &program.declarations[0] else {
+        panic!("expected system declaration");
+    };
+    assert_eq!(system.params, vec![("root".into(), false, "Root".into())]);
+    assert_eq!(system.authority_reads, vec!["Other"]);
+    assert_eq!(system.authority_writes, vec!["Log", "*"]);
+}
+
+#[test]
 fn parse_schedule_accepts_system_refs() {
     let prog = parse_source(
         "component C { x: 0 }\nsystem Tick(p: C) {}\nfn main() { schedule [system::Tick] }",

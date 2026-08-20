@@ -141,14 +141,15 @@
 <div id="app" style="display:none; flex-direction:column; min-height:100vh;">
   <header>
     <h1>Rad Playground</h1>
-    <span class="subtitle">The Three-Law Language</span>
+    <span class="subtitle">Stateful programs that explain themselves</span>
     <div class="toolbar">
+      <button onclick="window.location.href='https://peteracs.github.io/rad/docs/'" title="Open the Rad language documentation">Docs</button>
       <button id="webgpuBtn" title="Open the RAD WebGPU dogfood">WebGPU</button>
       <select id="examples" title="Load example">
         <option value="">-- Examples --</option>
         <option value="hello">Hello World</option>
         <option value="ecs">ECS Demo</option>
-        <option value="demo">Three Laws Demo</option>
+        <option value="demo">State and Events Demo</option>
         <option value="pipeline">Pipeline Pattern</option>
         <option value="traffic_light">Traffic Light FSM</option>
       </select>
@@ -177,10 +178,10 @@ const EXAMPLES = {
   hello: `// Hello from Rad!
 fn main() -> nil {
     print("Hello from Rad!")
-    print("The Three-Law Language:")
-    print("  1. Separate Data from Logic (ECS)")
-    print("  2. Move Data Through Pipelines")
-    print("  3. Communicate Via Events")
+    print("Stateful programs that explain themselves:")
+    print("  - declared world state (ECS)")
+    print("  - value-oriented pipelines")
+    print("  - causal event flow")
 
     let scores = [10, -5, 20, 0, 15]
         |> filter(fn(s) { return s > 0 })
@@ -219,7 +220,7 @@ fn main() -> nil {
     print(f"  {n.value}: ({p2.x}, {p2.y})")
 }`,
 
-  demo: `// The Three Laws of Rad
+  demo: `// Runtime-owned state and causal events
 component Health { hp: 100, max: 100 }
 component Name  { value: "" }
 

@@ -1,10 +1,10 @@
 // =====================================================================
 //  Rad Language v0.5 — Full Demo
-//  Demonstrating the Three Laws of Great Software Architecture
+//  Demonstrating runtime-owned state, transforms, events, and state machines
 //  Now with: let/let mut, match, system mut, runtime type checking
 // =====================================================================
 
-// ─── LAW 1: Separate Data from Logic (ECS) ─────────────────────────
+// ─── DECLARED WORLD STATE (ECS) ────────────────────────────────────
 
 component Position { x: 0.0, y: 0.0 }
 
@@ -41,7 +41,7 @@ system Physics(pos: mut Position, vel: Velocity) {
     pos.y = pos.y + vel.dy
 }
 
-// ─── LAW 2: Move Data Through Pipelines ────────────────────────────
+// ─── VALUE-ORIENTED PIPELINES ──────────────────────────────────────
 
 fn square(x: int) -> int {
     return x * x
@@ -54,7 +54,7 @@ fn process_scores(scores: list<int>) -> int {
     |> reduce(0, fn(a, b) { return a + b })
 }
 
-// ─── LAW 3: Components Talk Via Events ─────────────────────────────
+// ─── CAUSAL EVENT FLOW ─────────────────────────────────────────────
 
 event Hit { target, amount }
 
@@ -78,7 +78,7 @@ on Defeated(e) {
     print(f"  *** {e.name} has been defeated! ***")
 }
 
-// ─── BONUS: Finite State Machines ──────────────────────────────────
+// ─── FINITE STATE MACHINES ─────────────────────────────────────────
 
 state DoorState {
     Locked {
@@ -116,8 +116,8 @@ fn main() -> any {
     print("  Rad Language v0.5 - Architecture Demo")
     print("========================================")
 
-    // ── Law 1: ECS ──────────────────────────────
-    print("\n--- LAW 1: Data-Logic Separation (ECS) ---")
+    // ── Declared world state ─────────────────────
+    print("\n--- DECLARED WORLD STATE (ECS) ---")
     print("Systems declare mut access explicitly.")
     print("")
     print("Before Physics system:")
@@ -132,8 +132,8 @@ fn main() -> any {
     print(f"  Goblin: {get(goblin, Position) ?}")
     print(f"  Dragon: {get(dragon, Position) ?}")
 
-    // ── Law 2: Pipelines ────────────────────────
-    print("\n--- LAW 2: Immutable Data Pipelines ---")
+    // ── Value-oriented pipelines ─────────────────
+    print("\n--- VALUE-ORIENTED PIPELINES ---")
     print("let bindings are immutable. Use let mut when needed.")
     print("")
 
@@ -154,8 +154,8 @@ fn main() -> any {
     let reduced_total = nums |> reduce(0, fn(a, b) { return a + b })
     print(f"  [1,2,3,4,5] |> reduce(+)    = {reduced_total}")
 
-    // ── Law 3: Events ───────────────────────────
-    print("\n--- LAW 3: Event-Driven Communication ---")
+    // ── Causal event flow ────────────────────────
+    print("\n--- CAUSAL EVENT FLOW ---")
     print("Components never call each other directly.")
     print("")
 
@@ -169,7 +169,7 @@ fn main() -> any {
     emit Hit { target: dragon, amount: 150 }
 
     // ── State Machines + match ──────────────────
-    print("\n--- BONUS: Finite State Machines ---")
+    print("\n--- FINITE STATE MACHINES ---")
     print("Exhaustive match: missing a state is an error.")
     print("")
 
@@ -215,7 +215,7 @@ fn main() -> any {
     print(f"  restart  -> {game}")
 
     print("\n========================================")
-    print("  All three laws demonstrated!")
+    print("  Runtime-owned state model demonstrated!")
     print("  + let/let mut immutability")
     print("  + exhaustive match on state machines")
     print("  + system mut annotations")

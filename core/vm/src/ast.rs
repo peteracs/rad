@@ -296,6 +296,11 @@ pub struct SystemDecl {
     /// They also appear in `params` with `is_mut = true` — `accum` is `mut`
     /// plus fold-on-merge semantics for parallel batches.
     pub accum_params: Vec<String>,
+    /// Authority-only signature entries. Unlike `params`, these do not alter
+    /// the ECS query or bind a value in the body; they make cross-entity and
+    /// resource authority explicit without changing execution cardinality.
+    pub authority_reads: Vec<String>,
+    pub authority_writes: Vec<String>,
     pub body: Block,
     pub after: Vec<String>,
     pub before: Vec<String>,

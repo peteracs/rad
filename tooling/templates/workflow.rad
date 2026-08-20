@@ -6,15 +6,17 @@
 component Task       { title: "", author: "", priority: 0 }
 component Assignment { reviewer: "", sla_hours: 24 }
 
-entity task_1 {
-  Task       { title: "Design Review", author: "alice", priority: 3 },
+let task_1 = spawn(
+  "task_1",
+  Task { title: "Design Review", author: "alice", priority: 3 },
   Assignment { reviewer: "", sla_hours: 24 }
-}
+)
 
-entity task_2 {
-  Task       { title: "Security Audit", author: "bob", priority: 5 },
+let task_2 = spawn(
+  "task_2",
+  Task { title: "Security Audit", author: "bob", priority: 5 },
   Assignment { reviewer: "", sla_hours: 12 }
-}
+)
 
 state Status {
   Open {
@@ -53,7 +55,7 @@ fn status_name(s: Status) -> str {
   }
 }
 
-fn process_task(task_entity, reviewer: str) -> int {
+fn process_task(task_entity: entity, reviewer: str) -> int {
   let t = get(task_entity, Task) |> unwrap
   let mut s = Status::Open
 
@@ -62,6 +64,7 @@ fn process_task(task_entity, reviewer: str) -> int {
   emit TaskAssigned { title: t.title, reviewer: reviewer }
 
   s = transition(s, "complete") |> unwrap
+  let _status = status_name(s)
   emit TaskCompleted { title: t.title }
   return 1
 }

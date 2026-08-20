@@ -77,6 +77,7 @@ the [Core VM Source Audit](core-vm-source-audit.md).
 | Path | Status | Notes |
 |---|---|---|
 | `projects/dogfood/` | Active project | Larger Rad applications used to pressure-test language features. |
+| `projects/dogfood/authority-effects/` | Active project | Transitive system-authority enforcement and inspection dogfood. |
 | `projects/dogfood/budget/` | Active project | Budget dogfood app. |
 | `projects/dogfood/causality/` | Active project | Provenance/why dogfood app. |
 | `projects/dogfood/deathsight/` | Active project | Browser/game dogfood source. |

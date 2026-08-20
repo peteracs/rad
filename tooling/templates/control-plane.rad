@@ -55,7 +55,7 @@ system CheckHealth(s: Service, l: Load, h: mut Health) after AutoScale {
 fn main() -> nil {
   print("=== __PROJECT_NAME__ ===")
   print("--- control loop tick ---")
-  run [CheckHealth, AutoScale]
+  schedule [CheckHealth, AutoScale]
 
   let scores = [
     (get(api, Health) |> unwrap).score,

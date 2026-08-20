@@ -1,5 +1,5 @@
-// BUG 04 control: is update(R) inside a system broken by itself, or only when
-// the system is parallelised with another writer of R?
+// REGRESSION 04 control: proves update(R) works alone as well as when the
+// scheduler serializes it against another writer.
 //
 // If update() in a system were simply broken (always writing against a stale
 // base), these controls would also be wrong and BUG 04 would be a different,
@@ -15,7 +15,7 @@ fn bump_r3() -> nil {
     update(R3) { n = res(R3).n + 1 }
 }
 
-system UpdateWriter(_d: mut D1) {
+system UpdateWriter(_d: mut D1, reads R1, writes R1) {
     update(R1) { n = res(R1).n + 1 }
 }
 
@@ -23,7 +23,7 @@ system MutWriter(r: mut R2) {
     r.n = r.n + 100
 }
 
-system IndirectWriter(_d: mut D1) {
+system IndirectWriter(_d: mut D1, reads R3, writes R3) {
     bump_r3()
 }
 
@@ -44,7 +44,7 @@ print("")
 
 // and the read side: does a system SEE a resource written by an earlier
 // schedule call? (sequential visibility control)
-system Reader(_d: mut D1) {
+system Reader(_d: mut D1, reads R1, writes R1) {
     update(R1) { n = res(R1).n * 10 }
 }
 schedule [Reader]

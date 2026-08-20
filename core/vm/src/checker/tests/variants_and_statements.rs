@@ -546,6 +546,8 @@
                     params: vec![("d".to_string(), false, "Data".to_string())],
                     body: empty_block(),
                     accum_params: vec![],
+                    authority_reads: vec![],
+                    authority_writes: vec![],
                     after: vec![],
                     before: vec![],
                 }),

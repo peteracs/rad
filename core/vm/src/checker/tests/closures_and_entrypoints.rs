@@ -870,7 +870,7 @@
             r#"
             component Tag {}
             component Score { points: int = 0 }
-            system bump(Tag, s: mut Score) {
+            system bump(t: mut Tag, s: mut Score) {
               s.points = s.points + require(self, Score).points
               remove(self, Tag)
             }

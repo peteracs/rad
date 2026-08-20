@@ -1,0 +1,11 @@
+pub component WireIdentity {
+    serial: int = 0
+}
+
+pub component GraveyardMembership {
+    retired: bool = false
+}
+
+pub event EntityRetired {
+    target: entity
+}

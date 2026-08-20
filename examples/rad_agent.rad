@@ -182,7 +182,13 @@ system PerceiveEnvironment(_p: AgentProfile, mem: mut Memory, tq: TaskQueue) {
     mem.scratchpad = f"focus: {tq.current_task}"
 }
 
-system ExecuteAction(p: AgentProfile, tq: mut TaskQueue, s: mut Stats, mem: mut Memory) {
+system ExecuteAction(
+    p: AgentProfile,
+    tq: mut TaskQueue,
+    s: mut Stats,
+    mem: mut Memory,
+    reads AgentPool,
+) {
     if tq.current_task == "" { return }
     let pool = get_resource(AgentPool) ?
     let result = simulate_tool(tq.current_task, pool.tick)

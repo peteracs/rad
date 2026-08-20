@@ -4,7 +4,7 @@
 component Marker { gen: 0 }
 component Spawner { active: true }
 
-system SpawnChild(s: Spawner) {
+system SpawnChild(s: Spawner, writes Marker) {
     // Spawn a new entity during simulation
     spawn("child", Marker { gen: 1 })
 }

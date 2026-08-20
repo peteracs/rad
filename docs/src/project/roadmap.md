@@ -1,6 +1,6 @@
 # Rad Language Roadmap
 
-> Last updated: 2026-08-05
+> Last updated: 2026-08-21
 >
 > This roadmap is a living document. Priorities shift based on dogfood,
 > verification findings, and community feedback.
@@ -23,8 +23,8 @@
 
 | Status | Item | Tracking |
 |--------|------|----------|
-| :large_blue_circle: | **v0.5 DX mode stable** — zero-field shorthand, match rest, compat warnings | CHANGELOG [Unreleased] |
-| :large_blue_circle: | **Project templates** — `rad new --template workflow\|stream\|simulation` | #TBD |
+| :green_circle: | **v0.5 DX mode** — zero-field shorthand, match rest, compatibility warnings | Shipped |
+| :green_circle: | **Project templates** — `rad new --template workflow\|stream\|simulation\|control-plane` | Shipped |
 | :green_circle: | **ECS resource singletons** — `resource` keyword, `get_resource`/`set_resource` builtins, `update(Resource)` sugar, system resource params, parallel conflict analysis, fork/snapshot support | Shipped |
 | :green_circle: | **Indexed component fields** — `indexed` keyword, `lookup()` builtin, O(1) entity lookup by field value | Shipped |
 | :green_circle: | **Readonly effect level** — `readonly fn`, ECS reads allowed in pipelines, `Effect::ReadECS` | Shipped |
@@ -69,16 +69,17 @@
 | :white_circle: | **Debug adapter protocol** — step-through debugging in VS Code | #TBD |
 | :white_circle: | **Property-based testing** — `rad test --fuzz` for system invariants | #TBD |
 | :green_circle: | **WebGPU presentation host** — exact bounded WASM packets, storage-buffer materialization, resize and device-loss recovery | Shipped |
+| :green_circle: | **Transitive authority enforcement** — direct/synchronous/complete callable effects, enforced system bounds, exact scheduler metadata, and `effects`/`writers`/`readers`/`path` inspection | Shipped |
 
 ## 2027 H1 — Long-term Vision
 
 | Item | Notes |
 |------|-------|
-| **FFI / host bindings** | Call Rust/C functions from RAD (Note: I/O, networking, and file access are now available as built-in functions) |
-| **Conflict-aware system batching** | Shipped — `schedule` topologically orders systems, then groups them into batches with no conflicting `mut` component overlap (`core/vm/src/vm/parallel.rs`). Batches still run **sequentially** on one thread. |
-| **Multithreaded parallel system runs** | Planned — execute conflict-free batches on multiple threads (not implemented today; no worker pool in the VM scheduler). |
-| **Parallel fork simulation** | Evaluate multiple speculative futures concurrently |
-| **Fork diff/merge** | Inspect what changed between forks without committing either |
+| **FFI / host bindings** | Shipped — native extensions register Rust/C-compatible functions through `rad_extension_init`; host I/O is also available through builtins. |
+| **Conflict-aware system batching** | Shipped — `schedule` topologically orders systems and partitions them with exact synchronous authority sets. |
+| **Multithreaded parallel system runs** | Shipped on native targets — conflict-free batches execute through Rayon worker VMs; WASM preserves the same isolated deterministic semantics sequentially. |
+| **Parallel fork simulation** | Shipped — `simulate_par()` and `simulate_many()` evaluate deterministic speculative futures concurrently on native targets. |
+| **Fork diff/merge** | Shipped — `diff()`, `fork_delta()`, `merge_forks()`, and `merge_forks_with()` inspect and combine worlds without committing either input. |
 | **AOT compilation** | Compile RAD to native binaries via LLVM or Cranelift |
 | **Visual system graph** | IDE extension showing system dependency DAG |
 | **Language server protocol v2** | Rename, find references, code actions |

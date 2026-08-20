@@ -558,6 +558,8 @@
                     span: span(2),
                     name: "S".to_string(),
                     params: vec![("pos".to_string(), true, "Position".to_string())],
+                    authority_reads: vec![],
+                    authority_writes: vec![],
                     body: Block {
                         id: nid(),
                         span: span(2),

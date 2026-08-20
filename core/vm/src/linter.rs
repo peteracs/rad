@@ -25,11 +25,6 @@ pub struct LintPreset {
     pub warn_imperative_collection_building: bool,
     pub warn_bare_print: bool,
     pub require_aliased_imports: bool,
-    /// Opt-in (strict/enterprise): flag system bodies that directly read or
-    /// write component/resource types absent from the system's signature.
-    /// The scheduler's parallel conflict analysis only sees declared
-    /// parameters, so out-of-signature accesses are invisible to it.
-    pub require_system_signature_access: bool,
 }
 // Lexical sections preserve one private semantic namespace.
 include!("linter/engine.rs");

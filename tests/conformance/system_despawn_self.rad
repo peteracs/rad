@@ -10,7 +10,7 @@ on Boom(e) {
     print(f"boom {e.what}")
 }
 
-system burn(f: mut Fuse) {
+system burn(f: mut Fuse, writes *) {
     f.left = f.left - 1
     if f.left <= 0 {
         emit Boom { what: name_of(self) }

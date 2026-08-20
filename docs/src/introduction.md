@@ -207,8 +207,8 @@ These patterns are not the novel part — ECS appears in Bevy, Flecs, Unity DOTS
 and EnTT; `|>` in F#, Elixir, OCaml and Julia; event-driven messaging is the
 core of Erlang. What is unusual is treating all three as a *runtime* substrate
 that owns the program's persistent state, and then spending that ownership on
-debugging and testing tools. See [The Three Laws](./guide/three-laws.md) for the
-design rationale.
+debugging and testing tools. See the [Core Model](./guide/core-model.md) for the
+design rationale and its exact enforcement boundaries.
 
 Rad is an imperative language with strong defaults, not a straitjacket. Top-level
 code, `for` loops, and direct `set()` calls are ordinary — the demos above use

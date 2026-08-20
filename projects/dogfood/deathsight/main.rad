@@ -157,7 +157,7 @@ fn human_pick(report: list) -> Cand {
 fn main() -> nil {
     rand_seed(1337)
     spawn_dungeon()
-    let you = get_entity("you")
+    let you = require_entity("you")
 
     print("=== DEATHSIGHT ===")
     print("the floor knows when you will die. @ you, > the way out,")

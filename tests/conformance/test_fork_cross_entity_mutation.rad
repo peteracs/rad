@@ -4,7 +4,7 @@
 component HP    { hp: 100 }
 component Healer { power: 10 }
 
-system HealAll(h: Healer) {
+system HealAll(h: Healer, reads HP, writes HP) {
     // Find all entities with HP and heal them
     let targets = query { HP }
     let mut idx = 0

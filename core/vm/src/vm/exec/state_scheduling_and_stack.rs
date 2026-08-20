@@ -554,9 +554,9 @@ impl VM {
         // Sandbox gate: a system whose signature declares `mut` access to a
         // component outside the capability grant is rejected before it runs.
         // This single check covers all four writeback paths in run_frames.
-        // "__body_" entries are scheduler-only metadata (body writes found
-        // by conflict analysis); the actual writes they describe are still
-        // capability-checked at execution time.
+        // "__body_" entries are scheduler-only metadata projected from the
+        // checker's synchronous transitive authority graph; the actual writes
+        // they describe are still capability-checked at execution time.
         if let Some(caps) = &self.sandbox_caps {
             for (pname, is_mut, ctype) in info.params.iter().chain(info.resource_params.iter()) {
                 if pname.starts_with("__body_") {
