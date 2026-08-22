@@ -539,6 +539,7 @@ fn authority_query_fixture(width: usize) -> AuthorityReport {
                     writes,
                     ..AuthorityEffects::default()
                 },
+                contracts: rad_vm::types::AuthorityContracts::default(),
                 calls: Vec::new(),
                 deferred_calls: Vec::new(),
                 line: 1,

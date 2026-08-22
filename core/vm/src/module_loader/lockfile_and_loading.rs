@@ -470,7 +470,7 @@ fn load_program_with_resolved_overrides(
     };
     ctx.errors.extend(manifest_errors);
 
-    let _ = parse_pass(&entry, &mut ctx, &entry.to_string_lossy());
+    let _ = parse_pass(&entry, &mut ctx, &entry.to_string_lossy(), "@entry");
 
     let _ = merge_pass(&entry, &mut ctx);
     let _ = alias_pass(&mut ctx);
@@ -492,6 +492,7 @@ fn load_program_with_resolved_overrides(
 #[derive(Clone)]
 struct ParsedFile {
     path: PathBuf,
+    module_identity: String,
     source: String,
     decls: Vec<Decl>,
 }
@@ -507,7 +508,7 @@ struct LoadContext {
     source_map: SourceMap,
     parser_options: ParserOptions,
     module_fingerprints: Vec<ModuleFingerprint>,
-    aliases: HashMap<String, Vec<Decl>>,
+    aliases: HashMap<String, ModuleAlias>,
     file_overrides: HashMap<PathBuf, String>,
     resolved_imports: HashMap<(PathBuf, String), PathBuf>,
     errors: Vec<ModuleLoadError>,
@@ -665,7 +666,47 @@ fn resolve_module_path(
     }
 }
 
-fn parse_pass(path: &Path, ctx: &mut LoadContext, lock_path_label: &str) -> Result<(), ()> {
+/// Derive a root-independent logical identity from the normalized import
+/// route. Physical paths decide whether two imports load one file; this
+/// logical path decides the stable semantic namespace and survives source
+/// bundling/replay in a different temporary directory.
+fn logical_child_module_identity(importer_identity: &str, import: &str) -> String {
+    if is_remote_url(import) {
+        return format!("url:{import}");
+    }
+
+    let normalized_import = import.replace('\\', "/");
+    let importer_path = importer_identity
+        .strip_prefix("local:")
+        .unwrap_or(importer_identity);
+    let mut parts = importer_path
+        .rsplit_once('/')
+        .map_or_else(Vec::new, |(parent, _)| {
+            parent
+                .split('/')
+                .filter(|part| !part.is_empty() && *part != ".")
+                .map(str::to_string)
+                .collect::<Vec<_>>()
+        });
+    for part in normalized_import.split('/') {
+        match part {
+            "" | "." => {}
+            ".." if parts.last().is_some_and(|last| last != "..") => {
+                parts.pop();
+            }
+            ".." => parts.push("..".to_string()),
+            other => parts.push(other.to_string()),
+        }
+    }
+    format!("local:{}", parts.join("/"))
+}
+
+fn parse_pass(
+    path: &Path,
+    ctx: &mut LoadContext,
+    lock_path_label: &str,
+    module_identity: &str,
+) -> Result<(), ()> {
     modules_debug(&format!("enter parse_pass {}", path.to_string_lossy()));
     if ctx.visited.contains(path) {
         return Ok(());
@@ -739,6 +780,7 @@ fn parse_pass(path: &Path, ctx: &mut LoadContext, lock_path_label: &str) -> Resu
         path.to_path_buf(),
         ParsedFile {
             path: path.to_path_buf(),
+            module_identity: module_identity.to_string(),
             source: source.clone(),
             decls: program.declarations.clone(),
         },
@@ -792,7 +834,17 @@ fn parse_pass(path: &Path, ctx: &mut LoadContext, lock_path_label: &str) -> Resu
                 });
                 continue;
             }
-            let _ = parse_pass(&child, ctx, &child_label);
+            let child_identity = logical_child_module_identity(module_identity, &u.path);
+            if let Some(parsed) = ctx.parsed_files.get_mut(path) {
+                if let Some(Decl::Use(stored)) = parsed
+                    .decls
+                    .iter_mut()
+                    .find(|declaration| matches!(declaration, Decl::Use(stored) if stored.id == u.id))
+                {
+                    stored.module_identity = Some(child_identity.clone());
+                }
+            }
+            let _ = parse_pass(&child, ctx, &child_label, &child_identity);
         }
     }
     Ok(())
@@ -877,10 +929,12 @@ fn merge_pass(entry_path: &Path, ctx: &mut LoadContext) -> Result<(), ()> {
                 if let Decl::Use(_) = decl {
                     ctx.merged.push(decl.clone());
                 } else {
-                    let symbol = decl_symbol(decl);
+                    let symbol = decl
+                        .namespace_symbol()
+                        .map(|(name, span)| (name.to_string(), span.line, span.col));
                     if let Some((name, line, col)) = symbol {
                         let current_file = path.to_string_lossy().to_string();
-                        let is_pub = decl_is_pub(decl);
+                        let is_pub = decl.is_public();
                         let is_entry = path == entry_path;
 
                         if is_pub || is_entry {

@@ -1,8 +1,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::checker::{Checker, CheckerOptions};
-use crate::compiler::Compiler;
+use crate::checker::CheckerOptions;
 use crate::module_loader::load_program_with_source_map_and_options;
 use crate::parser::ParserOptions;
 use crate::vm::VM;
@@ -245,67 +244,66 @@ fn run_file_in_memory_with_features(
     let parser_options = ParserOptions {
         compat_v0_5_dx: false,
     };
-    let (program, _source, _had_imports, _source_map, _module_fingerprints, aliases, parse_errors) =
-        match load_program_with_source_map_and_options(filepath, parser_options) {
-            Ok(r) => (
-                r.program,
-                r.merged_source,
-                r.had_imports,
-                r.source_map,
-                r.module_fingerprints,
-                r.aliases,
-                r.errors,
-            ),
-            Err(errors) => {
-                let mut stderr = String::new();
-                for e in errors {
-                    stderr.push_str(&format!("Error: {}\n", e.message));
-                }
-                return (String::new(), stderr, 1);
+    let loaded = match load_program_with_source_map_and_options(filepath, parser_options) {
+        Ok(loaded) => loaded,
+        Err(errors) => {
+            let mut stderr = String::new();
+            for e in errors {
+                stderr.push_str(&format!("Error: {}\n", e.message));
             }
-        };
+            return (String::new(), stderr, 1);
+        }
+    };
 
     let mut stderr = String::new();
-    let mut has_errors = false;
-    for e in &parse_errors {
+    for e in &loaded.errors {
         stderr.push_str(&format!("Error: {}\n", e.message));
-        has_errors = true;
     }
 
-    let mut checker = Checker::new_with_options(CheckerOptions {
-        compat_v0_5_dx: false,
-        warn_compat: true,
-        strict_types: false,
-        features: if experimental_laws {
-            vec!["causal_laws".to_string()]
-        } else {
-            vec![]
+    let analysis = crate::pipeline::analyze_program(
+        &loaded.program,
+        &loaded.aliases,
+        CheckerOptions {
+            compat_v0_5_dx: false,
+            warn_compat: true,
+            strict_types: false,
+            features: if experimental_laws {
+                vec!["causal_laws".to_string()]
+            } else {
+                vec![]
+            },
         },
-    });
-    checker.set_aliases(aliases.clone());
-    let errors = checker.check(&program);
-    let checker_output = checker.output();
+    );
 
-    if !errors.is_empty() {
-        for err in &errors {
+    if !analysis.errors().is_empty() {
+        for err in analysis.errors() {
             stderr.push_str(&format!("Error: {}\n", err.message));
         }
-        has_errors = true;
     }
 
-    if has_errors {
+    if !loaded.errors.is_empty() || !analysis.errors().is_empty() {
         return (String::new(), stderr, 1);
     }
 
-    let compiler = Compiler::new()
-        .with_checker_output(checker_output)
-        .with_aliases(aliases)
-        .with_features(if experimental_laws {
-            vec!["causal_laws".to_string()]
-        } else {
-            vec![]
-        });
-    let compile_result = match compiler.compile(&program) {
+    let checked = analysis
+        .into_checked()
+        .expect("error-free snapshot analysis must produce checked semantics");
+    let source_identity = match loaded.source_layout.digest(&loaded.merged_source) {
+        Ok(identity) => identity,
+        Err(error) => {
+            stderr.push_str(&format!("Error: invalid source layout: {error}\n"));
+            return (String::new(), stderr, 1);
+        }
+    };
+    let compile_result = match crate::pipeline::compile_checked_program(
+        &loaded.program,
+        loaded.aliases,
+        checked,
+        crate::pipeline::CheckedCompileOptions {
+            source_identity: Some(source_identity),
+            ..crate::pipeline::CheckedCompileOptions::default()
+        },
+    ) {
         Ok(c) => c,
         Err(e) => {
             stderr.push_str(&format!("Error: {}\n", e.message));

@@ -1,0 +1,11 @@
+use "../schema.rad"
+use "../owners/telemetry.rad"
+use "../systems/ingest.rad"
+use "../scenarios/captured_frames.rad"
+
+test "layout and endian decoding match captured protocol" {
+    let frame: TelemetryFrame = decode_frame(captured_frame())
+    assert(size_of(TelemetryFrame) == 16, "ABI size")
+    assert(frame.checksum == u16(4660), "little-endian checksum")
+    assert(bytebuf_to_list(encode_le(frame.checksum)) == [52, 18], "canonical bytes")
+}

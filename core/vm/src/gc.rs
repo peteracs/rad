@@ -49,24 +49,31 @@ impl CaptureCell {
 
 /// Mark-sweep garbage collector for the Rad VM.
 ///
-/// Objects are allocated via `Box::into_raw` and tracked as raw pointers.
-/// The GC is the **sole owner** of all heap objects; `Value::Clone` is a
-/// plain bit-copy and `Value::Drop` is a no-op.
+/// Every object and its tracking header share one allocation. The intrusive
+/// list avoids a second metadata allocation and, critically, avoids the
+/// unbounded temporary peak produced when a tracking `Vec` grows. The GC is
+/// the **sole owner** of all heap objects; `Value::Clone` is a plain bit-copy
+/// and `Value::Drop` is a no-op.
 ///
 /// During collection the VM builds a `HashSet<usize>` of all reachable
 /// payload addresses, then the GC sweeps (drops + deallocates) every
 /// tracked object whose address is absent from that set.
 pub struct GcHeap {
-    /// (payload pointer, drop function, layout) for each tracked object.
-    objects: Vec<GcEntry>,
+    head: *mut GcEntry,
+    tail: *mut GcEntry,
+    object_count: usize,
     bytes_allocated: usize,
+    total_allocations: u64,
+    total_allocated_bytes: u64,
     next_gc: usize,
 }
 
 struct GcEntry {
+    next: *mut GcEntry,
     ptr: *mut u8,
     drop_fn: unsafe fn(*mut u8),
-    layout: std::alloc::Layout,
+    allocation_layout: std::alloc::Layout,
+    payload_layout: std::alloc::Layout,
     accounted_size: usize,
 }
 
@@ -77,8 +84,12 @@ unsafe fn drop_typed<T>(ptr: *mut u8) {
 impl GcHeap {
     pub const fn new() -> Self {
         GcHeap {
-            objects: Vec::new(),
+            head: std::ptr::null_mut(),
+            tail: std::ptr::null_mut(),
+            object_count: 0,
             bytes_allocated: 0,
+            total_allocations: 0,
+            total_allocated_bytes: 0,
             next_gc: INITIAL_THRESHOLD,
         }
     }
@@ -89,17 +100,59 @@ impl GcHeap {
         self.alloc_accounted(value, 0)
     }
 
+    /// Exact retained bytes for the GC header and a payload of `T`, excluding
+    /// any backing storage owned by `T` itself.
+    pub(crate) fn allocation_bytes_for<T>() -> usize {
+        std::alloc::Layout::new::<GcEntry>()
+            .extend(std::alloc::Layout::new::<T>())
+            .expect("GC allocation layout overflow")
+            .0
+            .pad_to_align()
+            .size()
+    }
+
     fn alloc_accounted<T>(&mut self, value: T, retained_bytes: usize) -> *mut T {
-        let ptr = Box::into_raw(Box::new(value));
-        let layout = std::alloc::Layout::new::<T>();
-        let accounted_size = layout.size().saturating_add(retained_bytes);
-        self.objects.push(GcEntry {
-            ptr: ptr as *mut u8,
-            drop_fn: drop_typed::<T>,
-            layout,
-            accounted_size,
+        let payload_layout = std::alloc::Layout::new::<T>();
+        let (allocation_layout, payload_offset) = std::alloc::Layout::new::<GcEntry>()
+            .extend(payload_layout)
+            .expect("GC allocation layout overflow");
+        let allocation_layout = allocation_layout.pad_to_align();
+        // SAFETY: `allocation_layout` is non-zero because it includes the
+        // tracking header. `handle_alloc_error` establishes a non-null base.
+        let allocation = crate::allocation_meter::managed_allocation(|| unsafe {
+            std::alloc::alloc(allocation_layout)
         });
+        if allocation.is_null() {
+            std::alloc::handle_alloc_error(allocation_layout);
+        }
+        let entry = allocation.cast::<GcEntry>();
+        // SAFETY: `Layout::extend` supplied an aligned in-bounds payload
+        // offset for T inside this allocation.
+        let ptr = unsafe { allocation.add(payload_offset).cast::<T>() };
+        unsafe {
+            ptr.write(value);
+            entry.write(GcEntry {
+                next: std::ptr::null_mut(),
+                ptr: ptr.cast::<u8>(),
+                drop_fn: drop_typed::<T>,
+                allocation_layout,
+                payload_layout,
+                accounted_size: allocation_layout.size().saturating_add(retained_bytes),
+            });
+            if self.tail.is_null() {
+                self.head = entry;
+            } else {
+                (*self.tail).next = entry;
+            }
+        }
+        self.tail = entry;
+        self.object_count = self.object_count.saturating_add(1);
+        let accounted_size = allocation_layout.size().saturating_add(retained_bytes);
         self.bytes_allocated = self.bytes_allocated.saturating_add(accounted_size);
+        self.total_allocations = self.total_allocations.saturating_add(1);
+        self.total_allocated_bytes = self
+            .total_allocated_bytes
+            .saturating_add(accounted_size as u64);
         ptr
     }
 
@@ -116,25 +169,42 @@ impl GcHeap {
     /// Sweep every object whose address is **not** in `reachable`.
     ///
     /// # Safety
-    /// All pointers in `self.objects` must be valid (only this method frees them).
+    /// All pointers in the intrusive list must be valid (only this method
+    /// frees them).
     /// `reachable` must contain payload-pointer addresses from `Value::trace`.
     pub unsafe fn sweep(&mut self, reachable: &HashSet<usize>) -> usize {
         let mut swept = 0usize;
         let mut bytes_freed = 0usize;
 
-        self.objects.retain(|entry| {
-            if reachable.contains(&(entry.ptr as usize)) {
-                true
+        let mut previous = std::ptr::null_mut();
+        let mut current = self.head;
+        while !current.is_null() {
+            let next = unsafe { (*current).next };
+            if reachable.contains(&(unsafe { (*current).ptr } as usize)) {
+                previous = current;
             } else {
-                unsafe {
-                    (entry.drop_fn)(entry.ptr);
-                    std::alloc::dealloc(entry.ptr, entry.layout);
+                if previous.is_null() {
+                    self.head = next;
+                } else {
+                    unsafe { (*previous).next = next };
                 }
-                bytes_freed = bytes_freed.saturating_add(entry.accounted_size);
+                if self.tail == current {
+                    self.tail = previous;
+                }
+                let ptr = unsafe { (*current).ptr };
+                let drop_fn = unsafe { (*current).drop_fn };
+                let layout = unsafe { (*current).allocation_layout };
+                let accounted_size = unsafe { (*current).accounted_size };
+                unsafe {
+                    drop_fn(ptr);
+                    std::alloc::dealloc(current.cast::<u8>(), layout);
+                }
+                bytes_freed = bytes_freed.saturating_add(accounted_size);
+                self.object_count = self.object_count.saturating_sub(1);
                 swept += 1;
-                false
             }
-        });
+            current = next;
+        }
 
         self.bytes_allocated = self.bytes_allocated.saturating_sub(bytes_freed);
         self.next_gc = (self.bytes_allocated * GC_GROW_FACTOR).max(INITIAL_THRESHOLD);
@@ -142,11 +212,21 @@ impl GcHeap {
     }
 
     pub fn object_count(&self) -> usize {
-        self.objects.len()
+        self.object_count
     }
 
     pub fn bytes_allocated(&self) -> usize {
         self.bytes_allocated
+    }
+
+    /// Monotonic counters for exact scoped runtime metrics. Collection
+    /// changes live bytes, never these allocation totals.
+    pub fn total_allocations(&self) -> u64 {
+        self.total_allocations
+    }
+
+    pub fn total_allocated_bytes(&self) -> u64 {
+        self.total_allocated_bytes
     }
 
     /// Return the heap accounting that would result from replacing an
@@ -162,15 +242,19 @@ impl GcHeap {
         ptr: *mut crate::value::Object,
         retained_bytes: usize,
     ) -> Result<usize, String> {
-        let entry = self
-            .objects
-            .iter()
-            .find(|entry| entry.ptr == ptr.cast::<u8>())
-            .ok_or_else(|| "GC replacement target is not owned by this heap".to_string())?;
-        let replacement_size = entry.layout.size().saturating_add(retained_bytes);
+        let mut entry = self.head;
+        while !entry.is_null() && unsafe { (*entry).ptr } != ptr.cast::<u8>() {
+            entry = unsafe { (*entry).next };
+        }
+        if entry.is_null() {
+            return Err("GC replacement target is not owned by this heap".into());
+        }
+        let replacement_size = unsafe { (*entry).allocation_layout }
+            .size()
+            .saturating_add(retained_bytes);
         Ok(self
             .bytes_allocated
-            .saturating_sub(entry.accounted_size)
+            .saturating_sub(unsafe { (*entry).accounted_size })
             .saturating_add(replacement_size))
     }
 
@@ -182,20 +266,24 @@ impl GcHeap {
         replacement: crate::value::Object,
     ) -> Result<(), String> {
         let retained_bytes = replacement.accounted_heap_bytes();
-        let entry = self
-            .objects
-            .iter_mut()
-            .find(|entry| entry.ptr == ptr.cast::<u8>())
-            .ok_or_else(|| "GC replacement target is not owned by this heap".to_string())?;
-        if entry.layout != std::alloc::Layout::new::<crate::value::Object>() {
+        let mut entry = self.head;
+        while !entry.is_null() && unsafe { (*entry).ptr } != ptr.cast::<u8>() {
+            entry = unsafe { (*entry).next };
+        }
+        if entry.is_null() {
+            return Err("GC replacement target is not owned by this heap".into());
+        }
+        if unsafe { (*entry).payload_layout } != std::alloc::Layout::new::<crate::value::Object>() {
             return Err("GC replacement target is not an Object allocation".into());
         }
-        let replacement_size = entry.layout.size().saturating_add(retained_bytes);
+        let replacement_size = unsafe { (*entry).allocation_layout }
+            .size()
+            .saturating_add(retained_bytes);
         self.bytes_allocated = self
             .bytes_allocated
-            .saturating_sub(entry.accounted_size)
+            .saturating_sub(unsafe { (*entry).accounted_size })
             .saturating_add(replacement_size);
-        entry.accounted_size = replacement_size;
+        unsafe { (*entry).accounted_size = replacement_size };
         // SAFETY: the entry proves `ptr` is a live Object owned exclusively by
         // this heap. `replace` drops the placeholder after installing the new
         // value without changing the stable address recorded by graph edges.
@@ -206,10 +294,28 @@ impl GcHeap {
     /// Append all allocations from `other` into `self`. Pointers in `Value`s that referred to
     /// `other` remain valid because object addresses are unchanged.
     pub fn merge(&mut self, mut other: GcHeap) {
+        if !other.head.is_null() {
+            if self.tail.is_null() {
+                self.head = other.head;
+            } else {
+                unsafe { (*self.tail).next = other.head };
+            }
+            self.tail = other.tail;
+        }
         self.bytes_allocated = self.bytes_allocated.saturating_add(other.bytes_allocated);
-        self.objects.append(&mut other.objects);
-        other.objects.clear();
+        self.object_count = self.object_count.saturating_add(other.object_count);
+        self.total_allocations = self
+            .total_allocations
+            .saturating_add(other.total_allocations);
+        self.total_allocated_bytes = self
+            .total_allocated_bytes
+            .saturating_add(other.total_allocated_bytes);
+        other.head = std::ptr::null_mut();
+        other.tail = std::ptr::null_mut();
+        other.object_count = 0;
         other.bytes_allocated = 0;
+        other.total_allocations = 0;
+        other.total_allocated_bytes = 0;
     }
 }
 
@@ -228,12 +334,20 @@ impl Default for GcHeap {
 
 impl Drop for GcHeap {
     fn drop(&mut self) {
-        for entry in &self.objects {
+        let mut current = self.head;
+        while !current.is_null() {
+            let next = unsafe { (*current).next };
+            let ptr = unsafe { (*current).ptr };
+            let drop_fn = unsafe { (*current).drop_fn };
+            let layout = unsafe { (*current).allocation_layout };
             unsafe {
-                (entry.drop_fn)(entry.ptr);
-                std::alloc::dealloc(entry.ptr, entry.layout);
+                drop_fn(ptr);
+                std::alloc::dealloc(current.cast::<u8>(), layout);
             }
+            current = next;
         }
-        self.objects.clear();
+        self.head = std::ptr::null_mut();
+        self.tail = std::ptr::null_mut();
+        self.object_count = 0;
     }
 }

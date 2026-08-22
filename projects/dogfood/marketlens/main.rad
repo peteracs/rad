@@ -1,0 +1,12 @@
+use "schema.rad"
+use "owners/catalog_owner.rad"
+use "systems/catalog.rad"
+use "scenarios/production.rad"
+
+fn main() -> nil {
+    run_catalog_day(20000)
+    InspectSellable()
+    let catalog_item: entity = find_sellable(ProductId(u64(1))) |> unwrap
+    print(why_in_view(SellableProducts, catalog_item))
+    print(f"marketlens: products=20000 sellable={len(entities(SellableProducts))}")
+}

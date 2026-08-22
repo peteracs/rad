@@ -24,9 +24,6 @@
 //!
 //! Budget: RAD_SHEET_FUZZ scenarios (default 24; thousands for soaks).
 
-use crate::compiler::Compiler;
-use crate::lexer::Lexer;
-use crate::parser::Parser;
 use crate::vm::VM;
 
 const LIB_SHEET: &str = include_str!("../../../projects/dogfood/radsheet/lib_sheet.rad");
@@ -332,22 +329,12 @@ fn build_merge_scenario(seed: u64) -> String {
 // ---------------------------------------------------------------------------
 
 fn compile(src: &str) -> crate::compiler::CompileResult {
-    let mut lexer = Lexer::new(src);
-    let tokens = lexer.tokenize().0;
-    let mut parser = Parser::new(tokens);
-    let program = parser.parse();
-    assert!(
-        parser.errors().is_empty(),
-        "parse errors: {:?}",
-        parser.errors()
-    );
-    let mut checker = crate::checker::Checker::new();
-    let errors = checker.check(&program);
-    assert!(errors.is_empty(), "check errors: {:?}", errors);
-    Compiler::new()
-        .with_checker_output(checker.output())
-        .compile(&program)
-        .expect("compile")
+    crate::test_support::compile_checked_source(
+        src,
+        crate::parser::ParserOptions::default(),
+        crate::checker::CheckerOptions::default(),
+    )
+    .expect("parse, check, and compile")
 }
 
 /// Run a scenario: record it, assert no PROP_FAIL, then replay digest-

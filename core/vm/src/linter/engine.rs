@@ -343,7 +343,7 @@ fn is_entry_decl(decl: &crate::ast::Decl) -> bool {
 
 pub fn lint_ast(
     program: &crate::ast::Program,
-    checker: &crate::checker::Checker,
+    checked: &crate::types::CheckerOutput,
     preset: &LintPreset,
     filepath: &str,
     boundaries: &std::collections::HashMap<String, Vec<String>>,
@@ -357,7 +357,7 @@ pub fn lint_ast(
             }
             if let crate::ast::Decl::Fn(f) = decl {
                 if !f.is_pure && f.effects.is_empty() {
-                    if let Some(sig) = checker.functions.get(&f.name) {
+                    if let Some(sig) = checked.functions.get(&f.name) {
                         if !sig.is_pure {
                             issues.push(LintIssue {
                                 line: f.span.line,
@@ -386,7 +386,7 @@ pub fn lint_ast(
             filepath: filepath.to_string(),
             boundaries: boundaries.clone(),
         };
-        visitor.visit_program(program);
+        crate::visitor::AstVisitor::visit_program(&mut visitor, program);
         issues.extend(visitor.issues);
     }
 
@@ -402,7 +402,15 @@ struct AstLintVisitor {
     boundaries: std::collections::HashMap<String, Vec<String>>,
 }
 
-impl AstLintVisitor {
+// The lint pass rides the shared AST walker rather than carrying its own.
+//
+// It used to define a parallel `visit_*` set whose `Expr`/`Stmt` matches both
+// ended in `_ => {}`. That is quieter than a duplicate walker deserves: adding
+// a syntax form did not fail to compile, it simply stopped being linted inside,
+// so rule coverage shrank without anyone being told. Overriding only the nodes
+// a rule inspects and delegating the rest to `walk_*` keeps new syntax covered
+// by construction.
+impl crate::visitor::AstVisitor for AstLintVisitor {
     fn visit_program(&mut self, program: &crate::ast::Program) {
         for decl in &program.declarations {
             if !is_entry_decl(decl) {
@@ -419,6 +427,14 @@ impl AstLintVisitor {
             Decl::System(s) => self.visit_block(&s.body),
             Decl::OnHandler(h) => self.visit_block(&h.body),
             Decl::Test(t) => self.visit_block(&t.body),
+            Decl::Model(model) => {
+                for command in &model.commands {
+                    self.visit_expr(command);
+                }
+                for invariant in &model.invariants {
+                    self.visit_block(invariant);
+                }
+            }
             Decl::Use(u) => {
                 if self.require_aliased_imports && u.alias.is_none() {
                     self.issues.push(LintIssue {
@@ -520,7 +536,7 @@ impl AstLintVisitor {
                 }
             }
             Stmt::Expr(e) => self.visit_expr(&e.expr),
-            _ => {}
+            other => crate::visitor::walk_stmt(self, other),
         }
     }
 
@@ -630,10 +646,13 @@ impl AstLintVisitor {
                     }
                 }
             }
-            _ => {}
+            other => crate::visitor::walk_expr(self, other),
         }
     }
 
+}
+
+impl AstLintVisitor {
     fn check_imperative_loop(&mut self, block: &crate::ast::Block, span: &crate::ast::Span) {
         if !self.warn_imperative_collection_building {
             return;

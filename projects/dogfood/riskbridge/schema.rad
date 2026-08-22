@@ -1,0 +1,42 @@
+pub opaque type CustomerId = u64
+pub opaque type TransactionId = u64
+pub opaque type ModelId = u32
+pub opaque type MoneyCents = i64
+
+pub bitflags RiskSignals: u64 {
+    NewDevice = 1,
+    ImpossibleTravel = 2,
+    HighValue = 4,
+    CompromisedAccount = 8,
+}
+
+pub enum DecisionDisposition: u8 {
+    Allow = 0,
+    Review = 1,
+    Deny = 2,
+}
+
+pub repr(C) struct RiskInput {
+    customer: CustomerId,
+    transaction: TransactionId,
+    amount: MoneyCents,
+    merchant_category: u16,
+    country: u16,
+    signals: RiskSignals,
+    model: ModelId,
+}
+
+pub repr(C) struct RiskOutput {
+    score: f32,
+    reason_mask: u64,
+    model_version: u32,
+    disposition: u8,
+}
+
+pub event DecisionCommitted {
+    attempt: entity,
+    disposition: u8,
+    model_version: u32,
+}
+
+pub event ManualReviewQueued { attempt: entity }

@@ -15,9 +15,12 @@ rad/
     - `adapters/cli/` - Rust package for the rad executable and process I/O.
       - `adapters/cli/src/` - CLI composition root.
         - `adapters/cli/src/cli/` - Command arguments, execution, and diagnostic presentation.
+    - `adapters/ffi-worker/` - Out-of-process native-plugin containment and replay worker.
+      - `adapters/ffi-worker/src/` - Worker protocol, process boundary, timeout, and crash handling.
     - `adapters/lsp/` - Rust package for the Language Server Protocol boundary.
       - `adapters/lsp/src/` - LSP library composition root.
         - `adapters/lsp/src/lsp/` - Document analysis, server requests, symbols, and diagnostics.
+    - `adapters/native/` - Stable C header for RAD native-extension ABI consumers.
     - `adapters/webgpu/` - Reusable WebGPU presentation host and runnable RAD dogfood.
       - `adapters/webgpu/browser-test/` - Real-browser pixel, resize, restart, and recovery smoke.
       - `adapters/webgpu/demo/` - Clockwork Eye application, world source, and browser entry point.
@@ -35,14 +38,19 @@ rad/
       - `benches/baselines/collab/` - RAD, Automerge, and Yjs collaborative-edit comparisons.
       - `benches/baselines/micro/` - Matched RAD, Lua, and JavaScript microbenchmarks.
   - `core/` - Authoritative RAD language and runtime code only.
+    - `core/relation/` - Independently compiled authoritative RFC-0003 relation frontend.
+      - `core/relation/src/` - Relation crate composition root.
+        - `core/relation/src/frontend/` - Bounded relation lexer, parser, checker, canonical form, limits, and tooling.
     - `core/vm/` - Primary Rust implementation of the RAD language and runtime.
       - `core/vm/benches/` - Criterion benchmarks for VM and world-state operations.
       - `core/vm/scripts/` - VM-specific documentation and benchmark helpers.
       - `core/vm/src/` - Language semantics, compilation, world state, execution, replay, relations, and WASM boundary.
+        - `core/vm/src/ast/` - Canonical declarations, module identity, and AST metadata.
         - `core/vm/src/builtins/` - Builtin signatures grouped by value, world, host, and simulation roles.
         - `core/vm/src/causality/` - Settlement provenance model and explanation rendering.
         - `core/vm/src/checker/` - Static semantics, effects, scopes, diagnostics, and type checking.
           - `core/vm/src/checker/authority/` - Authority graph propagation, call-site specialization, reverse indexes, and system-bound enforcement.
+            - `core/vm/src/checker/authority/graph/` - Authority seed collection, graph construction, and call-site path analysis.
           - `core/vm/src/checker/declarations/` - Declaration registration and effect-analysis phases.
           - `core/vm/src/checker/tests/` - Behavior-grouped checker regression suites.
           - `core/vm/src/checker/typeck/` - Expression, statement, query, pattern, and builtin type checking.
@@ -51,6 +59,7 @@ rad/
           - `core/vm/src/compiler/stmt/` - Statement, control-flow, effect, and loop lowering.
           - `core/vm/src/compiler/tests/` - Compiler execution and regression suites.
         - `core/vm/src/constraint_types/` - Candidate-constraint profiles, values, and pure reference contracts.
+        - `core/vm/src/ffi/` - Native extension ABI declarations, loading, validation, and tests.
         - `core/vm/src/host_value/` - Frozen host-value representation and boundary tests.
         - `core/vm/src/internal_tests/` - Crate-private cross-module integration suites.
           - `core/vm/src/internal_tests/causal_laws/` - Settlement, resource-limit, provenance, and wire tests requiring private VM state.
@@ -66,7 +75,6 @@ rad/
           - `core/vm/src/parser/tests/` - Core syntax, strings, and type parser regressions.
         - `core/vm/src/relation/` - First-class relation bounded context.
           - `core/vm/src/relation/derivation/` - Full and indexed derived-fact evaluation, proofs, limits, and explanations.
-          - `core/vm/src/relation/frontend/` - Bounded RFC-0003 lexer, parser, checker, manifests, and tooling.
           - `core/vm/src/relation/runtime/` - Authoritative relation store, candidates, manifests, encoding, and profiles.
         - `core/vm/src/replay/` - Replay codecs, identity, execution, and verification tests.
         - `core/vm/src/sandbox/` - Capability policy, isolation, and speculative-execution tests.
@@ -76,8 +84,10 @@ rad/
           - `core/vm/src/vm/builtins_impl/` - Runtime builtin implementations grouped by stable domain responsibility.
           - `core/vm/src/vm/constraint_runtime/` - Constraint evaluator metering and tests.
           - `core/vm/src/vm/exec/` - Opcode families, frames, calls, scheduling, and execution helpers.
+          - `core/vm/src/vm/replay_clone/` - Bounded replay cloning, operational identity, and topology preservation.
           - `core/vm/src/vm/settlement/` - Atomic candidates, commits, fact access, and World-Law gameplay tests.
         - `core/vm/src/wasm/` - Browser runtime API, execution bridge, and presentation packet encoder.
+        - `core/vm/src/wire/` - Canonical value and provenance wire encoding and decoding.
         - `core/vm/src/world/` - ECS storage, entity allocator, operations, snapshots, encoding, and tests.
       - `core/vm/tests/` - Public API, host, session, and executable RFC integration tests.
         - `core/vm/tests/rfc0003_reference/` - Independent accepted RFC-0003 semantic oracle.
@@ -94,6 +104,9 @@ rad/
         - `docs/src/reference/spec_parts/` - Language-specification sections included by the composition page.
       - `docs/src/rfcs/` - Generated-by-inclusion mdBook wrappers for canonical RFC bodies.
     - `docs/theme/` - mdBook CSS and theme behavior overrides.
+  - `devtools/` - Maintainer-only profiling and compiler-diagnostics utilities.
+    - `devtools/rustc-memory/` - Windows rustc virtual-memory trace analyzer and GNU symbol resolver.
+    - `devtools/rustc-memory-tests/` - Regression tests for compiler-memory trace interpretation.
   - `examples/` - Small copy-and-run RAD programs and embedding examples.
   - `experiments/` - Non-authoritative implementation research.
     - `experiments/c-backend/` - Frozen self-hosted C/AOT experiment retained for research.
@@ -101,6 +114,72 @@ rad/
       - `experiments/c-backend/src/` - Self-hosted frontend, C emitter/runtime, and WASM encoder sources.
   - `projects/` - Larger applications, integrations, tutorials, and product dogfood.
     - `projects/dogfood/` - Focused applications that stress language guarantees with real workloads.
+      - `projects/dogfood/accesslens/` - Zero-trust entitlement service exercising negative and field provenance.
+        - `projects/dogfood/accesslens/negative/` - Rejected authority, view, and revision implementations.
+        - `projects/dogfood/accesslens/owners/` - Authoritative access-state mutation boundary.
+        - `projects/dogfood/accesslens/scenarios/` - Production-shaped access workloads.
+        - `projects/dogfood/accesslens/systems/` - Policy evaluation systems.
+        - `projects/dogfood/accesslens/tests/` - Access workflow acceptance programs.
+      - `projects/dogfood/bookcore/` - Deterministic exchange order book for ordered-index contracts.
+        - `projects/dogfood/bookcore/negative/` - Rejected priority, ordering, and mutation implementations.
+        - `projects/dogfood/bookcore/owners/` - Authoritative order-book mutation boundary.
+        - `projects/dogfood/bookcore/scenarios/` - Production-shaped order streams.
+        - `projects/dogfood/bookcore/systems/` - Matching and amendment systems.
+        - `projects/dogfood/bookcore/tests/` - Order-book workflow acceptance programs.
+      - `projects/dogfood/clearpay/` - Atomic payment authorization, capture, refund, and ledger dogfood.
+        - `projects/dogfood/clearpay/negative/` - Rejected transaction and ledger implementations.
+        - `projects/dogfood/clearpay/owners/` - Authoritative payment-ledger mutation boundary.
+        - `projects/dogfood/clearpay/scenarios/` - Production-shaped payment workloads.
+        - `projects/dogfood/clearpay/systems/` - Settlement and capture systems.
+        - `projects/dogfood/clearpay/tests/` - Payment workflow acceptance programs.
+      - `projects/dogfood/dispatch60/` - Real-time fleet scheduler for transitive hot-path cost contracts.
+        - `projects/dogfood/dispatch60/negative/` - Rejected scans, allocations, and authority bypasses.
+        - `projects/dogfood/dispatch60/owners/` - Authoritative fleet mutation boundary.
+        - `projects/dogfood/dispatch60/scenarios/` - Production-shaped dispatch workloads.
+        - `projects/dogfood/dispatch60/systems/` - Fixed-rate dispatch systems.
+        - `projects/dogfood/dispatch60/tests/` - Dispatch workflow acceptance programs.
+      - `projects/dogfood/forgelink/` - Native-fidelity industrial protocol and telemetry gateway.
+        - `projects/dogfood/forgelink/negative/` - Rejected nominal, layout, endian, and scalar implementations.
+        - `projects/dogfood/forgelink/owners/` - Authoritative telemetry publication boundary.
+        - `projects/dogfood/forgelink/scenarios/` - Captured industrial frame workloads.
+        - `projects/dogfood/forgelink/systems/` - Frame validation and ingest systems.
+        - `projects/dogfood/forgelink/tests/` - Telemetry workflow acceptance programs.
+      - `projects/dogfood/fulfillos/` - Warehouse inventory and fulfillment ownership dogfood.
+        - `projects/dogfood/fulfillos/negative/` - Rejected direct and concealed inventory writes.
+        - `projects/dogfood/fulfillos/owners/` - Inventory owner and explicit migration co-owner.
+        - `projects/dogfood/fulfillos/scenarios/` - Production-shaped fulfillment workloads.
+        - `projects/dogfood/fulfillos/systems/` - Reservation and fulfillment systems.
+        - `projects/dogfood/fulfillos/tests/` - Fulfillment workflow acceptance programs.
+      - `projects/dogfood/marketlens/` - Transactionally maintained commerce-catalog projections.
+        - `projects/dogfood/marketlens/negative/` - Rejected view mutation, rebuild, and dependency implementations.
+        - `projects/dogfood/marketlens/owners/` - Authoritative catalog mutation boundary.
+        - `projects/dogfood/marketlens/scenarios/` - Production-shaped catalog workloads.
+        - `projects/dogfood/marketlens/systems/` - Catalog projection systems.
+        - `projects/dogfood/marketlens/tests/` - Materialized-view workflow acceptance programs.
+      - `projects/dogfood/matchflow/` - Explicit-phase deterministic multiplayer match engine.
+        - `projects/dogfood/matchflow/negative/` - Rejected phase, reentrancy, and delivery implementations.
+        - `projects/dogfood/matchflow/owners/` - Authoritative match-state mutation boundary.
+        - `projects/dogfood/matchflow/scenarios/` - Production-shaped match workloads.
+        - `projects/dogfood/matchflow/systems/` - Phase and event-delivery systems.
+        - `projects/dogfood/matchflow/tests/` - Match workflow acceptance programs.
+      - `projects/dogfood/pagergrid/` - Production incident routing and escalation authority dogfood.
+        - `projects/dogfood/pagergrid/negative/` - Rejected hidden, callback, and flush-boundary effects.
+        - `projects/dogfood/pagergrid/owners/` - Authoritative incident-audit mutation boundary.
+        - `projects/dogfood/pagergrid/scenarios/` - Production-shaped incident workloads.
+        - `projects/dogfood/pagergrid/systems/` - Incident routing and escalation systems.
+        - `projects/dogfood/pagergrid/tests/` - Incident workflow acceptance programs.
+      - `projects/dogfood/riskbridge/` - ABI-checked, effect-declared financial risk plugin capstone.
+        - `projects/dogfood/riskbridge/host/` - RAD host-call declarations and boundary adapters.
+        - `projects/dogfood/riskbridge/negative/` - Rejected ABI, effect, replay, and containment implementations.
+        - `projects/dogfood/riskbridge/owners/` - Authoritative risk-decision and ledger mutation boundary.
+        - `projects/dogfood/riskbridge/plugins/` - Native plugin implementations and conformance fixtures.
+          - `projects/dogfood/riskbridge/plugins/fixtures/` - Malformed and incompatible plugin manifests.
+          - `projects/dogfood/riskbridge/plugins/risk-model/` - Production-shaped native scoring plugin package.
+            - `projects/dogfood/riskbridge/plugins/risk-model/src/` - Plugin ABI export implementation.
+        - `projects/dogfood/riskbridge/scenarios/` - Production-shaped adjudication workloads.
+        - `projects/dogfood/riskbridge/systems/` - Risk evaluation and decision systems.
+        - `projects/dogfood/riskbridge/tests/` - Host, replay, and policy acceptance programs.
+      - `projects/dogfood/semantic-authority/` - Compact transitive semantic-authority demonstration.
       - `projects/dogfood/authority-effects/` - Transitive authority enforcement and graph-query dogfood.
       - `projects/dogfood/bastion/` - Sandbox capability and resource-exhaustion laboratory.
         - `projects/dogfood/bastion/bugs/` - Reproductions found by the bastion audit.
@@ -124,6 +203,7 @@ rad/
           - `projects/dogfood/native-math-kernels/src/bin/` - Standalone mathematical analysis binaries.
           - `projects/dogfood/native-math-kernels/src/boolean_lattice/` - Boolean-lattice closure and audit kernels.
           - `projects/dogfood/native-math-kernels/src/lib/` - RAD extension ABI bindings and registration sections.
+          - `projects/dogfood/native-math-kernels/src/zeta_cover/` - Zeta certificate, correlation, spacing, and window-verification kernels.
       - `projects/dogfood/opsdesk/` - Operations-desk workflow application.
       - `projects/dogfood/oracle/` - Speculative planner and beam-search application.
         - `projects/dogfood/oracle/bugs/` - Oracle-discovered runtime regressions.
@@ -155,6 +235,13 @@ rad/
       - `projects/dogfood/todo/` - Minimal persistent task application.
       - `projects/dogfood/world-law-rpg/` - Ownership, weight, encumbrance, derivation, constraints, and `why()` vertical slice.
       - `projects/dogfood/worldmerge/` - Three-way world merge and conflict example.
+      - `projects/dogfood/workpulse/` - Stateful temporal-model dogfood for distributed job orchestration.
+        - `projects/dogfood/workpulse/negative/` - Mutation fixtures rejected by lifecycle and temporal properties.
+        - `projects/dogfood/workpulse/owners/` - Authoritative job, lease, retry, and completion boundary.
+        - `projects/dogfood/workpulse/scenarios/` - Production-shaped scheduler workloads and failure schedules.
+        - `projects/dogfood/workpulse/systems/` - Lease, execution, timeout, retry, and cancellation systems.
+        - `projects/dogfood/workpulse/tests/` - Stateful model, shrinking, replay, and workflow acceptance programs.
+      - `projects/dogfood/zeta-simple-zeros/` - Exact finite-certificate verification for a lower bound on simple zeta zeros.
     - `projects/moba/` - Single ownership namespace for every MOBA-specific artifact.
       - `projects/moba/kit/` - Reusable RAD gameplay corpus, modular kits, and golden fixtures.
         - `projects/moba/kit/gen/` - Generated or generation-oriented MOBA fixtures.

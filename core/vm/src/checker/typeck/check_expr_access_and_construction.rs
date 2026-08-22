@@ -30,7 +30,9 @@ fn check_expr_access_and_construction(&mut self, expr: &Expr) -> Ty {
                         let is_private = self.alias_decls.get(alias_name).is_some_and(|decls| {
                             decls
                                 .iter()
-                                .any(|d| super::decl_name(d) == Some(field_name))
+                                .any(|declaration| {
+                                    declaration.namespace_name() == Some(field_name)
+                                })
                         });
                         if is_private {
                             self.error(
@@ -257,6 +259,20 @@ fn check_expr_access_and_construction(&mut self, expr: &Expr) -> Ty {
             }
             Expr::ComponentExpr(name, fields, rest, span) => {
                 let name = &self.resolve_canonical_name(name);
+                if self.materialized_views.contains(name) {
+                    self.error(
+                        span,
+                        format!(
+                            "Materialized view '{}' is runtime-maintained and cannot be mutated directly",
+                            name
+                        ),
+                        Some(
+                            "change the view's declared source components inside their owning transaction"
+                                .to_string(),
+                        ),
+                    );
+                    return Ty::Any;
+                }
                 if let Some(st) = self.structs.get(name).cloned() {
                     if let Some(rest_expr) = rest {
                         let rest_ty = self.check_expr(rest_expr);
@@ -483,6 +499,20 @@ fn check_expr_access_and_construction(&mut self, expr: &Expr) -> Ty {
             }
             Expr::VariantExpr(type_name, variant_name, fields, span) => {
                 let type_name = &self.resolve_canonical_name(type_name);
+                if let Some(native) = self.native_types.get(type_name).cloned() {
+                    if native.flavor == crate::native_types::NativeTypeFlavor::Opaque {
+                        self.error(span, format!("Opaque type '{}' has no members", type_name), None);
+                    } else if !fields.is_empty() {
+                        self.error(span, format!("Native member '{}::{}' cannot have fields", type_name, variant_name), None);
+                    } else if !native.members.iter().any(|(name, _)| name == variant_name) {
+                        self.error(span, format!("Unknown member '{}::{}'", type_name, variant_name), None);
+                    }
+                    return Ty::Native {
+                        name: type_name.clone(),
+                        repr: native.repr,
+                        flavor: native.flavor,
+                    };
+                }
                 match self.sum_types.get(type_name).cloned() {
                     Some(sum_type) => {
                         if !sum_type.is_pub && is_cross_file(sum_type.file_id, span.file) {
@@ -597,6 +627,18 @@ fn check_expr_access_and_construction(&mut self, expr: &Expr) -> Ty {
             }
             Expr::StateRef(machine, state, span) => {
                 let machine = &self.resolve_canonical_name(machine);
+                if let Some(native) = self.native_types.get(machine).cloned() {
+                    if native.flavor == crate::native_types::NativeTypeFlavor::Opaque {
+                        self.error(span, format!("Opaque type '{}' has no members", machine), None);
+                    } else if !native.members.iter().any(|(name, _)| name == state) {
+                        self.error(span, format!("Unknown member '{}::{}'", machine, state), None);
+                    }
+                    return Ty::Native {
+                        name: machine.clone(),
+                        repr: native.repr,
+                        flavor: native.flavor,
+                    };
+                }
                 let sm_opt = self.state_machines.get(machine).cloned();
                 let st_opt = self.sum_types.get(machine).cloned();
 

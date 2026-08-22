@@ -343,6 +343,13 @@ pub(crate) fn value_to_json(v: &Value, depth: usize) -> Result<serde_json::Value
             let key_str = match k {
                 MapKey::Str(s) => s.clone(),
                 MapKey::Int(i) => i.to_string(),
+                MapKey::Native(value) => format!(
+                    "{}:{}:{}:{}",
+                    value.type_name,
+                    value.repr,
+                    value.flavor.as_str(),
+                    value.bits
+                ),
                 MapKey::Bool(b) => b.to_string(),
                 MapKey::Entity(e) => e.to_string(),
                 // JSON object keys must be strings: "(1, 2)"

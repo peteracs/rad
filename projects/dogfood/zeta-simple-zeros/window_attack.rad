@@ -1,0 +1,246 @@
+// Bandwidth-one cosine-window attack on the 70% simple-zero boundary.
+//
+// RAD forks the compact window parameter.  The native hot path jointly
+// optimizes the affine gap multiplier q and the exact two-point Gram defect.
+// This first pass is a numerical scout; a successful cell must still be
+// replaced by a directed-rounding certificate before it is a theorem.
+
+use "../native-math-kernels/math_kernels.rad"
+
+let SCALE = 1000000000
+let A_MIN_MICROS = 100000
+let A_MAX_MICROS = 1570000
+let A_STEP_MICROS = 10000
+let TARGET_SCALED = 700000000
+
+resource CosineWindowUniverse {
+    a_micros: int = 0
+    baseline_scaled: int = 0
+    best_q_scaled: int = 0
+    local_a_scaled: int = 0
+    minimizing_gap_micros: int = 0
+    simple_bound_scaled: int = 0
+    evaluated: bool = false
+}
+
+system EvaluateCosineWindow(candidate: mut CosineWindowUniverse) {
+    let report = zeta_cosine_pair_scout(candidate.a_micros)
+    assert(not report["rigorous"], "sampled window scout mislabeled as rigorous")
+    assert(report["scale"] == SCALE, "window scout scale mismatch")
+    candidate = CosineWindowUniverse {
+        a_micros: report["a_micros"],
+        baseline_scaled: report["baseline_scaled"],
+        best_q_scaled: report["best_q_scaled"],
+        local_a_scaled: report["local_a_scaled"],
+        minimizing_gap_micros: report["minimizing_gap_micros"],
+        simple_bound_scaled: report["simple_bound_scaled"],
+        evaluated: true,
+    }
+}
+
+component WindowExpectation {
+    proposal_count: int = 0
+}
+
+component CosineWindowSelection {
+    proposal_count: int = 0
+    cells_seen: list = []
+    best_a_micros: int = 0
+    best_baseline_scaled: int = 0
+    best_q_scaled: int = 0
+    best_local_a_scaled: int = 0
+    best_gap_micros: int = 0
+    best_simple_bound_scaled: int = 0
+    crossing_count: int = 0
+}
+
+intent CosineWindowFinding {
+    key target: entity
+    candidate: CosineWindowUniverse
+}
+
+law SubmitCosineWindow(target: entity, candidate: CosineWindowUniverse) {
+    propose CosineWindowFinding { target: target, candidate: candidate }
+}
+
+resolver SelectCosineWindow for CosineWindowFinding(target, proposals) {
+    let expected = require(target, WindowExpectation)
+    let mut seen = []
+    for _index in range(expected.proposal_count) {
+        seen = push(seen, 0)
+    }
+
+    let mut best = CosineWindowUniverse {}
+    let mut crossing_count = 0
+    for proposal in proposals {
+        let candidate = proposal.candidate
+        assert(candidate.evaluated, "unevaluated cosine-window proposal")
+        assert(candidate.a_micros >= A_MIN_MICROS, "window parameter below scan")
+        assert(candidate.a_micros <= A_MAX_MICROS, "window parameter above scan")
+        assert((candidate.a_micros - A_MIN_MICROS) % A_STEP_MICROS == 0, "window parameter off grid")
+        let slot = (candidate.a_micros - A_MIN_MICROS) / A_STEP_MICROS
+        assert(seen[slot] == 0, "duplicate cosine-window proposal")
+        seen = set_at(seen, slot, 1)
+
+        if candidate.simple_bound_scaled >= TARGET_SCALED {
+            crossing_count = crossing_count + 1
+        }
+        if candidate.simple_bound_scaled > best.simple_bound_scaled
+        or (candidate.simple_bound_scaled == best.simple_bound_scaled
+            and candidate.a_micros < best.a_micros) {
+            best = candidate
+        }
+    }
+
+    next(target, CosineWindowSelection {
+        proposal_count: len(proposals),
+        cells_seen: seen,
+        best_a_micros: best.a_micros,
+        best_baseline_scaled: best.baseline_scaled,
+        best_q_scaled: best.best_q_scaled,
+        best_local_a_scaled: best.local_a_scaled,
+        best_gap_micros: best.minimizing_gap_micros,
+        best_simple_bound_scaled: best.simple_bound_scaled,
+        crossing_count: crossing_count,
+    })
+}
+
+constraint CompleteCosineWindowScan
+for CosineWindowSelection(subject, proposed)
+watches WindowExpectation
+{
+    let expected = candidate(subject, WindowExpectation)
+    require proposed.proposal_count == expected.proposal_count else "zeta.70.window_count"
+    require len(proposed.cells_seen) == expected.proposal_count else "zeta.70.window_shape"
+    let mut total = 0
+    for seen in proposed.cells_seen {
+        total = total + seen
+    }
+    require total == expected.proposal_count else "zeta.70.window_partition"
+    require proposed.best_a_micros >= A_MIN_MICROS else "zeta.70.window_best_missing"
+    require proposed.best_a_micros <= A_MAX_MICROS else "zeta.70.window_best_invalid"
+}
+
+entity window_judge {
+    WindowExpectation {}
+    CosineWindowSelection {}
+}
+
+entity reversed_window_judge {
+    WindowExpectation {}
+    CosineWindowSelection {}
+}
+
+event CosineWindowBatchReady {
+    target: entity
+    candidates: list
+    reverse_order: bool
+}
+
+on CosineWindowBatchReady(evt) {
+    settle {
+        if evt.reverse_order {
+            for index in range(len(evt.candidates)) {
+                SubmitCosineWindow(evt.target, evt.candidates[len(evt.candidates) - index - 1])
+            }
+        } else {
+            for candidate in evt.candidates {
+                SubmitCosineWindow(evt.target, candidate)
+            }
+        }
+    }
+}
+
+fn explore_windows() -> map<str, any> {
+    let live_before = world_digest()
+    let root = fork()
+    let count = (A_MAX_MICROS - A_MIN_MICROS) / A_STEP_MICROS + 1
+    let mut candidates = []
+    for slot in range(count) {
+        candidates = push(candidates, fork_with(root, CosineWindowUniverse {
+            a_micros: A_MIN_MICROS + slot * A_STEP_MICROS,
+        }))
+    }
+    let futures = simulate_many(candidates, [system::EvaluateCosineWindow], 1, 2011)
+    assert(world_digest() == live_before, "window forks mutated live state")
+
+    let mut reports = []
+    let mut first_wire_digest = ""
+    let mut last_wire_digest = ""
+    for future in futures {
+        assert_only_changed(root, future, [CosineWindowUniverse])
+        let wire = fork_to_bytes(future)
+        let restored = fork_from_bytes(wire) |> unwrap
+        assert(world_digest(restored) == world_digest(future), "window wire roundtrip changed a fork")
+        let report = peek_resource(restored, CosineWindowUniverse) |> unwrap
+        assert(report.evaluated, "window fork did not execute")
+        reports = push(reports, report)
+        if first_wire_digest == "" {
+            first_wire_digest = world_digest(restored)
+        }
+        last_wire_digest = world_digest(restored)
+    }
+    let result: map<str, any> = {
+        "candidates": reports,
+        "live_before": live_before,
+        "live_after": world_digest(),
+        "wire_boundary_digests": [first_wire_digest, last_wire_digest],
+    }
+    return result
+}
+
+fn main() -> nil {
+    let count = (A_MAX_MICROS - A_MIN_MICROS) / A_STEP_MICROS + 1
+    set(window_judge, WindowExpectation { proposal_count: count })
+    set(reversed_window_judge, WindowExpectation { proposal_count: count })
+
+    let explored = explore_windows()
+    emit CosineWindowBatchReady {
+        target: window_judge,
+        candidates: explored["candidates"],
+        reverse_order: false,
+    }
+    emit CosineWindowBatchReady {
+        target: reversed_window_judge,
+        candidates: explored["candidates"],
+        reverse_order: true,
+    }
+    flush_events()
+
+    let selected = require(window_judge, CosineWindowSelection)
+    let reversed = require(reversed_window_judge, CosineWindowSelection)
+    assert(selected == reversed, "window selection depends on proposal order")
+    assert(explored["live_before"] == explored["live_after"], "window speculation leaked")
+
+    let receipt: map<str, any> = {
+        "schema": "rad.zeta-cosine-window-attack.v1",
+        "rigorous": false,
+        "status": "sampled two-point scout; directed lower minimization still required",
+        "proposal_count": count,
+        "a_step_micros": A_STEP_MICROS,
+        "target_scaled": TARGET_SCALED,
+        "scale": SCALE,
+        "selection": selected,
+        "crosses_target_numerically": selected.best_simple_bound_scaled >= TARGET_SCALED,
+        "proposal_order_independent": selected == reversed,
+        "speculation_isolated": explored["live_before"] == explored["live_after"],
+        "wire_boundary_digests": explored["wire_boundary_digests"],
+        "selection_why": why(window_judge, CosineWindowSelection),
+    }
+    create_dir("projects/dogfood/zeta-simple-zeros/out")
+    write_file(
+        "projects/dogfood/zeta-simple-zeros/out/cosine-window-attack.json",
+        json_stringify(receipt),
+    )
+
+    print("bandwidth-one cosine-window attack")
+    print("forked cells:", count)
+    print("best a micros:", selected.best_a_micros)
+    print("best baseline:", selected.best_baseline_scaled, "/", SCALE)
+    print("best q:", selected.best_q_scaled, "/", SCALE)
+    print("sampled local A:", selected.best_local_a_scaled, "/", SCALE)
+    print("active gap micros:", selected.best_gap_micros)
+    print("sampled simple bound:", selected.best_simple_bound_scaled, "/", SCALE)
+    print("cells at or above 70%:", selected.crossing_count)
+    print(why(window_judge, CosineWindowSelection))
+}

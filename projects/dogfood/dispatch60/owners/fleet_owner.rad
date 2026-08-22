@@ -1,0 +1,74 @@
+use "../schema.rad"
+
+pub component VehicleProfile {
+    indexed vehicle_id: VehicleId = VehicleId(u64(0)),
+    ordered indexed dispatch_key: (int, int) = (0, 0),
+    zone: ZoneId = ZoneId(u16(0)),
+}
+
+pub component ActiveTrip owned {
+    active: bool = false,
+    job: JobId = JobId(u64(0)),
+}
+
+pub component TripPosition owned {
+    x: float = 0.0,
+    y: float = 0.0,
+}
+
+pub component TripVelocity {
+    dx: float = 0.0,
+    dy: float = 0.0,
+}
+
+pub materialized view ActiveTrips {
+    depends [VehicleProfile, ActiveTrip, TripPosition, TripVelocity]
+    key VehicleProfile.vehicle_id
+    where ActiveTrip.active == true
+}
+
+pub fn publish_vehicle(
+    id: VehicleId,
+    zone: ZoneId,
+    zone_key: int,
+    priority: int,
+    active: bool,
+) -> entity writes owned [ActiveTrip, TripPosition] {
+    return spawn(
+        VehicleProfile {
+            vehicle_id: id,
+            dispatch_key: (zone_key, priority),
+            zone: zone,
+        },
+        ActiveTrip {
+            active: active,
+            job: JobId(u64(if active { 1 } else { 0 })),
+        },
+        TripPosition { x: 0.0, y: 0.0 },
+        TripVelocity {
+            dx: if active { 0.25 } else { 0.0 },
+            dy: if active { 0.5 } else { 0.0 },
+        },
+    )
+}
+
+pub fn advance_trip(target: entity) -> nil writes owned [TripPosition] {
+    let x = read_field(target, TripPosition, "x")
+    let y = read_field(target, TripPosition, "y")
+    let dx = read_field(target, TripVelocity, "dx")
+    let dy = read_field(target, TripVelocity, "dy")
+    write_field(target, TripPosition, "x", x + dx)
+    write_field(target, TripPosition, "y", y + dy)
+}
+
+pub fn complete_trip(target: entity) -> nil writes owned [ActiveTrip] {
+    write_field(target, ActiveTrip, "active", false)
+}
+
+pub readonly fn position_of(id: VehicleId) -> (float, float) {
+    let target: entity = lookup(VehicleProfile, "vehicle_id", id) |> unwrap
+    return (
+        read_field(target, TripPosition, "x"),
+        read_field(target, TripPosition, "y"),
+    )
+}

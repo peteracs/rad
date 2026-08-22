@@ -29,6 +29,8 @@
 - [Modules & Imports](./guide/modules.md)
 - [Enterprise Expectations](./guide/enterprise-expectations.md)
 - [Async and Parallel Execution](./guide/async-and-parallel.md)
+- [Authority, Transactions, and Native Data](./guide/authority-transactions-and-native-data.md)
+- [Cost, Phases, Provenance, Models, and FFI](./guide/cost-phases-provenance-models-and-ffi.md)
 - [WebTransport Edge Networking](./guide/webtransport-networking.md)
 - [Game Embedding & MOBA Dogfood](./guide/game-embedding.md)
 - [WebGPU Presentation Host](./guide/webgpu.md)
@@ -64,6 +66,7 @@
 - [Radtactics](./examples/radtactics.md)
 - [Frankl Union-Closed-Family Search](./examples/frankl-search.md)
 - [Collatz Structural Laboratory](./examples/collatz-lab.md)
+- [Zeta Simple-Zero Certificate](./examples/zeta-simple-zeros.md)
 
 # Project
 
@@ -73,6 +76,7 @@
 - [Core VM Source Audit](./project/core-vm-source-audit.md)
 - [C Backend Freeze](./project/c-backend-freeze.md)
 - [Contributing](./project/contributing.md)
+- [Production Dogfood Portfolio](./project/production-dogfood-portfolio.md)
 - [Changelog](./project/changelog.md)
 - [Roadmap](./project/roadmap.md)
 - [RFC Process](./project/rfcs.md)

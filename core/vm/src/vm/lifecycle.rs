@@ -19,7 +19,23 @@ impl VM {
                     .unwrap_or_else(|error| panic!("compiler produced invalid bytecode: {error}"))
             })
             .collect::<Vec<_>>();
+        self.view_kernels = Arc::new(
+            std::mem::take(&mut result.view_kernels)
+                .into_iter()
+                .map(Arc::new)
+                .collect(),
+        );
         self.gc.merge(result.gc);
+        self.native_layouts = Arc::new(result.native_layouts);
+        self.shared_world_tests = Arc::new(std::mem::take(&mut result.shared_world_tests));
+        for view in &result.materialized_views {
+            self.world.install_materialized_view(
+                view.name.clone(),
+                view.dependencies.clone(),
+                view.key.clone(),
+                view.predicate.clone(),
+            );
+        }
         {
             let intents = Arc::make_mut(&mut self.intent_registry);
             for intent in &result.intents {
@@ -92,6 +108,7 @@ impl VM {
                         before: sys.before,
                         serial_group: sys.serial_group,
                         accum_resources,
+                        instruction_budget: sys.instruction_budget,
                     },
                 );
             }
@@ -112,9 +129,10 @@ impl VM {
                 eh.entry(h.event_name).or_default().push(HandlerEntry {
                     chunk_id: h.chunk_id,
                     param_slot: h.param_slot,
-                    once: h.once,
+                    once: h.once || h.contracts.exactly_once,
                     fired: false,
                     has_guard: h.has_guard,
+                    contracts: h.contracts,
                 });
             }
         }
@@ -144,6 +162,15 @@ impl VM {
             self.indexed_decl = Arc::new(indexed_fields);
             self.world
                 .set_indexed_fields_arc(Arc::clone(&self.indexed_decl));
+        }
+        {
+            let mut ordered_fields: HashMap<String, HashSet<String>> = (*self.ordered_decl).clone();
+            for (name, fields) in result.ordered_component_fields {
+                ordered_fields.insert(name, fields.into_iter().collect());
+            }
+            self.ordered_decl = Arc::new(ordered_fields);
+            self.world
+                .set_ordered_fields_arc(Arc::clone(&self.ordered_decl));
         }
         {
             let vl = Arc::make_mut(&mut self.variant_layouts);
@@ -177,6 +204,8 @@ impl VM {
         // invariant. Restore transaction-local state defensively instead of
         // merely dropping a stale context if an internal caller violated it.
         self.abort_settlement();
+        self.abort_transaction();
+        self.abort_post_commit();
         let next_frame_id_before = self.next_frame_id;
         crate::value::set_profile_copy_context(self.profile_copies, 0);
         self.frames.clear();
@@ -210,12 +239,14 @@ impl VM {
             }
             other => other,
         });
-        let result = self.enforce_settlement_balance(result);
+        let result = self.enforce_region_balance(result);
         if result.is_err() {
             // BeginSettlement and EndSettlement are separate bytecodes. A
             // body/law failure can bypass EndSettlement, so every public run
             // return must explicitly discard an unfinished transaction.
             self.abort_settlement();
+            self.abort_transaction();
+            self.abort_post_commit();
             self.frames.clear();
             self.stack.truncate(stack_base);
             self.next_frame_id = next_frame_id_before;

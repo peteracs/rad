@@ -1,0 +1,16 @@
+use "schema.rad"
+use "owners/inventory_owner.rad"
+use "systems/fulfillment.rad"
+use "scenarios/production.rad"
+
+fn main() -> nil {
+    seed_orders(1000)
+    schedule [ReserveOrders, ShipOrders]
+    assert(len(entities(Shipment)) == 1000, "every reserved order shipped")
+    assert(available_stock("RAD-BOOK") == 0, "stock was consumed through owner API")
+    assert(res(InventoryRevision).value == 2001, "owner revision tracks seed, reserve, consume")
+    let stock: entity = lookup(Inventory, "sku", "RAD-BOOK") |> unwrap
+    run_reconciliation(stock, 25, 0)
+    assert(available_stock("RAD-BOOK") == 25, "named co-owner performed migration")
+    print("fulfillos: shipped 1000 orders with owned inventory")
+}

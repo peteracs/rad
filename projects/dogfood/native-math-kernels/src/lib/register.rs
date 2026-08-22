@@ -38,7 +38,35 @@ unsafe extern "C" fn affine_cycle_profile(args: *const u64, argc: usize) -> u64 
 
 unsafe fn register(api: &RadPluginApi, name: &str, function: NativeFnPtr, arity: u32) {
     let name = CString::new(name).expect("static function name");
-    (api.register_fn)(api.ctx, name.as_ptr(), function, arity);
+    let parameters = (0..arity).map(|_| "any").collect::<Vec<_>>().join(",");
+    let signature = CString::new(format!("({parameters})->any")).expect("generated signature");
+    let declaration = RadNativeFunctionDecl {
+        name: name.as_ptr(),
+        function,
+        arity,
+        effects: std::ptr::null(),
+        effect_count: 0,
+        signature: signature.as_ptr(),
+        deterministic: true,
+        replayable: true,
+    };
+    (api.register_fn)(api.ctx, &declaration);
+}
+
+static EXTENSION_ID: &[u8] = b"rad.dogfood.math-kernels\0";
+static EXTENSION_VERSION: &[u8] = b"0.1.0\0";
+static ABI_CONTRACT: &[u8] =
+    b"{\"contract_version\":1,\"calling_convention\":\"C\",\"types\":[]}\0";
+static EXTENSION_DESCRIPTOR: RadExtensionDescriptor = RadExtensionDescriptor {
+    abi_version: 3,
+    extension_id: EXTENSION_ID.as_ptr().cast(),
+    extension_version: EXTENSION_VERSION.as_ptr().cast(),
+    abi_contract_json: ABI_CONTRACT.as_ptr().cast(),
+};
+
+#[no_mangle]
+pub extern "C" fn rad_extension_descriptor() -> *const RadExtensionDescriptor {
+    &EXTENSION_DESCRIPTOR
 }
 
 #[no_mangle]
@@ -183,4 +211,52 @@ pub unsafe extern "C" fn rad_extension_init(api: *const RadPluginApi) {
         7,
     );
     register(api, "affine_cycle_profile_json", affine_cycle_profile, 4);
+    register(api, "zeta_cover_lane_json", zeta_cover_lane, 3);
+    register(api, "zeta_prepare_cover_json", zeta_prepare_cover, 1);
+    register(
+        api,
+        "zeta_prepared_cover_lane_json",
+        zeta_prepared_cover_lane,
+        3,
+    );
+    register(api, "zeta_equispaced_block_json", zeta_equispaced_block, 2);
+    register(api, "zeta_even_spacing_bound_json", zeta_even_spacing_bound, 1);
+    register(
+        api,
+        "zeta_integer_spacing_bound_json",
+        zeta_integer_spacing_bound,
+        2,
+    );
+    register(api, "zeta_mt_bandwidth_scout_json", zeta_mt_bandwidth_scout, 1);
+    register(
+        api,
+        "zeta_fourth_moment_transfer_scout_json",
+        zeta_fourth_moment_transfer_scout,
+        3,
+    );
+    register(api, "zeta_cosine_pair_scout_json", zeta_cosine_pair_scout, 1);
+    register(
+        api,
+        "zeta_cosine_direct_sum_scout_json",
+        zeta_cosine_direct_sum_scout,
+        2,
+    );
+    register(
+        api,
+        "zeta_perturbed_window_scout_json",
+        zeta_perturbed_window_scout,
+        1,
+    );
+    register(
+        api,
+        "zeta_perturbed_window_two_mode_scout_json",
+        zeta_perturbed_window_two_mode_scout,
+        2,
+    );
+    register(
+        api,
+        "zeta_periodic_density_scout_json",
+        zeta_periodic_density_scout,
+        2,
+    );
 }

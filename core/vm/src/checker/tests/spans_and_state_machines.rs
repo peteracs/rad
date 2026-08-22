@@ -36,6 +36,7 @@
                 type_annotation,
                 default_value,
                 is_indexed: false,
+                is_owned: false,
             })
             .collect()
     }
@@ -67,6 +68,10 @@
                 version: 0,
                 fields: component_fields($fields),
                 indexed_fields: vec![],
+                ordered_indexed_fields: vec![],
+                ownership: OwnershipDecl::default(),
+                repr_c: false,
+                packed: false,
             }
         };
         (
@@ -85,6 +90,10 @@
                 version: 0,
                 fields: component_fields($fields),
                 indexed_fields: vec![],
+                ordered_indexed_fields: vec![],
+                ownership: OwnershipDecl::default(),
+                repr_c: false,
+                packed: false,
             }
         };
     }
@@ -176,6 +185,7 @@
                 is_pure: false,
                 is_async: false,
                 effects: vec![],
+                ownership_writes: vec![],
             })],
         };
         let mut checker = Checker::new();
@@ -314,6 +324,8 @@
                     authority_emits: vec![],
                     authority_io: false,
                     authority_async: false,
+                    ownership_writes: vec![],
+                    contracts: CallableContracts::default(),
                     after: vec![],
                     before: vec![],
                     body: Block {
@@ -372,6 +384,7 @@
                                         ("x".to_string(), Expr::IntLit(1, span(4))),
                                         ("y".to_string(), Expr::IntLit(2, span(4))),
                                     ],
+                                    delivery: EventDelivery::Next,
                                 })],
                             },
                             span(3),

@@ -1,5 +1,3 @@
-
-
 impl Compiler {
     fn component_fields_as_defaults(fields: &[FieldDef]) -> Vec<(String, Option<TypeExpr>, Expr)> {
         fields
@@ -74,6 +72,10 @@ impl Compiler {
             component_types: HashMap::new(),
             resource_types: HashMap::new(),
             chunks: Vec::new(),
+            function_declarations: HashMap::new(),
+            materialized_views: Vec::new(),
+            view_kernels: Vec::new(),
+            indexed_kernel_fields: std::collections::HashSet::new(),
             systems: Vec::new(),
             handlers: Vec::new(),
             migrations: Vec::new(),
@@ -88,10 +90,12 @@ impl Compiler {
             checker_resources: HashMap::new(),
             checker_sum_types: HashMap::new(),
             type_redirects: HashMap::new(),
+            native_types: HashMap::new(),
             variant_shorthand: std::collections::HashSet::new(),
             spread_lengths: HashMap::new(),
             global_slots,
             global_names,
+            shared_world_tests: std::collections::HashSet::new(),
             program_source_identity: None,
             module_aliases: HashMap::new(),
             alias_decls: HashMap::new(),
@@ -135,10 +139,7 @@ impl Compiler {
         self
     }
 
-    pub fn with_checker_options(
-        mut self,
-        options: crate::checker::CheckerOptions,
-    ) -> Self {
+    pub fn with_checker_options(mut self, options: crate::checker::CheckerOptions) -> Self {
         self.features = options.features.clone();
         self.expected_checker_options = Some(options);
         self
@@ -152,107 +153,22 @@ impl Compiler {
         self
     }
 
-    pub fn with_aliases(mut self, aliases: HashMap<String, Vec<Decl>>) -> Self {
-        for (alias_name, decls) in &aliases {
-            let mut pub_map = HashMap::new();
-            for d in decls {
-                if let Some(name) = Self::decl_name_static(d) {
-                    if Self::decl_is_pub_static(d) {
-                        let mangled = format!("__mod_{}__{}", alias_name, name);
-                        pub_map.insert(name.to_string(), mangled);
-                    }
-                }
-            }
-            self.module_aliases.insert(alias_name.clone(), pub_map);
-        }
+    pub fn with_aliases(mut self, aliases: HashMap<String, ModuleAlias>) -> Self {
+        self.module_aliases = crate::ast::public_module_members(&aliases);
         self.alias_decls = aliases;
         self
     }
 
-    fn register_alias_local_names(
-        names: &mut HashMap<String, String>,
-        alias_name: &str,
-        decl: &Decl,
-    ) {
-        if let Some(name) = Self::decl_name_static(decl) {
-            names.insert(name.to_string(), format!("__mod_{}__{}", alias_name, name));
-            return;
-        }
-        match decl {
-            Decl::Stmt(Stmt::Let(binding)) => {
-                for name in &binding.names {
-                    names.insert(name.clone(), format!("__mod_{}__{}", alias_name, name));
-                }
-            }
-            Decl::Stmt(Stmt::LetElse(binding)) => {
-                if let Some(name) = binding.primary_binding_name() {
-                    names.insert(name.clone(), format!("__mod_{}__{}", alias_name, name));
-                }
-            }
-            _ => {}
-        }
-    }
-
-    fn decl_name_static(decl: &Decl) -> Option<&str> {
-        match decl {
-            Decl::Component(c) => Some(&c.name),
-            Decl::Resource(r) => Some(&r.name),
-            Decl::Struct(s) => Some(&s.name),
-            Decl::Intent(i) => Some(&i.name),
-            Decl::Law(l) => Some(&l.name),
-            Decl::Resolver(r) => Some(&r.name),
-            Decl::Constraint(c) => Some(&c.name),
-            Decl::Entity(e) => Some(&e.name),
-            Decl::State(s) => Some(&s.name),
-            Decl::System(s) => Some(&s.name),
-            Decl::Event(e) => Some(&e.name),
-            Decl::Phase(p) => Some(&p.name),
-            Decl::Fn(f) => Some(&f.name),
-            Decl::Type(t) => Some(&t.name),
-            Decl::TypeAlias(a) => Some(&a.name),
-            _ => None,
-        }
-    }
-
-    fn decl_is_pub_static(decl: &Decl) -> bool {
-        match decl {
-            Decl::Component(c) => c.is_pub,
-            Decl::Resource(r) => r.is_pub,
-            Decl::Struct(s) => s.is_pub,
-            Decl::Intent(i) => i.is_pub,
-            Decl::Law(l) => l.is_pub,
-            Decl::Resolver(r) => r.is_pub,
-            Decl::Constraint(c) => c.is_pub,
-            Decl::Entity(e) => e.is_pub,
-            Decl::State(s) => s.is_pub,
-            Decl::System(s) => s.is_pub,
-            Decl::Event(e) => e.is_pub,
-            Decl::Phase(p) => p.is_pub,
-            Decl::Fn(f) => f.is_pub,
-            Decl::Type(t) => t.is_pub,
-            Decl::TypeAlias(a) => a.is_pub,
-            Decl::Stmt(Stmt::Let(l)) => l.is_pub,
-            _ => false,
-        }
-    }
-
     pub(crate) fn resolve_canonical_name(&self, name: &str) -> String {
-        let mut current = name.to_string();
-        if let Some(dot_pos) = current.find('.') {
-            let alias = &current[..dot_pos];
-            let member = &current[dot_pos + 1..];
-            if let Some(alias_map) = self.module_aliases.get(alias) {
-                if let Some(resolved) = alias_map.get(member) {
-                    current = resolved.clone();
-                }
-            }
-        } else if let Some(resolved) = self.resolve_current_alias(&current) {
-            current = resolved;
-        }
-        while let Some(canonical) = self.type_redirects.get(&current) {
-            current = canonical.clone();
-        }
-        current
+        crate::ast::resolve_canonical_name(
+            name,
+            Some(&self.module_aliases),
+            &[
+                self.current_alias_scope.as_ref(),
+                self.current_file_scope.as_ref(),
+            ],
+            &self.type_redirects,
+        )
     }
 
     pub(crate) fn resolve_alias_member(&self, alias: &str, member: &str) -> Option<String> {
@@ -293,25 +209,23 @@ impl Compiler {
         for (name, rs) in &self.checker_resources {
             self.checker_components.insert(
                 name.clone(),
-                ComponentType {
-                    name: rs.name.clone(),
-                    fields: rs.fields.clone(),
-                    is_pub: rs.is_pub,
-                    file_id: rs.file_id,
-                    indexed_fields: std::collections::HashSet::new(),
-                },
+                ComponentType::from_declared_fields(
+                    rs.name.clone(),
+                    rs.fields.clone(),
+                    rs.is_pub,
+                    rs.file_id,
+                ),
             );
         }
         for (name, st) in &output.structs {
             self.checker_components.insert(
                 name.clone(),
-                ComponentType {
-                    name: st.name.clone(),
-                    fields: st.fields.clone(),
-                    is_pub: st.is_pub,
-                    file_id: st.file_id,
-                    indexed_fields: std::collections::HashSet::new(),
-                },
+                ComponentType::from_declared_fields(
+                    st.name.clone(),
+                    st.fields.clone(),
+                    st.is_pub,
+                    st.file_id,
+                ),
             );
         }
         self.checker_sum_types = output.sum_types.clone();
@@ -442,11 +356,9 @@ impl Compiler {
 
     fn compile_alias_decls(&mut self) -> Result<(), CompileError> {
         let alias_decls = std::mem::take(&mut self.alias_decls);
-        for (alias_name, decls) in &alias_decls {
-            let mut all_names: HashMap<String, String> = HashMap::new();
-            for d in decls {
-                Self::register_alias_local_names(&mut all_names, alias_name, d);
-            }
+        for binding in crate::ast::canonical_module_bindings(&alias_decls) {
+            let decls = binding.declarations();
+            let all_names = binding.local_redirects();
             self.current_alias_scope = Some(all_names.clone());
             for d in decls {
                 match d {
@@ -480,8 +392,22 @@ impl Compiler {
                     _ => {}
                 }
             }
+            // Namespaced modules obey the same declaration semantics as the
+            // entry module. Register every compile-time fact before lowering
+            // any body so forward references, system classification, and
+            // view-kernel callback analysis cannot depend on source order.
+            for declaration in decls {
+                self.predeclare_decl_metadata(declaration);
+            }
             for d in decls {
-                self.compile_decl(d)?;
+                if Self::compiles_in_first_pass(d) {
+                    self.compile_decl(d)?;
+                }
+            }
+            for d in decls {
+                if !Self::compiles_in_first_pass(d) {
+                    self.compile_decl(d)?;
+                }
             }
             self.current_alias_scope = None;
         }
@@ -509,6 +435,18 @@ impl Compiler {
         format!("__{}{}", prefix, self.temp_counter)
     }
 
+    fn compiles_in_first_pass(declaration: &Decl) -> bool {
+        matches!(
+            declaration,
+            Decl::Fn(_)
+                | Decl::Law(_)
+                | Decl::Resolver(_)
+                | Decl::Constraint(_)
+                | Decl::NativeType(_)
+                | Decl::MaterializedView(_)
+        )
+    }
+
     pub fn compile(mut self, program: &Program) -> Result<CompileResult, CompileError> {
         if let Some(output) = self.checker_output.take() {
             self.validate_checker_output(program, &output)?;
@@ -519,18 +457,19 @@ impl Compiler {
         // authority enforcement does not silently enable unrelated typed
         // lowering and persisted-world schema validation.
         if self.authority.is_none() {
-            let mut checker = crate::checker::Checker::new_with_options(
-                crate::checker::CheckerOptions {
+            let mut checker =
+                crate::checker::Checker::new_with_options(crate::checker::CheckerOptions {
                     features: self.features.clone(),
                     warn_compat: false,
                     ..crate::checker::CheckerOptions::default()
-                },
-            );
+                });
             checker.set_aliases(self.alias_decls.clone());
             let _ = checker.check(program);
-            let output = checker.output();
-            self.authority_errors = output.authority_errors;
-            self.authority = Some(output.authority);
+            // Authority only: `output()` would clone every checker map and
+            // fingerprint the result to hand back two fields.
+            let (authority, authority_errors) = checker.authority_report();
+            self.authority_errors = authority_errors;
+            self.authority = Some(authority);
         }
         if let Some(error) = self.authority_errors.first() {
             return Err(CompileError {
@@ -547,8 +486,8 @@ impl Compiler {
         for decl in &program.declarations {
             if let Some(span) = decl.span() {
                 if let Some(file_id) = span.file {
-                    if file_id.0 != 0 && !Self::decl_is_pub_static(decl) {
-                        if let Some(name) = Self::decl_name_static(decl) {
+                    if file_id.0 != 0 && !decl.is_public() {
+                        if let Some(name) = decl.namespace_name() {
                             let mangled = format!("__priv_{}__{}", file_id.0, name);
                             file_private_scopes
                                 .entry(file_id.0)
@@ -569,6 +508,18 @@ impl Compiler {
             self.emit_u16(slot, 0);
         }
 
+        // Fixed-width scalar constructors are real runtime type values, not
+        // aliases or checker-only syntax. Install them before any user code.
+        for repr in crate::native_types::NativeScalarKind::ALL {
+            let name = repr.to_string();
+            let slot = self.ensure_global_slot(&name);
+            self.emit_constant_gc(0, |gc| {
+                Value::from_native_type(gc, crate::native_types::NativeTypeDescriptor::scalar(repr))
+            });
+            self.emit_op(Op::DefGlobal, 0);
+            self.emit_u16(slot, 0);
+        }
+
         let has_main_fn = program
             .declarations
             .iter()
@@ -579,7 +530,7 @@ impl Compiler {
             if let Some(span) = decl.span() {
                 if let Some(file_id) = span.file {
                     if let Some(scope) = self.file_private_scopes.get(&file_id.0) {
-                        if let Some(name) = Self::decl_name_static(decl) {
+                        if let Some(name) = decl.namespace_name() {
                             if let Some(mangled) = scope.get(name) {
                                 resolved_name = Some(mangled.clone());
                             }
@@ -630,18 +581,12 @@ impl Compiler {
             self.predeclare_decl_metadata(decl);
         }
         for decl in &program.declarations {
-            if matches!(
-                decl,
-                Decl::Fn(_) | Decl::Law(_) | Decl::Resolver(_) | Decl::Constraint(_)
-            ) {
+            if Self::compiles_in_first_pass(decl) {
                 self.compile_decl(decl)?;
             }
         }
         for decl in &program.declarations {
-            if !matches!(
-                decl,
-                Decl::Fn(_) | Decl::Law(_) | Decl::Resolver(_) | Decl::Constraint(_)
-            ) {
+            if !Self::compiles_in_first_pass(decl) {
                 self.compile_decl(decl)?;
             }
         }
@@ -653,6 +598,14 @@ impl Compiler {
         } else {
             layout_analysis::LayoutAnalysis::default()
         };
+        let native_layouts =
+            crate::native_types::compute_native_layouts(program).map_err(|message| {
+                CompileError {
+                    message,
+                    line: 0,
+                    col: 0,
+                }
+            })?;
 
         if has_main_fn {
             let line = 0;
@@ -672,6 +625,7 @@ impl Compiler {
         let mut component_layouts = HashMap::new();
         let mut component_field_types = HashMap::new();
         let mut indexed_component_fields = HashMap::new();
+        let mut ordered_component_fields = HashMap::new();
         let mut transient_resources = std::collections::HashSet::new();
         for (name, (_, fields)) in &self.intent_types {
             component_layouts.insert(Self::intent_runtime_type(name), fields.clone());
@@ -695,7 +649,7 @@ impl Compiler {
             if let Some(span) = decl.span() {
                 if let Some(file_id) = span.file {
                     if let Some(scope) = self.file_private_scopes.get(&file_id.0) {
-                        if let Some(name) = Self::decl_name_static(decl) {
+                        if let Some(name) = decl.namespace_name() {
                             if let Some(mangled) = scope.get(name) {
                                 resolved_name = Some(mangled.clone());
                             }
@@ -724,8 +678,11 @@ impl Compiler {
                     // compiles (replay of embedded trace source) — the AST
                     // is the source of truth, the checker copy is a cache.
                     indexed_component_fields
-                        .entry(name)
+                        .entry(name.clone())
                         .or_insert_with(|| c.indexed_fields.clone());
+                    ordered_component_fields
+                        .entry(name)
+                        .or_insert_with(|| c.ordered_indexed_fields.clone());
                 }
                 Decl::Resource(r) => {
                     let name = resolved_name.unwrap_or_else(|| r.name.clone());
@@ -752,27 +709,34 @@ impl Compiler {
                 _ => {}
             }
         }
-        for (alias_name, decls) in &self.alias_decls {
+        for binding in crate::ast::canonical_module_bindings(&self.alias_decls) {
+            let alias_name = binding
+                .canonical_namespace()
+                .expect("canonical bindings are namespaced");
+            let decls = binding.declarations();
             for decl in decls {
                 match decl {
                     Decl::Event(e) => {
                         component_layouts.insert(
-                            format!("__mod_{}__{}", alias_name, e.name),
+                            crate::ast::canonical_module_symbol(alias_name, &e.name),
                             e.fields.iter().map(|(n, _)| n.clone()).collect(),
                         );
                     }
                     Decl::Component(c) => {
+                        let name = crate::ast::canonical_module_symbol(alias_name, &c.name);
                         component_layouts.insert(
-                            format!("__mod_{}__{}", alias_name, c.name),
+                            name.clone(),
                             c.fields
                                 .iter()
                                 .map(|field| field.name.clone())
                                 .collect::<Vec<String>>(),
                         );
+                        indexed_component_fields.insert(name.clone(), c.indexed_fields.clone());
+                        ordered_component_fields.insert(name, c.ordered_indexed_fields.clone());
                     }
                     Decl::Resource(r) => {
                         component_layouts.insert(
-                            format!("__mod_{}__{}", alias_name, r.name),
+                            crate::ast::canonical_module_symbol(alias_name, &r.name),
                             r.fields
                                 .iter()
                                 .map(|field| field.name.clone())
@@ -781,7 +745,7 @@ impl Compiler {
                     }
                     Decl::Struct(s) => {
                         component_layouts.insert(
-                            format!("__mod_{}__{}", alias_name, s.name),
+                            crate::ast::canonical_module_symbol(alias_name, &s.name),
                             s.fields
                                 .iter()
                                 .map(|field| field.name.clone())
@@ -834,14 +798,19 @@ impl Compiler {
                 .collect(),
             resolvers: self.resolvers,
             constraints: self.constraints,
+            materialized_views: self.materialized_views,
+            view_kernels: self.view_kernels,
             layout_analysis,
             materialization_plan,
             component_layouts,
             component_field_types,
             indexed_component_fields,
+            ordered_component_fields,
+            native_layouts,
             transient_resources,
             component_versions: std::mem::take(&mut self.component_versions),
             variant_layouts,
+            shared_world_tests: std::mem::take(&mut self.shared_world_tests),
             global_names: self.global_names,
             program_source_identity: self.program_source_identity,
             warnings: std::mem::take(&mut self.warnings),

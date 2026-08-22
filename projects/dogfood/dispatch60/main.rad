@@ -1,0 +1,9 @@
+use "schema.rad"
+use "owners/fleet_owner.rad"
+use "systems/dispatch.rad"
+use "scenarios/production.rad"
+
+fn main() -> nil {
+    run_dispatch_day(5000, 600, 100)
+    print(f"dispatch60: vehicles=5000 jobs=10000 active={len(entities(ActiveTrips))} capacity={global_capacity()}")
+}

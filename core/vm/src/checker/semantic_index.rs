@@ -82,22 +82,12 @@ impl CheckerSemanticIndex {
     }
 
     pub fn canonical_name(&self, name: &str) -> String {
-        let mut current = name.to_string();
-        if let Some(dot) = current.find('.') {
-            let alias = &current[..dot];
-            let member = &current[dot + 1..];
-            if let Some(resolved) = self
-                .module_aliases
-                .get(alias)
-                .and_then(|members| members.get(member))
-            {
-                current = resolved.clone();
-            }
-        }
-        while let Some(canonical) = self.type_redirects.get(&current) {
-            current = canonical.clone();
-        }
-        current
+        crate::ast::resolve_canonical_name(
+            name,
+            Some(&self.module_aliases),
+            &[],
+            &self.type_redirects,
+        )
     }
 }
 

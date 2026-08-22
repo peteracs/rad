@@ -1,0 +1,38 @@
+pub opaque type MatchId = u64
+pub opaque type PlayerId = u64
+pub opaque type FrameNumber = u64
+
+pub event PlayerInput {
+    match_entity: entity,
+    player: entity,
+    damage: int,
+}
+
+pub event ValidatedDamage {
+    match_entity: entity,
+    player: entity,
+    damage: int,
+}
+
+pub event DamageRequested {
+    match_entity: entity,
+    player: entity,
+    damage: int,
+}
+
+pub event DamageResolved {
+    match_entity: entity,
+    player: entity,
+    remaining_hp: int,
+    killed: bool,
+}
+
+pub event SnapshotReady {
+    match_entity: entity,
+    revision: int,
+}
+
+pub event RespawnWindowOpened {
+    match_entity: entity,
+    frame: FrameNumber,
+}

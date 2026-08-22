@@ -1,0 +1,3 @@
+let bytes = bytebuf_from_list([52, 18])
+let checksum: u16 = decode_be(bytes, 0, u16)
+assert(checksum == u16(4660), "endianness mismatch must be visible")

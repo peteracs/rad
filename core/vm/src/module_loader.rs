@@ -30,7 +30,7 @@ pub struct LoadResult {
     pub had_imports: bool,
     pub source_map: SourceMap,
     pub module_fingerprints: Vec<ModuleFingerprint>,
-    pub aliases: HashMap<String, Vec<Decl>>,
+    pub aliases: HashMap<String, ModuleAlias>,
     pub errors: Vec<ModuleLoadError>,
 }
 
@@ -53,4 +53,5 @@ pub struct LockFile {
 }
 // Lexical sections preserve one private semantic namespace.
 include!("module_loader/lockfile_and_loading.rs");
-include!("module_loader/aliases_and_tests.rs");
+include!("module_loader/aliases.rs");
+include!("module_loader/tests.rs");

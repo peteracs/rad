@@ -14,8 +14,13 @@ use regex::Regex;
 use crate::gc::GcHeap;
 use crate::value::{Builtin, MapKey, MapStorage, Value};
 // Lexical sections preserve one private semantic namespace.
-include!("builtins_impl/dispatch_and_effects.rs");
-include!("builtins_impl/higher_order_and_components.rs");
+include!("builtins_impl/dispatch.rs");
+include!("builtins_impl/diagnostics.rs");
+include!("builtins_impl/higher_order.rs");
+include!("builtins_impl/component_access.rs");
+include!("builtins_impl/entity_lifecycle.rs");
+include!("builtins_impl/world_queries.rs");
+include!("builtins_impl/byte_buffers.rs");
 include!("builtins_impl/forks_and_simulation.rs");
 include!("builtins_impl/sandbox_and_rollouts.rs");
 include!("builtins_impl/fork_wire_and_delta.rs");
@@ -32,4 +37,7 @@ include!("builtins_impl/bitsets.rs");
 include!("builtins_impl/property_testing.rs");
 include!("builtins_impl/network_transport_helpers.rs");
 include!("builtins_impl/higher_order_io_and_network.rs");
+include!("builtins_impl/collection_higher_order.rs");
 include!("builtins_impl/network_and_system.rs");
+#[cfg(test)]
+include!("builtins_impl/property_testing_tests.rs");

@@ -1,0 +1,6 @@
+opaque type PriceTicks = i64
+opaque type UnsignedPrice = u64
+
+fn accept_price(price: PriceTicks) -> nil {}
+let wrong = UnsignedPrice(u64(10))
+accept_price(wrong)

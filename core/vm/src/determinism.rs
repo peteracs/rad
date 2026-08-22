@@ -13,9 +13,7 @@
 
 #![cfg(test)]
 
-use crate::compiler::Compiler;
-use crate::lexer::Lexer;
-use crate::parser::Parser;
+use crate::parser::ParserOptions;
 use crate::value::Value;
 use crate::vm::VM;
 use std::collections::HashMap;
@@ -23,16 +21,8 @@ use std::collections::HashMap;
 /// Compile `src` from scratch and run it in a fresh VM with the given RNG
 /// seed. Returns the print buffer and the final world content digest.
 fn run_fresh(src: &str, seed: u64) -> (Vec<String>, String) {
-    let mut lexer = Lexer::new(src);
-    let tokens = lexer.tokenize().0;
-    let mut parser = Parser::new(tokens);
-    let program = parser.parse();
-    assert!(
-        parser.errors().is_empty(),
-        "parse errors: {:?}",
-        parser.errors()
-    );
-    let result = Compiler::new().compile(&program).expect("compile");
+    let result = crate::test_support::compile_source(src, ParserOptions::default())
+        .expect("parse and compile");
     let mut vm = VM::new();
     vm.suppress_output();
     vm.set_random_seed(seed);

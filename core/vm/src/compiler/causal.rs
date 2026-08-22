@@ -42,6 +42,7 @@ impl Compiler {
             is_pure: false,
             is_async: false,
             effects: vec!["readonly".to_string()],
+            ownership_writes: Vec::new(),
         });
         self.causal_lowering_depth -= 1;
         result
@@ -70,6 +71,7 @@ impl Compiler {
             is_pure: false,
             is_async: false,
             effects: vec!["readonly".to_string()],
+            ownership_writes: Vec::new(),
         });
         self.causal_lowering_depth -= 1;
         compile_result?;
@@ -105,6 +107,7 @@ impl Compiler {
             is_pure: false,
             is_async: false,
             effects: vec!["readonly".to_string()],
+            ownership_writes: Vec::new(),
         });
         self.causal_lowering_depth -= 1;
         result?;

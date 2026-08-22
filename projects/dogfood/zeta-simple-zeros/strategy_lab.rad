@@ -1,0 +1,769 @@
+// RAD strategy laboratory for the 70% gate.
+//
+// This does not claim a new zeta theorem. It exhausts the parameter space of
+// the current seven-point/block-pinching deduction and identifies the scale of
+// the new mathematical input required to reach 70%.
+
+use "../native-math-kernels/math_kernels.rad"
+
+let SCALE = 1000000000
+let PPM = 1000000
+let TARGET_PPM = 700000
+let H_LOWER_SCALED = 672500703
+let LOCAL_C_LOWER_SCALED = 3820001
+let MIN_BLOCK = 7
+let MAX_BLOCK = 300
+let WITNESS_BLOCK = 23
+let WITNESS_MIN_GAP_MICROS = 800000
+let WITNESS_MAX_GAP_MICROS = 2200000
+let WITNESS_STEP_MICROS = 10000
+let BANDWIDTH_MIN_MICROS = 1000000
+let BANDWIDTH_MAX_MICROS = 1080000
+let BANDWIDTH_STEP_MICROS = 250
+let TARGET_BASELINE_SCALED = 700000000
+
+resource BlockGateUniverse {
+    block_size: int = 7
+    current_a_scaled: int = 0
+    current_valid: bool = false
+    current_bound_ppm: int = 0
+    required_a_scaled: int = 0
+    required_c_scaled: int = 0
+    required_h_scaled: int = 0
+    cap_feasible: bool = false
+    evaluated: bool = false
+}
+
+pure fn ceil_div(numerator: int, denominator: int) -> int {
+    return (numerator + denominator - 1) / denominator
+}
+
+system EvaluateBlockGate(gate: mut BlockGateUniverse) {
+    let m = gate.block_size
+    let span_tax_scaled = ((m - 1) * SCALE) / 500
+    let current_a = (m - 6) * LOCAL_C_LOWER_SCALED
+    let current_valid = current_a < SCALE
+    let current_denominator = m * SCALE - current_a
+    let current_numerator = m * H_LOWER_SCALED - span_tax_scaled
+    let current_bound = if current_valid {
+        (current_numerator * PPM) / current_denominator
+    } else {
+        0
+    }
+
+    // (m*H-tax)/(m-A) >= 7/10 iff
+    // A >= (7*m - 10*(m*H-tax))/7, in the common fixed-point scale.
+    let required_a_numerator = 7 * m * SCALE - 10 * current_numerator
+    let required_a = max(0, ceil_div(required_a_numerator, 7))
+    let required_c = ceil_div(required_a, m - 6)
+
+    // Required replacement baseline H if all other certified inputs stay put.
+    let required_h = ceil_div(
+        10 * span_tax_scaled + 7 * (m * SCALE - current_a),
+        10 * m,
+    )
+
+    gate = BlockGateUniverse {
+        block_size: m,
+        current_a_scaled: current_a,
+        current_valid: current_valid,
+        current_bound_ppm: current_bound,
+        required_a_scaled: required_a,
+        required_c_scaled: required_c,
+        required_h_scaled: required_h,
+        cap_feasible: required_a < SCALE,
+        evaluated: true,
+    }
+}
+
+component GateExpectation {
+    proposal_count: int = 0
+}
+
+component SeventyPercentKeys {
+    proposal_count: int = 0
+    blocks_seen: list = []
+    best_current_bound_ppm: int = 0
+    best_current_block: int = 0
+    minimum_required_c_scaled: int = 0
+    minimum_required_c_block: int = 0
+    minimum_required_h_scaled: int = 0
+    minimum_required_h_block: int = 0
+    current_block_required_a_scaled: int = 0
+    optimistic_current_block_ppm: int = 0
+}
+
+intent BlockGateFinding {
+    key target: entity
+    gate: BlockGateUniverse
+}
+
+law SubmitBlockGate(target: entity, gate: BlockGateUniverse) {
+    propose BlockGateFinding { target: target, gate: gate }
+}
+
+resolver ResolveSeventyPercentKeys for BlockGateFinding(target, proposals) {
+    let expected = require(target, GateExpectation)
+    let mut seen = []
+    for _index in range(expected.proposal_count) {
+        seen = push(seen, 0)
+    }
+    let mut best_bound = 0
+    let mut best_block = 0
+    let mut minimum_c = SCALE
+    let mut minimum_c_block = 0
+    let mut minimum_h = SCALE
+    let mut minimum_h_block = 0
+    let mut current_block_required_a = 0
+
+    for proposal in proposals {
+        let gate = proposal.gate
+        assert(gate.evaluated, "unevaluated 70-percent gate")
+        assert(gate.block_size >= MIN_BLOCK and gate.block_size <= MAX_BLOCK, "gate block out of range")
+        let slot = gate.block_size - MIN_BLOCK
+        assert(seen[slot] == 0, "duplicate block gate")
+        seen = set_at(seen, slot, 1)
+
+        if gate.current_valid
+        and (gate.current_bound_ppm > best_bound
+            or (gate.current_bound_ppm == best_bound and gate.block_size > best_block)) {
+            best_bound = gate.current_bound_ppm
+            best_block = gate.block_size
+        }
+        if gate.cap_feasible
+        and (gate.required_c_scaled < minimum_c
+            or (gate.required_c_scaled == minimum_c and gate.block_size < minimum_c_block)) {
+            minimum_c = gate.required_c_scaled
+            minimum_c_block = gate.block_size
+        }
+        if gate.current_valid
+        and (gate.required_h_scaled < minimum_h
+            or (gate.required_h_scaled == minimum_h and gate.block_size < minimum_h_block)) {
+            minimum_h = gate.required_h_scaled
+            minimum_h_block = gate.block_size
+        }
+        if gate.block_size == 267 {
+            current_block_required_a = gate.required_a_scaled
+        }
+    }
+
+    // Absolute optimistic ceiling at the current m: no span tax and A=1-eps.
+    let optimistic_denominator = 267 * SCALE - (SCALE - 1)
+    let optimistic_numerator = 267 * H_LOWER_SCALED
+    let optimistic_bound = (optimistic_numerator * PPM) / optimistic_denominator
+
+    next(target, SeventyPercentKeys {
+        proposal_count: len(proposals),
+        blocks_seen: seen,
+        best_current_bound_ppm: best_bound,
+        best_current_block: best_block,
+        minimum_required_c_scaled: minimum_c,
+        minimum_required_c_block: minimum_c_block,
+        minimum_required_h_scaled: minimum_h,
+        minimum_required_h_block: minimum_h_block,
+        current_block_required_a_scaled: current_block_required_a,
+        optimistic_current_block_ppm: optimistic_bound,
+    })
+}
+
+constraint CompleteBlockGateSearch
+for SeventyPercentKeys(subject, proposed)
+watches GateExpectation
+{
+    let expected = candidate(subject, GateExpectation)
+    require proposed.proposal_count == expected.proposal_count else "zeta.70.missing_block"
+    require len(proposed.blocks_seen) == expected.proposal_count else "zeta.70.block_shape"
+    let mut total = 0
+    for seen in proposed.blocks_seen {
+        total = total + seen
+    }
+    require total == expected.proposal_count else "zeta.70.block_partition"
+    require proposed.best_current_bound_ppm < TARGET_PPM else "zeta.70.current_route_crossed"
+    require proposed.minimum_required_c_scaled > LOCAL_C_LOWER_SCALED else "zeta.70.no_local_gap"
+    require proposed.minimum_required_h_scaled > H_LOWER_SCALED else "zeta.70.no_baseline_gap"
+    require proposed.current_block_required_a_scaled > SCALE else "zeta.70.current_cap_suffices"
+    require proposed.optimistic_current_block_ppm < TARGET_PPM else "zeta.70.current_block_ceiling"
+}
+
+resource EquispacedWitnessUniverse {
+    point_count: int = 23
+    gap_micros: int = 0
+    energy_upper_scaled: int = 0
+    span_tax_upper_scaled: int = 0
+    total_upper_scaled: int = 0
+    evaluated: bool = false
+}
+
+system EvaluateEquispacedWitness(witness: mut EquispacedWitnessUniverse) {
+    let report = zeta_equispaced_block(witness.point_count, witness.gap_micros)
+    assert(not report["rigorous"], "numerical strategy witness mislabeled as rigorous")
+    assert(report["scale"] == SCALE, "strategy witness scale mismatch")
+    witness = EquispacedWitnessUniverse {
+        point_count: report["point_count"],
+        gap_micros: report["gap_micros"],
+        energy_upper_scaled: report["energy_upper_scaled"],
+        span_tax_upper_scaled: report["span_tax_upper_scaled"],
+        total_upper_scaled: report["total_upper_scaled"],
+        evaluated: true,
+    }
+}
+
+component WitnessExpectation {
+    proposal_count: int = 0
+    required_a_scaled: int = 0
+}
+
+component EquispacedWitnessSelection {
+    proposal_count: int = 0
+    gaps_seen: list = []
+    point_count: int = 0
+    gap_micros: int = 0
+    energy_upper_scaled: int = 0
+    span_tax_upper_scaled: int = 0
+    total_upper_scaled: int = 0
+}
+
+intent EquispacedWitnessFinding {
+    key target: entity
+    witness: EquispacedWitnessUniverse
+}
+
+law SubmitEquispacedWitness(target: entity, witness: EquispacedWitnessUniverse) {
+    propose EquispacedWitnessFinding { target: target, witness: witness }
+}
+
+resolver SelectEquispacedWitness for EquispacedWitnessFinding(target, proposals) {
+    let expected = require(target, WitnessExpectation)
+    let mut seen = []
+    for _index in range(expected.proposal_count) {
+        seen = push(seen, 0)
+    }
+    let mut selected_gap = 0
+    let mut selected_energy = SCALE
+    let mut selected_span = SCALE
+    let mut selected_total = 2 * SCALE
+
+    for proposal in proposals {
+        let witness = proposal.witness
+        assert(witness.evaluated, "unevaluated equispaced witness")
+        assert(witness.point_count == WITNESS_BLOCK, "wrong witness block size")
+        assert(witness.gap_micros >= WITNESS_MIN_GAP_MICROS, "witness gap below scan")
+        assert(witness.gap_micros <= WITNESS_MAX_GAP_MICROS, "witness gap above scan")
+        assert((witness.gap_micros - WITNESS_MIN_GAP_MICROS) % WITNESS_STEP_MICROS == 0, "witness gap off grid")
+        let slot = (witness.gap_micros - WITNESS_MIN_GAP_MICROS) / WITNESS_STEP_MICROS
+        assert(seen[slot] == 0, "duplicate equispaced witness")
+        seen = set_at(seen, slot, 1)
+        if witness.total_upper_scaled < selected_total
+        or (witness.total_upper_scaled == selected_total and witness.gap_micros < selected_gap) {
+            selected_gap = witness.gap_micros
+            selected_energy = witness.energy_upper_scaled
+            selected_span = witness.span_tax_upper_scaled
+            selected_total = witness.total_upper_scaled
+        }
+    }
+
+    next(target, EquispacedWitnessSelection {
+        proposal_count: len(proposals),
+        gaps_seen: seen,
+        point_count: WITNESS_BLOCK,
+        gap_micros: selected_gap,
+        energy_upper_scaled: selected_energy,
+        span_tax_upper_scaled: selected_span,
+        total_upper_scaled: selected_total,
+    })
+}
+
+constraint CompleteWitnessScan
+for EquispacedWitnessSelection(subject, proposed)
+watches WitnessExpectation
+{
+    let expected = candidate(subject, WitnessExpectation)
+    require proposed.proposal_count == expected.proposal_count else "zeta.70.witness_count"
+    require len(proposed.gaps_seen) == expected.proposal_count else "zeta.70.witness_shape"
+    let mut total = 0
+    for seen in proposed.gaps_seen {
+        total = total + seen
+    }
+    require total == expected.proposal_count else "zeta.70.witness_partition"
+    require proposed.total_upper_scaled < expected.required_a_scaled else "zeta.70.no_short_block_witness"
+}
+
+resource BandwidthUniverse {
+    lambda_micros: int = 1000000
+    baseline_lower_scaled: int = 0
+    evaluated: bool = false
+}
+
+system EvaluateBandwidthFrontier(candidate: mut BandwidthUniverse) {
+    let report = zeta_mt_bandwidth_scout(candidate.lambda_micros)
+    assert(not report["rigorous"], "bandwidth attack scout mislabeled as theorem")
+    assert(report["scale"] == SCALE, "bandwidth scout scale mismatch")
+    candidate = BandwidthUniverse {
+        lambda_micros: report["lambda_micros"],
+        baseline_lower_scaled: report["baseline_lower_scaled"],
+        evaluated: true,
+    }
+}
+
+component BandwidthExpectation {
+    proposal_count: int = 0
+}
+
+component BandwidthAttackSelection {
+    proposal_count: int = 0
+    candidates_seen: list = []
+    first_crossing_lambda_micros: int = 0
+    first_crossing_baseline_scaled: int = 0
+    best_lambda_micros: int = 0
+    best_baseline_scaled: int = 0
+}
+
+intent BandwidthAttackFinding {
+    key target: entity
+    candidate: BandwidthUniverse
+}
+
+law SubmitBandwidthAttack(target: entity, candidate: BandwidthUniverse) {
+    propose BandwidthAttackFinding { target: target, candidate: candidate }
+}
+
+resolver SelectBandwidthAttack for BandwidthAttackFinding(target, proposals) {
+    let expected = require(target, BandwidthExpectation)
+    let mut seen = []
+    for _index in range(expected.proposal_count) {
+        seen = push(seen, 0)
+    }
+    let mut first_lambda = BANDWIDTH_MAX_MICROS + BANDWIDTH_STEP_MICROS
+    let mut first_baseline = 0
+    let mut best_lambda = 0
+    let mut best_baseline = 0
+    for proposal in proposals {
+        let candidate = proposal.candidate
+        assert(candidate.evaluated, "unevaluated bandwidth attack")
+        assert(candidate.lambda_micros >= BANDWIDTH_MIN_MICROS, "bandwidth below attack scan")
+        assert(candidate.lambda_micros <= BANDWIDTH_MAX_MICROS, "bandwidth above attack scan")
+        assert((candidate.lambda_micros - BANDWIDTH_MIN_MICROS) % BANDWIDTH_STEP_MICROS == 0, "bandwidth off attack grid")
+        let slot = (candidate.lambda_micros - BANDWIDTH_MIN_MICROS) / BANDWIDTH_STEP_MICROS
+        assert(seen[slot] == 0, "duplicate bandwidth attack")
+        seen = set_at(seen, slot, 1)
+        if candidate.baseline_lower_scaled >= TARGET_BASELINE_SCALED
+        and candidate.lambda_micros < first_lambda {
+            first_lambda = candidate.lambda_micros
+            first_baseline = candidate.baseline_lower_scaled
+        }
+        if candidate.baseline_lower_scaled > best_baseline {
+            best_lambda = candidate.lambda_micros
+            best_baseline = candidate.baseline_lower_scaled
+        }
+    }
+    next(target, BandwidthAttackSelection {
+        proposal_count: len(proposals),
+        candidates_seen: seen,
+        first_crossing_lambda_micros: first_lambda,
+        first_crossing_baseline_scaled: first_baseline,
+        best_lambda_micros: best_lambda,
+        best_baseline_scaled: best_baseline,
+    })
+}
+
+constraint CompleteBandwidthAttackScan
+for BandwidthAttackSelection(subject, proposed)
+watches BandwidthExpectation
+{
+    let expected = candidate(subject, BandwidthExpectation)
+    require proposed.proposal_count == expected.proposal_count else "zeta.70.bandwidth_count"
+    require len(proposed.candidates_seen) == expected.proposal_count else "zeta.70.bandwidth_shape"
+    let mut total = 0
+    for seen in proposed.candidates_seen {
+        total = total + seen
+    }
+    require total == expected.proposal_count else "zeta.70.bandwidth_partition"
+    require proposed.first_crossing_lambda_micros > 1000000 else "zeta.70.bandwidth_one_crossed"
+    require proposed.first_crossing_lambda_micros <= BANDWIDTH_MAX_MICROS else "zeta.70.bandwidth_frontier_missing"
+    require proposed.first_crossing_baseline_scaled >= TARGET_BASELINE_SCALED else "zeta.70.bandwidth_frontier_weak"
+}
+
+entity strategy_judge {
+    GateExpectation {}
+    SeventyPercentKeys {}
+}
+
+entity reversed_strategy_judge {
+    GateExpectation {}
+    SeventyPercentKeys {}
+}
+
+entity witness_judge {
+    WitnessExpectation {}
+    EquispacedWitnessSelection {}
+}
+
+entity reversed_witness_judge {
+    WitnessExpectation {}
+    EquispacedWitnessSelection {}
+}
+
+entity bandwidth_judge {
+    BandwidthExpectation {}
+    BandwidthAttackSelection {}
+}
+
+entity reversed_bandwidth_judge {
+    BandwidthExpectation {}
+    BandwidthAttackSelection {}
+}
+
+event BlockGateBatchReady {
+    target: entity
+    gates: list
+    reverse_order: bool
+}
+
+on BlockGateBatchReady(evt) {
+    settle {
+        if evt.reverse_order {
+            for index in range(len(evt.gates)) {
+                SubmitBlockGate(evt.target, evt.gates[len(evt.gates) - index - 1])
+            }
+        } else {
+            for gate in evt.gates {
+                SubmitBlockGate(evt.target, gate)
+            }
+        }
+    }
+}
+
+event EquispacedWitnessBatchReady {
+    target: entity
+    witnesses: list
+    reverse_order: bool
+}
+
+event BandwidthAttackBatchReady {
+    target: entity
+    candidates: list
+    reverse_order: bool
+}
+
+on EquispacedWitnessBatchReady(evt) {
+    settle {
+        if evt.reverse_order {
+            for index in range(len(evt.witnesses)) {
+                SubmitEquispacedWitness(evt.target, evt.witnesses[len(evt.witnesses) - index - 1])
+            }
+        } else {
+            for witness in evt.witnesses {
+                SubmitEquispacedWitness(evt.target, witness)
+            }
+        }
+    }
+}
+
+on BandwidthAttackBatchReady(evt) {
+    settle {
+        if evt.reverse_order {
+            for index in range(len(evt.candidates)) {
+                SubmitBandwidthAttack(evt.target, evt.candidates[len(evt.candidates) - index - 1])
+            }
+        } else {
+            for candidate in evt.candidates {
+                SubmitBandwidthAttack(evt.target, candidate)
+            }
+        }
+    }
+}
+
+fn explore_blocks() -> map<str, any> {
+    let live_before = world_digest()
+    let root = fork()
+    let mut candidates = []
+    for block_size in range(MIN_BLOCK, MAX_BLOCK + 1) {
+        candidates = push(candidates, fork_with(root, BlockGateUniverse {
+            block_size: block_size,
+        }))
+    }
+    let futures = simulate_many(candidates, [system::EvaluateBlockGate], 1, 1979)
+    assert(world_digest() == live_before, "70-percent strategy forks mutated live state")
+
+    let mut gates = []
+    let mut first_wire_digest = ""
+    let mut last_wire_digest = ""
+    for future in futures {
+        assert_only_changed(root, future, [BlockGateUniverse])
+        let wire = fork_to_bytes(future)
+        let restored = fork_from_bytes(wire) |> unwrap
+        assert(world_digest(restored) == world_digest(future), "strategy wire roundtrip changed a fork")
+        let gate = peek_resource(restored, BlockGateUniverse) |> unwrap
+        assert(gate.evaluated, "strategy fork did not execute")
+        gates = push(gates, gate)
+        let restored_digest = world_digest(restored)
+        if first_wire_digest == "" {
+            first_wire_digest = restored_digest
+        }
+        last_wire_digest = restored_digest
+    }
+    let result: map<str, any> = {
+        "gates": gates,
+        "wire_boundary_digests": [first_wire_digest, last_wire_digest],
+        "live_before": live_before,
+        "live_after": world_digest(),
+    }
+    return result
+}
+
+fn explore_equispaced_witnesses() -> map<str, any> {
+    let live_before = world_digest()
+    let root = fork()
+    let count = (WITNESS_MAX_GAP_MICROS - WITNESS_MIN_GAP_MICROS) / WITNESS_STEP_MICROS + 1
+    let mut candidates = []
+    for slot in range(count) {
+        candidates = push(candidates, fork_with(root, EquispacedWitnessUniverse {
+            point_count: WITNESS_BLOCK,
+            gap_micros: WITNESS_MIN_GAP_MICROS + slot * WITNESS_STEP_MICROS,
+        }))
+    }
+    let futures = simulate_many(candidates, [system::EvaluateEquispacedWitness], 1, 1987)
+    assert(world_digest() == live_before, "witness forks mutated live strategy state")
+
+    let mut witnesses = []
+    let mut first_wire_digest = ""
+    let mut last_wire_digest = ""
+    for future in futures {
+        assert_only_changed(root, future, [EquispacedWitnessUniverse])
+        let wire = fork_to_bytes(future)
+        let restored = fork_from_bytes(wire) |> unwrap
+        assert(world_digest(restored) == world_digest(future), "witness wire roundtrip changed a fork")
+        let witness = peek_resource(restored, EquispacedWitnessUniverse) |> unwrap
+        assert(witness.evaluated, "witness fork did not execute")
+        witnesses = push(witnesses, witness)
+        let restored_digest = world_digest(restored)
+        if first_wire_digest == "" {
+            first_wire_digest = restored_digest
+        }
+        last_wire_digest = restored_digest
+    }
+    let result: map<str, any> = {
+        "witnesses": witnesses,
+        "wire_boundary_digests": [first_wire_digest, last_wire_digest],
+        "live_before": live_before,
+        "live_after": world_digest(),
+    }
+    return result
+}
+
+fn explore_bandwidth_frontier() -> map<str, any> {
+    let live_before = world_digest()
+    let root = fork()
+    let count = (BANDWIDTH_MAX_MICROS - BANDWIDTH_MIN_MICROS) / BANDWIDTH_STEP_MICROS + 1
+    let mut candidates = []
+    for slot in range(count) {
+        candidates = push(candidates, fork_with(root, BandwidthUniverse {
+            lambda_micros: BANDWIDTH_MIN_MICROS + slot * BANDWIDTH_STEP_MICROS,
+        }))
+    }
+    let futures = simulate_many(candidates, [system::EvaluateBandwidthFrontier], 1, 1993)
+    assert(world_digest() == live_before, "bandwidth forks mutated live strategy state")
+
+    let mut reports = []
+    let mut first_wire_digest = ""
+    let mut last_wire_digest = ""
+    for future in futures {
+        assert_only_changed(root, future, [BandwidthUniverse])
+        let wire = fork_to_bytes(future)
+        let restored = fork_from_bytes(wire) |> unwrap
+        assert(world_digest(restored) == world_digest(future), "bandwidth wire roundtrip changed a fork")
+        let report = peek_resource(restored, BandwidthUniverse) |> unwrap
+        assert(report.evaluated, "bandwidth fork did not execute")
+        reports = push(reports, report)
+        let restored_digest = world_digest(restored)
+        if first_wire_digest == "" {
+            first_wire_digest = restored_digest
+        }
+        last_wire_digest = restored_digest
+    }
+    let result: map<str, any> = {
+        "candidates": reports,
+        "wire_boundary_digests": [first_wire_digest, last_wire_digest],
+        "live_before": live_before,
+        "live_after": world_digest(),
+    }
+    return result
+}
+
+fn main() -> nil {
+    let expected = MAX_BLOCK - MIN_BLOCK + 1
+    set(strategy_judge, GateExpectation { proposal_count: expected })
+    set(reversed_strategy_judge, GateExpectation { proposal_count: expected })
+
+    let explored = explore_blocks()
+    emit BlockGateBatchReady {
+        target: strategy_judge,
+        gates: explored["gates"],
+        reverse_order: false,
+    }
+    emit BlockGateBatchReady {
+        target: reversed_strategy_judge,
+        gates: explored["gates"],
+        reverse_order: true,
+    }
+    flush_events()
+
+    let evidence = require(strategy_judge, SeventyPercentKeys)
+    let reversed = require(reversed_strategy_judge, SeventyPercentKeys)
+    assert(evidence == reversed, "70-percent strategy selection depends on proposal order")
+
+    let witness_count = (WITNESS_MAX_GAP_MICROS - WITNESS_MIN_GAP_MICROS) / WITNESS_STEP_MICROS + 1
+    set(witness_judge, WitnessExpectation {
+        proposal_count: witness_count,
+        required_a_scaled: evidence.minimum_required_c_scaled * (WITNESS_BLOCK - 6),
+    })
+    set(reversed_witness_judge, WitnessExpectation {
+        proposal_count: witness_count,
+        required_a_scaled: evidence.minimum_required_c_scaled * (WITNESS_BLOCK - 6),
+    })
+    let witness_search = explore_equispaced_witnesses()
+    emit EquispacedWitnessBatchReady {
+        target: witness_judge,
+        witnesses: witness_search["witnesses"],
+        reverse_order: false,
+    }
+    emit EquispacedWitnessBatchReady {
+        target: reversed_witness_judge,
+        witnesses: witness_search["witnesses"],
+        reverse_order: true,
+    }
+    flush_events()
+    let witness = require(witness_judge, EquispacedWitnessSelection)
+    let reversed_witness = require(reversed_witness_judge, EquispacedWitnessSelection)
+    assert(witness == reversed_witness, "witness selection depends on proposal order")
+
+    let bandwidth_count = (BANDWIDTH_MAX_MICROS - BANDWIDTH_MIN_MICROS) / BANDWIDTH_STEP_MICROS + 1
+    set(bandwidth_judge, BandwidthExpectation { proposal_count: bandwidth_count })
+    set(reversed_bandwidth_judge, BandwidthExpectation { proposal_count: bandwidth_count })
+    let bandwidth_search = explore_bandwidth_frontier()
+    emit BandwidthAttackBatchReady {
+        target: bandwidth_judge,
+        candidates: bandwidth_search["candidates"],
+        reverse_order: false,
+    }
+    emit BandwidthAttackBatchReady {
+        target: reversed_bandwidth_judge,
+        candidates: bandwidth_search["candidates"],
+        reverse_order: true,
+    }
+    flush_events()
+    let bandwidth = require(bandwidth_judge, BandwidthAttackSelection)
+    let reversed_bandwidth = require(reversed_bandwidth_judge, BandwidthAttackSelection)
+    assert(bandwidth == reversed_bandwidth, "bandwidth attack selection depends on proposal order")
+
+    // The forked scan discovers a sharp obstruction near gap 2.004.  Unit
+    // spacing gives a more structural certificate: for every integer r,
+    // |k(r)|=1/(2*pi^2*r^2-1)<1/(17*r^2).  It obstructs every nonnegative
+    // affine span coefficient, not only the current 1/500 coefficient.
+    let rigorous_counterexample = zeta_integer_spacing_bound(WITNESS_BLOCK, 1)
+    let short_block_required_a = evidence.minimum_required_c_scaled * (WITNESS_BLOCK - 6)
+    assert(rigorous_counterexample["rigorous"], "short-block counterexample is not rigorous")
+    assert(rigorous_counterexample["scale"] == SCALE, "short-block counterexample scale mismatch")
+    assert(rigorous_counterexample["total_upper_scaled"] < short_block_required_a, "short-block route was not obstructed")
+
+    // Fully rational universal obstruction for this proof architecture.
+    // Alternating Taylor bounds at x=1/sqrt(2) give
+    //   x*cot(x) > 4379/5292 > 41/50,
+    // hence H0=3/2-x*cot(x)<17/25.  At unit spacing, D(G)<=E and
+    //   E < 2*m*(sum r^-4)/17^2 < 4*m/289 < m/35.
+    // But a 70% deduction requires the q=0 local term to exceed m/35,
+    // while its q coefficient is (m-1)/(7/10) and the counterexample's
+    // coefficient is only m-1.  Thus every m>=2 and every q>=0 fails.
+    assert(4379 * 50 > 41 * 5292, "H0 rational upper proof failed")
+    assert(4 * 35 < 289, "unit-spacing energy obstruction failed")
+    assert(7 < 10, "affine span slope obstruction failed")
+    let affine_route_obstruction: map<str, any> = {
+        "rigorous": true,
+        "applies_to_block_sizes": "all m >= 2",
+        "applies_to_span_coefficients": "all q >= 0",
+        "baseline_upper_numerator": 17,
+        "baseline_upper_denominator": 25,
+        "target_numerator": 7,
+        "target_denominator": 10,
+        "required_zero_span_term_lower_numerator": 1,
+        "required_zero_span_term_lower_denominator": 35,
+        "unit_gap_energy_per_point_upper_numerator": 4,
+        "unit_gap_energy_per_point_upper_denominator": 289,
+        "kernel_identity": "|k(r)|=1/(2*pi^2*r^2-1)",
+        "kernel_rational_bound": "|k(r)|<1/(17*r^2)",
+        "conclusion": "No fixed-size shifted-block inequality Delta(G)+q*span>=A can reach 70% from H0.",
+    }
+
+    let receipt: map<str, any> = {
+        "schema": "rad.zeta-seventy-percent-gate.v1",
+        "target": "70%",
+        "current_verified_bound_ppm": evidence.best_current_bound_ppm,
+        "current_best_block": evidence.best_current_block,
+        "optimistic_current_block_ppm": evidence.optimistic_current_block_ppm,
+        "least_required_local_c_scaled": evidence.minimum_required_c_scaled,
+        "least_required_local_c_scale": SCALE,
+        "least_required_local_c_block": evidence.minimum_required_c_block,
+        "current_local_c_scaled": LOCAL_C_LOWER_SCALED,
+        "required_local_multiplier_milli": (evidence.minimum_required_c_scaled * 1000) / LOCAL_C_LOWER_SCALED,
+        "least_required_baseline_h_scaled": evidence.minimum_required_h_scaled,
+        "least_required_baseline_h_scale": SCALE,
+        "least_required_baseline_h_block": evidence.minimum_required_h_block,
+        "current_baseline_h_scaled": H_LOWER_SCALED,
+        "current_block_required_a_scaled": evidence.current_block_required_a_scaled,
+        "defect_cap_scale": SCALE,
+        "short_block_numerical_scout": witness,
+        "short_block_rigorous_counterexample": rigorous_counterexample,
+        "short_block_required_a_scaled": short_block_required_a,
+        "short_block_counterexample_ratio_milli": (rigorous_counterexample["total_upper_scaled"] * 1000)
+        / short_block_required_a,
+        "affine_shifted_block_obstruction": affine_route_obstruction,
+        "bandwidth_attack": {
+            "rigorous": false,
+            "status": "variational scout; requires a new prime-side estimate beyond bandwidth one",
+            "grid_step_micros": BANDWIDTH_STEP_MICROS,
+            "first_crossing_lambda_micros": bandwidth.first_crossing_lambda_micros,
+            "first_crossing_baseline_scaled": bandwidth.first_crossing_baseline_scaled,
+            "baseline_scale": SCALE,
+            "relative_bandwidth_extension_ppm": bandwidth.first_crossing_lambda_micros - 1000000,
+            "proposal_order_independent": bandwidth == reversed_bandwidth,
+        },
+        "proposal_order_independent": evidence == reversed,
+        "speculation_isolated": explored["live_before"] == explored["live_after"],
+        "wire_boundary_digests": explored["wire_boundary_digests"],
+        "witness_wire_boundary_digests": witness_search["wire_boundary_digests"],
+        "bandwidth_wire_boundary_digests": bandwidth_search["wire_boundary_digests"],
+        "selection_why": why(strategy_judge, SeventyPercentKeys),
+        "witness_why": why(witness_judge, EquispacedWitnessSelection),
+        "bandwidth_why": why(bandwidth_judge, BandwidthAttackSelection),
+        "keys": [
+            "A stronger F6 decimal cannot cross 70%; the current block dilution is structural.",
+            "Unit spacing rigorously rules out every fixed-size affine-span block inequality, for all m>=2 and q>=0.",
+            "Alternatively the Montgomery-Taylor baseline must rise close to 70%, requiring a new analytic test family.",
+            "The remaining local key must couple blocks or densities nonlinearly; scalar Delta+q*span pinching cannot work.",
+            "The optimized variational baseline crosses 70% after only a small bandwidth extension; proving the new prime-side terms is the leading attack.",
+            "A second attack is a higher-moment stability inequality (trace M^3 or a spectral polynomial) that defeats the unit-lattice obstruction.",
+            "A third attack is a multi-window direct-sum certificate whose kernels do not share the integer-spacing near-zero structure.",
+        ],
+    }
+    create_dir("projects/dogfood/zeta-simple-zeros/out")
+    write_file(
+        "projects/dogfood/zeta-simple-zeros/out/seventy-percent-gate.json",
+        json_stringify(receipt),
+    )
+
+    print("70% strategy gate (all values fixed-point)")
+    print("current route best ppm:", evidence.best_current_bound_ppm, "at m=", evidence.best_current_block)
+    print("optimistic m=267 ceiling ppm:", evidence.optimistic_current_block_ppm)
+    print("least local C required:", evidence.minimum_required_c_scaled, "/", SCALE, "at m=", evidence.minimum_required_c_block)
+    print("local-strength multiplier milli:", receipt["required_local_multiplier_milli"])
+    print("least replacement H required:", evidence.minimum_required_h_scaled, "/", SCALE, "at m=", evidence.minimum_required_h_block)
+    print("m=23 numerical witness gap micros:", witness.gap_micros)
+    print("m=23 numerical E+tax:", witness.total_upper_scaled, "/", SCALE)
+    print("m=23 rigorous unit-gap upper:", rigorous_counterexample["total_upper_scaled"], "/", SCALE)
+    print("m=23 required A:", short_block_required_a, "/", SCALE)
+    print("first bandwidth-only 70% crossing lambda micros:", bandwidth.first_crossing_lambda_micros)
+    print("frontier baseline:", bandwidth.first_crossing_baseline_scaled, "/", SCALE)
+    print(why(strategy_judge, SeventyPercentKeys))
+    print(why(witness_judge, EquispacedWitnessSelection))
+    print(why(bandwidth_judge, BandwidthAttackSelection))
+}

@@ -1,0 +1,42 @@
+use "../schema.rad"
+use "../owners/fleet_owner.rad"
+use "../systems/dispatch.rad"
+
+pub fn seed_fleet(vehicle_count: int, active_count: int) -> nil {
+    for i in range(0, vehicle_count) {
+        publish_vehicle(
+            VehicleId(u64(i + 1)),
+            ZoneId(u16(i % 2000)),
+            i % 2000,
+            i % 100,
+            i < active_count,
+        )
+    }
+}
+
+pub fn seed_jobs(job_count: int) -> nil {
+    for i in range(0, job_count) {
+        spawn(DeliveryJob {
+            job_id: JobId(u64(i + 1)),
+            zone: ZoneId(u16(i % 2000)),
+            deadline_s: float(3600 + (i % 900)),
+            assigned: i % 2 == 0,
+        })
+    }
+}
+
+pub fn run_frames(frame_count: int) -> nil {
+    for _frame in range(0, frame_count) {
+        AdvanceActiveTrips()
+    }
+}
+
+pub fn run_dispatch_day(vehicle_count: int, active_count: int, frame_count: int) -> nil {
+    seed_fleet(vehicle_count, active_count)
+    seed_jobs(vehicle_count * 2)
+    assert(len(entities(ActiveTrips)) == active_count, "view holds active subset")
+    run_frames(frame_count)
+    let first_position = position_of(VehicleId(u64(1)))
+    assert(first_position[0] == float(frame_count) * 0.25, "x advances once per frame")
+    assert(first_position[1] == float(frame_count) * 0.5, "y advances once per frame")
+}

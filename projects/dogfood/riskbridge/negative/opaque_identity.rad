@@ -1,0 +1,5 @@
+use "../schema.rad"
+
+fn accept_transaction(_id: TransactionId) -> nil {}
+let customer: CustomerId = CustomerId(u64(42))
+accept_transaction(customer)

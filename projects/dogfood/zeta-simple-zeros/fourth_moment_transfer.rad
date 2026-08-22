@@ -1,0 +1,271 @@
+// Eight-fork finite stress test for the promoted fourth-moment transfer.
+
+use "../native-math-kernels/math_kernels.rad"
+
+let SCALE = 1000000000
+let RELATIVE_SLACK = SCALE / 117
+
+resource TransferUniverse {
+    lambda_micros: int = 0
+    limit: int = 0
+    max_shift: int = 0
+    small_factor_cap: int = 2
+    aggregate_ratio_scaled: int = 0
+    sampled_aggregate_ratio_scaled: int = 0
+    fejer_aggregate_ratio_scaled: int = 0
+    ascending_aggregate_ratio_scaled: int = 0
+    absolute_error_scaled: int = 0
+    even_ratio_scaled: int = 0
+    odd_ratio_scaled: int = 0
+    rms_error_scaled: int = 0
+    minimum_ratio_scaled: int = 0
+    maximum_ratio_scaled: int = 0
+    residue_block_rms_scaled: int = 0
+    maximum_residue_block_error_scaled: int = 0
+    nonzero_coefficients: int = 0
+    typical_aggregate_ratio_scaled: int = 0
+    balanced_aggregate_ratio_scaled: int = 0
+    cross_aggregate_ratio_scaled: int = 0
+    excluded_mean_fraction_scaled: int = 0
+    tail_l2_fraction_scaled: int = 0
+    inside_relative_slack: bool = false
+    evaluated: bool = false
+}
+
+system ScoutTransfer(candidate: mut TransferUniverse) {
+    let report = zeta_fourth_moment_transfer_scout(
+        candidate.limit,
+        candidate.max_shift,
+        candidate.small_factor_cap,
+    )
+    let error = abs(report["aggregate_ratio_scaled"] - SCALE)
+    candidate = TransferUniverse {
+        lambda_micros: candidate.lambda_micros,
+        limit: candidate.limit,
+        max_shift: candidate.max_shift,
+        small_factor_cap: candidate.small_factor_cap,
+        aggregate_ratio_scaled: report["aggregate_ratio_scaled"],
+        sampled_aggregate_ratio_scaled: report["sampled_aggregate_ratio_scaled"],
+        fejer_aggregate_ratio_scaled: report["fejer_aggregate_ratio_scaled"],
+        ascending_aggregate_ratio_scaled: report["ascending_aggregate_ratio_scaled"],
+        absolute_error_scaled: error,
+        even_ratio_scaled: report["even_ratio_scaled"],
+        odd_ratio_scaled: report["odd_ratio_scaled"],
+        rms_error_scaled: report["rms_error_scaled"],
+        minimum_ratio_scaled: report["minimum_ratio_scaled"],
+        maximum_ratio_scaled: report["maximum_ratio_scaled"],
+        residue_block_rms_scaled: report["residue_block_rms_scaled"],
+        maximum_residue_block_error_scaled: report["maximum_residue_block_error_scaled"],
+        nonzero_coefficients: report["nonzero_coefficients"],
+        typical_aggregate_ratio_scaled: report["typical_aggregate_ratio_scaled"],
+        balanced_aggregate_ratio_scaled: report["balanced_aggregate_ratio_scaled"],
+        cross_aggregate_ratio_scaled: report["cross_aggregate_ratio_scaled"],
+        excluded_mean_fraction_scaled: report["excluded_mean_fraction_scaled"],
+        tail_l2_fraction_scaled: report["tail_l2_fraction_scaled"],
+        inside_relative_slack: report["inside_relative_slack"],
+        evaluated: true,
+    }
+}
+
+component TransferExpectation {
+    proposal_count: int = 0
+}
+
+component TransferSelection {
+    proposal_count: int = 0
+    cells_seen: list = []
+    best: TransferUniverse = TransferUniverse { absolute_error_scaled: 2 * SCALE }
+    passes: int = 0
+    largest_limit_error_scaled: int = 0
+    minimum_cutoff_inside_tail_slack: int = 0
+}
+
+intent TransferFinding {
+    key target: entity
+    candidate: TransferUniverse
+}
+
+law SubmitTransfer(target: entity, candidate: TransferUniverse) {
+    propose TransferFinding { target: target, candidate: candidate }
+}
+
+resolver SelectTransfer for TransferFinding(target, proposals) {
+    let mut best = TransferUniverse { absolute_error_scaled: 2 * SCALE }
+    let mut cells = []
+    let mut passes = 0
+    let mut largest_limit = 0
+    let mut largest_shift = 0
+    let mut largest_error = 0
+    let mut minimum_cutoff_inside_tail_slack = 65537
+    for proposal in proposals {
+        let candidate = proposal.candidate
+        assert(candidate.evaluated, "unevaluated transfer scout")
+        let cell = f"{candidate.lambda_micros}:{candidate.limit}:{candidate.max_shift}:{candidate.small_factor_cap}"
+        assert(not contains(cells, cell), "duplicate transfer scout")
+        cells = push(cells, cell)
+        if candidate.inside_relative_slack {
+            passes = passes + 1
+        }
+        if candidate.tail_l2_fraction_scaled <= RELATIVE_SLACK
+        and candidate.small_factor_cap < minimum_cutoff_inside_tail_slack {
+            minimum_cutoff_inside_tail_slack = candidate.small_factor_cap
+        }
+        if candidate.absolute_error_scaled < best.absolute_error_scaled {
+            best = candidate
+        }
+        if candidate.limit > largest_limit
+        or candidate.limit == largest_limit and candidate.max_shift > largest_shift {
+            largest_limit = candidate.limit
+            largest_shift = candidate.max_shift
+            largest_error = candidate.absolute_error_scaled
+        }
+    }
+    next(target, TransferSelection {
+        proposal_count: len(proposals),
+        cells_seen: cells,
+        best: best,
+        passes: passes,
+        largest_limit_error_scaled: largest_error,
+        minimum_cutoff_inside_tail_slack: if minimum_cutoff_inside_tail_slack == 65537 {
+            0
+        } else {
+            minimum_cutoff_inside_tail_slack
+        },
+    })
+}
+
+constraint CompleteTransferGrid
+for TransferSelection(subject, proposed)
+watches TransferExpectation
+{
+    let expected = candidate(subject, TransferExpectation)
+    require proposed.proposal_count == expected.proposal_count else "zeta.70.transfer_count"
+    require len(proposed.cells_seen) == expected.proposal_count else "zeta.70.transfer_partition"
+    require proposed.best.evaluated else "zeta.70.transfer_selection"
+}
+
+entity transfer_judge {
+    TransferExpectation {}
+    TransferSelection {}
+}
+
+entity reversed_transfer_judge {
+    TransferExpectation {}
+    TransferSelection {}
+}
+
+event TransferReady {
+    target: entity
+    candidates: list
+    reversed: bool
+}
+
+on TransferReady(evt) {
+    settle {
+        if evt.reversed {
+            for index in range(len(evt.candidates)) {
+                SubmitTransfer(evt.target, evt.candidates[len(evt.candidates) - index - 1])
+            }
+        } else {
+            for candidate in evt.candidates {
+                SubmitTransfer(evt.target, candidate)
+            }
+        }
+    }
+}
+
+fn main() -> nil {
+    let parameters = [
+        [0, 100000, 316, 256],
+        [0, 200000, 447, 256],
+        [0, 400000, 632, 256],
+        [0, 600000, 774, 256],
+        [0, 800000, 894, 256],
+        [0, 1200000, 1095, 256],
+        [0, 1600000, 1264, 256],
+        [0, 2000000, 1414, 256],
+        [0, 2000000, 1414, 128],
+        [0, 2000000, 1414, 192],
+        [0, 2000000, 1414, 384],
+        [0, 2000000, 1414, 512],
+        [0, 2000000, 1414, 640],
+        [0, 2000000, 1414, 768],
+        [0, 2000000, 1414, 1024],
+        [0, 2000000, 1414, 1408],
+        [900000, 2000000, 631, 631],
+        [950000, 2000000, 965, 965],
+        [970000, 2000000, 1129, 1129],
+        [980000, 2000000, 1219, 1219],
+        [990000, 2000000, 1314, 1314],
+        [995000, 2000000, 1363, 1363],
+        [999000, 2000000, 1403, 1403],
+        [999500, 2000000, 1409, 1409],
+    ]
+    let root = fork()
+    let before = world_digest()
+    let mut worlds = []
+    for parameter in parameters {
+        worlds = push(worlds, fork_with(root, TransferUniverse {
+            lambda_micros: parameter[0],
+            limit: parameter[1],
+            max_shift: parameter[2],
+            small_factor_cap: parameter[3],
+        }))
+    }
+    let futures = simulate_many(worlds, [system::ScoutTransfer], 1, 2083)
+    assert(world_digest() == before, "transfer scouts leaked")
+
+    let mut reports = []
+    let mut wire_digests = []
+    for future in futures {
+        assert_only_changed(root, future, [TransferUniverse])
+        let restored = fork_from_bytes(fork_to_bytes(future)) |> unwrap
+        assert(world_digest(restored) == world_digest(future), "transfer wire mismatch")
+        reports = push(reports, peek_resource(restored, TransferUniverse) |> unwrap)
+        wire_digests = push(wire_digests, world_digest(restored))
+    }
+
+    set(transfer_judge, TransferExpectation { proposal_count: len(parameters) })
+    set(reversed_transfer_judge, TransferExpectation { proposal_count: len(parameters) })
+    emit TransferReady { target: transfer_judge, candidates: reports, reversed: false }
+    emit TransferReady { target: reversed_transfer_judge, candidates: reports, reversed: true }
+    flush_events()
+    let selected = require(transfer_judge, TransferSelection)
+    let reversed = require(reversed_transfer_judge, TransferSelection)
+    assert(selected == reversed, "transfer selection depends on proposal order")
+
+    let promising = selected.passes > 0
+    let receipt: map<str, any> = {
+        "schema": "rad.zeta-fourth-moment-transfer.v1",
+        "rigorous": false,
+        "scouts": reports,
+        "selection": selected,
+        "required_relative_slack_scaled": RELATIVE_SLACK,
+        "promising": promising,
+        "interpretation": if promising {
+            "finite averaged shifted correlations enter the 1/117 gate; continue the weighted transfer"
+        } else {
+            "finite averaged shifted correlations miss the 1/117 gate; demote this transfer"
+        },
+        "proposal_order_independent": selected == reversed,
+        "speculation_isolated": world_digest() != "" and before != "",
+        "wire_digests": wire_digests,
+        "selection_why": why(transfer_judge, TransferSelection),
+    }
+    create_dir("projects/dogfood/zeta-simple-zeros/out")
+    write_file(
+        "projects/dogfood/zeta-simple-zeros/out/fourth-moment-transfer.json",
+        json_stringify(receipt),
+    )
+    print("24-fork Lambda-convolution transfer scout")
+    print("passes inside relative 1/117 slack:", selected.passes, "/", len(parameters))
+    print("best cell:", selected.best.limit, selected.best.max_shift)
+    print("best aggregate ratio:", selected.best.aggregate_ratio_scaled, "/", SCALE)
+    print("best Fejer ratio:", selected.best.fejer_aggregate_ratio_scaled, "/", SCALE)
+    print("best absolute error:", selected.best.absolute_error_scaled, "/", SCALE)
+    print("best residue-block RMS:", selected.best.residue_block_rms_scaled, "/", SCALE)
+    print("best maximum residue-block error:", selected.best.maximum_residue_block_error_scaled, "/", SCALE)
+    print("minimum factor cutoff with tail L2 inside 1/117:", selected.minimum_cutoff_inside_tail_slack)
+    print("promising:", promising)
+    print(why(transfer_judge, TransferSelection))
+}

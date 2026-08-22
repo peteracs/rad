@@ -1,0 +1,18 @@
+use "../schema.rad"
+use "../owners/catalog_owner.rad"
+use "../scenarios/production.rad"
+
+test "catalog projections track source facts atomically" {
+    run_catalog_day(1000)
+    let catalog_item: entity = lookup(Product, "product_id", ProductId(u64(1))) |> unwrap
+    assert(lookup(SellableProducts, ProductId(u64(1))) == Some(catalog_item), "restocked product visible")
+}
+
+test "compliance and seller facts remove membership" {
+    let catalog_item = publish_product(ProductId(u64(9001)), 10, 500)
+    SetComplianceBlocked(catalog_item, true)
+    assert(is_none(lookup(SellableProducts, ProductId(u64(9001)))), "blocked product hidden")
+    SetComplianceBlocked(catalog_item, false)
+    SetSellerActive(catalog_item, false)
+    assert(is_none(lookup(SellableProducts, ProductId(u64(9001)))), "inactive seller hidden")
+}

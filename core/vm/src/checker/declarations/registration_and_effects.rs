@@ -53,6 +53,13 @@ impl Checker {
                     self.register_type_alias(a);
                     self.define(&a.name, Ty::Any, false, a.span.clone(), a.is_pub, false);
                 }
+                Decl::NativeType(native) => {
+                    self.register_native_type(native);
+                }
+                Decl::MaterializedView(view) => {
+                    self.materialized_views.insert(view.name.clone());
+                    self.define(&view.name, Ty::Str, false, view.span.clone(), view.is_pub, false);
+                }
                 Decl::Phase(p) => {
                     self.phases.insert(p.name.clone(), p.systems.clone());
                 }
@@ -182,7 +189,19 @@ impl Checker {
                 continue;
             }
             let ty = field_type_map.get(field_name).cloned().unwrap_or(Ty::Any);
-            if !matches!(ty, Ty::Int | Ty::Str | Ty::Bool | Ty::EntityId | Ty::Float) {
+            fn indexable(ty: &Ty) -> bool {
+                match ty {
+                    Ty::Int
+                    | Ty::Str
+                    | Ty::Bool
+                    | Ty::EntityId
+                    | Ty::Float
+                    | Ty::Native { .. } => true,
+                    Ty::Tuple(items) => !items.is_empty() && items.iter().all(indexable),
+                    _ => false,
+                }
+            }
+            if !indexable(&ty) {
                 self.error(
                     &decl.span,
                     format!(
@@ -190,7 +209,7 @@ impl Checker {
                         decl.name, field_name, ty
                     ),
                     Some(
-                        "Indexed fields must be int, float, str, bool, or entity for deterministic hash lookup"
+                        "Indexed fields must be int, float, str, bool, entity, a fixed-width native type, or a nonempty tuple of those types"
                             .to_string(),
                     ),
                 );
@@ -698,6 +717,71 @@ impl Checker {
         );
     }
 
+    pub(super) fn register_native_type(&mut self, decl: &NativeTypeDecl) {
+        use crate::native_types::NativeScalarKind as Repr;
+        let mut names = std::collections::HashSet::new();
+        let mut values = std::collections::HashSet::new();
+        let mut occupied_flags = 0_u64;
+        for (member, bits) in &decl.members {
+            if !names.insert(member.clone()) {
+                self.error(
+                    &decl.span,
+                    format!("Duplicate member '{}::{}'", decl.name, member),
+                    None,
+                );
+            }
+            let fits = match decl.repr {
+                Repr::U8 => *bits <= u8::MAX as u64,
+                Repr::U16 => *bits <= u16::MAX as u64,
+                Repr::U32 => *bits <= u32::MAX as u64,
+                Repr::U64 => true,
+                Repr::I8 => (*bits as i64) >= i8::MIN as i64 && (*bits as i64) <= i8::MAX as i64,
+                Repr::I16 => (*bits as i64) >= i16::MIN as i64 && (*bits as i64) <= i16::MAX as i64,
+                Repr::I32 => (*bits as i64) >= i32::MIN as i64 && (*bits as i64) <= i32::MAX as i64,
+                Repr::I64 => true,
+                Repr::F32 | Repr::F64 => false,
+            };
+            if !fits {
+                self.error(
+                    &decl.span,
+                    format!(
+                        "Value {} for '{}::{}' does not fit {}",
+                        *bits as i64, decl.name, member, decl.repr
+                    ),
+                    None,
+                );
+            }
+            if decl.flavor == crate::native_types::NativeTypeFlavor::Enum
+                && !values.insert(*bits)
+            {
+                self.error(
+                    &decl.span,
+                    format!("Duplicate discriminant {} in enum '{}'", *bits as i64, decl.name),
+                    None,
+                );
+            }
+            if decl.flavor == crate::native_types::NativeTypeFlavor::Bitflags && *bits != 0 {
+                if occupied_flags & *bits != 0 {
+                    self.error(
+                        &decl.span,
+                        format!("Overlapping mask 0x{:x} in bitflags '{}'", bits, decl.name),
+                        Some("Declare disjoint primitive flags; compose them with `|` at the use site".to_string()),
+                    );
+                }
+                occupied_flags |= *bits;
+            }
+        }
+        self.native_types.insert(decl.name.clone(), decl.clone());
+        self.define(
+            &decl.name,
+            Ty::Any,
+            false,
+            decl.span.clone(),
+            decl.is_pub,
+            false,
+        );
+    }
+
     pub(super) fn block_is_conservatively_pure(&self, block: &Block) -> bool {
         let mut local_muts = std::collections::HashSet::new();
         self.block_is_conservatively_pure_with_locals(block, &mut local_muts)
@@ -828,7 +912,11 @@ impl Checker {
                 .map(|e| self.expr_is_conservatively_pure(e))
                 .unwrap_or(true),
             Stmt::Break(_) | Stmt::Continue(_) => true,
-            Stmt::Emit(_) | Stmt::Schedule(_) | Stmt::Update(_) | Stmt::Settle(_) => false,
+            Stmt::Emit(_)
+            | Stmt::Schedule(_)
+            | Stmt::Update(_)
+            | Stmt::Transaction(_)
+            | Stmt::Settle(_) => false,
             Stmt::Propose(s) => s
                 .fields
                 .iter()

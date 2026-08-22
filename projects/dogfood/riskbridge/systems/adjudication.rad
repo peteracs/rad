@@ -1,0 +1,45 @@
+use "../schema.rad"
+use "../owners/decision_owner.rad"
+use "../owners/decision_owner.rad" as decisions
+use "../host/risk_model.rad" as model
+
+pub resource DecisionAudit { committed: int = 0, reviews: int = 0 }
+
+on DecisionCommitted(_event) {
+    update(DecisionAudit) { committed = res(DecisionAudit).committed + 1 }
+}
+
+on ManualReviewQueued(_event) {
+    update(DecisionAudit) { reviews = res(DecisionAudit).reviews + 1 }
+}
+
+pub fn adjudicate_native(customer: entity, request: RiskInput, order: u64) -> entity {
+    let generation: u32 = res(ActivePluginGeneration).generation
+    let output: RiskOutput = model.score_native(request)
+    // The fallible host boundary runs before the first authoritative write.
+    // A crash, timeout, malformed response, or host error therefore cannot
+    // publish a partial attempt outside CommitDecision's atomic patch.
+    decisions.CommitDecision(customer, request, output, generation, u8(0), order)
+    return decisions.attempt_by_transaction(request.transaction)
+}
+
+pub fn adjudicate_reference(customer: entity, request: RiskInput, order: u64) -> entity {
+    let generation: u32 = res(ActivePluginGeneration).generation
+    let output: RiskOutput = model.score_reference(request)
+    decisions.CommitDecision(customer, request, output, generation, u8(1), order)
+    return decisions.attempt_by_transaction(request.transaction)
+}
+
+fn inspect_review(_attempt: entity) -> nil {}
+
+@frame
+@no_full_scan
+@no_guest_allocation
+@budget(instructions: 10000)
+pub system InspectManualReviewQueue(
+    reads TransactionAttempt,
+    reads PolicyDecision,
+    reads ManualReviewCase,
+) {
+    visit_view(ManualReviewQueue, inspect_review)
+}

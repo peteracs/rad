@@ -1,0 +1,14 @@
+component DecisionState { committed: bool = false }
+let decision = spawn(DecisionState { committed: false })
+
+transaction ReloadDuringDecision(target: entity) {
+    requires has(target, DecisionState)
+    changes_only [DecisionState]
+    let _new_generation = load_extension(
+        "target/riskbridge-plugin/release/riskbridge_model_plugin.dll",
+    )
+    set(target, DecisionState { committed: true })
+    ensures require(target, DecisionState).committed
+}
+
+ReloadDuringDecision(decision)

@@ -1,0 +1,38 @@
+use "../schema.rad"
+use "../owners/inventory_owner.rad"
+
+pub system ReserveOrders(
+    order: mut Order,
+    reads Inventory,
+    writes Inventory,
+    reads InventoryRevision,
+    writes InventoryRevision,
+    emits OrderReserved,
+) {
+    if order.status == "new" && reserve_stock(order.sku, order.quantity) {
+        order.status = "reserved"
+        emit OrderReserved { order: self }
+    }
+}
+
+pub system ShipOrders(
+    order: mut Order,
+    reads Inventory,
+    writes Inventory,
+    reads InventoryRevision,
+    writes InventoryRevision,
+    writes Shipment,
+    writes "$entities",
+    writes "$entity_identity",
+    emits ShipmentCreated,
+) after ReserveOrders {
+    if order.status == "reserved" && consume_reservation(order.sku, order.quantity) {
+        let shipment: entity = spawn(Shipment {
+            order_id: order.order_id,
+            sku: order.sku,
+            status: "created",
+        })
+        order.status = "shipped"
+        emit ShipmentCreated { shipment: shipment }
+    }
+}

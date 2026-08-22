@@ -1,5 +1,3 @@
-
-
 /// `{"field":value,...}` for one component/resource row (Display-encoded
 /// values, escaped keys) — shared by full dumps and render deltas.
 fn resource_fields_json(data: &ComponentData) -> String {
@@ -129,13 +127,20 @@ pub struct WorldSnapshot {
     pub(crate) generations: Arc<HashMap<u32, u32>>,
     pub(crate) name_to_id: Arc<HashMap<String, u32>>,
     pub(crate) id_to_name: Arc<HashMap<u32, String>>,
-    pub(crate) type_registry: Arc<HashMap<String, TypeId>>,
+    pub(crate) type_registry: Arc<FastMap<String, TypeId>>,
     pub(crate) next_type_id: TypeId,
     pub(crate) archetypes: Vec<Archetype>,
     pub(crate) archetype_map: Arc<HashMap<Vec<TypeId>, ArchetypeId>>,
-    pub(crate) entity_archetype: Arc<HashMap<u32, ArchetypeId>>,
+    pub(crate) entity_archetype: Arc<FastMap<u32, ArchetypeId>>,
     indexed_fields: Arc<HashMap<String, HashSet<String>>>,
     indices: Arc<HashMap<IndexKey, Vec<u32>>>,
+    ordered_fields: Arc<HashMap<String, HashSet<String>>>,
+    ordered_indices: Arc<BTreeMap<IndexKey, Vec<u32>>>,
+    materialized_views: Arc<HashMap<String, MaterializedViewState>>,
+    view_dependents: Arc<HashMap<String, Vec<String>>>,
+    view_field_dependents: Arc<HashMap<String, HashMap<String, Vec<String>>>>,
+    entered_phases: Arc<Vec<String>>,
+    lifecycle_traces: Arc<HashMap<u32, Vec<String>>>,
     resources: Arc<ResourceMap>,
     authoritative_relations: crate::relation::runtime::AuthoritativeRelationState,
     derived_relations: crate::relation::derivation::DerivedRelationState,

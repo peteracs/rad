@@ -1,62 +1,22 @@
 fn run_authority_command(query: AuthorityQuery, filepath: String, json: bool) {
-    let loaded = match load_program_with_source_map_and_options(&filepath, ParserOptions::default()) {
+    let loaded = match load_cli_program(&filepath, ParserOptions::default()) {
         Ok(loaded) => loaded,
         Err(errors) => {
-            for error in errors {
-                eprintln!(
-                    "{}",
-                    format_error(
-                        &error.source,
-                        &error.filepath,
-                        &error.message,
-                        error.line,
-                        error.col,
-                    )
-                );
-            }
+            eprintln!("{errors}");
             process::exit(1);
         }
     };
-    let mut had_errors = false;
-    for error in &loaded.errors {
-        eprintln!(
-            "{}",
-            format_error(
-                &error.source,
-                &error.filepath,
-                &error.message,
-                error.line,
-                error.col,
-            )
-        );
-        had_errors = true;
+    let analysis = analyze_cli_program(&loaded, &filepath, CheckerOptions::default());
+    for error in &analysis.errors {
+        eprintln!("{error}");
     }
-    let mut checker = Checker::new();
-    checker.set_aliases(loaded.aliases);
-    for error in checker.check(&loaded.program) {
-        let (source, path) = resolve_source_for_error(
-            error.file,
-            &loaded.source_map,
-            &loaded.merged_source,
-            &filepath,
-        );
-        eprintln!(
-            "{}",
-            format_error(source, path, &error.message, error.line, error.col)
-        );
-        if let Some(hint) = error.hint {
-            eprintln!("  hint: {hint}");
-        }
-        had_errors = true;
-    }
-    let checker_output = checker.output();
-    let report = checker_output.authority();
+    let report = analysis.semantic.output().authority();
     let query_result = match query {
         AuthorityQuery::Effects { symbol } => report.resolve(&symbol).map(|callable| {
             if json {
                 serde_json::to_string_pretty(callable).expect("authority report is serializable")
             } else {
-                render_callable_effects(callable, &report)
+                render_callable_effects(callable, report)
             }
         }),
         AuthorityQuery::Writers { authority } => {
@@ -106,7 +66,7 @@ fn run_authority_command(query: AuthorityQuery, filepath: String, json: bool) {
             process::exit(1);
         }
     }
-    if had_errors {
+    if analysis.has_errors() {
         process::exit(1);
     }
 }
@@ -141,13 +101,21 @@ fn render_callable_effects(
 
 fn render_effect_set(effects: &rad_vm::types::AuthorityEffects) -> String {
     format!(
-        "{{ reads: {}, writes: {}, emits: {}, io: {}, async: {}, unknown: {} }}",
+        "{{ reads: {}, writes: {}, emits: {}, io: {}, async: {}, unknown: {}, full_scan: {}, allocates: {}, queries: {} }}",
         render_names(&effects.reads),
         render_names(&effects.writes),
         render_names(&effects.emits),
         effects.io,
         effects.async_effect,
         effects.unknown,
+        effects.full_scan,
+        effects.allocates,
+        effects
+            .queries
+            .iter()
+            .map(|query| format!("{} {} {}", query.operation, query.source, query.complexity))
+            .collect::<Vec<_>>()
+            .join("; "),
     )
 }
 

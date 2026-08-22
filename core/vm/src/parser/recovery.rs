@@ -38,6 +38,7 @@ impl Parser {
                         TokenType::Type,
                         TokenType::Use,
                         TokenType::Pub,
+                        TokenType::At,
                         TokenType::Let,
                     ]);
 

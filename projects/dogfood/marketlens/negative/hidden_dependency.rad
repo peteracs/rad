@@ -1,0 +1,6 @@
+component Product { active: bool = false }
+component Inventory { available: int = 0 }
+materialized view Broken {
+    depends [Product]
+    where Product.active == true and Inventory.available > 0
+}

@@ -37,6 +37,7 @@ pub enum FrozenValue {
     Nil,
     Bool(bool),
     Int(i64),
+    Native(crate::native_types::NativeScalarValue),
     Float(FrozenFloat),
     String(String),
     List(Vec<FrozenValue>),
@@ -60,6 +61,7 @@ pub enum FrozenValue {
     Buffer(String),
     Bytes(Vec<u8>),
     System(String),
+    HostHandle(crate::ffi::HostHandleToken),
 }
 
 impl FrozenValue {
@@ -112,6 +114,7 @@ impl FrozenValue {
             Self::Nil => Value::NIL,
             Self::Bool(value) => Value::from_bool(*value),
             Self::Int(value) => Value::from_int(gc, *value),
+            Self::Native(value) => Value::from_native_scalar(gc, value.clone()),
             Self::Float(value) => Value::from_float(value.get()),
             Self::String(value) => Value::from_string(gc, value.clone()),
             Self::List(values) => {
@@ -151,6 +154,7 @@ impl FrozenValue {
             Self::Buffer(value) => Value::buffer(gc, value.clone()),
             Self::Bytes(bytes) => Value::bytebuf(gc, bytes.clone()),
             Self::System(name) => Value::system_ref(gc, name.clone()),
+            Self::HostHandle(handle) => Value::from_host_handle(gc, handle.clone()),
         }
     }
 
@@ -192,6 +196,7 @@ impl FrozenValue {
                 self.charge(1, 0, 1)?;
                 match key {
                     FrozenMapKey::Int(_) => self.charge(0, 0, 8),
+                    FrozenMapKey::Native(value) => self.charge(0, 0, 10 + value.type_name.len()),
                     FrozenMapKey::String(value) => self.charge(0, 0, value.len()),
                     FrozenMapKey::Bool(_) => self.charge(0, 0, 1),
                     FrozenMapKey::Entity(_) => self.charge(0, 0, 4),
@@ -216,9 +221,15 @@ impl FrozenValue {
                     FrozenValue::Nil => Ok(()),
                     FrozenValue::Bool(_) => self.charge(0, 0, 1),
                     FrozenValue::Int(_) | FrozenValue::Float(_) => self.charge(0, 0, 8),
+                    FrozenValue::Native(value) => self.charge(0, 0, 10 + value.type_name.len()),
                     FrozenValue::String(value)
                     | FrozenValue::Buffer(value)
                     | FrozenValue::System(value) => self.charge(0, 0, value.len()),
+                    FrozenValue::HostHandle(handle) => self.charge(
+                        0,
+                        0,
+                        handle.owner_digest().len() + handle.type_name().len() + 8,
+                    ),
                     FrozenValue::List(values) | FrozenValue::Tuple(values) => {
                         self.charge(0, values.len(), 0)?;
                         for value in values {
@@ -299,6 +310,7 @@ impl FrozenMapKey {
     fn import(&self) -> MapKey {
         match self {
             Self::Int(value) => MapKey::Int(*value),
+            Self::Native(value) => MapKey::Native(value.clone()),
             Self::String(value) => MapKey::Str(value.clone()),
             Self::Bool(value) => MapKey::Bool(*value),
             Self::Entity(value) => MapKey::Entity(*value),
@@ -309,6 +321,7 @@ impl FrozenMapKey {
     fn export(value: &MapKey) -> Self {
         match value {
             MapKey::Int(value) => Self::Int(*value),
+            MapKey::Native(value) => Self::Native(value.clone()),
             MapKey::Str(value) => Self::String(value.clone()),
             MapKey::Bool(value) => Self::Bool(*value),
             MapKey::Entity(value) => Self::Entity(*value),
@@ -329,6 +342,12 @@ pub(crate) fn export_value(value: &Value) -> Result<FrozenValue, CausalValueErro
     }
     if let Some(value) = value.as_float() {
         return Ok(FrozenValue::Float(value.into()));
+    }
+    if let Some(value) = value.as_native_scalar() {
+        return Ok(FrozenValue::Native(value.clone()));
+    }
+    if let Some(value) = value.as_entity_id() {
+        return Ok(FrozenValue::Entity(value));
     }
     match value.as_object() {
         Some(Object::Str(value)) => Ok(FrozenValue::String(value.to_string())),
@@ -373,11 +392,11 @@ pub(crate) fn export_value(value: &Value) -> Result<FrozenValue, CausalValueErro
                 fields,
             })
         }
-        Some(Object::EntityId(value)) => Ok(FrozenValue::Entity(*value)),
         Some(Object::BitSet(value)) => Ok(FrozenValue::BitSet(value.clone())),
         Some(Object::Buffer(value)) => Ok(FrozenValue::Buffer(value.clone())),
         Some(Object::ByteBuf(value)) => Ok(FrozenValue::Bytes(value.clone())),
         Some(Object::SystemRef(value)) => Ok(FrozenValue::System(value.clone())),
+        Some(Object::HostHandle(handle)) => Ok(FrozenValue::HostHandle(handle.clone())),
         Some(other) => Err(CausalValueError::Unsupported {
             type_name: match other {
                 Object::Fn(_) => "function",
@@ -385,6 +404,7 @@ pub(crate) fn export_value(value: &Value) -> Result<FrozenValue, CausalValueErro
                 Object::Cell(_) => "capture",
                 Object::BuiltinFn(_) => "builtin",
                 Object::NativeFn(_) => "native_fn",
+                Object::NativeType(_) => "native_type",
                 Object::Task(_) => "task",
                 Object::MapIter(_, _, _) => "map_iter",
                 Object::WorldFork(_) => "world_fork",
@@ -445,6 +465,34 @@ impl<'vm> ValueHandle<'vm> {
 }
 
 impl VM {
+    /// Export the complete live snapshot, including queued and delayed events,
+    /// with the same integrity-checked transport used by fork replication.
+    pub fn export_snapshot(&mut self) -> Result<Vec<u8>, String> {
+        let snapshot = std::sync::Arc::new(self.snapshot_with_events());
+        let fork = Value::world_fork(&mut self.gc, snapshot);
+        let encoded = self.bi_fork_to_bytes(vec![fork])?;
+        let text = encoded
+            .as_str()
+            .ok_or_else(|| "snapshot encoder returned a non-string value".to_string())?;
+        Ok(text.as_bytes().to_vec())
+    }
+
+    /// Verify, decode, migrate, and atomically install a complete snapshot.
+    /// The live VM is untouched unless the entire payload is valid.
+    pub fn import_snapshot(&mut self, bytes: &[u8]) -> Result<(), String> {
+        let text = std::str::from_utf8(bytes)
+            .map_err(|error| format!("snapshot is not UTF-8 transport data: {error}"))?;
+        let encoded = Value::from_string(&mut self.gc, text.to_string());
+        let decoded = self.bi_fork_from_bytes(vec![encoded])?;
+        let snapshot = decoded
+            .as_world_fork()
+            .cloned()
+            .ok_or_else(|| "snapshot decoder returned a non-fork value".to_string())?;
+        self.world.restore((*snapshot).clone());
+        self.restore_events_from(&snapshot);
+        Ok(())
+    }
+
     pub fn import_value<'vm>(
         &'vm mut self,
         value: &FrozenValue,

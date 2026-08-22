@@ -1,0 +1,183 @@
+// Eight-fork stress test for converting the 19/27 mollifier ratio into an
+// unconditional inertia bound.  This is a route-selection calculation, not a
+// proof: it measures exactly how much signature loss the conversion can bear.
+
+let SCALE = 1000000000
+let TARGET = 700000000
+
+resource MollifierUniverse {
+    theta_micros: int = 0
+    ratio_scaled: int = 0
+    required_retention_scaled: int = SCALE
+    loss_budget_scaled: int = 0
+    clears_target_before_signature_loss: bool = false
+    evaluated: bool = false
+}
+
+system EvaluateMollifier(candidate: mut MollifierUniverse) {
+    let theta = float(candidate.theta_micros) / 1000000.0
+    // Bui--Heath-Brown's optimized one-piece polynomial
+    // P(x) = -theta*x^2 + (1+theta)*x.
+    let integral_p = 0.5 + theta / 6.0
+    let integral_dp_squared = 1.0 + theta * theta / 3.0
+    let first = 0.5 + theta * integral_p
+    let second = 1.0 / 3.0
+    + theta * integral_p
+    + theta * theta * integral_p * integral_p
+    + integral_dp_squared / (12.0 * theta)
+    let ratio_scaled = int(first * first * float(SCALE) / second)
+    let retention = if ratio_scaled >= TARGET {
+        (TARGET * SCALE + ratio_scaled - 1) / ratio_scaled
+    } else {
+        SCALE
+    }
+    candidate = MollifierUniverse {
+        theta_micros: candidate.theta_micros,
+        ratio_scaled: ratio_scaled,
+        required_retention_scaled: retention,
+        loss_budget_scaled: SCALE - retention,
+        clears_target_before_signature_loss: ratio_scaled >= TARGET,
+        evaluated: true,
+    }
+}
+
+component MollifierExpectation {
+    proposal_count: int = 0
+}
+
+component MollifierSelection {
+    proposal_count: int = 0
+    theta_seen: list = []
+    best: MollifierUniverse = MollifierUniverse {}
+    raw_hits: int = 0
+}
+
+intent MollifierFinding {
+    key target: entity
+    candidate: MollifierUniverse
+}
+
+law SubmitMollifier(target: entity, candidate: MollifierUniverse) {
+    propose MollifierFinding { target: target, candidate: candidate }
+}
+
+resolver SelectMollifier for MollifierFinding(target, proposals) {
+    let mut best = MollifierUniverse {}
+    let mut theta_seen = []
+    let mut raw_hits = 0
+    for proposal in proposals {
+        let candidate = proposal.candidate
+        assert(candidate.evaluated, "unevaluated mollifier branch")
+        assert(not contains(theta_seen, candidate.theta_micros), "duplicate theta")
+        theta_seen = push(theta_seen, candidate.theta_micros)
+        if candidate.clears_target_before_signature_loss {
+            raw_hits = raw_hits + 1
+        }
+        if candidate.loss_budget_scaled > best.loss_budget_scaled {
+            best = candidate
+        }
+    }
+    next(target, MollifierSelection {
+        proposal_count: len(proposals),
+        theta_seen: theta_seen,
+        best: best,
+        raw_hits: raw_hits,
+    })
+}
+
+constraint CompleteMollifierGrid
+for MollifierSelection(subject, proposed)
+watches MollifierExpectation
+{
+    let expected = candidate(subject, MollifierExpectation)
+    require proposed.proposal_count == expected.proposal_count else "zeta.70.mollifier_count"
+    require len(proposed.theta_seen) == expected.proposal_count else "zeta.70.mollifier_partition"
+    require proposed.best.evaluated else "zeta.70.mollifier_selection"
+}
+
+entity mollifier_judge {
+    MollifierExpectation {}
+    MollifierSelection {}
+}
+
+entity reversed_mollifier_judge {
+    MollifierExpectation {}
+    MollifierSelection {}
+}
+
+event MollifierReady {
+    target: entity
+    candidates: list
+    reversed: bool
+}
+
+on MollifierReady(evt) {
+    settle {
+        if evt.reversed {
+            for index in range(len(evt.candidates)) {
+                SubmitMollifier(evt.target, evt.candidates[len(evt.candidates) - index - 1])
+            }
+        } else {
+            for candidate in evt.candidates {
+                SubmitMollifier(evt.target, candidate)
+            }
+        }
+    }
+}
+
+fn main() -> nil {
+    let theta_grid = [430000, 440000, 450000, 460000, 470000, 480000, 490000, 499000]
+    let root = fork()
+    let before = world_digest()
+    let mut worlds = []
+    for theta_micros in theta_grid {
+        worlds = push(worlds, fork_with(root, MollifierUniverse { theta_micros: theta_micros }))
+    }
+    let futures = simulate_many(worlds, [system::EvaluateMollifier], 1, 2087)
+    assert(world_digest() == before, "mollifier speculation leaked")
+
+    let mut reports = []
+    let mut wire_digests = []
+    for future in futures {
+        assert_only_changed(root, future, [MollifierUniverse])
+        let restored = fork_from_bytes(fork_to_bytes(future)) |> unwrap
+        assert(world_digest(restored) == world_digest(future), "mollifier wire mismatch")
+        reports = push(reports, peek_resource(restored, MollifierUniverse) |> unwrap)
+        wire_digests = push(wire_digests, world_digest(restored))
+    }
+    let speculation_isolated = world_digest() == before
+
+    set(mollifier_judge, MollifierExpectation { proposal_count: len(theta_grid) })
+    set(reversed_mollifier_judge, MollifierExpectation { proposal_count: len(theta_grid) })
+    emit MollifierReady { target: mollifier_judge, candidates: reports, reversed: false }
+    emit MollifierReady { target: reversed_mollifier_judge, candidates: reports, reversed: true }
+    flush_events()
+    let selected = require(mollifier_judge, MollifierSelection)
+    let reversed = require(reversed_mollifier_judge, MollifierSelection)
+    assert(selected == reversed, "mollifier selection depends on proposal order")
+
+    let receipt: map<str, any> = {
+        "schema": "rad.zeta-mollifier-inertia-attack.v1",
+        "rigorous": false,
+        "target_scaled": TARGET,
+        "scouts": reports,
+        "selection": selected,
+        "interpretation": "a valid unconditional inertia conversion must retain at least the selected fraction of the RH mollifier ratio",
+        "proposal_order_independent": selected == reversed,
+        "speculation_isolated": speculation_isolated,
+        "wire_digests": wire_digests,
+        "selection_why": why(mollifier_judge, MollifierSelection),
+    }
+    create_dir("projects/dogfood/zeta-simple-zeros/out")
+    write_file(
+        "projects/dogfood/zeta-simple-zeros/out/mollifier-inertia-attack.json",
+        json_stringify(receipt),
+    )
+    print("eight-fork mollifier/inertia attack")
+    print("raw hits:", selected.raw_hits, "/", len(theta_grid))
+    print("best theta micros:", selected.best.theta_micros)
+    print("best raw ratio:", selected.best.ratio_scaled, "/", SCALE)
+    print("required signature retention:", selected.best.required_retention_scaled, "/", SCALE)
+    print("maximum signature loss:", selected.best.loss_budget_scaled, "/", SCALE)
+    print(why(mollifier_judge, MollifierSelection))
+}

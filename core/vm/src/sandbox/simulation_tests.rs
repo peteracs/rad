@@ -1,24 +1,12 @@
-
-
 /// `simulate_par` determinism and isolation tests.
 #[cfg(test)]
 mod simulate_par_tests {
-    use crate::compiler::Compiler;
-    use crate::lexer::Lexer;
-    use crate::parser::Parser;
+    use crate::parser::ParserOptions;
     use crate::vm::VM;
 
     fn run_host(src: &str) -> Vec<String> {
-        let mut lexer = Lexer::new(src);
-        let tokens = lexer.tokenize().0;
-        let mut parser = Parser::new(tokens);
-        let program = parser.parse();
-        assert!(
-            parser.errors().is_empty(),
-            "parse errors: {:?}",
-            parser.errors()
-        );
-        let result = Compiler::new().compile(&program).expect("compile");
+        let result = crate::test_support::compile_source(src, ParserOptions::default())
+            .expect("parse and compile");
         let mut vm = VM::new();
         vm.suppress_output();
         vm.load_compile_result(result);
@@ -247,22 +235,12 @@ mod simulate_par_tests {
 /// `assert_only_changed` — testing the negative space.
 #[cfg(test)]
 mod blast_radius_tests {
-    use crate::compiler::Compiler;
-    use crate::lexer::Lexer;
-    use crate::parser::Parser;
+    use crate::parser::ParserOptions;
     use crate::vm::VM;
 
     fn run_host(src: &str) -> Result<Vec<String>, String> {
-        let mut lexer = Lexer::new(src);
-        let tokens = lexer.tokenize().0;
-        let mut parser = Parser::new(tokens);
-        let program = parser.parse();
-        assert!(
-            parser.errors().is_empty(),
-            "parse errors: {:?}",
-            parser.errors()
-        );
-        let result = Compiler::new().compile(&program).expect("compile");
+        let result = crate::test_support::compile_source(src, ParserOptions::default())
+            .expect("parse and compile");
         let mut vm = VM::new();
         vm.suppress_output();
         vm.load_compile_result(result);

@@ -1,0 +1,240 @@
+// Fourier-mode perturbation of the bandwidth-one variational window.
+// RAD forks the mode coefficient; the native hot path settles 793 independent
+// six-gap descents and the best block dilution for each speculative world.
+
+use "../native-math-kernels/math_kernels.rad"
+
+let SCALE = 1000000000
+let C_MIN_MICROS = 0
+let C_MAX_MICROS = 300000
+let C_STEP_MICROS = 10000
+let TARGET_SCALED = 700000000
+
+resource PerturbedWindowUniverse {
+    mode_coefficient_micros: int = 0
+    baseline_scaled: int = 0
+    local_c_scaled: int = 0
+    best_block_size: int = 0
+    simple_bound_scaled: int = 0
+    minimizing_gaps_micros: list = []
+    starts_checked: int = 0
+    evaluated: bool = false
+}
+
+system EvaluatePerturbedWindow(candidate: mut PerturbedWindowUniverse) {
+    let report = zeta_perturbed_window_scout(candidate.mode_coefficient_micros)
+    assert(not report["rigorous"], "perturbed-window scout mislabeled as rigorous")
+    assert(report["scale"] == SCALE, "perturbed-window scale mismatch")
+    candidate = PerturbedWindowUniverse {
+        mode_coefficient_micros: report["mode_coefficient_micros"],
+        baseline_scaled: report["baseline_scaled"],
+        local_c_scaled: report["local_c_scaled"],
+        best_block_size: report["best_block_size"],
+        simple_bound_scaled: report["simple_bound_scaled"],
+        minimizing_gaps_micros: report["minimizing_gaps_micros"],
+        starts_checked: report["starts_checked"],
+        evaluated: true,
+    }
+}
+
+component PerturbationExpectation {
+    proposal_count: int = 0
+}
+
+component PerturbationSelection {
+    proposal_count: int = 0
+    cells_seen: list = []
+    best_coefficient_micros: int = 0
+    best_baseline_scaled: int = 0
+    best_local_c_scaled: int = 0
+    best_block_size: int = 0
+    best_simple_bound_scaled: int = 0
+    best_gaps_micros: list = []
+    starts_per_cell: int = 0
+    crossing_count: int = 0
+}
+
+intent PerturbationFinding {
+    key target: entity
+    candidate: PerturbedWindowUniverse
+}
+
+law SubmitPerturbation(target: entity, candidate: PerturbedWindowUniverse) {
+    propose PerturbationFinding { target: target, candidate: candidate }
+}
+
+resolver SelectPerturbation for PerturbationFinding(target, proposals) {
+    let expected = require(target, PerturbationExpectation)
+    let mut seen = []
+    for _index in range(expected.proposal_count) {
+        seen = push(seen, 0)
+    }
+    let mut best = PerturbedWindowUniverse {}
+    let mut crossing_count = 0
+    for proposal in proposals {
+        let candidate = proposal.candidate
+        assert(candidate.evaluated, "unevaluated perturbation")
+        assert(candidate.mode_coefficient_micros >= C_MIN_MICROS, "perturbation below grid")
+        assert(candidate.mode_coefficient_micros <= C_MAX_MICROS, "perturbation above grid")
+        assert((candidate.mode_coefficient_micros - C_MIN_MICROS) % C_STEP_MICROS == 0, "perturbation off grid")
+        assert(candidate.starts_checked == 793, "perturbation hot-path partition mismatch")
+        let slot = (candidate.mode_coefficient_micros - C_MIN_MICROS) / C_STEP_MICROS
+        assert(seen[slot] == 0, "duplicate perturbation")
+        seen = set_at(seen, slot, 1)
+        if candidate.simple_bound_scaled >= TARGET_SCALED {
+            crossing_count = crossing_count + 1
+        }
+        if candidate.simple_bound_scaled > best.simple_bound_scaled
+        or (candidate.simple_bound_scaled == best.simple_bound_scaled
+            and candidate.mode_coefficient_micros < best.mode_coefficient_micros) {
+            best = candidate
+        }
+    }
+    next(target, PerturbationSelection {
+        proposal_count: len(proposals),
+        cells_seen: seen,
+        best_coefficient_micros: best.mode_coefficient_micros,
+        best_baseline_scaled: best.baseline_scaled,
+        best_local_c_scaled: best.local_c_scaled,
+        best_block_size: best.best_block_size,
+        best_simple_bound_scaled: best.simple_bound_scaled,
+        best_gaps_micros: best.minimizing_gaps_micros,
+        starts_per_cell: best.starts_checked,
+        crossing_count: crossing_count,
+    })
+}
+
+constraint CompletePerturbationScan
+for PerturbationSelection(subject, proposed)
+watches PerturbationExpectation
+{
+    let expected = candidate(subject, PerturbationExpectation)
+    require proposed.proposal_count == expected.proposal_count else "zeta.70.perturbation_count"
+    require len(proposed.cells_seen) == expected.proposal_count else "zeta.70.perturbation_shape"
+    let mut total = 0
+    for seen in proposed.cells_seen {
+        total = total + seen
+    }
+    require total == expected.proposal_count else "zeta.70.perturbation_partition"
+    require proposed.starts_per_cell == 793 else "zeta.70.perturbation_hot_path"
+}
+
+entity perturbation_judge {
+    PerturbationExpectation {}
+    PerturbationSelection {}
+}
+
+entity reversed_perturbation_judge {
+    PerturbationExpectation {}
+    PerturbationSelection {}
+}
+
+event PerturbationBatchReady {
+    target: entity
+    candidates: list
+    reverse_order: bool
+}
+
+on PerturbationBatchReady(evt) {
+    settle {
+        if evt.reverse_order {
+            for index in range(len(evt.candidates)) {
+                SubmitPerturbation(evt.target, evt.candidates[len(evt.candidates) - index - 1])
+            }
+        } else {
+            for candidate in evt.candidates {
+                SubmitPerturbation(evt.target, candidate)
+            }
+        }
+    }
+}
+
+fn explore_perturbations() -> map<str, any> {
+    let live_before = world_digest()
+    let root = fork()
+    let count = (C_MAX_MICROS - C_MIN_MICROS) / C_STEP_MICROS + 1
+    let mut candidates = []
+    for slot in range(count) {
+        candidates = push(candidates, fork_with(root, PerturbedWindowUniverse {
+            mode_coefficient_micros: C_MIN_MICROS + slot * C_STEP_MICROS,
+        }))
+    }
+    let futures = simulate_many(candidates, [system::EvaluatePerturbedWindow], 1, 2027)
+    assert(world_digest() == live_before, "perturbation forks mutated live state")
+
+    let mut reports = []
+    let mut first_wire_digest = ""
+    let mut last_wire_digest = ""
+    for future in futures {
+        assert_only_changed(root, future, [PerturbedWindowUniverse])
+        let wire = fork_to_bytes(future)
+        let restored = fork_from_bytes(wire) |> unwrap
+        assert(world_digest(restored) == world_digest(future), "perturbation wire roundtrip changed a fork")
+        let report = peek_resource(restored, PerturbedWindowUniverse) |> unwrap
+        assert(report.evaluated, "perturbation fork did not execute")
+        reports = push(reports, report)
+        if first_wire_digest == "" {
+            first_wire_digest = world_digest(restored)
+        }
+        last_wire_digest = world_digest(restored)
+    }
+    let result: map<str, any> = {
+        "candidates": reports,
+        "live_before": live_before,
+        "live_after": world_digest(),
+        "wire_boundary_digests": [first_wire_digest, last_wire_digest],
+    }
+    return result
+}
+
+fn main() -> nil {
+    let expected = (C_MAX_MICROS - C_MIN_MICROS) / C_STEP_MICROS + 1
+    set(perturbation_judge, PerturbationExpectation { proposal_count: expected })
+    set(reversed_perturbation_judge, PerturbationExpectation { proposal_count: expected })
+    let explored = explore_perturbations()
+    emit PerturbationBatchReady {
+        target: perturbation_judge,
+        candidates: explored["candidates"],
+        reverse_order: false,
+    }
+    emit PerturbationBatchReady {
+        target: reversed_perturbation_judge,
+        candidates: explored["candidates"],
+        reverse_order: true,
+    }
+    flush_events()
+
+    let selected = require(perturbation_judge, PerturbationSelection)
+    let reversed = require(reversed_perturbation_judge, PerturbationSelection)
+    assert(selected == reversed, "perturbation selection depends on proposal order")
+    assert(explored["live_before"] == explored["live_after"], "perturbation speculation leaked")
+    let receipt: map<str, any> = {
+        "schema": "rad.zeta-perturbed-window-attack.v1",
+        "rigorous": false,
+        "status": "multi-start six-gap scout; a directed global cover is required",
+        "selection": selected,
+        "target_scaled": TARGET_SCALED,
+        "scale": SCALE,
+        "crosses_target_numerically": selected.best_simple_bound_scaled >= TARGET_SCALED,
+        "proposal_order_independent": selected == reversed,
+        "speculation_isolated": explored["live_before"] == explored["live_after"],
+        "wire_boundary_digests": explored["wire_boundary_digests"],
+        "selection_why": why(perturbation_judge, PerturbationSelection),
+    }
+    create_dir("projects/dogfood/zeta-simple-zeros/out")
+    write_file(
+        "projects/dogfood/zeta-simple-zeros/out/perturbed-window-attack.json",
+        json_stringify(receipt),
+    )
+
+    print("bandwidth-one perturbed-window attack")
+    print("forked coefficients:", expected)
+    print("best coefficient micros:", selected.best_coefficient_micros)
+    print("best baseline:", selected.best_baseline_scaled, "/", SCALE)
+    print("sampled local C:", selected.best_local_c_scaled, "/", SCALE)
+    print("best block:", selected.best_block_size)
+    print("sampled simple bound:", selected.best_simple_bound_scaled, "/", SCALE)
+    print("minimizing gaps micros:", selected.best_gaps_micros)
+    print("cells at or above 70%:", selected.crossing_count)
+    print(why(perturbation_judge, PerturbationSelection))
+}

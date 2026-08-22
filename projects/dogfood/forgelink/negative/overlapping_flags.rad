@@ -1,0 +1,4 @@
+bitflags BadStatus: u16 {
+    Warning = 4,
+    AlsoWarning = 4,
+}

@@ -69,6 +69,13 @@ lifetime, the test fails and names it.
 | **Blast-radius assertions** | `diff()` and `assert_only_changed()` compare worlds in O(archetypes), without scanning every entity. |
 | **Deterministic parallel simulation** | The same inputs produce bit-identical rollout results at any native worker count; a rollout's seed can reproduce that future alone. |
 | **Compiler-enforced authority** | System signatures bound transitive reads, writes, event emission, host IO, and async execution across helpers, imports, callbacks, transitions, and synchronous event chains. |
+| **Write ownership** | Components, individual fields, and resources have one canonical owner; outside code can read state but cannot encode an unauthorized mutation. |
+| **Atomic contract transactions** | `requires`, transitive `changes_only`, `ensures`, and post-commit effects turn multi-entity lifecycle changes into one rollback-safe cause. |
+| **Native-fidelity data** | Opaque IDs, fixed-width scalars, enums, bitflags, ABI layouts, and endian codecs preserve representation without collapsing semantic namespaces. |
+| **Maintained views and ordered indexes** | Derived subsets and traversal order update transactionally instead of being rebuilt by readers. |
+| **Reviewable hot paths** | Query plans expose scans, sorts, allocations, complexity, and transitive cost paths; frame budgets are enforced before deployment. |
+| **Stateful model checking** | Generate lifecycle histories, check temporal properties, shrink failures, and replay the minimal `.radr` counterexample from the CLI. |
+| **Contained native extensions** | Verify ABI/effects/layout/determinism, isolate crashes and timeouts, pin plugin generations, and replay recorded host results. |
 | **Record, replay, and time travel** | Record a session, inspect earlier frames, ask `why` in the past, or replay the same inputs against edited source. |
 | **Capability sandboxing** | Run proposed Rad code against a fork with a builtin mask, component-write ACL, and fuel/memory budgets; the host decides what commits. |
 | **Mergeable worlds** | Inspect, serialize, diff, patch, and three-way merge forks with deterministic conflict handling. |
@@ -134,6 +141,8 @@ cargo run --release -p rad-cli -- projects/dogfood/causality/main.rad
 cargo run --release -p rad-cli -- projects/dogfood/speculation/blast_radius.rad
 cargo run --release -p rad-cli -- projects/dogfood/worldmerge/main.rad
 cargo run --release -p rad-cli -- projects/dogfood/authority-effects/main.rad
+cargo run --release -p rad-cli -- projects/dogfood/workpulse/main.rad
+cargo run --release -p rad-cli -- projects/dogfood/riskbridge/main.rad
 ```
 
 ## A small language with a serious runtime
@@ -154,7 +163,10 @@ Rad includes:
 The repository does not stop at syntax samples. [`projects/dogfood`](projects/dogfood)
 contains game runtimes, speculative planners, sandboxes, replay workflows,
 causal constraints, browser presentation, and independently checked exact-search
-projects built on the same shipping VM.
+projects built on the same shipping VM. The
+[production dogfood portfolio](https://peteracs.github.io/rad/docs/project/production-dogfood-portfolio.html)
+binds eleven cumulative services to their negative fixtures, scale workloads,
+replays, operational inspections, and one exact-generation release report.
 
 ## Where Rad fits
 

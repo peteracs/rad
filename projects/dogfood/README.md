@@ -10,11 +10,24 @@ Use these discoverability groups when choosing a workload:
 - Applications: `opsdesk`, `radsheet`, `radtrack`, `syncdesk`, `todo`.
 - Security and persistence labs: `bastion`, `strongbox`, `worldmerge`,
   `migration-chain`, `schema`.
-- Research workloads: `collatz-lab`, `frankl-search`, `sudoku`.
+- Research workloads: `collatz-lab`, `frankl-search`, `sudoku`,
+  `zeta-simple-zeros`.
 - Language and causal verticals: `causal-laws`, `causal-constraints`,
   `causality`, `speculation`, `timetravel`, `world-law-rpg`,
   `authority-effects`.
 - Host/extension proofs: `native-math-kernels`, `orianna_gui`, `radgui`.
+- Production-boundary portfolio: `pagergrid`, `fulfillos`, `clearpay`,
+  `forgelink`, `marketlens`, `bookcore`, `dispatch60`, `matchflow`,
+  `accesslens`, `workpulse`, `riskbridge`.
+
+Run the complete clean-commit portfolio and repository gate with:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File devtools/accept-portfolio.ps1
+```
+
+The command retains a source-, binary-, replay-, diagnostic-, memory-, and
+benchmark-bound JSON report under `artifacts/portfolio/`.
 
 Add a new workload here only when it exercises several language/runtime
 boundaries. Small teaching examples belong under `examples/`; canonical

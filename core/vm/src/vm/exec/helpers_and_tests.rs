@@ -80,7 +80,7 @@ impl VM {
             self.last_sandbox_fuel_spent,
             self.current_trace_id,
             self.next_trace_id,
-            self.current_cause,
+            (&self.current_cause, &self.pending_host_cause),
             self.causality_frame,
             self.once_guard_passed,
         )
@@ -94,35 +94,20 @@ impl VM {
 #[cfg(test)]
 mod scheduling_tests {
     fn run_source(src: &str) -> Vec<String> {
-        let mut lexer = crate::lexer::Lexer::new(src);
-        let tokens = lexer.tokenize().0;
-        let program = crate::parser::Parser::new(tokens).parse();
-        let compiler = crate::compiler::Compiler::new();
-        let result = compiler.compile(&program).expect("program should compile");
-        let mut vm = crate::vm::VM::new();
-        vm.load_compile_result(result);
-        vm.run(0).expect("program should run");
-        vm.print_buffer.clone()
+        crate::test_support::run_source(src, crate::parser::ParserOptions::default())
+            .expect("program should compile and run")
     }
 
     /// Like `run_source` but through the checker (as `rad file.rad`
     /// compiles), so per-fn effect sets reach the compiler's body-access
     /// analysis.
     fn run_source_checked(src: &str) -> Vec<String> {
-        let mut lexer = crate::lexer::Lexer::new(src);
-        let tokens = lexer.tokenize().0;
-        let program = crate::parser::Parser::new(tokens).parse();
-        let mut checker = crate::checker::Checker::new();
-        let errors = checker.check(&program);
-        assert!(errors.is_empty(), "check errors: {:?}", errors);
-        let result = crate::compiler::Compiler::new()
-            .with_checker_output(checker.output())
-            .compile(&program)
-            .expect("program should compile");
-        let mut vm = crate::vm::VM::new();
-        vm.load_compile_result(result);
-        vm.run(0).expect("program should run");
-        vm.print_buffer.clone()
+        crate::test_support::run_checked_source(
+            src,
+            crate::parser::ParserOptions::default(),
+            crate::checker::CheckerOptions::default(),
+        )
+        .expect("program should check, compile, and run")
     }
 
     #[test]
@@ -197,16 +182,8 @@ mod scheduling_tests {
     /// Like `run_source` but with the `--serial-schedule` lever engaged, so
     /// scheduled systems run one at a time in topological order.
     fn run_source_serial(src: &str) -> Vec<String> {
-        let mut lexer = crate::lexer::Lexer::new(src);
-        let tokens = lexer.tokenize().0;
-        let program = crate::parser::Parser::new(tokens).parse();
-        let compiler = crate::compiler::Compiler::new();
-        let result = compiler.compile(&program).expect("program should compile");
-        let mut vm = crate::vm::VM::new();
-        vm.set_serial_schedule(true);
-        vm.load_compile_result(result);
-        vm.run(0).expect("program should run");
-        vm.print_buffer.clone()
+        crate::test_support::run_source_serial(src, crate::parser::ParserOptions::default())
+            .expect("program should compile and run serially")
     }
 
     #[test]
@@ -477,6 +454,7 @@ mod scheduling_tests {
             system Publish(
                 _root: Root,
                 writes Named,
+                writes "$entities",
                 writes "$entity_names",
                 writes "$entity_identity"
             ) {

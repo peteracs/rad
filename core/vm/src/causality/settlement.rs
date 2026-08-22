@@ -116,31 +116,6 @@ impl CausalityLedger {
         result
     }
 
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn record_write_with_resolution(
-        &mut self,
-        frame: u64,
-        entity: u32,
-        entity_name: Option<String>,
-        component: &str,
-        value: String,
-        by: Cause,
-        resolution_id: Option<u64>,
-    ) {
-        self.writes.push_back(WriteRecord {
-            frame,
-            entity: Some(entity),
-            entity_name,
-            component: component.to_string(),
-            value,
-            kind: WriteKind::Set,
-            by,
-            origin: None,
-            resolution_id,
-        });
-        self.evict_overflow();
-    }
-
     pub(crate) fn record_relation_assertion(
         &mut self,
         frame: u64,
@@ -177,7 +152,7 @@ impl CausalityLedger {
                 write.resolution_id == Some(resolution_id) && write.entity == Some(resolution.key)
             })
             .and_then(|write| write.entity_name.clone())
-            .unwrap_or_else(|| format!("entity {}", resolution.key));
+            .unwrap_or_else(|| format!("entity {}", resolution.key).into());
         let mut out = format!(
             "\n\n  <- resolver `{}`\n     intent: {}\n     key: {}",
             resolution.resolver, resolution.intent, key_label

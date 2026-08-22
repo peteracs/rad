@@ -1,13 +1,14 @@
-
-
 impl VM {
     pub(crate) fn enforce_settlement_opcode(&self, op: crate::opcode::Op) -> Result<(), String> {
         if self.settlement.is_none() {
             return Ok(());
         }
-        if let crate::bytecode_effects::OpcodeEffect::Forbidden(effect) =
-            crate::bytecode_effects::opcode_effect(op)
-        {
+        if let crate::bytecode_effects::OpcodePolicy::Reject(
+            crate::bytecode_effects::BoundaryViolation::SettlementEffect(effect),
+        ) = crate::bytecode_effects::opcode_policy(
+            crate::bytecode_effects::EffectBoundary::Settlement,
+            op,
+        ) {
             return Err(format!(
                 "Settlement effect firewall: opcode {:?} cannot perform {} while a settlement is active",
                 op, effect
@@ -20,7 +21,10 @@ impl VM {
         if self.settlement.is_none() {
             return Ok(());
         }
-        if let Some(effect) = crate::bytecode_effects::forbidden_builtin_effect(builtin) {
+        if let Some(effect) = crate::bytecode_effects::forbidden_builtin_effect(
+            crate::bytecode_effects::EffectBoundary::Settlement,
+            builtin,
+        ) {
             return Err(format!(
                 "Settlement effect firewall: builtin `{}` cannot access {} while a settlement is active",
                 builtin.name(), effect
@@ -34,7 +38,7 @@ impl VM {
         slot: usize,
         operation: &str,
     ) -> Result<(), String> {
-        if self.settlement.is_none() {
+        if self.settlement.is_none() && self.transaction.is_none() {
             return Ok(());
         }
         let index = self.current_frame().stack_base.saturating_add(slot);
@@ -43,8 +47,13 @@ impl VM {
             .get(index)
             .is_some_and(|value| value.as_cell().is_some())
         {
+            let boundary = if self.transaction.is_some() {
+                "Transaction"
+            } else {
+                "Settlement"
+            };
             return Err(format!(
-                "Settlement effect firewall: {} cannot mutate captured local slot {}",
+                "{boundary} effect firewall: {} cannot mutate captured local slot {}",
                 operation, slot
             ));
         }
@@ -64,27 +73,6 @@ impl VM {
             // was never externally committed, so an abort can safely return
             // the allocator to the pre-attempt state as part of atomic unwind.
             self.next_settlement_id = context.settlement_id;
-        }
-    }
-
-    /// Enforce the public VM invariant that no execution result can expose an
-    /// unfinished settlement. Errors keep their original diagnostic; a
-    /// successful escape is a compiler/bytecode fault and becomes an error.
-    pub(crate) fn enforce_settlement_balance<T, E>(&mut self, result: Result<T, E>) -> Result<T, E>
-    where
-        E: From<String>,
-    {
-        if self.settlement.is_none() {
-            return result;
-        }
-        self.abort_settlement();
-        match result {
-            Ok(_) => Err(
-                "Internal VM error: unbalanced settlement at public execution boundary; transaction was aborted"
-                    .to_string()
-                    .into(),
-            ),
-            Err(error) => Err(error),
         }
     }
 
@@ -268,12 +256,15 @@ impl VM {
             .active
             .as_mut()
             .ok_or_else(|| "relation patches are only valid inside a resolver".to_string())?;
-        operation.metadata_mut().causes.insert(relation_resolution_cause(
-            &active.resolver,
-            &active.intent,
-            active.key,
-            &active.proposal_ids,
-        ));
+        operation
+            .metadata_mut()
+            .causes
+            .insert(relation_resolution_cause(
+                &active.resolver,
+                &active.intent,
+                active.key,
+                &active.proposal_ids,
+            ));
         active.relation_operations.push(operation);
         Ok(())
     }
@@ -934,4 +925,5 @@ impl VM {
                 message: error.to_string(),
             }),
         }
-    }}
+    }
+}

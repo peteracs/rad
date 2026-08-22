@@ -3,7 +3,8 @@ impl Checker {
 fn check_expr_operations(&mut self, expr: &Expr) -> Ty {
         match expr {
             Expr::Ident(name, span) => {
-                if let Some(redirected) = self.redirect_alias_name(name) {
+                let redirected = self.resolve_canonical_name(name);
+                if redirected != *name {
                     return self.check_expr(&Expr::Ident(redirected, span.clone()));
                 }
                 match self.lookup_with_depth(name) {
@@ -30,7 +31,11 @@ fn check_expr_operations(&mut self, expr: &Expr) -> Ty {
                         binding.ty.clone()
                     }
                     None => {
-                        if is_builtin(name) {
+                        if crate::native_types::NativeScalarKind::parse(name).is_some() {
+                            // Fixed-width scalar names are constructors and
+                            // first-class ABI descriptors for size/decode.
+                            Ty::Any
+                        } else if is_builtin(name) {
                             if let Some(sig) = crate::builtins::builtin_type_scheme(name) {
                                 let mut mapping = std::collections::HashMap::new();
                                 for tp in &sig.type_params {
@@ -277,6 +282,76 @@ fn check_expr_operations(&mut self, expr: &Expr) -> Ty {
                     resolved_callee_name.as_deref()
                 };
                 if let Some(name) = callee_name_ref {
+                    let canonical = self.resolve_canonical_name(name);
+                    let native_target = if let Some(repr) =
+                        crate::native_types::NativeScalarKind::parse(&canonical)
+                    {
+                        Some((
+                            Ty::Native {
+                                name: canonical.clone(),
+                                repr,
+                                flavor: crate::native_types::NativeTypeFlavor::Scalar,
+                            },
+                            true,
+                        ))
+                    } else {
+                        self.native_types.get(&canonical).map(|native| {
+                            (
+                                Ty::Native {
+                                    name: canonical.clone(),
+                                    repr: native.repr,
+                                    flavor: native.flavor,
+                                },
+                                false,
+                            )
+                        })
+                    };
+                    if let Some((target_ty, scalar_constructor)) = native_target {
+                        if args.len() != 1 {
+                            self.error(
+                                span,
+                                format!("{}() expects exactly one explicit conversion argument", canonical),
+                                None,
+                            );
+                            for arg in args {
+                                self.check_expr(arg);
+                            }
+                            return target_ty;
+                        }
+                        let source_ty = self.check_expr(&args[0]);
+                        let valid = if scalar_constructor {
+                            matches!(source_ty, Ty::Int | Ty::Float | Ty::Native { .. } | Ty::Any)
+                        } else {
+                            match &source_ty {
+                                Ty::Native { name, repr, flavor } => {
+                                    name == &canonical
+                                        || (*flavor == crate::native_types::NativeTypeFlavor::Scalar
+                                            && match &target_ty {
+                                                Ty::Native { repr: target_repr, .. } => repr == target_repr,
+                                                _ => false,
+                                            })
+                                }
+                                Ty::Any => true,
+                                _ => false,
+                            }
+                        };
+                        if !valid {
+                            self.error(
+                                args[0].span(),
+                                format!(
+                                    "cannot convert {} directly to {}; use an explicit {} conversion first",
+                                    source_ty,
+                                    canonical,
+                                    match &target_ty {
+                                        Ty::Native { repr, .. } => repr.to_string(),
+                                        _ => unreachable!(),
+                                    }
+                                ),
+                                None,
+                            );
+                        }
+                        return target_ty;
+                    }
                     if let Some(ty) = self.check_resolver_fact_write_call(name, args, span) {
                         return ty;
                     }

@@ -9,9 +9,6 @@
 //! any pending events at a fork/commit/merge boundary silently vanished.
 //! Events are program state; a snapshot that drops them is not a snapshot.
 
-use crate::compiler::Compiler;
-use crate::lexer::Lexer;
-use crate::parser::Parser;
 use crate::replay::TraceReplayer;
 use crate::vm::VM;
 // Lexical sections preserve one private semantic namespace.

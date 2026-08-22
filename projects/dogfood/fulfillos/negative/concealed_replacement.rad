@@ -1,0 +1,2 @@
+component Inventory owned { available: int = 0 }
+fn conceal(target: entity, replacement: Inventory) { set(target, replacement) }

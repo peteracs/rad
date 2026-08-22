@@ -147,10 +147,11 @@ fn imported_build(xs: list) -> list {
         let mut checker = crate::checker::Checker::new();
         let errors = checker.check(&program);
         assert!(errors.is_empty(), "type errors: {:?}", errors);
+        let checked = checker.output();
         let preset = get_preset("strict").expect("preset");
         let issues = lint_ast(
             &program,
-            &checker,
+            &checked,
             &preset,
             "entry.rad",
             &std::collections::HashMap::new(),

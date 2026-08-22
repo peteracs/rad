@@ -1,0 +1,19 @@
+use "../schema.rad"
+use "../owners/access_owner.rad"
+use "../systems/policy.rad"
+use "../scenarios/production.rad"
+
+test "revocation remains explainable after wire restoration" {
+    let alice = run_access_incident(100)
+    assert(not has(alice, Entitlement), "entitlement remains absent")
+    assert(contains(why_removed(alice, Entitlement), "RevokeProductionAccess"), "transaction cause survives")
+}
+
+test "unrelated identity text leaves the dependency revision stable" {
+    seed_directory(10)
+    let alice = user_by_id(UserId(u64(1)))
+    improve_device_posture(alice)
+    let before = revision(ProductionDeployers)
+    RenameUser(alice, "Alice Operations")
+    assert(revision(ProductionDeployers) == before, "membership did not change")
+}

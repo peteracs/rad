@@ -20,11 +20,18 @@ pub struct TestOutcome {
     pub error: Option<String>,
 }
 
-/// Run every `test` declaration the loaded program defined, in source
-/// order, against the world its top-level code left behind (the fixture).
-/// Tests run sequentially and share that world. VM control state (value
-/// stack, call frames) is restored between tests, so an assertion that
-/// fails deep inside a call chain cannot poison the tests after it.
+/// Run every `test` declaration the loaded program defined, in source order.
+///
+/// Each test starts from the *fixture*: the world, event queues and causal
+/// ledger that the file's top-level code left behind. Tests used to run
+/// against whatever the previous test happened to leave, which made execution
+/// order a silent dependency — AccessLens' second test asserted a directory of
+/// ten users and saw the hundred seeded by the first. A test that genuinely
+/// wants the previous world declares `shared test`, so the dependency is
+/// visible in the source rather than implied by position.
+///
+/// VM control state (value stack, call frames) is restored regardless, so an
+/// assertion that fails deep inside a call chain cannot poison later tests.
 pub fn run_tests(vm: &mut VM) -> Vec<TestOutcome> {
     let tests: Vec<(usize, String)> = vm
         .global_names
@@ -33,6 +40,12 @@ pub fn run_tests(vm: &mut VM) -> Vec<TestOutcome> {
         .filter_map(|(slot, n)| n.strip_prefix("__test_").map(|t| (slot, t.to_string())))
         .collect();
 
+    // Captured once, before any test runs: restoring per test would otherwise
+    // re-capture whatever the previous test left behind.
+    let fixture_world = vm.snapshot_with_events();
+    let fixture_ledger = vm.causality_ledger().clone();
+    let shared = std::sync::Arc::clone(&vm.shared_world_tests);
+
     let mut outcomes = Vec::with_capacity(tests.len());
     for (slot, name) in tests {
         let callee = vm.globals[slot];
@@ -40,6 +53,9 @@ pub fn run_tests(vm: &mut VM) -> Vec<TestOutcome> {
             // Not a compiled test block (e.g. a user global that happens
             // to start with the reserved prefix) — nothing to run.
             continue;
+        }
+        if !shared.contains(&name) {
+            vm.restore_fixture(&fixture_world, &fixture_ledger);
         }
         let frames_before = vm.frames.len();
         let stack_before = vm.stack.len();

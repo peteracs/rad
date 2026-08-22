@@ -376,10 +376,7 @@ impl Checker {
             if *expected == Ty::Any {
                 continue;
             }
-            if expected.is_numeric() && actual.is_numeric() {
-                continue;
-            }
-            if !expected.assignable_from(actual) && *actual != Ty::Any {
+            if !expected.accepts_argument(actual) {
                 let hint = self.type_mismatch_hint(expected, actual);
                 self.error(
                     span,
@@ -820,9 +817,9 @@ impl Checker {
         arg_exprs: &[&Expr],
     ) -> Option<Ty> {
         match name {
-            "get" | "require" | "require_all" | "set_at" | "keys" | "values" | "entries" | "set" | "transition" | "contains" | "sort" | "reverse" | "slice" | "append" | "extend" | "flat_map" | "map" | "filter" | "reduce" | "group_by" | "sort_by" | "zip" => self.check_typed_collection_builtin(name, arg_tys, arg_exprs),
+            "get" | "read_field" | "require" | "require_all" | "set_at" | "keys" | "values" | "entries" | "set" | "write_field" | "transition" | "contains" | "sort" | "reverse" | "slice" | "append" | "extend" | "flat_map" | "map" | "filter" | "reduce" | "group_by" | "sort_by" | "zip" => self.check_typed_collection_builtin(name, arg_tys, arg_exprs),
             "unwrap" | "expect" | "unwrap_or" | "map_or" | "query_where" | "query_map" | "query_count" => self.check_typed_query_builtin(name, arg_tys, arg_exprs),
-            "world_digest" | "entities" | "spawn" | "get_resource" | "res" | "set_resource" => self.check_typed_world_builtin(name, arg_tys, arg_exprs),
+            "world_digest" | "entities" | "spawn" | "get_resource" | "res" | "set_resource" | "lookup" | "range" => self.check_typed_world_builtin(name, arg_tys, arg_exprs),
             _ => None,
         }
     }}

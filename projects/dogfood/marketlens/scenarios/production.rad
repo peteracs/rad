@@ -1,0 +1,29 @@
+use "../schema.rad"
+use "../owners/catalog_owner.rad"
+
+pub fn seed_catalog(count: int) -> nil {
+    for i in range(0, count) {
+        let stock = if i % 7 == 0 { 0 } else { (i % 20) + 1 }
+        publish_product(ProductId(u64(i)), stock, 100 + (i % 5000))
+    }
+}
+
+pub fn run_catalog_day(count: int) -> nil {
+    seed_catalog(count)
+    let catalog_item: entity = lookup(Product, "product_id", ProductId(u64(1))) |> unwrap
+    assert(lookup(SellableProducts, ProductId(u64(1))) == Some(catalog_item), "ready product admitted")
+
+    let before = revision(SellableProducts)
+    rename_product(catalog_item, "Renamed without reclassification")
+    assert(revision(SellableProducts) == before, "nonmembership field keeps revision stable")
+
+    SetInventory(catalog_item, 0)
+    assert(is_none(lookup(SellableProducts, ProductId(u64(1)))), "zero stock removes immediately")
+    let explanation = why_not_in_view(SellableProducts, catalog_item)
+    assert(contains(explanation, "Inventory.available > 0"), "failed field predicate is explicit")
+
+    let removed_revision = revision(SellableProducts)
+    SetInventory(catalog_item, 8)
+    assert(revision(SellableProducts) == removed_revision + 1, "restock enters exactly once")
+    assert(len(changes_since(SellableProducts, before)) == 2, "remove and re-entry are incremental")
+}

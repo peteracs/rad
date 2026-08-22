@@ -776,7 +776,13 @@
         let alias_program = Parser::new(alias_tokens).parse();
 
         let mut aliases = std::collections::HashMap::new();
-        aliases.insert("math".to_string(), alias_program.declarations);
+        aliases.insert(
+            "math".to_string(),
+            crate::ast::ModuleAlias::namespaced(
+                alias_program.declarations,
+                "test:math".to_string(),
+            ),
+        );
 
         let mut checker = Checker::new();
         checker.set_aliases(aliases);
@@ -802,7 +808,13 @@
         let alias_program = Parser::new(alias_tokens).parse();
 
         let mut aliases = std::collections::HashMap::new();
-        aliases.insert("m".to_string(), alias_program.declarations);
+        aliases.insert(
+            "m".to_string(),
+            crate::ast::ModuleAlias::namespaced(
+                alias_program.declarations,
+                "test:m".to_string(),
+            ),
+        );
 
         let mut checker = Checker::new();
         checker.set_aliases(aliases);

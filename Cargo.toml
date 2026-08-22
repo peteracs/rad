@@ -1,7 +1,9 @@
 [workspace]
 members = [
     "adapters/cli",
+    "adapters/ffi-worker",
     "adapters/lsp",
+    "core/relation",
     "core/vm",
     "projects/moba/simcore",
 ]
@@ -15,20 +17,35 @@ resolver = "2"
 # need fast incremental dev builds.
 
 [profile.dev]
-# Incremental on: small compiler edits rebuild in seconds instead of
-# recompiling all of rad-vm. Costs disk (`target/debug/incremental`);
-# `cargo clean` reclaims it.
-incremental = true
-# Strip debug info for dependencies to drastically reduce disk space (PDBs)
+# rad-vm is a large compiler/runtime crate. Retaining its full incremental
+# query graph and DWARF state made rustc exceed 1.4 GiB and left multi-GiB
+# caches on constrained developer drives. The dedicated `profiling` profile
+# below is the symbolized build; ordinary development keeps assertions and
+# overflow checks without paying for unused compiler state.
+incremental = false
+debug = 0
+# Strip debug info for dependencies as well.
 [profile.dev.package."*"]
 debug = 0
+
+# The rad-vm unit-test artifact contains the complete compiler/runtime plus
+# more than a thousand tests. Full DWARF for that single executable makes
+# rustc retain gigabytes of debuginfo state even though CI and local test runs
+# consume test names and diagnostics, not debugger symbols. Keep assertions
+# and the normal test harness while emitting no unused symbol payload.
+[profile.test]
+debug = 0
+incremental = false
 
 # opt-level 3 for the native CLI: the interpreter dispatch loop gains
 # double-digit percent over "s" (which was chosen for wasm bundle size —
 # if playground size regresses, build wasm with --profile wasm-size).
 [profile.release]
 opt-level = 3
-lto = true
+# Thin LTO keeps cross-crate optimization without constructing one
+# monolithic LLVM unit for RAD, Wasmtime, and the native adapters. Full LTO
+# exhausted developer and CI machines as the compiler/runtime grew.
+lto = "thin"
 
 [profile.wasm-size]
 inherits = "release"

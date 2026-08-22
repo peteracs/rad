@@ -1,16 +1,6 @@
-
-
 fn run_vm(src: &str) -> VM {
-    let mut lexer = Lexer::new(src);
-    let tokens = lexer.tokenize().0;
-    let mut parser = Parser::new(tokens);
-    let program = parser.parse();
-    assert!(
-        parser.errors().is_empty(),
-        "parse errors: {:?}",
-        parser.errors()
-    );
-    let result = Compiler::new().compile(&program).expect("compile");
+    let result = crate::test_support::compile_source(src, crate::parser::ParserOptions::default())
+        .expect("parse and compile");
     let mut vm = VM::new();
     vm.suppress_output();
     vm.load_compile_result(result);
@@ -86,22 +76,12 @@ fn load_err(src: &str, json: &str) -> String {
 /// declared field types reach the VM — the deserialization boundary
 /// validates loaded values against them.
 fn run_vm_checked(src: &str) -> VM {
-    let mut lexer = Lexer::new(src);
-    let tokens = lexer.tokenize().0;
-    let mut parser = Parser::new(tokens);
-    let program = parser.parse();
-    assert!(
-        parser.errors().is_empty(),
-        "parse errors: {:?}",
-        parser.errors()
-    );
-    let mut checker = crate::checker::Checker::new();
-    let errors = checker.check(&program);
-    assert!(errors.is_empty(), "check errors: {:?}", errors);
-    let result = Compiler::new()
-        .with_checker_output(checker.output())
-        .compile(&program)
-        .expect("compile");
+    let result = crate::test_support::compile_checked_source(
+        src,
+        crate::parser::ParserOptions::default(),
+        crate::checker::CheckerOptions::default(),
+    )
+    .expect("parse, check, and compile");
     let mut vm = VM::new();
     vm.suppress_output();
     vm.load_compile_result(result);
@@ -430,7 +410,9 @@ const INCIDENT_DECL: &str = r#"component Incident { code: "", sev: 1, open: true
 /// declaration exactly but whose value TYPES do not (sev str, open int).
 #[test]
 fn load_world_rejects_wrong_typed_values_with_matching_field_set() {
-    let poisoned = current_world_save(r#"{"entities":[["inc-1001",[["Incident",["DISK_FULL","3",0]]]]],"resources":[],"schema":[["Incident",["code","sev","open"]]]}"#);
+    let poisoned = current_world_save(
+        r#"{"entities":[["inc-1001",[["Incident",["DISK_FULL","3",0]]]]],"resources":[],"schema":[["Incident",["code","sev","open"]]]}"#,
+    );
     let err = load_err_checked(INCIDENT_DECL, &poisoned);
     assert!(err.contains("type drift in 'Incident.sev'"), "got: {}", err);
     assert!(err.contains("declared int"), "got: {}", err);
@@ -441,7 +423,9 @@ fn load_world_rejects_wrong_typed_values_with_matching_field_set() {
 /// silent nil — the exact thing the docs promise never happens.
 #[test]
 fn load_world_rejects_null_in_typed_field() {
-    let nulled = current_world_save(r#"{"entities":[["inc-1001",[["Incident",["DISK_FULL",3,null]]]]],"resources":[],"schema":[["Incident",["code","sev","open"]]]}"#);
+    let nulled = current_world_save(
+        r#"{"entities":[["inc-1001",[["Incident",["DISK_FULL",3,null]]]]],"resources":[],"schema":[["Incident",["code","sev","open"]]]}"#,
+    );
     let err = load_err_checked(INCIDENT_DECL, &nulled);
     assert!(
         err.contains("type drift in 'Incident.open'"),
@@ -456,7 +440,9 @@ fn load_world_rejects_null_in_typed_field() {
 /// used to land silently in an int-declared field (type AND value changed).
 #[test]
 fn load_world_rejects_out_of_range_integer_in_int_field() {
-    let huge = current_world_save(r#"{"entities":[["inc-1001",[["Incident",["DISK_FULL",99999999999999999999999999,true]]]]],"resources":[],"schema":[["Incident",["code","sev","open"]]]}"#);
+    let huge = current_world_save(
+        r#"{"entities":[["inc-1001",[["Incident",["DISK_FULL",99999999999999999999999999,true]]]]],"resources":[],"schema":[["Incident",["code","sev","open"]]]}"#,
+    );
     let err = load_err_checked(INCIDENT_DECL, &huge);
     assert!(err.contains("type drift in 'Incident.sev'"), "got: {}", err);
     assert!(err.contains("declared int"), "got: {}", err);
@@ -468,7 +454,9 @@ fn load_world_rejects_out_of_range_integer_in_int_field() {
 /// get_entity, count still "right").
 #[test]
 fn load_world_rejects_duplicate_entity_names() {
-    let dup = current_world_save(r#"{"entities":[["inc-1001",[["Incident",["A",1,true]]]],["inc-1001",[["Incident",["B",2,false]]]]],"resources":[],"schema":[["Incident",["code","sev","open"]]]}"#);
+    let dup = current_world_save(
+        r#"{"entities":[["inc-1001",[["Incident",["A",1,true]]]],["inc-1001",[["Incident",["B",2,false]]]]],"resources":[],"schema":[["Incident",["code","sev","open"]]]}"#,
+    );
     let err = load_err_checked(INCIDENT_DECL, &dup);
     assert!(
         err.contains("two entities named 'inc-1001'"),
@@ -482,7 +470,9 @@ fn load_world_rejects_duplicate_entity_names() {
 /// to record one), so the payload is corrupt.
 #[test]
 fn load_world_rejects_empty_entity_name() {
-    let blank = current_world_save(r#"{"entities":[["",[["Incident",["A",1,true]]]]],"resources":[],"schema":[["Incident",["code","sev","open"]]]}"#);
+    let blank = current_world_save(
+        r#"{"entities":[["",[["Incident",["A",1,true]]]]],"resources":[],"schema":[["Incident",["code","sev","open"]]]}"#,
+    );
     let err = load_err_checked(INCIDENT_DECL, &blank);
     assert!(err.contains("entity named \"\""), "got: {}", err);
 }
@@ -554,7 +544,9 @@ fn correct_migration_still_loads_under_type_validation() {
 /// Wrong-typed resource values are refused too (same choke point).
 #[test]
 fn load_world_rejects_wrong_typed_resource_value() {
-    let poisoned = current_world_save(r#"{"entities":[],"resources":[["Ledger",["us-east",2]]],"schema":[["Ledger",["count","site"]]]}"#);
+    let poisoned = current_world_save(
+        r#"{"entities":[],"resources":[["Ledger",["us-east",2]]],"schema":[["Ledger",["count","site"]]]}"#,
+    );
     let err = load_err_checked(r#"resource Ledger { count: 0, site: "" }"#, &poisoned);
     assert!(err.contains("type drift in 'Ledger.count'"), "got: {}", err);
     assert!(err.contains("declared int"), "got: {}", err);
@@ -632,7 +624,9 @@ fn int_in_float_declared_field_round_trips_under_validation() {
 /// this fix must still replay.
 #[test]
 fn checkerless_compile_skips_type_validation() {
-    let poisoned = current_world_save(r#"{"entities":[["inc-1001",[["Incident",["DISK_FULL","3",0]]]]],"resources":[],"schema":[["Incident",["code","sev","open"]]]}"#);
+    let poisoned = current_world_save(
+        r#"{"entities":[["inc-1001",[["Incident",["DISK_FULL","3",0]]]]],"resources":[],"schema":[["Incident",["code","sev","open"]]]}"#,
+    );
     let vm = load_into(INCIDENT_DECL, &poisoned).expect("bare compile stays permissive");
     assert_eq!(vm.get_world().all_entity_ids().len(), 1);
 }

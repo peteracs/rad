@@ -5,9 +5,7 @@
 //! compilation path. Keeping this policy here prevents the CLI and replay
 //! server from drifting apart.
 
-use crate::compiler::Compiler;
-use crate::lexer::Lexer;
-use crate::parser::{Parser, ParserOptions};
+use crate::parser::ParserOptions;
 use crate::source_bundle::SourceLayout;
 use crate::vm::VM;
 
@@ -20,19 +18,15 @@ pub fn compile_trace_vm(
     let source_identity = source_layout
         .digest(source)
         .map_err(|error| format!("{description} has an invalid source layout: {error}"))?;
-    let compile_result = if source_layout.sections.is_empty() {
-        let mut lexer = Lexer::new(source);
-        let tokens = lexer.tokenize().0;
-        let mut parser = Parser::new(tokens);
-        let program = parser.parse();
-        if let Some(error) = parser.errors().first() {
+    let (program, aliases) = if source_layout.sections.is_empty() {
+        let parsed = crate::pipeline::parse_source(source, ParserOptions::default());
+        if let Some(error) = parsed.lexer_errors.first() {
+            return Err(format!("{description} failed to lex: {}", error.message));
+        }
+        if let Some(error) = parsed.parser_errors.first() {
             return Err(format!("{description} failed to parse: {}", error.message));
         }
-        Compiler::new()
-            .with_features(features.to_vec())
-            .with_program_source_identity(source_identity.clone())
-            .compile(&program)
-            .map_err(|error| format!("{description} failed to compile: {}", error.message))?
+        (parsed.program, std::collections::HashMap::new())
     } else {
         let loaded = crate::module_loader::load_program_from_source_bundle(
             source,
@@ -45,13 +39,18 @@ pub fn compile_trace_vm(
         if !loaded.errors.is_empty() {
             return Err(render_load_errors(loaded.errors));
         }
-        Compiler::new()
-            .with_aliases(loaded.aliases)
-            .with_features(features.to_vec())
-            .with_program_source_identity(source_identity)
-            .compile(&loaded.program)
-            .map_err(|error| format!("{description} failed to compile: {}", error.message))?
+        (loaded.program, loaded.aliases)
     };
+    let compile_result = crate::pipeline::compile_unchecked_program(
+        &program,
+        aliases,
+        crate::pipeline::UncheckedCompileOptions {
+            features: features.to_vec(),
+            source_identity: Some(source_identity),
+            ..crate::pipeline::UncheckedCompileOptions::default()
+        },
+    )
+    .map_err(|error| format!("{description} failed to compile: {}", error.message))?;
 
     let mut vm = VM::new();
     vm.load_compile_result(compile_result);

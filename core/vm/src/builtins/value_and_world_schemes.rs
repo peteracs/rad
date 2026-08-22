@@ -23,7 +23,7 @@ pub fn builtin_effect(name: &str) -> EffectSet {
         // builtin_required_effects and in is_impure_builtin): the sandbox
         // mask, this table's one functional consumer, carries an explicit
         // allow arm for them so seeded guest randomness keeps working.
-        "print" | "sys_args" | "now_unix_s" | "now_unix_ms" | "clock" | "load_extension" | "gc_collect"
+        "print" | "sys_args" | "now_unix_s" | "now_unix_ms" | "clock" | "load_extension" | "host_try" | "host_try0" | "gc_collect"
         | "eprint" | "write_stdout" | "write_stderr" | "flush_stdout" | "sleep_ms" | "log"
         | "metric" | "rand_int" | "rand_float" | "rand_bool" | "rand_seed" | "sandbox_input"
         | "sandbox_output" | "sandbox_last_output" | "sandbox_last_fuel" => {
@@ -64,18 +64,20 @@ pub fn builtin_effect(name: &str) -> EffectSet {
         | "udp_send_to_bytes"
         | "udp_send_bytebuf"
         | "udp_close" => EffectSet::from_vec(&[Effect::IO, Effect::Async]),
-        "set" | "set_resource" | "spawn" | "remove" | "despawn" | "fork" | "fork_with"
+        "set" | "write_field" | "set_resource" | "spawn" | "remove" | "despawn" | "fork" | "fork_with"
         | "simulate" | "simulate_par" | "simulate_many" | "simulate_seeded" | "sandbox_run"
         | "commit" | "load_world" | "try_load_world" | "merge_forks" | "merge_forks_with"
         | "fork_from_bytes" | "fork_apply" | "insert_fact" | "remove_fact"
         | "replace_fact_by" => EffectSet::single(Effect::ECS),
-        "get" | "has" | "entities" | "query_where" | "query_map" | "query_count" | "with_field"
+        "enter_phase" | "mark_phase" | "model_check" => EffectSet::single(Effect::ECS),
+        "get" | "read_field" | "has" | "entities" | "visit_view" | "query_where" | "query_map" | "query_count" | "with_field"
         | "peek" | "peek_resource" | "fork_seed" | "lookup" | "lookup_all" | "why"
         | "why_resource" | "why_fact" | "save_world" | "name_of" | "require_entity" | "world_digest"
         | "schema_digest" | "res" | "get_resource" | "require" | "require_all" | "get_entity"
-        | "recent_events" | "base_fact" | "candidate_fact" => {
+        | "recent_events" | "base_fact" | "candidate_fact" | "revision" | "changes_since" | "why_in_view" | "why_not_in_view" | "why_field" | "why_removed" | "why_missing" | "why_revision_changed" | "why_revision_did_not_change" | "lower_bound" | "upper_bound" | "first" | "last" | "next" | "previous" => {
             EffectSet::single(Effect::ReadECS)
         }
+        "assert_trace" => EffectSet::single(Effect::ReadECS),
         "emit" | "transition" | "flush_events" => EffectSet::single(Effect::Event),
         _ => EffectSet::pure(),
     }
@@ -134,9 +136,9 @@ pub fn builtin_signature_help(name: &str) -> Option<String> {
 pub fn builtin_type_scheme(name: &str) -> Option<BuiltinSig> {
     match name {
         "len" | "typeof" | "variant_of" | "sys_args" | "str" | "int" | "int_div" | "float" | "abs" | "sign" | "popcount" | "ctz" | "shl" | "shr" | "filled" | "set_at" | "sum" | "product" | "get_or" | "clamp" | "index_of" | "any" | "all" | "min" | "max" | "log" | "metric" | "trace_id" | "flush_events" | "print" | "debug_trace" | "push" | "pop" | "pop_last" | "drop_last" | "drop_first" | "recent_events" | "sort" | "reverse" | "sort_by" | "slice" | "map" | "filter" | "reduce" | "range" | "keys" | "contains" | "format" | "format_value" | "entries" | "merge" | "remove_key" | "group_by" | "split" | "join" | "trim" | "replace" | "starts_with" | "ends_with" | "append" | "extend" | "zip" | "flat_map" | "enumerate" | "find" | "max_by" | "min_by" | "try_int" | "try_float" => builtin_type_scheme_values(name),
-        "get" | "res" | "get_resource" | "set_resource" | "lookup" | "lookup_all" | "require" | "get_entity" | "require_entity" | "require_all" | "set" | "has" | "spawn" | "remove" | "despawn" | "name_of" | "id_of" | "entities" | "transition" | "emit" | "unwrap" | "expect" | "unwrap_or" | "map_or" | "is_some" | "is_none" | "chr" | "ord" | "chars" | "to_upper" | "to_lower" | "values" | "byte_at" | "substring_bytes" | "byte_len" | "base_fact" | "candidate_fact" | "insert_fact" | "remove_fact" | "replace_fact_by" => builtin_type_scheme_world(name),
-        "read_file" | "write_file" | "http_get" | "regex_is_match" | "regex_find" | "now_unix_s" | "now_unix_ms" | "round" | "floor" | "ceil" | "sqrt" | "pow" | "to_fixed" | "json_stringify" | "json_parse" | "rand_int" | "rand_float" | "rand_bool" | "rand_seed" | "gen_int" | "gen_float" | "gen_str" | "gen_bool" | "gen_list" | "input" | "readline" | "assert" | "assert_eq" | "load_extension" | "gc_collect" | "eprint" | "write_stdout" | "write_stderr" | "read_stdin_all" | "flush_stdout" | "sleep_ms" | "append_file" | "file_exists" | "remove_file" | "list_dir" | "create_dir" | "remove_dir" | "read_file_bytes" | "write_file_bytes" | "http_post" | "http_post_json" | "http_request" | "tcp_connect" | "tcp_listen" | "tcp_accept" | "tcp_accept_timeout" | "tcp_read" | "tcp_write" | "tcp_close" | "udp_bind" | "udp_recv_from" | "udp_recv_from_timeout" | "udp_recv_from_bytes" | "udp_recv_from_bytes_timeout" | "udp_recv_bytebuf" | "udp_recv_bytebuf_timeout" | "udp_send_to" | "udp_send_to_bytes" | "udp_send_bytebuf" | "udp_close" => builtin_type_scheme_host(name),
-        "query_where" | "query_map" | "query_count" | "with_field" | "bitset_new" | "bitset_set" | "bitset_has" | "bitset_clear" | "buffer_new" | "buffer_append" | "buffer_to_str" | "bytebuf_new" | "bytebuf_len" | "bytebuf_get" | "bytebuf_set_u8" | "bytebuf_set_u32_le" | "bytebuf_set_i32_le" | "bytebuf_get_u32_le" | "bytebuf_get_i32_le" | "bytebuf_to_list" | "bytebuf_from_list" => builtin_type_scheme_buffers(name),
+        "get" | "read_field" | "res" | "get_resource" | "set_resource" | "lookup" | "lookup_all" | "require" | "get_entity" | "require_entity" | "require_all" | "set" | "write_field" | "has" | "spawn" | "remove" | "despawn" | "name_of" | "id_of" | "entities" | "visit_view" | "transition" | "emit" | "unwrap" | "expect" | "unwrap_or" | "map_or" | "is_some" | "is_none" | "chr" | "ord" | "chars" | "to_upper" | "to_lower" | "values" | "byte_at" | "substring_bytes" | "byte_len" | "base_fact" | "candidate_fact" | "insert_fact" | "remove_fact" | "replace_fact_by" | "revision" | "changes_since" | "why_in_view" | "why_not_in_view" | "why_field" | "why_removed" | "why_missing" | "why_revision_changed" | "why_revision_did_not_change" | "lower_bound" | "upper_bound" | "first" | "last" | "next" | "previous" | "enter_phase" | "mark_phase" | "assert_trace" | "model_check" => builtin_type_scheme_world(name),
+        "read_file" | "write_file" | "http_get" | "regex_is_match" | "regex_find" | "now_unix_s" | "now_unix_ms" | "round" | "floor" | "ceil" | "sqrt" | "pow" | "to_fixed" | "json_stringify" | "json_parse" | "rand_int" | "rand_float" | "rand_bool" | "rand_seed" | "gen_int" | "gen_float" | "gen_str" | "gen_bool" | "gen_list" | "input" | "readline" | "assert" | "assert_eq" | "load_extension" | "host_try" | "host_try0" | "gc_collect" | "eprint" | "write_stdout" | "write_stderr" | "read_stdin_all" | "flush_stdout" | "sleep_ms" | "append_file" | "file_exists" | "remove_file" | "list_dir" | "create_dir" | "remove_dir" | "read_file_bytes" | "write_file_bytes" | "http_post" | "http_post_json" | "http_request" | "tcp_connect" | "tcp_listen" | "tcp_accept" | "tcp_accept_timeout" | "tcp_read" | "tcp_write" | "tcp_close" | "udp_bind" | "udp_recv_from" | "udp_recv_from_timeout" | "udp_recv_from_bytes" | "udp_recv_from_bytes_timeout" | "udp_recv_bytebuf" | "udp_recv_bytebuf_timeout" | "udp_send_to" | "udp_send_to_bytes" | "udp_send_bytebuf" | "udp_close" => builtin_type_scheme_host(name),
+        "query_where" | "query_map" | "query_count" | "with_field" | "bitset_new" | "bitset_set" | "bitset_has" | "bitset_clear" | "buffer_new" | "buffer_append" | "buffer_to_str" | "bytebuf_new" | "bytebuf_len" | "bytebuf_get" | "bytebuf_set_u8" | "bytebuf_set_u32_le" | "bytebuf_set_i32_le" | "bytebuf_get_u32_le" | "bytebuf_get_i32_le" | "bytebuf_to_list" | "bytebuf_from_list" | "size_of" | "offset_of" | "decode_le" | "decode_be" | "encode_le" | "encode_be" => builtin_type_scheme_buffers(name),
         "fork" | "simulate_par" | "simulate_many" | "simulate_seeded" | "fork_with" | "fork_seed" | "sandbox_run" | "sandbox_input" | "sandbox_output" | "sandbox_last_output" | "sandbox_last_fuel" | "diff" | "assert_only_changed" | "why" | "why_resource" | "why_fact" | "save_world" | "load_world" | "try_load_world" | "world_digest" | "schema_digest" | "fork_to_bytes" | "fork_from_bytes" | "fork_delta" | "fork_apply" | "merge_forks" | "merge_forks_with" | "simulate" | "commit" | "clock" | "peek" | "peek_resource" => builtin_type_scheme_simulation(name),
         _ => None,
     }
@@ -646,6 +648,18 @@ fn builtin_type_scheme_world(name: &str) -> Option<BuiltinSig> {
             ret: Ty::App("Option".to_string(), vec![Ty::Any]),
             is_pure: false,
         },
+        "read_field" => BuiltinSig {
+            type_params: vec![],
+            params: vec![Ty::EntityId, Ty::Any, Ty::Str],
+            ret: Ty::Any,
+            is_pure: false,
+        },
+        "write_field" => BuiltinSig {
+            type_params: vec![],
+            params: vec![Ty::EntityId, Ty::Any, Ty::Str, Ty::Any],
+            ret: Ty::Nil,
+            is_pure: false,
+        },
         // res(R): direct resource read. Not pure (reads world state), but
         // readonly — allowed in `readonly fn` and rejected in `pure fn`,
         // exactly like get().
@@ -763,6 +777,106 @@ fn builtin_type_scheme_world(name: &str) -> Option<BuiltinSig> {
             type_params: vec![],
             params: vec![],
             ret: Ty::List(Box::new(Ty::EntityId)),
+            is_pure: false,
+        },
+        "visit_view" => BuiltinSig {
+            type_params: vec![],
+            params: vec![
+                Ty::Str,
+                Ty::Fn {
+                    params: vec![Ty::EntityId],
+                    ret: Box::new(Ty::Nil),
+                    purity: crate::types::FnPurity::Impure,
+                },
+            ],
+            ret: Ty::Nil,
+            is_pure: false,
+        },
+        "revision" => BuiltinSig {
+            type_params: vec![],
+            params: vec![Ty::Any],
+            ret: Ty::Int,
+            is_pure: false,
+        },
+        "changes_since" => BuiltinSig {
+            type_params: vec![],
+            params: vec![Ty::Any, Ty::Int],
+            ret: Ty::List(Box::new(Ty::Any)),
+            is_pure: false,
+        },
+        "why_in_view" | "why_not_in_view" => BuiltinSig {
+            type_params: vec![],
+            params: vec![Ty::Any, Ty::EntityId],
+            ret: Ty::Str,
+            is_pure: false,
+        },
+        "why_field" => BuiltinSig {
+            type_params: vec![],
+            params: vec![Ty::EntityId, Ty::Any, Ty::Str],
+            ret: Ty::Str,
+            is_pure: false,
+        },
+        "why_removed" | "why_missing" => BuiltinSig {
+            type_params: vec![],
+            params: vec![Ty::Any, Ty::Any],
+            ret: Ty::Str,
+            is_pure: false,
+        },
+        "why_revision_changed" => BuiltinSig {
+            type_params: vec![],
+            params: vec![Ty::Any],
+            ret: Ty::Str,
+            is_pure: false,
+        },
+        "why_revision_did_not_change" => BuiltinSig {
+            type_params: vec![],
+            params: vec![Ty::Any, Ty::Int],
+            ret: Ty::Str,
+            is_pure: false,
+        },
+        "lower_bound" | "upper_bound" | "next" | "previous" => BuiltinSig {
+            type_params: vec![],
+            params: vec![Ty::Any, Ty::Str, Ty::Any],
+            ret: Ty::App("Option".to_string(), vec![Ty::EntityId]),
+            is_pure: false,
+        },
+        "first" | "last" => BuiltinSig {
+            type_params: vec![],
+            params: vec![Ty::Any, Ty::Str],
+            ret: Ty::App("Option".to_string(), vec![Ty::EntityId]),
+            is_pure: false,
+        },
+        "enter_phase" => BuiltinSig {
+            type_params: vec![],
+            params: vec![Ty::Str],
+            ret: Ty::Nil,
+            is_pure: false,
+        },
+        "mark_phase" => BuiltinSig {
+            type_params: vec![],
+            params: vec![Ty::EntityId, Ty::Str],
+            ret: Ty::Nil,
+            is_pure: false,
+        },
+        "assert_trace" => BuiltinSig {
+            type_params: vec![],
+            params: vec![Ty::EntityId, Ty::List(Box::new(Ty::Str))],
+            ret: Ty::Nil,
+            is_pure: false,
+        },
+        "model_check" => BuiltinSig {
+            type_params: vec![],
+            params: vec![
+                Ty::Str,
+                Ty::List(Box::new(Ty::Any)),
+                Ty::List(Box::new(Ty::Str)),
+                Ty::List(Box::new(Ty::Any)),
+                Ty::List(Box::new(Ty::Str)),
+                Ty::Int,
+                Ty::Int,
+                Ty::Int,
+            ],
+            ret: Ty::Nil,
             is_pure: false,
         },
         "transition" => BuiltinSig {

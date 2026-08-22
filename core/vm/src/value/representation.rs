@@ -57,6 +57,20 @@ impl Value {
         Self::from_object(alloc, Object::Str(Arc::from(s)))
     }
 
+    pub(crate) fn from_native_scalar(
+        alloc: &mut dyn Allocator,
+        value: crate::native_types::NativeScalarValue,
+    ) -> Self {
+        Self::from_object(alloc, Object::NativeScalar(value))
+    }
+
+    pub(crate) fn from_native_type(
+        alloc: &mut dyn Allocator,
+        value: crate::native_types::NativeTypeDescriptor,
+    ) -> Self {
+        Self::from_object(alloc, Object::NativeType(value))
+    }
+
     pub(crate) fn from_object(alloc: &mut dyn Allocator, obj: Object) -> Self {
         let ptr = alloc.alloc_object(obj) as u64;
         let tag = alloc.pointer_tag();
@@ -79,6 +93,11 @@ impl Value {
         self.tag() == ValueTag::Object
     }
 
+    #[inline(always)]
+    fn is_entity(&self) -> bool {
+        self.tag() == ValueTag::Entity
+    }
+
     /// Classify a value exclusively from its bits.  This function never
     /// dereferences an object payload and is therefore safe to use at raw
     /// bytecode and wire ingress boundaries.
@@ -90,6 +109,11 @@ impl Value {
             ValueTag::Bool
         } else if (self.0 & (QNAN | SIGN_BIT | INT_TAG_BIT)) == (QNAN | SIGN_BIT | INT_TAG_BIT) {
             ValueTag::Int
+        } else if (self.0 & (QNAN | SIGN_BIT | ENTITY_TAG_BIT))
+            == (QNAN | ENTITY_TAG_BIT)
+            && self.0 & !(QNAN | ENTITY_TAG_BIT | ENTITY_PAYLOAD_MASK) == 0
+        {
+            ValueTag::Entity
         } else if (self.0 & (QNAN | SIGN_BIT)) == (QNAN | SIGN_BIT) {
             ValueTag::Object
         } else {
@@ -231,6 +255,20 @@ impl Value {
         }
     }
 
+    pub fn as_native_scalar(&self) -> Option<&crate::native_types::NativeScalarValue> {
+        self.as_object().and_then(|object| match object {
+            Object::NativeScalar(value) => Some(value),
+            _ => None,
+        })
+    }
+
+    pub(crate) fn as_native_type(&self) -> Option<&crate::native_types::NativeTypeDescriptor> {
+        self.as_object().and_then(|object| match object {
+            Object::NativeType(value) => Some(value),
+            _ => None,
+        })
+    }
+
     pub fn as_str(&self) -> Option<&str> {
         self.as_object().and_then(|o| match o {
             Object::Str(s) => Some(&**s),
@@ -301,11 +339,16 @@ impl Value {
         })
     }
 
-    pub fn as_entity_id(&self) -> Option<u32> {
-        self.as_object().and_then(|o| match o {
-            Object::EntityId(id) => Some(*id),
+    pub fn as_host_handle(&self) -> Option<&crate::ffi::HostHandleToken> {
+        match self.as_object()? {
+            Object::HostHandle(handle) => Some(handle),
             _ => None,
-        })
+        }
+    }
+
+    pub fn as_entity_id(&self) -> Option<u32> {
+        self.is_entity()
+            .then_some((self.0 & ENTITY_PAYLOAD_MASK) as u32)
     }
 
     pub fn as_task(&self) -> Option<u64> {
@@ -459,6 +502,13 @@ impl Value {
         Self::from_object(alloc, Object::NativeFn(info))
     }
 
+    pub(crate) fn from_host_handle(
+        alloc: &mut dyn Allocator,
+        handle: crate::ffi::HostHandleToken,
+    ) -> Self {
+        Self::from_object(alloc, Object::HostHandle(handle))
+    }
+
     #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     pub(crate) fn to_raw(self) -> u64 {
         self.0
@@ -475,8 +525,8 @@ impl Value {
         Self(raw)
     }
 
-    pub(crate) fn from_entity_id(alloc: &mut dyn Allocator, id: u32) -> Self {
-        Self::from_object(alloc, Object::EntityId(id))
+    pub(crate) fn from_entity_id(_alloc: &mut dyn Allocator, id: u32) -> Self {
+        Self(QNAN | ENTITY_TAG_BIT | u64::from(id))
     }
 
     pub(crate) fn from_task(alloc: &mut dyn Allocator, id: u64) -> Self {
@@ -611,6 +661,8 @@ impl Value {
         match self.as_object() {
             Some(Object::Str(s)) => Self::from_object(target, Object::Str(Arc::clone(s))),
             Some(Object::BigInt(n)) => Self::from_int(target, *n),
+            Some(Object::NativeScalar(value)) => Self::from_native_scalar(target, value.clone()),
+            Some(Object::NativeType(value)) => Self::from_native_type(target, value.clone()),
             Some(Object::List(list)) => {
                 let items: Vec<Value> = list.iter().map(|v| v.deep_copy(target)).collect();
                 Self::list(target, items)
@@ -639,7 +691,6 @@ impl Value {
                 Self::sum_type(target, st.type_name.clone(), st.variant.clone(), fields)
             }
             Some(Object::State(s)) => Self::from_state(target, s.machine.clone(), s.state.clone()),
-            Some(Object::EntityId(id)) => Self::from_entity_id(target, *id),
             Some(Object::BitSet(words)) => Self::bitset(target, words.clone()),
             Some(Object::Buffer(s)) => Self::buffer(target, s.clone()),
             Some(Object::ByteBuf(bytes)) => Self::bytebuf(target, bytes.clone()),
@@ -650,6 +701,7 @@ impl Value {
             Some(Object::Cell(ptr)) => Self::from_cell(target, *ptr),
             Some(Object::BuiltinFn(b)) => Self::from_builtin(target, *b),
             Some(Object::NativeFn(info)) => Self::from_native_fn(target, info.clone()),
+            Some(Object::HostHandle(handle)) => Self::from_host_handle(target, handle.clone()),
             Some(Object::Task(id)) => Self::from_task(target, *id),
             Some(Object::MapIter(storage, _idx, keys)) => {
                 let copied_storage: MapStorage = storage
@@ -672,14 +724,18 @@ impl Value {
         remap: &HashMap<u32, u32>,
         target: &mut dyn Allocator,
     ) -> Self {
-        if remap.is_empty() || !self.is_object() {
+        if remap.is_empty() {
+            return *self;
+        }
+        if let Some(id) = self.as_entity_id() {
+            return remap
+                .get(&id)
+                .map_or(*self, |new_id| Self::from_entity_id(target, *new_id));
+        }
+        if !self.is_object() {
             return *self;
         }
         match self.as_object() {
-            Some(Object::EntityId(id)) => match remap.get(id) {
-                Some(&new_id) => Self::from_entity_id(target, new_id),
-                None => *self,
-            },
             Some(Object::List(list)) => {
                 let items: Vec<Value> = list
                     .iter()
@@ -827,11 +883,16 @@ impl Value {
         if self.is_inline_int() {
             return "int".to_string();
         }
+        if self.is_entity() {
+            return "entity".to_string();
+        }
         if self.is_float() {
             return "float".to_string();
         }
         match self.as_object() {
             Some(Object::BigInt(_)) => "int".to_string(),
+            Some(Object::NativeScalar(value)) => value.type_name.clone(),
+            Some(Object::NativeType(value)) => format!("type<{}>", value.name),
             Some(Object::Str(_)) => "str".to_string(),
             Some(Object::List(_)) => "list".to_string(),
             Some(Object::Tuple(_)) => "tuple".to_string(),
@@ -843,7 +904,7 @@ impl Value {
             Some(Object::Cell(cell)) => unsafe { (**cell).get().type_name() },
             Some(Object::BuiltinFn(_)) => "builtin".to_string(),
             Some(Object::NativeFn(_)) => "native_fn".to_string(),
-            Some(Object::EntityId(_)) => "entity".to_string(),
+            Some(Object::HostHandle(handle)) => format!("host_handle<{}>", handle.type_name()),
             Some(Object::Task(_)) => "task".to_string(),
             Some(Object::Map(_)) => "map".to_string(),
             Some(Object::MapIter(_, _, _)) => "map_iter".to_string(),

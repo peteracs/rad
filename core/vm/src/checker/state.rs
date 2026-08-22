@@ -1,73 +1,5 @@
-
-
 pub(crate) fn is_cross_file(decl_file: Option<FileId>, use_file: Option<FileId>) -> bool {
     matches!((decl_file, use_file), (Some(d), Some(u)) if d != u)
-}
-
-fn decl_name(decl: &Decl) -> Option<&str> {
-    match decl {
-        Decl::Component(c) => Some(&c.name),
-        Decl::Resource(r) => Some(&r.name),
-        Decl::Struct(s) => Some(&s.name),
-        Decl::Intent(i) => Some(&i.name),
-        Decl::Law(l) => Some(&l.name),
-        Decl::Resolver(r) => Some(&r.name),
-        Decl::Constraint(c) => Some(&c.name),
-        Decl::Entity(e) => Some(&e.name),
-        Decl::State(s) => Some(&s.name),
-        Decl::System(s) => Some(&s.name),
-        Decl::Event(e) => Some(&e.name),
-        Decl::Phase(p) => Some(&p.name),
-        Decl::Fn(f) => Some(&f.name),
-        Decl::Type(t) => Some(&t.name),
-        Decl::TypeAlias(a) => Some(&a.name),
-        // Top-level lets are deliberately absent: pub lets export through
-        // bare `use` (merged namespace), not module aliases — see the
-        // targeted diagnostic in the alias-member check.
-        _ => None,
-    }
-}
-
-fn decl_is_pub(decl: &Decl) -> bool {
-    match decl {
-        Decl::Component(c) => c.is_pub,
-        Decl::Resource(r) => r.is_pub,
-        Decl::Struct(s) => s.is_pub,
-        Decl::Intent(i) => i.is_pub,
-        Decl::Law(l) => l.is_pub,
-        Decl::Resolver(r) => r.is_pub,
-        Decl::Constraint(c) => c.is_pub,
-        Decl::Entity(e) => e.is_pub,
-        Decl::State(s) => s.is_pub,
-        Decl::System(s) => s.is_pub,
-        Decl::Event(e) => e.is_pub,
-        Decl::Phase(p) => p.is_pub,
-        Decl::Fn(f) => f.is_pub,
-        Decl::Type(t) => t.is_pub,
-        Decl::TypeAlias(a) => a.is_pub,
-        Decl::Stmt(Stmt::Let(l)) => l.is_pub,
-        _ => false,
-    }
-}
-
-fn register_alias_local_names(names: &mut HashMap<String, String>, alias_name: &str, decl: &Decl) {
-    if let Some(name) = decl_name(decl) {
-        names.insert(name.to_string(), format!("__mod_{}__{}", alias_name, name));
-        return;
-    }
-    match decl {
-        Decl::Stmt(Stmt::Let(binding)) => {
-            for name in &binding.names {
-                names.insert(name.clone(), format!("__mod_{}__{}", alias_name, name));
-            }
-        }
-        Decl::Stmt(Stmt::LetElse(binding)) => {
-            if let Some(name) = binding.primary_binding_name() {
-                names.insert(name.clone(), format!("__mod_{}__{}", alias_name, name));
-            }
-        }
-        _ => {}
-    }
 }
 
 pub(super) fn format_type_expr(te: &TypeExpr) -> String {
@@ -255,6 +187,10 @@ pub struct Checker {
     pub(crate) fn_param_names: HashMap<String, Vec<String>>,
     pub(crate) sum_types: HashMap<String, SumTypeDef>,
     pub(crate) type_aliases: HashMap<String, TypeScheme>,
+    pub(crate) native_types: HashMap<String, crate::ast::NativeTypeDecl>,
+    /// Canonical materialized-view names. Views are runtime-maintained query
+    /// products, never component constructors or direct mutation targets.
+    pub(crate) materialized_views: HashSet<String>,
     pub(crate) errors: Vec<TypeError>,
     pub(crate) authority_errors: Vec<TypeError>,
     pub(crate) warnings: Vec<TypeWarning>,
@@ -279,7 +215,7 @@ pub struct Checker {
     pub(crate) purity_breach_reasons: HashMap<String, String>,
     pub(crate) module_aliases: HashMap<String, HashMap<String, String>>,
     pub(crate) type_redirects: HashMap<String, String>,
-    pub(crate) alias_decls: HashMap<String, Vec<Decl>>,
+    pub(crate) alias_decls: HashMap<String, ModuleAlias>,
     /// Active during alias body checking: maps original names → mangled names
     pub(crate) current_alias_redirects: Option<HashMap<String, String>>,
     /// `Some(name)` while type-checking an assignment RHS for `name = ...`.

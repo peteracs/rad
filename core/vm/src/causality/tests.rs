@@ -1,24 +1,12 @@
-
-
 #[cfg(test)]
 mod tests {
-    use super::{CausalityLedger, Cause, WriteKind};
-    use crate::compiler::Compiler;
-    use crate::lexer::Lexer;
-    use crate::parser::Parser;
+    use super::{CausalityLedger, Cause, WriteKind, WriteRecord, WriteSummary};
+    use crate::parser::ParserOptions;
     use crate::vm::VM;
 
     fn run(src: &str) -> VM {
-        let mut lexer = Lexer::new(src);
-        let tokens = lexer.tokenize().0;
-        let mut parser = Parser::new(tokens);
-        let program = parser.parse();
-        assert!(
-            parser.errors().is_empty(),
-            "parse errors: {:?}",
-            parser.errors()
-        );
-        let result = Compiler::new().compile(&program).expect("compile");
+        let result = crate::test_support::compile_source(src, ParserOptions::default())
+            .expect("parse and compile");
         let mut vm = VM::new();
         vm.suppress_output();
         vm.load_compile_result(result);
@@ -179,15 +167,15 @@ mod tests {
         under.set_retention_cap(1_000_000); // never evicts
         let t = Instant::now();
         for i in 0..writes_n {
-            under.record_write(
+            under.record_write(WriteRecord::local(
                 0,
                 Some(i as u32),
                 None,
                 "Hp",
-                format!("{{ hp: {} }}", i),
+                WriteSummary::full(format!("{{ hp: {} }}", i), smallvec::SmallVec::new()),
                 WriteKind::Set,
                 Cause::Main,
-            );
+            ));
         }
         let t_under = t.elapsed();
 
@@ -195,15 +183,15 @@ mod tests {
         over.set_retention_cap(10_000); // evicts on ~95% of writes
         let t = Instant::now();
         for i in 0..writes_n {
-            over.record_write(
+            over.record_write(WriteRecord::local(
                 0,
                 Some(i as u32),
                 None,
                 "Hp",
-                format!("{{ hp: {} }}", i),
+                WriteSummary::full(format!("{{ hp: {} }}", i), smallvec::SmallVec::new()),
                 WriteKind::Set,
                 Cause::Main,
-            );
+            ));
         }
         let t_over = t.elapsed();
 
@@ -216,6 +204,72 @@ mod tests {
             t_under,
             t_over
         );
+    }
+
+    #[test]
+    fn retention_truncation_is_counted_hashed_and_deterministic() {
+        fn ledger(last_value: i64) -> CausalityLedger {
+            let mut ledger = CausalityLedger::default();
+            ledger.set_retention_cap(2);
+            for value in [1, 2, last_value] {
+                ledger.record_write(WriteRecord::local(
+                    0,
+                    Some(7),
+                    Some("job-7".to_string()),
+                    "Lease",
+                    WriteSummary::full(
+                        format!("{{ token: {value} }}"),
+                        smallvec::smallvec![(
+                            "token".into(),
+                            crate::causality::CausalScalar::Int(value)
+                        )],
+                    ),
+                    WriteKind::Set,
+                    Cause::Main,
+                ));
+            }
+            ledger
+        }
+
+        let first = ledger(3);
+        let same = ledger(3);
+        let different = ledger(4);
+        assert_eq!(first.truncation().evicted_records, 1);
+        assert_ne!(first.truncation().digest, [0; 32]);
+        assert_eq!(first.truncation(), same.truncation());
+        assert_eq!(
+            first.truncation(),
+            different.truncation(),
+            "the retained newest record does not change the evicted-history commitment"
+        );
+
+        let mut changed_eviction = CausalityLedger::default();
+        changed_eviction.set_retention_cap(2);
+        for value in [9, 2, 3] {
+            changed_eviction.record_write(WriteRecord::local(
+                0,
+                Some(7),
+                None,
+                "Lease",
+                WriteSummary::full(format!("{{ token: {value} }}"), Default::default()),
+                WriteKind::Set,
+                Cause::Main,
+            ));
+        }
+        assert_ne!(first.truncation().digest, changed_eviction.truncation().digest);
+    }
+
+    #[test]
+    fn commit_provenance_is_bounded_and_committed_to_the_marker() {
+        let mut ledger = CausalityLedger::default();
+        ledger.set_retention_cap(2);
+        ledger.record_commit(1);
+        ledger.record_commit(2);
+        ledger.record_commit(3);
+
+        assert_eq!(ledger.commits.len(), 2);
+        assert_eq!(ledger.truncation().evicted_records, 1);
+        assert_ne!(ledger.truncation().digest, [0; 32]);
     }
 
     #[test]

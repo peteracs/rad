@@ -1,0 +1,7 @@
+event SnapshotReady {}
+
+@exactly_once
+on SnapshotReady(_evt) {}
+
+signal sync SnapshotReady {}
+signal sync SnapshotReady {}

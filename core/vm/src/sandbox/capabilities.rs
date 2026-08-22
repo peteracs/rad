@@ -48,7 +48,11 @@ pub fn builtin_allowed_in_sandbox(builtin: Builtin) -> bool {
         | Builtin::Commit
         | Builtin::Peek => false,
         // Host environment probes.
-        Builtin::SysArgs | Builtin::LoadExtension | Builtin::GcCollect => false,
+        Builtin::SysArgs
+        | Builtin::LoadExtension
+        | Builtin::HostTry
+        | Builtin::HostTry0
+        | Builtin::GcCollect => false,
         // Everything else: deny if it carries IO or Async effects
         // (files, network, stdin, clocks, metrics), allow otherwise.
         b => {

@@ -2,6 +2,7 @@ mod authority;
 mod causal;
 mod declarations;
 mod diagnostics;
+mod ownership;
 mod reachability;
 mod resolve;
 mod scope;

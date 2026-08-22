@@ -608,6 +608,103 @@ impl VM {
         Ok(Value::from_string(&mut self.gc, explanation))
     }
 
+    fn bi_why_field(&mut self, args: Vec<Value>) -> Result<Value, String> {
+        if args.len() != 3 {
+            return Err(format!("why_field() expects entity, component, field; got {} arguments", args.len()));
+        }
+        let entity = args[0]
+            .as_entity_id()
+            .ok_or_else(|| "why_field() first argument must be an entity".to_string())?;
+        let component = Self::expect_component_type_name(&args[1], "why_field")?;
+        let field = args[2]
+            .as_str()
+            .ok_or_else(|| "why_field() field must be a string".to_string())?;
+        self.sandbox_check_read(&component)?;
+        let explanation = self
+            .ledger
+            .explain_field(entity, &component, field, u64::MAX);
+        Ok(Value::from_string(&mut self.gc, explanation))
+    }
+
+    fn bi_why_removed(&mut self, args: Vec<Value>) -> Result<Value, String> {
+        if args.len() != 2 {
+            return Err(format!("why_removed() expects entity and component, got {} arguments", args.len()));
+        }
+        let entity = args[0]
+            .as_entity_id()
+            .ok_or_else(|| "why_removed() first argument must be an entity".to_string())?;
+        let component = Self::expect_component_type_name(&args[1], "why_removed")?;
+        self.sandbox_check_read(&component)?;
+        let explanation = self.ledger.explain_removed(entity, &component);
+        Ok(Value::from_string(&mut self.gc, explanation))
+    }
+
+    fn bi_why_missing(&mut self, args: Vec<Value>) -> Result<Value, String> {
+        if args.len() != 2 {
+            return Err(format!("why_missing() expects component and indexed value, got {} arguments", args.len()));
+        }
+        let component = Self::expect_component_type_name(&args[0], "why_missing")?;
+        self.sandbox_check_read(&component)?;
+        let explanation = self
+            .ledger
+            .explain_missing_value(&component, &args[1].to_string());
+        Ok(Value::from_string(&mut self.gc, explanation))
+    }
+
+    fn bi_why_revision_changed(&mut self, args: Vec<Value>) -> Result<Value, String> {
+        if args.len() != 1 {
+            return Err(format!("why_revision_changed() expects a view, got {} arguments", args.len()));
+        }
+        let view = args[0]
+            .as_str()
+            .ok_or_else(|| "why_revision_changed() expects a materialized view".to_string())?;
+        let revision = self
+            .get_world()
+            .materialized_view_revision(view)
+            .ok_or_else(|| format!("Unknown materialized view `{view}`"))?;
+        let changes = self
+            .get_world()
+            .materialized_view_changes_since(view, revision.saturating_sub(1))
+            .unwrap_or_default();
+        let explanation = changes.last().map_or_else(
+            || format!("View `{view}` revision is 0 because no membership has changed"),
+            |change| {
+                format!(
+                    "View `{view}` revision {} because entity {} {}: {}",
+                    change.revision,
+                    change.entity,
+                    if change.entered { "entered" } else { "left" },
+                    change.reason
+                )
+            },
+        );
+        Ok(Value::from_string(&mut self.gc, explanation))
+    }
+
+    fn bi_why_revision_did_not_change(&mut self, args: Vec<Value>) -> Result<Value, String> {
+        if args.len() != 2 {
+            return Err(format!("why_revision_did_not_change() expects view and prior revision, got {} arguments", args.len()));
+        }
+        let view = args[0]
+            .as_str()
+            .ok_or_else(|| "why_revision_did_not_change() expects a materialized view".to_string())?;
+        let since = args[1]
+            .as_int()
+            .filter(|revision| *revision >= 0)
+            .ok_or_else(|| "why_revision_did_not_change() revision must be non-negative".to_string())?
+            as u64;
+        let current = self
+            .get_world()
+            .materialized_view_revision(view)
+            .ok_or_else(|| format!("Unknown materialized view `{view}`"))?;
+        let explanation = if current == since {
+            format!("View `{view}` stayed at revision {current}: no dependency update changed membership")
+        } else {
+            format!("View `{view}` did change: revision advanced from {since} to {current}")
+        };
+        Ok(Value::from_string(&mut self.gc, explanation))
+    }
+
     /// `why_resource(Resource) -> str` — causality query for resources.
     fn bi_why_resource(&mut self, args: Vec<Value>) -> Result<Value, String> {
         if args.len() != 1 {

@@ -1,0 +1,26 @@
+use "../schema.rad"
+use "../owners/order_book.rad"
+use "../systems/matching.rad"
+
+pub fn seed_orders(count: int) -> nil {
+    for i in range(0, count) {
+        let order_id = OrderId(u64(i + 1))
+        let account_id = AccountId(u64((i % 1000) + 1))
+        let sequence = Sequence(u64(i + 1))
+        if i % 2 == 0 {
+            assert(submit_buy(order_id, account_id, PriceTicks(i64(101)), Quantity(u64(1)), sequence), "buy accepted")
+        } else {
+            assert(submit_sell(order_id, account_id, PriceTicks(i64(100)), Quantity(u64(1)), sequence), "sell accepted")
+        }
+    }
+}
+
+pub fn run_exchange_day(count: int) -> nil {
+    seed_orders(count)
+    assert(not submit_buy(OrderId(u64(1)), AccountId(u64(99)), PriceTicks(i64(200)), Quantity(u64(1)), Sequence(u64(999999))), "duplicate order id rejected")
+    MatchOrders()
+    flush_events()
+    assert(res(MatchCycle).fills == count / 2, "every crossing pair fills")
+    assert(len(entities(OpenOrders)) == 0, "open-order view drained")
+    assert(len(entities(Fill)) == count / 2, "ledger has one fill per pair")
+}

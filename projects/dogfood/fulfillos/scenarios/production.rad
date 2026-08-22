@@ -1,0 +1,14 @@
+use "../schema.rad"
+use "../owners/inventory_owner.rad"
+
+pub fn seed_orders(count: int) -> nil {
+    seed_stock("RAD-BOOK", count, 100)
+    for i in range(0, count) {
+        spawn(Order {
+            order_id: i,
+            sku: "RAD-BOOK",
+            quantity: 1,
+            status: "new",
+        })
+    }
+}

@@ -1,5 +1,3 @@
-
-
 impl Checker {
     pub fn new() -> Self {
         Self::new_with_options(CheckerOptions::default())
@@ -152,6 +150,8 @@ impl Checker {
             fn_param_names: HashMap::new(),
             sum_types,
             type_aliases: HashMap::new(),
+            native_types: HashMap::new(),
+            materialized_views: HashSet::new(),
             errors: Vec::new(),
             authority_errors: Vec::new(),
             warnings: Vec::new(),
@@ -182,31 +182,9 @@ impl Checker {
         }
     }
 
-    pub fn set_aliases(&mut self, aliases: HashMap<String, Vec<Decl>>) {
-        for (alias_name, decls) in &aliases {
-            let mut pub_map = HashMap::new();
-            for d in decls {
-                if let Some(name) = decl_name(d) {
-                    if decl_is_pub(d) {
-                        let mangled = format!("__mod_{}__{}", alias_name, name);
-                        pub_map.insert(name.to_string(), mangled);
-                    }
-                }
-            }
-            self.module_aliases.insert(alias_name.clone(), pub_map);
-        }
+    pub fn set_aliases(&mut self, aliases: HashMap<String, ModuleAlias>) {
+        self.module_aliases = crate::ast::public_module_members(&aliases);
         self.alias_decls = aliases;
-    }
-
-    pub(crate) fn resolve_qualified_name(&self, qualified: &str) -> Option<String> {
-        if let Some(dot_pos) = qualified.find('.') {
-            let alias = &qualified[..dot_pos];
-            let member = &qualified[dot_pos + 1..];
-            if let Some(alias_map) = self.module_aliases.get(alias) {
-                return alias_map.get(member).cloned();
-            }
-        }
-        None
     }
 
     pub(crate) fn resolve_alias_member(&self, alias: &str, member: &str) -> Option<String> {
@@ -216,64 +194,36 @@ impl Checker {
     }
 
     pub(crate) fn resolve_canonical_name(&self, name: &str) -> String {
-        let mut current = name.to_string();
-        if let Some(resolved) = self.resolve_qualified_name(&current) {
-            current = resolved;
-        } else if let Some(redirected) = self.redirect_alias_name(&current) {
-            current = redirected;
-        }
-
-        while let Some(canonical) = self.type_redirects.get(&current) {
-            current = canonical.clone();
-        }
-        current
+        crate::ast::resolve_canonical_name(
+            name,
+            Some(&self.module_aliases),
+            &[self.current_alias_redirects.as_ref()],
+            &self.type_redirects,
+        )
     }
 
+    /// The declared name a module-local alias refers to, searched across every
+    /// type registry in declaration-resolution order.
+    ///
+    /// Each registry was scanned by its own copy of the same predicate, which
+    /// also rebuilt the `__suffix` string once per candidate. Chaining the
+    /// registries keeps that order while leaving one predicate to maintain.
     fn find_canonical_type_name(&self, file_id: Option<FileId>, orig_name: &str) -> Option<String> {
         let file_id = file_id?;
-        for (name, def) in &self.sum_types {
-            if def.file_id == Some(file_id)
-                && (name == orig_name || name.ends_with(&format!("__{}", orig_name)))
-            {
-                return Some(name.clone());
-            }
-        }
-        for (name, def) in &self.structs {
-            if def.file_id == Some(file_id)
-                && (name == orig_name || name.ends_with(&format!("__{}", orig_name)))
-            {
-                return Some(name.clone());
-            }
-        }
-        for (name, def) in &self.components {
-            if def.file_id == Some(file_id)
-                && (name == orig_name || name.ends_with(&format!("__{}", orig_name)))
-            {
-                return Some(name.clone());
-            }
-        }
-        for (name, def) in &self.resources {
-            if def.file_id == Some(file_id)
-                && (name == orig_name || name.ends_with(&format!("__{}", orig_name)))
-            {
-                return Some(name.clone());
-            }
-        }
-        for (name, def) in &self.events {
-            if def.file_id == Some(file_id)
-                && (name == orig_name || name.ends_with(&format!("__{}", orig_name)))
-            {
-                return Some(name.clone());
-            }
-        }
-        for (name, def) in &self.type_aliases {
-            if def.file_id == Some(file_id)
-                && (name == orig_name || name.ends_with(&format!("__{}", orig_name)))
-            {
-                return Some(name.clone());
-            }
-        }
-        None
+        let module_suffix = format!("__{orig_name}");
+        self.sum_types
+            .iter()
+            .map(|(name, def)| (name, def.file_id))
+            .chain(self.structs.iter().map(|(name, def)| (name, def.file_id)))
+            .chain(self.components.iter().map(|(name, def)| (name, def.file_id)))
+            .chain(self.resources.iter().map(|(name, def)| (name, def.file_id)))
+            .chain(self.events.iter().map(|(name, def)| (name, def.file_id)))
+            .chain(self.type_aliases.iter().map(|(name, def)| (name, def.file_id)))
+            .find(|(name, declared)| {
+                *declared == Some(file_id)
+                    && (name.as_str() == orig_name || name.ends_with(&module_suffix))
+            })
+            .map(|(name, _)| name.clone())
     }
 
     pub fn check(&mut self, program: &Program) -> Vec<TypeError> {
@@ -355,14 +305,12 @@ impl Checker {
 
     fn register_alias_declarations(&mut self) {
         let alias_decls = std::mem::take(&mut self.alias_decls);
-        for (alias_name, decls) in &alias_decls {
-            let mut all_names: HashMap<String, String> = HashMap::new();
-            for d in decls {
-                register_alias_local_names(&mut all_names, alias_name, d);
-            }
+        for binding in crate::ast::canonical_module_bindings(&alias_decls) {
+            let decls = binding.declarations();
+            let all_names = binding.local_redirects();
             self.current_alias_redirects = Some(all_names.clone());
             for d in decls {
-                let orig = match decl_name(d) {
+                let orig = match d.namespace_name() {
                     Some(n) => n.to_string(),
                     None => continue,
                 };
@@ -492,6 +440,27 @@ impl Checker {
                             self.define(&mangled, Ty::Any, false, a.span.clone(), a.is_pub, false);
                         }
                     }
+                    Decl::NativeType(n) => {
+                        if let Some(canonical) = self.find_canonical_type_name(n.span.file, &orig) {
+                            self.type_redirects.insert(mangled.clone(), canonical);
+                            self.define(&mangled, Ty::Any, false, n.span.clone(), n.is_pub, false);
+                        } else {
+                            let mut native = n.clone();
+                            native.name = mangled.clone();
+                            self.register_native_type(&native);
+                        }
+                    }
+                    Decl::MaterializedView(view) => {
+                        self.materialized_views.insert(mangled.clone());
+                        self.define(
+                            &mangled,
+                            Ty::Str,
+                            false,
+                            view.span.clone(),
+                            view.is_pub,
+                            false,
+                        );
+                    }
                     Decl::Entity(e) => {
                         self.define(
                             &mangled,
@@ -512,11 +481,9 @@ impl Checker {
 
     fn check_alias_bodies(&mut self) {
         let alias_decls = std::mem::take(&mut self.alias_decls);
-        for (alias_name, decls) in &alias_decls {
-            let mut all_names: HashMap<String, String> = HashMap::new();
-            for d in decls {
-                register_alias_local_names(&mut all_names, alias_name, d);
-            }
+        for binding in crate::ast::canonical_module_bindings(&alias_decls) {
+            let decls = binding.declarations();
+            let all_names = binding.local_redirects();
             self.current_alias_redirects = Some(all_names.clone());
             // Top-level lets of the aliased module first: its fns/systems
             // read them (the compiler defines these globals when it compiles
@@ -605,19 +572,25 @@ impl Checker {
         self.alias_decls = alias_decls;
     }
 
-    pub(crate) fn redirect_alias_name(&self, name: &str) -> Option<String> {
-        self.current_alias_redirects
-            .as_ref()
-            .and_then(|m| m.get(name).cloned())
-    }
-
     pub fn for_iter_kinds(&self) -> HashMap<NodeId, ForIterKind> {
         self.for_iter_kinds.clone()
     }
+    /// The authority graph and its violations on their own.
+    ///
+    /// Callers that only enforce authority went through `output()`, which
+    /// clones every checker map and then fingerprints the result. That is the
+    /// compiler's semantic product; taking two fields from it costs a full
+    /// product build plus a hash over the whole program.
+    pub fn authority_report(&self) -> (crate::types::AuthorityReport, Vec<TypeError>) {
+        (self.authority.clone(), self.authority_errors.clone())
+    }
+
     pub fn output(&self) -> crate::types::CheckerOutput {
         let mut output = crate::types::CheckerOutput {
             semantic_input_fingerprint: self.semantic_input_fingerprint,
-            semantic_options: self.semantic_input_fingerprint.map(|_| self.options.clone()),
+            semantic_options: self
+                .semantic_input_fingerprint
+                .map(|_| self.options.clone()),
             product_fingerprint: None,
             for_iter_kinds: self.for_iter_kinds.clone(),
             components: self.components.clone(),
@@ -626,6 +599,7 @@ impl Checker {
             functions: self.functions.clone(),
             systems: self.systems.clone(),
             sum_types: self.sum_types.clone(),
+            events: self.events.clone(),
             variant_shorthand: self.variant_shorthand.clone(),
             spread_lengths: self.spread_lengths.clone(),
             type_redirects: self.type_redirects.clone(),

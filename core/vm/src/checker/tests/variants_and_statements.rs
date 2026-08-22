@@ -204,6 +204,7 @@
                     is_pure: false,
                     is_async: false,
                     effects: vec![],
+                    ownership_writes: vec![],
                 }),
             ],
         };
@@ -251,6 +252,7 @@
                     is_pure: false,
                     is_async: false,
                     effects: vec![],
+                    ownership_writes: vec![],
                 }),
                 Decl::Component(component_decl! {
                     id: nid(),
@@ -329,6 +331,7 @@
                     is_pure: false,
                     is_async: false,
                     effects: vec![],
+                    ownership_writes: vec![],
                 }),
             ],
         };
@@ -426,6 +429,7 @@
                     is_pure: false,
                     is_async: false,
                     effects: vec![],
+                    ownership_writes: vec![],
                 }),
             ],
         };
@@ -476,6 +480,7 @@
                 is_pure: false,
                 is_async: false,
                 effects: vec![],
+                ownership_writes: vec![],
             })],
         };
         let mut checker = Checker::new();
@@ -504,6 +509,10 @@
                     ("y".to_string(), None, Expr::FloatLit(0.0, span(1))),
                 ]),
                 indexed_fields: vec![],
+                ordered_indexed_fields: vec![],
+                ownership: OwnershipDecl::default(),
+                repr_c: false,
+                packed: false,
             })],
         };
         let mut checker = Checker::new();
@@ -537,6 +546,10 @@
                         Expr::IntLit(0, span(1)),
                     )]),
                     indexed_fields: vec![],
+                    ordered_indexed_fields: vec![],
+                    ownership: OwnershipDecl::default(),
+                    repr_c: false,
+                    packed: false,
                 }),
                 Decl::System(SystemDecl {
                     is_pub: false,
@@ -551,6 +564,8 @@
                     authority_emits: vec![],
                     authority_io: false,
                     authority_async: false,
+                    ownership_writes: vec![],
+                    contracts: CallableContracts::default(),
                     after: vec![],
                     before: vec![],
                 }),
@@ -581,6 +596,10 @@
                     ("x".to_string(), None, Expr::IntLit(1, span(1))),
                 ]),
                 indexed_fields: vec![],
+                ordered_indexed_fields: vec![],
+                ownership: OwnershipDecl::default(),
+                repr_c: false,
+                packed: false,
             })],
         };
         let mut checker = Checker::new();
@@ -846,14 +865,7 @@
     }
 
     fn check_src(src: &str) -> Vec<TypeError> {
-        use crate::lexer::Lexer;
-        use crate::parser::Parser;
-        let mut lexer = Lexer::new(src);
-        let tokens = lexer.tokenize().0;
-        let mut parser = Parser::new(tokens);
-        let program = parser.parse();
-        let mut checker = Checker::new();
-        checker.check(&program)
+        crate::test_support::check_source(src).errors
     }
 
     #[test]
@@ -886,15 +898,7 @@
     }
 
     fn check_src_warnings(src: &str) -> Vec<TypeWarning> {
-        use crate::lexer::Lexer;
-        use crate::parser::Parser;
-        let mut lexer = Lexer::new(src);
-        let tokens = lexer.tokenize().0;
-        let mut parser = Parser::new(tokens);
-        let program = parser.parse();
-        let mut checker = Checker::new();
-        checker.check(&program);
-        checker.warnings()
+        crate::test_support::check_source(src).checker.warnings()
     }
 
     #[test]

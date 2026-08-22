@@ -368,7 +368,12 @@ mod resource_contract_tests {
             let quote = builtin_resource_charge(Builtin::BitsetClear, &args).unwrap();
             let before = gc.bytes_allocated();
             bi_bitset_clear(&mut gc, args.to_vec()).unwrap();
-            assert!(gc.bytes_allocated().saturating_sub(before) <= quote.heap);
+            let measured = gc.bytes_allocated().saturating_sub(before);
+            assert!(
+                measured <= quote.heap,
+                "bitset_clear words={words}: measured {measured} > quoted {}",
+                quote.heap
+            );
         }
 
         for (source, pattern, replacement) in [
@@ -386,7 +391,14 @@ mod resource_contract_tests {
             let quote = builtin_resource_charge(Builtin::Replace, &args).unwrap();
             let before = gc.bytes_allocated();
             bi_replace(&mut gc, args.to_vec()).unwrap();
-            assert!(gc.bytes_allocated().saturating_sub(before) <= quote.heap);
+            let measured = gc.bytes_allocated().saturating_sub(before);
+            assert!(
+                measured <= quote.heap,
+                "replace source={:?} pattern={:?}: measured {measured} > quoted {}",
+                source,
+                pattern,
+                quote.heap
+            );
         }
     }
 

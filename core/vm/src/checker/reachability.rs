@@ -265,6 +265,14 @@ impl Checker {
                 Decl::Test(t) => {
                     queue.push(VisitItem::Block(&t.body));
                 }
+                Decl::Model(model) => {
+                    for command in &model.commands {
+                        queue.push(VisitItem::Expr(command));
+                    }
+                    for invariant in &model.invariants {
+                        queue.push(VisitItem::Block(invariant));
+                    }
+                }
                 Decl::Stmt(s) => {
                     queue.push(VisitItem::Stmt(s));
                 }
@@ -282,7 +290,11 @@ impl Checker {
             }
         }
 
-        for (alias_name, decls) in &self.alias_decls {
+        for binding in crate::ast::canonical_module_bindings(&self.alias_decls) {
+            let alias_name = binding
+                .canonical_namespace()
+                .expect("canonical bindings are namespaced");
+            let decls = binding.declarations();
             let name_map = match self.module_aliases.get(alias_name) {
                 Some(m) => m,
                 None => continue,
@@ -438,6 +450,18 @@ impl Checker {
                                 queue.push(VisitItem::Expr(idx));
                             }
                             queue.push(VisitItem::Expr(&fu.value));
+                        }
+                    }
+                    Stmt::Transaction(transaction) => {
+                        for condition in &transaction.requires {
+                            queue.push(VisitItem::Expr(condition));
+                        }
+                        queue.push(VisitItem::Block(&transaction.body));
+                        for condition in &transaction.ensures {
+                            queue.push(VisitItem::Expr(condition));
+                        }
+                        if let Some(post_commit) = &transaction.post_commit {
+                            queue.push(VisitItem::Block(post_commit));
                         }
                     }
                     Stmt::Settle(settlement) => {

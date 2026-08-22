@@ -1,0 +1,5 @@
+use "../owners/fleet_owner.rad"
+
+pub fn conceal_cost(target: entity, field: str) -> float {
+    return read_field(target, TripPosition, field)
+}

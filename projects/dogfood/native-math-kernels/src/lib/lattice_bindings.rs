@@ -230,14 +230,16 @@ unsafe extern "C" fn lattice_exchange_rollout(args: *const u64, argc: usize) -> 
             })?;
         let rollout = boolean_lattice::or_exchange_rollout(
             &deleted,
-            int_arg(args, 1, "lattice_exchange_rollout")?,
-            steps,
-            choices,
-            seed,
-            objective,
-            int_arg(args, 6, "lattice_exchange_rollout")?,
-            acceptance,
-            repair_beam_width,
+            boolean_lattice::OrExchangeConfig {
+                width: int_arg(args, 1, "lattice_exchange_rollout")?,
+                steps,
+                choices_per_step: choices,
+                seed,
+                objective,
+                minimum_density_per_mille: int_arg(args, 6, "lattice_exchange_rollout")?,
+                acceptance,
+                repair_beam_width,
+            },
         )?;
         Ok(json!({
             "deleted": rollout.deleted,

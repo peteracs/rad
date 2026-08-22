@@ -1,0 +1,14 @@
+use "schema.rad"
+use "owners/job_owner.rad"
+use "owners/job_owner.rad" as jobs
+use "systems/scheduler.rad"
+use "scenarios/production.rad"
+
+fn main() -> nil {
+    let first_job: entity = run_job_day(1000)
+    InspectRetryQueue()
+    assert(has(first_job, Succeeded), "production batch completes")
+    print("workpulse: jobs=1000 workers=1 completed=1000")
+    print(why(first_job, CompletionRecord))
+    print(why_removed(first_job, ActiveLease))
+}

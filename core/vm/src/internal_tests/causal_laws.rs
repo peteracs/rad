@@ -1,12 +1,9 @@
 //! Executable acceptance tests for RFC-0001's vertical slice.
 
 use crate::causality::CausalityLedger;
-use crate::checker::{Checker, CheckerOptions};
-use crate::compiler::Compiler;
+use crate::checker::CheckerOptions;
 use crate::host_value::FrozenValue;
-use crate::lexer::Lexer;
 use crate::opcode::{Chunk, Op};
-use crate::parser::Parser;
 use crate::replay::TraceReplayer;
 use crate::sandbox::SandboxCaps;
 use crate::settlement_reference::{

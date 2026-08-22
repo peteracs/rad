@@ -1,0 +1,25 @@
+pub opaque type PaymentId = u64
+pub opaque type AccountId = u64
+pub opaque type MoneyCents = i64
+
+pub component Payment {
+    payment_id: PaymentId = PaymentId(u64(0)),
+    debit_account: entity,
+    credit_account: entity,
+    amount: MoneyCents = MoneyCents(i64(0)),
+    idempotency_key: str = "",
+}
+
+pub component AuthorizedPayment { authorized: bool = true }
+pub component CapturedPayment { captured: bool = true }
+
+pub event PaymentCaptured {
+    payment: entity,
+    amount: MoneyCents,
+}
+
+pub resource CaptureAudit { committed: int = 0 }
+
+on PaymentCaptured(_event) {
+    update(CaptureAudit) { committed = res(CaptureAudit).committed + 1 }
+}

@@ -132,6 +132,14 @@ impl Checker {
         match name.as_str() {
             "int" => Some(Ty::Int),
             "float" => Some(Ty::Float),
+            scalar if crate::native_types::NativeScalarKind::parse(scalar).is_some() => {
+                let repr = crate::native_types::NativeScalarKind::parse(scalar).unwrap();
+                Some(Ty::Native {
+                    name: scalar.to_string(),
+                    repr,
+                    flavor: crate::native_types::NativeTypeFlavor::Scalar,
+                })
+            }
             "str" => Some(Ty::Str),
             "bool" => Some(Ty::Bool),
             "nil" => Some(Ty::Nil),
@@ -146,6 +154,20 @@ impl Checker {
             "list" => Some(Ty::List(Box::new(Ty::Any))),
             "map" => Some(Ty::Map(Box::new(Ty::Any), Box::new(Ty::Any))),
             other => {
+                if let Some(native) = self.native_types.get(other).cloned() {
+                    if !native.is_pub && is_cross_file(native.span.file, span.file) {
+                        self.error(
+                            span,
+                            format!("Native type '{}' is private", other),
+                            Some(format!("Add `pub` to the declaration of '{}'", other)),
+                        );
+                    }
+                    return Some(Ty::Native {
+                        name: other.to_string(),
+                        repr: native.repr,
+                        flavor: native.flavor,
+                    });
+                }
                 if self
                     .type_param_scopes
                     .iter()

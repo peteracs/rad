@@ -1,0 +1,23 @@
+component ActiveLease { token: int = 2 }
+component CompletionRecord { token: int = 0 }
+component Running {}
+component Succeeded {}
+
+let job = spawn(ActiveLease { token: 2 }, Running {})
+
+fn complete_with_superseded_lease() -> nil {
+    remove(job, Running)
+    set(job, Succeeded {})
+    set(job, CompletionRecord { token: 1 })
+}
+
+model RejectStaleCompletion {
+    commands [complete_with_superseded_lease]
+    invariant {
+        return not has(job, CompletionRecord)
+            or require(job, CompletionRecord).token == require(job, ActiveLease).token
+    }
+    runs 1
+    max_commands 1
+    seed 1
+}

@@ -260,9 +260,7 @@ fn error_response(id: Json, code: i64, message: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::compiler::Compiler;
-    use crate::lexer::Lexer;
-    use crate::parser::Parser;
+    use crate::parser::ParserOptions;
 
     const HOST: &str = r#"
         component Health { hp: 100 }
@@ -271,12 +269,8 @@ mod tests {
     "#;
 
     fn server() -> SandboxServer {
-        let mut lexer = Lexer::new(HOST);
-        let tokens = lexer.tokenize().0;
-        let mut parser = Parser::new(tokens);
-        let program = parser.parse();
-        assert!(parser.errors().is_empty());
-        let result = Compiler::new().compile(&program).expect("host compile");
+        let result = crate::test_support::compile_source(HOST, ParserOptions::default())
+            .expect("host parse and compile");
         let mut vm = VM::new();
         vm.suppress_output();
         vm.load_compile_result(result);

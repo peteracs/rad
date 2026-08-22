@@ -18,26 +18,16 @@ use crate::parser::Parser;
 use crate::vm::VM;
 
 fn compile(src: &str) -> crate::compiler::CompileResult {
-    let mut lexer = Lexer::new(src);
-    let tokens = lexer.tokenize().0;
-    let mut parser = Parser::new(tokens);
-    let program = parser.parse();
-    assert!(
-        parser.errors().is_empty(),
-        "parse errors: {:?}",
-        parser.errors()
-    );
     // `indexed` declarations flow compiler-ward through the CHECKER's
     // component table, with an AST-derived fallback for checker-less
     // compiles (see replay_carries_indexes_without_checker_pass below —
     // the fallback's absence aborted `rad replay` of any indexed program).
-    let mut checker = crate::checker::Checker::new();
-    let errors = checker.check(&program);
-    assert!(errors.is_empty(), "check errors: {:?}", errors);
-    Compiler::new()
-        .with_checker_output(checker.output())
-        .compile(&program)
-        .expect("compile")
+    crate::test_support::compile_checked_source(
+        src,
+        crate::parser::ParserOptions::default(),
+        crate::checker::CheckerOptions::default(),
+    )
+    .expect("parse, check, and compile")
 }
 
 fn run(src: &str) -> VM {

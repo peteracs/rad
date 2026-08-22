@@ -1,0 +1,42 @@
+{
+  "bench": "projects/dogfood/dispatch60/bench.rad",
+  "build_profile": "release",
+  "elapsed_ns_when_recorded": 10723092400,
+  "metric_semantics": "semantic-work-v1+alloc-categories-v1",
+  "schema_version": 3,
+  "systems": [
+    {
+      "instruction_budget": 80000,
+      "instruction_budget_pass": true,
+      "invocations": 10000,
+      "max_guest_allocated_bytes": 0,
+      "max_guest_allocations": 0,
+      "max_host_boundary_allocated_bytes": 0,
+      "max_host_boundary_allocations": 0,
+      "max_instructions": 6604,
+      "max_managed_backing_allocations": 0,
+      "max_managed_backing_bytes": 0,
+      "max_runtime_allocated_bytes": 465,
+      "max_runtime_allocations": 15,
+      "name": "AdvanceActiveTrips",
+      "native_allocation_meter_supported": true,
+      "no_guest_allocation_declared": true,
+      "no_guest_allocation_pass": true,
+      "no_host_allocation_declared": false,
+      "no_host_allocation_pass": true,
+      "no_runtime_allocation_declared": false,
+      "no_runtime_allocation_pass": true,
+      "static_allocation_reachable": false,
+      "total_guest_allocated_bytes": 0,
+      "total_guest_allocations": 0,
+      "total_host_boundary_allocated_bytes": 0,
+      "total_host_boundary_allocations": 0,
+      "total_instructions": 66040000,
+      "total_managed_backing_allocations": 0,
+      "total_managed_backing_bytes": 0,
+      "total_runtime_allocated_bytes": 4650000,
+      "total_runtime_allocations": 150000
+    }
+  ],
+  "world_digest": "aa3eda506c2749e1c6e03e09dfd6729be7c25a457c25ea2c793f3f89fec2b58f"
+}

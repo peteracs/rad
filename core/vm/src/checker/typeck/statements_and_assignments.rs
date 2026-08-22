@@ -186,6 +186,7 @@ impl Checker {
             Stmt::Emit(s) => self.check_emit(s),
             Stmt::Schedule(s) => self.check_schedule(s),
             Stmt::Update(s) => self.check_update(s),
+            Stmt::Transaction(s) => self.check_transaction_stmt(s),
             Stmt::Settle(s) => self.check_settle_stmt(s),
             Stmt::Propose(s) => self.check_propose_stmt(s),
             Stmt::Next(s) => self.check_next_stmt(s),
@@ -198,6 +199,69 @@ impl Checker {
                 self.error_if_ignored_transform_result(&s.expr, &s.span);
             }
             Stmt::OnceGuardPass(_) | Stmt::Error(_) => {}
+        }
+    }
+
+    fn check_transaction_stmt(&mut self, stmt: &TransactionStmt) {
+        let mut seen = std::collections::HashSet::new();
+        for authority in &stmt.changes_only {
+            if !seen.insert(authority) {
+                self.error(
+                    &stmt.span,
+                    format!(
+                        "Transaction '{}' declares '{}' more than once in changes_only",
+                        stmt.name, authority
+                    ),
+                    Some("Remove the duplicate transaction authority".to_string()),
+                );
+                continue;
+            }
+            if authority == "*"
+                || matches!(
+                    authority.as_str(),
+                    "$entities" | "$entity_names" | "$entity_identity"
+                )
+            {
+                continue;
+            }
+            let resolved = self.resolve_canonical_name(authority);
+            if !self.components.contains_key(&resolved) && !self.resources.contains_key(&resolved) {
+                self.error(
+                    &stmt.span,
+                    format!(
+                        "Transaction '{}' declares unknown changes_only authority '{}'",
+                        stmt.name, authority
+                    ),
+                    Some(format!(
+                        "Declare '{}', import it, or correct the changes_only contract",
+                        authority
+                    )),
+                );
+            }
+        }
+
+        self.check_transaction_conditions("requires", &stmt.requires);
+        self.push_scope();
+        self.check_block(&stmt.body);
+        self.pop_scope();
+        self.check_transaction_conditions("ensures", &stmt.ensures);
+        if let Some(post_commit) = &stmt.post_commit {
+            self.push_scope();
+            self.check_block(post_commit);
+            self.pop_scope();
+        }
+    }
+
+    fn check_transaction_conditions(&mut self, kind: &str, conditions: &[Expr]) {
+        for condition in conditions {
+            let actual = self.check_expr(condition);
+            if actual != Ty::Bool && actual != Ty::Any {
+                self.error(
+                    condition.span(),
+                    format!("transaction {kind} contract must be bool, got {actual}"),
+                    None,
+                );
+            }
         }
     }
 

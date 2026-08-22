@@ -33,13 +33,8 @@ use std::sync::Arc;
 use serde_json::{json, Value as Json};
 
 #[cfg(test)]
-use crate::compiler::Compiler;
-#[cfg(test)]
-use crate::lexer::Lexer;
-#[cfg(test)]
-use crate::parser::Parser;
+use crate::parser::ParserOptions;
 use crate::replay::TraceReplayer;
-#[cfg(test)]
 use crate::vm::VM;
 use crate::world::{World, WorldSnapshot};
 
@@ -62,6 +57,8 @@ pub struct ReplayServer {
     /// Causality ledger (#4) rebuilt by the replay pass — `why` answers
     /// from it at any frame.
     ledger: crate::causality::CausalityLedger,
+    trace_text: String,
+    force: bool,
 }
 
 impl ReplayServer {
@@ -101,6 +98,8 @@ impl ReplayServer {
             verified,
             run_error,
             ledger,
+            trace_text: trace_text.to_string(),
+            force,
         })
     }
 
@@ -147,6 +146,10 @@ impl ReplayServer {
             "peek" => (self.peek(&params), true),
             "diff_frames" => (self.diff_frames(&params), true),
             "why" => (self.why(&params), true),
+            "why_missing" => (self.why_missing(&params), true),
+            "why_view" => (self.why_view(&params), true),
+            "check_invariants" => (self.check_invariants(&params), true),
+            "execute_transition" => (self.execute_transition(&params), true),
             "shutdown" => (Ok(json!({ "bye": true })), false),
             other => (
                 Err((METHOD_NOT_FOUND, format!("unknown method '{}'", other))),
@@ -279,7 +282,29 @@ impl ReplayServer {
                     INVALID_PARAMS,
                     "why: 'component' (string) is required".to_string(),
                 ))?;
-                self.ledger.explain_named(name, component, up_to)
+                let entity = self.timeline[frame].get_entity_by_name(name);
+                if params.get("removed").and_then(Json::as_bool) == Some(true) {
+                    match entity.or_else(|| {
+                        self.ledger
+                            .writes
+                            .iter()
+                            .rev()
+                            .find(|write| write.entity_name.as_deref() == Some(name))
+                            .and_then(|write| write.entity)
+                    }) {
+                        Some(entity) => self.ledger.explain_removed_at(entity, component, up_to),
+                        None => format!("{component} of {name}: no retained entity identity"),
+                    }
+                } else if let Some(field) = params.get("field").and_then(Json::as_str) {
+                    match entity {
+                        Some(entity) => self.ledger.explain_field(entity, component, field, up_to),
+                        None => format!(
+                            "{component}.{field} of {name}: entity is absent at frame {frame}"
+                        ),
+                    }
+                } else {
+                    self.ledger.explain_named(name, component, up_to)
+                }
             }
             (_, Some(Json::String(resource))) => self.ledger.explain_resource(resource, up_to),
             _ => {
@@ -291,6 +316,179 @@ impl ReplayServer {
             }
         };
         Ok(json!({ "frame": frame, "why": explanation }))
+    }
+
+    fn why_missing(&self, params: &Json) -> Result<Json, (i64, String)> {
+        let frame = match params.get("frame") {
+            Some(_) => require_frame(params, "frame")?,
+            None => self.current,
+        };
+        let component = params.get("component").and_then(Json::as_str).ok_or((
+            INVALID_PARAMS,
+            "why_missing: 'component' (string) is required".to_string(),
+        ))?;
+        let value = params.get("value").ok_or((
+            INVALID_PARAMS,
+            "why_missing: 'value' is required".to_string(),
+        ))?;
+        let value = value.to_string();
+        let up_to = if frame + 1 == self.timeline.len() {
+            u64::MAX
+        } else {
+            frame as u64
+        };
+        Ok(json!({
+            "frame": frame,
+            "why": self.ledger.explain_missing_value_at(component, &value, up_to),
+        }))
+    }
+
+    fn why_view(&self, params: &Json) -> Result<Json, (i64, String)> {
+        let frame = match params.get("frame") {
+            Some(_) => require_frame(params, "frame")?,
+            None => self.current,
+        };
+        let view = params.get("view").and_then(Json::as_str).ok_or((
+            INVALID_PARAMS,
+            "why_view: 'view' (string) is required".to_string(),
+        ))?;
+        let snapshot = self.frame_snapshot(frame)?;
+        let entity = match params.get("entity") {
+            Some(Json::String(name)) => snapshot.get_entity_by_name(name).ok_or((
+                INVALID_PARAMS,
+                format!("why_view: no entity named '{name}' at frame {frame}"),
+            ))?,
+            Some(Json::Number(number)) => number
+                .as_u64()
+                .and_then(|value| u32::try_from(value).ok())
+                .ok_or((
+                    INVALID_PARAMS,
+                    "why_view: entity id exceeds u32".to_string(),
+                ))?,
+            _ => {
+                return Err((
+                    INVALID_PARAMS,
+                    "why_view: 'entity' (name or id) is required".to_string(),
+                ))
+            }
+        };
+        let mut world = World::new();
+        world.restore((*snapshot).clone());
+        let (included, reason) = world
+            .materialized_view_reason(view, entity)
+            .ok_or((INVALID_PARAMS, format!("why_view: unknown view '{view}'")))?;
+        Ok(json!({
+            "frame": frame,
+            "view": view,
+            "entity": entity,
+            "included": included,
+            "why": reason,
+        }))
+    }
+
+    /// `check_invariants {names:[...], frame?}` — run named zero-argument
+    /// predicates in an effect-firewalled VM restored to one exact frame.
+    fn check_invariants(&mut self, params: &Json) -> Result<Json, (i64, String)> {
+        let frame = match params.get("frame") {
+            Some(_) => require_frame(params, "frame")?,
+            None => self.current,
+        };
+        let names = params.get("names").and_then(Json::as_array).ok_or((
+            INVALID_PARAMS,
+            "check_invariants: 'names' must be a non-empty string array".to_string(),
+        ))?;
+        if names.is_empty() || names.iter().any(|name| !name.is_string()) {
+            return Err((
+                INVALID_PARAMS,
+                "check_invariants: 'names' must be a non-empty string array".to_string(),
+            ));
+        }
+        let mut vm = self.vm_at_frame(frame).map_err(|error| (-32002, error))?;
+        let baseline = vm.world_digest();
+        let mut results = serde_json::Map::new();
+        for name in names.iter().filter_map(Json::as_str) {
+            let result = vm.call_global(name, &[]).map_err(|error| (-32003, error))?;
+            let passed = match result {
+                crate::host_value::FrozenValue::Bool(passed) => passed,
+                other => {
+                    return Err((
+                        -32003,
+                        format!("invariant `{name}` returned {other:?}, expected bool"),
+                    ))
+                }
+            };
+            if vm.world_digest() != baseline {
+                return Err((-32003, format!("invariant `{name}` mutated world state")));
+            }
+            results.insert(name.to_string(), json!(passed));
+        }
+        Ok(json!({ "frame": frame, "invariants": results }))
+    }
+
+    /// `execute_transition {name,args,frame?}` — execute in an isolated,
+    /// host-effect-firewalled VM and return a conformance trace.
+    fn execute_transition(&mut self, params: &Json) -> Result<Json, (i64, String)> {
+        let frame = match params.get("frame") {
+            Some(_) => require_frame(params, "frame")?,
+            None => self.current,
+        };
+        let name = params.get("name").and_then(Json::as_str).ok_or((
+            INVALID_PARAMS,
+            "execute_transition: 'name' (string) is required".to_string(),
+        ))?;
+        let args = params
+            .get("args")
+            .and_then(Json::as_array)
+            .ok_or((
+                INVALID_PARAMS,
+                "execute_transition: 'args' must be an array".to_string(),
+            ))?
+            .iter()
+            .map(crate::conformance::frozen_from_json)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|error| (INVALID_PARAMS, error))?;
+        let mut vm = self.vm_at_frame(frame).map_err(|error| (-32002, error))?;
+        let trace = vm
+            .execute_transition(name, &args)
+            .map_err(|error| (-32003, error))?;
+        serde_json::to_value(trace).map_err(|error| (-32603, error.to_string()))
+    }
+
+    fn vm_at_frame(&self, frame: usize) -> Result<VM, String> {
+        let snapshot = self
+            .timeline
+            .get(frame)
+            .cloned()
+            .ok_or_else(|| format!("unknown frame {frame}"))?;
+        let replayer = TraceReplayer::parse(&self.trace_text, self.force)?;
+        let source = replayer.source().to_string();
+        let features = replayer.features().to_vec();
+        let source_layout = replayer.source_layout().clone();
+        let mut vm = crate::replay_compile::compile_trace_vm(
+            &source,
+            "embedded source",
+            &features,
+            &source_layout,
+        )?;
+        vm.suppress_output();
+        vm.enable_replay(replayer);
+        let run_error = vm.run(0).err();
+        if run_error.as_deref() != self.run_error.as_deref() {
+            return Err(format!(
+                "cannot reconstruct semantic frame: recorded outcome {:?}, reconstructed {:?}",
+                self.run_error, run_error
+            ));
+        }
+        let (_, report) = vm
+            .finish_replay_session_with_outcome(run_error.as_deref())
+            .ok_or_else(|| "replay session disappeared during reconstruction".to_string())?;
+        if report.end_digest_match == Some(false) || report.end_outcome_match == Some(false) {
+            return Err("cannot reconstruct semantic frame: replay diverged".to_string());
+        }
+        vm.world.restore((*snapshot).clone());
+        vm.restore_events_from(&snapshot);
+        vm.observational_attempt_replay = true;
+        Ok(vm)
     }
 
     fn frame_snapshot(&self, frame: usize) -> Result<Arc<WorldSnapshot>, (i64, String)> {
@@ -357,16 +555,8 @@ mod tests {
     "#;
 
     fn record(src: &str) -> String {
-        let mut lexer = Lexer::new(src);
-        let tokens = lexer.tokenize().0;
-        let mut parser = Parser::new(tokens);
-        let program = parser.parse();
-        assert!(
-            parser.errors().is_empty(),
-            "parse errors: {:?}",
-            parser.errors()
-        );
-        let result = Compiler::new().compile(&program).expect("compile");
+        let result = crate::test_support::compile_source(src, ParserOptions::default())
+            .expect("parse and compile");
         let mut vm = VM::new();
         vm.suppress_output();
         vm.enable_recording(src);
@@ -466,11 +656,8 @@ mod tests {
             let mut replayer = TraceReplayer::parse(&trace, false).expect("parse");
             replayer.stop_at(k);
             let src = replayer.source().to_string();
-            let mut lexer = Lexer::new(&src);
-            let tokens = lexer.tokenize().0;
-            let mut parser = Parser::new(tokens);
-            let program = parser.parse();
-            let result = Compiler::new().compile(&program).expect("compile");
+            let result = crate::test_support::compile_source(&src, ParserOptions::default())
+                .expect("parse and compile");
             let mut vm = VM::new();
             vm.suppress_output();
             vm.enable_replay(replayer);

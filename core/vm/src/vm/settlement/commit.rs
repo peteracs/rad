@@ -1,5 +1,4 @@
 impl VM {
-
     pub(crate) fn finish_settlement(&mut self) -> Result<(), crate::constraint_types::VmFailure> {
         self.ensure_current_frame_owns_settlement("EndSettlement")?;
         let result = self.resolve_and_commit_settlement();
@@ -273,14 +272,17 @@ impl VM {
             for write in &patch.writes {
                 let summary = Self::component_summary(&write.component);
                 let entity_name = self.world.entity_name(write.entity);
-                self.ledger.record_write_with_resolution(
-                    self.causality_frame,
-                    write.entity,
-                    entity_name,
-                    &write.component.type_name,
-                    summary,
-                    context.origin.clone(),
-                    resolution_id,
+                self.ledger.record_write(
+                    crate::causality::WriteRecord::local(
+                        self.causality_frame,
+                        Some(write.entity),
+                        entity_name,
+                        write.component.type_name.as_str(),
+                        crate::causality::WriteSummary::full(summary, smallvec::SmallVec::new()),
+                        crate::causality::WriteKind::Set,
+                        context.origin.clone(),
+                    )
+                    .with_resolution_id(resolution_id),
                 );
             }
         }
@@ -303,26 +305,33 @@ impl VM {
                 if let Some(resolution_id) = resolution_ids.get(patch_index).copied() {
                     relation_resolution_ids.push(resolution_id);
                 }
-                self.ledger.record_write_with_resolution(
-                    self.causality_frame,
-                    patch.key,
-                    self.world.entity_name(patch.key),
-                    &component,
-                    value.clone(),
-                    context.origin.clone(),
-                    resolution_ids.get(patch_index).copied(),
+                self.ledger.record_write(
+                    crate::causality::WriteRecord::local(
+                        self.causality_frame,
+                        Some(patch.key),
+                        self.world.entity_name(patch.key),
+                        component.as_str(),
+                        crate::causality::WriteSummary::full(
+                            value.clone(),
+                            smallvec::SmallVec::new(),
+                        ),
+                        crate::causality::WriteKind::Set,
+                        context.origin.clone(),
+                    )
+                    .with_resolution_id(resolution_ids.get(patch_index).copied()),
                 );
             }
             if !recorded {
-                self.ledger.record_write(
-                    self.causality_frame,
-                    None,
-                    None,
-                    &component,
-                    value,
-                    crate::causality::WriteKind::Set,
-                    context.origin.clone(),
-                );
+                self.ledger
+                    .record_write(crate::causality::WriteRecord::local(
+                        self.causality_frame,
+                        None,
+                        None,
+                        component.as_str(),
+                        crate::causality::WriteSummary::full(value, smallvec::SmallVec::new()),
+                        crate::causality::WriteKind::Set,
+                        context.origin.clone(),
+                    ));
             }
             if change.kind == crate::relation::runtime::FactChangeKind::Insert {
                 if let Some(assertion) = self

@@ -1,0 +1,18 @@
+component Running {}
+component Cancelled {}
+component Succeeded {}
+let job = spawn(Running {})
+
+fn commit_cancel_and_complete() -> nil {
+    remove(job, Running)
+    set(job, Cancelled {})
+    set(job, Succeeded {})
+}
+
+model OneTerminalOutcome {
+    commands [commit_cancel_and_complete]
+    invariant { return not has(job, Cancelled) or not has(job, Succeeded) }
+    runs 1
+    max_commands 1
+    seed 8
+}

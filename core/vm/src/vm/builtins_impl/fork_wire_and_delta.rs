@@ -241,6 +241,11 @@ impl VM {
             "fork_from_bytes",
             allocator,
         )?;
+        w.install_materialized_view_definitions_from(&self.world);
+        let view_state = body
+            .get("views")
+            .ok_or("fork_from_bytes: payload omits materialized view state")?;
+        w.restore_materialized_view_transport(view_state, "fork_from_bytes")?;
 
         let mut events: Vec<(String, Value, u64)> = Vec::new();
         let mut emit_ids: Vec<u64> = Vec::new();

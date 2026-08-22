@@ -35,6 +35,19 @@ let AFFINE_SPARSE_SLOPE_SUPPORT_SUMMARY_JSON: pure fn(int, int, int, int) -> str
 let AFFINE_SPARSE_SLOPE_SUPPORT_LANE_JSON: pure fn(int, int, int, int, int, int) -> str = MATH_KERNELS["affine_sparse_slope_support_lane_json"]
 let AFFINE_FRONTIER_PROFILE_JSON: pure fn(int, int, int, int, int, str, int) -> str = MATH_KERNELS["affine_frontier_profile_json"]
 let AFFINE_CYCLE_PROFILE_JSON: pure fn(int, int, int, int) -> str = MATH_KERNELS["affine_cycle_profile_json"]
+let ZETA_COVER_LANE_JSON: pure fn(str, int, int) -> str = MATH_KERNELS["zeta_cover_lane_json"]
+let ZETA_PREPARE_COVER_JSON: pure fn(str) -> str = MATH_KERNELS["zeta_prepare_cover_json"]
+let ZETA_PREPARED_COVER_LANE_JSON: pure fn(str, int, int) -> str = MATH_KERNELS["zeta_prepared_cover_lane_json"]
+let ZETA_EQUISPACED_BLOCK_JSON: pure fn(int, int) -> str = MATH_KERNELS["zeta_equispaced_block_json"]
+let ZETA_EVEN_SPACING_BOUND_JSON: pure fn(int) -> str = MATH_KERNELS["zeta_even_spacing_bound_json"]
+let ZETA_INTEGER_SPACING_BOUND_JSON: pure fn(int, int) -> str = MATH_KERNELS["zeta_integer_spacing_bound_json"]
+let ZETA_MT_BANDWIDTH_SCOUT_JSON: pure fn(int) -> str = MATH_KERNELS["zeta_mt_bandwidth_scout_json"]
+let ZETA_FOURTH_MOMENT_TRANSFER_SCOUT_JSON: pure fn(int, int, int) -> str = MATH_KERNELS["zeta_fourth_moment_transfer_scout_json"]
+let ZETA_COSINE_PAIR_SCOUT_JSON: pure fn(int) -> str = MATH_KERNELS["zeta_cosine_pair_scout_json"]
+let ZETA_COSINE_DIRECT_SUM_SCOUT_JSON: pure fn(int, int) -> str = MATH_KERNELS["zeta_cosine_direct_sum_scout_json"]
+let ZETA_PERTURBED_WINDOW_SCOUT_JSON: pure fn(int) -> str = MATH_KERNELS["zeta_perturbed_window_scout_json"]
+let ZETA_PERTURBED_WINDOW_TWO_MODE_SCOUT_JSON: pure fn(int, int) -> str = MATH_KERNELS["zeta_perturbed_window_two_mode_scout_json"]
+let ZETA_PERIODIC_DENSITY_SCOUT_JSON: pure fn(int, int) -> str = MATH_KERNELS["zeta_periodic_density_scout_json"]
 
 pure fn decode_kernel_result(encoded: str, operation: str) -> any {
     let decoded = json_parse(encoded)
@@ -392,4 +405,131 @@ pub pure fn affine_cycle_summary(
         max_total_divisions,
     )
     return decode_kernel_result(encoded, "affine_cycle_profile")
+}
+
+// Exact integer replay of one partition of the Arb-backed zeta cover.  The
+// native module caches only the parsed immutable certificate; lane outputs
+// remain deterministic functions of these three arguments.
+pub pure fn zeta_cover_lane(
+    certificate_json: str,
+    lane_index: int,
+    lane_count: int,
+) -> map<str, any> {
+    return decode_kernel_result(
+        ZETA_COVER_LANE_JSON(certificate_json, lane_index, lane_count),
+        "zeta_cover_lane",
+    )
+}
+
+pub pure fn zeta_prepare_cover(certificate_json: str) -> str {
+    let result = decode_kernel_result(
+        ZETA_PREPARE_COVER_JSON(certificate_json),
+        "zeta_prepare_cover",
+    )
+    return result["certificate_digest"]
+}
+
+pub pure fn zeta_prepared_cover_lane(
+    certificate_digest: str,
+    lane_index: int,
+    lane_count: int,
+) -> map<str, any> {
+    return decode_kernel_result(
+        ZETA_PREPARED_COVER_LANE_JSON(certificate_digest, lane_index, lane_count),
+        "zeta_prepared_cover_lane",
+    )
+}
+
+pub pure fn zeta_equispaced_block(
+    point_count: int,
+    gap_micros: int,
+) -> map<str, any> {
+    return decode_kernel_result(
+        ZETA_EQUISPACED_BLOCK_JSON(point_count, gap_micros),
+        "zeta_equispaced_block",
+    )
+}
+
+pub pure fn zeta_even_spacing_bound(point_count: int) -> map<str, any> {
+    return decode_kernel_result(
+        ZETA_EVEN_SPACING_BOUND_JSON(point_count),
+        "zeta_even_spacing_bound",
+    )
+}
+
+pub pure fn zeta_integer_spacing_bound(
+    point_count: int,
+    gap_units: int,
+) -> map<str, any> {
+    return decode_kernel_result(
+        ZETA_INTEGER_SPACING_BOUND_JSON(point_count, gap_units),
+        "zeta_integer_spacing_bound",
+    )
+}
+
+pub pure fn zeta_mt_bandwidth_scout(lambda_micros: int) -> map<str, any> {
+    return decode_kernel_result(
+        ZETA_MT_BANDWIDTH_SCOUT_JSON(lambda_micros),
+        "zeta_mt_bandwidth_scout",
+    )
+}
+
+pub pure fn zeta_fourth_moment_transfer_scout(
+    limit: int,
+    max_shift: int,
+    minimum_factor: int,
+) -> map<str, any> {
+    return decode_kernel_result(
+        ZETA_FOURTH_MOMENT_TRANSFER_SCOUT_JSON(limit, max_shift, minimum_factor),
+        "zeta_fourth_moment_transfer_scout",
+    )
+}
+
+pub pure fn zeta_cosine_pair_scout(a_micros: int) -> map<str, any> {
+    return decode_kernel_result(
+        ZETA_COSINE_PAIR_SCOUT_JSON(a_micros),
+        "zeta_cosine_pair_scout",
+    )
+}
+
+pub pure fn zeta_cosine_direct_sum_scout(
+    companion_a_micros: int,
+    companion_weight_ppm: int,
+) -> map<str, any> {
+    return decode_kernel_result(
+        ZETA_COSINE_DIRECT_SUM_SCOUT_JSON(companion_a_micros, companion_weight_ppm),
+        "zeta_cosine_direct_sum_scout",
+    )
+}
+
+pub pure fn zeta_perturbed_window_scout(
+    mode_coefficient_micros: int,
+) -> map<str, any> {
+    return decode_kernel_result(
+        ZETA_PERTURBED_WINDOW_SCOUT_JSON(mode_coefficient_micros),
+        "zeta_perturbed_window_scout",
+    )
+}
+
+pub pure fn zeta_perturbed_window_two_mode_scout(
+    mode_coefficient_micros: int,
+    second_mode_coefficient_micros: int,
+) -> map<str, any> {
+    return decode_kernel_result(
+        ZETA_PERTURBED_WINDOW_TWO_MODE_SCOUT_JSON(
+            mode_coefficient_micros,
+            second_mode_coefficient_micros,
+        ),
+        "zeta_perturbed_window_two_mode_scout",
+    )
+}
+
+pub pure fn zeta_periodic_density_scout(
+    long_gap_mask: int,
+    short_gap_micros: int,
+) -> map<str, any> {
+    return decode_kernel_result(
+        ZETA_PERIODIC_DENSITY_SCOUT_JSON(long_gap_mask, short_gap_micros),
+        "zeta_periodic_density_scout",
+    )
 }

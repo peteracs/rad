@@ -1,0 +1,4 @@
+event DamageRequested {}
+
+enter_phase("Resolve")
+emit phase(Resolve) DamageRequested {}

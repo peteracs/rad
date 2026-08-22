@@ -1,0 +1,11 @@
+use "../schema.rad"
+use "../owners/ledger.rad"
+use "../systems/settlement.rad"
+use "../scenarios/production.rad"
+
+test "capture is atomic, balanced, and idempotent" {
+    run_payment_day(100)
+    assert(len(entities(CapturedPayment)) == 100, "captured once")
+    assert(len(entities(PaymentHold)) == 0, "holds removed atomically")
+    assert(len(entities(LedgerEntry)) == 200, "two ledger entries per payment")
+}

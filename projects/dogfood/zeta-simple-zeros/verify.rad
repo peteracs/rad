@@ -1,0 +1,514 @@
+// Advanced RAD consumer for the finite certificate behind the
+// 67.30085% simple-zero bound.
+//
+// Independent integer-cover lanes execute in speculative ECS worlds through
+// simulate_many().  A typed causal settlement merges the complete partition;
+// Candidate Constraints reject missing, duplicated, or numerically altered
+// evidence.  The final H0 deduction uses only a positive rational cotangent
+// series and signed 64-bit arithmetic.
+
+use "../native-math-kernels/math_kernels.rad"
+
+let SOURCE_COMMIT = "040c5e899e658aed7b56a2a87f501798fe10761d"
+let KERNEL_SHA256 = "a9992300d2bf71665aa2b6bd2727e798624cd297103bb200c7f0ca2baea55a2c"
+let SECOND_SHA256 = "7913c5511a572c32dd573cd53123d8cf3ddf73d3ec63b1aa823faae2ae83570a"
+let STRONG_CERTIFICATE_DIGEST = "1ae4353ea619f174ed7473ea2397770e4fb243520442ae0f988652e2060f1927"
+let COVER_SCALE = 100000000000000
+let ORIGINAL_TARGET_SCALED = 380000000000
+let FINAL_SCALE = 10000000000000
+let ORIGINAL_PROPORTION_DIGITS = [6, 7, 3, 0, 0, 8, 5, 2, 8, 4]
+let STRONG_PROPORTION_DIGITS = [6, 7, 3, 0, 2, 1, 3, 6, 2, 7, 2, 8, 8]
+
+resource CoverLaneUniverse {
+    certificate_digest: str = ""
+    lane_index: int = 0
+    lane_count: int = 0
+    verified: bool = false
+    initial_boxes: int = 0
+    nodes: int = 0
+    pruned: int = 0
+    splits: int = 0
+    maximum_depth: int = 0
+    pressure_pruned: int = 0
+    interval_pruned: int = 0
+    tangent_pruned: int = 0
+    minimum_leaf_lower_scaled: int = 0
+    minimum_leaf_kind: str = ""
+    minimum_leaf_box: list = []
+    signature: int = 0
+}
+
+system VerifyCoverLane(universe: mut CoverLaneUniverse) {
+    let report = zeta_prepared_cover_lane(
+        universe.certificate_digest,
+        universe.lane_index,
+        universe.lane_count,
+    )
+    assert(report["verified"], "native zeta lane did not verify")
+    assert(report["lane_index"] == universe.lane_index, "zeta lane index changed")
+    assert(report["lane_count"] == universe.lane_count, "zeta lane count changed")
+    universe = CoverLaneUniverse {
+        certificate_digest: report["certificate_digest"],
+        lane_index: report["lane_index"],
+        lane_count: report["lane_count"],
+        verified: report["verified"],
+        initial_boxes: report["initial_boxes"],
+        nodes: report["nodes"],
+        pruned: report["pruned"],
+        splits: report["splits"],
+        maximum_depth: report["maximum_depth"],
+        pressure_pruned: report["pressure_pruned"],
+        interval_pruned: report["interval_pruned"],
+        tangent_pruned: report["tangent_pruned"],
+        minimum_leaf_lower_scaled: report["minimum_leaf_lower_scaled"],
+        minimum_leaf_kind: report["minimum_leaf_kind"],
+        minimum_leaf_box: report["minimum_leaf_box"],
+        signature: report["signature"],
+    }
+}
+
+component CoverExpectation {
+    lane_count: int = 0
+    target_scaled: int = 0
+    initial_boxes: int = 0
+    nodes: int = 0
+    pruned: int = 0
+    splits: int = 0
+    maximum_depth: int = 0
+    pressure_pruned: int = 0
+    interval_pruned: int = 0
+    tangent_pruned: int = 0
+}
+
+component ExactCoverCertificate {
+    verified: bool = false
+    certificate_digest: str = ""
+    lane_count: int = 0
+    proposal_count: int = 0
+    lanes_seen: list = []
+    lane_signatures: list = []
+    initial_boxes: int = 0
+    nodes: int = 0
+    pruned: int = 0
+    splits: int = 0
+    maximum_depth: int = 0
+    pressure_pruned: int = 0
+    interval_pruned: int = 0
+    tangent_pruned: int = 0
+    minimum_leaf_lower_scaled: int = 0
+    minimum_leaf_lane: int = 0
+    minimum_leaf_kind: str = ""
+    minimum_leaf_box: list = []
+}
+
+intent CoverLaneContribution {
+    key target: entity
+    lane: CoverLaneUniverse
+}
+
+law SubmitCoverLane(target: entity, lane: CoverLaneUniverse) {
+    propose CoverLaneContribution { target: target, lane: lane }
+}
+
+resolver MergeCoverLanes for CoverLaneContribution(target, proposals) {
+    let expected = require(target, CoverExpectation)
+    let mut seen = []
+    let mut signatures = []
+    for _index in range(expected.lane_count) {
+        seen = push(seen, 0)
+        signatures = push(signatures, 0)
+    }
+    let mut digest = ""
+    let mut initial_boxes = 0
+    let mut nodes = 0
+    let mut pruned = 0
+    let mut splits = 0
+    let mut maximum_depth = 0
+    let mut pressure_pruned = 0
+    let mut interval_pruned = 0
+    let mut tangent_pruned = 0
+    let mut minimum_leaf = COVER_SCALE
+    let mut minimum_lane = expected.lane_count
+    let mut minimum_kind = ""
+    let mut minimum_box = []
+
+    for proposal in proposals {
+        let lane = proposal.lane
+        assert(lane.verified, "unverified zeta lane proposal")
+        assert(lane.lane_count == expected.lane_count, "zeta lane partition mismatch")
+        assert(lane.lane_index >= 0 and lane.lane_index < expected.lane_count, "zeta lane out of range")
+        assert(seen[lane.lane_index] == 0, "duplicate zeta lane proposal")
+        seen = set_at(seen, lane.lane_index, 1)
+        signatures = set_at(signatures, lane.lane_index, lane.signature)
+        if digest == "" {
+            digest = lane.certificate_digest
+        } else {
+            assert(digest == lane.certificate_digest, "zeta lane certificate digests disagree")
+        }
+        initial_boxes = initial_boxes + lane.initial_boxes
+        nodes = nodes + lane.nodes
+        pruned = pruned + lane.pruned
+        splits = splits + lane.splits
+        maximum_depth = max(maximum_depth, lane.maximum_depth)
+        pressure_pruned = pressure_pruned + lane.pressure_pruned
+        interval_pruned = interval_pruned + lane.interval_pruned
+        tangent_pruned = tangent_pruned + lane.tangent_pruned
+        if lane.minimum_leaf_lower_scaled < minimum_leaf
+        or (lane.minimum_leaf_lower_scaled == minimum_leaf and lane.lane_index < minimum_lane) {
+            minimum_leaf = lane.minimum_leaf_lower_scaled
+            minimum_lane = lane.lane_index
+            minimum_kind = lane.minimum_leaf_kind
+            minimum_box = lane.minimum_leaf_box
+        }
+    }
+
+    next(target, ExactCoverCertificate {
+        verified: true,
+        certificate_digest: digest,
+        lane_count: expected.lane_count,
+        proposal_count: len(proposals),
+        lanes_seen: seen,
+        lane_signatures: signatures,
+        initial_boxes: initial_boxes,
+        nodes: nodes,
+        pruned: pruned,
+        splits: splits,
+        maximum_depth: maximum_depth,
+        pressure_pruned: pressure_pruned,
+        interval_pruned: interval_pruned,
+        tangent_pruned: tangent_pruned,
+        minimum_leaf_lower_scaled: minimum_leaf,
+        minimum_leaf_lane: minimum_lane,
+        minimum_leaf_kind: minimum_kind,
+        minimum_leaf_box: minimum_box,
+    })
+}
+
+constraint CompleteExactCover
+for ExactCoverCertificate(subject, proposed)
+watches CoverExpectation
+{
+    let expected = candidate(subject, CoverExpectation)
+    require proposed.verified else "zeta.cover.unverified"
+    require proposed.certificate_digest != "" else "zeta.cover.missing_digest"
+    require proposed.lane_count == expected.lane_count else "zeta.cover.lane_count"
+    require proposed.proposal_count == expected.lane_count else "zeta.cover.missing_lane"
+    require len(proposed.lanes_seen) == expected.lane_count else "zeta.cover.lane_shape"
+    let mut seen_total = 0
+    for seen in proposed.lanes_seen {
+        seen_total = seen_total + seen
+    }
+    require seen_total == expected.lane_count else "zeta.cover.partition"
+    require len(proposed.lane_signatures) == expected.lane_count else "zeta.cover.signature_shape"
+    for signature in proposed.lane_signatures {
+        require signature > 0 else "zeta.cover.lane_signature"
+    }
+    require proposed.initial_boxes == expected.initial_boxes else "zeta.cover.initial_boxes"
+    require proposed.nodes == expected.nodes else "zeta.cover.nodes"
+    require proposed.pruned == expected.pruned else "zeta.cover.pruned"
+    require proposed.splits == expected.splits else "zeta.cover.splits"
+    require proposed.maximum_depth == expected.maximum_depth else "zeta.cover.depth"
+    require proposed.pressure_pruned == expected.pressure_pruned else "zeta.cover.pressure"
+    require proposed.interval_pruned == expected.interval_pruned else "zeta.cover.interval"
+    require proposed.tangent_pruned == expected.tangent_pruned else "zeta.cover.tangent"
+    require proposed.nodes == proposed.pruned + proposed.splits else "zeta.cover.tree_identity"
+    require proposed.pruned == proposed.pressure_pruned + proposed.interval_pruned + proposed.tangent_pruned
+    else "zeta.cover.prune_partition"
+    require proposed.minimum_leaf_lower_scaled >= expected.target_scaled else "zeta.cover.weak_leaf"
+    require len(proposed.minimum_leaf_box) == 12 else "zeta.cover.minimum_witness"
+}
+
+entity cover_judge {
+    CoverExpectation {}
+    ExactCoverCertificate {}
+}
+
+entity reversed_cover_judge {
+    CoverExpectation {}
+    ExactCoverCertificate {}
+}
+
+event CoverBatchReady {
+    target: entity
+    lanes: list
+    reverse_order: bool
+}
+
+on CoverBatchReady(evt) {
+    settle {
+        if evt.reverse_order {
+            for index in range(len(evt.lanes)) {
+                SubmitCoverLane(evt.target, evt.lanes[len(evt.lanes) - index - 1])
+            }
+        } else {
+            for lane in evt.lanes {
+                SubmitCoverLane(evt.target, lane)
+            }
+        }
+    }
+}
+
+resource ZetaVerificationJournal {
+    summary: str = "not-run"
+}
+
+event ZetaCoverPublished {
+    nodes: int
+    lower_scaled: int
+    digest: str
+}
+
+on ZetaCoverPublished(evt) {
+    set_resource(ZetaVerificationJournal, ZetaVerificationJournal {
+        summary: f"verified {evt.nodes} cover nodes; F6 lower {evt.lower_scaled}/{COVER_SCALE}; certificate {evt.digest}"
+    })
+}
+
+fn run_lanes(encoded: str, lane_count: int) -> map<str, any> {
+    let live_before = world_digest()
+    let certificate_digest = zeta_prepare_cover(encoded)
+    let root = fork()
+    let mut candidates = []
+    for lane_index in range(lane_count) {
+        candidates = push(candidates, fork_with(root, CoverLaneUniverse {
+            certificate_digest: certificate_digest,
+            lane_index: lane_index,
+            lane_count: lane_count,
+        }))
+    }
+    let futures = simulate_many(candidates, [system::VerifyCoverLane], 1, 1979)
+    assert(world_digest() == live_before, "zeta speculation mutated the live world")
+
+    let mut lanes = []
+    let mut wire_digests = []
+    for future in futures {
+        assert_only_changed(root, future, [CoverLaneUniverse])
+        let wire = fork_to_bytes(future)
+        let restored = fork_from_bytes(wire) |> unwrap
+        assert(world_digest(restored) == world_digest(future), "zeta lane wire roundtrip changed the world")
+        let lane = peek_resource(restored, CoverLaneUniverse) |> unwrap
+        assert(lane.certificate_digest == certificate_digest, "zeta lane changed the prepared digest")
+        assert(lane.verified, "speculative zeta lane was not verified")
+        lanes = push(lanes, lane)
+        wire_digests = push(wire_digests, world_digest(restored))
+    }
+    let result: map<str, any> = {
+        "lanes": lanes,
+        "certificate_digest": certificate_digest,
+        "wire_digests": wire_digests,
+        "live_digest_before": live_before,
+        "live_digest_after": world_digest(),
+    }
+    return result
+}
+
+fn assert_monolithic_matches(report: map<str, any>, cover: ExactCoverCertificate) -> nil {
+    assert(report["verified"], "monolithic cover replay failed")
+    assert(report["certificate_digest"] == cover.certificate_digest, "serial/parallel digest mismatch")
+    assert(report["initial_boxes"] == cover.initial_boxes, "serial/parallel initial boxes mismatch")
+    assert(report["nodes"] == cover.nodes, "serial/parallel nodes mismatch")
+    assert(report["pruned"] == cover.pruned, "serial/parallel pruned mismatch")
+    assert(report["splits"] == cover.splits, "serial/parallel splits mismatch")
+    assert(report["maximum_depth"] == cover.maximum_depth, "serial/parallel depth mismatch")
+    assert(report["pressure_pruned"] == cover.pressure_pruned, "serial/parallel pressure mismatch")
+    assert(report["interval_pruned"] == cover.interval_pruned, "serial/parallel interval mismatch")
+    assert(report["tangent_pruned"] == cover.tangent_pruned, "serial/parallel tangent mismatch")
+    assert(report["minimum_leaf_lower_scaled"] == cover.minimum_leaf_lower_scaled, "serial/parallel minimum mismatch")
+    assert(report["minimum_leaf_kind"] == cover.minimum_leaf_kind, "serial/parallel minimum kind mismatch")
+    assert(report["minimum_leaf_box"] == cover.minimum_leaf_box, "serial/parallel witness mismatch")
+}
+
+pure fn expectation_from(cert: map<str, any>, lane_count: int) -> CoverExpectation {
+    let stats = cert["stats"]
+    return CoverExpectation {
+        lane_count: lane_count,
+        target_scaled: cert["target_scaled"],
+        initial_boxes: stats["initial_boxes"],
+        nodes: stats["nodes"],
+        pruned: stats["pruned"],
+        splits: stats["splits"],
+        maximum_depth: stats["maximum_depth"],
+        pressure_pruned: stats["pressure_pruned"],
+        interval_pruned: stats["interval_pruned"],
+        tangent_pruned: stats["tangent_pruned"],
+    }
+}
+
+pure fn scaled_floor(numerator: int, denominator: int, scale: int) -> int {
+    return (numerator * scale) / denominator
+}
+
+pure fn h0_series_lower_scaled() -> int {
+    // For x^2=1/2,
+    //   3/2 - x*cot(x)
+    // = 1/2 + 1/6 + 1/180 + 1/3780 + 1/75600
+    //   + 1/1496880 + 691/20432412000 + 1/583783200 + ... .
+    // Every omitted Bernoulli-series term is positive for 0 < x < pi.
+    // Flooring each retained positive term separately preserves a lower
+    // bound while keeping every product in the signed i64 range.
+    let mut lower = scaled_floor(1, 2, FINAL_SCALE)
+    lower = lower + scaled_floor(1, 6, FINAL_SCALE)
+    lower = lower + scaled_floor(1, 180, FINAL_SCALE)
+    lower = lower + scaled_floor(1, 3780, FINAL_SCALE)
+    lower = lower + scaled_floor(1, 75600, FINAL_SCALE)
+    lower = lower + scaled_floor(1, 1496880, FINAL_SCALE)
+    lower = lower + scaled_floor(691, 20432412000, FINAL_SCALE)
+    lower = lower + scaled_floor(1, 583783200, FINAL_SCALE)
+    return lower
+}
+
+pure fn decimal_product_upper(value: int, digits: list) -> int {
+    // Return an integer upper bound for value * 0.<digits>.  Digitwise
+    // ceilings avoid the overflowing full cross-product; at most one unit is
+    // lost per decimal place.
+    let mut denominator = 1
+    let mut upper = 0
+    for digit in digits {
+        denominator = denominator * 10
+        upper = upper + (value * digit + denominator - 1) / denominator
+    }
+    return upper
+}
+
+pure fn prove_strengthened_boundary(cover: ExactCoverCertificate) -> map<str, any> {
+    let h0_lower = h0_series_lower_scaled()
+    assert(h0_lower == 6725007035877, "unexpected H0 rational-series lower bound")
+
+    // The cover uses scale 10^14; floor it once to the common 10^13 scale.
+    let cover_lower = cover.minimum_leaf_lower_scaled / 10
+
+    // Choose the largest valid block size directly from the certified local
+    // lower C.  Its block defect A=C*(m-6) must remain strictly below one.
+    let mut block_size = 7
+    for candidate in range(7, 400) {
+        if (candidate - 6) * cover_lower < FINAL_SCALE {
+            block_size = candidate
+        }
+    }
+    assert((block_size - 6) * cover_lower < FINAL_SCALE, "block defect reached one")
+    assert((block_size - 5) * cover_lower >= FINAL_SCALE, "block size was not maximal")
+
+    // Generalized block argument for F6 >= C:
+    //   B = (m H0 - (m-1)/500) / (m - (m-6) C).
+    // Digitwise ceilings avoid an overflowing full rational cross-product.
+    let denominator_scaled = block_size * FINAL_SCALE - (block_size - 6) * cover_lower
+    let left = block_size * h0_lower - ((block_size - 1) * FINAL_SCALE) / 500
+    let strong = cover.minimum_leaf_lower_scaled >= 382000000000
+    let digits = if strong {
+        STRONG_PROPORTION_DIGITS
+    } else {
+        ORIGINAL_PROPORTION_DIGITS
+    }
+    let right_upper = decimal_product_upper(denominator_scaled, digits)
+    assert(left >= right_upper, "certified simple-zero deduction failed")
+    let proportion_lower = if strong { 6730213627288 } else { 6730085284 }
+    let proportion_scale = if strong { 10000000000000 } else { 10000000000 }
+    let percentage = if strong { "67.30213627288%" } else { "67.30085284%" }
+    let result: map<str, any> = {
+        "h0_lower_scaled": h0_lower,
+        "h0_scale": FINAL_SCALE,
+        "cover_lower_scaled": cover_lower,
+        "cover_scale": FINAL_SCALE,
+        "block_size": block_size,
+        "proportion_lower_scaled": proportion_lower,
+        "proportion_scale": proportion_scale,
+        "percentage": percentage,
+        "comparison_left": left,
+        "comparison_right_upper": right_upper,
+        "comparison_margin": left - right_upper,
+    }
+    return result
+}
+
+fn main() -> nil {
+    let args = sys_args()
+    let certificate_path = if len(args) > 0 {
+        args[0]
+    } else {
+        "projects/dogfood/zeta-simple-zeros/certificate-382.json"
+    }
+    let lane_count = if len(args) > 1 { int(args[1]) } else { 16 }
+    let output_path = if len(args) > 2 {
+        args[2]
+    } else {
+        "projects/dogfood/zeta-simple-zeros/out/verification.json"
+    }
+    assert(lane_count > 0 and lane_count <= 729, "lane count must be in 1..729")
+
+    let encoded = read_file(certificate_path)
+    let cert = json_parse(encoded) |> unwrap
+    assert(cert["format"] == "rad-zeta-seven-v1", "wrong zeta certificate format")
+    assert(cert["upstream_commit"] == SOURCE_COMMIT, "wrong upstream revision")
+    assert(cert["kernel_sha256"] == KERNEL_SHA256, "wrong kernel table hash")
+    assert(cert["second_derivative_sha256"] == SECOND_SHA256, "wrong Hessian table hash")
+    assert(cert["scale"] == COVER_SCALE, "wrong zeta cover scale")
+    assert(cert["target_scaled"] >= ORIGINAL_TARGET_SCALED, "zeta certificate target is below 19/5000")
+
+    let expectation = expectation_from(cert, lane_count)
+    set(cover_judge, expectation)
+    set(reversed_cover_judge, expectation)
+
+    let started = clock()
+    let audited = run_lanes(encoded, lane_count)
+    if cert["target_scaled"] >= 382000000000 {
+        assert(audited["certificate_digest"] == STRONG_CERTIFICATE_DIGEST, "strong zeta artifact digest mismatch")
+    }
+    emit CoverBatchReady {
+        target: cover_judge,
+        lanes: audited["lanes"],
+        reverse_order: false,
+    }
+    emit CoverBatchReady {
+        target: reversed_cover_judge,
+        lanes: audited["lanes"],
+        reverse_order: true,
+    }
+    flush_events()
+
+    let cover = require(cover_judge, ExactCoverCertificate)
+    let reversed = require(reversed_cover_judge, ExactCoverCertificate)
+    assert(cover == reversed, "zeta proposal order changed the exact certificate")
+    let monolithic = zeta_prepared_cover_lane(audited["certificate_digest"], 0, 1)
+    assert_monolithic_matches(monolithic, cover)
+    let boundary = prove_strengthened_boundary(cover)
+
+    emit ZetaCoverPublished {
+        nodes: cover.nodes,
+        lower_scaled: cover.minimum_leaf_lower_scaled,
+        digest: cover.certificate_digest,
+    }
+    flush_events()
+
+    let receipt: map<str, any> = {
+        "schema": "rad.zeta-simple-zeros.v2",
+        "verified": true,
+        "upstream_commit": SOURCE_COMMIT,
+        "arb_boundary": {
+            "kernel_sha256": KERNEL_SHA256,
+            "second_derivative_sha256": SECOND_SHA256,
+            "precision_bits": cert["precision_bits"],
+            "tangent_leaves": cover.tangent_pruned,
+        },
+        "cover": cover,
+        "strengthened_boundary": boundary,
+        "parallel_lanes": lane_count,
+        "serial_parallel_agree": true,
+        "proposal_order_independent": cover == reversed,
+        "speculation_left_live_world_unchanged": audited["live_digest_before"] == audited["live_digest_after"],
+        "lane_wire_digests": audited["wire_digests"],
+        "authoritative_world_digest": world_digest(),
+        "cover_why": why(cover_judge, ExactCoverCertificate),
+        "journal_why": why_resource(ZetaVerificationJournal),
+        "elapsed_seconds": clock() - started,
+    }
+    create_dir("projects/dogfood/zeta-simple-zeros/out")
+    write_file(output_path, json_stringify(receipt))
+
+    print("verified: exact", cover.nodes, "node six-gap cover across", lane_count, "speculative lanes")
+    print("verified: F6 >=", cover.minimum_leaf_lower_scaled, "/", COVER_SCALE)
+    print("verified: simple-zero proportion >=", boundary["percentage"])
+    print("minimum leaf:", cover.minimum_leaf_kind, cover.minimum_leaf_box)
+    print("world digest:", receipt["authoritative_world_digest"])
+    print(why(cover_judge, ExactCoverCertificate))
+    print("receipt:", output_path)
+}

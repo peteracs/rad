@@ -1,0 +1,15 @@
+use "schema.rad"
+use "owners/decision_owner.rad"
+use "systems/adjudication.rad"
+use "scenarios/production.rad"
+
+fn main() -> nil {
+    assert(size_of(RiskInput) == 48, "RiskInput ABI size")
+    assert(offset_of(RiskInput, "signals") == 32, "RiskInput signal offset")
+    assert(size_of(RiskOutput) == 24, "RiskOutput ABI size")
+    let decision: entity = run_differential_corpus(100)
+    InspectManualReviewQueue()
+    print("riskbridge: native=reference adjudications=100 generation=17")
+    print(why(decision, PolicyDecision))
+    print(why(decision, ModelScore))
+}

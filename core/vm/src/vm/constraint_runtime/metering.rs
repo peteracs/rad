@@ -81,7 +81,9 @@ pub(crate) fn builtin_resource_charge(
     };
     debug_assert!(!contract.proof_id.is_empty());
     let _proof_class = contract.proof_class;
-    let object = std::mem::size_of::<Object>();
+    // Native contracts include the intrusive GC header as well as the Value
+    // payload. This remains an exact fixed cost at every heap population.
+    let object = crate::gc::GcHeap::allocation_bytes_for::<Object>();
     let values = |count: usize| {
         count
             .saturating_mul(std::mem::size_of::<Value>())

@@ -35,6 +35,7 @@ Usage: {program} <file.rad> [--no-check] [--compat-v0.5-dx|--no-compat-v0.5-dx] 
        {program} snapshot [--update] [--create] [--experimental-laws] [dir]
        {program} play [--port <port>]
        {program} build [--target wasm] <input.rad> <output.wasm>
+       {program} types <input.rad> <output.d.ts> [--feature <name>]
        {program} sandbox serve [host.rad] [--caps <caps.json>]
        {program} replay <trace.radr> [--to-frame <n>] [--serve] [--with <fixed.rad>] [--force]
        {program} fmt [--check] [file.rad...]
@@ -43,6 +44,16 @@ Usage: {program} <file.rad> [--no-check] [--compat-v0.5-dx|--no-compat-v0.5-dx] 
        {program} writers <component|resource> [--json] [--file <file.rad>]
        {program} readers <component|resource> [--json] [--file <file.rad>]
        {program} path <from> -> <to> [--json] [--file <file.rad>]
+       {program} query-plan <view|callable> [--json] [--file <file.rad>]
+       {program} cost-path <callable> [--json] [--file <file.rad>]
+       {program} why <entity> <component> [--json] [--file <file.rad>]
+       {program} why-field <entity> <component> <field> [--json] [--file <file.rad>]
+       {program} why-removed <entity> <component> [--json] [--file <file.rad>]
+       {program} why-not-in-view <view> <entity> [--json] [--file <file.rad>]
+       {program} bench <file.rad> [--json] [-- <program args>]
+       {program} model-check <file.rad> [--model <name>] [--runs <n>] [--max-commands <n>] [--seed <n>] [--artifact-dir <dir>] [--json]
+       {program} shrink <model-failure.radr>
+       {program} ffi verify <plugin> [--contract <contract.json>] [--json]
        {program} test [dir]
        {program} lsp [--experimental-relations]
        {program} --version
@@ -57,6 +68,149 @@ fn wants_help(args: &[String]) -> bool {
 
 fn parse_cli_args(args: &[String]) -> Result<CliCommand, String> {
     let program = args.first().map(String::as_str).unwrap_or("rad");
+
+    if args.get(1).map(String::as_str) == Some("ffi") {
+        if args.get(2).map(String::as_str) != Some("verify") {
+            return Err(format!("Expected: {program} ffi verify <plugin> [--contract <contract.json>] [--json]"));
+        }
+        let mut plugin = None;
+        let mut contract = None;
+        let mut json = false;
+        let mut index = 3;
+        while index < args.len() {
+            match args[index].as_str() {
+                "--json" => {
+                    json = true;
+                    index += 1;
+                }
+                "--contract" if index + 1 < args.len() => {
+                    contract = Some(args[index + 1].clone());
+                    index += 2;
+                }
+                option if option.starts_with('-') => {
+                    return Err(format!("Unknown option for ffi verify: {option}"));
+                }
+                argument => {
+                    if plugin.replace(argument.to_string()).is_some() {
+                        return Err(format!("Expected: {program} ffi verify <plugin> [--contract <contract.json>] [--json]"));
+                    }
+                    index += 1;
+                }
+            }
+        }
+        return Ok(CliCommand::FfiVerify {
+            plugin: plugin
+                .ok_or_else(|| format!("Expected: {program} ffi verify <plugin> [--contract <contract.json>] [--json]"))?,
+            contract,
+            json,
+        });
+    }
+
+    if args.get(1).map(String::as_str) == Some("bench") {
+        let mut json = false;
+        let mut filepath = None;
+        let mut program_args = Vec::new();
+        let mut index = 2;
+        while index < args.len() {
+            let argument = &args[index];
+            if argument == "--" {
+                program_args.extend_from_slice(&args[index + 1..]);
+                break;
+            }
+            if argument == "--json" {
+                json = true;
+            } else if argument.starts_with('-') {
+                return Err(format!("Unknown option for bench: {argument}"));
+            } else if filepath.replace(argument.clone()).is_some() {
+                return Err(format!("Expected: {program} bench <file.rad> [--json] [-- <program args>]"));
+            }
+            index += 1;
+        }
+        let filepath = filepath
+            .ok_or_else(|| format!("Expected: {program} bench <file.rad> [--json] [-- <program args>]"))?;
+        return Ok(CliCommand::Bench {
+            filepath,
+            json,
+            program_args,
+        });
+    }
+
+    if args.get(1).map(String::as_str) == Some("model-check") {
+        let mut filepath = None;
+        let mut model = None;
+        let mut runs = 10_000_u32;
+        let mut max_commands = 200_u32;
+        let mut seed = 1_u64;
+        let mut artifact_directory = None;
+        let mut json = false;
+        let mut index = 2;
+        while index < args.len() {
+            let argument = &args[index];
+            let mut take_value = |name: &str| -> Result<String, String> {
+                let value = args.get(index + 1).ok_or_else(|| {
+                    format!("{name} requires a value for model-check")
+                })?;
+                index += 2;
+                Ok(value.clone())
+            };
+            match argument.as_str() {
+                "--json" => {
+                    json = true;
+                    index += 1;
+                }
+                "--model" => model = Some(take_value("--model")?),
+                "--runs" => {
+                    runs = take_value("--runs")?
+                        .parse()
+                        .map_err(|_| "--runs requires a positive u32".to_string())?;
+                }
+                "--max-commands" => {
+                    max_commands = take_value("--max-commands")?
+                        .parse()
+                        .map_err(|_| "--max-commands requires a positive u32".to_string())?;
+                }
+                "--seed" => {
+                    seed = take_value("--seed")?
+                        .parse()
+                        .map_err(|_| "--seed requires a u64".to_string())?;
+                }
+                "--artifact-dir" => artifact_directory = Some(take_value("--artifact-dir")?),
+                option if option.starts_with('-') => {
+                    return Err(format!("Unknown option for model-check: {option}"));
+                }
+                value => {
+                    if filepath.replace(value.to_string()).is_some() {
+                        return Err(format!("Expected one model-check input file, got '{value}'"));
+                    }
+                    index += 1;
+                }
+            }
+        }
+        if runs == 0 || max_commands == 0 {
+            return Err("--runs and --max-commands must be positive".to_string());
+        }
+        let filepath = filepath.ok_or_else(|| {
+            format!("Expected: {program} model-check <file.rad> [options]")
+        })?;
+        return Ok(CliCommand::ModelCheck {
+            filepath,
+            model,
+            runs,
+            max_commands,
+            seed,
+            artifact_directory,
+            json,
+        });
+    }
+
+    if args.get(1).map(String::as_str) == Some("shrink") {
+        if args.len() != 3 {
+            return Err(format!("Expected: {program} shrink <model-failure.radr>"));
+        }
+        return Ok(CliCommand::ShrinkModel {
+            artifact: args[2].clone(),
+        });
+    }
 
     if args.len() > 1
         && matches!(
@@ -142,6 +296,83 @@ fn parse_cli_args(args: &[String]) -> Result<CliCommand, String> {
         });
     }
 
+    if args.len() > 1
+        && matches!(
+            args[1].as_str(),
+            "query-plan" | "cost-path" | "why" | "why-field" | "why-removed" | "why-not-in-view"
+        )
+    {
+        let command = args[1].as_str();
+        let mut json = false;
+        let mut filepath = None;
+        let mut positional = Vec::new();
+        let mut index = 2;
+        while index < args.len() {
+            match args[index].as_str() {
+                "--json" => {
+                    json = true;
+                    index += 1;
+                }
+                "--file" if index + 1 < args.len() => {
+                    filepath = Some(args[index + 1].clone());
+                    index += 2;
+                }
+                value if value.starts_with("--file=") => {
+                    filepath = Some(value["--file=".len()..].to_string());
+                    index += 1;
+                }
+                option if option.starts_with('-') => {
+                    return Err(format!("Unknown option for {command}: {option}"));
+                }
+                value => {
+                    positional.push(value.to_string());
+                    index += 1;
+                }
+            }
+        }
+        let query = match command {
+            "query-plan" if positional.len() == 1 => OperationalQuery::QueryPlan {
+                target: positional.remove(0),
+            },
+            "cost-path" if positional.len() == 1 => OperationalQuery::CostPath {
+                target: positional.remove(0),
+            },
+            "why" if positional.len() == 2 => OperationalQuery::Why {
+                entity: positional.remove(0),
+                component: positional.remove(0),
+            },
+            "why-field" if positional.len() == 3 => OperationalQuery::WhyField {
+                entity: positional.remove(0),
+                component: positional.remove(0),
+                field: positional.remove(0),
+            },
+            "why-removed" if positional.len() == 2 => OperationalQuery::WhyRemoved {
+                entity: positional.remove(0),
+                component: positional.remove(0),
+            },
+            "why-not-in-view" if positional.len() == 2 => OperationalQuery::WhyNotInView {
+                view: positional.remove(0),
+                entity: positional.remove(0),
+            },
+            _ => {
+                return Err(format!(
+                    "Invalid arguments for {command}. See `{program} --help`."
+                ));
+            }
+        };
+        let filepath = match filepath {
+            Some(filepath) => filepath,
+            None => project_entry_from_rad_toml().map_err(|error| {
+                format!("{error}\nUse `--file <file.rad>` outside a RAD project.")
+            })?,
+        };
+        return Ok(CliCommand::Operational {
+            query,
+            filepath,
+            json,
+        });
+    }
+
     if args.len() > 1 && args[1] == "fmt" {
         let mut check_only = false;
         let mut filepaths = Vec::new();
@@ -210,6 +441,43 @@ fn parse_cli_args(args: &[String]) -> Result<CliCommand, String> {
             "tests".to_string()
         };
         return Ok(CliCommand::Test { test_dir });
+    }
+
+    if args.len() > 1 && args[1] == "types" {
+        let mut positional = Vec::new();
+        let mut features = Vec::new();
+        let mut index = 2;
+        while index < args.len() {
+            match args[index].as_str() {
+                "--feature" if index + 1 < args.len() => {
+                    features.push(args[index + 1].clone());
+                    index += 2;
+                }
+                value if value.starts_with("--feature=") => {
+                    features.push(value["--feature=".len()..].to_string());
+                    index += 1;
+                }
+                option if option.starts_with('-') => {
+                    return Err(format!("Unknown option for types: {option}"));
+                }
+                value => {
+                    positional.push(value.to_string());
+                    index += 1;
+                }
+            }
+        }
+        if positional.len() != 2 || !positional[1].ends_with(".d.ts") {
+            return Err(format!(
+                "Expected: {program} types <input.rad> <output.d.ts> [--feature <name>]"
+            ));
+        }
+        features.sort();
+        features.dedup();
+        return Ok(CliCommand::Types {
+            input_rad: positional.remove(0),
+            output_typescript: positional.remove(0),
+            features,
+        });
     }
 
     if args.len() > 1 && args[1] == "lsp" {

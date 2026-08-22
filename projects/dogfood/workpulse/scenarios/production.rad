@@ -1,0 +1,31 @@
+use "../schema.rad"
+use "../owners/job_owner.rad"
+use "../owners/job_owner.rad" as jobs
+use "../systems/scheduler.rad"
+
+pub fn run_job_load(job_count: int, worker_count: int, heartbeats_per_job: int) -> entity {
+    let mut workers = []
+    for i in range(0, worker_count) {
+        workers = push(workers, jobs.register_worker(WorkerId(u64(i + 1))))
+    }
+    let mut first_job: entity = workers[0]
+    for i in range(0, job_count) {
+        let worker: entity = workers[i % worker_count]
+        let job: entity = jobs.EnqueueJob(JobId(u64(i + 1)), u64(i + 1), 3)
+        if i == 0 { first_job = job }
+        let token: LeaseToken = lease_and_start(job, worker)
+        for _heartbeat in range(0, heartbeats_per_job) {
+            jobs.HeartbeatWorker(worker)
+        }
+        assert(jobs.try_complete(job, token, f"completion-{i}"), "current lease completes")
+    }
+    flush_events()
+    assert(res(SchedulerAudit).leases == job_count, "every accepted job was leased")
+    assert(res(SchedulerAudit).completions == job_count, "every completion was published")
+    assert(len(entities(ActiveJobs)) == 0, "terminal jobs retain no active lease")
+    return first_job
+}
+
+pub fn run_job_day(job_count: int) -> entity {
+    return run_job_load(job_count, 1, 0)
+}

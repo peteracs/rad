@@ -70,6 +70,7 @@
                     is_pure: false,
                     is_async: false,
                     effects: vec![],
+                    ownership_writes: vec![],
                 }),
                 Decl::Stmt(Stmt::Expr(ExprStmt {
                     id: nid(),
@@ -137,6 +138,7 @@
                     is_pure: false,
                     is_async: false,
                     effects: vec![],
+                    ownership_writes: vec![],
                 }),
                 Decl::Stmt(Stmt::Expr(ExprStmt {
                     id: nid(),

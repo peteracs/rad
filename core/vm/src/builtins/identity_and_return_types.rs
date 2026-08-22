@@ -5,7 +5,9 @@ impl Builtin {
         match self {
             Builtin::Print
             | Builtin::Set
+            | Builtin::WriteField
             | Builtin::SetResource
+            | Builtin::VisitView
             | Builtin::InsertFact
             | Builtin::RemoveFact
             | Builtin::ReplaceFactBy => Ty::Nil,
@@ -38,6 +40,9 @@ impl Builtin {
             | Builtin::UnwrapOr
             | Builtin::MapOr
             | Builtin::LoadExtension => Ty::Any,
+            Builtin::HostTry | Builtin::HostTry0 => {
+                Ty::App("Result".to_string(), vec![Ty::Any, Ty::Str])
+            }
             Builtin::Push
             | Builtin::Reverse
             | Builtin::Sort
@@ -75,6 +80,7 @@ impl Builtin {
             | Builtin::MaxBy
             | Builtin::MinBy => Ty::SumType("Option".to_string()),
             Builtin::Get | Builtin::GetResource => Ty::SumType("Option".to_string()),
+            Builtin::ReadField => Ty::Any,
             Builtin::Res => Ty::Any,
             Builtin::Lookup => Ty::SumType("Option".to_string()),
             Builtin::LookupAll => Ty::List(Box::new(Ty::EntityId)),
@@ -137,7 +143,7 @@ impl Builtin {
             Builtin::GenStr => Ty::List(Box::new(Ty::Str)),
             Builtin::GenBool => Ty::List(Box::new(Ty::Bool)),
             Builtin::GenList => Ty::List(Box::new(Ty::List(Box::new(Ty::Any)))),
-            Builtin::Assert | Builtin::AssertEq => Ty::Nil,
+            Builtin::Assert | Builtin::AssertEq | Builtin::ModelCheck => Ty::Nil,
             Builtin::Eprint
             | Builtin::WriteStdout
             | Builtin::WriteStderr
@@ -194,6 +200,24 @@ impl Builtin {
             | Builtin::ByteBufGetU32Le
             | Builtin::ByteBufGetI32Le => Ty::Int,
             Builtin::ByteBufToList => Ty::List(Box::new(Ty::Int)),
+            Builtin::SizeOf | Builtin::OffsetOf => Ty::Int,
+            Builtin::DecodeLe | Builtin::DecodeBe => Ty::Any,
+            Builtin::EncodeLe | Builtin::EncodeBe => Ty::Any,
+            Builtin::ViewRevision => Ty::Int,
+            Builtin::ChangesSince => Ty::List(Box::new(Ty::Any)),
+            Builtin::WhyInView | Builtin::WhyNotInView => Ty::Str,
+            Builtin::WhyField
+            | Builtin::WhyRemoved
+            | Builtin::WhyMissing
+            | Builtin::WhyRevisionChanged
+            | Builtin::WhyRevisionDidNotChange => Ty::Str,
+            Builtin::LowerBound
+            | Builtin::UpperBound
+            | Builtin::First
+            | Builtin::Last
+            | Builtin::Next
+            | Builtin::Previous => Ty::App("Option".to_string(), vec![Ty::EntityId]),
+            Builtin::EnterPhase | Builtin::MarkPhase | Builtin::AssertTrace => Ty::Nil,
             Builtin::Log | Builtin::Metric => Ty::Nil,
             Builtin::TraceId => Ty::Any,
             Builtin::Fork => Ty::WorldFork,

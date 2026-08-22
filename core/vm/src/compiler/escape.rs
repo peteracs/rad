@@ -161,6 +161,18 @@ impl EscapeAnalyzer {
                     self.visit_expr(&fu.value);
                 }
             }
+            Stmt::Transaction(s) => {
+                for condition in &s.requires {
+                    self.visit_expr(condition);
+                }
+                self.visit_block(&s.body);
+                for condition in &s.ensures {
+                    self.visit_expr(condition);
+                }
+                if let Some(post_commit) = &s.post_commit {
+                    self.visit_block(post_commit);
+                }
+            }
             Stmt::Settle(s) => self.visit_block(&s.body),
             Stmt::Propose(s) => {
                 for (_, expr) in &s.fields {

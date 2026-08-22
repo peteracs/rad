@@ -1,5 +1,3 @@
-
-
 impl LspBackend {
     async fn check_document(&self, uri: Url, text: String) {
         let path = if let Ok(p) = uri.to_file_path() {
@@ -121,16 +119,9 @@ impl LspBackend {
         let entry_path = path.to_string_lossy().to_string();
         match load_program_with_overrides(&entry_path, parser_options, &overrides) {
             Ok(r) => {
-                let mut checker = Checker::new_with_options(CheckerOptions {
-                    features: vec!["causal_laws".to_string()],
-                    compat_v0_5_dx: false,
-                    warn_compat: true,
-                    strict_types: false,
-                });
-                checker.set_aliases(r.aliases.clone());
-                let errors = checker.check(&r.program);
+                let analysis = editor_analysis(&r);
 
-                for err in errors {
+                for err in analysis.errors() {
                     let mut is_this_file = false;
                     if let Some(fid) = err.file {
                         if let Some(sf) = r.source_map.get_file(fid) {
@@ -146,7 +137,7 @@ impl LspBackend {
                         let line = err.line.saturating_sub(1);
                         let col = err.col.saturating_sub(1);
                         let mut message = err.message.clone();
-                        if let Some(hint) = err.hint {
+                        if let Some(hint) = &err.hint {
                             message.push_str(&format!("\nhint: {}", hint));
                         }
                         diagnostics.push(Diagnostic {

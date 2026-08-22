@@ -143,8 +143,16 @@ pub fn walk_decl<V: AstVisitor + ?Sized>(v: &mut V, decl: &Decl) {
                 v.visit_expr(ex);
             }
         }
+        Decl::Model(model) => {
+            for command in &model.commands {
+                v.visit_expr(command);
+            }
+            for invariant in &model.invariants {
+                v.visit_block(invariant);
+            }
+        }
         Decl::Stmt(s) => v.visit_stmt(s),
-        Decl::Use(_) | Decl::Error => {}
+        Decl::Use(_) | Decl::NativeType(_) | Decl::MaterializedView(_) | Decl::Error => {}
     }
 }
 
@@ -213,6 +221,18 @@ pub fn walk_stmt<V: AstVisitor + ?Sized>(v: &mut V, stmt: &Stmt) {
                     v.visit_expr(idx);
                 }
                 v.visit_expr(&fu.value);
+            }
+        }
+        Stmt::Transaction(s) => {
+            for condition in &s.requires {
+                v.visit_expr(condition);
+            }
+            v.visit_block(&s.body);
+            for condition in &s.ensures {
+                v.visit_expr(condition);
+            }
+            if let Some(post_commit) = &s.post_commit {
+                v.visit_block(post_commit);
             }
         }
         Stmt::Settle(s) => v.visit_block(&s.body),

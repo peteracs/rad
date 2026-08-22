@@ -11,7 +11,7 @@
 //   #2 record       run it under `--record`, then `rad replay` the trace
 //
 //   rad projects/dogfood/opsdesk/seed_v1.rad
-//   rad run projects/dogfood/opsdesk/main.rad --record projects/dogfood/opsdesk/ops.radr
+//   rad projects/dogfood/opsdesk/main.rad --record projects/dogfood/opsdesk/ops.radr
 //   rad replay projects/dogfood/opsdesk/ops.radr
 
 component Incident { title: "", priority: 0, age: 0, status: "open" }

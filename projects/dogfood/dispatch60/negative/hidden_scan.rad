@@ -1,0 +1,11 @@
+component Vehicle {}
+
+fn count_all_vehicles() -> int {
+    return len(entities(Vehicle))
+}
+
+@frame
+@no_full_scan
+system UpdateDashboard(reads Vehicle) {
+    let _total = count_all_vehicles()
+}

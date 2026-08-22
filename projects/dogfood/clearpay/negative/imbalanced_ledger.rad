@@ -1,0 +1,11 @@
+component Balance { value: int = 100 }
+component Entry { delta: int = 0 }
+transaction Broken(target: entity) {
+    requires has(target, Balance)
+    changes_only [Balance]
+    update(target, Balance) { value = 0 }
+    ensures len(entities(Entry)) == 2
+}
+let target = spawn(Balance {})
+let _entry = spawn(Entry { delta: -100 })
+Broken(target)

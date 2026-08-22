@@ -9,5 +9,5 @@
 //! ```
 
 pub mod derivation;
-pub mod frontend;
+pub use rad_relation::frontend;
 pub mod runtime;

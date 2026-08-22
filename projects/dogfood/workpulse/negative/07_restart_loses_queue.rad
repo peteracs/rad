@@ -1,0 +1,14 @@
+component Accepted {}
+component Queued {}
+component Terminal {}
+let job = spawn(Accepted {}, Queued {})
+
+fn restart_drops_queued_jobs() -> nil { remove(job, Queued) }
+
+model RestartPreservesAcceptedJobs {
+    commands [restart_drops_queued_jobs]
+    invariant { return not has(job, Accepted) or has(job, Queued) or has(job, Terminal) }
+    runs 1
+    max_commands 1
+    seed 7
+}

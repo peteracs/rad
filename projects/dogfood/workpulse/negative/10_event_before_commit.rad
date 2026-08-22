@@ -1,0 +1,22 @@
+component PendingDecision {}
+component CommittedDecision {}
+event DecisionPublished { target: entity }
+let job = spawn(PendingDecision {})
+
+on DecisionPublished(evt) {
+    assert(has(evt.target, CommittedDecision), "post-commit event observed uncommitted state")
+}
+fn publish_before_commit() -> nil {
+    emit next DecisionPublished { target: job }
+    flush_events()
+    remove(job, PendingDecision)
+    set(job, CommittedDecision {})
+}
+
+model PostCommitDeliveryOrder {
+    commands [publish_before_commit]
+    invariant { return has(job, PendingDecision) or has(job, CommittedDecision) }
+    runs 1
+    max_commands 1
+    seed 10
+}

@@ -13,4 +13,10 @@ pub enum VectorizableBody<'a> {
 // Lexical sections preserve one private semantic namespace.
 include!("expr/constant_folding.rs");
 include!("expr/expression_lowering.rs");
+include!("expr/operators.rs");
+include!("expr/calls.rs");
+include!("expr/construction.rs");
+include!("expr/branching.rs");
+include!("expr/queries.rs");
+include!("expr/closures.rs");
 include!("expr/queries_and_vectors.rs");

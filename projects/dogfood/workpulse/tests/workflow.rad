@@ -1,0 +1,44 @@
+use "../schema.rad"
+use "../owners/job_owner.rad"
+use "../owners/job_owner.rad" as jobs
+use "../systems/scheduler.rad"
+use "../scenarios/production.rad"
+
+test "completion is lease-bound and exactly once" {
+    InspectRetryQueue()
+    let worker: entity = jobs.register_worker(WorkerId(u64(10)))
+    let job: entity = jobs.EnqueueJob(JobId(u64(10)), u64(10), 3)
+    let token: LeaseToken = lease_and_start(job, worker)
+    assert(not jobs.try_complete(job, LeaseToken(u64(9999)), "stale"), "stale token rejected")
+    assert(jobs.try_complete(job, token, "accepted"), "current token accepted")
+    assert(not jobs.try_complete(job, token, "duplicate"), "duplicate delivery rejected")
+    flush_events()
+    assert(has(job, Succeeded), "job reached terminal success")
+    assert(len(query { CompletionRecord }) == 1, "completion recorded once")
+    assert(res(SchedulerAudit).rejections == 2, "both stale deliveries observable")
+}
+
+test "timeout retries then dead-letters at the policy limit" {
+    let worker: entity = jobs.register_worker(WorkerId(u64(20)))
+    let job: entity = jobs.EnqueueJob(JobId(u64(20)), u64(20), 2)
+    jobs.LeaseJob(job, worker)
+    jobs.TimeoutJob(job, require(job, ActiveLease).token)
+    assert(has(job, RetryWaiting), "first timeout waits for retry")
+    jobs.RetryJob(job)
+    jobs.LeaseJob(job, worker)
+    jobs.TimeoutJob(job, require(job, ActiveLease).token)
+    assert(has(job, DeadLettered), "retry limit dead-letters")
+    assert(not has(job, ActiveLease), "dead-letter has no lease")
+}
+
+test "scheduler restart preserves authoritative lifecycle state" {
+    let worker: entity = jobs.register_worker(WorkerId(u64(30)))
+    let job: entity = jobs.EnqueueJob(JobId(u64(30)), u64(30), 3)
+    jobs.LeaseJob(job, worker)
+    let lease: ActiveLease = require(job, ActiveLease)
+    let attempts: int = require(job, Attempt).count
+    jobs.RestartScheduler()
+    assert(require(job, ActiveLease).token == lease.token, "restart preserves lease ownership")
+    assert(require(job, Attempt).count == attempts, "restart preserves attempt count")
+    assert(res(SchedulerState).restart_count == 1, "restart is explicit state")
+}

@@ -70,7 +70,7 @@ fn seed_observable_state(vm: &mut VM) {
     );
     vm.next_task_id = 74;
     vm.timeline.push(vm.world.snapshot());
-    vm.event_log.push(EventLogEntry {
+    vm.event_log.push_back(EventLogEntry {
         tick: 9,
         event_name: "seed-log".to_string(),
         payload: Value::NIL,

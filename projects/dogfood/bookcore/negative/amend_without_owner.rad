@@ -1,0 +1,10 @@
+use "../schema.rad"
+use "../owners/order_book.rad"
+
+let target = submit_buy(OrderId(u64(1)), AccountId(u64(1)), PriceTicks(i64(100)), Quantity(u64(1)), Sequence(u64(1)))
+let order: entity = lookup(OrderIdentity, "order_id", OrderId(u64(1))) |> unwrap
+set(order, BuyOrder {
+    priority: (PriceTicks(i64(-200)), Sequence(u64(1))),
+    price: PriceTicks(i64(200)),
+    quantity: Quantity(u64(1)),
+})

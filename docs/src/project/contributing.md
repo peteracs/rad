@@ -7,6 +7,19 @@ Thanks for your interest in contributing to Rad! This guide covers everything yo
 - **Rust stable** (latest) — for the bytecode VM and `rad` CLI
 - **Python 3.10+** — for helper scripts (optional)
 
+On Windows, initialize the checkout once from PowerShell:
+
+```powershell
+./devtools/setup-windows-rust.ps1
+```
+
+RAD uses the `stable-x86_64-pc-windows-gnu` Rust host and a MinGW-w64 x64 GCC
+linker on Windows. The script installs the Rust host when needed, validates GCC,
+and records a rustup directory override, so every plain `cargo` command below
+this checkout uses the same ABI regardless of a global MSVC default or an
+unrelated `link.exe` earlier on `PATH`. Linux and macOS continue to use their
+native stable host toolchains.
+
 ## Quick Start
 
 This repository is a **Cargo workspace**: build artifacts go to **`target/` at the repo root** (not under `core/vm/target/`).

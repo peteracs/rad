@@ -1,0 +1,8 @@
+event DamageRequested {}
+
+@no_nested_flush
+on DamageRequested(_evt) {
+    flush_events()
+}
+
+signal sync DamageRequested {}

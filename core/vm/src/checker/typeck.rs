@@ -11,7 +11,10 @@ use crate::simulate_syntax::{self, SystemsListForm};
 use crate::types::*;
 use crate::value::Builtin;
 // Lexical sections preserve one private semantic namespace.
-include!("typeck/diagnostics_and_declarations.rs");
+include!("typeck/diagnostics.rs");
+include!("typeck/declaration_routing.rs");
+include!("typeck/data_declarations.rs");
+include!("typeck/executable_declarations.rs");
 include!("typeck/statements_and_assignments.rs");
 include!("typeck/control_flow.rs");
 include!("typeck/matches_and_expressions.rs");

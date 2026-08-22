@@ -9,31 +9,16 @@
     }
 
     fn run_source_result(src: &str) -> Result<Vec<String>, String> {
-        let mut lexer = Lexer::new(src);
-        let tokens = lexer.tokenize().0;
-        let program = Parser::new(tokens).parse();
-        let compiler = Compiler::new();
-        let result = compiler.compile(&program).unwrap();
-        let mut vm = VM::new();
-        vm.load_compile_result(result);
-        vm.run(0)?;
-        Ok(vm.print_buffer.clone())
+        crate::test_support::run_source(src, ParserOptions::default())
     }
 
     fn run_source_result_with_compat(src: &str) -> Result<Vec<String>, String> {
-        let mut lexer = Lexer::new(src);
-        let tokens = lexer.tokenize().0;
-        let program = Parser::new(tokens)
-            .with_options(ParserOptions {
+        crate::test_support::run_source(
+            src,
+            ParserOptions {
                 compat_v0_5_dx: true,
-            })
-            .parse();
-        let compiler = Compiler::new();
-        let result = compiler.compile(&program).unwrap();
-        let mut vm = VM::new();
-        vm.load_compile_result(result);
-        vm.run(0)?;
-        Ok(vm.print_buffer.clone())
+            },
+        )
     }
 
     #[test]

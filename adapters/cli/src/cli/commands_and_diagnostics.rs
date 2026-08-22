@@ -1,5 +1,3 @@
-
-
 /// `rad replay <trace> --with <fixed.rad>` — retroactive edits (list item
 /// #6): replay the recorded session's *inputs* against *modified* source,
 /// then report the blast radius of the edit by diffing the two final worlds.
@@ -44,15 +42,10 @@ fn retroactive_replay(trace_text: &str, new_path: &str, force: bool) {
     let parser_options = ParserOptions {
         compat_v0_5_dx: false,
     };
-    let loaded = match load_program_with_source_map_and_options(new_path, parser_options) {
-        Ok(r) => r,
+    let loaded = match load_cli_program(new_path, parser_options) {
+        Ok(loaded) => loaded,
         Err(errors) => {
-            for e in errors {
-                eprintln!(
-                    "{}",
-                    format_error(&e.source, &e.filepath, &e.message, e.line, e.col)
-                );
-            }
+            eprintln!("{errors}");
             process::exit(1);
         }
     };
@@ -65,16 +58,19 @@ fn retroactive_replay(trace_text: &str, new_path: &str, force: bool) {
         }
         process::exit(1);
     }
-    let compile_result = match Compiler::new()
-        .with_features(trace_features)
-        .with_program_source_identity(
-            loaded
-                .source_layout
-                .digest(&loaded.merged_source)
-                .expect("module loader produced an invalid source layout"),
-        )
-        .compile(&loaded.program)
-    {
+    let source_identity = loaded
+        .source_layout
+        .digest(&loaded.merged_source)
+        .expect("module loader produced an invalid source layout");
+    let compile_result = match rad_vm::pipeline::compile_unchecked_program(
+        &loaded.program,
+        loaded.aliases,
+        rad_vm::pipeline::UncheckedCompileOptions {
+            features: trace_features,
+            source_identity: Some(source_identity),
+            ..rad_vm::pipeline::UncheckedCompileOptions::default()
+        },
+    ) {
         Ok(c) => c,
         Err(e) => {
             eprintln!(
@@ -191,16 +187,11 @@ fn execute_test_command(test_dir: &str) {
         let parser_options = ParserOptions {
             compat_v0_5_dx: false,
         };
-        let loaded = match load_program_with_source_map_and_options(&path_str, parser_options) {
-            Ok(r) => r,
+        let loaded = match load_cli_program(&path_str, parser_options) {
+            Ok(loaded) => loaded,
             Err(errors) => {
                 println!("  ERROR {}", filename);
-                for e in &errors {
-                    eprintln!(
-                        "{}",
-                        format_error(&e.source, &e.filepath, &e.message, e.line, e.col)
-                    );
-                }
+                eprintln!("{errors}");
                 files_errored += 1;
                 continue;
             }
@@ -211,50 +202,46 @@ fn execute_test_command(test_dir: &str) {
             path_str.clone()
         };
 
-        let mut checker = Checker::new_with_options(CheckerOptions {
-            compat_v0_5_dx: false,
-            warn_compat: false,
-            strict_types: false,
-            features: Vec::new(),
-        });
-        checker.set_aliases(loaded.aliases.clone());
-        let check_errors = checker.check(&loaded.program);
-        let checker_output = checker.output();
+        let analysis = analyze_cli_program(
+            &loaded,
+            &path_str,
+            CheckerOptions {
+                warn_compat: false,
+                ..CheckerOptions::default()
+            },
+        );
 
-        if !loaded.errors.is_empty() || !check_errors.is_empty() {
+        if analysis.has_errors() {
             println!("  ERROR {}", filename);
-            for e in &loaded.errors {
-                eprintln!(
-                    "{}",
-                    format_error(&e.source, &e.filepath, &e.message, e.line, e.col)
-                );
-            }
-            for err in &check_errors {
-                let (src, epath) = resolve_source_for_error(
-                    err.file,
-                    &loaded.source_map,
-                    &loaded.merged_source,
-                    &display_path,
-                );
-                eprintln!(
-                    "{}",
-                    format_error(src, epath, &err.message, err.line, err.col)
-                );
+            for error in &analysis.errors {
+                eprintln!("{error}");
             }
             files_errored += 1;
             continue;
         }
 
-        let compiler = Compiler::new()
-            .with_checker_output(checker_output)
-            .with_aliases(loaded.aliases)
-            .with_program_source_identity(
-                loaded
-                    .source_layout
-                    .digest(&loaded.merged_source)
-                    .expect("module loader produced an invalid source layout"),
-            );
-        let compile_result = match compiler.compile(&loaded.program) {
+        let checked = analysis
+            .semantic
+            .into_checked()
+            .expect("error-free test analysis must produce checked semantics");
+        let source_identity = match checked_source_identity(&loaded) {
+            Ok(identity) => identity,
+            Err(error) => {
+                println!("  ERROR {}", filename);
+                eprintln!("{error}");
+                files_errored += 1;
+                continue;
+            }
+        };
+        let compile_result = match rad_vm::pipeline::compile_checked_program(
+            &loaded.program,
+            loaded.aliases,
+            checked,
+            rad_vm::pipeline::CheckedCompileOptions {
+                source_identity: Some(source_identity),
+                ..rad_vm::pipeline::CheckedCompileOptions::default()
+            },
+        ) {
             Ok(c) => c,
             Err(e) => {
                 println!("  ERROR {}", filename);
@@ -299,6 +286,15 @@ fn execute_test_command(test_dir: &str) {
                 Some(e) => {
                     println!("  FAIL  {} :: {}", filename, outcome.name);
                     println!("        {}", e);
+                    if let Some(artifact) = write_model_failure_artifact(
+                        e,
+                        &filepath,
+                        &loaded.merged_source,
+                        &loaded.source_layout,
+                        None,
+                    ) {
+                        println!("        replay: rad replay {}", artifact.display());
+                    }
                     tests_failed += 1;
                 }
             }
@@ -321,6 +317,59 @@ fn execute_test_command(test_dir: &str) {
     if tests_failed > 0 || files_errored > 0 {
         process::exit(1);
     }
+}
+
+fn write_model_failure_artifact(
+    error: &str,
+    source_path: &Path,
+    source: &str,
+    source_layout: &rad_vm::source_bundle::SourceLayout,
+    artifact_directory: Option<&Path>,
+) -> Option<std::path::PathBuf> {
+    let mut artifact = model_failure_json(error)?;
+    let object = artifact.as_object_mut()?;
+    object.insert(
+        "source".to_string(),
+        serde_json::Value::String(source.to_string()),
+    );
+    object.insert(
+        "source_layout".to_string(),
+        serde_json::to_value(source_layout).ok()?,
+    );
+    object.insert("features".to_string(), serde_json::json!([]));
+    let model = object.get("model")?.as_str()?;
+    let safe_model = model
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || ch == '_' || ch == '-' {
+                ch
+            } else {
+                '_'
+            }
+        })
+        .collect::<String>();
+    let seed = object
+        .get("seed")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or(0);
+    let stem = source_path.file_stem()?.to_string_lossy();
+    let filename = format!("{stem}.{safe_model}.{seed}.radr");
+    let artifact_path = if let Some(directory) = artifact_directory {
+        fs::create_dir_all(directory).ok()?;
+        directory.join(filename)
+    } else {
+        source_path.with_file_name(filename)
+    };
+    let bytes = serde_json::to_vec_pretty(&artifact).ok()?;
+    fs::write(&artifact_path, bytes).ok()?;
+    Some(artifact_path)
+}
+
+fn model_failure_json(error: &str) -> Option<serde_json::Value> {
+    let encoded = error
+        .lines()
+        .find_map(|line| line.strip_prefix("RAD_MODEL_FAILURE="))?;
+    serde_json::from_str(encoded).ok()
 }
 
 fn resolve_source_for_error<'a>(
@@ -378,584 +427,4 @@ fn format_diagnostic(
     }
     parts.push(String::new());
     parts.join("\n")
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn help_flags_are_recognized() {
-        assert!(wants_help(&["rad".to_string(), "--help".to_string()]));
-        assert!(wants_help(&["rad".to_string(), "-h".to_string()]));
-        assert!(!wants_help(&["rad".to_string()]));
-        assert!(!wants_help(&[
-            "rad".to_string(),
-            "script.rad".to_string(),
-            "--help".to_string(),
-        ]));
-    }
-
-    #[test]
-    fn parse_cli_args_parses_authority_effects_with_json() {
-        let args = vec![
-            "rad".to_string(),
-            "effects".to_string(),
-            "RemoveEntity".to_string(),
-            "--json".to_string(),
-            "--file".to_string(),
-            "mission.rad".to_string(),
-        ];
-
-        match parse_cli_args(&args).unwrap() {
-            CliCommand::Authority {
-                query: AuthorityQuery::Effects { symbol },
-                filepath,
-                json,
-            } => {
-                assert_eq!(symbol, "RemoveEntity");
-                assert_eq!(filepath, "mission.rad");
-                assert!(json);
-            }
-            command => panic!("expected effects command, got {command:?}"),
-        }
-    }
-
-    #[test]
-    fn parse_cli_args_parses_authority_indexes_and_path() {
-        let cases = [
-            ("writers", "LiveMembership"),
-            ("readers", "WireIdentity"),
-        ];
-        for (name, authority) in cases {
-            let args = vec![
-                "rad".to_string(),
-                name.to_string(),
-                authority.to_string(),
-                "--file=mission.rad".to_string(),
-            ];
-            match parse_cli_args(&args).unwrap() {
-                CliCommand::Authority {
-                    query: AuthorityQuery::Writers { authority: actual },
-                    filepath,
-                    json: false,
-                } if name == "writers" => {
-                    assert_eq!(actual, authority);
-                    assert_eq!(filepath, "mission.rad");
-                }
-                CliCommand::Authority {
-                    query: AuthorityQuery::Readers { authority: actual },
-                    filepath,
-                    json: false,
-                } if name == "readers" => {
-                    assert_eq!(actual, authority);
-                    assert_eq!(filepath, "mission.rad");
-                }
-                command => panic!("expected {name} command, got {command:?}"),
-            }
-        }
-
-        let args = vec![
-            "rad".to_string(),
-            "path".to_string(),
-            "mission_frame".to_string(),
-            "->".to_string(),
-            "full_scan".to_string(),
-            "--file".to_string(),
-            "mission.rad".to_string(),
-            "--json".to_string(),
-        ];
-        match parse_cli_args(&args).unwrap() {
-            CliCommand::Authority {
-                query: AuthorityQuery::Path { from, to },
-                filepath,
-                json: true,
-            } => {
-                assert_eq!(from, "mission_frame");
-                assert_eq!(to, "full_scan");
-                assert_eq!(filepath, "mission.rad");
-            }
-            command => panic!("expected path command, got {command:?}"),
-        }
-    }
-
-    fn assert_parses_run_with_no_check(args: Vec<String>) {
-        let parsed = parse_cli_args(&args).unwrap();
-        match parsed {
-            CliCommand::Run {
-                filepath,
-                skip_check,
-                ..
-            } => {
-                assert_eq!(filepath, "script.rad");
-                assert!(skip_check);
-            }
-            CliCommand::Version | CliCommand::Authority { .. } => {
-                panic!("expected run command")
-            }
-            CliCommand::Fmt { .. } => panic!("expected run command"),
-            CliCommand::Lint { .. } => panic!("expected run command"),
-            CliCommand::Test { .. } => panic!("expected run command"),
-            CliCommand::Lsp { .. } | CliCommand::RelationsCheck { .. } => {
-                panic!("expected run command")
-            }
-            CliCommand::Build { .. } => panic!("expected run command"),
-            CliCommand::New { .. }
-            | CliCommand::Snapshot { .. }
-            | CliCommand::Play { .. }
-            | CliCommand::SandboxServe { .. }
-            | CliCommand::Replay { .. } => todo!(),
-        }
-    }
-
-    #[test]
-    fn parse_cli_args_accepts_no_check_before_and_after_file() {
-        let cases = vec![
-            vec![
-                "rad".to_string(),
-                "--no-check".to_string(),
-                "script.rad".to_string(),
-            ],
-            vec![
-                "rad".to_string(),
-                "script.rad".to_string(),
-                "--no-check".to_string(),
-            ],
-        ];
-
-        for args in cases {
-            assert_parses_run_with_no_check(args);
-        }
-    }
-
-    #[test]
-    fn parse_cli_args_accepts_bounded_relations_check() {
-        let args = vec![
-            "rad".to_string(),
-            "relations".to_string(),
-            "check".to_string(),
-            "facts.rad".to_string(),
-            "--experimental-relations".to_string(),
-            "--module".to_string(),
-            "game::facts".to_string(),
-        ];
-        match parse_cli_args(&args).unwrap() {
-            CliCommand::RelationsCheck {
-                filepath,
-                module_id,
-                experimental_relations,
-            } => {
-                assert_eq!(filepath, "facts.rad");
-                assert_eq!(module_id, "game::facts");
-                assert!(experimental_relations);
-            }
-            _ => panic!("expected relations check command"),
-        }
-    }
-
-    #[test]
-    fn parse_cli_args_feature_gates_relation_lsp_support() {
-        let args = vec![
-            "rad".to_string(),
-            "lsp".to_string(),
-            "--experimental-relations".to_string(),
-        ];
-        assert!(matches!(
-            parse_cli_args(&args).unwrap(),
-            CliCommand::Lsp {
-                experimental_relations: true
-            }
-        ));
-    }
-
-    #[test]
-    fn parse_cli_args_supports_version_anywhere_without_file() {
-        let args = vec![
-            "rad".to_string(),
-            "--no-check".to_string(),
-            "--version".to_string(),
-        ];
-        let parsed = parse_cli_args(&args).unwrap();
-        assert!(matches!(parsed, CliCommand::Version));
-    }
-
-    #[test]
-    fn parse_cli_args_accepts_compat_flag() {
-        let args = vec![
-            "rad".to_string(),
-            "--compat-v0.5-dx".to_string(),
-            "script.rad".to_string(),
-        ];
-        let parsed = parse_cli_args(&args).unwrap();
-        match parsed {
-            CliCommand::Run {
-                filepath,
-                skip_check,
-                compat_v0_5_dx,
-                deny_warnings,
-                warn_compat,
-                strict_types,
-                write_lock,
-                ..
-            } => {
-                assert_eq!(filepath, "script.rad");
-                assert!(!skip_check);
-                assert!(compat_v0_5_dx);
-                assert!(!deny_warnings);
-                assert!(warn_compat);
-                assert!(!strict_types);
-                assert!(!write_lock);
-            }
-            CliCommand::Version | CliCommand::Authority { .. } => {
-                panic!("expected run command")
-            }
-            CliCommand::Fmt { .. } => panic!("expected run command"),
-            CliCommand::Lint { .. } => panic!("expected run command"),
-            CliCommand::Test { .. } => panic!("expected run command"),
-            CliCommand::Lsp { .. } | CliCommand::RelationsCheck { .. } => {
-                panic!("expected run command")
-            }
-            CliCommand::Build { .. } => panic!("expected run command"),
-            CliCommand::New { .. }
-            | CliCommand::Snapshot { .. }
-            | CliCommand::Play { .. }
-            | CliCommand::SandboxServe { .. }
-            | CliCommand::Replay { .. } => todo!(),
-        }
-    }
-
-    #[test]
-    fn parse_cli_args_accepts_no_compat_flag() {
-        let args = vec![
-            "rad".to_string(),
-            "--no-compat-v0.5-dx".to_string(),
-            "script.rad".to_string(),
-        ];
-        let parsed = parse_cli_args(&args).unwrap();
-        match parsed {
-            CliCommand::Run { compat_v0_5_dx, .. } => {
-                assert!(!compat_v0_5_dx);
-            }
-            CliCommand::Version | CliCommand::Authority { .. } => {
-                panic!("expected run command")
-            }
-            CliCommand::Fmt { .. } => panic!("expected run command"),
-            CliCommand::Lint { .. } => panic!("expected run command"),
-            CliCommand::Test { .. } => panic!("expected run command"),
-            CliCommand::Lsp { .. } | CliCommand::RelationsCheck { .. } => {
-                panic!("expected run command")
-            }
-            CliCommand::Build { .. } => panic!("expected run command"),
-            CliCommand::New { .. }
-            | CliCommand::Snapshot { .. }
-            | CliCommand::Play { .. }
-            | CliCommand::SandboxServe { .. }
-            | CliCommand::Replay { .. } => todo!(),
-        }
-    }
-
-    #[test]
-    fn parse_cli_args_compat_last_flag_wins() {
-        let args = vec![
-            "rad".to_string(),
-            "--compat-v0.5-dx".to_string(),
-            "--no-compat-v0.5-dx".to_string(),
-            "script.rad".to_string(),
-        ];
-        let parsed = parse_cli_args(&args).unwrap();
-        match parsed {
-            CliCommand::Run { compat_v0_5_dx, .. } => {
-                assert!(!compat_v0_5_dx);
-            }
-            CliCommand::Version | CliCommand::Authority { .. } => {
-                panic!("expected run command")
-            }
-            CliCommand::Fmt { .. } => panic!("expected run command"),
-            CliCommand::Lint { .. } => panic!("expected run command"),
-            CliCommand::Test { .. } => panic!("expected run command"),
-            CliCommand::Lsp { .. } | CliCommand::RelationsCheck { .. } => {
-                panic!("expected run command")
-            }
-            CliCommand::Build { .. } => panic!("expected run command"),
-            CliCommand::New { .. }
-            | CliCommand::Snapshot { .. }
-            | CliCommand::Play { .. }
-            | CliCommand::SandboxServe { .. }
-            | CliCommand::Replay { .. } => todo!(),
-        }
-    }
-
-    #[test]
-    fn parse_cli_args_accepts_warning_policy_flags() {
-        let args = vec![
-            "rad".to_string(),
-            "--deny-warnings".to_string(),
-            "--no-warn-compat".to_string(),
-            "script.rad".to_string(),
-        ];
-        let parsed = parse_cli_args(&args).unwrap();
-        match parsed {
-            CliCommand::Run {
-                filepath,
-                skip_check,
-                compat_v0_5_dx,
-                deny_warnings,
-                warn_compat,
-                strict_types,
-                write_lock,
-                ..
-            } => {
-                assert_eq!(filepath, "script.rad");
-                assert!(!skip_check);
-                assert!(!compat_v0_5_dx);
-                assert!(deny_warnings);
-                assert!(!warn_compat);
-                assert!(!strict_types);
-                assert!(!write_lock);
-            }
-            CliCommand::Version | CliCommand::Authority { .. } => {
-                panic!("expected run command")
-            }
-            CliCommand::Fmt { .. } => panic!("expected run command"),
-            CliCommand::Lint { .. } => panic!("expected run command"),
-            CliCommand::Test { .. } => panic!("expected run command"),
-            CliCommand::Lsp { .. } | CliCommand::RelationsCheck { .. } => {
-                panic!("expected run command")
-            }
-            CliCommand::Build { .. } => panic!("expected run command"),
-            CliCommand::New { .. }
-            | CliCommand::Snapshot { .. }
-            | CliCommand::Play { .. }
-            | CliCommand::SandboxServe { .. }
-            | CliCommand::Replay { .. } => todo!(),
-        }
-    }
-
-    #[test]
-    fn parse_cli_args_accepts_strict_and_lock_flags() {
-        let args = vec![
-            "rad".to_string(),
-            "--strict-types".to_string(),
-            "--write-lock".to_string(),
-            "script.rad".to_string(),
-        ];
-        let parsed = parse_cli_args(&args).unwrap();
-        match parsed {
-            CliCommand::Run {
-                strict_types,
-                write_lock,
-                ..
-            } => {
-                assert!(strict_types);
-                assert!(write_lock);
-            }
-            CliCommand::Version | CliCommand::Authority { .. } => {
-                panic!("expected run command")
-            }
-            CliCommand::Fmt { .. } => panic!("expected run command"),
-            CliCommand::Lint { .. } => panic!("expected run command"),
-            CliCommand::Test { .. } => panic!("expected run command"),
-            CliCommand::Lsp { .. } | CliCommand::RelationsCheck { .. } => {
-                panic!("expected run command")
-            }
-            CliCommand::Build { .. } => panic!("expected run command"),
-            CliCommand::New { .. }
-            | CliCommand::Snapshot { .. }
-            | CliCommand::Play { .. }
-            | CliCommand::SandboxServe { .. }
-            | CliCommand::Replay { .. } => todo!(),
-        }
-    }
-
-    #[test]
-    fn parse_cli_args_accepts_profile_copies_flag() {
-        let args = vec![
-            "rad".to_string(),
-            "--profile-copies".to_string(),
-            "script.rad".to_string(),
-        ];
-        let parsed = parse_cli_args(&args).unwrap();
-        match parsed {
-            CliCommand::Run { profile_copies, .. } => {
-                assert!(profile_copies);
-            }
-            CliCommand::Version | CliCommand::Authority { .. } => {
-                panic!("expected run command")
-            }
-            CliCommand::Fmt { .. } => panic!("expected run command"),
-            CliCommand::Lint { .. } => panic!("expected run command"),
-            CliCommand::Test { .. } => panic!("expected run command"),
-            CliCommand::Lsp { .. } | CliCommand::RelationsCheck { .. } => {
-                panic!("expected run command")
-            }
-            CliCommand::Build { .. } => panic!("expected run command"),
-            CliCommand::New { .. }
-            | CliCommand::Snapshot { .. }
-            | CliCommand::Play { .. }
-            | CliCommand::SandboxServe { .. }
-            | CliCommand::Replay { .. } => {
-                todo!()
-            }
-        }
-    }
-
-    #[test]
-    fn parse_cli_args_accepts_record_flag() {
-        for args in [
-            vec![
-                "rad".to_string(),
-                "script.rad".to_string(),
-                "--record".to_string(),
-                "trace.radr".to_string(),
-            ],
-            vec![
-                "rad".to_string(),
-                "--record=trace.radr".to_string(),
-                "script.rad".to_string(),
-            ],
-        ] {
-            let parsed = parse_cli_args(&args).unwrap();
-            match parsed {
-                CliCommand::Run { record, .. } => {
-                    assert_eq!(record.as_deref(), Some("trace.radr"));
-                }
-                other => panic!("expected run command, got {:?}", other),
-            }
-        }
-        let missing = vec![
-            "rad".to_string(),
-            "script.rad".to_string(),
-            "--record".to_string(),
-        ];
-        assert!(parse_cli_args(&missing).is_err());
-    }
-
-    /// `rad run` outside a project directory must explain itself instead of
-    /// trying to open a file literally named "run".
-    #[test]
-    fn parse_cli_args_run_without_rad_toml_is_a_helpful_error() {
-        let args: Vec<String> = ["rad", "run"].iter().map(|s| s.to_string()).collect();
-        // cargo test runs in core/vm/, which has no rad.toml
-        let err = parse_cli_args(&args).unwrap_err();
-        assert!(err.contains("no rad.toml"), "got: {}", err);
-        assert!(err.contains("rad new"), "got: {}", err);
-    }
-
-    /// Everything after `--` belongs to the program: flags are not parsed,
-    /// and sys_args() receives exactly these strings.
-    #[test]
-    fn parse_cli_args_passes_program_args_after_double_dash() {
-        let args: Vec<String> = ["rad", "script.rad", "--", "alice", "work/dir", "--record"]
-            .iter()
-            .map(|s| s.to_string())
-            .collect();
-        match parse_cli_args(&args).unwrap() {
-            CliCommand::Run {
-                filepath,
-                record,
-                program_args,
-                ..
-            } => {
-                assert_eq!(filepath, "script.rad");
-                // `--record` after `--` is data, not a rad flag
-                assert_eq!(record, None);
-                assert_eq!(program_args, vec!["alice", "work/dir", "--record"]);
-            }
-            other => panic!("expected run command, got {:?}", other),
-        }
-    }
-
-    #[test]
-    fn parse_cli_args_parses_replay_command() {
-        let args = vec![
-            "rad".to_string(),
-            "replay".to_string(),
-            "trace.radr".to_string(),
-            "--to-frame".to_string(),
-            "42".to_string(),
-            "--force".to_string(),
-        ];
-        match parse_cli_args(&args).unwrap() {
-            CliCommand::Replay {
-                trace_path,
-                to_frame,
-                force,
-                serve,
-                with_source,
-            } => {
-                assert_eq!(trace_path, "trace.radr");
-                assert_eq!(to_frame, Some(42));
-                assert!(force);
-                assert!(!serve);
-                assert!(with_source.is_none());
-            }
-            other => panic!("expected replay command, got {:?}", other),
-        }
-        // Missing trace path is an error.
-        let missing = vec!["rad".to_string(), "replay".to_string()];
-        assert!(parse_cli_args(&missing).is_err());
-        // Bad frame number is an error.
-        let bad = vec![
-            "rad".to_string(),
-            "replay".to_string(),
-            "t.radr".to_string(),
-            "--to-frame=abc".to_string(),
-        ];
-        assert!(parse_cli_args(&bad).is_err());
-    }
-
-    #[test]
-    fn parse_cli_args_parses_build_target_wasm() {
-        let args = vec![
-            "rad".to_string(),
-            "build".to_string(),
-            "--target".to_string(),
-            "wasm".to_string(),
-            "a.rad".to_string(),
-            "out.wasm".to_string(),
-        ];
-        let parsed = parse_cli_args(&args).unwrap();
-        match parsed {
-            CliCommand::Build {
-                input_rad,
-                output_wasm,
-            } => {
-                assert_eq!(input_rad, "a.rad");
-                assert_eq!(output_wasm, "out.wasm");
-            }
-            _ => panic!("expected build"),
-        }
-    }
-
-    #[test]
-    fn parse_cli_args_rejects_unknown_option() {
-        let args = vec!["rad".to_string(), "--wat".to_string()];
-        let err = parse_cli_args(&args).unwrap_err();
-        assert!(err.contains("Unknown option"));
-    }
-
-    #[test]
-    fn parse_cli_args_rejects_version_with_input_file() {
-        let args = vec![
-            "rad".to_string(),
-            "--version".to_string(),
-            "script.rad".to_string(),
-        ];
-        let err = parse_cli_args(&args).unwrap_err();
-        assert!(err.contains("--version cannot be combined"));
-    }
-
-    #[test]
-    fn parse_cli_args_requires_single_input_file() {
-        let args = vec!["rad".to_string()];
-        let err = parse_cli_args(&args).unwrap_err();
-        assert!(err.contains("Usage:"));
-    }
-
-    #[test]
-    fn format_error_caret_aligns_with_column() {
-        let out = format_error("ab\nxyz", "file.rad", "bad", 2, 2);
-        assert!(out.contains(">>    2 | xyz"));
-        assert!(out.contains("^"));
-    }
 }

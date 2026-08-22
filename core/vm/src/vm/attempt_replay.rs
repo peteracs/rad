@@ -53,6 +53,7 @@ pub(crate) struct AttemptReplayState {
     pub(crate) tasks: HashMap<u64, TaskRecord>,
     event_handlers: Arc<HashMap<String, Vec<HandlerEntry>>>,
     indexed_decl: Arc<HashMap<String, HashSet<String>>>,
+    ordered_decl: Arc<HashMap<String, HashSet<String>>>,
     migrations: HashMap<String, MigrationEntry>,
     sandbox_caps: Option<Arc<crate::sandbox::SandboxCaps>>,
     sys_args: Vec<String>,
@@ -65,6 +66,7 @@ pub(crate) struct AttemptReplayState {
     mem_limit: usize,
     rng_state: u64,
     current_cause: crate::causality::Cause,
+    pending_host_cause: Option<crate::causality::Cause>,
     causality_frame: u64,
     ledger: crate::causality::CausalityLedger,
     emit_ids_current: Vec<u64>,
@@ -121,6 +123,7 @@ impl AttemptReplayState {
             tasks: source.tasks.clone(),
             event_handlers: Arc::clone(&source.event_handlers),
             indexed_decl: Arc::clone(&source.indexed_decl),
+            ordered_decl: Arc::clone(&source.ordered_decl),
             migrations: source.migrations.clone(),
             sandbox_caps: source.sandbox_caps.clone(),
             sys_args: source.sys_args.clone(),
@@ -133,6 +136,7 @@ impl AttemptReplayState {
             mem_limit: source.mem_limit,
             rng_state: source.rng_state,
             current_cause: source.current_cause.clone(),
+            pending_host_cause: source.pending_host_cause.clone(),
             causality_frame: source.causality_frame,
             ledger: source.ledger.clone(),
             emit_ids_current: source.emit_ids_current.clone(),
@@ -157,6 +161,7 @@ impl AttemptReplayState {
         replay.world.restore(self.world.clone());
         replay.event_handlers = Arc::clone(&self.event_handlers);
         replay.indexed_decl = Arc::clone(&self.indexed_decl);
+        replay.ordered_decl = Arc::clone(&self.ordered_decl);
         replay.migrations = self.migrations.clone();
         replay.sandbox_caps = self.sandbox_caps.clone();
         replay.sys_args = self.sys_args.clone();
@@ -169,6 +174,7 @@ impl AttemptReplayState {
         replay.mem_limit = self.mem_limit;
         replay.rng_state = self.rng_state;
         replay.current_cause = self.current_cause.clone();
+        replay.pending_host_cause = self.pending_host_cause.clone();
         replay.causality_frame = self.causality_frame;
         replay.ledger = self.ledger.clone();
         replay.emit_ids_current = self.emit_ids_current.clone();
@@ -190,7 +196,7 @@ impl AttemptReplayState {
     pub(crate) fn rebuild_event_log(
         &self,
         mut next_value: impl FnMut() -> Result<Value, String>,
-    ) -> Result<Vec<EventLogEntry>, String> {
+    ) -> Result<std::collections::VecDeque<EventLogEntry>, String> {
         self.event_log
             .iter()
             .map(|(tick, event_name)| {
@@ -228,7 +234,7 @@ impl AttemptReplayState {
         }
 
         let mut handler_names = self.event_handlers.keys().collect::<Vec<_>>();
-        handler_names.sort();
+        handler_names.sort_unstable();
         out.usize(handler_names.len());
         for name in handler_names {
             out.text(name);
@@ -269,7 +275,7 @@ impl AttemptReplayState {
             out.text(event_name);
         }
         let mut tasks = self.tasks.iter().collect::<Vec<_>>();
-        tasks.sort_by_key(|(id, _)| **id);
+        tasks.sort_unstable_by_key(|(id, _)| **id);
         out.usize(tasks.len());
         for (id, task) in tasks {
             out.u64(*id);
@@ -285,19 +291,31 @@ impl AttemptReplayState {
         }
 
         let mut indexed_components = self.indexed_decl.keys().collect::<Vec<_>>();
-        indexed_components.sort();
+        indexed_components.sort_unstable();
         out.usize(indexed_components.len());
         for component in indexed_components {
             out.text(component);
             let mut fields = self.indexed_decl[component].iter().collect::<Vec<_>>();
-            fields.sort();
+            fields.sort_unstable();
+            out.usize(fields.len());
+            for field in fields {
+                out.text(field);
+            }
+        }
+        let mut ordered_components = self.ordered_decl.keys().collect::<Vec<_>>();
+        ordered_components.sort_unstable();
+        out.usize(ordered_components.len());
+        for component in ordered_components {
+            out.text(component);
+            let mut fields = self.ordered_decl[component].iter().collect::<Vec<_>>();
+            fields.sort_unstable();
             out.usize(fields.len());
             for field in fields {
                 out.text(field);
             }
         }
         let mut migration_names = self.migrations.keys().collect::<Vec<_>>();
-        migration_names.sort();
+        migration_names.sort_unstable();
         out.usize(migration_names.len());
         for name in migration_names {
             let migration = &self.migrations[name];
@@ -331,6 +349,10 @@ impl AttemptReplayState {
         }
         self.ledger.encode_checkpoint(out);
         crate::causality::CausalityLedger::encode_cause_checkpoint(&self.current_cause, out);
+        out.bool(self.pending_host_cause.is_some());
+        if let Some(cause) = &self.pending_host_cause {
+            crate::causality::CausalityLedger::encode_cause_checkpoint(cause, out);
+        }
         out.bool(self.trace_patch.is_some());
         if let Some((frame, entity, component, field, value)) = &self.trace_patch {
             out.u64(*frame);
@@ -348,8 +370,8 @@ impl AttemptReplayState {
             out.bool(true);
             let mut readable = caps.readable_components.iter().collect::<Vec<_>>();
             let mut writable = caps.writable_components.iter().collect::<Vec<_>>();
-            readable.sort();
-            writable.sort();
+            readable.sort_unstable();
+            writable.sort_unstable();
             out.usize(readable.len());
             for component in readable {
                 out.text(component);
@@ -448,7 +470,7 @@ impl VM {
                 TaskStatus::Ready | TaskStatus::Failed(_) => None,
             })
             .collect::<Vec<_>>();
-        completed_tasks.sort_by_key(|(id, _)| *id);
+        completed_tasks.sort_unstable_by_key(|(id, _)| *id);
         roots.extend(completed_tasks.iter().map(|(_, value)| *value));
         ReplayRootLayout {
             roots,
@@ -458,7 +480,12 @@ impl VM {
     }
 
     fn ensure_attempt_checkpoint_boundary(&self) -> Result<(), String> {
-        if self.settlement.is_some() || !self.frames.is_empty() || !self.stack.is_empty() {
+        if self.settlement.is_some()
+            || self.transaction.is_some()
+            || self.post_commit.is_some()
+            || !self.frames.is_empty()
+            || !self.stack.is_empty()
+        {
             return Err("attempt recording requires a quiescent public VM boundary".into());
         }
         if self.in_async_context || !self.pending_io.is_empty() {

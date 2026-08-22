@@ -1,0 +1,5 @@
+component Inventory { available: int = 0 }
+materialized view Broken {
+    depends [Inventory]
+    where Inventory.on_hand > 0
+}

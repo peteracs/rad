@@ -1,0 +1,4 @@
+component Product { id: int = 0 }
+materialized view Visible { depends [Product] }
+let product = spawn(Product { id: 1 })
+set(product, Visible {})

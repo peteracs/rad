@@ -1,0 +1,11 @@
+component Active {}
+
+fn rebuild_priority() -> list<entity> {
+    return sort(entities(Active))
+}
+
+@frame
+@no_guest_allocation
+system Rebuild(reads Active) {
+    let _ordered = rebuild_priority()
+}

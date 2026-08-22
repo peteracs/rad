@@ -1,5 +1,3 @@
-
-
 impl Default for RadRuntime {
     fn default() -> Self {
         Self::new()
@@ -122,6 +120,9 @@ fn parse_op_name(name: &str) -> Option<Op> {
         "EcsSpawn" => Some(Op::EcsSpawn),
         "EcsGet" => Some(Op::EcsGet),
         "EcsSet" => Some(Op::EcsSet),
+        "EcsReadField" => Some(Op::EcsReadField),
+        "EcsWriteField" => Some(Op::EcsWriteField),
+        "RunViewKernel" => Some(Op::RunViewKernel),
         "EcsHas" => Some(Op::EcsHas),
         "EcsQuery" => Some(Op::EcsQuery),
         "Transition" => Some(Op::Transition),
@@ -249,9 +250,7 @@ print(require(hero, Health).hp)
     fn webgpu_dogfood_compiles_ticks_and_exports_exact_packet() {
         let mut runtime = RadRuntime::new();
         runtime
-            .session_start(include_str!(
-                "../../../../adapters/webgpu/demo/world.rad"
-            ))
+            .session_start(include_str!("../../../../adapters/webgpu/demo/world.rad"))
             .expect("WebGPU dogfood source should compile");
         runtime
             .session_emit("Tick", r#"{"dt":0.016}"#)
@@ -294,7 +293,9 @@ print(require(hero, Health).hp)
         assert_eq!(runtime.render_buffer[4], 1);
         assert_eq!(runtime.render_buffer[6], 1);
 
-        runtime.session_start(source).expect("replacement session starts");
+        runtime
+            .session_start(source)
+            .expect("replacement session starts");
         runtime
             .session_render_buffer_refresh()
             .expect("replacement stream packet encodes");

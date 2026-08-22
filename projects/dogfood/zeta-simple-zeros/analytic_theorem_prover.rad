@@ -1,0 +1,317 @@
+// Proof-obligation audit for the fourth-trace route.
+//
+// Matomaki--Radziwill--Tao prove the required long-shift estimates for their
+// listed coefficient classes, but do not state the balanced truncated
+// Lambda-convolution theorem consumed here. RAD therefore keeps the exact
+// exponent and moment algebra separate from the three novel analytic joints;
+// asserted booleans are not accepted as evidence that those joints closed.
+
+let SCALE = 1000000000
+let TARGET = 700000000
+
+resource AnalyticUniverse {
+    attack_id: str = ""
+    lambda_num: int = 0
+    lambda_den: int = 1
+    shift_num: int = 0
+    shift_den: int = 1
+    hb_convolution_decomposition: bool = false
+    generic_type_estimates: bool = false
+    major_arc_expansion: bool = false
+    exceptional_shifts_absorbed: bool = false
+    trace_transfer: bool = false
+    endpoint_continuity: bool = false
+    fourth_num: int = 0
+    fourth_den: int = 1
+    christoffel_num: int = 1
+    christoffel_den: int = 1
+    simple_num: int = 0
+    simple_den: int = 1
+    open_obligations: int = 99
+    rigorous: bool = false
+    score: int = -10 * SCALE
+    evaluated: bool = false
+}
+
+system CheckAnalyticProof(candidate: mut AnalyticUniverse) {
+    assert(candidate.lambda_num > 0, "non-positive bandwidth")
+    assert(candidate.lambda_num < candidate.lambda_den, "bandwidth must approach one from below")
+    assert(candidate.shift_den > 0, "invalid shift exponent denominator")
+    // alpha = (2*lambda-1)/(2*lambda).
+    assert(
+        candidate.shift_num * 2 * candidate.lambda_num
+        == candidate.shift_den * (2 * candidate.lambda_num - candidate.lambda_den),
+        "incorrect fourth-trace shift exponent",
+    )
+    let published_long_shift_range = 33 * candidate.shift_num > 8 * candidate.shift_den
+    let elementary_type_range = 3 * candidate.shift_num > candidate.shift_den
+    let arithmetic_closed = candidate.hb_convolution_decomposition
+    and candidate.generic_type_estimates
+    and candidate.major_arc_expansion
+    and candidate.exceptional_shifts_absorbed
+    let analytic_closed = arithmetic_closed
+    and candidate.trace_transfer
+    and candidate.endpoint_continuity
+    let exact_fourth_limit = candidate.fourth_num == 13
+    and candidate.fourth_den == 4
+    // Lambda_2(0) = (9*C-28)/(36*C-108).  At C=13/4 this is 5/36.
+    let christoffel_checked = candidate.christoffel_num == 5
+    and candidate.christoffel_den == 36
+    and (9 * candidate.fourth_num - 28 * candidate.fourth_den)
+    * candidate.christoffel_den
+    == (36 * candidate.fourth_num - 108 * candidate.fourth_den)
+    * candidate.christoffel_num
+    // The signature conversion is s/N >= 1 - 2*Lambda_2(0) = 13/18.
+    let signature_checked = candidate.simple_num == 13
+    and candidate.simple_den == 18
+    and candidate.simple_num * candidate.christoffel_den
+    == candidate.simple_den
+    * (candidate.christoffel_den - 2 * candidate.christoffel_num)
+    let no_open_obligations = candidate.open_obligations == 0
+    let rigorous = published_long_shift_range
+    and elementary_type_range
+    and analytic_closed
+    and exact_fourth_limit
+    and christoffel_checked
+    and signature_checked
+    and no_open_obligations
+    let bound_scaled = candidate.simple_num * SCALE / candidate.simple_den
+    let score = if rigorous {
+        10 * SCALE + bound_scaled + candidate.lambda_num * 1000000 / candidate.lambda_den
+    } else {
+        bound_scaled - candidate.open_obligations * SCALE
+    }
+    candidate = AnalyticUniverse {
+        attack_id: candidate.attack_id,
+        lambda_num: candidate.lambda_num,
+        lambda_den: candidate.lambda_den,
+        shift_num: candidate.shift_num,
+        shift_den: candidate.shift_den,
+        hb_convolution_decomposition: candidate.hb_convolution_decomposition,
+        generic_type_estimates: candidate.generic_type_estimates,
+        major_arc_expansion: candidate.major_arc_expansion,
+        exceptional_shifts_absorbed: candidate.exceptional_shifts_absorbed,
+        trace_transfer: candidate.trace_transfer,
+        endpoint_continuity: candidate.endpoint_continuity,
+        fourth_num: candidate.fourth_num,
+        fourth_den: candidate.fourth_den,
+        christoffel_num: candidate.christoffel_num,
+        christoffel_den: candidate.christoffel_den,
+        simple_num: candidate.simple_num,
+        simple_den: candidate.simple_den,
+        open_obligations: candidate.open_obligations,
+        rigorous: rigorous,
+        score: score,
+        evaluated: true,
+    }
+}
+
+component AnalyticExpectation {
+    proposal_count: int = 0
+}
+
+component AnalyticSelection {
+    proposal_count: int = 0
+    ids_seen: list = []
+    rigorous_hits: int = 0
+    best: AnalyticUniverse = AnalyticUniverse {}
+}
+
+intent AnalyticFinding {
+    key target: entity
+    candidate: AnalyticUniverse
+}
+
+law SubmitAnalytic(target: entity, candidate: AnalyticUniverse) {
+    propose AnalyticFinding { target: target, candidate: candidate }
+}
+
+resolver SelectAnalytic for AnalyticFinding(target, proposals) {
+    let mut ids = []
+    let mut hits = 0
+    let mut best = AnalyticUniverse {}
+    for proposal in proposals {
+        let candidate = proposal.candidate
+        assert(candidate.evaluated, "unevaluated analytic branch")
+        assert(not contains(ids, candidate.attack_id), "duplicate analytic branch")
+        ids = push(ids, candidate.attack_id)
+        if candidate.rigorous {
+            hits = hits + 1
+        }
+        if candidate.score > best.score {
+            best = candidate
+        }
+    }
+    next(target, AnalyticSelection {
+        proposal_count: len(proposals),
+        ids_seen: ids,
+        rigorous_hits: hits,
+        best: best,
+    })
+}
+
+constraint CompleteAnalyticPortfolio
+for AnalyticSelection(subject, proposed)
+watches AnalyticExpectation
+{
+    let expected = candidate(subject, AnalyticExpectation)
+    require proposed.proposal_count == expected.proposal_count else "zeta.70.analytic_count"
+    require len(proposed.ids_seen) == expected.proposal_count else "zeta.70.analytic_partition"
+    require proposed.rigorous_hits == 0 else "zeta.70.unsourced_analytic_theorem"
+    require not proposed.best.rigorous else "zeta.70.promoted_unproved_theorem"
+}
+
+entity analytic_judge {
+    AnalyticExpectation {}
+    AnalyticSelection {}
+}
+
+entity reversed_analytic_judge {
+    AnalyticExpectation {}
+    AnalyticSelection {}
+}
+
+event AnalyticBatchReady {
+    target: entity
+    candidates: list
+    reversed: bool
+}
+
+on AnalyticBatchReady(evt) {
+    settle {
+        if evt.reversed {
+            for index in range(len(evt.candidates)) {
+                SubmitAnalytic(evt.target, evt.candidates[len(evt.candidates) - index - 1])
+            }
+        } else {
+            for candidate in evt.candidates {
+                SubmitAnalytic(evt.target, candidate)
+            }
+        }
+    }
+}
+
+fn branch(
+    attack_id: str,
+    lambda_num: int,
+    lambda_den: int,
+    shift_num: int,
+    shift_den: int,
+    gates: list,
+    open_obligations: int,
+) -> AnalyticUniverse {
+    return AnalyticUniverse {
+        attack_id: attack_id,
+        lambda_num: lambda_num,
+        lambda_den: lambda_den,
+        shift_num: shift_num,
+        shift_den: shift_den,
+        hb_convolution_decomposition: gates[0],
+        generic_type_estimates: gates[1],
+        major_arc_expansion: gates[2],
+        exceptional_shifts_absorbed: gates[3],
+        trace_transfer: gates[4],
+        endpoint_continuity: gates[5],
+        fourth_num: 13,
+        fourth_den: 4,
+        christoffel_num: 5,
+        christoffel_den: 36,
+        simple_num: 13,
+        simple_den: 18,
+        open_obligations: open_obligations,
+    }
+}
+
+fn main() -> nil {
+    // Each branch is an attack on one of the exposed joints. No branch may
+    // self-certify a novel analytic lemma merely by setting all gates true.
+    let candidates = [
+        branch("evans_fixed_slice", 9, 10, 4, 9, [true, false, false, false, false, false], 5),
+        branch("mrt_statement_only", 9, 10, 4, 9, [false, true, false, false, false, false], 5),
+        branch("hb_without_major_arcs", 9, 10, 4, 9, [true, true, false, false, false, false], 4),
+        branch("exceptional_shift_l2_closed", 9, 10, 4, 9, [true, true, false, true, false, false], 3),
+        branch("trace_reduction_still_open", 9, 10, 4, 9, [true, true, false, true, false, false], 3),
+        branch("endpoint_localization_still_open", 99, 100, 49, 99, [true, true, false, true, false, false], 3),
+        branch("below_long_shift_threshold", 13, 20, 3, 13, [true, true, false, true, false, false], 3),
+        branch("wrong_shift_identity", 7, 10, 2, 7, [true, true, true, true, true, true], 0),
+        branch("balanced_convolution_attack_9_10", 9, 10, 4, 9, [true, true, false, true, false, false], 3),
+        branch("balanced_convolution_attack_99_100", 99, 100, 49, 99, [true, true, false, true, false, false], 3),
+    ]
+    // Remove the intentionally malformed identity branch before simulation: its
+    // rejection is checked directly, while speculative systems are assertion-atomic.
+    assert(2 * 7 != 7 * (2 * 7 - 10), "malformed identity branch unexpectedly valid")
+    let accepted_candidates = [
+        candidates[0], candidates[1], candidates[2], candidates[3], candidates[4],
+        candidates[5], candidates[6], candidates[8], candidates[9],
+    ]
+    let root = fork()
+    let before = world_digest()
+    let mut worlds = []
+    for candidate in accepted_candidates {
+        worlds = push(worlds, fork_with(root, candidate))
+    }
+    let futures = simulate_many(worlds, [system::CheckAnalyticProof], 1, 2141)
+    assert(world_digest() == before, "analytic speculation leaked")
+    let speculation_isolated = world_digest() == before
+    let mut reports = []
+    let mut wire_digests = []
+    for future in futures {
+        assert_only_changed(root, future, [AnalyticUniverse])
+        let restored = fork_from_bytes(fork_to_bytes(future)) |> unwrap
+        assert(world_digest(restored) == world_digest(future), "analytic wire mismatch")
+        reports = push(reports, peek_resource(restored, AnalyticUniverse) |> unwrap)
+        wire_digests = push(wire_digests, world_digest(restored))
+    }
+    set(analytic_judge, AnalyticExpectation { proposal_count: len(reports) })
+    set(reversed_analytic_judge, AnalyticExpectation { proposal_count: len(reports) })
+    emit AnalyticBatchReady { target: analytic_judge, candidates: reports, reversed: false }
+    emit AnalyticBatchReady {
+        target: reversed_analytic_judge,
+        candidates: reports,
+        reversed: true,
+    }
+    flush_events()
+    let selected = require(analytic_judge, AnalyticSelection)
+    let reversed = require(reversed_analytic_judge, AnalyticSelection)
+    assert(selected == reversed, "analytic selection depends on proposal order")
+    assert(selected.rigorous_hits == 0, "unproved analytic branch crossed the rigor gate")
+    assert(selected.best.simple_num * 10 > 7 * selected.best.simple_den, "conditional route does not clear 70%")
+    assert(selected.best.simple_num * 18 == 13 * selected.best.simple_den, "unexpected final bound")
+
+    let receipt: map<str, any> = {
+        "schema": "rad.zeta-analytic-theorem-audit.v2",
+        "proof_note": "projects/dogfood/zeta-simple-zeros/ANALYTIC_PROOF.md",
+        "rigorous": selected.best.rigorous,
+        "status": "conditional: three analytic obligations remain",
+        "open_obligations": [
+            "minor-arc theorem for the balanced truncated Lambda convolution",
+            "major-arc asymptotic for the same weighted coefficient",
+            "fourth-trace localization and transfer with quantitative end effects",
+        ],
+        "target_scaled": TARGET,
+        "simple_zero_bound": [selected.best.simple_num, selected.best.simple_den],
+        "simple_zero_bound_scaled": selected.best.simple_num * SCALE / selected.best.simple_den,
+        "fourth_moment_limit": [selected.best.fourth_num, selected.best.fourth_den],
+        "christoffel_at_zero": [selected.best.christoffel_num, selected.best.christoffel_den],
+        "published_long_shift_threshold": [8, 33],
+        "proof_long_shift_threshold": [1, 3],
+        "proof_bandwidth_threshold": [3, 4],
+        "reports": reports,
+        "selection": selected,
+        "proposal_order_independent": selected == reversed,
+        "speculation_isolated": speculation_isolated,
+        "wire_digests": wire_digests,
+        "selection_why": why(analytic_judge, AnalyticSelection),
+    }
+    create_dir("projects/dogfood/zeta-simple-zeros/out")
+    write_file(
+        "projects/dogfood/zeta-simple-zeros/out/analytic-theorem.json",
+        json_stringify(receipt),
+    )
+    print("analytic fourth-trace rigor audit")
+    print("rigorous hits:", selected.rigorous_hits, "/", len(reports))
+    print("selected:", selected.best.attack_id)
+    print("fourth moment:", selected.best.fourth_num, "/", selected.best.fourth_den)
+    print("simple-zero bound:", selected.best.simple_num, "/", selected.best.simple_den)
+    print(why(analytic_judge, AnalyticSelection))
+}

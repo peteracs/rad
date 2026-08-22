@@ -7,23 +7,13 @@
 //! BUG 04: `save_world()` wrote f64::MAX as a 309-digit decimal expansion
 //! that `load_world()`/`fork_from_bytes()` rejected ("number out of range").
 
-use crate::compiler::Compiler;
-use crate::lexer::Lexer;
-use crate::parser::Parser;
+use crate::parser::ParserOptions;
 use crate::test_runner::run_tests;
 use crate::vm::VM;
 
 fn run_vm(src: &str) -> VM {
-    let mut lexer = Lexer::new(src);
-    let tokens = lexer.tokenize().0;
-    let mut parser = Parser::new(tokens);
-    let program = parser.parse();
-    assert!(
-        parser.errors().is_empty(),
-        "parse errors: {:?}",
-        parser.errors()
-    );
-    let result = Compiler::new().compile(&program).expect("compile");
+    let result = crate::test_support::compile_source(src, ParserOptions::default())
+        .expect("parse and compile");
     let mut vm = VM::new();
     vm.suppress_output();
     vm.load_compile_result(result);
@@ -179,4 +169,78 @@ fn integral_float_stays_float_through_save_load() {
         "#,
     );
     assert_eq!(vm.print_buffer, vec!["float", "true"]);
+}
+
+/// Each `test` starts from the fixture, not from whatever the previous test
+/// left behind. AccessLens' second workflow test seeded a directory of ten
+/// users and asserted ten existed, but the first test had already seeded a
+/// hundred into the same world — it failed for a reason that had nothing to do
+/// with the code under test, and would have passed if run alone or first.
+#[test]
+fn each_test_starts_from_the_fixture_world() {
+    let mut vm = run_vm(
+        r#"
+        component Marker { tag: int = 0 }
+
+        test first_seeds_two {
+            spawn(Marker { tag: 1 })
+            spawn(Marker { tag: 2 })
+            assert_eq(len(entities(Marker)), 2)
+        }
+
+        test second_sees_only_its_own {
+            spawn(Marker { tag: 3 })
+            assert_eq(len(entities(Marker)), 1)
+        }
+        "#,
+    );
+    let outcomes = run_tests(&mut vm);
+    assert_eq!(outcomes.len(), 2);
+    for outcome in &outcomes {
+        assert!(
+            outcome.error.is_none(),
+            "{} leaked state between tests: {:?}",
+            outcome.name,
+            outcome.error
+        );
+    }
+}
+
+/// World state produced by the file's top-level code is the fixture every test
+/// starts from, so isolation must not mean "empty".
+#[test]
+fn fixture_state_is_visible_to_every_test() {
+    let mut vm = run_vm(
+        r#"
+        component Marker { tag: int = 0 }
+        spawn(Marker { tag: 7 })
+
+        test first_sees_the_fixture { assert_eq(len(entities(Marker)), 1) }
+        test second_sees_the_same_fixture { assert_eq(len(entities(Marker)), 1) }
+        "#,
+    );
+    let outcomes = run_tests(&mut vm);
+    assert_eq!(outcomes.len(), 2);
+    for outcome in &outcomes {
+        assert!(outcome.error.is_none(), "{:?}", outcome.error);
+    }
+}
+
+/// `shared test` opts back in to the previous test's world, so a suite that
+/// deliberately asserts across one lifecycle stays expressible — and says so.
+#[test]
+fn shared_tests_observe_the_previous_test_world() {
+    let mut vm = run_vm(
+        r#"
+        component Marker { tag: int = 0 }
+
+        test seeds_the_world { spawn(Marker { tag: 1 }) }
+        shared test observes_the_previous_world { assert_eq(len(entities(Marker)), 1) }
+        "#,
+    );
+    let outcomes = run_tests(&mut vm);
+    assert_eq!(outcomes.len(), 2);
+    for outcome in &outcomes {
+        assert!(outcome.error.is_none(), "{:?}", outcome.error);
+    }
 }

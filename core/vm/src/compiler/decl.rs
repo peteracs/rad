@@ -17,7 +17,7 @@ impl Compiler {
             self.current_file_scope = None;
         }
 
-        let res = match decl {
+        let result = match decl {
             Decl::Component(c) => self.compile_component_decl(c),
             Decl::Resource(r) => self.compile_resource_decl(r),
             Decl::Struct(s) => self.compile_struct_decl(s),
@@ -43,37 +43,23 @@ impl Compiler {
                 }
                 Ok(())
             }
-            Decl::OnHandler(h) => self.compile_on_handler(h),
-            Decl::Migration(m) => self.compile_migration_decl(m),
-            Decl::Fn(f) => self.compile_fn_decl(f),
-            Decl::Type(_t) => Ok(()),
-            Decl::Use(_) => Ok(()),
-            Decl::Test(t) => self.compile_test_decl(t),
-            Decl::Stmt(s) => self.compile_stmt(s),
-            Decl::TypeAlias(_) => Ok(()),
-            Decl::Error => Ok(()),
+            Decl::OnHandler(handler) => self.compile_on_handler(handler),
+            Decl::Migration(migration) => self.compile_migration_decl(migration),
+            Decl::Fn(function) => self.compile_fn_decl(function),
+            Decl::NativeType(native) => self.compile_native_type_decl(native),
+            Decl::MaterializedView(view) => self.compile_materialized_view_decl(view),
+            Decl::Model(model) => self.compile_model_decl(model),
+            Decl::Type(_) | Decl::Use(_) | Decl::TypeAlias(_) | Decl::Error => Ok(()),
+            Decl::Test(test) => self.compile_test_decl(test),
+            Decl::Stmt(statement) => self.compile_stmt(statement),
         };
 
         self.current_file_scope = prev_file_scope;
-        res
+        result
     }
 
-    /// Declaration-metadata pre-pass: registers the compile-time facts each
-    /// declaration will eventually establish, before any body compiles.
-    ///
-    /// Top-level `fn` definitions are hoisted ahead of every other
-    /// declaration (see `compile`), which moves their body compilation ahead
-    /// of the declarations that follow them in source. Without this pre-pass
-    /// a hoisted body could not know that a later name is a system (the call
-    /// would compile as a plain global call and trap on `nil`), that a later
-    /// binding is immutable (an illegal assignment would compile silently),
-    /// or that a later name is a phase (a `schedule` would skip expansion).
-    ///
-    /// Names are registered exactly as the real pass registers them — same
-    /// file-scope resolution, raw vs resolved spelling per declaration kind —
-    /// and via `entry().or_insert()`, so when a name is declared twice the
-    /// binding in force between the two declarations is still the earlier
-    /// one, exactly as in the in-order pass.
+    /// Register compile-time declaration metadata before hoisted bodies are
+    /// compiled. This mirrors the real pass without emitting bytecode.
     pub(crate) fn predeclare_decl_metadata(&mut self, decl: &Decl) {
         let prev_file_scope = self.current_file_scope.clone();
         self.current_file_scope = decl
@@ -82,29 +68,37 @@ impl Compiler {
             .and_then(|file_id| self.file_private_scopes.get(&file_id.0).cloned());
 
         match decl {
-            Decl::Component(c) => {
+            Decl::Component(component) => {
                 let resolved = self
-                    .resolve_current_alias(&c.name)
-                    .unwrap_or_else(|| c.name.clone());
+                    .resolve_current_alias(&component.name)
+                    .unwrap_or_else(|| component.name.clone());
                 self.global_mutability.entry(resolved).or_insert(false);
             }
-            Decl::Resource(r) => {
+            Decl::Resource(resource) => {
                 let resolved = self
-                    .resolve_current_alias(&r.name)
-                    .unwrap_or_else(|| r.name.clone());
+                    .resolve_current_alias(&resource.name)
+                    .unwrap_or_else(|| resource.name.clone());
                 self.global_mutability.entry(resolved).or_insert(false);
             }
-            Decl::Struct(s) => {
+            Decl::Struct(structure) => {
                 let resolved = self
-                    .resolve_current_alias(&s.name)
-                    .unwrap_or_else(|| s.name.clone());
+                    .resolve_current_alias(&structure.name)
+                    .unwrap_or_else(|| structure.name.clone());
                 self.global_mutability.entry(resolved).or_insert(false);
             }
-            Decl::Intent(i) => {
+            Decl::NativeType(native) => {
+                let resolved = self.resolve_canonical_name(&native.name);
+                self.global_mutability.entry(resolved).or_insert(false);
+            }
+            Decl::MaterializedView(view) => {
+                let resolved = self.resolve_canonical_name(&view.name);
+                self.global_mutability.entry(resolved).or_insert(false);
+            }
+            Decl::Intent(intent) => {
                 let resolved = self
-                    .resolve_current_alias(&i.name)
-                    .unwrap_or_else(|| i.name.clone());
-                let key = i
+                    .resolve_current_alias(&intent.name)
+                    .unwrap_or_else(|| intent.name.clone());
+                let key = intent
                     .fields
                     .iter()
                     .find(|field| field.is_key)
@@ -113,51 +107,71 @@ impl Compiler {
                 self.intent_types.entry(resolved).or_insert_with(|| {
                     (
                         key,
-                        i.fields.iter().map(|field| field.name.clone()).collect(),
+                        intent
+                            .fields
+                            .iter()
+                            .map(|field| field.name.clone())
+                            .collect(),
                     )
                 });
             }
-            Decl::Law(l) => {
+            Decl::Law(law) => {
                 let resolved = self
-                    .resolve_current_alias(&l.name)
-                    .unwrap_or_else(|| l.name.clone());
+                    .resolve_current_alias(&law.name)
+                    .unwrap_or_else(|| law.name.clone());
                 self.global_mutability.entry(resolved).or_insert(false);
             }
-            Decl::Entity(e) => {
+            Decl::Entity(entity) => {
                 let resolved = self
-                    .resolve_current_alias(&e.name)
-                    .unwrap_or_else(|| e.name.clone());
+                    .resolve_current_alias(&entity.name)
+                    .unwrap_or_else(|| entity.name.clone());
                 self.global_mutability.entry(resolved).or_insert(false);
             }
-            // compile_fn_decl registers mutability under the raw name.
-            Decl::Fn(f) => {
+            Decl::Fn(function) => {
                 self.global_mutability
-                    .entry(f.name.clone())
+                    .entry(function.name.clone())
                     .or_insert(false);
-            }
-            Decl::System(s) => {
+                // The view-kernel analyzer resolves a `visit_view` callback
+                // through this table while the *system* body compiles. Without
+                // it `analyze_kernel_function` finds nothing, silently declines
+                // to fuse, and the traversal falls back to ordinary calls —
+                // 2.4x the frame cost and ~1 runtime allocation per row, with
+                // no diagnostic and an unchanged `query-plan`. Both spellings
+                // are registered because a call site may use either.
                 let resolved = self
-                    .resolve_current_alias(&s.name)
-                    .unwrap_or_else(|| s.name.clone());
+                    .resolve_current_alias(&function.name)
+                    .unwrap_or_else(|| function.name.clone());
+                self.function_declarations
+                    .entry(function.name.clone())
+                    .or_insert_with(|| function.clone());
+                self.function_declarations
+                    .entry(resolved)
+                    .or_insert_with(|| function.clone());
+            }
+            Decl::System(system) => {
+                let resolved = self
+                    .resolve_current_alias(&system.name)
+                    .unwrap_or_else(|| system.name.clone());
                 self.declared_systems.insert(resolved);
             }
-            Decl::Phase(p) => {
+            Decl::Phase(phase) => {
                 self.phases
-                    .entry(p.name.clone())
-                    .or_insert_with(|| p.systems.clone());
+                    .entry(phase.name.clone())
+                    .or_insert_with(|| phase.systems.clone());
             }
-            Decl::Stmt(stmt) => match stmt {
-                // Top-level lets are globals (single, destructuring, rec).
-                Stmt::Let(l) => {
-                    for name in &l.names {
+            Decl::Stmt(statement) => match statement {
+                Stmt::Let(binding) => {
+                    for name in &binding.names {
                         self.global_mutability
                             .entry(name.clone())
-                            .or_insert(l.mutable);
+                            .or_insert(binding.mutable);
                     }
                 }
-                Stmt::LetElse(le) => {
-                    if let Some(primary) = le.primary_binding_name() {
-                        self.global_mutability.entry(primary).or_insert(le.mutable);
+                Stmt::LetElse(binding) => {
+                    if let Some(primary) = binding.primary_binding_name() {
+                        self.global_mutability
+                            .entry(primary)
+                            .or_insert(binding.mutable);
                     }
                 }
                 _ => {}
@@ -166,6 +180,53 @@ impl Compiler {
         }
 
         self.current_file_scope = prev_file_scope;
+    }
+
+    fn compile_native_type_decl(&mut self, native: &NativeTypeDecl) -> Result<(), CompileError> {
+        let resolved = self.resolve_canonical_name(&native.name);
+        let mut descriptor = crate::native_types::NativeTypeDescriptor::from(native);
+        descriptor.name = resolved.clone();
+        self.native_types
+            .insert(resolved.clone(), descriptor.clone());
+        let line = native.span.line;
+        self.emit_constant_gc(line, |gc| Value::from_native_type(gc, descriptor));
+        let slot = self.ensure_global_slot(&resolved);
+        self.emit_op(Op::DefGlobal, line);
+        self.emit_u16(slot, line);
+        self.global_mutability.insert(resolved, false);
+        Ok(())
+    }
+
+    fn compile_materialized_view_decl(
+        &mut self,
+        view: &MaterializedViewDecl,
+    ) -> Result<(), CompileError> {
+        let resolved = self.resolve_canonical_name(&view.name);
+        let mut predicate = view.predicate.clone();
+        for clause in &mut predicate.clauses {
+            clause.component = self.resolve_canonical_name(&clause.component);
+        }
+        self.materialized_views.push(MaterializedViewInfo {
+            name: resolved.clone(),
+            dependencies: view
+                .dependencies
+                .iter()
+                .map(|dependency| self.resolve_canonical_name(dependency))
+                .collect(),
+            key: view
+                .key
+                .as_ref()
+                .map(|(component, field)| (self.resolve_canonical_name(component), field.clone())),
+            predicate,
+        });
+        let slot = self.ensure_global_slot(&resolved);
+        self.emit_constant_gc(view.span.line, |gc| {
+            Value::from_string(gc, resolved.clone())
+        });
+        self.emit_op(Op::DefGlobal, view.span.line);
+        self.emit_u16(slot, view.span.line);
+        self.global_mutability.insert(resolved, false);
+        Ok(())
     }
 
     fn compile_component_decl(&mut self, c: &ComponentDecl) -> Result<(), CompileError> {
@@ -555,6 +616,7 @@ impl Compiler {
             after: resolved_after,
             before: resolved_before,
             serial_group: None,
+            instruction_budget: s.contracts.instruction_budget,
         });
         Ok(())
     }
@@ -627,12 +689,16 @@ impl Compiler {
             once: h.once,
             is_async: h.is_async,
             has_guard: h.has_guard,
+            contracts: h.contracts.clone(),
         });
         Ok(())
     }
 
     fn compile_test_decl(&mut self, t: &TestDecl) -> Result<(), CompileError> {
         let line = t.span.line;
+        if t.shared_world {
+            self.shared_world_tests.insert(t.name.clone());
+        }
         let test_name = format!("__test_{}", t.name);
         let mut test_scope = Compiler::new_fn_scope(&test_name);
         test_scope.unique_locals = super::escape::find_unique_locals(&t.body);
@@ -652,6 +718,121 @@ impl Compiler {
         let chunk_id = self.chunks.len() + 1;
         self.chunks.push(scope.chunk);
 
+        self.global_mutability.insert(test_name.clone(), false);
+        let slot = self.ensure_global_slot(&test_name);
+        let fn_val = Value::from_fn(
+            &mut self.gc,
+            FnValue {
+                name: test_name,
+                arity: 0,
+                chunk_id,
+            },
+        );
+        self.emit_constant(fn_val, line);
+        self.emit_op(Op::DefGlobal, line);
+        self.emit_u16(slot, line);
+        Ok(())
+    }
+
+    fn compile_model_decl(&mut self, model: &ModelDecl) -> Result<(), CompileError> {
+        let line = model.span.line;
+        let test_name = format!("__test_model_{}", model.name);
+        let mut test_scope = Compiler::new_fn_scope(&test_name);
+        test_scope.scope_depth = 1;
+        self.functions.push(test_scope);
+
+        let command_labels = model
+            .commands
+            .iter()
+            .enumerate()
+            .map(|(index, command)| {
+                let label = match command {
+                    Expr::Ident(name, _) => name.clone(),
+                    _ => format!("command_{}", index + 1),
+                };
+                Expr::StrLit(label, model.span.clone())
+            })
+            .collect::<Vec<_>>();
+        let invariant_closures = model
+            .invariants
+            .iter()
+            .cloned()
+            .map(|body| {
+                Expr::FnExpr(
+                    Vec::new(),
+                    Vec::new(),
+                    Vec::new(),
+                    Vec::new(),
+                    Some(TypeExpr::Named("bool".to_string())),
+                    body,
+                    model.span.clone(),
+                )
+            })
+            .collect::<Vec<_>>();
+        let temporal = model
+            .temporal
+            .iter()
+            .map(|clause| {
+                let canonical = |name: &str| self.resolve_canonical_name(name);
+                let encoded = match clause {
+                    TemporalClause::Always(name) => format!("always|{}", canonical(name)),
+                    TemporalClause::Eventually(name) => {
+                        format!("eventually|{}", canonical(name))
+                    }
+                    TemporalClause::Until {
+                        condition,
+                        terminal,
+                    } => format!("until|{}|{}", canonical(condition), canonical(terminal)),
+                    TemporalClause::LeadsTo {
+                        trigger,
+                        consequence,
+                    } => format!("leads_to|{}|{}", canonical(trigger), canonical(consequence)),
+                    TemporalClause::ExactlyOnce(name) => {
+                        format!("exactly_once|{}", canonical(name))
+                    }
+                    TemporalClause::NeverAfter {
+                        prohibited,
+                        terminal,
+                    } => format!(
+                        "never_after|{}|{}",
+                        canonical(prohibited),
+                        canonical(terminal)
+                    ),
+                    TemporalClause::EventuallyWithin {
+                        trigger,
+                        consequence,
+                        bound,
+                    } => format!(
+                        "eventually_within|{}|{}|{bound}",
+                        canonical(trigger),
+                        canonical(consequence)
+                    ),
+                };
+                Expr::StrLit(encoded, model.span.clone())
+            })
+            .collect::<Vec<_>>();
+        let call = Expr::Call(
+            Box::new(Expr::Ident("model_check".to_string(), model.span.clone())),
+            vec![
+                Expr::StrLit(model.name.clone(), model.span.clone()),
+                Expr::ListLit(model.commands.clone(), model.span.clone()),
+                Expr::ListLit(command_labels, model.span.clone()),
+                Expr::ListLit(invariant_closures, model.span.clone()),
+                Expr::ListLit(temporal, model.span.clone()),
+                Expr::IntLit(i64::from(model.runs), model.span.clone()),
+                Expr::IntLit(i64::from(model.max_commands), model.span.clone()),
+                Expr::IntLit(model.seed as i64, model.span.clone()),
+            ],
+            model.span.clone(),
+        );
+        self.compile_expr(&call)?;
+        self.emit_op(Op::PopCheckErr, line);
+        self.emit_constant(Value::NIL, line);
+        self.emit_op(Op::Return, line);
+
+        let scope = self.functions.pop().expect("model function scope");
+        let chunk_id = self.chunks.len() + 1;
+        self.chunks.push(scope.chunk);
         self.global_mutability.insert(test_name.clone(), false);
         let slot = self.ensure_global_slot(&test_name);
         let fn_val = Value::from_fn(

@@ -7,6 +7,33 @@ fn check_typed_world_builtin(
         arg_exprs: &[&Expr],
     ) -> Option<Ty> {
         match name {
+            "lookup" if arg_tys.len() == 2 => {
+                if !Ty::Str.assignable_from(&arg_tys[0]) && arg_tys[0] != Ty::Any {
+                    self.error(
+                        arg_exprs[0].span(),
+                        format!("view lookup expects a materialized view, got {}", arg_tys[0]),
+                        None,
+                    );
+                }
+                Some(Ty::App("Option".to_string(), vec![Ty::EntityId]))
+            }
+            "range" if arg_tys.len() == 4 => {
+                if !Ty::Str.assignable_from(&arg_tys[0]) && arg_tys[0] != Ty::Any {
+                    self.error(
+                        arg_exprs[0].span(),
+                        format!("ordered range expects a component type, got {}", arg_tys[0]),
+                        None,
+                    );
+                }
+                if !Ty::Str.assignable_from(&arg_tys[1]) && arg_tys[1] != Ty::Any {
+                    self.error(
+                        arg_exprs[1].span(),
+                        format!("ordered range field expects str, got {}", arg_tys[1]),
+                        None,
+                    );
+                }
+                Some(Ty::List(Box::new(Ty::EntityId)))
+            }
             "world_digest" => {
                 // 0 args: digest the live world. 1 arg: digest a fork's
                 // state (the rolling-migration certification view).
@@ -208,13 +235,24 @@ fn check_typed_world_builtin(
     }
 
     fn resolve_component_name(&self, expr: Option<&&Expr>, ty: Option<&Ty>) -> Option<String> {
-        if let Some(Expr::Ident(name, _)) = expr {
-            if self.components.contains_key(name) {
-                return Some(name.clone());
+        let source_name = match expr {
+            Some(Expr::Ident(name, _)) => Some(self.resolve_canonical_name(name)),
+            Some(Expr::Field(owner, member, _)) => match owner.as_ref() {
+                Expr::Ident(alias, _) => self.resolve_alias_member(alias, member),
+                _ => None,
+            },
+            _ => None,
+        };
+        if let Some(name) = source_name {
+            if self.components.contains_key(&name) {
+                return Some(name);
             }
         }
         if let Some(Ty::Component(name)) = ty {
-            return Some(name.clone());
+            let resolved = self.resolve_canonical_name(name);
+            if self.components.contains_key(&resolved) {
+                return Some(resolved);
+            }
         }
         None
     }

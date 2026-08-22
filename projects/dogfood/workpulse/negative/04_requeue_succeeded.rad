@@ -1,0 +1,13 @@
+component Succeeded {}
+component Queued {}
+let job = spawn(Succeeded {})
+
+fn requeue_terminal_job() -> nil { set(job, Queued {}) }
+
+model TerminalNeverRequeues {
+    commands [requeue_terminal_job]
+    invariant { return not has(job, Succeeded) or not has(job, Queued) }
+    runs 1
+    max_commands 1
+    seed 4
+}

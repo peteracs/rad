@@ -253,6 +253,27 @@ pub enum Op {
     ReadBaseComponent,
     ReadCandidateComponent,
     RequireConstraint,
+
+    /// Stable ordinary transaction boundary and contract checks.
+    BeginTransaction,
+    CheckTransaction,
+    EndTransaction,
+    EndPostCommit,
+
+    /// Immediate event delivery in the current call stack (`signal sync`).
+    EmitSync,
+    /// Phase-gated event delivery (operand: phase-name constant index).
+    EmitPhase,
+
+    /// Statically checked ECS field read. Operands are component-name and
+    /// field-name constant indices; the stack contains the entity.
+    EcsReadField,
+    /// Statically checked ECS field write. Operands are component-name and
+    /// field-name constant indices; the stack contains entity then value.
+    EcsWriteField,
+    /// Execute a checker-proved, allocation-free materialized-view data
+    /// kernel. Operand: u16 index in the immutable compiled kernel table.
+    RunViewKernel,
 }
 
 impl Op {

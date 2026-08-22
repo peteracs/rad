@@ -1,0 +1,12 @@
+use "../schema.rad"
+use "../owners/order_book.rad"
+
+spawn(
+    OrderIdentity { order_id: OrderId(u64(1)), account_id: AccountId(u64(1)) },
+    OpenOrder {},
+    BuyOrder {
+        priority: (PriceTicks(i64(-100)), Sequence(u64(1))),
+        price: PriceTicks(i64(100)),
+        quantity: Quantity(u64(1)),
+    },
+)

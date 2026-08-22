@@ -1,0 +1,10 @@
+use "../schema.rad"
+use "../owners/ledger.rad"
+use "../systems/settlement.rad"
+
+pub fn run_payment_day(count: int) -> nil {
+    settle_batch(count)
+    flush_events()
+    assert(res(MerchantSettlement).captures == count, "settlement count")
+    assert(res(CaptureAudit).committed == count, "post-commit delivery count")
+}

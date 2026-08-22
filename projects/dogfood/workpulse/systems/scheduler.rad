@@ -1,0 +1,37 @@
+use "../schema.rad"
+use "../owners/job_owner.rad"
+use "../owners/job_owner.rad" as jobs
+
+pub resource SchedulerAudit { leases: int = 0, completions: int = 0, rejections: int = 0 }
+
+on JobLeased(_event) {
+    update(SchedulerAudit) { leases = res(SchedulerAudit).leases + 1 }
+}
+
+on JobCompleted(_event) {
+    update(SchedulerAudit) { completions = res(SchedulerAudit).completions + 1 }
+}
+
+on StaleCompletionRejected(_event) {
+    update(SchedulerAudit) { rejections = res(SchedulerAudit).rejections + 1 }
+}
+
+pub fn lease_and_start(job: entity, worker: entity) -> LeaseToken {
+    jobs.LeaseJob(job, worker)
+    let token: LeaseToken = require(job, ActiveLease).token
+    jobs.StartJob(job)
+    return token
+}
+
+fn inspect_retry(_target: entity) -> nil {}
+
+@tick
+@no_full_scan
+@no_guest_allocation
+@budget(instructions: 5000)
+pub system InspectRetryQueue(
+    reads JobIdentity,
+    reads RetryWaiting,
+) {
+    visit_view(RetryQueue, inspect_retry)
+}

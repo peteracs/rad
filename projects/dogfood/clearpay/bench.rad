@@ -1,0 +1,11 @@
+use "schema.rad"
+use "owners/ledger.rad"
+use "systems/settlement.rad"
+use "scenarios/production.rad"
+
+fn main() -> nil {
+    run_payment_day(10000)
+    assert(len(entities(CapturedPayment)) == 10000, "10k captures")
+    assert(len(entities(LedgerEntry)) == 20000, "20k balanced entries")
+    print("clearpay-bench: ok payments=10000")
+}

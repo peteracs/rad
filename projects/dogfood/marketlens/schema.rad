@@ -1,0 +1,6 @@
+pub opaque type ProductId = u64
+
+pub event CatalogMembershipChanged {
+    product: entity,
+    sellable: bool,
+}

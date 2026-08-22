@@ -1,0 +1,132 @@
+// End-to-end semantic authority workload: ownership, transactions, native
+// types, maintained views, ordered traversal, cost contracts, explicit event
+// delivery, negative provenance, lifecycle traces, and stateful models.
+
+pub opaque type ManagerGid = u32
+pub opaque type WireGid = u32
+
+pub enum LifecycleCode: u8 {
+    Live = 1,
+    Retired = 2,
+}
+
+pub bitflags PublicationFlags: u32 {
+    Named = 1,
+    Indexed = 2,
+    Ready = 4,
+}
+
+pub component LiveMembership owned {
+    code: LifecycleCode = LifecycleCode::Live,
+}
+
+pub component GraveyardMembership owned {
+    code: LifecycleCode = LifecycleCode::Retired,
+}
+
+pub component Identity {
+    ordered indexed manager_gid: ManagerGid = ManagerGid(u32(0)),
+    wire_gid: WireGid = WireGid(u32(0)),
+}
+
+pub materialized view LiveByManager {
+    depends [LiveMembership, Identity]
+    key Identity.manager_gid
+}
+
+pub event Published { target: entity }
+pub event PoseReady { target: entity }
+pub event Retired { target: entity }
+
+@non_reentrant
+@must_complete_before(PoseReady)
+on Published(evt) {
+    mark_phase(evt.target, "PublishLive")
+}
+
+@exactly_once
+on PoseReady(evt) {
+    mark_phase(evt.target, "PoseReady")
+}
+
+on Retired(evt) {
+    print(why_removed(evt.target, LiveMembership))
+}
+
+pub fn publish(manager: ManagerGid, wire: WireGid) -> entity
+    writes owned [LiveMembership]
+{
+    let target: entity = spawn(
+        LiveMembership { code: LifecycleCode::Live },
+        Identity { manager_gid: manager, wire_gid: wire },
+    )
+    mark_phase(target, "Construct")
+    signal sync Published { target: target }
+    emit phase(PoseReady) PoseReady { target: target }
+    return target
+}
+
+pub transaction Retire(target: entity)
+    writes owned [LiveMembership, GraveyardMembership]
+{
+    requires has(target, LiveMembership)
+    requires not has(target, GraveyardMembership)
+    changes_only [LiveMembership, GraveyardMembership]
+
+    remove(target, LiveMembership)
+    set(target, GraveyardMembership { code: LifecycleCode::Retired })
+
+    ensures not has(target, LiveMembership)
+    ensures has(target, GraveyardMembership)
+    post_commit { emit next Retired { target: target } }
+}
+
+@frame
+@no_full_scan
+@budget(instructions: 5000)
+system PublishProjection(_live: LiveMembership, identity: Identity) {
+    let _manager: ManagerGid = identity.manager_gid
+}
+
+component ModelFlag { active: bool = false }
+
+let model_subject: entity = spawn(ModelFlag { active: false })
+
+fn toggle_model_flag() -> nil {
+    let current: ModelFlag = get(model_subject, ModelFlag) |> unwrap
+    set(model_subject, ModelFlag { active: not current.active })
+}
+
+model ToggleModel {
+    commands [toggle_model_flag]
+    invariant {
+        return len(query { ModelFlag }) == 1
+    }
+    runs 1
+    max_commands 32
+    seed 424242
+}
+
+let manager: ManagerGid = ManagerGid(u32(41))
+let wire: WireGid = WireGid(u32(9001))
+let target: entity = publish(manager, wire)
+PublishProjection()
+
+assert(len(entities(LiveByManager)) == 1, "maintained view admitted live entity")
+assert(lookup(LiveByManager, manager) == Some(target), "view key resolves directly")
+assert(first(Identity, "manager_gid") == Some(target), "ordered first")
+assert(lower_bound(Identity, "manager_gid", manager) == Some(target), "ordered lower bound")
+assert(len(range(Identity, "manager_gid", manager, ManagerGid(u32(42)))) == 1, "ordered range")
+
+enter_phase("PoseReady")
+assert_trace(target, ["Construct", "PublishLive", "PoseReady"])
+
+let live_revision: int = revision(LiveByManager)
+Retire(target)
+flush_events()
+
+assert(len(entities(LiveByManager)) == 0, "transaction removed view membership atomically")
+assert(revision(LiveByManager) > live_revision, "view revision advanced")
+print(why_not_in_view(LiveByManager, target))
+print(why_field(target, GraveyardMembership, "code"))
+print("semantic-authority: ok")

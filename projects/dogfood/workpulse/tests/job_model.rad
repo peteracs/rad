@@ -1,0 +1,168 @@
+use "../schema.rad"
+use "../owners/job_owner.rad"
+use "../owners/job_owner.rad" as jobs
+
+let model_worker_a: entity = jobs.register_worker(WorkerId(u64(1001)))
+let model_worker_b: entity = jobs.register_worker(WorkerId(u64(1002)))
+let model_job: entity = jobs.EnqueueJob(JobId(u64(9001)), u64(1), 3)
+
+fn lifecycle_status_count(job: entity) -> int {
+    let mut count: int = 0
+    if has(job, Queued) { count = count + 1 }
+    if has(job, Leased) { count = count + 1 }
+    if has(job, Running) { count = count + 1 }
+    if has(job, Succeeded) { count = count + 1 }
+    if has(job, Failed) { count = count + 1 }
+    if has(job, RetryWaiting) { count = count + 1 }
+    if has(job, Cancelled) { count = count + 1 }
+    if has(job, DeadLettered) { count = count + 1 }
+    return count
+}
+
+fn terminal(job: entity) -> bool {
+    return has(job, Succeeded) or has(job, Cancelled) or has(job, DeadLettered)
+}
+
+fn enqueue() -> nil {
+    // An accepted job is immutable as an identity. Duplicate delivery is an
+    // idempotent no-op, not a second entity.
+    assert(jobs.job_by_id(JobId(u64(9001))) == model_job, "enqueue is idempotent")
+}
+
+fn lease() -> nil {
+    if has(model_job, Queued) and require(model_worker_a, WorkerIdentity).connected {
+        jobs.LeaseJob(model_job, model_worker_a)
+    }
+}
+
+fn start() -> nil {
+    if has(model_job, Leased) { jobs.StartJob(model_job) }
+}
+
+fn heartbeat() -> nil { jobs.HeartbeatWorker(model_worker_a) }
+
+fn complete() -> nil {
+    if has(model_job, Running) {
+        let token: LeaseToken = require(model_job, ActiveLease).token
+        let _accepted: bool = jobs.try_complete(model_job, token, "model-completion")
+    }
+}
+
+fn fail() -> nil {
+    if has(model_job, ActiveLease) {
+        jobs.FailJob(model_job, require(model_job, ActiveLease).token)
+    }
+}
+
+fn timeout() -> nil {
+    if has(model_job, ActiveLease) {
+        jobs.TimeoutJob(model_job, require(model_job, ActiveLease).token)
+    }
+}
+
+fn retry() -> nil {
+    if has(model_job, Failed) { jobs.ScheduleFailedJob(model_job) }
+    if has(model_job, RetryWaiting) { jobs.RetryJob(model_job) }
+}
+
+fn cancel() -> nil {
+    if not terminal(model_job) { jobs.CancelJob(model_job) }
+}
+
+fn worker_disconnect() -> nil {
+    jobs.set_worker_connected(model_worker_a, false)
+    if has(model_job, ActiveLease) {
+        jobs.TimeoutJob(model_job, require(model_job, ActiveLease).token)
+    }
+}
+
+fn worker_reconnect() -> nil { jobs.set_worker_connected(model_worker_a, true) }
+fn scheduler_restart() -> nil { jobs.RestartScheduler() }
+
+fn snapshot_restore() -> nil {
+    let encoded: str = fork_to_bytes(fork())
+    let restored = fork_from_bytes(encoded) |> unwrap
+    assert(fork_to_bytes(restored) == encoded, "snapshot wire roundtrip is exact")
+    jobs.RestartScheduler()
+}
+
+fn duplicate_delivery() -> nil {
+    if has(model_job, CompletionRecord) {
+        let completion: CompletionRecord = require(model_job, CompletionRecord)
+        assert(
+            not jobs.try_complete(model_job, completion.token, completion.idempotency_key),
+            "duplicate completion is rejected",
+        )
+    }
+}
+
+fn stale_worker_completion() -> nil {
+    if has(model_job, Running) {
+        let current: u64 = u64(require(model_job, ActiveLease).token)
+        assert(
+            not jobs.try_complete(model_job, LeaseToken(current + u64(1000000)), "stale"),
+            "superseded lease cannot complete",
+        )
+    }
+}
+
+model JobLifecycleModel {
+    commands [
+        enqueue,
+        lease,
+        start,
+        heartbeat,
+        complete,
+        fail,
+        timeout,
+        retry,
+        cancel,
+        worker_disconnect,
+        worker_reconnect,
+        scheduler_restart,
+        snapshot_restore,
+        duplicate_delivery,
+        stale_worker_completion,
+    ]
+    invariant {
+        return lifecycle_status_count(model_job) == 1
+            and (not has(model_job, ActiveLease) or has(model_job, Leased) or has(model_job, Running))
+            and (not has(model_job, CompletionRecord) or has(model_job, Succeeded))
+            and require(model_job, Attempt).count <= require(model_job, RetryPolicy).max_retries
+            and has(model_job, BlockingReason)
+    }
+    temporal {
+        always BlockingReason,
+        JobCompleted eventually Succeeded,
+        CancellationRequested eventually_within JobCancelled 1,
+        Running never_after Succeeded,
+        Leased never_after Succeeded,
+    }
+    runs 1000
+    max_commands 200
+    seed 1234
+}
+
+component TemporalPending {}
+component TemporalTerminal {}
+let temporal_subject: entity = spawn(TemporalPending {})
+
+fn finish_temporal_subject() -> nil {
+    if not has(temporal_subject, TemporalTerminal) {
+        remove(temporal_subject, TemporalPending)
+        set(temporal_subject, TemporalTerminal {})
+    }
+}
+
+model TemporalOperatorContract {
+    commands [finish_temporal_subject]
+    invariant { return has(temporal_subject, TemporalTerminal) or has(temporal_subject, TemporalPending) }
+    temporal {
+        eventually TemporalTerminal,
+        TemporalPending until TemporalTerminal,
+        exactly_once TemporalTerminal,
+    }
+    runs 1
+    max_commands 5
+    seed 77
+}

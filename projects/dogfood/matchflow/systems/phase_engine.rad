@@ -1,0 +1,88 @@
+use "../schema.rad"
+use "../owners/match_owner.rad" as owner
+
+on PlayerInput(evt) {
+    if evt.damage > 0 {
+        emit next ValidatedDamage {
+            match_entity: evt.match_entity,
+            player: evt.player,
+            damage: evt.damage,
+        }
+    }
+}
+
+on ValidatedDamage(evt) {
+    emit phase(Resolve) DamageRequested {
+        match_entity: evt.match_entity,
+        player: evt.player,
+        damage: evt.damage,
+    }
+}
+
+@non_reentrant
+@no_nested_flush
+@must_complete_before(Commit)
+on DamageRequested(evt) {
+    let frame = require(evt.match_entity, MatchIdentity).frame
+    owner.ApplyDamage(evt.match_entity, evt.player, evt.damage, frame)
+}
+
+on DamageResolved(evt) {
+    assert(evt.remaining_hp >= 0, "resolved HP remains normalized")
+}
+
+@exactly_once
+on SnapshotReady(evt) {
+    assert(require(evt.match_entity, OutboundSnapshot).revision == evt.revision, "published revision exists")
+}
+
+on RespawnWindowOpened(evt) {
+    assert(has(evt.match_entity, MatchIdentity), "delayed event retains its match")
+}
+
+pub fn queue_inputs(match_entity: entity, input_count: int) -> nil {
+    let mut i = 0
+    while i < input_count {
+        let player = owner.player_by_id(PlayerId(u64(i + 1)))
+        emit next PlayerInput {
+            match_entity: match_entity,
+            player: player,
+            damage: 100 + (i % 7),
+        }
+        i = i + 1
+    }
+}
+
+pub fn execute_authoritative_frame(match_entity: entity, input_count: int) -> nil {
+    enter_phase("Input")
+    mark_phase(match_entity, "Input")
+    queue_inputs(match_entity, input_count)
+
+    enter_phase("Validate")
+    mark_phase(match_entity, "Validate")
+    flush_events()
+
+    enter_phase("Simulate")
+    mark_phase(match_entity, "Simulate")
+
+    enter_phase("Resolve")
+    mark_phase(match_entity, "Resolve")
+
+    enter_phase("Commit")
+    mark_phase(match_entity, "Commit")
+    flush_events()
+
+    enter_phase("Publish")
+    mark_phase(match_entity, "Publish")
+    owner.PublishSnapshot(match_entity, 1)
+    signal sync SnapshotReady { match_entity: match_entity, revision: 1 }
+
+    emit RespawnWindowOpened {
+        match_entity: match_entity,
+        frame: require(match_entity, MatchIdentity).frame,
+    } after 2
+    flush_events()
+    flush_events()
+
+    assert_trace(match_entity, ["Input", "Validate", "Simulate", "Resolve", "Commit", "Publish"])
+}

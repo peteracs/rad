@@ -1,0 +1,27 @@
+pub opaque type DeviceId = u32
+pub opaque type SessionId = u32
+pub opaque type RegisterAddress = u16
+
+pub enum AlarmCode: u8 {
+    None = 0,
+    Overheat = 1,
+    Overpressure = 2,
+    EmergencyStop = 7,
+}
+
+pub bitflags DeviceStatus: u16 {
+    Online = 1,
+    Calibrated = 2,
+    Warning = 4,
+    Fault = 8,
+}
+
+pub packed repr(C) struct TelemetryFrame {
+    device: DeviceId,
+    sequence: u32,
+    status: DeviceStatus,
+    temperature: f32,
+    checksum: u16,
+}
+
+pub event FrameStored { target: entity, sequence: u32 }

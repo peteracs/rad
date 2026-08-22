@@ -1,0 +1,11 @@
+use "schema.rad"
+use "owners/access_owner.rad"
+use "systems/policy.rad"
+use "scenarios/production.rad"
+
+fn main() -> nil {
+    let alice = run_access_incident(10000)
+    print("accesslens: Alice denied production deployment")
+    print(why_not_in_view(ProductionDeployers, alice))
+    print(why_removed(alice, Entitlement))
+}

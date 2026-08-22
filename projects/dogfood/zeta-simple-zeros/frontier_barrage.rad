@@ -1,0 +1,352 @@
+// Ten-way attack barrage for the unconditional 70% boundary.
+//
+// One RAD run forks every route, performs its quantitative gate, rejects
+// hypothesis mismatches, settles the portfolio in both proposal orders, and
+// records causal ancestry for the promoted route.
+
+use "../native-math-kernels/math_kernels.rad"
+
+let SCALE = 1000000000
+let TARGET = 700000000
+let CURRENT_H = 672500703
+let CERTIFIED_F6_GAIN = 520659
+let FULL_QUADRATIC_SCOUT_GAIN = 1873308
+
+resource BarrageUniverse {
+    attack_id: str = ""
+    mode: str = ""
+    hypothesis_compatible: bool = true
+    analytic_obligations: int = 0
+    route_penalty_scaled: int = 0
+    auxiliary_gain_scaled: int = 0
+    m4_numerator: int = 0
+    m4_denominator: int = 1
+    first_lambda_micros: int = 0
+    bound_scaled: int = 0
+    input_margin_scaled: int = 0
+    numerical_hit: bool = false
+    rigorous_hit: bool = false
+    score_scaled: int = 0
+    status: str = ""
+    evaluated: bool = false
+}
+
+fn fourth_moment_simple_bound(numerator: int, denominator: int) -> int {
+    // For moments (1, 1, 4/3, 2, C), the degree-two Christoffel mass is
+    //   Lambda_2(0) = (9C - 28) / (36C - 108).
+    // Proposition 4.5 then gives simple/N >= 1 - 2 Lambda_2(0).
+    let top = 9 * numerator - 28 * denominator
+    let bottom = 36 * numerator - 108 * denominator
+    assert(top >= 0 and bottom > 0, "invalid fourth-moment gate")
+    return SCALE - (2 * top * SCALE) / bottom
+}
+
+fn first_bandwidth_crossing(auxiliary_gain_scaled: int) -> map<str, int> {
+    let mut first_lambda = 0
+    let mut first_bound = 0
+    // 1.00000 <= lambda <= 1.05000 in 0.00025 increments.
+    for slot in range(201) {
+        let lambda_micros = 1000000 + 250 * slot
+        let report = zeta_mt_bandwidth_scout(lambda_micros)
+        let bound = report["baseline_lower_scaled"] + auxiliary_gain_scaled
+        if first_lambda == 0 and bound >= TARGET {
+            first_lambda = lambda_micros
+            first_bound = bound
+        }
+    }
+    return { "lambda": first_lambda, "bound": first_bound }
+}
+
+system RunBarrage(candidate: mut BarrageUniverse) {
+    let mut first_lambda = candidate.first_lambda_micros
+    let mut bound = candidate.bound_scaled
+    let mut margin = candidate.input_margin_scaled
+    let mut hit = candidate.numerical_hit
+
+    if candidate.mode == "bandwidth" {
+        let crossing = first_bandwidth_crossing(candidate.auxiliary_gain_scaled)
+        first_lambda = crossing["lambda"]
+        bound = crossing["bound"]
+        hit = first_lambda > 0
+        margin = if hit { first_lambda - 1000000 } else { 50001 }
+    } else if candidate.mode == "fourth_moment" {
+        bound = fourth_moment_simple_bound(candidate.m4_numerator, candidate.m4_denominator)
+        hit = bound >= TARGET
+        // The target cap is 59/18 and the predicted value is 13/4.
+        // Their additive gap is 1/36; relative to 13/4 it is 1/117.
+        margin = 1000000000 / 117
+    }
+
+    let score = if candidate.rigorous_hit and hit and candidate.hypothesis_compatible {
+        10 * SCALE + bound
+    } else if not candidate.hypothesis_compatible {
+        -2 * SCALE + bound
+    } else if not hit {
+        -SCALE + bound
+    } else {
+        bound - candidate.analytic_obligations * 10000000 - candidate.route_penalty_scaled
+    }
+
+    candidate = BarrageUniverse {
+        attack_id: candidate.attack_id,
+        mode: candidate.mode,
+        hypothesis_compatible: candidate.hypothesis_compatible,
+        analytic_obligations: candidate.analytic_obligations,
+        route_penalty_scaled: candidate.route_penalty_scaled,
+        auxiliary_gain_scaled: candidate.auxiliary_gain_scaled,
+        m4_numerator: candidate.m4_numerator,
+        m4_denominator: candidate.m4_denominator,
+        first_lambda_micros: first_lambda,
+        bound_scaled: bound,
+        input_margin_scaled: margin,
+        numerical_hit: hit,
+        rigorous_hit: candidate.rigorous_hit,
+        score_scaled: score,
+        status: candidate.status,
+        evaluated: true,
+    }
+}
+
+component BarrageExpectation {
+    proposal_count: int = 0
+}
+
+component BarrageSelection {
+    proposal_count: int = 0
+    ids_seen: list = []
+    promoted: BarrageUniverse = BarrageUniverse {}
+    compatible_hits: int = 0
+    rigorous_hits: int = 0
+}
+
+intent BarrageFinding {
+    key target: entity
+    candidate: BarrageUniverse
+}
+
+law SubmitBarrage(target: entity, candidate: BarrageUniverse) {
+    propose BarrageFinding { target: target, candidate: candidate }
+}
+
+resolver SelectBarrage for BarrageFinding(target, proposals) {
+    let mut best = BarrageUniverse { score_scaled: -3 * SCALE }
+    let mut ids = []
+    let mut compatible_hits = 0
+    let mut rigorous_hits = 0
+    for proposal in proposals {
+        let candidate = proposal.candidate
+        assert(candidate.evaluated, "unevaluated barrage route")
+        assert(not contains(ids, candidate.attack_id), "duplicate barrage route")
+        ids = push(ids, candidate.attack_id)
+        if candidate.hypothesis_compatible and candidate.numerical_hit {
+            compatible_hits = compatible_hits + 1
+        }
+        if candidate.rigorous_hit {
+            rigorous_hits = rigorous_hits + 1
+        }
+        if candidate.score_scaled > best.score_scaled {
+            best = candidate
+        }
+    }
+    next(target, BarrageSelection {
+        proposal_count: len(proposals),
+        ids_seen: ids,
+        promoted: best,
+        compatible_hits: compatible_hits,
+        rigorous_hits: rigorous_hits,
+    })
+}
+
+constraint CompleteBarrage
+for BarrageSelection(subject, proposed)
+watches BarrageExpectation
+{
+    let expected = candidate(subject, BarrageExpectation)
+    require proposed.proposal_count == expected.proposal_count else "zeta.70.barrage_count"
+    require len(proposed.ids_seen) == expected.proposal_count else "zeta.70.barrage_partition"
+    require proposed.promoted.attack_id == "fourth_moment_balanced_type_ii" else "zeta.70.barrage_promotion"
+}
+
+entity barrage_judge {
+    BarrageExpectation {}
+    BarrageSelection {}
+}
+
+entity reversed_barrage_judge {
+    BarrageExpectation {}
+    BarrageSelection {}
+}
+
+event BarrageReady {
+    target: entity
+    candidates: list
+    reversed: bool
+}
+
+on BarrageReady(evt) {
+    settle {
+        if evt.reversed {
+            for index in range(len(evt.candidates)) {
+                SubmitBarrage(evt.target, evt.candidates[len(evt.candidates) - index - 1])
+            }
+        } else {
+            for candidate in evt.candidates {
+                SubmitBarrage(evt.target, candidate)
+            }
+        }
+    }
+}
+
+fn main() -> nil {
+    let attacks = [
+        BarrageUniverse {
+            attack_id: "bandwidth_plain",
+            mode: "bandwidth",
+            analytic_obligations: 1,
+            route_penalty_scaled: 60000000,
+            status: "pair-prime input beyond support one",
+        },
+        BarrageUniverse {
+            attack_id: "bandwidth_plus_certified_f6",
+            mode: "bandwidth",
+            analytic_obligations: 2,
+            route_penalty_scaled: 50000000,
+            auxiliary_gain_scaled: CERTIFIED_F6_GAIN,
+            status: "transport the certified local defect into a widened window",
+        },
+        BarrageUniverse {
+            attack_id: "bandwidth_plus_full_quadratic",
+            mode: "bandwidth",
+            analytic_obligations: 3,
+            route_penalty_scaled: 45000000,
+            auxiliary_gain_scaled: FULL_QUADRATIC_SCOUT_GAIN,
+            status: "best possible quadratic density gain plus wider support",
+        },
+        BarrageUniverse {
+            attack_id: "fourth_moment_full_asymptotic",
+            mode: "fourth_moment",
+            analytic_obligations: 1,
+            route_penalty_scaled: 90000000,
+            m4_numerator: 13,
+            m4_denominator: 4,
+            status: "Hardy-Littlewood-strength fourth trace; yields 13/18",
+        },
+        BarrageUniverse {
+            attack_id: "fourth_moment_relaxed_upper",
+            mode: "fourth_moment",
+            analytic_obligations: 1,
+            route_penalty_scaled: 55000000,
+            m4_numerator: 59,
+            m4_denominator: 18,
+            status: "only prove m4 <= 59/18, not the full 13/4 asymptotic",
+        },
+        BarrageUniverse {
+            attack_id: "fourth_moment_balanced_type_ii",
+            mode: "fourth_moment",
+            analytic_obligations: 3,
+            route_penalty_scaled: 0,
+            m4_numerator: 59,
+            m4_denominator: 18,
+            status: "prove the balanced Type-II Lambda-convolution correlation at H asymptotic to sqrt(Y)",
+        },
+        BarrageUniverse {
+            attack_id: "fourth_moment_typical_e2_split",
+            mode: "fourth_moment",
+            analytic_obligations: 4,
+            route_penalty_scaled: 150000000,
+            m4_numerator: 59,
+            m4_denominator: 18,
+            status: "demoted: small-factor almost-prime theorems miss balanced log-weighted L2 mass",
+        },
+        BarrageUniverse {
+            attack_id: "fourth_moment_sieve_upper",
+            mode: "fourth_moment",
+            analytic_obligations: 2,
+            route_penalty_scaled: 40000000,
+            m4_numerator: 59,
+            m4_denominator: 18,
+            status: "weighted upper-bound sieve must stay within relative excess 1/117",
+        },
+        BarrageUniverse {
+            attack_id: "cubic_odd_moment",
+            mode: "blocked",
+            analytic_obligations: 1,
+            bound_scaled: CURRENT_H,
+            status: "rejected: an odd moment does not improve the unconditional positive-index bound",
+        },
+        BarrageUniverse {
+            attack_id: "rh_mollifier_19_over_27",
+            mode: "external_hypothesis",
+            hypothesis_compatible: false,
+            analytic_obligations: 0,
+            bound_scaled: 703703703,
+            numerical_hit: true,
+            status: "rejected: assumes RH and is not an unconditional improvement",
+        },
+    ]
+
+    let root = fork()
+    let live_before = world_digest()
+    let mut worlds = []
+    for attack in attacks {
+        worlds = push(worlds, fork_with(root, attack))
+    }
+    let futures = simulate_many(worlds, [system::RunBarrage], 1, 2081)
+    assert(world_digest() == live_before, "barrage speculation leaked")
+
+    let mut reports = []
+    let mut wire_digests = []
+    for future in futures {
+        assert_only_changed(root, future, [BarrageUniverse])
+        let wire = fork_to_bytes(future)
+        let restored = fork_from_bytes(wire) |> unwrap
+        assert(world_digest(restored) == world_digest(future), "barrage wire mismatch")
+        reports = push(reports, peek_resource(restored, BarrageUniverse) |> unwrap)
+        wire_digests = push(wire_digests, world_digest(restored))
+    }
+
+    set(barrage_judge, BarrageExpectation { proposal_count: len(attacks) })
+    set(reversed_barrage_judge, BarrageExpectation { proposal_count: len(attacks) })
+    emit BarrageReady { target: barrage_judge, candidates: reports, reversed: false }
+    emit BarrageReady { target: reversed_barrage_judge, candidates: reports, reversed: true }
+    flush_events()
+
+    let selected = require(barrage_judge, BarrageSelection)
+    let reversed = require(reversed_barrage_judge, BarrageSelection)
+    assert(selected == reversed, "barrage depends on proposal order")
+
+    let receipt: map<str, any> = {
+        "schema": "rad.zeta-frontier-barrage.v1",
+        "target_scaled": TARGET,
+        "scale": SCALE,
+        "attacks": reports,
+        "selection": selected,
+        "fourth_moment_target": {
+            "predicted_numerator": 13,
+            "predicted_denominator": 4,
+            "sufficient_cap_numerator": 59,
+            "sufficient_cap_denominator": 18,
+            "additive_slack_numerator": 1,
+            "additive_slack_denominator": 36,
+            "relative_slack_numerator": 1,
+            "relative_slack_denominator": 117,
+        },
+        "rigorous_target_reached": selected.rigorous_hits > 0,
+        "proposal_order_independent": selected == reversed,
+        "speculation_isolated": world_digest() != "" and live_before != "",
+        "wire_digests": wire_digests,
+        "promotion_why": why(barrage_judge, BarrageSelection),
+    }
+    create_dir("projects/dogfood/zeta-simple-zeros/out")
+    write_file(
+        "projects/dogfood/zeta-simple-zeros/out/frontier-barrage.json",
+        json_stringify(receipt),
+    )
+    print("10-way unconditional 70% barrage")
+    print("compatible numerical hits:", selected.compatible_hits)
+    print("rigorous hits:", selected.rigorous_hits)
+    print("promoted:", selected.promoted.attack_id)
+    print("promoted bound:", selected.promoted.bound_scaled, "/", SCALE)
+    print("promoted status:", selected.promoted.status)
+    print(why(barrage_judge, BarrageSelection))
+}

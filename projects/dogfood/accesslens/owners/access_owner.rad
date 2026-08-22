@@ -1,0 +1,123 @@
+use "../schema.rad"
+
+pub component UserIdentity owned {
+    indexed user_id: UserId = UserId(u64(0)),
+    ordered indexed directory_order: (u64, u64) = (u64(0), u64(0)),
+    display_name: str = "",
+}
+
+pub component MfaEnrollment owned {
+    active: bool = false,
+}
+
+pub component DeviceTrust owned {
+    level: int = 0,
+}
+
+pub component EmploymentStatus owned {
+    active: bool = false,
+}
+
+pub component Entitlement owned {
+    indexed user_id: UserId = UserId(u64(0)),
+    role: str = "",
+    active: bool = false,
+}
+
+pub component AccessDecision owned {
+    allowed: bool = false,
+    policy: str = "",
+}
+
+pub materialized view ProductionDeployers {
+    depends [UserIdentity, MfaEnrollment, DeviceTrust, EmploymentStatus, Entitlement]
+    key UserIdentity.user_id
+    where MfaEnrollment.active == true
+        and DeviceTrust.level >= 2
+        and EmploymentStatus.active == true
+        and Entitlement.role == "Deployer"
+        and Entitlement.active == true
+}
+
+pub fn publish_user(id: UserId, display_name: str, trusted: bool) -> entity
+    writes owned [UserIdentity, MfaEnrollment, DeviceTrust, EmploymentStatus, Entitlement, AccessDecision]
+{
+    return spawn(
+        UserIdentity {
+            user_id: id,
+            directory_order: (u64(id), u64(id)),
+            display_name: display_name,
+        },
+        MfaEnrollment { active: true },
+        DeviceTrust { level: if trusted { 3 } else { 1 } },
+        EmploymentStatus { active: true },
+        Entitlement { user_id: id, role: "Deployer", active: true },
+        AccessDecision { allowed: trusted, policy: "production-deployer-v1" },
+    )
+}
+
+pub transaction SetDeviceTrust(user: entity, level: int)
+    writes owned [DeviceTrust, AccessDecision]
+{
+    requires has(user, DeviceTrust)
+    requires level >= 0 and level <= 3
+    changes_only [DeviceTrust, AccessDecision]
+
+    set(user, DeviceTrust { level: level })
+    let eligible = level >= 2
+        and require(user, MfaEnrollment).active
+        and require(user, EmploymentStatus).active
+        and has(user, Entitlement)
+    set(user, AccessDecision {
+        allowed: eligible,
+        policy: "production-deployer-v1",
+    })
+
+    ensures require(user, DeviceTrust).level == level
+    ensures require(user, AccessDecision).allowed == (
+        level >= 2
+        and require(user, MfaEnrollment).active
+        and require(user, EmploymentStatus).active
+        and has(user, Entitlement)
+    )
+}
+
+pub transaction RenameUser(user: entity, display_name: str)
+    writes owned [UserIdentity]
+{
+    requires has(user, UserIdentity)
+    changes_only [UserIdentity]
+    let identity: UserIdentity = require(user, UserIdentity)
+    set(user, UserIdentity {
+        user_id: identity.user_id,
+        directory_order: identity.directory_order,
+        display_name: display_name,
+    })
+    ensures require(user, UserIdentity).display_name == display_name
+}
+
+pub transaction RevokeProductionAccess(
+    user: entity,
+    batch: RevocationBatchId,
+    reason: str,
+)
+    writes owned [Entitlement, AccessDecision]
+{
+    requires has(user, Entitlement)
+    changes_only [Entitlement, AccessDecision]
+    remove(user, Entitlement)
+    set(user, AccessDecision {
+        allowed: false,
+        policy: "production-deployer-v1",
+    })
+    ensures not has(user, Entitlement)
+    ensures not require(user, AccessDecision).allowed
+
+    post_commit {
+        emit next EntitlementRevoked { user: user, batch: batch, reason: reason }
+    }
+}
+
+pub readonly fn user_by_id(id: UserId) -> entity {
+    return lookup(UserIdentity, "user_id", id) |> unwrap
+}

@@ -56,7 +56,11 @@ impl Checker {
                 .map(|e| self.expr_is_conservatively_readonly(e))
                 .unwrap_or(true),
             Stmt::Break(_) | Stmt::Continue(_) => true,
-            Stmt::Emit(_) | Stmt::Schedule(_) | Stmt::Update(_) | Stmt::Settle(_) => false,
+            Stmt::Emit(_)
+            | Stmt::Schedule(_)
+            | Stmt::Update(_)
+            | Stmt::Transaction(_)
+            | Stmt::Settle(_) => false,
             Stmt::Propose(s) => s
                 .fields
                 .iter()
@@ -397,6 +401,7 @@ impl Checker {
             Stmt::Emit(_) => Some("emits an event".to_string()),
             Stmt::Schedule(_) => Some("runs a system schedule".to_string()),
             Stmt::Update(_) => Some("calls impure builtin 'set'".to_string()),
+            Stmt::Transaction(_) => Some("opens an atomic transaction".to_string()),
             Stmt::Settle(_) => Some("opens a causal settlement".to_string()),
             Stmt::Propose(s) => s
                 .fields
@@ -695,6 +700,21 @@ impl Checker {
                 .find_map(|(_, expr)| self.find_expr_sim_breach(expr))
                 .or_else(|| e.delay.as_ref().and_then(|d| self.find_expr_sim_breach(d))),
             Stmt::Schedule(_) | Stmt::Update(_) => None,
+            Stmt::Transaction(s) => s
+                .requires
+                .iter()
+                .find_map(|condition| self.find_expr_sim_breach(condition))
+                .or_else(|| self.find_block_sim_breach_with_locals(&s.body, local_muts))
+                .or_else(|| {
+                    s.ensures
+                        .iter()
+                        .find_map(|condition| self.find_expr_sim_breach(condition))
+                })
+                .or_else(|| {
+                    s.post_commit.as_ref().and_then(|block| {
+                        self.find_block_sim_breach_with_locals(block, local_muts)
+                    })
+                }),
             Stmt::Settle(s) => self.find_block_sim_breach_with_locals(&s.body, local_muts),
             Stmt::Propose(s) => s
                 .fields
@@ -770,6 +790,8 @@ impl Checker {
                 | "rand_bool"
                 | "rand_seed"
                 | "load_extension"
+                | "host_try"
+                | "host_try0"
                 | "log"
                 | "metric"
         )

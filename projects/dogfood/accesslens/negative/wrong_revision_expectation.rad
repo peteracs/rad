@@ -1,0 +1,7 @@
+use "../schema.rad"
+use "../owners/access_owner.rad"
+
+let user = publish_user(UserId(u64(1)), "Alice", true)
+let before = revision(ProductionDeployers)
+RenameUser(user, "Alice Chen")
+assert(revision(ProductionDeployers) > before, "incorrectly expected unrelated text to move membership")

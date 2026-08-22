@@ -1,0 +1,354 @@
+// Evidence-driven scheduler for attacks on the 70% boundary.
+// Every branch is measured by a dogfood receipt or an exact obstruction.  RAD
+// forks the portfolio, scores proof obligations, settles in both orders, and
+// records why() ancestry for the promoted branch.
+
+let SCALE = 1000000000
+let TARGET_SCALED = 700000000
+
+resource AttackUniverse {
+    attack_id: str = ""
+    conditional_bound_scaled: int = 0
+    rigorous_bound: bool = false
+    rigorous_obstruction: bool = false
+    analytic_obligations: int = 0
+    barrier_penalty_scaled: int = 0
+    score_scaled: int = 0
+    status: str = ""
+    evaluated: bool = false
+}
+
+system EvaluateAttack(candidate: mut AttackUniverse) {
+    let score = if candidate.rigorous_bound
+    and candidate.conditional_bound_scaled >= TARGET_SCALED {
+        10 * SCALE + candidate.conditional_bound_scaled
+    } else if candidate.rigorous_obstruction {
+        -SCALE + candidate.conditional_bound_scaled
+    } else {
+        candidate.conditional_bound_scaled
+        - candidate.analytic_obligations * 10000000
+        - candidate.barrier_penalty_scaled
+    }
+    candidate = AttackUniverse {
+        attack_id: candidate.attack_id,
+        conditional_bound_scaled: candidate.conditional_bound_scaled,
+        rigorous_bound: candidate.rigorous_bound,
+        rigorous_obstruction: candidate.rigorous_obstruction,
+        analytic_obligations: candidate.analytic_obligations,
+        barrier_penalty_scaled: candidate.barrier_penalty_scaled,
+        score_scaled: score,
+        status: candidate.status,
+        evaluated: true,
+    }
+}
+
+component AttackExpectation {
+    proposal_count: int = 0
+}
+
+component PromotedAttack {
+    proposal_count: int = 0
+    ids_seen: list = []
+    attack_id: str = ""
+    conditional_bound_scaled: int = 0
+    rigorous_bound: bool = false
+    analytic_obligations: int = 0
+    barrier_penalty_scaled: int = 0
+    score_scaled: int = 0
+    status: str = ""
+}
+
+intent AttackFinding {
+    key target: entity
+    candidate: AttackUniverse
+}
+
+law SubmitAttack(target: entity, candidate: AttackUniverse) {
+    propose AttackFinding { target: target, candidate: candidate }
+}
+
+resolver PromoteAttack for AttackFinding(target, proposals) {
+    let _expected = require(target, AttackExpectation)
+    let mut best = AttackUniverse { score_scaled: -10 * SCALE }
+    let mut ids = []
+    for proposal in proposals {
+        let candidate = proposal.candidate
+        assert(candidate.evaluated, "unevaluated attack evidence")
+        assert(not contains(ids, candidate.attack_id), "duplicate attack evidence")
+        ids = push(ids, candidate.attack_id)
+        if candidate.score_scaled > best.score_scaled {
+            best = candidate
+        }
+    }
+    next(target, PromotedAttack {
+        proposal_count: len(proposals),
+        ids_seen: ids,
+        attack_id: best.attack_id,
+        conditional_bound_scaled: best.conditional_bound_scaled,
+        rigorous_bound: best.rigorous_bound,
+        analytic_obligations: best.analytic_obligations,
+        barrier_penalty_scaled: best.barrier_penalty_scaled,
+        score_scaled: best.score_scaled,
+        status: best.status,
+    })
+}
+
+constraint CompleteAttackPortfolio
+for PromotedAttack(subject, proposed)
+watches AttackExpectation
+{
+    let expected = candidate(subject, AttackExpectation)
+    require proposed.proposal_count == expected.proposal_count else "zeta.70.scheduler_count"
+    require len(proposed.ids_seen) == expected.proposal_count else "zeta.70.scheduler_partition"
+    require proposed.attack_id != "" else "zeta.70.scheduler_selection"
+}
+
+entity attack_judge {
+    AttackExpectation {}
+    PromotedAttack {}
+}
+
+entity reversed_attack_judge {
+    AttackExpectation {}
+    PromotedAttack {}
+}
+
+event AttackBatchReady {
+    target: entity
+    candidates: list
+    reverse_order: bool
+}
+
+on AttackBatchReady(evt) {
+    settle {
+        if evt.reverse_order {
+            for index in range(len(evt.candidates)) {
+                SubmitAttack(evt.target, evt.candidates[len(evt.candidates) - index - 1])
+            }
+        } else {
+            for candidate in evt.candidates {
+                SubmitAttack(evt.target, candidate)
+            }
+        }
+    }
+}
+
+fn explore_attacks(candidates: list) -> map<str, any> {
+    let live_before = world_digest()
+    let root = fork()
+    let mut worlds = []
+    for candidate in candidates {
+        worlds = push(worlds, fork_with(root, candidate))
+    }
+    let futures = simulate_many(worlds, [system::EvaluateAttack], 1, 2053)
+    assert(world_digest() == live_before, "attack forks mutated live state")
+    let mut reports = []
+    let mut first_wire_digest = ""
+    let mut last_wire_digest = ""
+    for future in futures {
+        assert_only_changed(root, future, [AttackUniverse])
+        let wire = fork_to_bytes(future)
+        let restored = fork_from_bytes(wire) |> unwrap
+        assert(world_digest(restored) == world_digest(future), "attack wire roundtrip changed a fork")
+        reports = push(reports, peek_resource(restored, AttackUniverse) |> unwrap)
+        if first_wire_digest == "" {
+            first_wire_digest = world_digest(restored)
+        }
+        last_wire_digest = world_digest(restored)
+    }
+    let result: map<str, any> = {
+        "candidates": reports,
+        "live_before": live_before,
+        "live_after": world_digest(),
+        "wire_boundary_digests": [first_wire_digest, last_wire_digest],
+    }
+    return result
+}
+
+fn decode_receipt(path: str) -> map<str, any> {
+    let encoded = read_file(path)
+    let decoded = json_parse(encoded)
+    assert(is_some(decoded), f"invalid attack receipt: {path}")
+    return unwrap(decoded)
+}
+
+fn main() -> nil {
+    let verified = decode_receipt("projects/dogfood/zeta-simple-zeros/out/verification-382.json")
+    let gate = decode_receipt("projects/dogfood/zeta-simple-zeros/out/seventy-percent-gate.json")
+    let scalar = decode_receipt("projects/dogfood/zeta-simple-zeros/out/cosine-window-attack.json")
+    let direct_sum = decode_receipt("projects/dogfood/zeta-simple-zeros/out/direct-sum-attack.json")
+    let perturbation = decode_receipt("projects/dogfood/zeta-simple-zeros/out/perturbed-window-attack.json")
+    let moment = decode_receipt("projects/dogfood/zeta-simple-zeros/out/cubic-moment-attack.json")
+    let density = decode_receipt("projects/dogfood/zeta-simple-zeros/out/density-attack.json")
+    let barrage = decode_receipt("projects/dogfood/zeta-simple-zeros/out/frontier-barrage.json")
+    let transfer = decode_receipt("projects/dogfood/zeta-simple-zeros/out/fourth-moment-transfer.json")
+    let mollifier = decode_receipt("projects/dogfood/zeta-simple-zeros/out/mollifier-inertia-attack.json")
+    let two_mode = decode_receipt("projects/dogfood/zeta-simple-zeros/out/two-mode-window-attack.json")
+    let fejer = decode_receipt("projects/dogfood/zeta-simple-zeros/out/fejer-type-ii-attack.json")
+    let analytic = decode_receipt("projects/dogfood/zeta-simple-zeros/out/analytic-theorem.json")
+    assert(verified["verified"], "scheduler received an unverified F6 boundary")
+    assert(gate["affine_shifted_block_obstruction"]["rigorous"], "affine obstruction is not rigorous")
+    assert(not scalar["crosses_target_numerically"], "scalar-window receipt changed")
+    assert(not direct_sum["crosses_target_numerically"], "direct-sum receipt changed")
+    assert(not perturbation["crosses_target_numerically"], "perturbation receipt changed")
+    assert(moment["required_u3_upper_scaled"] == 1900000000, "cubic threshold changed")
+    assert(density["numerically_obstructs_full_quadratic_route"], "density obstruction changed")
+    assert(
+        barrage["selection"]["promoted"]["attack_id"] == "fourth_moment_balanced_type_ii",
+        "frontier barrage promotion changed",
+    )
+    assert(transfer["promising"], "balanced fourth-moment scout lost its numerical hit")
+    assert(mollifier["selection"]["raw_hits"] > 0, "mollifier frontier changed")
+    assert(not two_mode["crosses_target_numerically"], "two-mode window unexpectedly crossed")
+    assert(fejer["selection"]["reserved_passes"] > 0, "Fejer budget lost its reserved hit")
+    assert(not analytic["rigorous"], "analytic fourth-trace audit unexpectedly self-certified")
+    assert(
+        analytic["simple_zero_bound"][0] == 13 and analytic["simple_zero_bound"][1] == 18,
+        "analytic fourth-trace bound changed",
+    )
+
+    let candidates = [
+        AttackUniverse {
+            attack_id: "certified_affine_f6",
+            conditional_bound_scaled: verified["strengthened_boundary"]["proportion_lower_scaled"] / 10000,
+            rigorous_bound: true,
+            rigorous_obstruction: true,
+            analytic_obligations: 0,
+            barrier_penalty_scaled: 0,
+            status: "verified at 67.302136%; rigorously obstructed below 70 in the affine family",
+        },
+        AttackUniverse {
+            attack_id: "scalar_window",
+            conditional_bound_scaled: scalar["selection"]["best_simple_bound_scaled"],
+            rigorous_bound: false,
+            rigorous_obstruction: true,
+            analytic_obligations: 0,
+            barrier_penalty_scaled: 0,
+            status: "148-world settlement collapses to q=0",
+        },
+        AttackUniverse {
+            attack_id: "convex_direct_sum",
+            conditional_bound_scaled: direct_sum["selection"]["best_simple_bound_scaled"],
+            rigorous_bound: false,
+            rigorous_obstruction: true,
+            analytic_obligations: 0,
+            barrier_penalty_scaled: 0,
+            status: "2193-world settlement collapses to zero companion weight",
+        },
+        AttackUniverse {
+            attack_id: "fourier_perturbation",
+            conditional_bound_scaled: perturbation["selection"]["best_simple_bound_scaled"],
+            rigorous_bound: false,
+            rigorous_obstruction: false,
+            analytic_obligations: 2,
+            barrier_penalty_scaled: 20000000,
+            status: "improves numerically to 67.3086%, but remains far below target",
+        },
+        AttackUniverse {
+            attack_id: "two_mode_fourier_window",
+            conditional_bound_scaled: two_mode["selection"]["best"]["bound_scaled"],
+            rigorous_bound: false,
+            rigorous_obstruction: false,
+            analytic_obligations: 1,
+            barrier_penalty_scaled: 100000000,
+            status: "two-mode hot path improves to 67.31956%, with asymptotic ceiling near 67.31993%",
+        },
+        AttackUniverse {
+            attack_id: "density_coupled_quadratic",
+            conditional_bound_scaled: density["selection"]["implied_simple_bound_scaled"],
+            rigorous_bound: false,
+            rigorous_obstruction: false,
+            analytic_obligations: 1,
+            barrier_penalty_scaled: 100000000,
+            status: "3535-world 70%-density adversary leaves only 0.0018733 full quadratic defect",
+        },
+        AttackUniverse {
+            attack_id: "wider_bandwidth",
+            conditional_bound_scaled: gate["bandwidth_attack"]["first_crossing_baseline_scaled"],
+            rigorous_bound: false,
+            rigorous_obstruction: false,
+            analytic_obligations: 2,
+            barrier_penalty_scaled: 142750000,
+            status: "crosses numerically at lambda=1.04275; near-diagonal prime term grows like T^0.04275",
+        },
+        AttackUniverse {
+            attack_id: "fourth_moment_balanced_type_ii",
+            conditional_bound_scaled: barrage["selection"]["promoted"]["bound_scaled"],
+            rigorous_bound: false,
+            rigorous_obstruction: false,
+            analytic_obligations: 3,
+            barrier_penalty_scaled: 10000000,
+            status: "superseded by the positive Fejer factor slicing of the same balanced correlation",
+        },
+        AttackUniverse {
+            attack_id: "fourth_moment_fejer_factor_slicing",
+            conditional_bound_scaled: 722222222,
+            rigorous_bound: false,
+            rigorous_obstruction: false,
+            analytic_obligations: 2,
+            barrier_penalty_scaled: 0,
+            status: "positive fourth-trace norm; factor-sliced almost-prime correlations plus a coarse balanced-tail sieve",
+        },
+        AttackUniverse {
+            attack_id: "mollifier_inertia_conversion",
+            conditional_bound_scaled: mollifier["selection"]["best"]["ratio_scaled"],
+            rigorous_bound: false,
+            rigorous_obstruction: false,
+            analytic_obligations: 2,
+            barrier_penalty_scaled: 150000000,
+            status: "raw 19/27 route tolerates under 0.45% signature loss at theta=0.499",
+        },
+        AttackUniverse {
+            attack_id: "conditional_long_shift_fourth_trace",
+            conditional_bound_scaled: analytic["simple_zero_bound_scaled"],
+            rigorous_bound: false,
+            rigorous_obstruction: false,
+            analytic_obligations: 3,
+            barrier_penalty_scaled: 0,
+            status: "conditional 13/18 route; balanced-convolution minor/major arcs and quantitative fourth-trace transfer remain open",
+        },
+    ]
+    let expected = len(candidates)
+    set(attack_judge, AttackExpectation { proposal_count: expected })
+    set(reversed_attack_judge, AttackExpectation { proposal_count: expected })
+    let explored = explore_attacks(candidates)
+    emit AttackBatchReady {
+        target: attack_judge,
+        candidates: explored["candidates"],
+        reverse_order: false,
+    }
+    emit AttackBatchReady {
+        target: reversed_attack_judge,
+        candidates: explored["candidates"],
+        reverse_order: true,
+    }
+    flush_events()
+    let selected = require(attack_judge, PromotedAttack)
+    let reversed = require(reversed_attack_judge, PromotedAttack)
+    assert(selected == reversed, "attack promotion depends on proposal order")
+    assert(selected.attack_id == "certified_affine_f6", "scheduler promoted an unproved bound")
+
+    let receipt: map<str, any> = {
+        "schema": "rad.zeta-attack-scheduler.v1",
+        "target_scaled": TARGET_SCALED,
+        "scale": SCALE,
+        "promoted": selected,
+        "rigorous_target_reached": selected.rigorous_bound
+        and selected.conditional_bound_scaled >= TARGET_SCALED,
+        "proposal_order_independent": selected == reversed,
+        "speculation_isolated": explored["live_before"] == explored["live_after"],
+        "wire_boundary_digests": explored["wire_boundary_digests"],
+        "promotion_why": why(attack_judge, PromotedAttack),
+    }
+    create_dir("projects/dogfood/zeta-simple-zeros/out")
+    write_file(
+        "projects/dogfood/zeta-simple-zeros/out/attack-scheduler.json",
+        json_stringify(receipt),
+    )
+    print("70% attack scheduler")
+    print("promoted attack:", selected.attack_id)
+    print("conditional bound:", selected.conditional_bound_scaled, "/", SCALE)
+    print("remaining analytic obligations:", selected.analytic_obligations)
+    print("status:", selected.status)
+    print(why(attack_judge, PromotedAttack))
+}

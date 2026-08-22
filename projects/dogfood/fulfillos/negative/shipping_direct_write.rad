@@ -1,0 +1,2 @@
+component Inventory owned { available: int = 0 }
+fn shipping(target: entity) { set(target, Inventory { available: 0 }) }

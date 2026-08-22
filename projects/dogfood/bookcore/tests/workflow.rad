@@ -1,0 +1,21 @@
+use "../schema.rad"
+use "../owners/order_book.rad"
+use "../systems/matching.rad"
+use "../scenarios/production.rad"
+
+test "price-time priority drains a crossing book" {
+    run_exchange_day(1000)
+    assert(len(entities(Fill)) == 500, "fills exact")
+}
+
+test "range traversal is a stable snapshot during cancellation" {
+    submit_sell(OrderId(u64(7001)), AccountId(u64(1)), PriceTicks(i64(-2)), Quantity(u64(1)), Sequence(u64(1)))
+    submit_sell(OrderId(u64(7002)), AccountId(u64(1)), PriceTicks(i64(-1)), Quantity(u64(1)), Sequence(u64(2)))
+    submit_sell(OrderId(u64(7003)), AccountId(u64(1)), PriceTicks(i64(0)), Quantity(u64(1)), Sequence(u64(3)))
+    let selected = range(SellOrder, "priority", (PriceTicks(i64(-2)), Sequence(u64(0))), (PriceTicks(i64(1)), Sequence(u64(0))))
+    for target in selected {
+        let identity: OrderIdentity = require(target, OrderIdentity)
+        assert(cancel_order(identity.order_id), "selected order cancelled once")
+    }
+    assert(len(entities(OpenOrders)) == 0, "no traversal skip")
+}

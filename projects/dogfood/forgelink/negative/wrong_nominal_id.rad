@@ -1,0 +1,5 @@
+opaque type DeviceId = u32
+opaque type SessionId = u32
+fn open_device(_device: DeviceId) {}
+let session: SessionId = SessionId(u32(7))
+open_device(session)

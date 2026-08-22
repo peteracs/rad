@@ -1,0 +1,1 @@
+let impossible: u8 = u8(300)

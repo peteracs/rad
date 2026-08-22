@@ -1,0 +1,23 @@
+component Attempt { count: int = 3 }
+component RetryPolicy { limit: int = 3 }
+component Failed {}
+component RetryWaiting {}
+component DeadLettered {}
+let job = spawn(Attempt { count: 3 }, RetryPolicy { limit: 3 }, Failed {})
+
+fn retry_after_exhaustion() -> nil {
+    remove(job, Failed)
+    set(job, RetryWaiting {})
+}
+
+model ExhaustionDeadLetters {
+    commands [retry_after_exhaustion]
+    invariant {
+        return has(job, Failed)
+            or require(job, Attempt).count < require(job, RetryPolicy).limit
+            or has(job, DeadLettered)
+    }
+    runs 1
+    max_commands 1
+    seed 9
+}

@@ -1,0 +1,44 @@
+use "../schema.rad"
+use "../host/risk_model.rad"
+
+pub fn fixture_request() -> RiskInput {
+    return RiskInput {
+        customer: CustomerId(u64(1)),
+        transaction: TransactionId(u64(1)),
+        amount: MoneyCents(i64(1000)),
+        merchant_category: u16(5411),
+        country: u16(156),
+        signals: RiskSignals(u64(1)),
+        model: ModelId(u32(17)),
+    }
+}
+
+pub fn fixture_score(path: str) -> str {
+    let extension = load_extension(path)
+    let score: pure fn(str) -> str = extension["score_transaction"]
+    return score(json_stringify(encode_risk_input(fixture_request())))
+}
+
+pub fn fixture_score_result(path: str) -> Result<str, str> {
+    let extension = load_extension(path)
+    let score: pure fn(str) -> str = extension["score_transaction"]
+    return host_try(score, json_stringify(encode_risk_input(fixture_request())))
+}
+
+pub fn fixture_raw(path: str) -> any {
+    let extension = load_extension(path)
+    let score: any = extension["score_transaction"]
+    return score(json_stringify(encode_risk_input(fixture_request())))
+}
+
+pub fn fixture_probe(path: str) -> any {
+    let extension = load_extension(path)
+    let probe: any = extension["risk_determinism_probe"]
+    return probe()
+}
+
+pub fn fixture_probe_result(path: str) -> Result<str, str> {
+    let extension = load_extension(path)
+    let probe: pure fn() -> str = extension["risk_determinism_probe"]
+    return host_try0(probe)
+}

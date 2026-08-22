@@ -1,140 +1,6 @@
 
 
 impl VM {
-    fn bi_flat_map(&mut self, args: Vec<Value>) -> Result<Value, String> {
-        if args.len() < 2 {
-            return Err("flat_map() requires 2 arguments".into());
-        }
-        let mut arg_iter = args.into_iter();
-        let list = arg_iter.next().unwrap();
-        let func = arg_iter.next().unwrap();
-
-        let items = if list.as_list().is_some() {
-            list.into_rad_list().unwrap().into_vec()
-        } else if let Some(s) = list.as_str() {
-            let gc = &mut self.gc;
-            s.chars()
-                .map(|c| Value::from_string(gc, c.to_string()))
-                .collect()
-        } else {
-            return Err(format!(
-                "flat_map() expects list or string, got {}",
-                list.type_name()
-            ));
-        };
-
-        let mut result = Vec::new();
-        for item in items.into_iter() {
-            let mapped = self.call_value(&func, vec![item])?;
-            let sub_items = mapped.as_list().ok_or_else(|| {
-                format!(
-                    "flat_map() callback must return a list, got {}",
-                    mapped.type_name()
-                )
-            })?;
-            result.extend(sub_items.iter().cloned());
-        }
-        Ok(Value::list(&mut self.gc, result))
-    }
-
-    fn bi_group_by(&mut self, args: Vec<Value>) -> Result<Value, String> {
-        if args.len() < 2 {
-            return Err("group_by() requires 2 arguments".into());
-        }
-        let mut arg_iter = args.into_iter();
-        let list = arg_iter.next().unwrap();
-        let func = arg_iter.next().unwrap();
-
-        let items = if list.as_list().is_some() {
-            list.into_rad_list().unwrap().into_vec()
-        } else if let Some(s) = list.as_str() {
-            let gc = &mut self.gc;
-            s.chars()
-                .map(|c| Value::from_string(gc, c.to_string()))
-                .collect()
-        } else {
-            return Err(format!(
-                "group_by() expects list or string, got {}",
-                list.type_name()
-            ));
-        };
-
-        // real map keys (str, int, bool, entity, tuple) — invalid key
-        // types (float, nil, …) error instead of silently stringifying
-        let mut groups: HashMap<MapKey, Vec<Value>> = HashMap::new();
-        for item in items.into_iter() {
-            let key_value = self.call_value(&func, vec![item])?;
-            let key = MapKey::from_value(&key_value)
-                .map_err(|e| format!("group_by() key function: {}", e))?;
-            groups.entry(key).or_default().push(item);
-        }
-        let gc = &mut self.gc;
-        let out: MapStorage = groups
-            .into_iter()
-            .map(|(k, vs)| (k, Value::list(gc, vs)))
-            .collect();
-        Ok(Value::map(gc, out))
-    }
-
-    fn bi_sort_by(&mut self, args: Vec<Value>) -> Result<Value, String> {
-        if args.len() < 2 {
-            return Err("sort_by() requires 2 arguments (list, key_fn)".into());
-        }
-        let mut arg_iter = args.into_iter();
-        let list = arg_iter.next().unwrap();
-        let got = list.type_name();
-        let key_fn = arg_iter.next().unwrap();
-
-        let is_string = list.as_str().is_some();
-        let items = if list.as_list().is_some() {
-            list.into_rad_list().unwrap().into_vec()
-        } else if let Some(s) = list.as_str() {
-            let gc = &mut self.gc;
-            s.chars()
-                .map(|c| Value::from_string(gc, c.to_string()))
-                .collect()
-        } else {
-            return Err(format!("sort_by() expects list or string, got {}", got));
-        };
-
-        let mut keyed: Vec<(Value, Value)> = Vec::with_capacity(items.len());
-        for item in items.into_iter() {
-            let key = self.call_value(&key_fn, vec![item])?;
-            keyed.push((key, item));
-        }
-
-        // The shared value order: numbers, strings, bools, and tuple keys
-        // (lexicographic) — multi-key sorting is `sort_by` with a tuple.
-        let mut err: Option<String> = None;
-        keyed.sort_by(|(a, _), (b, _)| match helpers::compare_values(a, b) {
-            Ok(ord) => ord,
-            Err(e) => {
-                if err.is_none() {
-                    err = Some(format!(
-                        "sort_by() key function returned incomparable keys: {}",
-                        e
-                    ));
-                }
-                std::cmp::Ordering::Equal
-            }
-        });
-        if let Some(e) = err {
-            return Err(e);
-        }
-        let result: Vec<Value> = keyed.into_iter().map(|(_, v)| v).collect();
-
-        let gc = &mut self.gc;
-        if is_string {
-            let s: String = result
-                .into_iter()
-                .map(|v| v.as_str().unwrap().to_string())
-                .collect();
-            Ok(Value::from_string(gc, s))
-        } else {
-            Ok(Value::list(gc, result))
-        }
-    }
-
     fn bi_load_extension(&mut self, args: Vec<Value>) -> Result<Value, String> {
         if args.is_empty() {
             return Err("load_extension() requires 1 argument (path)".into());
@@ -155,22 +21,46 @@ impl VM {
 
         #[cfg(not(target_arch = "wasm32"))]
         {
-            let (functions, lib, manifest) = crate::ffi::load_plugin(path, &mut self.gc)?;
-
-            if let Some(existing) = self
-                .native_extension_manifests
-                .iter()
-                .find(|loaded| loaded.extension_id() == manifest.extension_id())
-            {
-                if existing.content_digest() != manifest.content_digest() {
-                    return Err(format!(
-                        "native extension '{}' is already sealed to different content",
-                        manifest.extension_id()
-                    ));
+            let boundary = "native-load:v3";
+            let argument_digest = crate::replay::args_digest(&args)?;
+            if let Some(replayer) = self.replayer.as_mut() {
+                let record = replayer.next_io(boundary, &argument_digest)?;
+                let encoded = record.result?;
+                let (functions, manifest) = crate::ffi::decode_recorded_plugin(encoded)?;
+                let manifests = std::sync::Arc::make_mut(&mut self.native_extension_manifests);
+                if !manifests
+                    .iter()
+                    .any(|loaded| loaded.digest() == manifest.digest())
+                {
+                    manifests.push(manifest);
                 }
+                let mut map = MapStorage::new();
+                for (name, info) in functions {
+                    map.insert(MapKey::Str(name), Value::from_native_fn(&mut self.gc, info));
+                }
+                return Ok(Value::map(&mut self.gc, map));
             }
 
-            self.loaded_libraries.push(lib);
+            let (functions, lib, manifest) =
+                match crate::ffi::load_plugin_isolated(path) {
+                    Ok(loaded) => loaded,
+                    Err(error) => {
+                        if let Some(recorder) = self.recorder.as_mut() {
+                            recorder.record_io(
+                                boundary,
+                                argument_digest,
+                                &Err(error.clone()),
+                            );
+                        }
+                        return Err(error);
+                    }
+                };
+
+            if let Some(recorder) = self.recorder.as_mut() {
+                let encoded = crate::ffi::encode_recorded_plugin(&manifest)?;
+                recorder.record_io(boundary, argument_digest, &Ok(encoded));
+            }
+
             let manifests = std::sync::Arc::make_mut(&mut self.native_extension_manifests);
             if !manifests
                 .iter()
@@ -183,9 +73,55 @@ impl VM {
             for (name, info) in functions {
                 map.insert(MapKey::Str(name), Value::from_native_fn(&mut self.gc, info));
             }
+            // NativeFnInfo owns the isolated generation handle. Dropping this
+            // temporary owner permits automatic unload when the last
+            // callable value disappears instead of retaining every reload
+            // for the lifetime of the VM.
+            drop(lib);
 
             Ok(Value::map(&mut self.gc, map))
         }
+    }
+
+    /// Convert a one-argument host/native failure into a typed language
+    /// `Result`; the worker remains process-isolated and other plugin
+    /// generations remain usable after an `Err`.
+    fn bi_host_try(&mut self, args: Vec<Value>) -> Result<Value, String> {
+        if args.len() != 2 {
+            return Err(format!(
+                "host_try() expects a callable and one argument, got {} arguments",
+                args.len()
+            ));
+        }
+        let callable = args[0];
+        let argument = args[1];
+        let result = self.call_value_caught(&callable, vec![argument]);
+        Ok(match result {
+            Ok(value) => self.make_result(true, value),
+            Err(error) => {
+                let message = Value::from_string(&mut self.gc, error);
+                self.make_result(false, message)
+            }
+        })
+    }
+
+    /// Zero-argument form used for health/determinism probes.
+    fn bi_host_try0(&mut self, args: Vec<Value>) -> Result<Value, String> {
+        if args.len() != 1 {
+            return Err(format!(
+                "host_try0() expects one callable, got {} arguments",
+                args.len()
+            ));
+        }
+        let callable = args[0];
+        let result = self.call_value_caught(&callable, Vec::new());
+        Ok(match result {
+            Ok(value) => self.make_result(true, value),
+            Err(error) => {
+                let message = Value::from_string(&mut self.gc, error);
+                self.make_result(false, message)
+            }
+        })
     }
 
     // ── Tier 1: Standard I/O ──

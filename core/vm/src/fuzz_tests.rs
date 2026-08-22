@@ -26,9 +26,7 @@
 //! a panic.** Budget scales with RAD_FUZZ_ITERS (mutants per payload,
 //! default 120 — CI-friendly seconds; thousands for soak runs).
 
-use crate::compiler::Compiler;
-use crate::lexer::Lexer;
-use crate::parser::Parser;
+use crate::parser::ParserOptions;
 use crate::value::{Builtin, Value};
 use crate::vm::VM;
 use std::panic::{catch_unwind, AssertUnwindSafe};
@@ -60,16 +58,7 @@ fn iters() -> usize {
 }
 
 fn compile(src: &str) -> crate::compiler::CompileResult {
-    let mut lexer = Lexer::new(src);
-    let tokens = lexer.tokenize().0;
-    let mut parser = Parser::new(tokens);
-    let program = parser.parse();
-    assert!(
-        parser.errors().is_empty(),
-        "parse errors: {:?}",
-        parser.errors()
-    );
-    Compiler::new().compile(&program).expect("compile")
+    crate::test_support::compile_source(src, ParserOptions::default()).expect("parse and compile")
 }
 
 fn fresh_vm(src: &str) -> VM {

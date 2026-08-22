@@ -1,0 +1,89 @@
+use "../schema.rad"
+
+pub component Product owned {
+    indexed product_id: ProductId = ProductId(u64(0)),
+    active: bool = false,
+    description: str = "",
+}
+
+pub component Price owned {
+    cents: int = 0,
+}
+
+pub component Inventory owned {
+    available: int = 0,
+}
+
+pub component SellerStatus owned {
+    active: bool = false,
+}
+
+pub component ComplianceRestriction owned {
+    blocked: bool = false,
+}
+
+pub materialized view SellableProducts {
+    depends [Product, Price, Inventory, SellerStatus, ComplianceRestriction]
+    key Product.product_id
+    where Product.active == true
+        and Price.cents > 0
+        and Inventory.available > 0
+        and SellerStatus.active == true
+        and ComplianceRestriction.blocked == false
+}
+
+pub materialized view LowStockProducts {
+    depends [Product, Inventory]
+    key Product.product_id
+    where Product.active == true and Inventory.available <= 5
+}
+
+pub fn publish_product(id: ProductId, stock: int, cents: int) -> entity
+    writes owned [Product, Price, Inventory, SellerStatus, ComplianceRestriction]
+{
+    return spawn(
+        Product { product_id: id, active: true, description: f"Product {u64(id)}" },
+        Price { cents: cents },
+        Inventory { available: stock },
+        SellerStatus { active: true },
+        ComplianceRestriction { blocked: false },
+    )
+}
+
+pub transaction SetInventory(item: entity, available: int)
+    writes owned [Inventory]
+{
+    requires has(item, Inventory)
+    changes_only [Inventory]
+    set(item, Inventory { available: available })
+    ensures require(item, Inventory).available == available
+}
+
+pub transaction SetSellerActive(item: entity, active: bool)
+    writes owned [SellerStatus]
+{
+    requires has(item, SellerStatus)
+    changes_only [SellerStatus]
+    set(item, SellerStatus { active: active })
+    ensures require(item, SellerStatus).active == active
+}
+
+pub transaction SetComplianceBlocked(item: entity, blocked: bool)
+    writes owned [ComplianceRestriction]
+{
+    requires has(item, ComplianceRestriction)
+    changes_only [ComplianceRestriction]
+    set(item, ComplianceRestriction { blocked: blocked })
+    ensures require(item, ComplianceRestriction).blocked == blocked
+}
+
+pub fn rename_product(item: entity, description: str) -> nil
+    writes owned [Product]
+{
+    let current: Product = require(item, Product)
+    set(item, Product {
+        product_id: current.product_id,
+        active: current.active,
+        description: description,
+    })
+}

@@ -252,6 +252,7 @@ impl<'a> GraphValidator<'a> {
         self.charge_bytes(1)?;
         match key {
             MapKey::Int(_) => self.charge_bytes(8)?,
+            MapKey::Native(value) => self.charge_bytes(10 + value.type_name.len())?,
             MapKey::Str(value) => self.charge_bytes(value.len())?,
             MapKey::Bool(_) => self.charge_bytes(1)?,
             MapKey::Entity(_) => self.charge_bytes(4)?,
@@ -278,7 +279,7 @@ impl<'a> GraphValidator<'a> {
         self.charge_bytes(1)?;
 
         let Some(object) = value.as_object() else {
-            self.charge_bytes(8)?;
+            self.charge_bytes(if value.as_entity_id().is_some() { 4 } else { 8 })?;
             return Ok(());
         };
         let identity = value
@@ -340,6 +341,7 @@ impl<'a> GraphValidator<'a> {
             | Object::Cell(_)
             | Object::BuiltinFn(_)
             | Object::NativeFn(_)
+            | Object::NativeType(_)
             | Object::Task(_)
             | Object::MapIter(_, _, _)
             | Object::WorldFork(_) => Err(CausalValueError::Unsupported {
@@ -347,12 +349,15 @@ impl<'a> GraphValidator<'a> {
             }),
             Object::Str(value) => self.charge_bytes(value.len()),
             Object::BigInt(_) => self.charge_bytes(8),
+            Object::NativeScalar(value) => self.charge_bytes(2 + value.type_name.len() + 8),
             Object::State(value) => self.charge_bytes(value.machine.len() + value.state.len()),
-            Object::EntityId(_) => self.charge_bytes(4),
             Object::BitSet(words) => self.charge_bytes(words.len().saturating_mul(8)),
             Object::Buffer(value) => self.charge_bytes(value.len()),
             Object::ByteBuf(bytes) => self.charge_bytes(bytes.len()),
             Object::SystemRef(value) => self.charge_bytes(value.len()),
+            Object::HostHandle(value) => self.charge_bytes(
+                value.owner_digest().len() + value.type_name().len() + std::mem::size_of::<u64>(),
+            ),
         };
 
         self.active_path.remove(&identity);

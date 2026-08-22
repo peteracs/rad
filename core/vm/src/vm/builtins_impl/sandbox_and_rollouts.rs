@@ -1,5 +1,4 @@
 impl VM {
-
     /// `simulate_many(forks, schedule, ticks, seed) -> [world_fork]`
     ///
     /// The heterogeneous sibling of `simulate_par`: instead of `n` rollouts of
@@ -258,26 +257,30 @@ impl VM {
     /// Module imports are rejected outright: resolving them would touch the
     /// filesystem, which a sandboxed guest must never do.
     fn compile_sandbox_source(source: &str) -> Result<crate::compiler::CompileResult, String> {
-        let mut lexer = crate::lexer::Lexer::new(source);
-        let (tokens, lex_errors) = lexer.tokenize();
-
-        let mut parser = crate::parser::Parser::new(tokens);
-        let program = parser.parse();
-
-        let mut all_errors = Vec::new();
-        for e in lex_errors {
-            all_errors.push(format!(
-                "[line {}:{}] Lex error: {}",
-                e.line, e.col, e.message
-            ));
-        }
-        for e in parser.errors() {
-            all_errors.push(format!(
+        let analyzed = crate::pipeline::analyze_source(
+            source,
+            crate::parser::ParserOptions::default(),
+            &std::collections::HashMap::new(),
+            crate::checker::CheckerOptions::default(),
+        );
+        let mut all_errors = analyzed
+            .lexer_errors
+            .iter()
+            .map(|error| {
+                format!(
+                    "[line {}:{}] Lex error: {}",
+                    error.line, error.col, error.message
+                )
+            })
+            .collect::<Vec<_>>();
+        all_errors.extend(analyzed.parser_errors.iter().map(|error| {
+            format!(
                 "[line {}:{}] Parse error: {}",
-                e.line, e.col, e.message
-            ));
-        }
-        if program
+                error.line, error.col, error.message
+            )
+        }));
+        if analyzed
+            .program
             .declarations
             .iter()
             .any(|d| matches!(d, crate::ast::Decl::Use(_)))
@@ -286,23 +289,27 @@ impl VM {
                 .push("sandbox: module imports are not permitted in sandboxed code".to_string());
         }
 
-        let mut checker = crate::checker::Checker::new();
-        let checker_errors = checker.check(&program);
-        let checker_output = checker.output();
-        for e in checker_errors {
-            all_errors.push(format!(
+        all_errors.extend(analyzed.semantic().errors().iter().map(|error| {
+            format!(
                 "[line {}:{}] Type error: {}",
-                e.line, e.col, e.message
-            ));
-        }
+                error.line, error.col, error.message
+            )
+        }));
         if !all_errors.is_empty() {
             return Err(all_errors.join("\n"));
         }
 
-        crate::compiler::Compiler::new()
-            .with_checker_output(checker_output)
-            .compile(&program)
-            .map_err(|e| format!("Compile error: {}", e.message))
+        let (program, analysis) = analyzed.into_parts();
+        let checked = analysis
+            .into_checked()
+            .map_err(|_| "error-free sandbox analysis did not produce checked semantics")?;
+        crate::pipeline::compile_checked_program(
+            &program,
+            std::collections::HashMap::new(),
+            checked,
+            crate::pipeline::CheckedCompileOptions::default(),
+        )
+        .map_err(|error| format!("Compile error: {}", error.message))
     }
 
     /// `sandbox_run(source, fork, caps_json) -> Result`
@@ -664,11 +671,13 @@ impl VM {
             body.push_str("]]");
         }
 
+        body.push_str("],\"views\":");
+        body.push_str(&w.materialized_view_transport_json()?);
+
         // Provenance rides last (tools that only want state can stop at it).
         // A decoded fork re-encodes its carried records verbatim — that is
         // what keeps re-encoding byte-identical across machines. A local
         // fork ships this VM's ledger closure for everything alive in it.
-        body.push(']');
         Self::append_authoritative_world_transport(&w, &mut body)?;
         body.push_str(",\"prov\":");
         match &provenance {
@@ -679,15 +688,13 @@ impl VM {
                 let closure = self.ledger.provenance_closure(
                     |rec| match rec.entity {
                         Some(eid) => w.contains_entity(eid),
-                        None => resource_names.contains(&rec.component),
+                        None => resource_names.contains(rec.component.as_str()),
                     },
                     |record| {
                         w.relation_state()
                             .assertions()
                             .get(&record.fact_key)
-                            .is_some_and(|assertion| {
-                                assertion.assertion_id == record.assertion_id
-                            })
+                            .is_some_and(|assertion| assertion.assertion_id == record.assertion_id)
                     },
                     &emit_ids
                         .iter()
@@ -735,4 +742,5 @@ impl VM {
                 Ok(self.make_result(false, e))
             }
         }
-    }}
+    }
+}

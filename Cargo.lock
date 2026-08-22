@@ -1383,12 +1383,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "rad-ffi-worker"
+version = "0.5.0"
+dependencies = [
+ "rad-vm",
+]
+
+[[package]]
 name = "rad-lsp"
 version = "0.5.0"
 dependencies = [
  "rad-vm",
  "tokio",
  "tower-lsp",
+]
+
+[[package]]
+name = "rad-relation"
+version = "0.5.0"
+dependencies = [
+ "hex",
+ "sha2",
 ]
 
 [[package]]
@@ -1406,12 +1421,15 @@ dependencies = [
  "miniz_oxide",
  "num_enum",
  "parking_lot",
+ "rad-relation",
  "rayon",
  "regex",
  "rpds",
+ "rustc-hash",
  "serde",
  "serde_json",
  "sha2",
+ "smallvec",
  "tokio",
  "ureq",
  "wasm-bindgen",

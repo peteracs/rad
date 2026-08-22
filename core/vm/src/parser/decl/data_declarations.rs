@@ -1,4 +1,311 @@
 impl Parser {
+    pub(super) fn parse_materialized_view_decl(
+        &mut self,
+    ) -> Result<MaterializedViewDecl, ParseError> {
+        let span = self.span();
+        self.advance(); // materialized
+        let view = self.expect_ident_text()?;
+        debug_assert_eq!(view, "view");
+        let name = self.expect_ident_text()?;
+        self.expect(TokenType::LBrace)?;
+        let mut dependencies = Vec::new();
+        let mut key = None;
+        let mut predicate = crate::materialized_view::MaterializedViewPredicate::default();
+        while !self.check(TokenType::RBrace) {
+            if self.check_ident_text("depends") {
+                self.advance();
+                self.expect(TokenType::LBracket)?;
+                while !self.check(TokenType::RBracket) {
+                    dependencies.push(self.expect_ident_text()?);
+                    if self.check(TokenType::Comma) {
+                        self.advance();
+                    } else if !self.check(TokenType::RBracket) {
+                        return Err(ParseError {
+                            message: "Expected `,` or `]` in view dependency list".to_string(),
+                            line: self.peek().line,
+                            col: self.peek().col,
+                        });
+                    }
+                }
+                self.expect(TokenType::RBracket)?;
+            } else if self.check_ident_text("key") {
+                self.advance();
+                let component = self.expect_ident_text()?;
+                self.expect(TokenType::Dot)?;
+                let field = self.expect_ident_text()?;
+                if key.replace((component, field)).is_some() {
+                    return Err(ParseError {
+                        message: format!("materialized view `{name}` declares more than one key"),
+                        line: self.peek().line,
+                        col: self.peek().col,
+                    });
+                }
+            } else if self.check_ident_text("where") {
+                self.advance();
+                if !predicate.clauses.is_empty() {
+                    return Err(ParseError {
+                        message: format!(
+                            "materialized view `{name}` declares more than one `where` predicate"
+                        ),
+                        line: self.peek().line,
+                        col: self.peek().col,
+                    });
+                }
+                let expression = self.parse_expr()?;
+                Self::lower_materialized_view_predicate(&expression, &mut predicate.clauses)?;
+            } else {
+                return Err(ParseError {
+                    message: "Expected `depends [Component, ...]`, `key Component.field`, or `where Component.field <op> literal` in materialized view".to_string(),
+                    line: self.peek().line,
+                    col: self.peek().col,
+                });
+            }
+            if self.check(TokenType::Comma) {
+                self.advance();
+            }
+        }
+        self.expect(TokenType::RBrace)?;
+        dependencies.sort();
+        dependencies.dedup();
+        if dependencies.is_empty() {
+            return Err(ParseError {
+                message: format!("materialized view `{name}` requires at least one dependency"),
+                line: span.line,
+                col: span.col,
+            });
+        }
+        if let Some((component, _)) = &key {
+            if !dependencies.contains(component) {
+                dependencies.push(component.clone());
+                dependencies.sort();
+            }
+        }
+        for clause in &predicate.clauses {
+            if !dependencies.contains(&clause.component) {
+                return Err(ParseError {
+                    message: format!(
+                        "materialized view `{name}` predicate reads `{}` but it is absent from `depends`; add `{}` so revision and maintenance invalidation stay exact",
+                        clause.component, clause.component
+                    ),
+                    line: span.line,
+                    col: span.col,
+                });
+            }
+        }
+        Ok(MaterializedViewDecl {
+            id: self.next_id(),
+            span,
+            name,
+            is_pub: false,
+            dependencies,
+            key,
+            predicate,
+        })
+    }
+
+    fn lower_materialized_view_predicate(
+        expression: &Expr,
+        clauses: &mut Vec<crate::materialized_view::ViewPredicateClause>,
+    ) -> Result<(), ParseError> {
+        use crate::materialized_view::{
+            ViewComparison, ViewPredicateClause, ViewPredicateValue,
+        };
+
+        if let Expr::Binary(left, BinOp::And, right, _) = expression {
+            Self::lower_materialized_view_predicate(left, clauses)?;
+            Self::lower_materialized_view_predicate(right, clauses)?;
+            return Ok(());
+        }
+
+        let Expr::Binary(left, operator, right, span) = expression else {
+            return Err(ParseError {
+                message: "A materialized-view predicate must be a conjunction of field-to-literal comparisons".to_string(),
+                line: expression.span().line,
+                col: expression.span().col,
+            });
+        };
+        let comparison = match operator {
+            BinOp::Eq | BinOp::Is => ViewComparison::Eq,
+            BinOp::Ne => ViewComparison::Ne,
+            BinOp::Lt => ViewComparison::Lt,
+            BinOp::Le => ViewComparison::Le,
+            BinOp::Gt => ViewComparison::Gt,
+            BinOp::Ge => ViewComparison::Ge,
+            _ => {
+                return Err(ParseError {
+                    message: "Materialized-view predicates support only ==, !=, <, <=, >, and >= comparisons".to_string(),
+                    line: span.line,
+                    col: span.col,
+                });
+            }
+        };
+
+        fn field(expression: &Expr) -> Option<(&str, &str)> {
+            let Expr::Field(base, name, _) = expression else {
+                return None;
+            };
+            let Expr::Ident(component, _) = base.as_ref() else {
+                return None;
+            };
+            Some((component, name))
+        }
+
+        fn literal(expression: &Expr) -> Option<ViewPredicateValue> {
+            match expression {
+                Expr::IntLit(value, _) => Some(ViewPredicateValue::Int(*value)),
+                Expr::FloatLit(value, _) => Some(ViewPredicateValue::Float(value.to_bits())),
+                Expr::StrLit(value, _) => Some(ViewPredicateValue::Str(value.clone())),
+                Expr::BoolLit(value, _) => Some(ViewPredicateValue::Bool(*value)),
+                Expr::Unary(UnaryOp::Neg, inner, _) => match inner.as_ref() {
+                    Expr::IntLit(value, _) => Some(ViewPredicateValue::Int(-*value)),
+                    Expr::FloatLit(value, _) => {
+                        Some(ViewPredicateValue::Float((-*value).to_bits()))
+                    }
+                    _ => None,
+                },
+                _ => None,
+            }
+        }
+
+        let (component, name, comparison, expected) =
+            if let (Some((component, name)), Some(expected)) = (field(left), literal(right)) {
+                (component, name, comparison, expected)
+            } else if let (Some(expected), Some((component, name))) = (literal(left), field(right)) {
+                (component, name, comparison.reversed(), expected)
+            } else {
+                return Err(ParseError {
+                    message: "Each materialized-view clause must compare `Component.field` with an int, float, bool, or string literal".to_string(),
+                    line: span.line,
+                    col: span.col,
+                });
+            };
+        clauses.push(ViewPredicateClause {
+            component: component.to_string(),
+            field: name.to_string(),
+            comparison,
+            expected,
+        });
+        Ok(())
+    }
+
+    fn parse_native_repr(&mut self) -> Result<crate::native_types::NativeScalarKind, ParseError> {
+        let token = self.peek().clone();
+        let name = self.expect_ident_text()?;
+        crate::native_types::NativeScalarKind::parse(&name).ok_or_else(|| ParseError {
+            message: format!(
+                "'{}' is not a native scalar representation; expected u8/u16/u32/u64, i8/i16/i32/i64, f32, or f64",
+                name
+            ),
+            line: token.line,
+            col: token.col,
+        })
+    }
+
+    pub(super) fn parse_opaque_type_decl(&mut self) -> Result<NativeTypeDecl, ParseError> {
+        let span = self.span();
+        self.advance(); // opaque
+        self.expect(TokenType::Type)?;
+        let name = self.expect_ident_text()?;
+        self.expect(TokenType::Assign)?;
+        let repr = self.parse_native_repr()?;
+        Ok(NativeTypeDecl {
+            id: self.next_id(),
+            span,
+            name,
+            is_pub: false,
+            repr,
+            flavor: crate::native_types::NativeTypeFlavor::Opaque,
+            members: Vec::new(),
+        })
+    }
+
+    pub(super) fn parse_native_members_decl(
+        &mut self,
+        flavor: crate::native_types::NativeTypeFlavor,
+    ) -> Result<NativeTypeDecl, ParseError> {
+        let span = self.span();
+        self.advance(); // enum / bitflags
+        let name = self.expect_ident_text()?;
+        self.expect(TokenType::Colon)?;
+        let repr = self.parse_native_repr()?;
+        if repr.is_float() {
+            return Err(ParseError {
+                message: format!("{} '{}' requires an integer representation", if flavor == crate::native_types::NativeTypeFlavor::Enum { "enum" } else { "bitflags" }, name),
+                line: span.line,
+                col: span.col,
+            });
+        }
+        self.expect(TokenType::LBrace)?;
+        let mut members = Vec::new();
+        while !self.check(TokenType::RBrace) {
+            let member_span = self.span();
+            let member = self.expect_ident_text()?;
+            self.expect(TokenType::Assign)?;
+            let negative = self.check(TokenType::Minus);
+            if negative {
+                self.advance();
+            }
+            let token = self.expect(TokenType::Int)?;
+            let magnitude = self.token_int_value(&token, "native discriminant")?;
+            let bits = if negative {
+                (magnitude.checked_neg().ok_or_else(|| ParseError {
+                    message: "native discriminant underflow".to_string(),
+                    line: member_span.line,
+                    col: member_span.col,
+                })?) as u64
+            } else {
+                magnitude as u64
+            };
+            members.push((member, bits));
+            if self.check(TokenType::Comma) {
+                self.advance();
+            }
+        }
+        self.expect(TokenType::RBrace)?;
+        Ok(NativeTypeDecl {
+            id: self.next_id(),
+            span,
+            name,
+            is_pub: false,
+            repr,
+            flavor,
+            members,
+        })
+    }
+
+    pub(super) fn parse_repr_struct_decl(&mut self) -> Result<DataDecl, ParseError> {
+        let leading_packed = self.check_ident_text("packed");
+        if leading_packed {
+            self.advance();
+        }
+        if !self.check_ident_text("repr") {
+            return Err(ParseError {
+                message: "`packed` requires `repr(C)`".to_string(),
+                line: self.peek().line,
+                col: self.peek().col,
+            });
+        }
+        self.advance();
+        self.expect(TokenType::LParen)?;
+        let convention = self.expect_ident_text()?;
+        if convention != "C" {
+            return Err(ParseError {
+                message: format!("unsupported representation `repr({convention})`; RAD supports only repr(C)"),
+                line: self.peek().line,
+                col: self.peek().col,
+            });
+        }
+        self.expect(TokenType::RParen)?;
+        let trailing_packed = self.check_ident_text("packed");
+        if trailing_packed {
+            self.advance();
+        }
+        let mut decl = self.parse_data_decl(DataKind::Struct, false, true)?;
+        decl.repr_c = true;
+        decl.packed = leading_packed || trailing_packed;
+        Ok(decl)
+    }
+
 fn parse_use(&mut self) -> Result<UseStmt, ParseError> {
         let span = self.span();
         self.expect(TokenType::Use)?;
@@ -21,6 +328,7 @@ fn parse_use(&mut self) -> Result<UseStmt, ParseError> {
             path,
             alias,
             contract,
+            module_identity: None,
         })
     }
 
@@ -44,10 +352,55 @@ fn parse_use(&mut self) -> Result<UseStmt, ParseError> {
         0
     }
 
+    fn parse_ownership_decl(&mut self) -> Result<OwnershipDecl, ParseError> {
+        if !self.check_ident_text("owned") {
+            return Ok(OwnershipDecl::default());
+        }
+        self.advance();
+        let transferred_to = if self.check_ident_text("transfer") {
+            self.advance();
+            if !self.check_ident_text("to") {
+                return Err(ParseError {
+                    message: "Expected `to` after `owned transfer`".to_string(),
+                    line: self.peek().line,
+                    col: self.peek().col,
+                });
+            }
+            self.advance();
+            Some(self.expect_ident_text()?)
+        } else {
+            None
+        };
+        let mut coowner_modules = Vec::new();
+        if self.check_ident_text("with") {
+            self.advance();
+            self.expect(TokenType::LBracket)?;
+            while !self.check(TokenType::RBracket) {
+                coowner_modules.push(self.expect_ident_text()?);
+                if self.check(TokenType::Comma) {
+                    self.advance();
+                } else if !self.check(TokenType::RBracket) {
+                    return Err(ParseError {
+                        message: "Expected `,` or `]` in owned co-owner list".to_string(),
+                        line: self.peek().line,
+                        col: self.peek().col,
+                    });
+                }
+            }
+            self.expect(TokenType::RBracket)?;
+        }
+        Ok(OwnershipDecl {
+            owned: true,
+            coowner_modules,
+            transferred_to,
+        })
+    }
+
     fn parse_data_decl(
         &mut self,
         kind: DataKind,
         allow_indexed: bool,
+        require_named_field_types: bool,
     ) -> Result<DataDecl, ParseError> {
         let span = self.span();
         match kind {
@@ -62,16 +415,33 @@ fn parse_use(&mut self) -> Result<UseStmt, ParseError> {
         } else {
             0
         };
+        let ownership = if matches!(kind, DataKind::Component) {
+            self.parse_ownership_decl()?
+        } else {
+            OwnershipDecl::default()
+        };
         self.expect(TokenType::LBrace)?;
         let mut fields = Vec::new();
         let mut indexed_fields = Vec::new();
+        let mut ordered_indexed_fields = Vec::new();
         while !self.check(TokenType::RBrace) {
+            let is_ordered = allow_indexed
+                && self.check_ident_text("ordered")
+                && self.peek_at(1).ty == TokenType::Indexed;
+            if is_ordered {
+                self.advance();
+            }
             // `indexed` is only the marker when a field name follows it —
             // `indexed: int = 0` is a field literally named "indexed".
             let is_indexed = allow_indexed
                 && self.check(TokenType::Indexed)
                 && self.peek_at(1).ty != TokenType::Colon;
             if is_indexed {
+                self.advance();
+            }
+            let is_owned = self.check_ident_text("owned")
+                && self.peek_at(1).ty != TokenType::Colon;
+            if is_owned {
                 self.advance();
             }
             let fname = self.expect_field_name()?;
@@ -81,7 +451,7 @@ fn parse_use(&mut self) -> Result<UseStmt, ParseError> {
                 self.expect(TokenType::Assign)?;
                 let expr = self.parse_expr()?;
                 (Some(ty), expr, false)
-            } else if let Some(ty) = self.try_annotation_only_field() {
+            } else if let Some(ty) = self.try_annotation_only_field(require_named_field_types) {
                 // `source: entity` — required at every construction
                 let placeholder = Expr::NilLit(self.span());
                 (Some(ty), placeholder, true)
@@ -94,10 +464,14 @@ fn parse_use(&mut self) -> Result<UseStmt, ParseError> {
                 type_annotation: type_ann,
                 default_value: fval,
                 is_indexed,
+                is_owned,
                 required,
             });
             if is_indexed {
                 indexed_fields.push(field_name);
+                if is_ordered {
+                    ordered_indexed_fields.push(fields.last().unwrap().name.clone());
+                }
             }
             if self.check(TokenType::Comma) {
                 self.advance();
@@ -113,6 +487,10 @@ fn parse_use(&mut self) -> Result<UseStmt, ParseError> {
             version,
             fields,
             indexed_fields,
+            ordered_indexed_fields,
+            ownership,
+            repr_c: false,
+            packed: false,
         })
     }
 
@@ -121,9 +499,15 @@ fn parse_use(&mut self) -> Result<UseStmt, ParseError> {
         self.expect(TokenType::Resource)?;
         let name = self.expect_ident_text()?;
         let version = self.try_parse_schema_version();
+        let ownership = self.parse_ownership_decl()?;
         self.expect(TokenType::LBrace)?;
         let mut fields = Vec::new();
         while !self.check(TokenType::RBrace) {
+            let is_owned = self.check_ident_text("owned")
+                && self.peek_at(1).ty != TokenType::Colon;
+            if is_owned {
+                self.advance();
+            }
             let fname = self.expect_field_name()?;
             self.expect(TokenType::Colon)?;
             let (type_ann, fval, required) = if self.is_component_type_annotation() {
@@ -131,7 +515,7 @@ fn parse_use(&mut self) -> Result<UseStmt, ParseError> {
                 self.expect(TokenType::Assign)?;
                 let expr = self.parse_expr()?;
                 (Some(ty), expr, false)
-            } else if let Some(ty) = self.try_annotation_only_field() {
+            } else if let Some(ty) = self.try_annotation_only_field(false) {
                 let placeholder = Expr::NilLit(self.span());
                 (Some(ty), placeholder, true)
             } else {
@@ -142,6 +526,7 @@ fn parse_use(&mut self) -> Result<UseStmt, ParseError> {
                 type_annotation: type_ann,
                 default_value: fval,
                 is_indexed: false,
+                is_owned,
                 required,
             });
             if self.check(TokenType::Comma) {
@@ -157,6 +542,7 @@ fn parse_use(&mut self) -> Result<UseStmt, ParseError> {
             transient: false,
             version,
             fields,
+            ownership,
         })
     }
 
@@ -167,12 +553,12 @@ fn parse_use(&mut self) -> Result<UseStmt, ParseError> {
     /// Bare uppercase identifiers stay DEFAULT VALUES (`speed: MAX_SPEED`
     /// is a constant reference, not a type) — only unambiguous type syntax
     /// counts: primitives, `entity`, unions, generics, tuples, fn types.
-    fn try_annotation_only_field(&mut self) -> Option<TypeExpr> {
+    fn try_annotation_only_field(&mut self, allow_named: bool) -> Option<TypeExpr> {
         let saved_pos = self.pos;
         match self.parse_type() {
             Ok(ty)
                 if (self.check(TokenType::Comma) || self.check(TokenType::RBrace))
-                    && Self::unambiguous_type_syntax(&ty) =>
+                    && (allow_named || Self::unambiguous_type_syntax(&ty)) =>
             {
                 Some(ty)
             }
@@ -410,7 +796,7 @@ fn parse_use(&mut self) -> Result<UseStmt, ParseError> {
                 // `name: type` (annotation, no default — `target: entity`)
                 // vs `name: value` (default). Bare idents stay values so
                 // type-param witnesses (`value: T`) keep working.
-                match self.try_annotation_only_field() {
+                match self.try_annotation_only_field(false) {
                     Some(ty) => {
                         let field_span = self.span();
                         annotations.push((fname.clone(), ty));

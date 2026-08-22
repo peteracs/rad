@@ -1,0 +1,94 @@
+use "../schema.rad"
+use "warehouse_migration.rad" as warehouse_migration
+
+pub component Inventory owned with [warehouse_migration] {
+    indexed sku: str = "",
+    available: int = 0,
+    reserved: int = 0,
+}
+
+pub component ProductProfile {
+    description: str = "",
+    owned reorder_level: int = 0,
+}
+
+pub resource InventoryRevision owned {
+    value: int = 0,
+}
+
+fn bump_revision() -> nil writes owned [InventoryRevision] {
+    update(InventoryRevision) { value = res(InventoryRevision).value + 1 }
+}
+
+pub fn seed_stock(sku: str, units: int, reorder_level: int) -> entity
+    writes owned [Inventory, ProductProfile, ProductProfile.reorder_level, InventoryRevision]
+{
+    let item: entity = spawn(
+        Inventory { sku: sku, available: units, reserved: 0 },
+        ProductProfile { description: f"Product {sku}", reorder_level: reorder_level },
+    )
+    bump_revision()
+    return item
+}
+
+pub readonly fn available_stock(sku: str) -> int {
+    match lookup(Inventory, "sku", sku) {
+        Some(item) => { return require(item, Inventory).available }
+        None => { return 0 }
+    }
+}
+
+pub fn reserve_stock(sku: str, quantity: int) -> bool
+    writes owned [Inventory, InventoryRevision]
+{
+    match lookup(Inventory, "sku", sku) {
+        Some(item) => {
+            let current: Inventory = require(item, Inventory)
+            if current.available < quantity { return false }
+            set(item, Inventory {
+                sku: current.sku,
+                available: current.available - quantity,
+                reserved: current.reserved + quantity,
+            })
+            bump_revision()
+            return true
+        }
+        None => { return false }
+    }
+}
+
+pub fn consume_reservation(sku: str, quantity: int) -> bool
+    writes owned [Inventory, InventoryRevision]
+{
+    match lookup(Inventory, "sku", sku) {
+        Some(item) => {
+            let current: Inventory = require(item, Inventory)
+            if current.reserved < quantity { return false }
+            set(item, Inventory {
+                sku: current.sku,
+                available: current.available,
+                reserved: current.reserved - quantity,
+            })
+            bump_revision()
+            return true
+        }
+        None => { return false }
+    }
+}
+
+pub fn return_stock(sku: str, quantity: int) -> nil
+    writes owned [Inventory, InventoryRevision]
+{
+    let item: entity = lookup(Inventory, "sku", sku) |> unwrap
+    let current: Inventory = require(item, Inventory)
+    set(item, Inventory {
+        sku: current.sku,
+        available: current.available + quantity,
+        reserved: current.reserved,
+    })
+    bump_revision()
+}
+
+pub fn run_reconciliation(target: entity, available: int, reserved: int) -> nil {
+    warehouse_migration.reconcile(target, available, reserved)
+}

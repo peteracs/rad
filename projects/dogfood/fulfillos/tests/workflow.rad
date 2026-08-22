@@ -1,0 +1,16 @@
+use "../schema.rad"
+use "../owners/inventory_owner.rad"
+use "../systems/fulfillment.rad"
+use "../scenarios/production.rad"
+
+test "production modules cannot bypass owned stock" {
+    seed_orders(100)
+    schedule [ReserveOrders, ShipOrders]
+    assert(available_stock("RAD-BOOK") == 0, "owner state exact")
+}
+
+test "fixture capability is scoped" writes owned [Inventory] {
+    let fixture: entity = spawn(Inventory { sku: "FIXTURE", available: 1, reserved: 0 })
+    set(fixture, Inventory { sku: "FIXTURE", available: 2, reserved: 0 })
+    assert(require(fixture, Inventory).available == 2, "test capability works only here")
+}

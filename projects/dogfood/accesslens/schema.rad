@@ -1,0 +1,13 @@
+pub opaque type UserId = u64
+pub opaque type RevocationBatchId = u64
+
+pub event EntitlementRevoked {
+    user: entity,
+    batch: RevocationBatchId,
+    reason: str,
+}
+
+pub event AccessDecisionPublished {
+    user: entity,
+    allowed: bool,
+}

@@ -139,6 +139,7 @@ mod tests {
             before: Vec::new(),
             serial_group: None,
             accum_resources: HashSet::new(),
+            instruction_budget: None,
         }
     }
 

@@ -1,9 +1,10 @@
-
-
 impl IndexValue {
     fn from_value(value: &Value) -> Option<Self> {
         if let Some(i) = value.as_int() {
             return Some(IndexValue::Int(i));
+        }
+        if let Some(native) = value.as_native_scalar() {
+            return Some(IndexValue::Native(native.clone()));
         }
         if let Some(s) = value.as_str() {
             return Some(IndexValue::Str(s.to_string()));
@@ -17,7 +18,84 @@ impl IndexValue {
         if let Some(f) = value.as_float() {
             return Some(IndexValue::Float(f.to_bits()));
         }
+        if let Some(tuple) = value.as_tuple() {
+            return tuple
+                .iter()
+                .map(IndexValue::from_value)
+                .collect::<Option<Vec<_>>>()
+                .map(IndexValue::Tuple);
+        }
         None
+    }
+}
+
+impl PartialOrd for IndexValue {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for IndexValue {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        use std::cmp::Ordering;
+
+        fn rank(value: &IndexValue) -> u8 {
+            match value {
+                IndexValue::Min => 0,
+                IndexValue::Int(_) => 1,
+                IndexValue::Native(_) => 2,
+                IndexValue::Str(_) => 3,
+                IndexValue::Bool(_) => 4,
+                IndexValue::Entity(_) => 5,
+                IndexValue::Float(_) => 6,
+                IndexValue::Tuple(_) => 7,
+                IndexValue::Max => 8,
+            }
+        }
+
+        let type_order = rank(self).cmp(&rank(other));
+        if type_order != Ordering::Equal {
+            return type_order;
+        }
+        match (self, other) {
+            (Self::Min, Self::Min) | (Self::Max, Self::Max) => Ordering::Equal,
+            (Self::Int(left), Self::Int(right)) => left.cmp(right),
+            (Self::Native(left), Self::Native(right)) => {
+                let metadata = left
+                    .type_name
+                    .cmp(&right.type_name)
+                    .then_with(|| left.repr.cmp(&right.repr))
+                    .then_with(|| left.flavor.cmp(&right.flavor));
+                if metadata != Ordering::Equal {
+                    return metadata;
+                }
+                use crate::native_types::NativeScalarKind;
+                match left.repr {
+                    NativeScalarKind::I8 => (left.bits as u8 as i8).cmp(&(right.bits as u8 as i8)),
+                    NativeScalarKind::I16 => {
+                        (left.bits as u16 as i16).cmp(&(right.bits as u16 as i16))
+                    }
+                    NativeScalarKind::I32 => {
+                        (left.bits as u32 as i32).cmp(&(right.bits as u32 as i32))
+                    }
+                    NativeScalarKind::I64 => (left.bits as i64).cmp(&(right.bits as i64)),
+                    NativeScalarKind::F32 => f32::from_bits(left.bits as u32)
+                        .total_cmp(&f32::from_bits(right.bits as u32)),
+                    NativeScalarKind::F64 => {
+                        f64::from_bits(left.bits).total_cmp(&f64::from_bits(right.bits))
+                    }
+                    _ => left.bits.cmp(&right.bits),
+                }
+            }
+            (Self::Str(left), Self::Str(right)) => left.cmp(right),
+            (Self::Bool(left), Self::Bool(right)) => left.cmp(right),
+            (Self::Entity(left), Self::Entity(right)) => left.cmp(right),
+            (Self::Float(left), Self::Float(right)) => {
+                f64::from_bits(*left).total_cmp(&f64::from_bits(*right))
+            }
+            (Self::Tuple(left), Self::Tuple(right)) => left.cmp(right),
+            _ => unreachable!("equal index ranks must have equal variants"),
+        }
     }
 }
 
@@ -73,6 +151,14 @@ impl ResourceMap {
         if let Some(old) = self.0.insert(name, data) {
             Value::release_component_data(&old);
         }
+    }
+
+    fn remove_and_release(&mut self, name: &str) -> bool {
+        let Some(old) = self.0.remove(name) else {
+            return false;
+        };
+        Value::release_component_data(&old);
+        true
     }
 }
 
@@ -132,7 +218,12 @@ impl<'a> ComponentView<'a> {
 
     pub(crate) fn field(&self, name: &str) -> Option<Value> {
         let index = self.column.layout.iter().position(|field| field == name)?;
-        self.column.fields.get(index)?.as_slice().get(self.row).copied()
+        self.column
+            .fields
+            .get(index)?
+            .as_slice()
+            .get(self.row)
+            .copied()
     }
 }
 
@@ -207,6 +298,44 @@ impl SoAColumn {
         }
     }
 
+    fn set_field_owned(&mut self, row: usize, field_name: &str, value: Value) -> bool {
+        let Some(field_index) = self.layout.iter().position(|field| field == field_name) else {
+            unsafe { value.release_persistent() };
+            return false;
+        };
+        let Some(column) = self.fields.get_mut(field_index) else {
+            unsafe { value.release_persistent() };
+            return false;
+        };
+        let Some(slot) = Arc::make_mut(column).0.get_mut(row) else {
+            unsafe { value.release_persistent() };
+            return false;
+        };
+        let old = std::mem::replace(slot, value);
+        unsafe { old.release_persistent() };
+        true
+    }
+
+    #[inline]
+    fn field_at(&self, row: usize, field_index: usize) -> Option<Value> {
+        self.fields.get(field_index)?.as_slice().get(row).copied()
+    }
+
+    #[inline]
+    fn set_field_at_owned(&mut self, row: usize, field_index: usize, value: Value) -> bool {
+        let Some(column) = self.fields.get_mut(field_index) else {
+            unsafe { value.release_persistent() };
+            return false;
+        };
+        let Some(slot) = Arc::make_mut(column).0.get_mut(row) else {
+            unsafe { value.release_persistent() };
+            return false;
+        };
+        let old = std::mem::replace(slot, value);
+        unsafe { old.release_persistent() };
+        true
+    }
+
     /// Trace all values in this column for GC reachability.
     pub(crate) fn trace(&self, marked: &mut HashSet<usize>) {
         for col in &self.fields {
@@ -227,8 +356,8 @@ impl SoAColumn {
 pub struct Archetype {
     type_set: Vec<TypeId>,
     pub entities: Arc<Vec<u32>>,
-    pub(crate) columns: HashMap<TypeId, SoAColumn>,
-    entity_row: Arc<HashMap<u32, usize>>,
+    pub(crate) columns: FastMap<TypeId, SoAColumn>,
+    entity_row: Arc<FastMap<u32, usize>>,
 }
 
 impl Archetype {
@@ -236,8 +365,8 @@ impl Archetype {
         Archetype {
             type_set,
             entities: Arc::new(Vec::new()),
-            columns: HashMap::new(),
-            entity_row: Arc::new(HashMap::new()),
+            columns: FastMap::default(),
+            entity_row: Arc::new(FastMap::default()),
         }
     }
 
@@ -319,6 +448,24 @@ impl Archetype {
             }
         }
     }
+
+    fn set_component_field_owned(
+        &mut self,
+        eid: u32,
+        tid: TypeId,
+        field_name: &str,
+        value: Value,
+    ) -> bool {
+        let Some(&row) = self.entity_row.get(&eid) else {
+            unsafe { value.release_persistent() };
+            return false;
+        };
+        let Some(column) = self.columns.get_mut(&tid) else {
+            unsafe { value.release_persistent() };
+            return false;
+        };
+        column.set_field_owned(row, field_name, value)
+    }
 }
 
 /// Mutable world storage. Explicit entity identities are deliberately not a
@@ -339,14 +486,39 @@ pub struct World {
     generations: Arc<HashMap<u32, u32>>,
     name_to_id: Arc<HashMap<String, u32>>,
     id_to_name: Arc<HashMap<u32, String>>,
-    type_registry: Arc<HashMap<String, TypeId>>,
+    type_registry: Arc<FastMap<String, TypeId>>,
     next_type_id: TypeId,
     archetypes: Vec<Archetype>,
     archetype_map: Arc<HashMap<Vec<TypeId>, ArchetypeId>>,
-    entity_archetype: Arc<HashMap<u32, ArchetypeId>>,
+    entity_archetype: Arc<FastMap<u32, ArchetypeId>>,
     indexed_fields: Arc<HashMap<String, HashSet<String>>>,
     indices: Arc<HashMap<IndexKey, Vec<u32>>>,
+    ordered_fields: Arc<HashMap<String, HashSet<String>>>,
+    ordered_indices: Arc<BTreeMap<IndexKey, Vec<u32>>>,
+    materialized_views: Arc<HashMap<String, MaterializedViewState>>,
+    view_dependents: Arc<HashMap<String, Vec<String>>>,
+    view_field_dependents: Arc<HashMap<String, HashMap<String, Vec<String>>>>,
+    entered_phases: Arc<Vec<String>>,
+    lifecycle_traces: Arc<HashMap<u32, Vec<String>>>,
     resources: Arc<ResourceMap>,
     authoritative_relations: crate::relation::runtime::AuthoritativeRelationState,
     derived_relations: crate::relation::derivation::DerivedRelationState,
+}
+
+/// Exact allocator facts needed to reverse one transactional spawn without
+/// retaining a copy-on-write snapshot of the whole world.
+pub(crate) struct TransactionSpawnCheckpoint {
+    next_id: u32,
+    fresh_ids_exhausted: bool,
+    reusable_id: Option<u32>,
+    reusable_generation: Option<u32>,
+    displaced_name_owner: Option<u32>,
+    name: Option<String>,
+}
+
+/// Relation state is independent of ECS archetype storage but participates in
+/// entity destruction. A transactional despawn restores both halves together.
+pub(crate) struct TransactionRelationCheckpoint {
+    authoritative: crate::relation::runtime::AuthoritativeRelationState,
+    derived: crate::relation::derivation::DerivedRelationState,
 }

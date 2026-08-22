@@ -1,0 +1,23 @@
+use "../schema.rad"
+use "../owners/fleet_owner.rad"
+use "../systems/dispatch.rad"
+use "../scenarios/production.rad"
+
+test "frame traversal touches only active trips" {
+    seed_fleet(1000, 60)
+    run_frames(10)
+    assert(position_of(VehicleId(u64(1))) == (2.5, 5.0), "active vehicle moved")
+    assert(position_of(VehicleId(u64(1000))) == (0.0, 0.0), "inactive vehicle untouched")
+}
+
+test "completion updates the materialized subset atomically" {
+    // Seeds its own fleet: this test needs a populated view, not the specific
+    // world the traversal test left behind.
+    seed_fleet(1000, 60)
+    let target: entity = lookup(VehicleProfile, "vehicle_id", VehicleId(u64(1))) |> unwrap
+    let members_before = len(entities(ActiveTrips))
+    let before = revision(ActiveTrips)
+    complete_trip(target)
+    assert(len(entities(ActiveTrips)) == members_before - 1, "completed trip removed")
+    assert(revision(ActiveTrips) == before + 1, "membership revision advances once")
+}

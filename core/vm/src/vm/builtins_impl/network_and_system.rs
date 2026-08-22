@@ -881,3 +881,27 @@ impl VM {
         Ok(Value::list(gc, list))
     }
 }
+
+pub(crate) fn bi_now_unix_s(gc: &mut GcHeap, args: Vec<Value>) -> Result<Value, String> {
+    if !args.is_empty() {
+        return Err("now_unix_s() takes no arguments".into());
+    }
+    let seconds = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|error| format!("now_unix_s() failed: {error}"))?
+        .as_secs();
+    let output = i64::try_from(seconds).map_err(|_| "now_unix_s() overflow".to_string())?;
+    Ok(Value::from_int(gc, output))
+}
+
+pub(crate) fn bi_now_unix_ms(gc: &mut GcHeap, args: Vec<Value>) -> Result<Value, String> {
+    if !args.is_empty() {
+        return Err("now_unix_ms() takes no arguments".into());
+    }
+    let milliseconds = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|error| format!("now_unix_ms() failed: {error}"))?
+        .as_millis();
+    let output = i64::try_from(milliseconds).map_err(|_| "now_unix_ms() overflow".to_string())?;
+    Ok(Value::from_int(gc, output))
+}

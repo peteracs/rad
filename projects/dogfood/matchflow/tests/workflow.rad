@@ -1,0 +1,18 @@
+use "../schema.rad"
+use "../owners/match_owner.rad"
+use "../systems/phase_engine.rad"
+use "../scenarios/production.rad"
+
+test "one authoritative frame commits before publication" {
+    let session = run_match_frame(100, 25)
+    let snapshot = snapshot_of(session)
+    assert(snapshot.alive_players == 75, "view is current at publish")
+    assert(snapshot.deaths == 25, "transaction effects are visible at publish")
+}
+
+// Reads the fleet the frame test committed: this suite deliberately asserts
+// across one match lifecycle rather than reseeding it.
+shared test "ordered simulation identity remains deterministic" {
+    let first_player = first(PlayerIdentity, "simulation_order") |> unwrap
+    assert(require(first_player, PlayerIdentity).player_id == PlayerId(u64(1)), "first player is stable")
+}

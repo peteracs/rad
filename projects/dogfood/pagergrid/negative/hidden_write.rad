@@ -1,0 +1,4 @@
+component Root {}
+component IncidentTimeline { entries: int = 0 }
+fn append_audit(target: entity) { set(target, IncidentTimeline { entries: 1 }) }
+system RouteIncident(_root: Root) { append_audit(self) }

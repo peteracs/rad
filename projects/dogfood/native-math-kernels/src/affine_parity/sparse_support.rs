@@ -308,6 +308,9 @@ pub(crate) struct SparseSupportSummary {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+// Independent differential-oracle output used by the compact sparse-slope
+// implementation's tests. Production calls the compact implementation.
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) struct SparseSupportLaneSummary {
     pub max_depth: u32,
     pub max_input_ones: u32,
@@ -341,6 +344,8 @@ struct SparseSupportSearch {
 #[derive(Clone, Copy)]
 enum SparsePruneMode {
     DescentThreshold,
+    // Retained as the independent oracle for `src/sparse_slope.rs` tests.
+    #[cfg_attr(not(test), allow(dead_code))]
     PrefixSlope,
 }
 
@@ -655,6 +660,8 @@ pub(crate) fn sparse_support_summary(
     )
 }
 
+// Independent differential oracle for the compact production implementation.
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn sparse_slope_support_summary(
     multiplier: u64,
     addend: u64,
@@ -671,6 +678,8 @@ pub(crate) fn sparse_slope_support_summary(
     )
 }
 
+// Lane-level differential oracle for the compact production implementation.
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn sparse_slope_support_lane_summary(
     multiplier: u64,
     addend: u64,

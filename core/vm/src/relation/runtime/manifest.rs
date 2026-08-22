@@ -124,7 +124,7 @@ fn schema_bytes(schema: &RelationSchema) -> Vec<u8> {
     put_u64(&mut out, schema.columns.len() as u64);
     for column in &schema.columns {
         put_text(&mut out, &column.name);
-        out.push(column.value_type.tag());
+        out.push(column.value_type.canonical_tag());
         out.push(match column.on_delete {
             None => 0,
             Some(crate::relation::frontend::OnDelete::Restrict) => 1,

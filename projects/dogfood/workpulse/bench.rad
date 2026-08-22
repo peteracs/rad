@@ -1,0 +1,11 @@
+use "schema.rad"
+use "owners/job_owner.rad"
+use "owners/job_owner.rad" as jobs
+use "systems/scheduler.rad"
+use "scenarios/production.rad"
+
+fn main() -> nil {
+    let _first: entity = run_job_load(100000, 1000, 6)
+    assert(len(entities(Succeeded)) == 100000, "all production jobs completed")
+    print("workpulse-bench: jobs=100000 workers=1000 lifecycle_commands=1000000")
+}

@@ -78,6 +78,18 @@ struct RepairMove {
     member: usize,
 }
 
+#[derive(Clone, Copy)]
+pub(crate) struct OrExchangeConfig {
+    pub(crate) width: i64,
+    pub(crate) steps: usize,
+    pub(crate) choices_per_step: usize,
+    pub(crate) seed: u64,
+    pub(crate) objective: OrDeletionObjective,
+    pub(crate) minimum_density_per_mille: i64,
+    pub(crate) acceptance: OrExchangeAcceptance,
+    pub(crate) repair_beam_width: usize,
+}
+
 fn insert_repair_move(
     moves: &mut Vec<RepairMove>,
     candidate: RepairMove,
@@ -110,15 +122,18 @@ fn insert_repair_move(
 /// caller owns the interpretation of coordinate balance.
 pub(crate) fn or_exchange_rollout(
     deleted: &[i64],
-    width: i64,
-    steps: usize,
-    choices_per_step: usize,
-    seed: u64,
-    objective: OrDeletionObjective,
-    minimum_density_per_mille: i64,
-    acceptance: OrExchangeAcceptance,
-    repair_beam_width: usize,
+    config: OrExchangeConfig,
 ) -> Result<OrDeletionRollout, String> {
+    let OrExchangeConfig {
+        width,
+        steps,
+        choices_per_step,
+        seed,
+        objective,
+        minimum_density_per_mille,
+        acceptance,
+        repair_beam_width,
+    } = config;
     if !(0..=1000).contains(&minimum_density_per_mille) {
         return Err("minimum density must be between 0 and 1000 per mille".to_string());
     }
@@ -168,7 +183,7 @@ pub(crate) fn or_exchange_rollout(
                         .map(|member| member as usize)
                         .filter(|member| *member != 0 && *member != inserted)
                         .filter(|member| {
-                            density_allows_removal(&partial, *member, minimum_density_per_mille)
+                            density_allows_removal(partial, *member, minimum_density_per_mille)
                         })
                     {
                         insert_repair_move(

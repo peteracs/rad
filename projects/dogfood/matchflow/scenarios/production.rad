@@ -1,0 +1,26 @@
+use "../schema.rad"
+use "../owners/match_owner.rad"
+use "../systems/phase_engine.rad"
+
+pub fn seed_match(player_count: int) -> entity {
+    let session = create_match(MatchId(u64(928)), FrameNumber(u64(1842)))
+    let mut i = 0
+    while i < player_count {
+        publish_player(PlayerId(u64(i + 1)), u64(i), 100)
+        i = i + 1
+    }
+    assert(len(entities(PlayerIdentity)) == player_count, "every player is published before Input")
+    return session
+}
+
+pub fn run_match_frame(player_count: int, input_count: int) -> entity {
+    assert(input_count <= player_count, "inputs require published players")
+    let session = seed_match(player_count)
+    execute_authoritative_frame(session, input_count)
+
+    let snapshot = snapshot_of(session)
+    assert(snapshot.alive_players == player_count - input_count, "lethal inputs leave the materialized view")
+    assert(snapshot.deaths == input_count, "scoreboard and snapshot agree")
+    assert(len(entities(DeathState)) == input_count, "death publication is atomic")
+    return session
+}

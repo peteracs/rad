@@ -1,0 +1,46 @@
+use "../schema.rad"
+
+pub fn seed_alerts(count: int) -> int {
+    let responder: entity = spawn("responder_primary", Responder {
+        responder_id: 7,
+        pages: 0,
+    })
+    let mut created = 0
+    for i in range(0, count) {
+        let service: entity = spawn(f"service_{i}", Service {
+            service_id: i,
+            tier: if i % 10 == 0 { 0 } else { 1 },
+        })
+        spawn(f"oncall_{i}", OnCallAssignment {
+            service_id: i,
+            responder: responder,
+        })
+        if i % 10 == 0 {
+            spawn(f"incident_{i}",
+                Incident {
+                    incident_id: i,
+                    service: service,
+                    responder: responder,
+                    severity: 1,
+                    status: "open",
+                },
+                IncidentTimeline {},
+                CriticalRoute {},
+            )
+        } else {
+            spawn(f"incident_{i}",
+                Incident {
+                    incident_id: i,
+                    service: service,
+                    responder: responder,
+                    severity: 3,
+                    status: "open",
+                },
+                IncidentTimeline {},
+                RoutineRoute {},
+            )
+        }
+        created = created + 1
+    }
+    return created
+}

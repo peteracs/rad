@@ -1,5 +1,3 @@
-
-
 impl World {
     pub fn trace(&self, marked: &mut HashSet<usize>) {
         for archetype in &self.archetypes {
@@ -22,17 +20,64 @@ impl World {
             generations: Arc::new(HashMap::new()),
             name_to_id: Arc::new(HashMap::new()),
             id_to_name: Arc::new(HashMap::new()),
-            type_registry: Arc::new(HashMap::new()),
+            type_registry: Arc::new(FastMap::default()),
             next_type_id: 0,
             archetypes: Vec::new(),
             archetype_map: Arc::new(HashMap::new()),
-            entity_archetype: Arc::new(HashMap::new()),
+            entity_archetype: Arc::new(FastMap::default()),
             indexed_fields: Arc::new(HashMap::new()),
             indices: Arc::new(HashMap::new()),
+            ordered_fields: Arc::new(HashMap::new()),
+            ordered_indices: Arc::new(BTreeMap::new()),
+            materialized_views: Arc::new(HashMap::new()),
+            view_dependents: Arc::new(HashMap::new()),
+            view_field_dependents: Arc::new(HashMap::new()),
+            entered_phases: Arc::new(Vec::new()),
+            lifecycle_traces: Arc::new(HashMap::new()),
             resources: Arc::new(ResourceMap::default()),
-            authoritative_relations: crate::relation::runtime::AuthoritativeRelationState::default(),
+            authoritative_relations: crate::relation::runtime::AuthoritativeRelationState::default(
+            ),
             derived_relations: crate::relation::derivation::DerivedRelationState::default(),
         }
+    }
+
+    pub(crate) fn enter_phase(&mut self, phase: &str) -> Result<(), String> {
+        if self.entered_phases.iter().any(|entered| entered == phase) {
+            return Err(format!(
+                "Lifecycle phase '{phase}' was entered more than once"
+            ));
+        }
+        Arc::make_mut(&mut self.entered_phases).push(phase.to_string());
+        Ok(())
+    }
+
+    pub(crate) fn phase_entered(&self, phase: &str) -> bool {
+        self.entered_phases.iter().any(|entered| entered == phase)
+    }
+
+    pub(crate) fn mark_lifecycle_phase(&mut self, entity: u32, phase: &str) -> Result<(), String> {
+        if !self.contains_entity(entity) {
+            return Err(format!(
+                "Cannot mark lifecycle phase for missing entity {entity}"
+            ));
+        }
+        let trace = Arc::make_mut(&mut self.lifecycle_traces)
+            .entry(entity)
+            .or_default();
+        if trace.last().is_some_and(|last| last == phase) {
+            return Err(format!(
+                "Entity {entity} entered lifecycle phase '{phase}' twice"
+            ));
+        }
+        trace.push(phase.to_string());
+        Ok(())
+    }
+
+    pub(crate) fn lifecycle_trace(&self, entity: u32) -> &[String] {
+        self.lifecycle_traces
+            .get(&entity)
+            .map(Vec::as_slice)
+            .unwrap_or_default()
     }
 
     fn type_id(&mut self, name: &str) -> TypeId {
@@ -60,71 +105,6 @@ impl World {
         aid
     }
 
-    fn field_value(data: &ComponentData, field_name: &str) -> Option<IndexValue> {
-        let idx = data.layout.iter().position(|n| n == field_name)?;
-        let raw = data.values.get(idx).copied()?;
-        IndexValue::from_value(&raw)
-    }
-
-    fn indexed_field_names<'a>(&'a self, type_name: &str) -> Option<&'a HashSet<String>> {
-        self.indexed_fields.get(type_name)
-    }
-
-    fn add_component_indices(&mut self, eid: u32, data: &ComponentData) {
-        let Some(fields) = self.indexed_field_names(&data.type_name) else {
-            return;
-        };
-        let mut entries: Vec<(String, IndexValue)> = Vec::new();
-        for field_name in fields {
-            if let Some(value) = Self::field_value(data, field_name) {
-                entries.push((field_name.clone(), value));
-            }
-        }
-        if entries.is_empty() {
-            return;
-        }
-        let indices = Arc::make_mut(&mut self.indices);
-        for (field_name, value) in entries {
-            let key = IndexKey {
-                type_name: data.type_name.clone(),
-                field_name,
-                value,
-            };
-            let entity_ids = indices.entry(key).or_default();
-            if !entity_ids.contains(&eid) {
-                entity_ids.push(eid);
-            }
-        }
-    }
-
-    fn remove_component_indices(&mut self, eid: u32, data: &ComponentData) {
-        let Some(fields) = self.indexed_field_names(&data.type_name) else {
-            return;
-        };
-        let mut keys = Vec::new();
-        for field_name in fields {
-            if let Some(value) = Self::field_value(data, field_name) {
-                keys.push(IndexKey {
-                    type_name: data.type_name.clone(),
-                    field_name: field_name.clone(),
-                    value,
-                });
-            }
-        }
-        if keys.is_empty() {
-            return;
-        }
-        let indices = Arc::make_mut(&mut self.indices);
-        for key in keys {
-            if let Some(entity_ids) = indices.get_mut(&key) {
-                entity_ids.retain(|id| *id != eid);
-                if entity_ids.is_empty() {
-                    indices.remove(&key);
-                }
-            }
-        }
-    }
-
     pub fn get_entity_by_name(&self, name: &str) -> Option<u32> {
         self.name_to_id.get(name).copied()
     }
@@ -133,125 +113,6 @@ impl World {
     /// Whether `eid` is currently live in the world.
     pub fn entity_exists(&self, eid: u32) -> bool {
         self.entity_archetype.contains_key(&eid)
-    }
-
-    pub fn relation_state(&self) -> &crate::relation::runtime::AuthoritativeRelationState {
-        &self.authoritative_relations
-    }
-
-    pub fn derived_relation_state(&self) -> &crate::relation::derivation::DerivedRelationState {
-        &self.derived_relations
-    }
-
-    pub(crate) fn restore_relation_transport(
-        &mut self,
-        encoded: &str,
-        manifest: std::sync::Arc<crate::relation::runtime::RelationRuntimeManifest>,
-    ) -> crate::relation::runtime::RelationRuntimeResult<()> {
-        let state = crate::relation::runtime::AuthoritativeRelationState::from_transport_hex(
-            encoded, manifest,
-        )?;
-        state.validate_live_entity_set(&self.live_relation_entities())?;
-        let derived = Self::derive_relations(&state)?;
-        self.authoritative_relations = state;
-        self.derived_relations = derived;
-        Ok(())
-    }
-
-    pub fn install_relation_manifest(
-        &mut self,
-        manifest: std::sync::Arc<crate::relation::runtime::RelationRuntimeManifest>,
-        expected: crate::relation::frontend::FrontendManifestDigest,
-    ) -> crate::relation::runtime::RelationRuntimeResult<()> {
-        let mut authoritative = self.authoritative_relations.clone();
-        authoritative.install_manifest(manifest, expected)?;
-        let derived = Self::derive_relations(&authoritative)?;
-        self.authoritative_relations = authoritative;
-        self.derived_relations = derived;
-        Ok(())
-    }
-
-    pub(crate) fn live_relation_entities(
-        &self,
-    ) -> std::collections::BTreeSet<crate::relation::runtime::EntityRef> {
-        self.entity_archetype
-            .keys()
-            .filter_map(|id| self.entity_ref(*id))
-            .collect()
-    }
-
-    pub(crate) fn prepare_relation_candidate(
-        &self,
-        transaction: &crate::relation::runtime::RelationTransaction,
-        live_after: std::collections::BTreeSet<crate::relation::runtime::EntityRef>,
-        handles: std::collections::BTreeMap<u32, crate::relation::runtime::EntityRef>,
-    ) -> crate::relation::runtime::RelationRuntimeResult<crate::relation::runtime::RelationCandidate>
-    {
-        self.authoritative_relations.prepare_candidate(
-            transaction,
-            &crate::relation::runtime::CandidateEntityState {
-                live_after,
-                candidate_handles: handles,
-            },
-        )
-    }
-
-    pub(crate) fn adopt_relation_candidate(
-        &mut self,
-        candidate: crate::relation::runtime::RelationCandidate,
-    ) -> crate::relation::runtime::RelationRuntimeResult<Vec<crate::relation::runtime::FactChange>> {
-        let mut authoritative = self.authoritative_relations.clone();
-        let changes = authoritative.adopt(candidate);
-        let derived = Self::maintain_relations(
-            &self.derived_relations,
-            &authoritative,
-            &changes,
-        )?;
-        self.authoritative_relations = authoritative;
-        self.derived_relations = derived;
-        Ok(changes)
-    }
-
-    fn maintain_relations(
-        previous: &crate::relation::derivation::DerivedRelationState,
-        authoritative: &crate::relation::runtime::AuthoritativeRelationState,
-        changes: &[crate::relation::runtime::FactChange],
-    ) -> crate::relation::runtime::RelationRuntimeResult<
-        crate::relation::derivation::DerivedRelationState,
-    > {
-        let Some(manifest) = authoritative.manifest() else {
-            return Ok(crate::relation::derivation::DerivedRelationState::default());
-        };
-        crate::relation::derivation::maintain_indexed(
-            previous,
-            authoritative,
-            manifest,
-            changes,
-            crate::relation::derivation::DerivationLimits::default(),
-        )
-        .map_err(|error| crate::relation::runtime::RelationRuntimeError {
-            code: error.code,
-            detail: error.detail,
-        })
-    }
-
-    fn derive_relations(
-        authoritative: &crate::relation::runtime::AuthoritativeRelationState,
-    ) -> crate::relation::runtime::RelationRuntimeResult<
-        crate::relation::derivation::DerivedRelationState,
-    > {
-        let Some(manifest) = authoritative.manifest() else {
-            return Ok(crate::relation::derivation::DerivedRelationState::default());
-        };
-        crate::relation::derivation::derive_all(
-            authoritative,
-            manifest,
-            crate::relation::derivation::DerivationLimits::default(),
-        )
-        .map_err(|error| crate::relation::runtime::RelationRuntimeError {
-            code: error.code,
-            detail: error.detail,
-        })
     }
 
     /// Forks assign ids independently; when merging, entities that exist in
@@ -267,9 +128,11 @@ impl World {
         if self.entity_archetype.contains_key(&eid) {
             return Err(EntityAllocationError::IdAlreadyLive(eid));
         }
-        if self.archetype_map.get(&Vec::new()).is_some_and(|aid| {
-            self.archetypes[*aid as usize].entity_row.contains_key(&eid)
-        }) {
+        if self
+            .archetype_map
+            .get(&Vec::new())
+            .is_some_and(|aid| self.archetypes[*aid as usize].entity_row.contains_key(&eid))
+        {
             return Err(EntityAllocationError::ArchetypeDuplicate(eid));
         }
         self.claim_explicit_entity_id(eid)?;
@@ -290,6 +153,46 @@ impl World {
         components: Vec<ComponentData>,
     ) -> Result<(), EntityAllocationError> {
         self.insert_entity_components_storage(eid, name, components)
+    }
+
+    /// Reverse one transactional despawn. `components` already own persistent
+    /// values captured before destruction, so this path transfers them into
+    /// storage without retaining a second copy.
+    pub(crate) fn restore_transaction_despawn(
+        &mut self,
+        eid: u32,
+        generation: u32,
+        name: Option<&str>,
+        components: Vec<ComponentData>,
+    ) -> Result<(), EntityAllocationError> {
+        if self.entity_archetype.contains_key(&eid) {
+            for component in &components {
+                Value::release_component_data(component);
+            }
+            return Err(EntityAllocationError::IdAlreadyLive(eid));
+        }
+
+        let mut by_tid = HashMap::with_capacity(components.len());
+        for data in components {
+            let tid = self.type_id(&data.type_name);
+            by_tid.insert(tid, data);
+        }
+        let type_set = by_tid.keys().copied().collect::<Vec<_>>();
+        let aid = self.get_or_create_archetype(type_set);
+        let indexed = by_tid
+            .values()
+            .filter(|data| self.indexed_fields.contains_key(&data.type_name))
+            .cloned()
+            .collect::<Vec<_>>();
+        self.archetypes[aid as usize].push_entity(eid, by_tid)?;
+        Arc::make_mut(&mut self.entity_archetype).insert(eid, aid);
+        Arc::make_mut(&mut self.free_ids).remove(&eid);
+        self.set_entity_generation(eid, generation);
+        self.set_entity_name(eid, name);
+        for data in &indexed {
+            self.add_component_indices(eid, data);
+        }
+        Ok(())
     }
 
     fn insert_entity_components_storage(
@@ -416,6 +319,133 @@ impl World {
         self.archetypes[aid as usize].get_component(eid, tid)
     }
 
+    pub(crate) fn component_field_value(
+        &self,
+        eid: u32,
+        ctype: &str,
+        field_name: &str,
+    ) -> Option<Value> {
+        let &aid = self.entity_archetype.get(&eid)?;
+        let tid = self.type_id_lookup(ctype)?;
+        let archetype = &self.archetypes[aid as usize];
+        let &row = archetype.entity_row.get(&eid)?;
+        let column = archetype.columns.get(&tid)?;
+        ComponentView::new(column, row).field(field_name)
+    }
+
+    pub(crate) fn resolve_field_address(
+        &self,
+        component: &str,
+        field_name: &str,
+        field_index: usize,
+    ) -> Option<ResolvedFieldAddress> {
+        let type_id = self.type_id_lookup(component)?;
+        Some(ResolvedFieldAddress {
+            type_id,
+            field_index,
+            indexed: self
+                .indexed_field_names(component)
+                .is_some_and(|fields| fields.contains(field_name)),
+        })
+    }
+
+    #[inline]
+    pub(crate) fn resolve_entity_address(&self, entity: u32) -> Option<ResolvedEntityAddress> {
+        let &archetype = self.entity_archetype.get(&entity)?;
+        let row = *self
+            .archetypes
+            .get(archetype as usize)?
+            .entity_row
+            .get(&entity)?;
+        Some(ResolvedEntityAddress { archetype, row })
+    }
+
+    #[inline]
+    pub(crate) fn component_field_value_resolved(
+        &self,
+        entity: ResolvedEntityAddress,
+        field: ResolvedFieldAddress,
+    ) -> Option<Value> {
+        self.archetypes
+            .get(entity.archetype as usize)?
+            .columns
+            .get(&field.type_id)?
+            .field_at(entity.row, field.field_index)
+    }
+
+    /// Replace an unindexed SoA cell through a pre-resolved address. Indexed
+    /// writes deliberately stay on the ordinary path so index publication can
+    /// never be bypassed by a kernel optimization.
+    #[inline]
+    pub(crate) fn set_component_field_resolved_owned(
+        &mut self,
+        entity: ResolvedEntityAddress,
+        field: ResolvedFieldAddress,
+        value: Value,
+    ) -> bool {
+        if field.indexed {
+            unsafe { value.release_persistent() };
+            return false;
+        }
+        let Some(archetype) = self.archetypes.get_mut(entity.archetype as usize) else {
+            unsafe { value.release_persistent() };
+            return false;
+        };
+        let Some(column) = archetype.columns.get_mut(&field.type_id) else {
+            unsafe { value.release_persistent() };
+            return false;
+        };
+        column.set_field_at_owned(entity.row, field.field_index, value)
+    }
+
+    /// Replace one SoA cell without constructing a whole component value.
+    /// `value` must already belong to the persistent store; this method takes
+    /// ownership on success and releases it on every failure path.
+    pub(crate) fn set_component_field_owned(
+        &mut self,
+        eid: u32,
+        ctype: &str,
+        field_name: &str,
+        value: Value,
+    ) -> bool {
+        let Some(&aid) = self.entity_archetype.get(&eid) else {
+            unsafe { value.release_persistent() };
+            return false;
+        };
+        let Some(tid) = self.type_id_lookup(ctype) else {
+            unsafe { value.release_persistent() };
+            return false;
+        };
+        let old_index = self
+            .indexed_field_names(ctype)
+            .is_some_and(|fields| fields.contains(field_name))
+            .then(|| self.component_field_value(eid, ctype, field_name))
+            .flatten()
+            .and_then(|old| IndexValue::from_value(&old));
+        let new_index = old_index
+            .as_ref()
+            .and_then(|_| IndexValue::from_value(&value));
+        if old_index.is_some() && new_index.is_none() {
+            unsafe { value.release_persistent() };
+            return false;
+        }
+        if let Some(old) = old_index.clone() {
+            self.remove_field_index(eid, ctype, field_name, old);
+        }
+        let changed =
+            self.archetypes[aid as usize].set_component_field_owned(eid, tid, field_name, value);
+        if !changed {
+            if let Some(old) = old_index {
+                self.add_field_index(eid, ctype, field_name, old);
+            }
+            return false;
+        }
+        if let Some(new) = new_index {
+            self.add_field_index(eid, ctype, field_name, new);
+        }
+        true
+    }
+
     pub(crate) fn set_component(&mut self, eid: u32, data: ComponentData) -> bool {
         self.add_component(eid, data)
     }
@@ -505,129 +535,6 @@ impl World {
         self.apply_relation_transaction(&transaction).is_ok()
     }
 
-    /// Apply authoritative relation operations and entity deletion as one
-    /// copy-on-write world candidate. A relation failure leaves ECS rows,
-    /// assertion identities, indexes, and provenance untouched.
-    pub fn apply_relation_transaction(
-        &mut self,
-        transaction: &crate::relation::runtime::RelationTransaction,
-    ) -> crate::relation::runtime::RelationRuntimeResult<Vec<crate::relation::runtime::FactChange>>
-    {
-        // Construct the complete ECS + relation candidate in an isolated CoW
-        // world. No allocator, component, entity, assertion, or index state is
-        // adopted unless every phase succeeds.
-        let mut candidate_world = World::new();
-        candidate_world.restore(self.snapshot());
-        let mut handles = std::collections::BTreeMap::new();
-        let mut spawns = transaction.spawns.clone();
-        spawns.sort_by_key(|spawn| spawn.handle);
-        for pair in spawns.windows(2) {
-            if pair[0].handle == pair[1].handle {
-                return Err(crate::relation::runtime::RelationRuntimeError {
-                    code: "entity.duplicate_candidate_handle",
-                    detail: pair[0].handle.to_string(),
-                });
-            }
-        }
-        for spawn in spawns {
-            let slot = candidate_world
-                .spawn_entity(spawn.name.as_deref())
-                .map_err(|error| crate::relation::runtime::RelationRuntimeError {
-                    code: error.code(),
-                    detail: "candidate entity allocation failed".into(),
-                })?;
-            handles.insert(
-                spawn.handle,
-                candidate_world
-                    .entity_ref(slot)
-                    .expect("new entity is live"),
-            );
-        }
-
-        let mut component_writes = std::collections::BTreeMap::<
-            (crate::relation::runtime::EntityRef, String),
-            crate::value::ComponentData,
-        >::new();
-        for write in &transaction.component_writes {
-            let entity = match write.entity {
-                crate::relation::runtime::EntityOperand::Existing(entity) => entity,
-                crate::relation::runtime::EntityOperand::Candidate(handle) => *handles
-                    .get(&handle)
-                    .ok_or_else(|| crate::relation::runtime::RelationRuntimeError {
-                        code: "entity.unknown_candidate_handle",
-                        detail: handle.to_string(),
-                    })?,
-            };
-            if candidate_world.entity_ref(entity.slot) != Some(entity) {
-                return Err(crate::relation::runtime::RelationRuntimeError {
-                    code: "component.entity_not_live",
-                    detail: format!("{}:{}", entity.slot, entity.generation),
-                });
-            }
-            let key = (entity, write.component.type_name.clone());
-            match component_writes.get(&key) {
-                Some(existing) if existing != &write.component => {
-                    return Err(crate::relation::runtime::RelationRuntimeError {
-                        code: "component.write_conflict",
-                        detail: format!("{}:{}::{}", entity.slot, entity.generation, key.1),
-                    });
-                }
-                Some(_) => {}
-                None => {
-                    component_writes.insert(key, write.component.clone());
-                }
-            }
-        }
-        for ((entity, _), component) in component_writes {
-            if !candidate_world.add_component(entity.slot, component) {
-                return Err(crate::relation::runtime::RelationRuntimeError {
-                    code: "component.write_failed",
-                    detail: format!("{}:{}", entity.slot, entity.generation),
-                });
-            }
-        }
-
-        let mut live_after = candidate_world.live_relation_entities();
-        let despawn_entities = transaction
-            .despawns
-            .iter()
-            .map(|despawn| despawn.entity)
-            .collect::<std::collections::BTreeSet<_>>();
-        for entity in &despawn_entities {
-            if !live_after.remove(entity) {
-                return Err(crate::relation::runtime::RelationRuntimeError {
-                    code: "entity.not_live",
-                    detail: format!(
-                        "{}:{} is not a live entity lifetime",
-                        entity.slot, entity.generation
-                    ),
-                });
-            }
-        }
-        let candidate =
-            candidate_world.prepare_relation_candidate(transaction, live_after, handles)?;
-        for entity in despawn_entities {
-            // Exact lifetime membership was checked above; the raw slot is
-            // now safe to remove only after the complete relation candidate
-            // has passed restrict/cascade, foreign-key, and unique checks.
-            let removed = candidate_world.destroy_entity_storage(entity.slot);
-            debug_assert!(removed);
-        }
-        let changes = candidate_world.adopt_relation_candidate(candidate)?;
-        self.restore(candidate_world.snapshot());
-        Ok(changes)
-    }
-
-    /// Apply a host-admitted transaction. The complete envelope was checked
-    /// before this method can clone or mutate the candidate world.
-    pub fn apply_bounded_relation_transaction(
-        &mut self,
-        transaction: &crate::relation::runtime::BoundedRelationTransaction,
-    ) -> crate::relation::runtime::RelationRuntimeResult<Vec<crate::relation::runtime::FactChange>>
-    {
-        self.apply_relation_transaction(transaction.transaction())
-    }
-
     pub fn has_component(&self, eid: u32, ctype: &str) -> bool {
         let Some(tid) = self.type_id_lookup(ctype) else {
             return false;
@@ -645,86 +552,8 @@ impl World {
     /// Sorted resource names (deterministic iteration for `save_world`).
     pub fn resource_names(&self) -> Vec<String> {
         let mut names: Vec<String> = self.resources.keys().cloned().collect();
-        names.sort();
+        names.sort_unstable();
         names
-    }
-
-    pub fn set_indexed_fields(&mut self, indexed_fields: HashMap<String, HashSet<String>>) {
-        self.set_indexed_fields_arc(Arc::new(indexed_fields));
-    }
-
-    pub fn set_indexed_fields_arc(
-        &mut self,
-        indexed_fields: Arc<HashMap<String, HashSet<String>>>,
-    ) {
-        self.indexed_fields = indexed_fields;
-        Arc::make_mut(&mut self.indices).clear();
-        for eid in self.all_entity_ids() {
-            let components = self.components_on_entity(eid);
-            for component in components {
-                self.add_component_indices(eid, &component);
-            }
-        }
-    }
-
-    pub fn is_field_indexed(&self, ctype: &str, field: &str) -> bool {
-        self.indexed_fields
-            .get(ctype)
-            .map(|fields| fields.contains(field))
-            .unwrap_or(false)
-    }
-
-    pub(crate) fn index_lookup(&self, ctype: &str, field: &str, value: Value) -> Option<u32> {
-        let value_key = IndexValue::from_value(&value)?;
-        let key = IndexKey {
-            type_name: ctype.to_string(),
-            field_name: field.to_string(),
-            value: value_key,
-        };
-        // Lowest id, not "first inserted": bucket order is insertion order,
-        // which differs between a live world (chronological) and one rebuilt
-        // from a save or wire payload (id order). With duplicate keys,
-        // min-id is the only answer that survives a save/load round trip.
-        self.indices
-            .get(&key)
-            .and_then(|ids| ids.iter().min().copied())
-    }
-
-    /// Every entity whose indexed `ctype.field` equals `value`, sorted by
-    /// id — the deterministic multi-match query ("all open tickets").
-    pub(crate) fn index_lookup_all(&self, ctype: &str, field: &str, value: Value) -> Vec<u32> {
-        let Some(value_key) = IndexValue::from_value(&value) else {
-            return Vec::new();
-        };
-        let key = IndexKey {
-            type_name: ctype.to_string(),
-            field_name: field.to_string(),
-            value: value_key,
-        };
-        let mut ids = self.indices.get(&key).cloned().unwrap_or_default();
-        ids.sort_unstable();
-        ids
-    }
-
-    /// Share another world's index *declarations* (cheap Arc clone, no
-    /// rebuild). Decode paths build worlds from scratch; seeding the
-    /// declarations first means `restore_entity_with_components` populates
-    /// the indices as rows land, so a snapshot that crossed a wire carries
-    /// working indices instead of silently wiping them on commit.
-    pub fn share_indexed_fields_from(&mut self, other: &World) {
-        self.indexed_fields = Arc::clone(&other.indexed_fields);
-    }
-
-    /// Reconcile the live world's index declarations with the program's
-    /// (the compile result is the source of truth; snapshots only carry
-    /// derived state). A no-op when they already agree — the rebuild only
-    /// runs when a commit adopted a snapshot from a foreign or pre-fix
-    /// lineage, which already paid O(world) to decode.
-    pub fn ensure_indexed_fields(&mut self, declared: &Arc<HashMap<String, HashSet<String>>>) {
-        if Arc::ptr_eq(&self.indexed_fields, declared) || *self.indexed_fields == **declared {
-            return;
-        }
-        self.set_indexed_fields_arc(Arc::clone(declared));
     }
 
     pub fn query(&self, with: &[String], without: &[String]) -> Vec<u32> {
@@ -753,6 +582,18 @@ impl World {
         result
     }
 
+    /// O(archetypes), allocation-free membership probe used by temporal
+    /// monitors. This avoids materializing and sorting an entity list merely
+    /// to answer whether one component is currently present anywhere.
+    pub(crate) fn any_with_component(&self, component: &str) -> bool {
+        let Some(type_id) = self.type_id_lookup(component) else {
+            return false;
+        };
+        self.archetypes
+            .iter()
+            .any(|archetype| !archetype.entities.is_empty() && archetype.contains_all(&[type_id]))
+    }
+
     pub(crate) fn get_resource(&self, name: &str) -> Option<ComponentData> {
         self.resources.get(name).cloned()
     }
@@ -767,6 +608,10 @@ impl World {
     /// displaced entry releases its values (see [`ResourceMap`]).
     pub(crate) fn set_resource_owned(&mut self, name: &str, data: ComponentData) {
         Arc::make_mut(&mut self.resources).insert_owned(name.to_string(), data);
+    }
+
+    pub(crate) fn remove_resource(&mut self, name: &str) -> bool {
+        Arc::make_mut(&mut self.resources).remove_and_release(name)
     }
 
     pub(crate) fn init_resource(&mut self, name: &str, mut data: ComponentData) {
@@ -843,7 +688,7 @@ impl World {
         use std::fmt::Write;
         let mut canon = self.snapshot_json_like();
         let mut res_names: Vec<&String> = self.resources.keys().collect();
-        res_names.sort();
+        res_names.sort_unstable();
         for name in res_names {
             let data = &self.resources[name];
             let _ = write!(&mut canon, "|res:{}", name);

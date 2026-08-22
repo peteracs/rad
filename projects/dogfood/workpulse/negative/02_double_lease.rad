@@ -1,0 +1,13 @@
+component LeaseState { active_count: int = 0 }
+let job = spawn(LeaseState { active_count: 0 })
+
+fn lease_to_two_workers() -> nil {
+    set(job, LeaseState { active_count: 2 })
+}
+model OneActiveLease {
+    commands [lease_to_two_workers]
+    invariant { return require(job, LeaseState).active_count <= 1 }
+    runs 1
+    max_commands 1
+    seed 2
+}

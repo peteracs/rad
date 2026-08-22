@@ -1,40 +1,65 @@
 use super::*;
 use crate::ast::ComponentEntry;
-use crate::types::{Effect, Ty};
+use crate::types::{AuthorityQueryComplexity, AuthorityQueryOperation, Effect, Ty};
 
 impl Scanner<'_> {
     pub(super) fn scan_builtin(&mut self, name: &str, args: &[&Expr]) {
         let declared_effects = builtins::builtin_effect(name);
         self.direct.io |= declared_effects.allows(Effect::IO);
         self.direct.async_effect |= declared_effects.allows(Effect::Async);
+        self.record_query_operation(name, args);
         match name {
             "get" | "require" | "require_all" | "has" => self.read_arg(args, 1),
-            "lookup" | "lookup_all" | "with_field" => self.read_arg(args, 0),
+            "read_field" => self.record_direct_field_access(args, false),
+            "lookup" | "lookup_all" | "with_field" => self.read_view_or_data_arg(args, 0),
             "entities" => {
+                let indexed_view = args.first().is_some_and(|arg| {
+                    self.resolver
+                        .data_expr(arg, &self.seed.redirects)
+                        .is_some_and(|name| self.resolver.known_views.contains_key(&name))
+                });
+                self.direct.full_scan |= !indexed_view;
+                self.direct.allocates = true;
                 if args.is_empty() {
                     self.direct.reads.insert(WHOLE_WORLD.to_string());
                 } else {
                     for index in 0..args.len() {
-                        self.read_arg(args, index);
+                        self.read_view_or_data_arg(args, index);
                     }
                 }
             }
+            "visit_view" => self.read_view_or_data_arg(args, 0),
             "query_where" | "query_map" => {
+                self.direct.full_scan = true;
+                self.direct.allocates = true;
                 for index in 0..args.len().saturating_sub(1) {
                     self.read_arg(args, index);
                 }
                 self.record_builtin_callback(args.last());
             }
             "query_count" => {
+                self.direct.full_scan = true;
                 for index in 0..args.len() {
                     self.read_arg(args, index);
                 }
             }
             "res" | "get_resource" | "why_resource" => self.read_arg(args, 0),
             "peek" => self.read_arg(args, 2),
-            "why" => self.read_arg(args, 1),
+            "why" | "why_field" | "why_removed" => self.read_arg(args, 1),
+            "why_missing" => self.read_arg(args, 0),
+            "revision"
+            | "changes_since"
+            | "why_in_view"
+            | "why_not_in_view"
+            | "why_revision_changed"
+            | "why_revision_did_not_change" => self.read_view_or_data_arg(args, 0),
+            "lower_bound" | "upper_bound" | "next" | "previous" | "first" | "last" => {
+                self.read_arg(args, 0);
+            }
+            "range" if args.len() == 4 => self.read_arg(args, 0),
             "peek_resource" => self.read_arg(args, 1),
             "set" | "remove" => self.write_arg(args, 1),
+            "write_field" => self.record_direct_field_access(args, true),
             "set_resource" => self.write_arg(args, 0),
             "fork_with" => self.write_arg(args, 1),
             "spawn" => self.record_spawn_args(args),
@@ -103,9 +128,32 @@ impl Scanner<'_> {
             "flush_events" => {
                 self.direct.emits.insert(EVENT_LOG.to_string());
             }
+            "enter_phase" | "mark_phase" | "model_check" => {
+                self.direct.writes.insert(LIFECYCLE.to_string());
+            }
+            "assert_trace" => {
+                self.direct.reads.insert(LIFECYCLE.to_string());
+            }
             "base_fact" | "candidate_fact" | "why_fact" => self.record_fact(args, false),
             "insert_fact" | "remove_fact" | "replace_fact_by" => self.record_fact(args, true),
             _ => {}
+        }
+        if matches!(
+            name,
+            "push"
+                | "concat"
+                | "map"
+                | "filter"
+                | "sort"
+                | "sort_by"
+                | "range"
+                | "bytes"
+                | "encode_le"
+                | "encode_be"
+                | "changes_since"
+                | "recent_events"
+        ) {
+            self.direct.allocates = true;
         }
         self.record_typed_builtin_callbacks(name, args);
         assert!(
@@ -125,6 +173,154 @@ impl Scanner<'_> {
             self.direct.reads.insert(name);
         } else {
             self.direct.reads.insert(WHOLE_WORLD.to_string());
+        }
+    }
+
+    fn record_query_operation(&mut self, name: &str, args: &[&Expr]) {
+        let source = |index: usize| {
+            args.get(index)
+                .and_then(|arg| self.resolver.data_expr(arg, &self.seed.redirects))
+                .unwrap_or_else(|| "dynamic".to_string())
+        };
+        let operation = match name {
+            "entities" => {
+                let source = if args.is_empty() {
+                    WHOLE_WORLD.to_string()
+                } else {
+                    args.iter()
+                        .map(|arg| {
+                            self.resolver
+                                .data_expr(arg, &self.seed.redirects)
+                                .unwrap_or_else(|| "dynamic".to_string())
+                        })
+                        .collect::<Vec<_>>()
+                        .join(" & ")
+                };
+                let view = args.len() == 1 && self.resolver.known_views.contains_key(&source);
+                AuthorityQueryOperation {
+                    operation: "entities".to_string(),
+                    source,
+                    complexity: if view {
+                        AuthorityQueryComplexity::OutputLinear
+                    } else {
+                        AuthorityQueryComplexity::PopulationLinear
+                    },
+                    allocates: true,
+                }
+            }
+            "visit_view" => AuthorityQueryOperation {
+                operation: name.to_string(),
+                source: source(0),
+                complexity: AuthorityQueryComplexity::OutputLinear,
+                allocates: false,
+            },
+            "lookup" | "get_entity" | "require_entity" | "name_of" => AuthorityQueryOperation {
+                operation: name.to_string(),
+                source: if matches!(name, "get_entity" | "require_entity") {
+                    ENTITY_NAMES.to_string()
+                } else if name == "name_of" {
+                    ENTITY_IDENTITY.to_string()
+                } else {
+                    source(0)
+                },
+                complexity: AuthorityQueryComplexity::Constant,
+                allocates: false,
+            },
+            "lookup_all" => AuthorityQueryOperation {
+                operation: name.to_string(),
+                source: source(0),
+                complexity: AuthorityQueryComplexity::OutputLinear,
+                allocates: true,
+            },
+            "lower_bound" | "upper_bound" | "next" | "previous" | "first" | "last" => {
+                AuthorityQueryOperation {
+                    operation: name.to_string(),
+                    source: source(0),
+                    complexity: AuthorityQueryComplexity::Logarithmic,
+                    allocates: false,
+                }
+            }
+            "range" if args.len() == 4 => AuthorityQueryOperation {
+                operation: name.to_string(),
+                source: source(0),
+                complexity: AuthorityQueryComplexity::OutputLinear,
+                allocates: true,
+            },
+            "query_where" | "query_map" => AuthorityQueryOperation {
+                operation: name.to_string(),
+                source: args
+                    .iter()
+                    .take(args.len().saturating_sub(1))
+                    .map(|arg| {
+                        self.resolver
+                            .data_expr(arg, &self.seed.redirects)
+                            .unwrap_or_else(|| "dynamic".to_string())
+                    })
+                    .collect::<Vec<_>>()
+                    .join(" & "),
+                complexity: AuthorityQueryComplexity::PopulationLinear,
+                allocates: true,
+            },
+            "query_count" => AuthorityQueryOperation {
+                operation: name.to_string(),
+                source: args
+                    .iter()
+                    .map(|arg| {
+                        self.resolver
+                            .data_expr(arg, &self.seed.redirects)
+                            .unwrap_or_else(|| "dynamic".to_string())
+                    })
+                    .collect::<Vec<_>>()
+                    .join(" & "),
+                complexity: AuthorityQueryComplexity::PopulationLinear,
+                allocates: false,
+            },
+            "sort" | "sort_by" => AuthorityQueryOperation {
+                operation: name.to_string(),
+                source: "input collection".to_string(),
+                complexity: AuthorityQueryComplexity::PopulationLogLinear,
+                allocates: true,
+            },
+            _ => return,
+        };
+        self.direct.queries.insert(operation);
+    }
+
+    fn record_direct_field_access(&mut self, args: &[&Expr], write: bool) {
+        if write {
+            self.write_arg(args, 1);
+        } else {
+            self.read_arg(args, 1);
+        }
+        let allocation_free = args
+            .get(1)
+            .and_then(|component| self.resolver.data_expr(component, &self.seed.redirects))
+            .zip(args.get(2))
+            .and_then(|(component, field)| match field {
+                Expr::StrLit(field, _) => Some((component, field)),
+                _ => None,
+            })
+            .is_some_and(|(component, field)| {
+                self.resolver
+                    .allocation_free_fields
+                    .get(&component)
+                    .is_some_and(|fields| fields.contains(field))
+            });
+        self.direct.allocates |= !allocation_free;
+    }
+
+    fn read_view_or_data_arg(&mut self, args: &[&Expr], index: usize) {
+        let Some(name) = args
+            .get(index)
+            .and_then(|arg| self.resolver.data_expr(arg, &self.seed.redirects))
+        else {
+            self.direct.reads.insert(WHOLE_WORLD.to_string());
+            return;
+        };
+        if let Some(dependencies) = self.resolver.known_views.get(&name) {
+            self.direct.reads.extend(dependencies.iter().cloned());
+        } else {
+            self.direct.reads.insert(name);
         }
     }
 
@@ -232,6 +428,7 @@ impl Scanner<'_> {
     }
 
     fn record_spawn_args(&mut self, args: &[&Expr]) {
+        self.direct.writes.insert(ENTITIES.to_string());
         self.direct.writes.insert(ENTITY_IDENTITY.to_string());
         if args
             .first()
@@ -254,6 +451,8 @@ impl Scanner<'_> {
     }
 
     pub(super) fn record_spawn_entries(&mut self, entries: &[ComponentEntry]) {
+        self.direct.writes.insert(ENTITIES.to_string());
+        self.direct.writes.insert(ENTITY_IDENTITY.to_string());
         let mut found = false;
         for entry in entries {
             match entry {
@@ -288,6 +487,7 @@ fn builtin_has_exact_state_authority(name: &str) -> bool {
     matches!(
         name,
         "get"
+            | "read_field"
             | "require"
             | "require_all"
             | "has"
@@ -295,6 +495,7 @@ fn builtin_has_exact_state_authority(name: &str) -> bool {
             | "lookup_all"
             | "with_field"
             | "entities"
+            | "visit_view"
             | "query_where"
             | "query_map"
             | "query_count"
@@ -305,6 +506,7 @@ fn builtin_has_exact_state_authority(name: &str) -> bool {
             | "why"
             | "peek_resource"
             | "set"
+            | "write_field"
             | "remove"
             | "set_resource"
             | "fork_with"
@@ -337,9 +539,29 @@ fn builtin_has_exact_state_authority(name: &str) -> bool {
             | "base_fact"
             | "candidate_fact"
             | "why_fact"
+            | "why_field"
+            | "why_removed"
+            | "why_missing"
+            | "why_revision_changed"
+            | "why_revision_did_not_change"
+            | "revision"
+            | "changes_since"
+            | "why_in_view"
+            | "why_not_in_view"
+            | "lower_bound"
+            | "upper_bound"
+            | "next"
+            | "previous"
+            | "first"
+            | "last"
+            | "range"
             | "insert_fact"
             | "remove_fact"
             | "replace_fact_by"
+            | "enter_phase"
+            | "model_check"
+            | "mark_phase"
+            | "assert_trace"
     )
 }
 

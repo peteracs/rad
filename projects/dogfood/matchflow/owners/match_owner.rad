@@ -1,0 +1,129 @@
+use "../schema.rad"
+
+pub component MatchIdentity owned {
+    indexed match_id: MatchId = MatchId(u64(0)),
+    frame: FrameNumber = FrameNumber(u64(0)),
+}
+
+pub component PlayerIdentity owned {
+    indexed player_id: PlayerId = PlayerId(u64(0)),
+    ordered indexed simulation_order: (u64, u64) = (u64(0), u64(0)),
+}
+
+pub component PlayerState owned {
+    hp: int = 100,
+    alive: bool = true,
+}
+
+pub component DeathState owned {
+    frame: FrameNumber = FrameNumber(u64(0)),
+}
+
+pub component OutboundSnapshot owned {
+    revision: int = 0,
+    alive_players: int = 0,
+    deaths: int = 0,
+}
+
+pub resource Scoreboard owned {
+    deaths: int = 0,
+    resolved_damage: int = 0,
+}
+
+pub materialized view AlivePlayers {
+    depends [PlayerIdentity, PlayerState]
+    key PlayerIdentity.player_id
+    where PlayerState.alive == true
+}
+
+pub fn create_match(id: MatchId, frame: FrameNumber) -> entity
+    writes owned [MatchIdentity, OutboundSnapshot]
+{
+    return spawn(
+        MatchIdentity { match_id: id, frame: frame },
+        OutboundSnapshot { revision: 0, alive_players: 0, deaths: 0 },
+    )
+}
+
+pub fn publish_player(id: PlayerId, order: u64, hp: int) -> entity
+    writes owned [PlayerIdentity, PlayerState]
+{
+    return spawn(
+        PlayerIdentity {
+            player_id: id,
+            simulation_order: (order, u64(id)),
+        },
+        PlayerState { hp: hp, alive: true },
+    )
+}
+
+pub transaction ApplyDamage(
+    match_entity: entity,
+    player: entity,
+    amount: int,
+    frame: FrameNumber,
+)
+    writes owned [PlayerState, DeathState, Scoreboard]
+{
+    requires has(match_entity, MatchIdentity)
+    requires has(player, PlayerState)
+    requires require(player, PlayerState).alive
+    requires amount > 0
+    changes_only [PlayerState, DeathState, Scoreboard]
+
+    let current: PlayerState = require(player, PlayerState)
+    let remaining = current.hp - amount
+    let killed = remaining <= 0
+    let next_hp = if killed { 0 } else { remaining }
+
+    set(player, PlayerState { hp: next_hp, alive: not killed })
+    if killed {
+        set(player, DeathState { frame: frame })
+    }
+    update(Scoreboard) {
+        deaths = res(Scoreboard).deaths + if killed { 1 } else { 0 },
+        resolved_damage = res(Scoreboard).resolved_damage + amount,
+    }
+
+    ensures require(player, PlayerState).hp >= 0
+    ensures require(player, PlayerState).alive == (require(player, PlayerState).hp > 0)
+
+    post_commit {
+        emit next DamageResolved {
+            match_entity: match_entity,
+            player: player,
+            remaining_hp: require(player, PlayerState).hp,
+            killed: not require(player, PlayerState).alive,
+        }
+    }
+}
+
+pub transaction PublishSnapshot(match_entity: entity, revision_number: int)
+    writes owned [OutboundSnapshot]
+{
+    requires has(match_entity, MatchIdentity)
+    requires has(match_entity, OutboundSnapshot)
+    changes_only [OutboundSnapshot]
+
+    set(match_entity, OutboundSnapshot {
+        revision: revision_number,
+        alive_players: len(entities(AlivePlayers)),
+        deaths: res(Scoreboard).deaths,
+    })
+
+    ensures require(match_entity, OutboundSnapshot).revision == revision_number
+    ensures require(match_entity, OutboundSnapshot).alive_players == len(entities(AlivePlayers))
+}
+
+pub readonly fn player_by_id(id: PlayerId) -> entity {
+    let found = lookup(PlayerIdentity, "player_id", id)
+    assert(
+        is_some(found),
+        f"player index miss: id={u64(id)} population={len(entities(PlayerIdentity))}",
+    )
+    return found |> unwrap
+}
+
+pub readonly fn snapshot_of(match_entity: entity) -> OutboundSnapshot {
+    return require(match_entity, OutboundSnapshot)
+}

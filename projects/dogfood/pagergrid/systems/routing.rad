@@ -1,0 +1,56 @@
+use "../schema.rad"
+use "../owners/audit.rad" as audit
+
+async fn persist_delivery_receipt() -> nil {}
+
+fn invoke(callback: fn(entity) -> nil, target: entity) -> nil {
+    callback(target)
+}
+
+fn arm_escalation(target: entity) -> nil {
+    set(target, EscalationState { armed: true })
+}
+
+fn queue_notification(target: entity) -> nil {
+    set(target, NotificationState { queued: true })
+}
+
+pub system RouteCritical(
+    incident: mut Incident,
+    _route: CriticalRoute,
+    reads IncidentTimeline,
+    writes IncidentTimeline,
+    writes EscalationState,
+    emits ResponderPaged,
+    emits "$events",
+    reads "$entity_identity",
+    io true,
+    async true,
+) {
+    invoke(arm_escalation, self)
+    audit.append_timeline(self, "critical route selected")
+    incident.status = "paged"
+    emit ResponderPaged { incident: self, responder: incident.responder }
+    let _receipt = persist_delivery_receipt()
+    flush_events()
+}
+
+pub system RouteRoutine(
+    incident: mut Incident,
+    _route: RoutineRoute,
+    reads IncidentTimeline,
+    writes IncidentTimeline,
+    writes NotificationState,
+    emits ResponderPaged,
+    emits "$events",
+    reads "$entity_identity",
+    io true,
+    async true,
+) {
+    invoke(queue_notification, self)
+    audit.append_timeline(self, "routine route selected")
+    incident.status = "paged"
+    emit ResponderPaged { incident: self, responder: incident.responder }
+    let _receipt = persist_delivery_receipt()
+    flush_events()
+}

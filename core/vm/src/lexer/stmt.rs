@@ -886,6 +886,9 @@ impl<'a> Lexer<'a> {
                     start_pos,
                     self.pos,
                 );
+            } else if ch == '@' {
+                self.advance();
+                Self::push_simple_token(&mut tokens, TokenType::At, line, col, start_pos, self.pos);
             } else if ch == '\\' {
                 if self.peek_next() == '\\' {
                     let mut text = String::new();

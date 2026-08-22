@@ -8,6 +8,8 @@ mod layout_analysis;
 mod materialization;
 mod pipeline;
 mod stmt;
+mod transaction;
+mod view_kernel;
 
 #[cfg(test)]
 mod tests;

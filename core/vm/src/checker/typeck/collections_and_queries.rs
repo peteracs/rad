@@ -35,6 +35,63 @@ fn check_typed_collection_builtin(
                 Some(Ty::Any)
             }
             "require_all" if arg_tys.len() >= 2 => Some(Ty::List(Box::new(Ty::Any))),
+            "read_field" | "write_field"
+                if arg_tys.len() == if name == "read_field" { 3 } else { 4 } =>
+            {
+                let component = self.resolve_component_name(arg_exprs.get(1), arg_tys.get(1));
+                let Some(component) = component else {
+                    self.error(
+                        arg_exprs[1].span(),
+                        format!("{}() requires a statically named component type", name),
+                        Some(format!(
+                            "Use `{}(entity, Component, \"field\"{})` so effects and ownership stay exact",
+                            name,
+                            if name == "write_field" { ", value" } else { "" }
+                        )),
+                    );
+                    return Some(if name == "read_field" { Ty::Any } else { Ty::Nil });
+                };
+                let field = match arg_exprs.get(2) {
+                    Some(Expr::StrLit(field, _)) => field.clone(),
+                    _ => {
+                        self.error(
+                            arg_exprs[2].span(),
+                            format!("{}() requires a string-literal field name", name),
+                            Some("A static field keeps authority, ownership, and allocation analysis exact".to_string()),
+                        );
+                        return Some(if name == "read_field" { Ty::Any } else { Ty::Nil });
+                    }
+                };
+                let field_ty = self
+                    .components
+                    .get(&component)
+                    .and_then(|declaration| declaration.field_type(&field))
+                    .cloned();
+                let Some(field_ty) = field_ty else {
+                    self.error(
+                        arg_exprs[2].span(),
+                        format!("Component '{}' has no field '{}'", component, field),
+                        None,
+                    );
+                    return Some(if name == "read_field" { Ty::Any } else { Ty::Nil });
+                };
+                if name == "write_field" {
+                    let actual = &arg_tys[3];
+                    if !field_ty.assignable_from(actual) && *actual != Ty::Any {
+                        self.error(
+                            arg_exprs[3].span(),
+                            format!(
+                                "write_field() expects {} for '{}.{}', got {}",
+                                field_ty, component, field, actual
+                            ),
+                            None,
+                        );
+                    }
+                    Some(Ty::Nil)
+                } else {
+                    Some(field_ty)
+                }
+            }
             // set_at: (T, K, V) -> T for T = list or map. The key must fit
             // the collection (int for lists, the key type for maps) and the
             // result keeps the collection's own type.

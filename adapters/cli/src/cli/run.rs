@@ -1,6 +1,5 @@
-
-
 fn main() {
+    rad_vm::allocation_meter::mark_allocator_installed();
     let args: Vec<String> = env::args().collect();
     if wants_help(&args) {
         println!(
@@ -32,47 +31,70 @@ fn main() {
         return;
     }
 
+    if let CliCommand::Operational {
+        query,
+        filepath,
+        json,
+    } = command
+    {
+        run_operational_command(query, filepath, json);
+        return;
+    }
+
+    if let CliCommand::Bench {
+        filepath,
+        json,
+        program_args,
+    } = command
+    {
+        run_bench_command(filepath, json, program_args);
+        return;
+    }
+
+    if let CliCommand::ModelCheck {
+        filepath,
+        model,
+        runs,
+        max_commands,
+        seed,
+        artifact_directory,
+        json,
+    } = command
+    {
+        run_model_check_command(
+            filepath,
+            model,
+            runs,
+            max_commands,
+            seed,
+            artifact_directory,
+            json,
+        );
+        return;
+    }
+
+    if let CliCommand::ShrinkModel { artifact } = command {
+        run_model_shrink_command(&artifact);
+        return;
+    }
+
+    if let CliCommand::FfiVerify {
+        plugin,
+        contract,
+        json,
+    } = command
+    {
+        run_ffi_verify_command(&plugin, contract.as_deref(), json);
+        return;
+    }
+
     if let CliCommand::RelationsCheck {
         filepath,
         module_id,
         experimental_relations,
     } = command
     {
-        let source = match fs::File::open(&filepath) {
-            Ok(source) => source,
-            Err(error) => {
-                eprintln!("Error reading {filepath}: {error}");
-                process::exit(1);
-            }
-        };
-        let options = rad_vm::relation::frontend::FrontendOptions {
-            enabled: experimental_relations,
-            module_id,
-            ..rad_vm::relation::frontend::FrontendOptions::default()
-        };
-        match rad_vm::relation::frontend::compile_reader(source, &options) {
-            Ok(artifacts) => {
-                println!(
-                    "relations: {} schemas, {} rules, manifest {}",
-                    artifacts.relations.schemas().len(),
-                    artifacts.rules.len(),
-                    hex::encode(artifacts.manifest_digest.as_bytes())
-                );
-            }
-            Err(diagnostics) => {
-                for diagnostic in diagnostics {
-                    eprintln!(
-                        "{}:{}:{} [{}] {}",
-                        filepath,
-                        diagnostic.line,
-                        diagnostic.column,
-                        diagnostic.code.as_str(),
-                        diagnostic.message
-                    );
-                }
-                process::exit(1);
-            }
-        }
+        run_relations_check_command(&filepath, module_id, experimental_relations);
         return;
     }
 
@@ -81,80 +103,7 @@ fn main() {
         check_only,
     } = command
     {
-        let mut changed = 0;
-
-        let mut all_files = Vec::new();
-        if filepaths.is_empty() {
-            all_files.push(".".to_string());
-        } else {
-            all_files.extend(filepaths);
-        }
-
-        let mut rad_files = Vec::new();
-        for target in all_files {
-            let path = Path::new(&target);
-            if path.is_file() && path.extension().is_some_and(|ext| ext == "rad") {
-                rad_files.push(target);
-            } else if path.is_dir() {
-                let mut dirs = vec![path.to_path_buf()];
-                while let Some(dir) = dirs.pop() {
-                    if let Ok(entries) = fs::read_dir(&dir) {
-                        for entry in entries.flatten() {
-                            let entry_path = entry.path();
-                            if entry_path.is_dir() {
-                                let name =
-                                    entry_path.file_name().unwrap_or_default().to_string_lossy();
-                                if name != "node_modules" && name != "target" {
-                                    dirs.push(entry_path);
-                                }
-                            } else if entry_path.is_file()
-                                && entry_path.extension().is_some_and(|ext| ext == "rad")
-                            {
-                                rad_files.push(entry_path.to_string_lossy().into_owned());
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        if rad_files.is_empty() {
-            println!("No .rad files found");
-            return;
-        }
-
-        for filepath in &rad_files {
-            let source = match fs::read_to_string(filepath) {
-                Ok(s) => s,
-                Err(e) => {
-                    eprintln!("Error reading {}: {}", filepath, e);
-                    continue;
-                }
-            };
-            let formatted = rad_vm::formatter::format_rad(&source);
-            if formatted != source {
-                if check_only {
-                    println!("  needs formatting: {}", filepath);
-                    changed += 1;
-                } else {
-                    if let Err(e) = fs::write(filepath, &formatted) {
-                        eprintln!("Error writing {}: {}", filepath, e);
-                    } else {
-                        println!("  formatted {}", filepath);
-                        changed += 1;
-                    }
-                }
-            } else if !check_only {
-                println!("  unchanged {}", filepath);
-            }
-        }
-        if check_only && changed > 0 {
-            println!(
-                "\n{} file(s) need formatting. Run `rad fmt` to fix.",
-                changed
-            );
-            process::exit(1);
-        }
+        run_format_command(filepaths, check_only);
         return;
     }
 
@@ -164,40 +113,7 @@ fn main() {
         boundaries,
     } = command
     {
-        let mut all_files = Vec::new();
-        if filepaths.is_empty() {
-            all_files.push(".".to_string());
-        } else {
-            all_files.extend(filepaths);
-        }
-
-        let mut rad_files = Vec::new();
-        for target in all_files {
-            let path = Path::new(&target);
-            if path.is_file() && path.extension().is_some_and(|ext| ext == "rad") {
-                rad_files.push(target);
-            } else if path.is_dir() {
-                let mut dirs = vec![path.to_path_buf()];
-                while let Some(dir) = dirs.pop() {
-                    if let Ok(entries) = fs::read_dir(&dir) {
-                        for entry in entries.flatten() {
-                            let entry_path = entry.path();
-                            if entry_path.is_dir() {
-                                let name =
-                                    entry_path.file_name().unwrap_or_default().to_string_lossy();
-                                if name != "node_modules" && name != "target" {
-                                    dirs.push(entry_path);
-                                }
-                            } else if entry_path.is_file()
-                                && entry_path.extension().is_some_and(|ext| ext == "rad")
-                            {
-                                rad_files.push(entry_path.to_string_lossy().into_owned());
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        let rad_files = collect_rad_files(filepaths);
 
         if rad_files.is_empty() {
             println!("No .rad files found");
@@ -236,18 +152,25 @@ fn main() {
             let mut ast_issues = Vec::new();
 
             if let Ok(r) = load_program_with_source_map_and_options(filepath, parser_options) {
-                let mut checker = Checker::new_with_options(CheckerOptions {
-                    compat_v0_5_dx: false,
-                    warn_compat: preset_data.vm_flags.contains(&"--warn-compat"),
-                    strict_types: preset_data.vm_flags.contains(&"--strict-types"),
-                    features: vec![],
-                });
-                let errors = checker.check(&r.program);
-                let warnings = checker.warnings();
+                // The last CLI entry point that built its own checker. The
+                // lint preset still chooses the options, but the parse/check
+                // flow is now the shared one.
+                let analysis = rad_vm::pipeline::analyze_program(
+                    &r.program,
+                    &r.aliases,
+                    CheckerOptions {
+                        compat_v0_5_dx: false,
+                        warn_compat: preset_data.vm_flags.contains(&"--warn-compat"),
+                        strict_types: preset_data.vm_flags.contains(&"--strict-types"),
+                        features: vec![],
+                    },
+                );
+                let errors = analysis.errors().to_vec();
+                let warnings = analysis.warnings().to_vec();
 
                 ast_issues = rad_vm::linter::lint_ast(
                     &r.program,
-                    &checker,
+                    analysis.output(),
                     &preset_data,
                     filepath,
                     &boundaries,
@@ -315,6 +238,62 @@ fn main() {
         return;
     }
 
+    if let CliCommand::Types {
+        input_rad,
+        output_typescript,
+        features,
+    } = command
+    {
+        let loaded = match load_cli_program(
+            &input_rad,
+            ParserOptions {
+                compat_v0_5_dx: false,
+            },
+        ) {
+            Ok(loaded) => loaded,
+            Err(errors) => {
+                eprintln!("{errors}");
+                process::exit(1);
+            }
+        };
+        let analysis = analyze_cli_program(
+            &loaded,
+            &input_rad,
+            CheckerOptions {
+                compat_v0_5_dx: false,
+                warn_compat: false,
+                strict_types: true,
+                features,
+            },
+        );
+        if analysis.has_errors() {
+            for error in &analysis.errors {
+                eprintln!("{error}");
+            }
+            process::exit(1);
+        }
+        let declarations =
+            match rad_vm::typescript::generate(&loaded.program, analysis.semantic.output()) {
+                Ok(declarations) => declarations,
+                Err(error) => {
+                    eprintln!("TypeScript generation failed: {error}");
+                    process::exit(1);
+                }
+            };
+        if let Some(parent) = Path::new(&output_typescript).parent() {
+            if let Err(error) = fs::create_dir_all(parent) {
+                eprintln!("Cannot create {}: {error}", parent.display());
+                process::exit(1);
+            }
+        }
+        if let Err(error) = fs::write(&output_typescript, declarations) {
+            eprintln!("Cannot write {output_typescript}: {error}");
+            process::exit(1);
+        }
+        println!("Generated {output_typescript}");
+        return;
+    }
+
     #[cfg(not(target_arch = "wasm32"))]
     if let CliCommand::Lsp {
         experimental_relations,
@@ -368,82 +347,21 @@ fn main() {
         output_wasm,
     } = command
     {
-        let parser_options = ParserOptions {
-            compat_v0_5_dx: false,
-        };
-        let (program, source, had_imports, source_map, _module_fingerprints, aliases, parse_errors) =
-            match load_program_with_source_map_and_options(&input_rad, parser_options) {
-                Ok(r) => (
-                    r.program,
-                    r.merged_source,
-                    r.had_imports,
-                    r.source_map,
-                    r.module_fingerprints,
-                    r.aliases,
-                    r.errors,
-                ),
-                Err(errors) => {
-                    for e in errors {
-                        eprintln!(
-                            "{}",
-                            format_error(&e.source, &e.filepath, &e.message, e.line, e.col)
-                        );
-                    }
-                    process::exit(1);
-                }
-            };
-
-        let mut has_errors = false;
-        for e in &parse_errors {
-            eprintln!(
-                "{}",
-                format_error(&e.source, &e.filepath, &e.message, e.line, e.col)
-            );
-            has_errors = true;
-        }
-
-        let display_path = if had_imports {
-            format!("<module graph from {}>", input_rad)
-        } else {
-            input_rad.clone()
-        };
-
-        let mut checker = Checker::new_with_options(CheckerOptions {
-            compat_v0_5_dx: false,
-            warn_compat: true,
-            strict_types: false,
-            features: vec![],
-        });
-        checker.set_aliases(aliases.clone());
-        let errors = checker.check(&program);
-        if !errors.is_empty() {
-            for err in &errors {
-                let (src, path) =
-                    resolve_source_for_error(err.file, &source_map, &source, &display_path);
-                eprintln!(
-                    "{}",
-                    format_error(src, path, &err.message, err.line, err.col)
-                );
-                if let Some(hint) = &err.hint {
-                    eprintln!("  hint: {}", hint);
-                }
+        let loaded = match load_cli_program(&input_rad, ParserOptions::default()) {
+            Ok(loaded) => loaded,
+            Err(errors) => {
+                eprintln!("{errors}");
+                process::exit(1);
             }
-            has_errors = true;
+        };
+        let analysis = analyze_cli_program(&loaded, &input_rad, CheckerOptions::default());
+        for error in &analysis.errors {
+            eprintln!("{error}");
         }
-        let warnings = checker.warnings();
-        for warning in &warnings {
-            let (src, path) =
-                resolve_source_for_error(warning.file, &source_map, &source, &display_path);
-            eprintln!(
-                "{}",
-                format_warning(src, path, &warning.message, warning.line, warning.col)
-            );
-            if let Some(hint) = &warning.hint {
-                eprintln!("  hint: {}", hint);
-            }
+        for warning in &analysis.warnings {
+            eprintln!("{warning}");
         }
-
-        if has_errors {
+        if analysis.has_errors() {
             process::exit(1);
         }
 
@@ -489,6 +407,97 @@ fn main() {
                 process::exit(1);
             }
         };
+
+        if let Ok(artifact) = serde_json::from_str::<serde_json::Value>(&trace_text) {
+            if artifact.get("kind").and_then(serde_json::Value::as_str)
+                == Some("rad_model_failure_v1")
+            {
+                if to_frame.is_some() || serve || with_source.is_some() {
+                    eprintln!(
+                        "Error: model-failure artifacts replay one deterministic generated case and do not support --to-frame, --serve, or --with"
+                    );
+                    process::exit(1);
+                }
+                let source = artifact
+                    .get("source")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or_default();
+                let model = artifact
+                    .get("model")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or_default();
+                let features = artifact
+                    .get("features")
+                    .cloned()
+                    .and_then(|value| serde_json::from_value::<Vec<String>>(value).ok())
+                    .unwrap_or_default();
+                let source_layout = artifact
+                    .get("source_layout")
+                    .cloned()
+                    .and_then(|value| {
+                        serde_json::from_value::<rad_vm::source_bundle::SourceLayout>(value).ok()
+                    })
+                    .unwrap_or_default();
+                let mut vm = match rad_vm::replay_compile::compile_trace_vm(
+                    source,
+                    "model-failure artifact",
+                    &features,
+                    &source_layout,
+                ) {
+                    Ok(vm) => vm,
+                    Err(error) => {
+                        eprintln!("Error: {error}");
+                        process::exit(1);
+                    }
+                };
+                let seed = artifact
+                    .get("seed")
+                    .and_then(serde_json::Value::as_u64)
+                    .unwrap_or_default();
+                let trace = artifact
+                    .get("minimal_trace")
+                    .cloned()
+                    .and_then(|value| {
+                        serde_json::from_value::<Vec<rad_vm::vm::ModelTraceStep>>(value).ok()
+                    })
+                    .unwrap_or_default();
+                if trace.is_empty() {
+                    eprintln!("Model replay artifact omits its minimal trace");
+                    process::exit(1);
+                }
+                vm.configure_model_check(rad_vm::vm::ModelCheckConfig {
+                    model: Some(model.to_string()),
+                    runs: Some(1),
+                    max_commands: Some(trace.len() as u32),
+                    seed: Some(seed),
+                    trace: Some(trace),
+                });
+                if let Err(error) = vm.run(0) {
+                    eprintln!("Model replay fixture failed: {error}");
+                    process::exit(1);
+                }
+                let expected_name = format!("model_{model}");
+                let outcomes = rad_vm::test_runner::run_tests(&mut vm);
+                let Some(outcome) = outcomes
+                    .iter()
+                    .find(|outcome| outcome.name == expected_name)
+                else {
+                    eprintln!("Model replay artifact names missing model '{model}'");
+                    process::exit(1);
+                };
+                match &outcome.error {
+                    Some(error) => {
+                        eprintln!("Model failure reproduced: {model}");
+                        eprintln!("{error}");
+                    }
+                    None => {
+                        eprintln!("Model replay DIVERGED: '{model}' now passes");
+                        process::exit(1);
+                    }
+                }
+                return;
+            }
+        }
 
         if let Some(new_path) = with_source {
             retroactive_replay(&trace_text, &new_path, force);
@@ -637,53 +646,40 @@ fn main() {
         vm.suppress_output();
 
         if let Some(filepath) = host_file {
-            let parser_options = ParserOptions {
-                compat_v0_5_dx: false,
-            };
-            let loaded = match load_program_with_source_map_and_options(&filepath, parser_options) {
-                Ok(r) => r,
+            let loaded = match load_cli_program(&filepath, ParserOptions::default()) {
+                Ok(loaded) => loaded,
                 Err(errors) => {
-                    for e in errors {
-                        eprintln!(
-                            "{}",
-                            format_error(&e.source, &e.filepath, &e.message, e.line, e.col)
-                        );
-                    }
+                    eprintln!("{errors}");
                     process::exit(1);
                 }
             };
-            let mut has_errors = false;
-            for e in &loaded.errors {
-                eprintln!(
-                    "{}",
-                    format_error(&e.source, &e.filepath, &e.message, e.line, e.col)
-                );
-                has_errors = true;
+            let analysis = analyze_cli_program(&loaded, &filepath, CheckerOptions::default());
+            for error in &analysis.errors {
+                eprintln!("{error}");
             }
-            let mut checker = Checker::new_with_options(CheckerOptions {
-                compat_v0_5_dx: false,
-                warn_compat: true,
-                strict_types: false,
-                features: vec![],
-            });
-            checker.set_aliases(loaded.aliases.clone());
-            for err in checker.check(&loaded.program) {
-                eprintln!("Error: {}", err.message);
-                has_errors = true;
-            }
-            if has_errors {
+            if analysis.has_errors() {
                 process::exit(1);
             }
-            let compile_result = match Compiler::new()
-                .with_checker_output(checker.output())
-                .with_program_source_identity(
-                    loaded
-                        .source_layout
-                        .digest(&loaded.merged_source)
-                        .expect("module loader produced an invalid source layout"),
-                )
-                .compile(&loaded.program)
-            {
+            let checked = analysis
+                .semantic
+                .into_checked()
+                .expect("error-free host analysis must produce checked semantics");
+            let source_identity = match checked_source_identity(&loaded) {
+                Ok(identity) => identity,
+                Err(error) => {
+                    eprintln!("{error}");
+                    process::exit(1);
+                }
+            };
+            let compile_result = match rad_vm::pipeline::compile_checked_program(
+                &loaded.program,
+                loaded.aliases,
+                checked,
+                rad_vm::pipeline::CheckedCompileOptions {
+                    source_identity: Some(source_identity),
+                    ..rad_vm::pipeline::CheckedCompileOptions::default()
+                },
+            ) {
                 Ok(r) => r,
                 Err(e) => {
                     eprintln!("Compile error: {}", e.message);
@@ -732,47 +728,15 @@ fn main() {
     };
 
     let parser_options = ParserOptions { compat_v0_5_dx };
-    let (
-        program,
-        source,
-        source_layout,
-        had_imports,
-        source_map,
-        module_fingerprints,
-        aliases,
-        parse_errors,
-    ) = match load_program_with_source_map_and_options(&filepath, parser_options) {
-        Ok(r) => (
-            r.program,
-            r.merged_source,
-            r.source_layout,
-            r.had_imports,
-            r.source_map,
-            r.module_fingerprints,
-            r.aliases,
-            r.errors,
-        ),
+    let loaded = match load_cli_program(&filepath, parser_options) {
+        Ok(loaded) => loaded,
         Err(errors) => {
-            for e in errors {
-                eprintln!(
-                    "{}",
-                    format_error(&e.source, &e.filepath, &e.message, e.line, e.col)
-                );
-            }
+            eprintln!("{errors}");
             process::exit(1);
         }
     };
 
-    let mut has_errors = false;
-    for e in &parse_errors {
-        eprintln!(
-            "{}",
-            format_error(&e.source, &e.filepath, &e.message, e.line, e.col)
-        );
-        has_errors = true;
-    }
-
-    let display_path = if had_imports {
+    let display_path = if loaded.had_imports {
         format!("<module graph from {}>", filepath)
     } else {
         filepath.clone()
@@ -783,75 +747,97 @@ fn main() {
             .parent()
             .unwrap_or_else(|| Path::new("."))
             .join("forge.lock");
-        let lock = rad_vm::module_loader::LockFile::generate(&module_fingerprints);
+        let lock = rad_vm::module_loader::LockFile::generate(&loaded.module_fingerprints);
         if let Err(e) = rad_vm::module_loader::write_lockfile(&lock_path.to_string_lossy(), &lock) {
             eprintln!("Warning: failed to write forge.lock: {}", e);
         }
     }
 
-    let mut checker_output = None;
-    if !skip_check {
-        let mut checker = Checker::new_with_options(CheckerOptions {
-            compat_v0_5_dx,
-            warn_compat,
-            strict_types,
-            features: features.clone(),
-        });
-        checker.set_aliases(aliases.clone());
-        let errors = checker.check(&program);
-        checker_output = Some(checker.output());
-        if !errors.is_empty() {
-            for err in &errors {
-                let (src, path) =
-                    resolve_source_for_error(err.file, &source_map, &source, &display_path);
-                eprintln!(
-                    "{}",
-                    format_error(src, path, &err.message, err.line, err.col)
-                );
-                if let Some(hint) = &err.hint {
-                    eprintln!("  hint: {}", hint);
-                }
-            }
-            has_errors = true;
-        }
-        let warnings = checker.warnings();
-        for warning in &warnings {
-            let (src, path) =
-                resolve_source_for_error(warning.file, &source_map, &source, &display_path);
+    let checked_semantics = if skip_check {
+        for error in &loaded.errors {
             eprintln!(
                 "{}",
-                format_warning(src, path, &warning.message, warning.line, warning.col)
+                format_error(
+                    &error.source,
+                    &error.filepath,
+                    &error.message,
+                    error.line,
+                    error.col,
+                )
             );
-            if let Some(hint) = &warning.hint {
-                eprintln!("  hint: {}", hint);
-            }
         }
-        if deny_warnings && !warnings.is_empty() {
+        if !loaded.errors.is_empty() {
             process::exit(1);
         }
-    }
-
-    if has_errors {
-        process::exit(1);
-    }
-
-    let mut compiler = Compiler::new()
-        .with_aliases(aliases)
-        .with_features(features.clone())
-        .with_program_source_identity(
-            source_layout
-                .digest(&source)
-                .expect("module loader produced an invalid source layout"),
+        None
+    } else {
+        let analysis = analyze_cli_program(
+            &loaded,
+            &filepath,
+            CheckerOptions {
+                compat_v0_5_dx,
+                warn_compat,
+                strict_types,
+                features: features.clone(),
+            },
         );
-    if let Some(output) = checker_output {
-        compiler = compiler.with_checker_output(output);
-    }
-    let compile_result = match compiler.compile(&program) {
+        for error in &analysis.errors {
+            eprintln!("{error}");
+        }
+        for warning in &analysis.warnings {
+            eprintln!("{warning}");
+        }
+        if analysis.has_errors() || (deny_warnings && !analysis.warnings.is_empty()) {
+            process::exit(1);
+        }
+        Some(
+            analysis
+                .semantic
+                .into_checked()
+                .expect("error-free semantic analysis must produce checked semantics"),
+        )
+    };
+
+    let source_identity = match checked_source_identity(&loaded) {
+        Ok(identity) => identity,
+        Err(error) => {
+            eprintln!("{error}");
+            process::exit(1);
+        }
+    };
+    let compile = if let Some(checked) = checked_semantics {
+        rad_vm::pipeline::compile_checked_program(
+            &loaded.program,
+            loaded.aliases,
+            checked,
+            rad_vm::pipeline::CheckedCompileOptions {
+                source_identity: Some(source_identity),
+                ..rad_vm::pipeline::CheckedCompileOptions::default()
+            },
+        )
+    } else {
+        rad_vm::pipeline::compile_unchecked_program(
+            &loaded.program,
+            loaded.aliases,
+            rad_vm::pipeline::UncheckedCompileOptions {
+                features: features.clone(),
+                source_identity: Some(source_identity),
+                ..rad_vm::pipeline::UncheckedCompileOptions::default()
+            },
+        )
+    };
+    let compile_result = match compile {
         Ok(c) => c,
         Err(e) => {
             eprintln!(
                 "{}",
-                format_error(&source, &display_path, &e.message, e.line, e.col)
+                format_error(
+                    &loaded.merged_source,
+                    &display_path,
+                    &e.message,
+                    e.line,
+                    e.col,
+                )
             );
             process::exit(1);
         }
@@ -864,7 +850,11 @@ fn main() {
     if record.is_some() {
         // Hash the merged source (module graph included): a trace must only
         // replay against the exact program that produced it.
-        vm.enable_recording_with_source_layout(&source, &features, &source_layout);
+        vm.enable_recording_with_source_layout(
+            &loaded.merged_source,
+            &features,
+            &loaded.source_layout,
+        );
     }
     vm.load_compile_result(compile_result);
 

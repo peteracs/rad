@@ -60,6 +60,8 @@ pub struct SystemChunkInfo {
     /// Stamped after all declarations compile, since a phase may be
     /// declared before or after its member systems.
     pub serial_group: Option<u32>,
+    /// Deterministic per-schedule instruction ceiling from `@budget`.
+    pub instruction_budget: Option<u64>,
 }
 
 #[derive(Debug, Clone)]
@@ -83,6 +85,7 @@ pub struct HandlerChunkInfo {
     pub once: bool,
     pub is_async: bool,
     pub has_guard: bool,
+    pub contracts: CallableContracts,
 }
 
 /// Schema migration (list item #5): one compiled `migrate X(old) { … }`
@@ -134,6 +137,14 @@ pub struct ConstraintChunkInfo {
     pub global_slot: u16,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MaterializedViewInfo {
+    pub name: String,
+    pub dependencies: Vec<String>,
+    pub key: Option<(String, String)>,
+    pub predicate: crate::materialized_view::MaterializedViewPredicate,
+}
+
 pub struct CompileResult {
     pub(crate) chunks: Vec<Chunk>,
     pub systems: Vec<SystemChunkInfo>,
@@ -143,6 +154,8 @@ pub struct CompileResult {
     pub intents: Vec<IntentChunkInfo>,
     pub resolvers: Vec<ResolverChunkInfo>,
     pub constraints: Vec<ConstraintChunkInfo>,
+    pub materialized_views: Vec<MaterializedViewInfo>,
+    pub(crate) view_kernels: Vec<crate::view_kernel::ViewKernelPlan>,
     pub(crate) layout_analysis: layout_analysis::LayoutAnalysis,
     pub(crate) materialization_plan: materialization::MaterializationPlan,
     pub component_layouts: HashMap<String, Vec<String>>,
@@ -153,6 +166,9 @@ pub struct CompileResult {
     /// is skipped there, never wrongly strict.
     pub component_field_types: HashMap<String, Vec<(String, crate::types::Ty)>>,
     pub indexed_component_fields: HashMap<String, Vec<String>>,
+    pub ordered_component_fields: HashMap<String, Vec<String>>,
+    /// Closed, deterministic layouts for every `repr(C)` struct.
+    pub native_layouts: HashMap<String, crate::native_types::NativeLayout>,
     /// `transient resource` names — excluded from world_digest()/save_world().
     pub transient_resources: std::collections::HashSet<String>,
     /// Declared schema versions (`component X v2`), resolved name →
@@ -161,6 +177,9 @@ pub struct CompileResult {
     /// (dogfood feature seq 69 IDEA 03).
     pub component_versions: HashMap<String, u32>,
     pub variant_layouts: HashMap<(String, String), Vec<String>>,
+    /// Names of `shared test` declarations. The test runner restores the
+    /// fixture world before every test that is *not* in this set.
+    pub shared_world_tests: std::collections::HashSet<String>,
     pub global_names: Vec<String>,
     /// Canonical identity of the source/module graph that produced this
     /// artifact. Bytecode-only embedders may leave this absent; normal CLI
@@ -196,6 +215,10 @@ pub struct Compiler {
     pub(crate) component_types: HashMap<String, Vec<(String, Option<TypeExpr>, Expr)>>,
     pub(crate) resource_types: HashMap<String, Vec<(String, Option<TypeExpr>, Expr)>>,
     pub(crate) chunks: Vec<Chunk>,
+    pub(crate) function_declarations: HashMap<String, FnDecl>,
+    pub(crate) materialized_views: Vec<MaterializedViewInfo>,
+    pub(crate) view_kernels: Vec<crate::view_kernel::ViewKernelPlan>,
+    pub(crate) indexed_kernel_fields: std::collections::HashSet<(String, String)>,
     pub(crate) systems: Vec<SystemChunkInfo>,
     pub(crate) handlers: Vec<HandlerChunkInfo>,
     pub(crate) migrations: Vec<MigrationChunkInfo>,
@@ -210,13 +233,16 @@ pub struct Compiler {
     pub(crate) checker_resources: HashMap<String, ResourceType>,
     pub(crate) checker_sum_types: HashMap<String, SumTypeDef>,
     pub(crate) type_redirects: HashMap<String, String>,
+    pub(crate) native_types: HashMap<String, crate::native_types::NativeTypeDescriptor>,
     pub(crate) variant_shorthand: std::collections::HashSet<(String, String)>,
     pub(crate) spread_lengths: HashMap<crate::ast::Span, usize>,
     pub(crate) global_slots: HashMap<String, u16>,
     pub(crate) global_names: Vec<String>,
+    /// Accumulated `shared test` names, handed to the runner in CompileResult.
+    pub(crate) shared_world_tests: std::collections::HashSet<String>,
     pub(crate) program_source_identity: Option<String>,
     pub(crate) module_aliases: HashMap<String, HashMap<String, String>>,
-    pub(crate) alias_decls: HashMap<String, Vec<Decl>>,
+    pub(crate) alias_decls: HashMap<String, ModuleAlias>,
     pub(crate) current_alias_scope: Option<HashMap<String, String>>,
     pub(crate) file_private_scopes: HashMap<u32, HashMap<String, String>>,
     pub(crate) current_file_scope: Option<HashMap<String, String>>,

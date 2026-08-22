@@ -37,6 +37,7 @@ use std::sync::Arc;
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum FrozenMapKey {
     Int(i64),
+    Native(crate::native_types::NativeScalarValue),
     String(String),
     Bool(bool),
     Entity(u32),

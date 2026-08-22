@@ -64,6 +64,7 @@
                     is_pure: false,
                     is_async: false,
                     effects: vec![],
+                    ownership_writes: vec![],
                 }),
                 Decl::Stmt(Stmt::Expr(ExprStmt {
                     id: nid(),
@@ -135,6 +136,7 @@
                     is_pure: false,
                     is_async: false,
                     effects: vec![],
+                    ownership_writes: vec![],
                 }),
                 Decl::Stmt(Stmt::Expr(ExprStmt {
                     id: nid(),
@@ -178,6 +180,7 @@
                 is_pure: false,
                 is_async: false,
                 effects: vec![],
+                ownership_writes: vec![],
             })],
         };
         let mut checker = Checker::new();
@@ -456,6 +459,7 @@
                     is_pure: false,
                     is_async: false,
                     effects: vec![],
+                    ownership_writes: vec![],
                 }),
                 Decl::Stmt(Stmt::Expr(ExprStmt {
                     id: nid(),
@@ -563,6 +567,8 @@
                     authority_emits: vec![],
                     authority_io: false,
                     authority_async: false,
+                    ownership_writes: vec![],
+                    contracts: CallableContracts::default(),
                     body: Block {
                         id: nid(),
                         span: span(2),
@@ -791,6 +797,7 @@
                 is_pure: false,
                 is_async: false,
                 effects: vec![],
+                ownership_writes: vec![],
             })],
         };
         let mut checker = Checker::new();

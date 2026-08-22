@@ -1,0 +1,5 @@
+use "../owners/fleet_owner.rad"
+
+pub fn bypass_owner(target: entity) -> nil {
+    write_field(target, TripPosition, "x", 99.0)
+}

@@ -1,0 +1,7 @@
+event DamageRequested {}
+
+@must_complete_before(Commit)
+on DamageRequested(_evt) {}
+
+enter_phase("Commit")
+signal sync DamageRequested {}

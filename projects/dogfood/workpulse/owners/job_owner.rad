@@ -1,0 +1,289 @@
+use "../schema.rad"
+
+pub component JobIdentity owned {
+    indexed job_id: JobId = JobId(u64(0)),
+    ordered indexed submission_order: u64 = u64(0),
+}
+
+pub component WorkerIdentity owned {
+    indexed worker_id: WorkerId = WorkerId(u64(0)),
+    connected: bool = true,
+}
+
+pub component RetryPolicy owned { max_retries: int = 3 }
+pub component Attempt owned { count: int = 0 }
+pub component Queued owned {}
+pub component Leased owned {}
+pub component Running owned {}
+pub component Succeeded owned {}
+pub component Failed owned {}
+pub component RetryWaiting owned {}
+pub component CancelRequested owned {}
+pub component Cancelled owned {}
+pub component DeadLettered owned {}
+
+pub component ActiveLease owned {
+    worker: entity,
+    token: LeaseToken = LeaseToken(u64(0)),
+    deadline: int = 0,
+}
+
+pub component CompletionRecord owned {
+    idempotency_key: str = "",
+    token: LeaseToken = LeaseToken(u64(0)),
+}
+
+pub component DeadLetterRecord owned { attempts: int = 0 }
+pub component WorkerHeartbeat owned { tick: int = 0 }
+pub component BlockingReason owned { reason: str = "" }
+
+pub resource SchedulerState owned {
+    tick: int = 0,
+    next_token: u64 = u64(1),
+    restart_count: int = 0,
+}
+
+pub materialized view ActiveJobs {
+    depends [JobIdentity, ActiveLease]
+    key JobIdentity.job_id
+}
+
+pub materialized view RetryQueue {
+    depends [JobIdentity, RetryWaiting]
+    key JobIdentity.job_id
+}
+
+pub fn register_worker(id: WorkerId) -> entity
+    writes owned [WorkerIdentity, WorkerHeartbeat]
+{
+    return spawn(
+        WorkerIdentity { worker_id: id, connected: true },
+        WorkerHeartbeat { tick: 0 },
+    )
+}
+
+pub fn EnqueueJob(id: JobId, order: u64, max_retries: int) -> entity
+    writes owned [JobIdentity, RetryPolicy, Attempt, Queued, BlockingReason]
+{
+    return spawn(
+        JobIdentity { job_id: id, submission_order: order },
+        RetryPolicy { max_retries: max_retries },
+        Attempt { count: 0 },
+        Queued {},
+        BlockingReason { reason: "queued" },
+    )
+}
+
+fn clear_nonterminal_status(job: entity) -> nil
+    writes owned [Queued, Leased, Running, Failed, RetryWaiting, CancelRequested]
+{
+    if has(job, Queued) { remove(job, Queued) }
+    if has(job, Leased) { remove(job, Leased) }
+    if has(job, Running) { remove(job, Running) }
+    if has(job, Failed) { remove(job, Failed) }
+    if has(job, RetryWaiting) { remove(job, RetryWaiting) }
+    if has(job, CancelRequested) { remove(job, CancelRequested) }
+}
+
+pub transaction LeaseJob(job: entity, worker: entity)
+    writes owned [Queued, Leased, ActiveLease, Attempt, BlockingReason, SchedulerState]
+{
+    requires has(job, Queued)
+    requires require(worker, WorkerIdentity).connected
+    requires not has(job, ActiveLease)
+    changes_only [Queued, Leased, ActiveLease, Attempt, BlockingReason, SchedulerState]
+
+    let scheduler: SchedulerState = res(SchedulerState)
+    let attempt: Attempt = require(job, Attempt)
+    let token: LeaseToken = LeaseToken(scheduler.next_token)
+    remove(job, Queued)
+    set(job, Leased {})
+    set(job, ActiveLease { worker: worker, token: token, deadline: scheduler.tick + 10 })
+    set(job, Attempt { count: attempt.count + 1 })
+    set(job, BlockingReason { reason: "actively leased" })
+    update(SchedulerState) {
+        tick = scheduler.tick,
+        next_token = scheduler.next_token + u64(1),
+        restart_count = scheduler.restart_count,
+    }
+
+    ensures not has(job, Queued)
+    ensures has(job, Leased)
+    ensures has(job, ActiveLease)
+    post_commit {
+        emit next JobLeased {
+            job: job,
+            worker: worker,
+            token: require(job, ActiveLease).token,
+        }
+    }
+}
+
+pub transaction StartJob(job: entity)
+    writes owned [Leased, Running, BlockingReason]
+{
+    requires has(job, Leased)
+    requires has(job, ActiveLease)
+    changes_only [Leased, Running, BlockingReason]
+    remove(job, Leased)
+    set(job, Running {})
+    set(job, BlockingReason { reason: "worker executing" })
+    ensures has(job, Running)
+    ensures not has(job, Leased)
+    post_commit { emit next JobStarted { job: job } }
+}
+
+pub transaction CompleteJob(job: entity, token: LeaseToken, key: str)
+    writes owned [Running, ActiveLease, Succeeded, CompletionRecord, BlockingReason]
+{
+    requires has(job, Running)
+    requires require(job, ActiveLease).token == token
+    requires not has(job, CompletionRecord)
+    changes_only [Running, ActiveLease, Succeeded, CompletionRecord, BlockingReason]
+    remove(job, Running)
+    remove(job, ActiveLease)
+    set(job, Succeeded {})
+    set(job, CompletionRecord { idempotency_key: key, token: token })
+    set(job, BlockingReason { reason: "terminal: succeeded" })
+    ensures has(job, Succeeded)
+    ensures has(job, CompletionRecord)
+    ensures not has(job, ActiveLease)
+    post_commit { emit next JobCompleted { job: job, key: key } }
+}
+
+pub fn try_complete(job: entity, token: LeaseToken, key: str) -> bool
+    writes owned [Running, ActiveLease, Succeeded, CompletionRecord, BlockingReason]
+{
+    if not has(job, Running) or not has(job, ActiveLease) {
+        set(job, BlockingReason { reason: "completion rejected: job is not running" })
+        emit next StaleCompletionRejected { job: job, token: token }
+        return false
+    }
+    if require(job, ActiveLease).token != token or has(job, CompletionRecord) {
+        set(job, BlockingReason { reason: "completion rejected: stale lease token" })
+        emit next StaleCompletionRejected { job: job, token: token }
+        return false
+    }
+    CompleteJob(job, token, key)
+    return true
+}
+
+pub transaction TimeoutJob(job: entity, token: LeaseToken)
+    writes owned [Leased, Running, ActiveLease, RetryWaiting, DeadLettered, DeadLetterRecord, BlockingReason]
+{
+    requires has(job, ActiveLease)
+    requires require(job, ActiveLease).token == token
+    requires not has(job, Succeeded)
+    requires not has(job, Cancelled)
+    changes_only [Leased, Running, ActiveLease, RetryWaiting, DeadLettered, DeadLetterRecord, BlockingReason]
+    let attempts: int = require(job, Attempt).count
+    let limit: int = require(job, RetryPolicy).max_retries
+    if has(job, Leased) { remove(job, Leased) }
+    if has(job, Running) { remove(job, Running) }
+    remove(job, ActiveLease)
+    if attempts >= limit {
+        set(job, DeadLettered {})
+        set(job, DeadLetterRecord { attempts: attempts })
+        set(job, BlockingReason { reason: "terminal: retry policy exhausted" })
+    } else {
+        set(job, RetryWaiting {})
+        set(job, BlockingReason { reason: "waiting for retry backoff" })
+    }
+    ensures not has(job, ActiveLease)
+    post_commit { emit next JobTimedOut { job: job, token: token } }
+}
+
+pub transaction FailJob(job: entity, token: LeaseToken)
+    writes owned [Leased, Running, ActiveLease, Failed, BlockingReason]
+{
+    requires has(job, ActiveLease)
+    requires require(job, ActiveLease).token == token
+    requires not has(job, Succeeded)
+    changes_only [Leased, Running, ActiveLease, Failed, BlockingReason]
+    if has(job, Leased) { remove(job, Leased) }
+    if has(job, Running) { remove(job, Running) }
+    remove(job, ActiveLease)
+    set(job, Failed {})
+    set(job, BlockingReason { reason: "attempt failed; retry decision pending" })
+    ensures has(job, Failed)
+    ensures not has(job, ActiveLease)
+    post_commit { emit next JobFailed { job: job, token: token } }
+}
+
+pub transaction ScheduleFailedJob(job: entity)
+    writes owned [Failed, RetryWaiting, DeadLettered, DeadLetterRecord, BlockingReason]
+{
+    requires has(job, Failed)
+    changes_only [Failed, RetryWaiting, DeadLettered, DeadLetterRecord, BlockingReason]
+    let attempts: int = require(job, Attempt).count
+    let limit: int = require(job, RetryPolicy).max_retries
+    remove(job, Failed)
+    if attempts >= limit {
+        set(job, DeadLettered {})
+        set(job, DeadLetterRecord { attempts: attempts })
+        set(job, BlockingReason { reason: "terminal: failed retry policy exhausted" })
+    } else {
+        set(job, RetryWaiting {})
+        set(job, BlockingReason { reason: "failed attempt waiting for retry" })
+    }
+    ensures not has(job, Failed)
+}
+
+pub transaction RetryJob(job: entity)
+    writes owned [RetryWaiting, Queued, BlockingReason]
+{
+    requires has(job, RetryWaiting)
+    changes_only [RetryWaiting, Queued, BlockingReason]
+    remove(job, RetryWaiting)
+    set(job, Queued {})
+    set(job, BlockingReason { reason: "queued after retry backoff" })
+    ensures has(job, Queued)
+}
+
+pub transaction CancelJob(job: entity)
+    writes owned [Queued, Leased, Running, Failed, RetryWaiting, CancelRequested, ActiveLease, Cancelled, BlockingReason]
+{
+    requires not has(job, Succeeded)
+    requires not has(job, Cancelled)
+    requires not has(job, DeadLettered)
+    changes_only [Queued, Leased, Running, Failed, RetryWaiting, CancelRequested, ActiveLease, Cancelled, BlockingReason]
+    set(job, CancelRequested {})
+    clear_nonterminal_status(job)
+    if has(job, ActiveLease) { remove(job, ActiveLease) }
+    set(job, Cancelled {})
+    set(job, BlockingReason { reason: "terminal: cancelled" })
+    ensures has(job, Cancelled)
+    ensures not has(job, ActiveLease)
+    post_commit {
+        emit next CancellationRequested { job: job }
+        emit next JobCancelled { job: job }
+    }
+}
+
+pub fn HeartbeatWorker(worker: entity) -> nil writes owned [WorkerHeartbeat] {
+    set(worker, WorkerHeartbeat { tick: res(SchedulerState).tick })
+}
+
+pub fn set_worker_connected(worker: entity, connected: bool) -> nil
+    writes owned [WorkerIdentity]
+{
+    let identity: WorkerIdentity = require(worker, WorkerIdentity)
+    set(worker, WorkerIdentity { worker_id: identity.worker_id, connected: connected })
+}
+
+pub fn advance_clock() -> nil writes owned [SchedulerState] {
+    update(SchedulerState) { tick = res(SchedulerState).tick + 1 }
+}
+
+pub fn RestartScheduler() -> nil writes owned [SchedulerState] {
+    let before: SchedulerState = res(SchedulerState)
+    update(SchedulerState) {
+        tick = before.tick,
+        next_token = before.next_token,
+        restart_count = before.restart_count + 1,
+    }
+}
+
+pub readonly fn job_by_id(id: JobId) -> entity {
+    return lookup(JobIdentity, "job_id", id) |> unwrap
+}

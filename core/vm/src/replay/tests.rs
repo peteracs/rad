@@ -1,24 +1,12 @@
-
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::compiler::Compiler;
-    use crate::lexer::Lexer;
-    use crate::parser::Parser;
+    use crate::parser::ParserOptions;
     use crate::vm::VM;
 
     fn record_run_raw(src: &str) -> (Result<(), String>, Vec<serde_json::Value>) {
-        let mut lexer = Lexer::new(src);
-        let tokens = lexer.tokenize().0;
-        let mut parser = Parser::new(tokens);
-        let program = parser.parse();
-        assert!(
-            parser.errors().is_empty(),
-            "parse errors: {:?}",
-            parser.errors()
-        );
-        let result = Compiler::new().compile(&program).expect("compile");
+        let result = crate::test_support::compile_source(src, ParserOptions::default())
+            .expect("parse and compile");
         let mut vm = VM::new();
         vm.suppress_output();
         vm.set_random_seed(7);
@@ -229,16 +217,8 @@ mod tests {
     }
 
     fn compile_and_make_vm(src: &str) -> VM {
-        let mut lexer = Lexer::new(src);
-        let tokens = lexer.tokenize().0;
-        let mut parser = Parser::new(tokens);
-        let program = parser.parse();
-        assert!(
-            parser.errors().is_empty(),
-            "parse errors: {:?}",
-            parser.errors()
-        );
-        let result = Compiler::new().compile(&program).expect("compile");
+        let result = crate::test_support::compile_source(src, ParserOptions::default())
+            .expect("parse and compile");
         let mut vm = VM::new();
         vm.suppress_output();
         vm.load_compile_result(result);

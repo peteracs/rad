@@ -1,0 +1,25 @@
+use "schema.rad"
+use "owners/telemetry.rad"
+use "systems/ingest.rad"
+use "scenarios/captured_frames.rad"
+
+fn main() -> nil {
+    assert(size_of(TelemetryFrame) == 16, "packed frame size")
+    assert(offset_of(TelemetryFrame, "device") == 0, "device offset")
+    assert(offset_of(TelemetryFrame, "status") == 8, "status offset")
+    assert(offset_of(TelemetryFrame, "temperature") == 10, "temperature offset")
+    assert(offset_of(TelemetryFrame, "checksum") == 14, "checksum offset")
+
+    let target: entity = register_device(DeviceId(u32(42)))
+    let bytes: any = captured_frame()
+    let frame: TelemetryFrame = decode_frame(bytes)
+    ingest(bytes, target)
+    flush_events()
+    assert(frame.device == DeviceId(u32(42)), "opaque device preserved")
+    assert(frame.sequence == u32(7), "sequence decoded")
+    assert(frame.status == DeviceStatus(u16(3)), "bit combination preserved")
+    assert(frame.temperature == f32(1.0), "f32 fidelity")
+    assert(canonical_frame_bytes(frame)[0] == [42, 0, 0, 0], "device re-encoded")
+    verify_scalar_corpus(5000)
+    print("forgelink: decoded native frame corpus byte-exactly")
+}

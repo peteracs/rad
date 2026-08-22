@@ -87,6 +87,14 @@ impl Encoder {
                 self.escaped(value);
             }
             FrozenMapKey::Int(value) => self.text(&format!("\"i\",{value}")),
+            FrozenMapKey::Native(value) => {
+                self.text("\"n\",");
+                self.escaped(&value.type_name);
+                self.text(&format!(
+                    ",\"{}\",{:?},{}",
+                    value.repr, value.flavor, value.bits
+                ));
+            }
             FrozenMapKey::Bool(value) => {
                 self.text(if *value { "\"b\",true" } else { "\"b\",false" });
             }
@@ -113,6 +121,14 @@ impl Encoder {
                 self.escaped(value);
             }
             MapKey::Int(value) => self.text(&format!("\"i\",{value}")),
+            MapKey::Native(value) => {
+                self.text("\"n\",");
+                self.escaped(&value.type_name);
+                self.text(&format!(
+                    ",\"{}\",{:?},{}",
+                    value.repr, value.flavor, value.bits
+                ));
+            }
             MapKey::Bool(value) => {
                 self.text(if *value { "\"b\",true" } else { "\"b\",false" });
             }
@@ -150,6 +166,14 @@ impl Encoder {
             FrozenValue::Nil => self.text("null"),
             FrozenValue::Bool(value) => self.text(if *value { "true" } else { "false" }),
             FrozenValue::Int(value) => self.text(&value.to_string()),
+            FrozenValue::Native(value) => {
+                self.text("{\"native\":[");
+                self.escaped(&value.type_name);
+                self.text(&format!(
+                    ",\"{}\",\"{:?}\",{}]}}",
+                    value.repr, value.flavor, value.bits
+                ));
+            }
             FrozenValue::Float(value) => self.float(*value),
             FrozenValue::String(value) => self.escaped(value),
             FrozenValue::List(values) => {
@@ -241,6 +265,15 @@ impl Encoder {
                 self.escaped(value);
                 self.byte(b'}');
             }
+            FrozenValue::HostHandle(handle) => {
+                self.text("{\"host_handle\":[");
+                self.escaped(handle.owner_digest());
+                self.byte(b',');
+                self.escaped(handle.type_name());
+                self.byte(b',');
+                self.text(&handle.token_for_runtime().to_string());
+                self.text("]}");
+            }
         }
     }
 
@@ -284,9 +317,19 @@ impl Encoder {
             self.text(&value.to_string());
         } else if let Some(value) = value.as_float() {
             self.float(value.into());
+        } else if let Some(value) = value.as_entity_id() {
+            self.text(&format!("{{\"e\":{value}}}"));
         } else {
             match value.as_object() {
                 Some(Object::Str(value)) => self.escaped(value),
+                Some(Object::NativeScalar(value)) => {
+                    self.text("{\"native\":[");
+                    self.escaped(&value.type_name);
+                    self.text(&format!(
+                        ",\"{}\",\"{:?}\",{}]}}",
+                        value.repr, value.flavor, value.bits
+                    ));
+                }
                 Some(Object::List(values)) => {
                     self.byte(b'[');
                     for (index, value) in values.iter().enumerate() {
@@ -342,7 +385,6 @@ impl Encoder {
                     self.raw_fields(sum.fields.iter())?;
                     self.text("]}");
                 }
-                Some(Object::EntityId(value)) => self.text(&format!("{{\"e\":{value}}}")),
                 Some(Object::BitSet(words)) => {
                     self.text("{\"bits\":[");
                     for (index, word) in words.iter().enumerate() {
@@ -369,6 +411,15 @@ impl Encoder {
                     self.text("{\"system\":");
                     self.escaped(value);
                     self.byte(b'}');
+                }
+                Some(Object::HostHandle(handle)) => {
+                    self.text("{\"host_handle\":[");
+                    self.escaped(handle.owner_digest());
+                    self.byte(b',');
+                    self.escaped(handle.type_name());
+                    self.byte(b',');
+                    self.text(&handle.token_for_runtime().to_string());
+                    self.text("]}");
                 }
                 Some(other) => return Err(unsupported_object(other)),
                 None => {
@@ -401,6 +452,7 @@ fn unsupported_object(object: &Object) -> CausalValueError {
             Object::Cell(_) => "capture",
             Object::BuiltinFn(_) => "builtin",
             Object::NativeFn(_) => "native_fn",
+            Object::HostHandle(_) => "host_handle",
             Object::Task(_) => "task",
             Object::MapIter(_, _, _) => "map_iter",
             Object::WorldFork(_) => "world_fork",

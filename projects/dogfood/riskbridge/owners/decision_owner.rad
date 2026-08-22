@@ -1,0 +1,135 @@
+use "../schema.rad"
+
+pub component CustomerRiskState owned {
+    indexed customer: CustomerId = CustomerId(u64(0)),
+    decisions: int = 0,
+}
+
+pub component TransactionAttempt owned {
+    indexed transaction: TransactionId = TransactionId(u64(0)),
+    ordered indexed submission_order: u64 = u64(0),
+    customer: CustomerId = CustomerId(u64(0)),
+    amount: MoneyCents = MoneyCents(i64(0)),
+}
+
+pub component RiskSignal owned { bits: RiskSignals = RiskSignals(u64(0)) }
+pub component ModelRequest owned { model: ModelId = ModelId(u32(0)) }
+pub component PluginGeneration owned { generation: u32 = u32(0) }
+pub component ModelScore owned { score: f32 = f32(0.0), reason_mask: u64 = u64(0) }
+
+pub component PolicyDecision owned {
+    disposition: u8 = u8(0),
+    model_version: u32 = u32(0),
+    source: u8 = u8(0),
+}
+
+pub component ManualReviewCase owned {
+    ordered indexed urgency: (u64, u64) = (u64(0), u64(0)),
+}
+
+pub component DecisionLedger owned {
+    transaction: TransactionId = TransactionId(u64(0)),
+    model_version: u32 = u32(0),
+    committed: bool = false,
+}
+
+pub component IdempotencyRecord owned { transaction: TransactionId = TransactionId(u64(0)) }
+pub component HostCallRecord owned {
+    model: ModelId = ModelId(u32(0)),
+    generation: u32 = u32(0),
+    effect_class: u8 = u8(0),
+    outcome: u8 = u8(0),
+}
+
+pub resource ActivePluginGeneration owned {
+    generation: u32 = u32(17),
+    plugin_digest: str = "riskbridge-model-v17",
+}
+
+pub materialized view ManualReviewQueue {
+    depends [TransactionAttempt, PolicyDecision, ManualReviewCase]
+    key TransactionAttempt.transaction
+}
+
+pub fn register_customer(id: CustomerId) -> entity writes owned [CustomerRiskState] {
+    return spawn(CustomerRiskState { customer: id, decisions: 0 })
+}
+
+pub transaction CommitDecision(
+    customer: entity,
+    request: RiskInput,
+    output: RiskOutput,
+    started_generation: u32,
+    source: u8,
+    order: u64,
+)
+    writes owned [CustomerRiskState, TransactionAttempt, RiskSignal, ModelRequest, PluginGeneration, ModelScore, PolicyDecision, ManualReviewCase, DecisionLedger, IdempotencyRecord, HostCallRecord]
+{
+    requires is_none(lookup(TransactionAttempt, "transaction", request.transaction))
+    requires output.model_version == started_generation
+    changes_only [CustomerRiskState, TransactionAttempt, RiskSignal, ModelRequest, PluginGeneration, ModelScore, PolicyDecision, ManualReviewCase, DecisionLedger, IdempotencyRecord, HostCallRecord, "$entities", "$entity_identity"]
+
+    let attempt: entity = spawn(
+        TransactionAttempt {
+            transaction: request.transaction,
+            submission_order: order,
+            customer: request.customer,
+            amount: request.amount,
+        },
+        RiskSignal { bits: request.signals },
+        ModelRequest { model: request.model },
+    )
+    let state: CustomerRiskState = require(customer, CustomerRiskState)
+    set(customer, CustomerRiskState { customer: state.customer, decisions: state.decisions + 1 })
+    set(attempt, PluginGeneration { generation: started_generation })
+    set(attempt, ModelScore { score: output.score, reason_mask: output.reason_mask })
+    set(attempt, PolicyDecision {
+        disposition: output.disposition,
+        model_version: output.model_version,
+        source: source,
+    })
+    if output.disposition == u8(1) {
+        set(attempt, ManualReviewCase {
+            urgency: (u64(request.transaction), u64(request.transaction)),
+        })
+    }
+    set(attempt, DecisionLedger {
+        transaction: request.transaction,
+        model_version: output.model_version,
+        committed: true,
+    })
+    set(attempt, IdempotencyRecord { transaction: request.transaction })
+    set(attempt, HostCallRecord {
+        model: request.model,
+        generation: started_generation,
+        effect_class: u8(0),
+        outcome: u8(0),
+    })
+
+    ensures is_some(lookup(TransactionAttempt, "transaction", request.transaction))
+    ensures has(lookup(TransactionAttempt, "transaction", request.transaction) |> unwrap, PolicyDecision)
+    ensures require(lookup(TransactionAttempt, "transaction", request.transaction) |> unwrap, DecisionLedger).committed
+    ensures require(lookup(TransactionAttempt, "transaction", request.transaction) |> unwrap, PluginGeneration).generation == started_generation
+    post_commit {
+        emit next DecisionCommitted {
+            attempt: lookup(TransactionAttempt, "transaction", request.transaction) |> unwrap,
+            disposition: output.disposition,
+            model_version: output.model_version,
+        }
+        if output.disposition == u8(1) {
+            emit next ManualReviewQueued {
+                attempt: lookup(TransactionAttempt, "transaction", request.transaction) |> unwrap,
+            }
+        }
+    }
+}
+
+pub readonly fn attempt_by_transaction(id: TransactionId) -> entity {
+    return lookup(TransactionAttempt, "transaction", id) |> unwrap
+}
+
+pub fn activate_generation(generation: u32, digest: str) -> nil
+    writes owned [ActivePluginGeneration]
+{
+    update(ActivePluginGeneration) { generation = generation, plugin_digest = digest }
+}

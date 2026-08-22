@@ -31,6 +31,7 @@ class ArchitectureGateTests(unittest.TestCase):
 
     def test_accepts_authority_oriented_layout(self) -> None:
         self.write("adapters/cli/src/main.rs", "fn main() {}\n")
+        self.write("core/relation/src/lib.rs", "// authoritative relation frontend\n")
         self.write("projects/moba/kit/main.rad", "fn main() -> nil {}\n")
         self.assertEqual(check_architecture.audit(self.root), [])
 
@@ -53,6 +54,14 @@ class ArchitectureGateTests(unittest.TestCase):
         self.write(
             "core/vm/Cargo.toml",
             "[dependencies]\nrad-lsp = { path = \"../../adapters/lsp\" }\n",
+        )
+        errors = check_architecture.audit(self.root)
+        self.assertTrue(any("core must not depend" in error for error in errors))
+
+    def test_rejects_relation_core_dependency_on_project(self) -> None:
+        self.write(
+            "core/relation/Cargo.toml",
+            "[dependencies]\napp = { path = \"../../projects/app\" }\n",
         )
         errors = check_architecture.audit(self.root)
         self.assertTrue(any("core must not depend" in error for error in errors))

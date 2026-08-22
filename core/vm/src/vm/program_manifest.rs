@@ -61,12 +61,12 @@ impl CompiledProgramManifest {
         )?);
 
         let mut machines = vm.state_machines.iter().collect::<Vec<_>>();
-        machines.sort_by(|left, right| left.0.cmp(right.0));
+        machines.sort_unstable_by(|left, right| left.0.cmp(right.0));
         out.usize(machines.len());
         for (machine, states) in machines {
             out.text(machine);
             let mut states = states.iter().collect::<Vec<_>>();
-            states.sort_by(|left, right| left.0.cmp(right.0));
+            states.sort_unstable_by(|left, right| left.0.cmp(right.0));
             out.usize(states.len());
             for (state, transitions) in states {
                 out.text(state);
@@ -80,7 +80,7 @@ impl CompiledProgramManifest {
         }
 
         let mut handlers = vm.event_handlers.iter().collect::<Vec<_>>();
-        handlers.sort_by(|left, right| left.0.cmp(right.0));
+        handlers.sort_unstable_by(|left, right| left.0.cmp(right.0));
         out.usize(handlers.len());
         for (event, entries) in handlers {
             out.text(event);
@@ -90,15 +90,20 @@ impl CompiledProgramManifest {
                 out.u16(entry.param_slot);
                 out.bool(entry.once);
                 out.bool(entry.has_guard);
+                out.bool(entry.contracts.no_nested_flush);
+                out.bool(entry.contracts.non_reentrant);
+                out.bool(entry.contracts.exactly_once);
+                out.optional_text(entry.contracts.must_complete_before.as_deref());
             }
         }
 
         let mut systems = vm.systems.iter().collect::<Vec<_>>();
-        systems.sort_by(|left, right| left.0.cmp(right.0));
+        systems.sort_unstable_by(|left, right| left.0.cmp(right.0));
         out.usize(systems.len());
         for (name, system) in systems {
             out.text(name);
             out.usize(system.chunk_id);
+            out.optional_u64(system.instruction_budget);
             encode_signature(&mut out, &system.params);
             encode_signature(&mut out, &system.resource_params);
             encode_sorted_strings(&mut out, system.after.iter());
@@ -111,7 +116,7 @@ impl CompiledProgramManifest {
         }
 
         let mut intents = vm.intent_registry.iter().collect::<Vec<_>>();
-        intents.sort_by(|left, right| left.0.cmp(right.0));
+        intents.sort_unstable_by(|left, right| left.0.cmp(right.0));
         out.usize(intents.len());
         for (name, intent) in intents {
             out.text(name);
@@ -124,7 +129,7 @@ impl CompiledProgramManifest {
         }
 
         let mut resolvers = vm.resolver_registry.iter().collect::<Vec<_>>();
-        resolvers.sort_by(|left, right| left.0.cmp(right.0));
+        resolvers.sort_unstable_by(|left, right| left.0.cmp(right.0));
         out.usize(resolvers.len());
         for (owned_intent, resolver) in resolvers {
             out.text(owned_intent);
@@ -150,7 +155,7 @@ impl CompiledProgramManifest {
         }
 
         let mut layouts = vm.component_layouts.iter().collect::<Vec<_>>();
-        layouts.sort_by(|left, right| left.0.cmp(right.0));
+        layouts.sort_unstable_by(|left, right| left.0.cmp(right.0));
         out.usize(layouts.len());
         for (name, fields) in layouts {
             out.text(name);
@@ -161,7 +166,7 @@ impl CompiledProgramManifest {
         }
 
         let mut field_types = vm.component_field_types.iter().collect::<Vec<_>>();
-        field_types.sort_by(|left, right| left.0.cmp(right.0));
+        field_types.sort_unstable_by(|left, right| left.0.cmp(right.0));
         out.usize(field_types.len());
         for (name, fields) in field_types {
             out.text(name);
@@ -173,7 +178,7 @@ impl CompiledProgramManifest {
         }
 
         let mut versions = vm.component_versions.iter().collect::<Vec<_>>();
-        versions.sort_by(|left, right| left.0.cmp(right.0));
+        versions.sort_unstable_by(|left, right| left.0.cmp(right.0));
         out.usize(versions.len());
         for (name, version) in versions {
             out.text(name);
@@ -181,7 +186,7 @@ impl CompiledProgramManifest {
         }
 
         let mut variants = vm.variant_layouts.iter().collect::<Vec<_>>();
-        variants.sort_by(|left, right| left.0.cmp(right.0));
+        variants.sort_unstable_by(|left, right| left.0.cmp(right.0));
         out.usize(variants.len());
         for ((type_name, variant), fields) in variants {
             out.text(type_name);
@@ -195,7 +200,7 @@ impl CompiledProgramManifest {
         encode_sorted_strings(&mut out, vm.transient_resources.iter());
 
         let mut indexed = vm.indexed_decl.iter().collect::<Vec<_>>();
-        indexed.sort_by(|left, right| left.0.cmp(right.0));
+        indexed.sort_unstable_by(|left, right| left.0.cmp(right.0));
         out.usize(indexed.len());
         for (component, fields) in indexed {
             out.text(component);
@@ -203,7 +208,7 @@ impl CompiledProgramManifest {
         }
 
         let mut migrations = vm.migrations.iter().collect::<Vec<_>>();
-        migrations.sort_by(|left, right| left.0.cmp(right.0));
+        migrations.sort_unstable_by(|left, right| left.0.cmp(right.0));
         out.usize(migrations.len());
         for (component, migration) in migrations {
             out.text(component);
@@ -256,7 +261,7 @@ fn encode_sorted_strings<'a>(
     values: impl IntoIterator<Item = &'a String>,
 ) {
     let mut values = values.into_iter().collect::<Vec<_>>();
-    values.sort();
+    values.sort_unstable();
     out.usize(values.len());
     for value in values {
         out.text(value);
@@ -280,13 +285,9 @@ mod tests {
             fn attempt() { return 1 }
             fn alternate() { return 2 }
         "#;
-        let mut lexer = crate::lexer::Lexer::new(source);
-        let tokens = lexer.tokenize().0;
-        let mut parser = crate::parser::Parser::new(tokens);
-        let program = parser.parse();
-        let result = crate::compiler::Compiler::new()
-            .compile(&program)
-            .expect("compile");
+        let result =
+            crate::test_support::compile_source(source, crate::parser::ParserOptions::default())
+                .expect("parse and compile");
         left.load_compile_result(result);
 
         let original = left
@@ -354,7 +355,21 @@ mod tests {
             let extension = crate::ffi::NativeExtensionManifest::from_binary(
                 std::path::Path::new("generic-extension.bin"),
                 b"implementation-a",
-                &[("transform".into(), 1)],
+                "test.generic".to_string(),
+                "1.0.0".to_string(),
+                &[crate::ffi::NativeExportManifest::new(
+                    "transform",
+                    1,
+                    crate::ffi::NativeEffectSet::declare(&["io"]).unwrap(),
+                    "(str)->str",
+                    false,
+                    true,
+                )
+                .unwrap()],
+                crate::ffi::NativeAbiContract::parse(
+                    r#"{"contract_version":1,"calling_convention":"C","types":[]}"#,
+                )
+                .unwrap(),
             );
             Arc::make_mut(&mut vm.native_extension_manifests).push(Arc::new(extension));
             changed(&vm, &digest);
@@ -373,6 +388,7 @@ mod tests {
                 once: true,
                 fired: false,
                 has_guard: true,
+                contracts: crate::ast::CallableContracts::default(),
             }],
         );
         changed(&vm, &digest);
@@ -388,6 +404,7 @@ mod tests {
                 before: vec!["Render".into()],
                 serial_group: Some(1),
                 accum_resources: HashSet::new(),
+                instruction_budget: None,
             },
         );
         changed(&vm, &digest);
@@ -444,7 +461,21 @@ mod tests {
             let extension = crate::ffi::NativeExtensionManifest::from_binary(
                 std::path::Path::new("generic-extension.bin"),
                 bytes,
-                &[("transform".into(), 1)],
+                "test.generic".to_string(),
+                "1.0.0".to_string(),
+                &[crate::ffi::NativeExportManifest::new(
+                    "transform",
+                    1,
+                    crate::ffi::NativeEffectSet::declare(&["io"]).unwrap(),
+                    "(str)->str",
+                    false,
+                    true,
+                )
+                .unwrap()],
+                crate::ffi::NativeAbiContract::parse(
+                    r#"{"contract_version":1,"calling_convention":"C","types":[]}"#,
+                )
+                .unwrap(),
             );
             Arc::make_mut(&mut vm.native_extension_manifests).push(Arc::new(extension));
             vm.compiled_program_manifest()

@@ -1,0 +1,14 @@
+use "schema.rad"
+use "owners/ledger.rad"
+use "systems/settlement.rad"
+use "scenarios/production.rad"
+
+fn main() -> nil {
+    run_payment_day(1000)
+    let debit: entity = lookup(AccountBalance, "account_id", AccountId(u64(100))) |> unwrap
+    let credit: entity = lookup(AccountBalance, "account_id", AccountId(u64(200))) |> unwrap
+    assert(i64(require(debit, AccountBalance).balance) == i64(0), "debit exact")
+    assert(i64(require(credit, AccountBalance).balance) == i64(100000), "credit exact")
+    assert(len(entities(LedgerEntry)) == 2000, "double-entry ledger complete")
+    print("clearpay: captured 1000 payments atomically")
+}

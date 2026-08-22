@@ -1,0 +1,16 @@
+component ActiveLease {}
+component Running {}
+component RetryWaiting {}
+let job = spawn(ActiveLease {}, Running {})
+
+fn timeout_without_clearing_lease() -> nil {
+    remove(job, Running)
+    set(job, RetryWaiting {})
+}
+model TimeoutClearsLease {
+    commands [timeout_without_clearing_lease]
+    invariant { return not has(job, RetryWaiting) or not has(job, ActiveLease) }
+    runs 1
+    max_commands 1
+    seed 3
+}

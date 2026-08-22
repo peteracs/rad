@@ -1,5 +1,3 @@
-
-
 // ---------------------------------------------------------------------------
 // sandpaper: literals default-fill
 // ---------------------------------------------------------------------------
@@ -37,20 +35,20 @@ fn component_literals_default_fill_omitted_fields() {
 /// instead of presenting a partial ledger as the whole truth.
 #[test]
 fn causality_retention_evicts_honestly() {
-    use crate::causality::{CausalityLedger, Cause, WriteKind};
+    use crate::causality::{CausalityLedger, Cause, WriteKind, WriteRecord, WriteSummary};
     let mut ledger = CausalityLedger::default();
     ledger.set_retention_cap(3);
 
     for i in 0..10 {
-        ledger.record_write(
+        ledger.record_write(WriteRecord::local(
             0,
             Some(i),
             Some(format!("e{}", i)),
             "Pos",
-            format!("{{ x: {} }}", i),
+            WriteSummary::full(format!("{{ x: {} }}", i), smallvec::SmallVec::new()),
             WriteKind::Set,
             Cause::Main,
-        );
+        ));
         let id = ledger.record_emit(0, "Tick", format!("Tick {{ n: {} }}", i), Cause::Main);
         assert_eq!(
             id,

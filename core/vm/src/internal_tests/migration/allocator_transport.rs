@@ -13,6 +13,7 @@ fn allocator_transport_body(
         "relations": serde_json::Value::Null,
         "resources": [],
         "schema": [],
+        "views": {},
     })
     .to_string()
 }

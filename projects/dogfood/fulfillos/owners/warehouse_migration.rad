@@ -1,0 +1,12 @@
+use "inventory_owner.rad"
+
+pub fn reconcile(target: entity, available: int, reserved: int) -> nil
+    writes owned [Inventory]
+{
+    let current: Inventory = require(target, Inventory)
+    set(target, Inventory {
+        sku: current.sku,
+        available: available,
+        reserved: reserved,
+    })
+}

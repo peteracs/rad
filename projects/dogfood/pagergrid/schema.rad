@@ -1,0 +1,41 @@
+pub component Service {
+    service_id: int = 0,
+    tier: int = 1,
+}
+
+pub component Incident {
+    incident_id: int = 0,
+    service: entity,
+    responder: entity,
+    severity: int = 1,
+    status: str = "open",
+}
+
+pub component Responder {
+    responder_id: int = 0,
+    pages: int = 0,
+}
+
+pub component OnCallAssignment {
+    service_id: int = 0,
+    responder: entity,
+}
+
+pub component EscalationPolicy {
+    after_minutes: int = 5,
+}
+
+pub component IncidentTimeline {
+    entries: int = 0,
+    last_action: str = "opened",
+}
+
+pub component CriticalRoute { enabled: bool = true }
+pub component RoutineRoute { enabled: bool = true }
+pub component EscalationState { armed: bool = false }
+pub component NotificationState { queued: bool = false }
+
+pub event ResponderPaged {
+    incident: entity,
+    responder: entity,
+}

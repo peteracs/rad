@@ -3,3 +3,4 @@ use super::*;
 include!("decl/declaration_dispatch.rs");
 include!("decl/data_declarations.rs");
 include!("decl/callable_declarations.rs");
+include!("decl/transaction_declarations.rs");

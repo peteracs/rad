@@ -1,0 +1,21 @@
+use "../schema.rad"
+use "../owners/order_book.rad"
+
+@no_full_scan
+pub system MatchOrders(
+    reads OrderIdentity,
+    reads OpenOrder,
+    reads BuyOrder,
+    reads SellOrder,
+    reads MatchCycle,
+    writes OpenOrder,
+    writes BuyOrder,
+    writes SellOrder,
+    writes Fill,
+    writes MatchCycle,
+    writes "$entities",
+    writes "$entity_identity",
+    emits MatchBatchCommitted,
+) {
+    MatchBook(100000)
+}

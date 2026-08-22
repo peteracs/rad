@@ -1,8 +1,8 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 
 use crate::ast::{
-    Block, Decl, Expr, FStringPart, FnDecl, FnTypePurity, OnHandler, Pattern, Program, Span, Stmt,
-    SystemDecl, TypeExpr,
+    Block, CallableContracts, Decl, EventDelivery, Expr, FStringPart, FnDecl, FnTypePurity,
+    OnHandler, Pattern, Program, Span, Stmt, SystemDecl, TypeExpr,
 };
 use crate::builtins;
 use crate::types::{AuthorityCallableKind, AuthorityEffects, AuthorityReport, CallableAuthority};
@@ -20,6 +20,8 @@ const SCHEMA: &str = "$schema";
 const STATE_TRANSITION: &str = "$transition";
 const ENTITY_NAMES: &str = "$entity_names";
 const ENTITY_IDENTITY: &str = "$entity_identity";
+const ENTITIES: &str = "$entities";
+const LIFECYCLE: &str = "$lifecycle";
 
 #[derive(Clone, Default)]
 struct EffectDraft {
@@ -29,6 +31,9 @@ struct EffectDraft {
     io: bool,
     async_effect: bool,
     unknown: bool,
+    full_scan: bool,
+    allocates: bool,
+    queries: BTreeSet<crate::types::AuthorityQueryOperation>,
 }
 
 impl EffectDraft {
@@ -40,6 +45,9 @@ impl EffectDraft {
             self.io,
             self.async_effect,
             self.unknown,
+            self.full_scan,
+            self.allocates,
+            self.queries.len(),
         );
         self.reads.extend(other.reads.iter().cloned());
         self.writes.extend(other.writes.iter().cloned());
@@ -47,6 +55,9 @@ impl EffectDraft {
         self.io |= other.io;
         self.async_effect |= other.async_effect;
         self.unknown |= other.unknown;
+        self.full_scan |= other.full_scan;
+        self.allocates |= other.allocates;
+        self.queries.extend(other.queries.iter().cloned());
         before
             != (
                 self.reads.len(),
@@ -55,6 +66,9 @@ impl EffectDraft {
                 self.io,
                 self.async_effect,
                 self.unknown,
+                self.full_scan,
+                self.allocates,
+                self.queries.len(),
             )
     }
 
@@ -66,6 +80,9 @@ impl EffectDraft {
             io: self.io,
             async_effect: self.async_effect,
             unknown: self.unknown,
+            full_scan: self.full_scan,
+            allocates: self.allocates,
+            queries: self.queries.iter().cloned().collect(),
         }
     }
 }
@@ -86,6 +103,8 @@ struct Seed {
     authority_emits: BTreeSet<String>,
     authority_io: bool,
     authority_async: bool,
+    contracts: CallableContracts,
+    transaction_changes_only: Option<BTreeSet<String>>,
     declared: EffectDraft,
     captured_locals: HashMap<String, LocalBinding>,
 }
@@ -156,6 +175,7 @@ struct NodeDraft {
     /// specialization can keep their callback tuple separate.
     plain_calls: BTreeSet<String>,
     deferred_calls: BTreeSet<String>,
+    sync_emits: BTreeSet<String>,
     dynamic_params: BTreeMap<usize, CallableBound>,
     /// Writes already diagnosed by the ordinary mutability checker. Keeping
     /// these separate avoids emitting two errors for `p.x = ...` when `p` is
@@ -200,10 +220,13 @@ struct LocalBinding {
 struct Resolver {
     known_callables: HashSet<String>,
     known_data: HashSet<String>,
+    known_native_constructors: HashSet<String>,
     module_aliases: HashMap<String, HashMap<String, String>>,
     type_redirects: HashMap<String, String>,
     static_schedules: HashMap<String, Vec<Expr>>,
     phases: HashMap<String, Vec<String>>,
+    known_views: HashMap<String, Vec<String>>,
+    allocation_free_fields: HashMap<String, HashSet<String>>,
 }
 
 impl Resolver {
@@ -248,15 +271,12 @@ impl Resolver {
     }
 
     fn type_name(&self, raw: &str, redirects: &HashMap<String, String>) -> String {
-        let mut current = self.symbol_name(raw, redirects);
-        let mut seen = HashSet::new();
-        while seen.insert(current.clone()) {
-            let Some(next) = self.type_redirects.get(&current) else {
-                break;
-            };
-            current = next.clone();
-        }
-        current
+        crate::ast::resolve_canonical_name(
+            raw,
+            Some(&self.module_aliases),
+            &[Some(redirects)],
+            &self.type_redirects,
+        )
     }
 
     fn data_expr(&self, expr: &Expr, redirects: &HashMap<String, String>) -> Option<String> {
@@ -281,6 +301,7 @@ struct Scanner<'a> {
     calls: BTreeSet<String>,
     plain_calls: BTreeSet<String>,
     deferred_calls: BTreeSet<String>,
+    sync_emits: BTreeSet<String>,
     dynamic_params: BTreeMap<usize, CallableBound>,
     parameter_assignments: BTreeSet<String>,
     call_sites: Vec<CallSite>,
@@ -304,6 +325,7 @@ impl<'a> Scanner<'a> {
             calls: BTreeSet::new(),
             plain_calls: BTreeSet::new(),
             deferred_calls: BTreeSet::new(),
+            sync_emits: BTreeSet::new(),
             dynamic_params: BTreeMap::new(),
             parameter_assignments: BTreeSet::new(),
             call_sites: Vec::new(),
@@ -321,6 +343,7 @@ impl<'a> Scanner<'a> {
             calls: self.calls,
             plain_calls: self.plain_calls,
             deferred_calls: self.deferred_calls,
+            sync_emits: self.sync_emits,
             dynamic_params: self.dynamic_params,
             parameter_assignments: self.parameter_assignments,
         };
@@ -476,7 +499,10 @@ impl<'a> Scanner<'a> {
             }
             Stmt::Emit(s) => {
                 let event = self.resolver.type_name(&s.event_name, &self.seed.redirects);
-                self.direct.emits.insert(event);
+                self.direct.emits.insert(event.clone());
+                if s.delivery == EventDelivery::Sync {
+                    self.sync_emits.insert(event);
+                }
                 for (_, value) in &s.fields {
                     self.scan_expr(value);
                 }
@@ -514,6 +540,18 @@ impl<'a> Scanner<'a> {
                         self.scan_expr(index);
                     }
                     self.scan_expr(&update.value);
+                }
+            }
+            Stmt::Transaction(s) => {
+                for condition in &s.requires {
+                    self.scan_expr(condition);
+                }
+                self.scan_block(&s.body);
+                for condition in &s.ensures {
+                    self.scan_expr(condition);
+                }
+                if let Some(post_commit) = &s.post_commit {
+                    self.scan_block(post_commit);
                 }
             }
             Stmt::Settle(s) => self.scan_block(&s.body),
@@ -560,17 +598,20 @@ impl<'a> Scanner<'a> {
             | Expr::SystemRef(_, _)
             | Expr::Error(_) => {}
             Expr::ListLit(items, _) | Expr::TupleLit(items, _) => {
+                self.direct.allocates = true;
                 for item in items {
                     self.scan_expr(item);
                 }
             }
             Expr::MapLit(entries, _) => {
+                self.direct.allocates = true;
                 for (key, value) in entries {
                     self.scan_expr(key);
                     self.scan_expr(value);
                 }
             }
             Expr::FStringExpr(parts, _) => {
+                self.direct.allocates = true;
                 for part in parts {
                     if let FStringPart::Expr(value, _) = part {
                         self.scan_expr(value);
@@ -614,6 +655,7 @@ impl<'a> Scanner<'a> {
                 self.scan_expr(index);
             }
             Expr::ComponentExpr(_, fields, spread, _) => {
+                self.direct.allocates = true;
                 for (_, value) in fields {
                     self.scan_expr(value);
                 }
@@ -622,6 +664,7 @@ impl<'a> Scanner<'a> {
                 }
             }
             Expr::VariantExpr(_, _, fields, _) => {
+                self.direct.allocates = true;
                 for (_, value) in fields {
                     self.scan_expr(value);
                 }
@@ -641,6 +684,8 @@ impl<'a> Scanner<'a> {
                 self.ensure_closure(expr);
             }
             Expr::QueryExpr(query, _) => {
+                self.direct.full_scan = true;
+                self.direct.allocates = true;
                 for (component, _) in &query.components {
                     self.direct
                         .reads
@@ -651,6 +696,7 @@ impl<'a> Scanner<'a> {
                 }
             }
             Expr::EntityLiteral(name, components, _) => {
+                self.direct.allocates = true;
                 if let Some(name) = name {
                     self.scan_expr(name);
                     self.direct.writes.insert(ENTITY_NAMES.to_string());
@@ -670,6 +716,11 @@ impl<'a> Scanner<'a> {
         if let Expr::Ident(name, _) = callee {
             if builtins::is_builtin(name) {
                 self.scan_builtin(name, &logical_args);
+                return;
+            }
+            let resolved = self.resolver.symbol_name(name, &self.seed.redirects);
+            if self.resolver.known_native_constructors.contains(&resolved) {
+                self.direct.allocates = true;
                 return;
             }
             if let Some(index) = self.seed.params.iter().position(|param| param == name) {
@@ -814,6 +865,8 @@ impl<'a> Scanner<'a> {
             authority_emits: BTreeSet::new(),
             authority_io: false,
             authority_async: false,
+            contracts: CallableContracts::default(),
+            transaction_changes_only: None,
             declared: EffectDraft::default(),
             captured_locals: self.visible_locals(),
         });

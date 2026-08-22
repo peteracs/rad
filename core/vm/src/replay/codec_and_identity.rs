@@ -74,13 +74,16 @@ pub(crate) fn is_observational_attempt_effect(b: Builtin) -> bool {
 
 /// Digest of builtin arguments, used purely for divergence detection.
 /// Relies on `Display` being deterministic (guaranteed by `determinism.rs`).
-pub(crate) fn args_digest(args: &[Value]) -> String {
+pub(crate) fn args_digest(args: &[Value]) -> Result<String, String> {
     let mut hasher = blake3::Hasher::new();
-    for a in args {
-        hasher.update(format!("{}", a).as_bytes());
+    for argument in args {
+        let encoded = encode_value(argument)?;
+        let bytes = serde_json::to_vec(&encoded)
+            .map_err(|error| format!("argument identity encoding failed: {error}"))?;
+        hasher.update(&bytes);
         hasher.update(&[0x1f]);
     }
-    hasher.finalize().to_hex()[..16].to_string()
+    Ok(hasher.finalize().to_hex()[..16].to_string())
 }
 
 pub fn source_hash(source: &str) -> String {
@@ -89,7 +92,7 @@ pub fn source_hash(source: &str) -> String {
 
 fn canonical_features(features: &[String]) -> Vec<String> {
     let mut features = features.to_vec();
-    features.sort();
+    features.sort_unstable();
     features.dedup();
     features
 }
@@ -118,6 +121,12 @@ fn map_key_to_json(k: &MapKey) -> serde_json::Value {
     match k {
         MapKey::Str(s) => serde_json::json!(["s", s]),
         MapKey::Int(i) => serde_json::json!(["i", i]),
+        MapKey::Native(value) => serde_json::json!(["n", {
+            "ty": value.type_name,
+            "repr": value.repr.to_string(),
+            "flavor": value.flavor.as_str(),
+            "bits": value.bits,
+        }]),
         MapKey::Bool(b) => serde_json::json!(["b", b]),
         MapKey::Entity(e) => serde_json::json!(["e", e]),
         MapKey::Tuple(items) => {
@@ -152,6 +161,27 @@ fn json_to_map_key(karr: &[serde_json::Value]) -> Result<MapKey, String> {
         "i" => Ok(MapKey::Int(payload.as_i64().ok_or_else(|| {
             "trace codec: malformed integer map key".to_string()
         })?)),
+        "n" => Ok(MapKey::Native(crate::native_types::NativeScalarValue {
+            type_name: payload["ty"]
+                .as_str()
+                .ok_or_else(|| "trace codec: malformed native map key type".to_string())?
+                .to_string(),
+            repr: crate::native_types::NativeScalarKind::parse(
+                payload["repr"]
+                    .as_str()
+                    .ok_or_else(|| "trace codec: malformed native map key repr".to_string())?,
+            )
+            .ok_or_else(|| "trace codec: unknown native map key repr".to_string())?,
+            flavor: crate::native_types::NativeTypeFlavor::parse(
+                payload["flavor"]
+                    .as_str()
+                    .ok_or_else(|| "trace codec: malformed native map key flavor".to_string())?,
+            )
+            .ok_or_else(|| "trace codec: unknown native map key flavor".to_string())?,
+            bits: payload["bits"]
+                .as_u64()
+                .ok_or_else(|| "trace codec: malformed native map key bits".to_string())?,
+        })),
         "b" => Ok(MapKey::Bool(payload.as_bool().ok_or_else(|| {
             "trace codec: malformed boolean map key".to_string()
         })?)),
@@ -197,6 +227,30 @@ pub(crate) fn encode_value(v: &Value) -> Result<serde_json::Value, String> {
     if let Some(s) = v.as_str() {
         return Ok(json!({"t": "str", "v": s}));
     }
+    if let Some(value) = v.as_native_scalar() {
+        return Ok(json!({
+            "t": "native",
+            "ty": value.type_name,
+            "repr": value.repr.to_string(),
+            "flavor": value.flavor.as_str(),
+            "bits": value.bits,
+        }));
+    }
+    if let Some(value) = v.as_state() {
+        return Ok(json!({"t": "state", "machine": value.machine, "state": value.state}));
+    }
+    if let Some(value) = v.as_bitset() {
+        return Ok(json!({"t": "bitset", "v": value}));
+    }
+    if let Some(value) = v.as_buffer() {
+        return Ok(json!({"t": "buffer", "v": value}));
+    }
+    if let Some(value) = v.as_bytebuf() {
+        return Ok(json!({"t": "bytes", "v": value}));
+    }
+    if let Some(value) = v.as_system_ref() {
+        return Ok(json!({"t": "system", "v": value}));
+    }
     if let Some(items) = v.as_list() {
         let encoded: Result<Vec<_>, _> = items.iter().map(encode_value).collect();
         return Ok(json!({"t": "list", "v": encoded?}));
@@ -207,7 +261,7 @@ pub(crate) fn encode_value(v: &Value) -> Result<serde_json::Value, String> {
     }
     if let Some(m) = v.as_map() {
         let mut sorted_keys: Vec<&MapKey> = m.keys().collect();
-        sorted_keys.sort();
+        sorted_keys.sort_unstable();
         let mut pairs = Vec::with_capacity(m.len());
         for k in sorted_keys {
             let key = map_key_to_json(k);
@@ -218,7 +272,7 @@ pub(crate) fn encode_value(v: &Value) -> Result<serde_json::Value, String> {
     if let Some(st) = v.as_sum_type() {
         let mut fields = serde_json::Map::with_capacity(st.fields.len());
         let mut keys: Vec<&String> = st.fields.keys().collect();
-        keys.sort();
+        keys.sort_unstable();
         for k in keys {
             fields.insert(k.clone(), encode_value(&st.fields[k])?);
         }
@@ -230,6 +284,14 @@ pub(crate) fn encode_value(v: &Value) -> Result<serde_json::Value, String> {
         let values: Result<Vec<_>, _> = c.values.iter().map(encode_value).collect();
         return Ok(json!({
             "t": "comp", "ty": c.type_name, "layout": *c.layout, "values": values?
+        }));
+    }
+    if let Some(handle) = v.as_host_handle() {
+        return Ok(json!({
+            "t": "host_handle",
+            "owner": handle.owner_digest(),
+            "ty": handle.type_name(),
+            "v": handle.token_for_runtime(),
         }));
     }
     Err(format!(
@@ -260,6 +322,69 @@ pub(crate) fn decode_value(gc: &mut GcHeap, j: &serde_json::Value) -> Result<Val
         "str" => Ok(Value::from_string(
             gc,
             j["v"].as_str().ok_or_else(|| bad("str"))?.to_string(),
+        )),
+        "native" => {
+            let repr_name = j["repr"].as_str().ok_or_else(|| bad("native"))?;
+            let flavor_name = j["flavor"].as_str().ok_or_else(|| bad("native"))?;
+            let value = crate::native_types::NativeScalarValue {
+                type_name: j["ty"]
+                    .as_str()
+                    .ok_or_else(|| bad("native"))?
+                    .to_string(),
+                repr: crate::native_types::NativeScalarKind::parse(repr_name)
+                    .ok_or_else(|| bad("native"))?,
+                flavor: crate::native_types::NativeTypeFlavor::parse(flavor_name)
+                    .ok_or_else(|| bad("native"))?,
+                bits: j["bits"].as_u64().ok_or_else(|| bad("native"))?,
+            };
+            Ok(Value::from_native_scalar(gc, value))
+        }
+        "state" => Ok(Value::from_state(
+            gc,
+            j["machine"]
+                .as_str()
+                .ok_or_else(|| bad("state"))?
+                .to_string(),
+            j["state"]
+                .as_str()
+                .ok_or_else(|| bad("state"))?
+                .to_string(),
+        )),
+        "bitset" => {
+            let words = j["v"]
+                .as_array()
+                .ok_or_else(|| bad("bitset"))?
+                .iter()
+                .map(|word| word.as_u64().ok_or_else(|| bad("bitset")))
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(Value::bitset(gc, words))
+        }
+        "buffer" => Ok(Value::buffer(
+            gc,
+            j["v"]
+                .as_str()
+                .ok_or_else(|| bad("buffer"))?
+                .to_string(),
+        )),
+        "bytes" => {
+            let bytes = j["v"]
+                .as_array()
+                .ok_or_else(|| bad("bytes"))?
+                .iter()
+                .map(|byte| {
+                    byte.as_u64()
+                        .and_then(|value| u8::try_from(value).ok())
+                        .ok_or_else(|| bad("bytes"))
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(Value::bytebuf(gc, bytes))
+        }
+        "system" => Ok(Value::system_ref(
+            gc,
+            j["v"]
+                .as_str()
+                .ok_or_else(|| bad("system"))?
+                .to_string(),
         )),
         "list" | "tuple" => {
             let items = j["v"].as_array().ok_or_else(|| bad(tag))?;
@@ -318,6 +443,21 @@ pub(crate) fn decode_value(gc: &mut GcHeap, j: &serde_json::Value) -> Result<Val
                 ty,
                 std::sync::Arc::new(layout),
                 values,
+            ))
+        }
+        "host_handle" => {
+            let owner = j["owner"]
+                .as_str()
+                .ok_or_else(|| bad("host_handle"))?
+                .to_string();
+            let type_name = j["ty"]
+                .as_str()
+                .ok_or_else(|| bad("host_handle"))?
+                .to_string();
+            let token = j["v"].as_u64().ok_or_else(|| bad("host_handle"))?;
+            Ok(Value::from_host_handle(
+                gc,
+                crate::ffi::HostHandleToken::from_recorded(owner, type_name, token),
             ))
         }
         other => Err(format!("trace codec: unknown tag '{}'", other)),

@@ -1,0 +1,7 @@
+use "schema.rad"
+use "scenarios/captured_frames.rad"
+
+fn main() -> nil {
+    verify_scalar_corpus(100000)
+    print("forgelink-bench: ok scalar-roundtrips=200000")
+}

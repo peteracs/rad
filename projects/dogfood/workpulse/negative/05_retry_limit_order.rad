@@ -1,0 +1,20 @@
+component RetryPolicy { limit: int = 3 }
+component Attempt { count: int = 3 }
+component Failed {}
+component DeadLettered {}
+let job = spawn(RetryPolicy { limit: 3 }, Attempt { count: 3 }, Failed {})
+
+fn increment_after_limit_check() -> nil {
+    let attempt: Attempt = require(job, Attempt)
+    set(job, Attempt { count: attempt.count + 1 })
+    set(job, DeadLettered {})
+    remove(job, Failed)
+}
+
+model RetryCountBound {
+    commands [increment_after_limit_check]
+    invariant { return require(job, Attempt).count <= require(job, RetryPolicy).limit }
+    runs 1
+    max_commands 1
+    seed 5
+}

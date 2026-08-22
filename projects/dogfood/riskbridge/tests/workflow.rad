@@ -1,0 +1,25 @@
+use "../schema.rad"
+use "../owners/decision_owner.rad"
+use "../owners/decision_owner.rad" as decisions
+use "../systems/adjudication.rad"
+use "../host/risk_model.rad"
+use "../scenarios/production.rad"
+
+test "native and reference models agree byte-for-byte" {
+    InspectManualReviewQueue()
+    let attempt: entity = run_differential_corpus(1000)
+    assert(has(attempt, DecisionLedger), "decision committed atomically")
+    assert(require(attempt, HostCallRecord).generation == u32(17), "host generation retained")
+}
+
+test "decision stays pinned to its starting generation" {
+    let customer: entity = decisions.register_customer(CustomerId(u64(5000)))
+    let request: RiskInput = risk_input(5000, 10000)
+    let started: u32 = res(ActivePluginGeneration).generation
+    let output: RiskOutput = score_reference(request)
+    decisions.activate_generation(u32(18), "riskbridge-model-v18")
+    decisions.CommitDecision(customer, request, output, started, u8(1), u64(5000))
+    let attempt: entity = decisions.attempt_by_transaction(request.transaction)
+    assert(require(attempt, PluginGeneration).generation == u32(17), "in-flight decision remains v17")
+    assert(res(ActivePluginGeneration).generation == u32(18), "future decisions observe v18")
+}

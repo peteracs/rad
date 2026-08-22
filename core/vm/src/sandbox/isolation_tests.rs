@@ -1,5 +1,3 @@
-
-
 /// Escape-attempt suite (ratified spec: ships *with* the sandbox, not after).
 ///
 /// Each test is an attack class: IO smuggling, ACL bypass via builtins and via
@@ -7,24 +5,14 @@
 /// captured-events semantics that distinguish `sandbox_run` from `simulate`.
 #[cfg(test)]
 mod escape_tests {
-    use crate::compiler::Compiler;
-    use crate::lexer::Lexer;
-    use crate::parser::Parser;
+    use crate::parser::ParserOptions;
     use crate::value::{Builtin, Value};
     use crate::vm::VM;
 
     /// Compile and run trusted host source, returning the live VM.
     fn host_vm(src: &str) -> VM {
-        let mut lexer = Lexer::new(src);
-        let tokens = lexer.tokenize().0;
-        let mut parser = Parser::new(tokens);
-        let program = parser.parse();
-        assert!(
-            parser.errors().is_empty(),
-            "host parse errors: {:?}",
-            parser.errors()
-        );
-        let result = Compiler::new().compile(&program).expect("host compile");
+        let result = crate::test_support::compile_source(src, ParserOptions::default())
+            .expect("host parse and compile");
         let mut vm = VM::new();
         vm.suppress_output();
         vm.load_compile_result(result);
@@ -36,22 +24,12 @@ mod escape_tests {
     /// declared component field types reach the VM — required for the
     /// write-shape ACL, which binds a guest write to the host's schema.
     fn host_vm_checked(src: &str) -> VM {
-        let mut lexer = Lexer::new(src);
-        let tokens = lexer.tokenize().0;
-        let mut parser = Parser::new(tokens);
-        let program = parser.parse();
-        assert!(
-            parser.errors().is_empty(),
-            "host parse errors: {:?}",
-            parser.errors()
-        );
-        let mut checker = crate::checker::Checker::new();
-        let errors = checker.check(&program);
-        assert!(errors.is_empty(), "host check errors: {:?}", errors);
-        let result = Compiler::new()
-            .with_checker_output(checker.output())
-            .compile(&program)
-            .expect("host compile");
+        let result = crate::test_support::compile_checked_source(
+            src,
+            ParserOptions::default(),
+            crate::checker::CheckerOptions::default(),
+        )
+        .expect("host parse, check, and compile");
         let mut vm = VM::new();
         vm.suppress_output();
         vm.load_compile_result(result);

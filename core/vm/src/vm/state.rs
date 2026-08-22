@@ -5,6 +5,7 @@ unsafe impl Send for WorkerResult {}
 #[derive(Clone, Debug)]
 pub enum EcsCommand {
     SetComponent(u32, crate::value::ComponentData),
+    SetField(u32, String, String, Value),
     SetResource(String, crate::value::ComponentData),
     SpawnEntity(Option<String>, Vec<crate::value::ComponentData>, u32), // The u32 is the local ID assigned by the worker
     RemoveComponent(u32, String),
@@ -20,6 +21,7 @@ impl EcsCommand {
             EcsCommand::SetComponent(_, data) | EcsCommand::SetResource(_, data) => {
                 Value::release_component_data(data);
             }
+            EcsCommand::SetField(_, _, _, value) => unsafe { value.release_persistent() },
             EcsCommand::SpawnEntity(_, comps, _) => {
                 for c in comps {
                     Value::release_component_data(c);
@@ -62,6 +64,7 @@ pub(crate) enum NetHandle {
 
 pub struct VM {
     pub(crate) chunks: Arc<Vec<SealedChunk>>,
+    pub(crate) view_kernels: Arc<Vec<Arc<crate::view_kernel::ViewKernelPlan>>>,
     pub(crate) stack: Vec<Value>,
     pub(crate) globals: Vec<Value>,
     pub(crate) global_names: Arc<Vec<String>>,
@@ -82,6 +85,8 @@ pub struct VM {
     pub(crate) constraint_registry: Arc<Vec<ConstraintRuntimeInfo>>,
     pub(crate) native_extension_manifests: Arc<Vec<Arc<crate::ffi::NativeExtensionManifest>>>,
     pub(crate) settlement: Option<SettlementContext>,
+    pub(crate) transaction: Option<TransactionContext>,
+    pub(crate) post_commit: Option<PostCommitContext>,
     pub(crate) next_settlement_id: u64,
     pub(crate) causal_value_limits: crate::CausalValueLimits,
     pub(crate) constraint_limit_profile: crate::constraint_types::ConstraintLimitProfile,
@@ -105,6 +110,10 @@ pub struct VM {
     /// interpreter spend its dispatches" answer.
     pub(crate) op_profile: bool,
     pub(crate) op_counts: Vec<u64>,
+    pub(crate) system_metrics: Option<BTreeMap<String, SystemExecutionMetrics>>,
+    pub(crate) model_check_config: ModelCheckConfig,
+    pub(crate) model_check_reports: Vec<ModelCheckReport>,
+    pub(crate) metered_instruction_count: u64,
     /// Live timeline tracing (RADSCOPE): capture a CoW world snapshot at
     /// every main-timeline frame boundary into `timeline`, capped so a
     /// runaway loop can't eat the heap. Embedders flip this before `run`.
@@ -116,6 +125,7 @@ pub struct VM {
     /// field, value as JSON scalar.)
     pub trace_patch: Option<(u64, String, String, String, String)>,
     pub(crate) component_layouts: Arc<HashMap<String, Arc<Vec<String>>>>,
+    pub(crate) native_layouts: Arc<HashMap<String, crate::native_types::NativeLayout>>,
     /// Declared field types per component/resource (checker-derived; empty
     /// on checker-less compiles). The deserialization boundary validates
     /// loaded/migrated rows against these so persisted type drift is a loud
@@ -131,15 +141,19 @@ pub struct VM {
     /// excluded from world_digest()/save_world(): command tapes, derived
     /// caches, spatial indexes. Forks/commits still carry their values.
     pub(crate) transient_resources: Arc<HashSet<String>>,
+    /// `shared test` names. The test runner restores the fixture world before
+    /// every other test, so one test's writes cannot become another's setup.
+    pub(crate) shared_world_tests: Arc<HashSet<String>>,
     /// The program's `indexed` field declarations — the source of truth for
     /// world indices. Snapshots only carry derived state; `commit()`
     /// reconciles the restored world against this (a foreign snapshot from a
     /// wire decode or an old save must not wipe the program's indexes).
     pub(crate) indexed_decl: Arc<HashMap<String, HashSet<String>>>,
+    pub(crate) ordered_decl: Arc<HashMap<String, HashSet<String>>>,
     pub(crate) gc: GcHeap,
     pub(crate) arena: BumpArena,
     pub(crate) timeline: Vec<WorldSnapshot>,
-    pub(crate) event_log: Vec<EventLogEntry>,
+    pub(crate) event_log: VecDeque<EventLogEntry>,
     pub(crate) rng_state: u64,
     pub(crate) tasks: HashMap<u64, TaskRecord>,
     pub(crate) next_task_id: u64,
@@ -147,8 +161,6 @@ pub struct VM {
     pub(crate) in_async_context: bool,
     #[cfg(not(target_arch = "wasm32"))]
     pub(crate) io_pool: IoPool,
-    #[cfg(not(target_arch = "wasm32"))]
-    pub(crate) loaded_libraries: Vec<crate::ffi::LoadedNativeLibrary>,
     #[cfg(not(target_arch = "wasm32"))]
     pub(crate) net_handles: HashMap<u64, NetHandle>,
     #[cfg(not(target_arch = "wasm32"))]
@@ -212,6 +224,9 @@ pub struct VM {
     /// Who is currently executing — top-level code, a system, or a handler.
     /// Writes recorded in the ledger carry this as their cause.
     pub(crate) current_cause: crate::causality::Cause,
+    /// Successful host calls form a one-shot causal edge into the next
+    /// transaction. Chained host calls retain one another as parents.
+    pub(crate) pending_host_cause: Option<crate::causality::Cause>,
     /// Main-timeline frame counter, advanced in lockstep with the
     /// record/replay frame convention (k-th flush starts frame k).
     pub(crate) causality_frame: u64,
@@ -234,6 +249,7 @@ pub struct HandlerEntry {
     pub(crate) once: bool,
     pub(crate) fired: bool,
     pub(crate) has_guard: bool,
+    pub(crate) contracts: crate::ast::CallableContracts,
 }
 
 #[derive(Clone, Copy)]
@@ -267,4 +283,5 @@ pub struct SystemRuntimeInfo {
     /// the base instead of last-write-wins, and the conflict analysis lets
     /// accum-writers of the same resource share a batch.
     pub(crate) accum_resources: std::collections::HashSet<String>,
+    pub(crate) instruction_budget: Option<u64>,
 }

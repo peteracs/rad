@@ -1,0 +1,9 @@
+use "schema.rad"
+use "owners/order_book.rad"
+use "systems/matching.rad"
+use "scenarios/production.rad"
+
+fn main() -> nil {
+    run_exchange_day(1000000)
+    print(f"bookcore-bench: orders=1000000 fills={res(MatchCycle).fills}")
+}

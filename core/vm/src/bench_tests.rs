@@ -11,23 +11,12 @@
 
 #![cfg(test)]
 
-use crate::compiler::Compiler;
-use crate::lexer::Lexer;
-use crate::parser::Parser;
+use crate::parser::ParserOptions;
 use crate::vm::VM;
 use std::time::Instant;
 
 fn compile(src: &str) -> crate::compiler::CompileResult {
-    let mut lexer = Lexer::new(src);
-    let tokens = lexer.tokenize().0;
-    let mut parser = Parser::new(tokens);
-    let program = parser.parse();
-    assert!(
-        parser.errors().is_empty(),
-        "parse errors: {:?}",
-        parser.errors()
-    );
-    Compiler::new().compile(&program).expect("compile")
+    crate::test_support::compile_source(src, ParserOptions::default()).expect("parse and compile")
 }
 
 /// Run a compiled program, return (wall seconds, vm).
@@ -322,25 +311,30 @@ fn bench_everything() {
         );
 
         // Ledger memory: measured record sizes plus retention behavior.
-        use crate::causality::{CausalityLedger, Cause, WriteKind};
+        use crate::causality::{CausalityLedger, Cause, WriteKind, WriteRecord, WriteSummary};
         let mut ledger = CausalityLedger::default();
         for i in 0..150_000u32 {
-            ledger.record_write(
+            ledger.record_write(WriteRecord::local(
                 0,
                 Some(i),
                 Some(format!("entity_{}", i)),
                 "Hp",
-                format!("{{ hp: {}, max: 100 }}", i),
+                WriteSummary::full(
+                    format!("{{ hp: {}, max: 100 }}", i),
+                    smallvec::SmallVec::new(),
+                ),
                 WriteKind::Set,
                 Cause::Main,
-            );
+            ));
         }
         let per_record = std::mem::size_of::<crate::causality::WriteRecord>();
         let strings: usize = ledger
             .writes
             .iter()
             .map(|w| {
-                w.value.len() + w.component.len() + w.entity_name.as_ref().map_or(0, |s| s.len())
+                w.value_string().len()
+                    + w.component.len()
+                    + w.entity_name.as_ref().map_or(0, |s| s.len())
             })
             .sum();
         println!(

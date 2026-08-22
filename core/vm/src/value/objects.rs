@@ -11,6 +11,9 @@ impl fmt::Display for Value {
         if let Some(i) = self.as_int() {
             return write!(f, "{}", i);
         }
+        if let Some(entity) = self.as_entity_id() {
+            return write!(f, "{}", entity);
+        }
         if let Some(x) = self.as_float() {
             return if x.fract() == 0.0 && x.is_finite() {
                 write!(f, "{:.1}", x)
@@ -20,6 +23,28 @@ impl fmt::Display for Value {
         }
         match self.as_object() {
             Some(Object::BigInt(n)) => write!(f, "{}", n),
+            Some(Object::NativeScalar(value)) => {
+                if let Some(number) = value.float() {
+                    write!(f, "{}({})", display_type_name(&value.type_name), number)
+                } else if value.repr.is_signed() {
+                    write!(
+                        f,
+                        "{}({})",
+                        display_type_name(&value.type_name),
+                        value.signed().unwrap()
+                    )
+                } else {
+                    write!(
+                        f,
+                        "{}({})",
+                        display_type_name(&value.type_name),
+                        value.unsigned().unwrap()
+                    )
+                }
+            }
+            Some(Object::NativeType(value)) => {
+                write!(f, "<native type {}>", display_type_name(&value.name))
+            }
             Some(Object::Str(s)) => {
                 write!(f, "\"")?;
                 for ch in s.chars() {
@@ -88,7 +113,9 @@ impl fmt::Display for Value {
             Some(Object::Cell(cell)) => write!(f, "{}", unsafe { (**cell).get() }),
             Some(Object::BuiltinFn(builtin)) => write!(f, "<builtin {}>", builtin.name()),
             Some(Object::NativeFn(native)) => write!(f, "<native fn {}>", native.name),
-            Some(Object::EntityId(id)) => write!(f, "{}", id),
+            Some(Object::HostHandle(handle)) => {
+                write!(f, "<host_handle {}>", display_type_name(handle.type_name()))
+            }
             Some(Object::Task(id)) => write!(f, "<task {}>", id),
             Some(Object::Map(m)) => {
                 write!(f, "{{")?;
@@ -118,8 +145,12 @@ impl fmt::Display for Value {
 #[derive(Clone)]
 pub struct NativeFnInfo {
     pub name: String,
-    pub func: crate::ffi::NativeFnPtr,
+    pub execution: crate::ffi::NativeExecution,
     pub arity: u32,
+    pub effects: crate::ffi::NativeEffectSet,
+    pub signature: String,
+    pub deterministic: bool,
+    pub replayable: bool,
     /// Content-addressed identity of the library implementation that owns
     /// this export. Function pointers are process-local and never enter
     /// portable program or replay identity.
@@ -128,6 +159,8 @@ pub struct NativeFnInfo {
 
 pub enum Object {
     BigInt(i64),
+    NativeScalar(crate::native_types::NativeScalarValue),
+    NativeType(crate::native_types::NativeTypeDescriptor),
     Str(Arc<str>),
     List(RadList),
     Component(ComponentData),
@@ -138,7 +171,7 @@ pub enum Object {
     Cell(*mut gc::CaptureCell),
     BuiltinFn(Builtin),
     NativeFn(NativeFnInfo),
-    EntityId(u32),
+    HostHandle(crate::ffi::HostHandleToken),
     Task(u64),
     Tuple(Vec<Value>),
     Map(MapStorage),
@@ -160,6 +193,7 @@ impl Object {
         fn key_bytes(key: &MapKey) -> usize {
             match key {
                 MapKey::Int(_) => std::mem::size_of::<i64>(),
+                MapKey::Native(value) => 10usize.saturating_add(value.type_name.len()),
                 MapKey::Str(value) => value.len(),
                 MapKey::Bool(_) => 1,
                 MapKey::Entity(_) => std::mem::size_of::<u32>(),
@@ -174,7 +208,11 @@ impl Object {
         }
 
         match self {
-            Object::BigInt(_) => 0,
+            Object::BigInt(_) | Object::NativeScalar(_) => 0,
+            Object::NativeType(descriptor) => descriptor
+                .name
+                .len()
+                .saturating_add(descriptor.members.iter().map(|(name, _)| name.len() + 8).sum()),
             Object::Str(value) => value.len(),
             Object::List(values) => values.len().saturating_mul(std::mem::size_of::<Value>()),
             Object::Component(component) => component
@@ -198,8 +236,11 @@ impl Object {
                 .captures
                 .len()
                 .saturating_mul(std::mem::size_of::<*mut gc::CaptureCell>()),
-            Object::Cell(_) | Object::BuiltinFn(_) | Object::EntityId(_) | Object::Task(_) => 0,
+            Object::Cell(_) | Object::BuiltinFn(_) | Object::Task(_) => 0,
             Object::NativeFn(native) => native.name.len(),
+            Object::HostHandle(handle) => {
+                handle.owner_digest().len().saturating_add(handle.type_name().len())
+            }
             Object::Tuple(values) => values.len().saturating_mul(std::mem::size_of::<Value>()),
             Object::Map(map) => map
                 .keys()
@@ -276,6 +317,8 @@ impl PartialEq for Object {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Object::BigInt(a), Object::BigInt(b)) => a == b,
+            (Object::NativeScalar(a), Object::NativeScalar(b)) => a == b,
+            (Object::NativeType(a), Object::NativeType(b)) => a == b,
             (Object::Str(a), Object::Str(b)) => a == b,
             (Object::List(a), Object::List(b)) => a == b,
             (Object::Tuple(a), Object::Tuple(b)) => a == b,
@@ -286,8 +329,10 @@ impl PartialEq for Object {
             (Object::Closure(a), Object::Closure(b)) => a == b,
             (Object::Cell(a), Object::Cell(b)) => unsafe { (**a).get() == (**b).get() },
             (Object::BuiltinFn(a), Object::BuiltinFn(b)) => a == b,
-            (Object::NativeFn(a), Object::NativeFn(b)) => a.func as usize == b.func as usize,
-            (Object::EntityId(a), Object::EntityId(b)) => a == b,
+            (Object::NativeFn(a), Object::NativeFn(b)) => {
+                a.name == b.name && a.extension.digest() == b.extension.digest()
+            }
+            (Object::HostHandle(a), Object::HostHandle(b)) => a == b,
             (Object::Task(a), Object::Task(b)) => a == b,
             (Object::Map(a), Object::Map(b)) => a == b,
             (Object::BitSet(a), Object::BitSet(b)) => a == b,

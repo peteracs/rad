@@ -1,0 +1,14 @@
+component CompletionState { records: int = 0 }
+let job = spawn(CompletionState { records: 0 })
+
+fn record_duplicate_delivery() -> nil {
+    let state: CompletionState = require(job, CompletionState)
+    set(job, CompletionState { records: state.records + 1 })
+}
+model CompletionExactlyOnce {
+    commands [record_duplicate_delivery]
+    invariant { return require(job, CompletionState).records <= 1 }
+    runs 1
+    max_commands 2
+    seed 6
+}

@@ -1,0 +1,215 @@
+// Cubic-moment threshold laboratory.
+// If U3 bounds (sum multiplicity^3)/N, then integer multiplicities give
+// simple/N >= (4-U3)/3.  RAD exhausts the fixed-point threshold at which this
+// genuinely crosses 70%; proving that U3 is the remaining analytic task.
+
+let SCALE = 1000000000
+let TARGET_SCALED = 700000000
+let CURRENT_BASELINE_SCALED = 672500703
+let U3_MIN_SCALED = 1800000000
+let U3_MAX_SCALED = 2000000000
+let U3_STEP_SCALED = 1000000
+
+resource CubicMomentUniverse {
+    u3_scaled: int = 0
+    simple_bound_scaled: int = 0
+    crosses_target: bool = false
+    evaluated: bool = false
+}
+
+system EvaluateCubicMoment(candidate: mut CubicMomentUniverse) {
+    // For multiplicity k>=2, k^2>=4.  With y_k the proportion of zeros
+    // carried by multiplicity k, U3=sum k^2*y_k and sum y_k=1, so
+    // y_1 >= (4-U3)/3.  The all-double distribution makes this sharp.
+    let cubic_bound = ((4 * SCALE - candidate.u3_scaled) * SCALE) / (3 * SCALE)
+    let simple_bound = max(CURRENT_BASELINE_SCALED, cubic_bound)
+    candidate = CubicMomentUniverse {
+        u3_scaled: candidate.u3_scaled,
+        simple_bound_scaled: simple_bound,
+        crosses_target: simple_bound >= TARGET_SCALED,
+        evaluated: true,
+    }
+}
+
+component MomentExpectation {
+    proposal_count: int = 0
+}
+
+component CubicMomentThreshold {
+    proposal_count: int = 0
+    cells_seen: list = []
+    weakest_crossing_u3_scaled: int = 0
+    crossing_bound_scaled: int = 0
+    crossing_count: int = 0
+}
+
+intent CubicMomentFinding {
+    key target: entity
+    candidate: CubicMomentUniverse
+}
+
+law SubmitCubicMoment(target: entity, candidate: CubicMomentUniverse) {
+    propose CubicMomentFinding { target: target, candidate: candidate }
+}
+
+resolver SelectCubicMomentThreshold for CubicMomentFinding(target, proposals) {
+    let expected = require(target, MomentExpectation)
+    let mut seen = []
+    for _index in range(expected.proposal_count) {
+        seen = push(seen, 0)
+    }
+    let mut weakest_u3 = 0
+    let mut crossing_bound = 0
+    let mut crossing_count = 0
+    for proposal in proposals {
+        let candidate = proposal.candidate
+        assert(candidate.evaluated, "unevaluated cubic-moment candidate")
+        assert(candidate.u3_scaled >= U3_MIN_SCALED, "cubic moment below grid")
+        assert(candidate.u3_scaled <= U3_MAX_SCALED, "cubic moment above grid")
+        assert((candidate.u3_scaled - U3_MIN_SCALED) % U3_STEP_SCALED == 0, "cubic moment off grid")
+        let slot = (candidate.u3_scaled - U3_MIN_SCALED) / U3_STEP_SCALED
+        assert(seen[slot] == 0, "duplicate cubic-moment candidate")
+        seen = set_at(seen, slot, 1)
+        if candidate.crosses_target {
+            crossing_count = crossing_count + 1
+            if candidate.u3_scaled > weakest_u3 {
+                weakest_u3 = candidate.u3_scaled
+                crossing_bound = candidate.simple_bound_scaled
+            }
+        }
+    }
+    next(target, CubicMomentThreshold {
+        proposal_count: len(proposals),
+        cells_seen: seen,
+        weakest_crossing_u3_scaled: weakest_u3,
+        crossing_bound_scaled: crossing_bound,
+        crossing_count: crossing_count,
+    })
+}
+
+constraint CompleteCubicMomentScan
+for CubicMomentThreshold(subject, proposed)
+watches MomentExpectation
+{
+    let expected = candidate(subject, MomentExpectation)
+    require proposed.proposal_count == expected.proposal_count else "zeta.70.moment_count"
+    require len(proposed.cells_seen) == expected.proposal_count else "zeta.70.moment_shape"
+    let mut total = 0
+    for seen in proposed.cells_seen {
+        total = total + seen
+    }
+    require total == expected.proposal_count else "zeta.70.moment_partition"
+    require proposed.weakest_crossing_u3_scaled == 1900000000 else "zeta.70.moment_threshold"
+    require proposed.crossing_bound_scaled == TARGET_SCALED else "zeta.70.moment_boundary"
+}
+
+entity moment_judge {
+    MomentExpectation {}
+    CubicMomentThreshold {}
+}
+
+entity reversed_moment_judge {
+    MomentExpectation {}
+    CubicMomentThreshold {}
+}
+
+event CubicMomentBatchReady {
+    target: entity
+    candidates: list
+    reverse_order: bool
+}
+
+on CubicMomentBatchReady(evt) {
+    settle {
+        if evt.reverse_order {
+            for index in range(len(evt.candidates)) {
+                SubmitCubicMoment(evt.target, evt.candidates[len(evt.candidates) - index - 1])
+            }
+        } else {
+            for candidate in evt.candidates {
+                SubmitCubicMoment(evt.target, candidate)
+            }
+        }
+    }
+}
+
+fn explore_moments() -> map<str, any> {
+    let live_before = world_digest()
+    let root = fork()
+    let count = (U3_MAX_SCALED - U3_MIN_SCALED) / U3_STEP_SCALED + 1
+    let mut candidates = []
+    for slot in range(count) {
+        candidates = push(candidates, fork_with(root, CubicMomentUniverse {
+            u3_scaled: U3_MIN_SCALED + slot * U3_STEP_SCALED,
+        }))
+    }
+    let futures = simulate_many(candidates, [system::EvaluateCubicMoment], 1, 2039)
+    assert(world_digest() == live_before, "moment forks mutated live state")
+    let mut reports = []
+    let mut first_wire_digest = ""
+    let mut last_wire_digest = ""
+    for future in futures {
+        assert_only_changed(root, future, [CubicMomentUniverse])
+        let wire = fork_to_bytes(future)
+        let restored = fork_from_bytes(wire) |> unwrap
+        assert(world_digest(restored) == world_digest(future), "moment wire roundtrip changed a fork")
+        reports = push(reports, peek_resource(restored, CubicMomentUniverse) |> unwrap)
+        if first_wire_digest == "" {
+            first_wire_digest = world_digest(restored)
+        }
+        last_wire_digest = world_digest(restored)
+    }
+    let result: map<str, any> = {
+        "candidates": reports,
+        "live_before": live_before,
+        "live_after": world_digest(),
+        "wire_boundary_digests": [first_wire_digest, last_wire_digest],
+    }
+    return result
+}
+
+fn main() -> nil {
+    let expected = (U3_MAX_SCALED - U3_MIN_SCALED) / U3_STEP_SCALED + 1
+    set(moment_judge, MomentExpectation { proposal_count: expected })
+    set(reversed_moment_judge, MomentExpectation { proposal_count: expected })
+    let explored = explore_moments()
+    emit CubicMomentBatchReady {
+        target: moment_judge,
+        candidates: explored["candidates"],
+        reverse_order: false,
+    }
+    emit CubicMomentBatchReady {
+        target: reversed_moment_judge,
+        candidates: explored["candidates"],
+        reverse_order: true,
+    }
+    flush_events()
+    let selected = require(moment_judge, CubicMomentThreshold)
+    let reversed = require(reversed_moment_judge, CubicMomentThreshold)
+    assert(selected == reversed, "moment threshold depends on proposal order")
+    assert(explored["live_before"] == explored["live_after"], "moment speculation leaked")
+
+    let receipt: map<str, any> = {
+        "schema": "rad.zeta-cubic-moment-attack.v1",
+        "rigorous": false,
+        "rigorous_algebra": true,
+        "analytic_trace_bound_proved": false,
+        "selection": selected,
+        "required_u3_upper_scaled": selected.weakest_crossing_u3_scaled,
+        "scale": SCALE,
+        "proposal_order_independent": selected == reversed,
+        "speculation_isolated": explored["live_before"] == explored["live_after"],
+        "wire_boundary_digests": explored["wire_boundary_digests"],
+        "selection_why": why(moment_judge, CubicMomentThreshold),
+    }
+    create_dir("projects/dogfood/zeta-simple-zeros/out")
+    write_file(
+        "projects/dogfood/zeta-simple-zeros/out/cubic-moment-attack.json",
+        json_stringify(receipt),
+    )
+    print("cubic-moment attack threshold")
+    print("forked caps:", expected)
+    print("weakest U3 cap crossing 70%:", selected.weakest_crossing_u3_scaled, "/", SCALE)
+    print("boundary simple proportion:", selected.crossing_bound_scaled, "/", SCALE)
+    print(why(moment_judge, CubicMomentThreshold))
+}

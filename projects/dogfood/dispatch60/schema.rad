@@ -1,0 +1,15 @@
+pub opaque type VehicleId = u64
+pub opaque type JobId = u64
+pub opaque type ZoneId = u16
+
+pub component DeliveryJob {
+    indexed job_id: JobId = JobId(u64(0)),
+    zone: ZoneId = ZoneId(u16(0)),
+    deadline_s: float = 0.0,
+    assigned: bool = false,
+}
+
+pub event DispatchFrameCompleted {
+    frame: int,
+    active_trips: int,
+}

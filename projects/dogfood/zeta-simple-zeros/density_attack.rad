@@ -1,0 +1,233 @@
+// Density-coupled obstruction scout at the proposed 70% boundary.
+// Seven periodic gaps total ten units exactly. RAD forks every placement of
+// three long gaps and a micro-grid of short gaps; the native hot path sums
+// 4096 neighbors of the full quadratic Gram defect.
+
+use "../native-math-kernels/math_kernels.rad"
+
+let SCALE = 1000000000
+let REQUIRED_DEFECT_SCALED = 27499297
+let SHORT_MIN_MICROS = 900001
+let SHORT_MAX_MICROS = 1200001
+let SHORT_STEP_MICROS = 3000
+
+pure fn popcount7(mask: int) -> int {
+    let mut value = mask
+    let mut count = 0
+    for _index in range(7) {
+        count = count + value % 2
+        value = value / 2
+    }
+    return count
+}
+
+resource DensityPatternUniverse {
+    long_gap_mask: int = 0
+    short_gap_micros: int = 0
+    long_gap_micros: int = 0
+    energy_per_point_scaled: int = 0
+    implied_simple_bound_scaled: int = 0
+    neighbor_terms: int = 0
+    evaluated: bool = false
+}
+
+system EvaluateDensityPattern(candidate: mut DensityPatternUniverse) {
+    let report = zeta_periodic_density_scout(
+        candidate.long_gap_mask,
+        candidate.short_gap_micros,
+    )
+    assert(not report["rigorous"], "periodic scout mislabeled as rigorous")
+    assert(report["scale"] == SCALE, "periodic scout scale mismatch")
+    assert(report["density_numerator"] == 7, "periodic density numerator mismatch")
+    assert(report["density_denominator"] == 10, "periodic density denominator mismatch")
+    candidate = DensityPatternUniverse {
+        long_gap_mask: report["long_gap_mask"],
+        short_gap_micros: report["short_gap_micros"],
+        long_gap_micros: report["long_gap_micros"],
+        energy_per_point_scaled: report["energy_per_point_scaled"],
+        implied_simple_bound_scaled: report["implied_simple_bound_scaled"],
+        neighbor_terms: report["neighbor_terms"],
+        evaluated: true,
+    }
+}
+
+component DensityExpectation {
+    proposal_count: int = 0
+}
+
+component DensityObstructionSelection {
+    proposal_count: int = 0
+    minimum_energy_scaled: int = 0
+    minimizing_mask: int = 0
+    minimizing_short_gap_micros: int = 0
+    minimizing_long_gap_micros: int = 0
+    implied_simple_bound_scaled: int = 0
+    neighbor_terms: int = 0
+}
+
+intent DensityPatternFinding {
+    key target: entity
+    candidate: DensityPatternUniverse
+}
+
+law SubmitDensityPattern(target: entity, candidate: DensityPatternUniverse) {
+    propose DensityPatternFinding { target: target, candidate: candidate }
+}
+
+resolver SelectDensityObstruction for DensityPatternFinding(target, proposals) {
+    let _expected = require(target, DensityExpectation)
+    let mut best = DensityPatternUniverse { energy_per_point_scaled: SCALE }
+    for proposal in proposals {
+        let candidate = proposal.candidate
+        assert(candidate.evaluated, "unevaluated density pattern")
+        assert(popcount7(candidate.long_gap_mask) == 3, "density mask has wrong weight")
+        assert(candidate.short_gap_micros >= SHORT_MIN_MICROS, "short gap below grid")
+        assert(candidate.short_gap_micros <= SHORT_MAX_MICROS, "short gap above grid")
+        assert((candidate.short_gap_micros - SHORT_MIN_MICROS) % SHORT_STEP_MICROS == 0, "short gap off grid")
+        assert(candidate.neighbor_terms == 4096, "density hot path was truncated early")
+        if candidate.energy_per_point_scaled < best.energy_per_point_scaled {
+            best = candidate
+        }
+    }
+    next(target, DensityObstructionSelection {
+        proposal_count: len(proposals),
+        minimum_energy_scaled: best.energy_per_point_scaled,
+        minimizing_mask: best.long_gap_mask,
+        minimizing_short_gap_micros: best.short_gap_micros,
+        minimizing_long_gap_micros: best.long_gap_micros,
+        implied_simple_bound_scaled: best.implied_simple_bound_scaled,
+        neighbor_terms: best.neighbor_terms,
+    })
+}
+
+constraint CompleteDensityPatternScan
+for DensityObstructionSelection(subject, proposed)
+watches DensityExpectation
+{
+    let expected = candidate(subject, DensityExpectation)
+    require proposed.proposal_count == expected.proposal_count else "zeta.70.density_count"
+    require proposed.minimum_energy_scaled > 0 else "zeta.70.density_minimum"
+    require proposed.neighbor_terms == 4096 else "zeta.70.density_hot_path"
+}
+
+entity density_judge {
+    DensityExpectation {}
+    DensityObstructionSelection {}
+}
+
+entity reversed_density_judge {
+    DensityExpectation {}
+    DensityObstructionSelection {}
+}
+
+event DensityPatternBatchReady {
+    target: entity
+    candidates: list
+    reverse_order: bool
+}
+
+on DensityPatternBatchReady(evt) {
+    settle {
+        if evt.reverse_order {
+            for index in range(len(evt.candidates)) {
+                SubmitDensityPattern(evt.target, evt.candidates[len(evt.candidates) - index - 1])
+            }
+        } else {
+            for candidate in evt.candidates {
+                SubmitDensityPattern(evt.target, candidate)
+            }
+        }
+    }
+}
+
+fn explore_density_patterns() -> map<str, any> {
+    let live_before = world_digest()
+    let root = fork()
+    let short_count = (SHORT_MAX_MICROS - SHORT_MIN_MICROS) / SHORT_STEP_MICROS + 1
+    let mut candidates = []
+    for mask in range(128) {
+        if popcount7(mask) == 3 {
+            for slot in range(short_count) {
+                candidates = push(candidates, fork_with(root, DensityPatternUniverse {
+                    long_gap_mask: mask,
+                    short_gap_micros: SHORT_MIN_MICROS + slot * SHORT_STEP_MICROS,
+                }))
+            }
+        }
+    }
+    let futures = simulate_many(candidates, [system::EvaluateDensityPattern], 1, 2063)
+    assert(world_digest() == live_before, "density forks mutated live state")
+    let mut reports = []
+    let mut first_wire_digest = ""
+    let mut last_wire_digest = ""
+    for future in futures {
+        assert_only_changed(root, future, [DensityPatternUniverse])
+        let wire = fork_to_bytes(future)
+        let restored = fork_from_bytes(wire) |> unwrap
+        assert(world_digest(restored) == world_digest(future), "density wire roundtrip changed a fork")
+        reports = push(reports, peek_resource(restored, DensityPatternUniverse) |> unwrap)
+        if first_wire_digest == "" {
+            first_wire_digest = world_digest(restored)
+        }
+        last_wire_digest = world_digest(restored)
+    }
+    let result: map<str, any> = {
+        "candidates": reports,
+        "live_before": live_before,
+        "live_after": world_digest(),
+        "wire_boundary_digests": [first_wire_digest, last_wire_digest],
+    }
+    return result
+}
+
+fn main() -> nil {
+    let short_count = (SHORT_MAX_MICROS - SHORT_MIN_MICROS) / SHORT_STEP_MICROS + 1
+    let expected = 35 * short_count
+    set(density_judge, DensityExpectation { proposal_count: expected })
+    set(reversed_density_judge, DensityExpectation { proposal_count: expected })
+    let explored = explore_density_patterns()
+    emit DensityPatternBatchReady {
+        target: density_judge,
+        candidates: explored["candidates"],
+        reverse_order: false,
+    }
+    emit DensityPatternBatchReady {
+        target: reversed_density_judge,
+        candidates: explored["candidates"],
+        reverse_order: true,
+    }
+    flush_events()
+    let selected = require(density_judge, DensityObstructionSelection)
+    let reversed = require(reversed_density_judge, DensityObstructionSelection)
+    assert(selected == reversed, "density selection depends on proposal order")
+    assert(explored["live_before"] == explored["live_after"], "density speculation leaked")
+
+    let receipt: map<str, any> = {
+        "schema": "rad.zeta-density-attack.v1",
+        "rigorous": false,
+        "density_numerator": 7,
+        "density_denominator": 10,
+        "required_defect_scaled": REQUIRED_DEFECT_SCALED,
+        "scale": SCALE,
+        "selection": selected,
+        "numerically_obstructs_full_quadratic_route": selected.minimum_energy_scaled
+        < REQUIRED_DEFECT_SCALED,
+        "proposal_order_independent": selected == reversed,
+        "speculation_isolated": explored["live_before"] == explored["live_after"],
+        "wire_boundary_digests": explored["wire_boundary_digests"],
+        "selection_why": why(density_judge, DensityObstructionSelection),
+    }
+    create_dir("projects/dogfood/zeta-simple-zeros/out")
+    write_file(
+        "projects/dogfood/zeta-simple-zeros/out/density-attack.json",
+        json_stringify(receipt),
+    )
+    print("70%-density full-quadratic scout")
+    print("forked patterns:", expected)
+    print("minimum defect per point:", selected.minimum_energy_scaled, "/", SCALE)
+    print("required defect:", REQUIRED_DEFECT_SCALED, "/", SCALE)
+    print("mask:", selected.minimizing_mask)
+    print("short/long gaps micros:", selected.minimizing_short_gap_micros, selected.minimizing_long_gap_micros)
+    print("implied simple bound:", selected.implied_simple_bound_scaled, "/", SCALE)
+    print(why(density_judge, DensityObstructionSelection))
+}

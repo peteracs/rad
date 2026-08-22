@@ -1,13 +1,10 @@
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
-use crate::ast::Decl;
-use crate::checker::{Checker, CheckerOptions};
-use crate::compiler::{Compiler, StateTransitionInfo};
+use crate::checker::CheckerOptions;
+use crate::compiler::StateTransitionInfo;
 use crate::gc::GcHeap;
-use crate::lexer::Lexer;
 use crate::opcode::{Chunk, Op};
-use crate::parser::Parser;
 use crate::value::Value;
 use crate::vm::VM;
 
@@ -47,6 +44,21 @@ pub struct RadRuntime {
     /// What the renderer last saw — `session_render_delta()` diffs against
     /// this, so unchanged widgets cost zero serialization.
     render_base: Option<std::sync::Arc<crate::world::WorldSnapshot>>,
+}
+
+#[derive(Clone, Copy)]
+enum BrowserSourceKind {
+    Playground,
+    Session,
+}
+
+impl BrowserSourceKind {
+    fn import_error(self) -> &'static str {
+        match self {
+            Self::Playground => "Module imports are not supported in browser playground yet",
+            Self::Session => "Module imports are not supported in browser sessions yet",
+        }
+    }
 }
 // Lexical sections preserve one private semantic namespace.
 include!("wasm/runtime_api.rs");

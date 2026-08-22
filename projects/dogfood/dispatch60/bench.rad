@@ -1,0 +1,9 @@
+use "schema.rad"
+use "owners/fleet_owner.rad"
+use "systems/dispatch.rad"
+use "scenarios/production.rad"
+
+fn main() -> nil {
+    run_dispatch_day(50000, 600, 10000)
+    print("dispatch60-bench: vehicles=50000 jobs=100000 frames=10000 active=600")
+}

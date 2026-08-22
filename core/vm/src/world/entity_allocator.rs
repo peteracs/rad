@@ -216,6 +216,46 @@ impl ValidatedEntityAllocatorState {
 }
 
 impl World {
+    pub(crate) fn transaction_spawn_checkpoint(
+        &self,
+        name: Option<&str>,
+    ) -> TransactionSpawnCheckpoint {
+        let reusable_id = self.free_ids.first().copied();
+        TransactionSpawnCheckpoint {
+            next_id: self.next_id,
+            fresh_ids_exhausted: self.fresh_ids_exhausted,
+            reusable_generation: reusable_id
+                .and_then(|entity| self.generations.get(&entity).copied()),
+            reusable_id,
+            displaced_name_owner: name.and_then(|value| self.name_to_id.get(value).copied()),
+            name: name.map(str::to_string),
+        }
+    }
+
+    pub(crate) fn rollback_transaction_spawn(
+        &mut self,
+        entity: u32,
+        checkpoint: TransactionSpawnCheckpoint,
+    ) {
+        let _ = self.destroy_entity_storage(entity);
+        self.next_id = checkpoint.next_id;
+        self.fresh_ids_exhausted = checkpoint.fresh_ids_exhausted;
+        if checkpoint.reusable_id == Some(entity) {
+            Arc::make_mut(&mut self.free_ids).insert(entity);
+            self.set_entity_generation(entity, checkpoint.reusable_generation.unwrap_or(0));
+        } else {
+            Arc::make_mut(&mut self.free_ids).remove(&entity);
+            self.set_entity_generation(entity, 0);
+        }
+        if let (Some(name), Some(previous_owner)) =
+            (checkpoint.name, checkpoint.displaced_name_owner)
+        {
+            if self.entity_exists(previous_owner) {
+                self.set_entity_name(previous_owner, Some(&name));
+            }
+        }
+    }
+
     fn set_entity_generation(&mut self, entity: u32, generation: u32) {
         let generations = Arc::make_mut(&mut self.generations);
         if generation == 0 {

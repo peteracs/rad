@@ -1,0 +1,18 @@
+use "../schema.rad"
+use "../owners/ledger.rad"
+
+pub fn settle_batch(count: int) -> nil {
+    let debit: entity = open_account(AccountId(u64(100)), MoneyCents(i64(count * 100)))
+    let credit: entity = open_account(AccountId(u64(200)), MoneyCents(i64(0)))
+    for i in range(0, count) {
+        let payment: entity = authorize_payment(
+            PaymentId(u64(i)),
+            debit,
+            credit,
+            MoneyCents(i64(100)),
+            f"capture-{i}",
+        )
+        assert(capture_idempotent(payment), "first capture commits")
+        assert(not capture_idempotent(payment), "retry is idempotent")
+    }
+}

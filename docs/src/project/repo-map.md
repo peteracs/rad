@@ -155,6 +155,12 @@ often spans app, security, persistence, and language research responsibilities.
 Its README provides discoverability groups without path churn. Small examples
 belong under `examples/`; MOBA code belongs under `projects/moba/`.
 
+Computational workloads may share the project-owned
+`projects/dogfood/native-math-kernels/` extension when a measured hot path does
+not belong in the generic VM. For example, `zeta-simple-zeros/` owns its RAD
+proof and certificate artifacts while the extension owns the exact cover-tree
+kernel and its certificate, correlation, spacing, and window submodules.
+
 `experiments/c-backend/` is a frozen experimental C/AOT implementation. It is
 kept outside core because it does not define current syntax, checking, runtime,
 WASM, or release behavior.

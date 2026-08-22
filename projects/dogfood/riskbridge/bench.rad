@@ -1,0 +1,34 @@
+use "schema.rad"
+use "owners/decision_owner.rad"
+use "owners/decision_owner.rad" as decisions
+use "systems/adjudication.rad"
+use "scenarios/production.rad"
+
+fn main() -> nil {
+    let args = sys_args()
+    let adjudications = if len(args) > 0 { int(args[0]) } else { 1000000 }
+    let flush_batch = if len(args) > 1 { int(args[1]) } else { 1000 }
+    let mode = if len(args) > 2 { args[2] } else { "native" }
+    let collect_each_batch = len(args) > 3 and args[3] == "collect"
+    assert(adjudications > 0, "adjudication count must be positive")
+    assert(flush_batch > 0, "event flush batch must be positive")
+    assert(mode == "native" or mode == "reference", "mode must be native or reference")
+    let customer: entity = decisions.register_customer(CustomerId(u64(1)))
+    for i in range(0, adjudications) {
+        let request = risk_input(i, 0)
+        let _attempt: entity = if mode == "native" {
+            adjudicate_native(customer, request, u64(i))
+        } else {
+            adjudicate_reference(customer, request, u64(i))
+        }
+        if (i + 1) % flush_batch == 0 {
+            flush_events()
+            if collect_each_batch {
+                let _swept = gc_collect()
+            }
+        }
+    }
+    flush_events()
+    assert(res(DecisionAudit).committed == adjudications, "every native decision committed")
+    print(f"riskbridge-bench: adjudications={adjudications} mode={mode} generation=17 flush_batch={flush_batch} explicit_gc={collect_each_batch}")
+}

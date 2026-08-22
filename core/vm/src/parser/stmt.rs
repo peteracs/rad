@@ -41,6 +41,12 @@ impl Parser {
     }
 
     pub(super) fn parse_statement(&mut self) -> Result<Stmt, ParseError> {
+        if self.check_ident_text("signal")
+            && self.peek_at(1).ty == TokenType::Ident
+            && self.peek_at(1).value.as_str() == Some("sync")
+        {
+            return self.parse_signal();
+        }
         if self.check_ident_text("settle") && self.peek_at(1).ty == TokenType::LBrace {
             return self.parse_settle();
         }
@@ -493,6 +499,41 @@ impl Parser {
     fn parse_emit(&mut self) -> Result<Stmt, ParseError> {
         let span = self.span();
         self.expect(TokenType::Emit)?;
+        let delivery = if self.check_ident_text("next") {
+            self.advance();
+            EventDelivery::Next
+        } else if self.check_ident_text("phase") {
+            self.advance();
+            self.expect(TokenType::LParen)?;
+            let phase = self.expect_ident_text()?;
+            self.expect(TokenType::RParen)?;
+            EventDelivery::Phase(phase)
+        } else {
+            EventDelivery::Next
+        };
+        self.parse_event_payload(span, delivery)
+    }
+
+    fn parse_signal(&mut self) -> Result<Stmt, ParseError> {
+        let span = self.span();
+        let signal = self.expect_ident_text()?;
+        debug_assert_eq!(signal, "signal");
+        let mode = self.expect_ident_text()?;
+        if mode != "sync" {
+            return Err(ParseError {
+                message: "Signals require explicit `sync` delivery".to_string(),
+                line: self.peek().line,
+                col: self.peek().col,
+            });
+        }
+        self.parse_event_payload(span, EventDelivery::Sync)
+    }
+
+    fn parse_event_payload(
+        &mut self,
+        span: Span,
+        delivery: EventDelivery,
+    ) -> Result<Stmt, ParseError> {
         let mut event_name = self.expect_ident_text()?;
         if self.check(TokenType::Dot) {
             self.advance();
@@ -513,6 +554,13 @@ impl Parser {
         self.expect(TokenType::RBrace)?;
         // `emit E { .. } after N` — delayed delivery, N flush cycles out
         let delay = if self.check_ident_text("after") {
+            if delivery != EventDelivery::Next {
+                return Err(ParseError {
+                    message: "Only `emit next` may use `after`".to_string(),
+                    line: self.peek().line,
+                    col: self.peek().col,
+                });
+            }
             self.advance();
             Some(self.parse_expr()?)
         } else {
@@ -524,6 +572,7 @@ impl Parser {
             event_name,
             fields,
             delay,
+            delivery,
         }))
     }
 

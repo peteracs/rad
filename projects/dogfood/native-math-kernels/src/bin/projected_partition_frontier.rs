@@ -262,7 +262,7 @@ mod tests {
 
     #[test]
     fn singleton_tests_distinguish_the_boolean_cube() {
-        let patterns = vec![1usize, 2, 4, 8, 16];
+        let patterns = [1usize, 2, 4, 8, 16];
         let row_count = 32;
         let hit_rows = patterns
             .iter()

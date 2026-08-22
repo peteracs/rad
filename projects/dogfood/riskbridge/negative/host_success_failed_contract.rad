@@ -1,0 +1,16 @@
+use "fixture_adapter.rad"
+
+component DecisionState { committed: bool = false }
+let decision = spawn(DecisionState { committed: false })
+
+transaction BrokenCommit(target: entity, _host_output: str) {
+    requires has(target, DecisionState)
+    changes_only [DecisionState]
+    set(target, DecisionState { committed: true })
+    ensures not require(target, DecisionState).committed
+}
+
+let host_output: str = fixture_score(
+    "target/riskbridge-plugin/release/riskbridge_model_plugin.dll",
+)
+BrokenCommit(decision, host_output)

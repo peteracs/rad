@@ -267,6 +267,7 @@ impl<'a> ExactSizeIterator for RadListIter<'a> {}
 #[derive(Clone, Debug)]
 pub enum MapKey {
     Int(i64),
+    Native(crate::native_types::NativeScalarValue),
     Str(String),
     Bool(bool),
     Entity(u32),
@@ -279,6 +280,8 @@ impl MapKey {
     pub fn from_value(v: &Value) -> Result<MapKey, String> {
         if let Some(i) = v.as_int() {
             Ok(MapKey::Int(i))
+        } else if let Some(native) = v.as_native_scalar() {
+            Ok(MapKey::Native(native.clone()))
         } else if let Some(s) = v.as_str() {
             Ok(MapKey::Str(s.to_string()))
         } else if let Some(b) = v.as_bool() {
@@ -300,6 +303,7 @@ impl MapKey {
     pub fn to_value(&self, gc: &mut crate::gc::GcHeap) -> Value {
         match self {
             MapKey::Int(i) => Value::from_int(gc, *i),
+            MapKey::Native(value) => Value::from_native_scalar(gc, value.clone()),
             MapKey::Str(s) => Value::from_string(gc, s.clone()),
             MapKey::Bool(b) => Value::from_bool(*b),
             MapKey::Entity(e) => Value::from_entity_id(gc, *e),
@@ -315,6 +319,7 @@ impl PartialEq for MapKey {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (MapKey::Int(a), MapKey::Int(b)) => a == b,
+            (MapKey::Native(a), MapKey::Native(b)) => a == b,
             (MapKey::Str(a), MapKey::Str(b)) => a == b,
             (MapKey::Bool(a), MapKey::Bool(b)) => a == b,
             (MapKey::Entity(a), MapKey::Entity(b)) => a == b,
@@ -331,6 +336,7 @@ impl Hash for MapKey {
         std::mem::discriminant(self).hash(state);
         match self {
             MapKey::Int(i) => i.hash(state),
+            MapKey::Native(value) => value.hash(state),
             MapKey::Str(s) => s.hash(state),
             MapKey::Bool(b) => b.hash(state),
             MapKey::Entity(e) => e.hash(state),
@@ -351,9 +357,10 @@ impl Ord for MapKey {
             match k {
                 MapKey::Bool(_) => 0,
                 MapKey::Int(_) => 1,
-                MapKey::Entity(_) => 2,
-                MapKey::Str(_) => 3,
-                MapKey::Tuple(_) => 4,
+                MapKey::Native(_) => 2,
+                MapKey::Entity(_) => 3,
+                MapKey::Str(_) => 4,
+                MapKey::Tuple(_) => 5,
             }
         }
         let rank_a = discriminant_rank(self);
@@ -363,6 +370,7 @@ impl Ord for MapKey {
         }
         match (self, other) {
             (MapKey::Int(a), MapKey::Int(b)) => a.cmp(b),
+            (MapKey::Native(a), MapKey::Native(b)) => a.cmp(b),
             (MapKey::Str(a), MapKey::Str(b)) => a.cmp(b),
             (MapKey::Bool(a), MapKey::Bool(b)) => a.cmp(b),
             (MapKey::Entity(a), MapKey::Entity(b)) => a.cmp(b),
@@ -376,6 +384,14 @@ impl fmt::Display for MapKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             MapKey::Int(i) => write!(f, "{}", i),
+            MapKey::Native(value) => write!(
+                f,
+                "{}:{}:{}:{}",
+                value.type_name,
+                value.repr,
+                value.flavor.as_str(),
+                value.bits
+            ),
             MapKey::Str(s) => write!(f, "\"{}\"", s),
             MapKey::Bool(b) => write!(f, "{}", b),
             MapKey::Entity(e) => write!(f, "entity({})", e),
@@ -522,6 +538,7 @@ mod map_storage_tests {
 ///   Float:   any f64 whose bits don't match the QNAN|SIGN pattern below
 ///   Nil:     QNAN | TAG_NIL
 ///   Bool:    QNAN | TAG_BOOL | (0 or 1)
+///   Entity:  QNAN | ENTITY_TAG_BIT | (32-bit entity id)
 ///   Inline Int: SIGN_BIT | QNAN | INT_TAG_BIT | (47-bit payload)
 ///   Heap Object: SIGN_BIT | QNAN | (raw pointer, bit 47 = 0)
 ///
@@ -547,6 +564,10 @@ const PERSISTENT_PTR_TAG: u64 = 1;
 /// Bit 47 of the 48-bit payload distinguishes inline integers from heap
 /// object pointers (userspace pointers always have bit 47 = 0).
 const INT_TAG_BIT: u64 = 1u64 << 47;
+/// The same payload bit without `SIGN_BIT` identifies an inline entity id.
+/// Entity ids are u32, leaving the upper payload bits clear for validation.
+const ENTITY_TAG_BIT: u64 = 1u64 << 47;
+const ENTITY_PAYLOAD_MASK: u64 = u32::MAX as u64;
 /// 47-bit payload mask (bits 0-46).
 const INT_PAYLOAD_MASK: u64 = INT_TAG_BIT - 1; // 0x00007FFF_FFFFFFFF
 const INLINE_INT_MIN: i64 = -(1i64 << 46); // -70_368_744_177_664
@@ -566,5 +587,6 @@ pub(crate) enum ValueTag {
     Nil,
     Bool,
     Int,
+    Entity,
     Object,
 }

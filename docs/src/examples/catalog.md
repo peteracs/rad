@@ -69,6 +69,7 @@ These examples demonstrate Rad's first-class world forking feature — fork the 
 |---|---|
 | [`frankl-search`](./frankl-search.md) | Native exact Boolean-quotient kernels, forked `simulate_many()` search, Causal Laws/constraints/`why()`/replay, an all-width theorem for at most seven join-generators, exact eight-generator graph/projected-CNF exclusions, and independently verified certificates |
 | [`collatz-lab`](./collatz-lab.md) | Pruned affine residue trees, bounded-binary-support and natural-tail certificates, counterexample-guided exact-state frontier portfolios, irrational-slope ballot paths, exact odd-cycle equations, COW universes, Causal Laws/constraints/`why()`/replay, and VM-independent verifiers that isolate the forms of a possible Collatz counterexample |
+| [`zeta-simple-zeros`](./zeta-simple-zeros.md) | Exact replay of a 789,908-node six-gap cover certificate, project-owned native kernels, speculative proof lanes, Causal Laws/constraints/`why()`/replay, and a certified 67.30213627288% lower bound for simple zeta zeros |
 
 ## Language-authority dogfood
 

@@ -194,6 +194,7 @@ fn optimize_stmt(stmt: &Stmt) -> Stmt {
                 .map(|(name, expr)| (name.clone(), optimize_expr(expr)))
                 .collect(),
             delay: e.delay.as_ref().map(optimize_expr),
+            delivery: e.delivery.clone(),
         }),
         Stmt::Schedule(s) => Stmt::Schedule(ScheduleStmt {
             id: s.id,
@@ -215,6 +216,16 @@ fn optimize_stmt(stmt: &Stmt) -> Stmt {
                     value: optimize_expr(&fu.value),
                 })
                 .collect(),
+        }),
+        Stmt::Transaction(t) => Stmt::Transaction(TransactionStmt {
+            id: t.id,
+            span: t.span.clone(),
+            name: t.name.clone(),
+            changes_only: t.changes_only.clone(),
+            requires: t.requires.iter().map(optimize_expr).collect(),
+            body: optimize_block(&t.body),
+            ensures: t.ensures.iter().map(optimize_expr).collect(),
+            post_commit: t.post_commit.as_ref().map(optimize_block),
         }),
         Stmt::Settle(s) => Stmt::Settle(SettleStmt {
             id: s.id,

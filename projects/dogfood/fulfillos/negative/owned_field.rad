@@ -1,0 +1,2 @@
+component ProductProfile { description: str = "", owned reorder_level: int = 0 }
+fn shipping(target: entity) { update(target, ProductProfile) { reorder_level = 5 } }

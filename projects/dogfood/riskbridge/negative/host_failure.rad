@@ -1,0 +1,3 @@
+use "fixture_adapter.rad"
+
+let _output = fixture_score("target/riskbridge-fixtures/host_failure.dll")

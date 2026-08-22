@@ -1,5 +1,4 @@
 impl RadRuntime {
-
     fn json_to_value(&mut self, jv: &serde_json::Value) -> Result<Value, String> {
         match jv {
             serde_json::Value::Null => Ok(Value::NIL),
@@ -43,49 +42,7 @@ impl RadRuntime {
         self.vm.set_random_seed(seed);
         self.output.clear();
 
-        let mut lexer = Lexer::new(source);
-        let (tokens, lex_errors) = lexer.tokenize();
-        let mut parser = Parser::new(tokens);
-        let program = parser.parse();
-
-        let mut all_errors = Vec::new();
-        for e in lex_errors {
-            all_errors.push(format!(
-                "[line {}:{}] Lex error: {}",
-                e.line, e.col, e.message
-            ));
-        }
-        for e in parser.errors() {
-            all_errors.push(format!(
-                "[line {}:{}] Parse error: {}",
-                e.line, e.col, e.message
-            ));
-        }
-        if program
-            .declarations
-            .iter()
-            .any(|d| matches!(d, Decl::Use(_)))
-        {
-            return Err("Module imports are not supported in browser sessions yet".to_string());
-        }
-
-        let mut checker = Self::checker();
-        let checker_errors = checker.check(&program);
-        let checker_output = checker.output();
-        for e in checker_errors {
-            all_errors.push(format!(
-                "[line {}:{}] Type error: {}",
-                e.line, e.col, e.message
-            ));
-        }
-        if !all_errors.is_empty() {
-            return Err(all_errors.join("\n"));
-        }
-
-        let compile_result = Self::compiler()
-            .with_checker_output(checker_output)
-            .compile(&program)
-            .map_err(|e| format!("Compile error: {}", e.message))?;
+        let compile_result = Self::compile_browser_source(source, BrowserSourceKind::Session)?;
         self.vm.load_compile_result(compile_result);
         self.vm.print_buffer.clear();
         match self.vm.run(0) {

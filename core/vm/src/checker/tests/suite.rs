@@ -9,5 +9,9 @@ mod tests {
     include!("closures_and_entrypoints.rs");
     include!("effects_and_mutability.rs");
     include!("readonly_and_recursive_bindings.rs");
-    include!("authority_effects.rs");
+include!("authority_effects.rs");
+include!("ownership.rs");
+include!("transactions.rs");
+include!("semantic_features.rs");
+include!("nominal_types.rs");
 }

@@ -1,0 +1,15 @@
+[package]
+name = "rad-ffi-worker"
+version = "0.5.0"
+edition = "2021"
+description = "Crash- and timeout-contained native extension worker for RAD"
+license = "MIT"
+repository = "https://github.com/peteracs/rad"
+publish = false
+
+[[bin]]
+name = "rad-ffi-worker"
+path = "src/main.rs"
+
+[dependencies]
+rad-vm = { path = "../../core/vm" }

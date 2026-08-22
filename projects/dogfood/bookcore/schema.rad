@@ -1,0 +1,9 @@
+pub opaque type OrderId = u64
+pub opaque type AccountId = u64
+pub opaque type PriceTicks = i64
+pub opaque type Quantity = u64
+pub opaque type Sequence = u64
+
+pub event MatchBatchCommitted {
+    fills: int,
+}

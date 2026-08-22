@@ -1,0 +1,65 @@
+use "../schema.rad"
+
+let RISK_EXTENSION = load_extension(
+    "target/riskbridge-plugin/release/riskbridge_model_plugin.dll",
+)
+let SCORE_TRANSACTION: pure fn(str) -> str = RISK_EXTENSION["score_transaction"]
+
+fn append_encoded(bytes: list, value: any) -> list {
+    return extend(bytes, bytebuf_to_list(encode_le(value)))
+}
+
+pub pure fn encode_risk_input(request: RiskInput) -> list {
+    let mut bytes = []
+    bytes = append_encoded(bytes, request.customer)
+    bytes = append_encoded(bytes, request.transaction)
+    bytes = append_encoded(bytes, request.amount)
+    bytes = append_encoded(bytes, request.merchant_category)
+    bytes = append_encoded(bytes, request.country)
+    bytes = extend(bytes, [0, 0, 0, 0])
+    bytes = append_encoded(bytes, request.signals)
+    bytes = append_encoded(bytes, request.model)
+    bytes = extend(bytes, [0, 0, 0, 0])
+    assert(len(bytes) == 48, "RiskInput ABI size")
+    return bytes
+}
+
+pub pure fn decode_risk_output(encoded: str) -> RiskOutput {
+    let parsed = json_parse(encoded)
+    assert(is_some(parsed), "native RiskOutput transport is valid JSON")
+    let bytes: list = unwrap(parsed)
+    assert(len(bytes) == 24, "RiskOutput ABI size")
+    let buffer = bytebuf_from_list(bytes)
+    let output = RiskOutput {
+        score: decode_le(buffer, 0, f32),
+        reason_mask: decode_le(buffer, 8, u64),
+        model_version: decode_le(buffer, 16, u32),
+        disposition: decode_le(buffer, 20, u8),
+    }
+    assert(output.score >= f32(0.0) and output.score <= f32(1.0), "RiskOutput score must be finite and within [0, 1]")
+    assert(output.reason_mask <= u64(15), "RiskOutput contains unknown reason flags")
+    assert(output.disposition <= u8(2), "RiskOutput disposition is unknown")
+    return output
+}
+
+pub fn score_native(request: RiskInput) -> RiskOutput {
+    return decode_risk_output(SCORE_TRANSACTION(json_stringify(encode_risk_input(request))))
+}
+
+pub pure fn score_reference(request: RiskInput) -> RiskOutput {
+    let signal_bits: u64 = u64(request.signals)
+    let mut points: int = 5
+    if signal_bits & u64(1) != u64(0) { points = points + 10 }
+    if signal_bits & u64(2) != u64(0) { points = points + 65 }
+    if signal_bits & u64(4) != u64(0) { points = points + 15 }
+    if signal_bits & u64(8) != u64(0) { points = points + 80 }
+    if i64(request.amount) > i64(100000) { points = points + 10 }
+    if points > 99 { points = 99 }
+    let disposition: u8 = if points >= 80 { u8(2) } else if points >= 50 { u8(1) } else { u8(0) }
+    return RiskOutput {
+        score: f32(float(points) / 100.0),
+        reason_mask: signal_bits,
+        model_version: u32(17),
+        disposition: disposition,
+    }
+}

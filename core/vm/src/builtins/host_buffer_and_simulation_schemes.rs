@@ -2,7 +2,9 @@
 
 fn builtin_type_scheme_host(name: &str) -> Option<BuiltinSig> {
     let a = || Ty::App("A".to_string(), vec![]);
+    let b = || Ty::App("B".to_string(), vec![]);
     let tp_a = || vec!["A".to_string()];
+    let tp_ab = || vec!["A".to_string(), "B".to_string()];
 
     let sig = match name {
             "read_file" => BuiltinSig {
@@ -159,6 +161,29 @@ fn builtin_type_scheme_host(name: &str) -> Option<BuiltinSig> {
             type_params: vec![],
             params: vec![Ty::Str],
             ret: Ty::Any,
+            is_pure: false,
+        },
+        "host_try" => BuiltinSig {
+            type_params: tp_ab(),
+            params: vec![
+                Ty::Fn {
+                    params: vec![a()],
+                    ret: Box::new(b()),
+                    purity: FnPurity::Impure,
+                },
+                a(),
+            ],
+            ret: Ty::App("Result".to_string(), vec![b(), Ty::Str]),
+            is_pure: false,
+        },
+        "host_try0" => BuiltinSig {
+            type_params: tp_a(),
+            params: vec![Ty::Fn {
+                params: vec![],
+                ret: Box::new(a()),
+                purity: FnPurity::Impure,
+            }],
+            ret: Ty::App("Result".to_string(), vec![a(), Ty::Str]),
             is_pure: false,
         },
         "gc_collect" => BuiltinSig {
@@ -516,6 +541,30 @@ fn builtin_type_scheme_buffers(name: &str) -> Option<BuiltinSig> {
         "bytebuf_from_list" => BuiltinSig {
             type_params: vec![],
             params: vec![Ty::List(Box::new(Ty::Int))],
+            ret: Ty::Any,
+            is_pure: true,
+        },
+        "size_of" => BuiltinSig {
+            type_params: vec![],
+            params: vec![Ty::Any],
+            ret: Ty::Int,
+            is_pure: true,
+        },
+        "offset_of" => BuiltinSig {
+            type_params: vec![],
+            params: vec![Ty::Any, Ty::Str],
+            ret: Ty::Int,
+            is_pure: true,
+        },
+        "decode_le" | "decode_be" => BuiltinSig {
+            type_params: vec![],
+            params: vec![Ty::Any, Ty::Int, Ty::Any],
+            ret: Ty::Any,
+            is_pure: true,
+        },
+        "encode_le" | "encode_be" => BuiltinSig {
+            type_params: vec![],
+            params: vec![Ty::Any],
             ret: Ty::Any,
             is_pure: true,
         },

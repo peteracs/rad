@@ -1,0 +1,10 @@
+use "schema.rad"
+use "owners/match_owner.rad"
+use "systems/phase_engine.rad"
+use "scenarios/production.rad"
+
+fn main() -> nil {
+    let session = run_match_frame(50000, 10000)
+    let snapshot = snapshot_of(session)
+    print(f"matchflow-bench: players=50000 inputs=10000 alive={snapshot.alive_players} deaths={snapshot.deaths}")
+}

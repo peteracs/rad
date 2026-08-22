@@ -38,7 +38,24 @@ impl fmt::Display for VerificationError {
 impl std::error::Error for VerificationError {}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct SettlementState(Option<usize>);
+struct AtomicState(Option<(AtomicRegionKind, usize)>);
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum AtomicRegionKind {
+    Settlement,
+    Transaction,
+    PostCommit,
+}
+
+impl AtomicRegionKind {
+    fn name(self) -> &'static str {
+        match self {
+            Self::Settlement => "settlement",
+            Self::Transaction => "transaction",
+            Self::PostCommit => "post_commit",
+        }
+    }
+}
 
 #[derive(Clone, Debug)]
 struct Instruction {
@@ -88,7 +105,7 @@ fn require_bytes(
 fn fixed_operand_bytes(op: Op) -> Option<usize> {
     use Op::*;
     match op {
-        Closure | RunSchedule | RunScheduleSerial => None,
+        Closure | RunSchedule | RunScheduleSerial | BeginTransaction => None,
 
         Const
         | DefGlobal
@@ -129,18 +146,21 @@ fn fixed_operand_bytes(op: Op) -> Option<usize> {
         | ProposeIntent
         | ReadBaseComponent
         | ReadCandidateComponent
-        | RequireConstraint => Some(2),
+        | RequireConstraint
+        | EmitPhase
+        | RunViewKernel => Some(2),
+
+        CheckTransaction => Some(3),
 
         GetLocal2 | EqConstJF | NeqConstJF | IncLocal | ListGetLL | MakeComp | MakeCompSlot
-        | InitResource | MakeState | MatchState => Some(4),
+        | InitResource | MakeState | MatchState | EcsReadField | EcsWriteField => Some(4),
 
         ForRangeNext | MakeVariant => Some(6),
 
         ConstArith | LoadColumn => Some(3),
 
-        PopN | Call | AsyncCall | ConcatN | Print | IterNext | QueryFilter | QueryProject => {
-            Some(1)
-        }
+        PopN | Call | AsyncCall | ConcatN | Print | IterNext | QueryFilter | QueryProject
+        | EndTransaction => Some(1),
 
         EcsSpawn => Some(4),
         EcsQuery => Some(2),
@@ -211,9 +231,11 @@ fn fixed_operand_bytes(op: Op) -> Option<usize> {
         | Shr
         | BitNot
         | EmitAfter
+        | EmitSync
         | BeginSettlement
         | EndSettlement
         | StageCandidate
+        | EndPostCommit
         | Pipe => Some(0),
     }
 }
@@ -244,6 +266,14 @@ fn decode_instruction(chunk: &Chunk, offset: usize) -> Result<Instruction, Verif
                     VerificationError::at(chunk, offset, "schedule operand length overflow")
                 })?;
                 require_bytes(chunk, offset, operands + 2, entries)?
+            }
+            Op::BeginTransaction => {
+                let header_end = require_bytes(chunk, offset, operands, 4)?;
+                let count = read_u16(chunk, operands + 2, offset)? as usize;
+                let entries = count.checked_mul(2).ok_or_else(|| {
+                    VerificationError::at(chunk, offset, "transaction operand length overflow")
+                })?;
+                require_bytes(chunk, offset, header_end, entries)?
             }
             _ => unreachable!("all variable-width opcodes are handled"),
         }
@@ -344,6 +374,17 @@ fn constant_indices(
         | Op::ReadBaseComponent
         | Op::ReadCandidateComponent
         | Op::RequireConstraint => vec![one(at)?],
+        Op::EcsReadField | Op::EcsWriteField => vec![one(at)?, one(at + 2)?],
+        Op::CheckTransaction => vec![one(at + 1)?],
+        Op::BeginTransaction => {
+            let count = one(at + 2)?;
+            let mut out = Vec::with_capacity(count + 1);
+            out.push(one(at)?);
+            for index in 0..count {
+                out.push(one(at + 4 + index * 2)?);
+            }
+            out
+        }
         Op::EqConstJF | Op::NeqConstJF | Op::ConstArith => vec![one(at)?],
         Op::IncLocal => vec![one(at + 2)?],
         Op::MakeState | Op::MakeVariant => vec![one(at)?, one(at + 2)?],
@@ -403,48 +444,147 @@ pub(crate) fn verify_chunk(chunk: &Chunk) -> Result<VerifiedChunk, VerificationE
                 ));
             }
         }
-    }
-
-    let mut lexical_state = HashMap::with_capacity(instructions.len());
-    let mut active_region = None;
-    for instruction in &instructions {
-        lexical_state.insert(instruction.offset, SettlementState(active_region));
         match instruction.op {
-            Op::BeginSettlement => {
-                if active_region.is_some() {
+            Op::BeginTransaction => {
+                let count = read_u16(chunk, instruction.offset + 3, instruction.offset)? as usize;
+                if count == 0 {
                     return Err(VerificationError::at(
                         chunk,
                         instruction.offset,
-                        "nested BeginSettlement",
+                        "BeginTransaction requires at least one changes_only authority",
                     ));
                 }
-                active_region = Some(instruction.offset);
-            }
-            Op::EndSettlement => {
-                if active_region.is_none() {
+                let name = read_u16(chunk, instruction.offset + 1, instruction.offset)? as usize;
+                if chunk.constants[name].as_str().is_none() {
                     return Err(VerificationError::at(
                         chunk,
                         instruction.offset,
-                        "EndSettlement without a matching BeginSettlement",
+                        "BeginTransaction name constant must be a string",
                     ));
                 }
-                active_region = None;
+                for authority in 0..count {
+                    let index = read_u16(
+                        chunk,
+                        instruction.offset + 5 + authority * 2,
+                        instruction.offset,
+                    )? as usize;
+                    if chunk.constants[index].as_str().is_none() {
+                        return Err(VerificationError::at(
+                            chunk,
+                            instruction.offset,
+                            "BeginTransaction changes_only constants must be strings",
+                        ));
+                    }
+                }
             }
-            _ if instruction.may_return && active_region.is_some() => {
+            Op::CheckTransaction => {
+                let phase = chunk.code[instruction.offset + 1];
+                if phase > 1 {
+                    return Err(VerificationError::at(
+                        chunk,
+                        instruction.offset,
+                        "CheckTransaction phase must be 0 (requires) or 1 (ensures)",
+                    ));
+                }
+                let label = read_u16(chunk, instruction.offset + 2, instruction.offset)? as usize;
+                if chunk.constants[label].as_str().is_none() {
+                    return Err(VerificationError::at(
+                        chunk,
+                        instruction.offset,
+                        "CheckTransaction label constant must be a string",
+                    ));
+                }
+            }
+            Op::EndTransaction if chunk.code[instruction.offset + 1] > 1 => {
                 return Err(VerificationError::at(
                     chunk,
                     instruction.offset,
-                    format!("{:?} can leave an active settlement", instruction.op),
+                    "EndTransaction post_commit flag must be 0 or 1",
                 ));
             }
             _ => {}
         }
     }
-    if let Some(begin) = active_region {
+
+    let mut lexical_state = HashMap::with_capacity(instructions.len());
+    let mut active_region = None;
+    for instruction in &instructions {
+        lexical_state.insert(instruction.offset, AtomicState(active_region));
+        match instruction.op {
+            Op::BeginSettlement | Op::BeginTransaction => {
+                if active_region.is_some() {
+                    return Err(VerificationError::at(
+                        chunk,
+                        instruction.offset,
+                        format!("nested {:?} atomic region", instruction.op),
+                    ));
+                }
+                let kind = if instruction.op == Op::BeginSettlement {
+                    AtomicRegionKind::Settlement
+                } else {
+                    AtomicRegionKind::Transaction
+                };
+                active_region = Some((kind, instruction.offset));
+            }
+            Op::EndSettlement | Op::EndTransaction | Op::EndPostCommit => {
+                let expected = if instruction.op == Op::EndSettlement {
+                    AtomicRegionKind::Settlement
+                } else if instruction.op == Op::EndTransaction {
+                    AtomicRegionKind::Transaction
+                } else {
+                    AtomicRegionKind::PostCommit
+                };
+                let Some((actual, _)) = active_region else {
+                    return Err(VerificationError::at(
+                        chunk,
+                        instruction.offset,
+                        format!("{:?} without a matching begin marker", instruction.op),
+                    ));
+                };
+                if actual != expected {
+                    return Err(VerificationError::at(
+                        chunk,
+                        instruction.offset,
+                        format!(
+                            "{:?} cannot close an active {}",
+                            instruction.op,
+                            actual.name()
+                        ),
+                    ));
+                }
+                active_region = if instruction.op == Op::EndTransaction
+                    && chunk.code[instruction.offset + 1] == 1
+                {
+                    Some((AtomicRegionKind::PostCommit, instruction.offset))
+                } else {
+                    None
+                };
+            }
+            Op::CheckTransaction
+                if !matches!(active_region, Some((AtomicRegionKind::Transaction, _))) =>
+            {
+                return Err(VerificationError::at(
+                    chunk,
+                    instruction.offset,
+                    "CheckTransaction is only valid inside a transaction",
+                ));
+            }
+            _ if instruction.may_return && active_region.is_some() => {
+                let kind = active_region.unwrap().0.name();
+                return Err(VerificationError::at(
+                    chunk,
+                    instruction.offset,
+                    format!("{:?} can leave an active {kind}", instruction.op),
+                ));
+            }
+            _ => {}
+        }
+    }
+    if let Some((kind, begin)) = active_region {
         return Err(VerificationError::at(
             chunk,
             begin,
-            "BeginSettlement has no matching EndSettlement",
+            format!("active {} has no matching end marker", kind.name()),
         ));
     }
 
@@ -461,8 +601,17 @@ pub(crate) fn verify_chunk(chunk: &Chunk) -> Result<VerifiedChunk, VerificationE
             targets.push(instruction.end);
         }
         let source_after = match instruction.op {
-            Op::BeginSettlement => SettlementState(Some(instruction.offset)),
-            Op::EndSettlement => SettlementState(None),
+            Op::BeginSettlement => {
+                AtomicState(Some((AtomicRegionKind::Settlement, instruction.offset)))
+            }
+            Op::BeginTransaction => {
+                AtomicState(Some((AtomicRegionKind::Transaction, instruction.offset)))
+            }
+            Op::EndSettlement | Op::EndPostCommit => AtomicState(None),
+            Op::EndTransaction if chunk.code[instruction.offset + 1] == 1 => {
+                AtomicState(Some((AtomicRegionKind::PostCommit, instruction.offset)))
+            }
+            Op::EndTransaction => AtomicState(None),
             _ => lexical_state[&instruction.offset],
         };
         for target in targets {
@@ -482,8 +631,15 @@ pub(crate) fn verify_chunk(chunk: &Chunk) -> Result<VerifiedChunk, VerificationE
                     chunk,
                     instruction.offset,
                     format!(
-                        "control-flow edge to byte {} crosses settlement region {:?} -> {:?}",
-                        target, source_after.0, target_state.0
+                        "control-flow edge to byte {} crosses {} boundary {:?} -> {:?}",
+                        target,
+                        source_after
+                            .0
+                            .or(target_state.0)
+                            .map(|(kind, _)| kind.name())
+                            .unwrap_or("atomic region"),
+                        source_after.0,
+                        target_state.0
                     ),
                 ));
             }
@@ -491,12 +647,12 @@ pub(crate) fn verify_chunk(chunk: &Chunk) -> Result<VerifiedChunk, VerificationE
     }
 
     // A worklist proves that every reachable CFG join receives one exact
-    // settlement token. The lexical edge check above also covers unreachable
+    // atomic-region token. The lexical edge check above also covers unreachable
     // malformed regions, so neither defense depends on reachability alone.
     let by_offset: HashMap<usize, &Instruction> =
         instructions.iter().map(|i| (i.offset, i)).collect();
-    let mut incoming = HashMap::<usize, SettlementState>::new();
-    let mut queue = VecDeque::from([(0usize, SettlementState(None))]);
+    let mut incoming = HashMap::<usize, AtomicState>::new();
+    let mut queue = VecDeque::from([(0usize, AtomicState(None))]);
     while let Some((at, state)) = queue.pop_front() {
         if let Some(previous) = incoming.insert(at, state) {
             if previous != state {
@@ -504,7 +660,7 @@ pub(crate) fn verify_chunk(chunk: &Chunk) -> Result<VerifiedChunk, VerificationE
                     chunk,
                     at,
                     format!(
-                        "CFG join has incompatible settlement states {:?} and {:?}",
+                        "CFG join has incompatible atomic states {:?} and {:?}",
                         previous.0, state.0
                     ),
                 ));
@@ -516,12 +672,21 @@ pub(crate) fn verify_chunk(chunk: &Chunk) -> Result<VerifiedChunk, VerificationE
             return Err(VerificationError::at(
                 chunk,
                 at,
-                "reachable instruction disagrees with its lexical settlement state",
+                "reachable instruction disagrees with its lexical atomic state",
             ));
         }
         let next_state = match instruction.op {
-            Op::BeginSettlement => SettlementState(Some(instruction.offset)),
-            Op::EndSettlement => SettlementState(None),
+            Op::BeginSettlement => {
+                AtomicState(Some((AtomicRegionKind::Settlement, instruction.offset)))
+            }
+            Op::BeginTransaction => {
+                AtomicState(Some((AtomicRegionKind::Transaction, instruction.offset)))
+            }
+            Op::EndSettlement | Op::EndPostCommit => AtomicState(None),
+            Op::EndTransaction if chunk.code[instruction.offset + 1] == 1 => {
+                AtomicState(Some((AtomicRegionKind::PostCommit, instruction.offset)))
+            }
+            Op::EndTransaction => AtomicState(None),
             _ => state,
         };
         for target in &instruction.branches {
@@ -566,6 +731,78 @@ mod tests {
         let mut chunk = chunk;
         chunk.add_constant(crate::value::Value::NIL);
         assert!(verify_chunk(&chunk).is_ok());
+    }
+
+    fn transaction_chunk(has_post_commit: u8, close_post_commit: bool) -> Chunk {
+        let mut bytes = vec![
+            (Op::BeginTransaction, vec![0, 0, 0, 1, 0, 1]),
+            (Op::Const, vec![0, 3]),
+            (Op::CheckTransaction, vec![0, 0, 2]),
+            (Op::Const, vec![0, 3]),
+            (Op::CheckTransaction, vec![1, 0, 2]),
+            (Op::EndTransaction, vec![has_post_commit]),
+        ];
+        if close_post_commit {
+            bytes.push((Op::EndPostCommit, vec![]));
+        }
+        bytes.push((Op::Const, vec![0, 4]));
+        bytes.push((Op::Return, vec![]));
+        let borrowed = bytes
+            .iter()
+            .map(|(op, operands)| (*op, operands.as_slice()))
+            .collect::<Vec<_>>();
+        let mut chunk = chunk("transaction", &borrowed);
+        chunk.add_constant(crate::value::Value::from_string(
+            &mut crate::value::PersistentStore,
+            "Rewrite".to_string(),
+        ));
+        chunk.add_constant(crate::value::Value::from_string(
+            &mut crate::value::PersistentStore,
+            "Marker".to_string(),
+        ));
+        chunk.add_constant(crate::value::Value::from_string(
+            &mut crate::value::PersistentStore,
+            "contract".to_string(),
+        ));
+        chunk.add_constant(crate::value::Value::from_bool(true));
+        chunk.add_constant(crate::value::Value::NIL);
+        chunk
+    }
+
+    #[test]
+    fn transaction_and_post_commit_regions_verify_as_one_balanced_boundary() {
+        assert!(verify_chunk(&transaction_chunk(0, false)).is_ok());
+        assert!(verify_chunk(&transaction_chunk(1, true)).is_ok());
+    }
+
+    #[test]
+    fn transaction_metadata_and_post_commit_balance_are_verified() {
+        let missing_post_commit_end = transaction_chunk(1, false);
+        assert!(verify_chunk(&missing_post_commit_end)
+            .unwrap_err()
+            .message
+            .contains("active post_commit"));
+
+        let mut invalid_flag = transaction_chunk(0, false);
+        let end = invalid_flag
+            .code
+            .iter()
+            .position(|byte| *byte == Op::EndTransaction as u8)
+            .unwrap();
+        invalid_flag.code[end + 1] = 2;
+        assert!(verify_chunk(&invalid_flag)
+            .unwrap_err()
+            .message
+            .contains("flag must be 0 or 1"));
+
+        let unmatched = chunk(
+            "unmatched-post-commit",
+            &[(Op::EndPostCommit, &[]), (Op::Halt, &[])],
+        );
+        assert!(verify_chunk(&unmatched)
+            .unwrap_err()
+            .message
+            .contains("without a matching begin marker"));
     }
 
     #[test]

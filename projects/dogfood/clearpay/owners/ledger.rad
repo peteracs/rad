@@ -1,0 +1,111 @@
+use "../schema.rad"
+
+pub component AccountBalance owned {
+    indexed account_id: AccountId = AccountId(u64(0)),
+    balance: MoneyCents = MoneyCents(i64(0)),
+}
+
+pub component PaymentHold owned {
+    amount: MoneyCents = MoneyCents(i64(0)),
+}
+
+pub component LedgerEntry owned {
+    payment: entity,
+    account: entity,
+    delta: MoneyCents = MoneyCents(i64(0)),
+}
+
+pub component IdempotencyRecord owned {
+    indexed key: str = "",
+    committed: bool = false,
+}
+
+pub resource MerchantSettlement owned {
+    captures: int = 0,
+}
+
+pub fn open_account(account_id: AccountId, balance: MoneyCents) -> entity
+    writes owned [AccountBalance]
+{
+    return spawn(AccountBalance { account_id: account_id, balance: balance })
+}
+
+pub fn authorize_payment(
+    payment_id: PaymentId,
+    debit: entity,
+    credit: entity,
+    amount: MoneyCents,
+    key: str,
+) -> entity writes owned [PaymentHold] {
+    return spawn(
+        Payment {
+            payment_id: payment_id,
+            debit_account: debit,
+            credit_account: credit,
+            amount: amount,
+            idempotency_key: key,
+        },
+        AuthorizedPayment {},
+        PaymentHold { amount: amount },
+    )
+}
+
+fn ledger_is_balanced(payment: entity) -> bool {
+    let mut total: i64 = i64(0)
+    for (_entry_entity, entry) in query { LedgerEntry } {
+        if entry.payment == payment { total = total + i64(entry.delta) }
+    }
+    return total == i64(0)
+}
+
+pub transaction CapturePayment(payment: entity)
+    writes owned [AccountBalance, PaymentHold, LedgerEntry, IdempotencyRecord, MerchantSettlement]
+{
+    requires has(payment, AuthorizedPayment)
+    requires not has(payment, CapturedPayment)
+    requires not has(payment, IdempotencyRecord)
+
+    changes_only [AccountBalance, PaymentHold, CapturedPayment, LedgerEntry, IdempotencyRecord, MerchantSettlement, "$entities", "$entity_identity"]
+
+    let charge: Payment = require(payment, Payment)
+    let debit: AccountBalance = require(charge.debit_account, AccountBalance)
+    let credit: AccountBalance = require(charge.credit_account, AccountBalance)
+    let amount: i64 = i64(charge.amount)
+
+    set(charge.debit_account, AccountBalance {
+        account_id: debit.account_id,
+        balance: MoneyCents(i64(debit.balance) - amount),
+    })
+    set(charge.credit_account, AccountBalance {
+        account_id: credit.account_id,
+        balance: MoneyCents(i64(credit.balance) + amount),
+    })
+    remove(payment, PaymentHold)
+    set(payment, CapturedPayment {})
+    set(payment, IdempotencyRecord { key: charge.idempotency_key, committed: true })
+    spawn(LedgerEntry {
+        payment: payment,
+        account: charge.debit_account,
+        delta: MoneyCents(-amount),
+    })
+    spawn(LedgerEntry {
+        payment: payment,
+        account: charge.credit_account,
+        delta: MoneyCents(amount),
+    })
+    update(MerchantSettlement) { captures = res(MerchantSettlement).captures + 1 }
+
+    ensures has(payment, CapturedPayment)
+    ensures not has(payment, PaymentHold)
+    ensures ledger_is_balanced(payment)
+
+    post_commit {
+        emit next PaymentCaptured { payment: payment, amount: require(payment, Payment).amount }
+    }
+}
+
+pub fn capture_idempotent(payment: entity) -> bool {
+    if has(payment, IdempotencyRecord) { return false }
+    CapturePayment(payment)
+    return true
+}

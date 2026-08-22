@@ -1,0 +1,164 @@
+use "../schema.rad"
+
+pub component OrderIdentity owned {
+    indexed order_id: OrderId = OrderId(u64(0)),
+    account_id: AccountId = AccountId(u64(0)),
+}
+
+pub component OpenOrder owned {}
+
+pub component BuyOrder owned {
+    ordered indexed priority: (PriceTicks, Sequence) = (PriceTicks(i64(0)), Sequence(u64(0))),
+    price: PriceTicks = PriceTicks(i64(0)),
+    quantity: Quantity = Quantity(u64(0)),
+}
+
+pub component SellOrder owned {
+    ordered indexed priority: (PriceTicks, Sequence) = (PriceTicks(i64(0)), Sequence(u64(0))),
+    price: PriceTicks = PriceTicks(i64(0)),
+    quantity: Quantity = Quantity(u64(0)),
+}
+
+pub component Fill owned {
+    buy_order: OrderId = OrderId(u64(0)),
+    sell_order: OrderId = OrderId(u64(0)),
+    price: PriceTicks = PriceTicks(i64(0)),
+    quantity: Quantity = Quantity(u64(0)),
+}
+
+pub resource MatchCycle owned {
+    fills: int = 0,
+    last_batch: int = 0,
+}
+
+pub materialized view OpenOrders {
+    depends [OrderIdentity, OpenOrder]
+    key OrderIdentity.order_id
+}
+
+pub fn submit_buy(
+    order_id: OrderId,
+    account_id: AccountId,
+    price: PriceTicks,
+    quantity: Quantity,
+    sequence: Sequence,
+) -> bool writes owned [OrderIdentity, OpenOrder, BuyOrder] {
+    if is_some(lookup(OrderIdentity, "order_id", order_id)) { return false }
+    let priority = (PriceTicks(-i64(price)), sequence)
+    if is_some(lookup(BuyOrder, "priority", priority)) { return false }
+    spawn(
+        OrderIdentity { order_id: order_id, account_id: account_id },
+        OpenOrder {},
+        BuyOrder { priority: priority, price: price, quantity: quantity },
+    )
+    return true
+}
+
+pub fn submit_sell(
+    order_id: OrderId,
+    account_id: AccountId,
+    price: PriceTicks,
+    quantity: Quantity,
+    sequence: Sequence,
+) -> bool writes owned [OrderIdentity, OpenOrder, SellOrder] {
+    if is_some(lookup(OrderIdentity, "order_id", order_id)) { return false }
+    let priority = (price, sequence)
+    if is_some(lookup(SellOrder, "priority", priority)) { return false }
+    spawn(
+        OrderIdentity { order_id: order_id, account_id: account_id },
+        OpenOrder {},
+        SellOrder { priority: priority, price: price, quantity: quantity },
+    )
+    return true
+}
+
+fn apply_fill(
+    buy: entity,
+    sell: entity,
+    price: PriceTicks,
+    quantity: Quantity,
+) -> nil writes owned [OpenOrder, BuyOrder, SellOrder, Fill] {
+    let bid: BuyOrder = require(buy, BuyOrder)
+    let ask: SellOrder = require(sell, SellOrder)
+    let buy_identity: OrderIdentity = require(buy, OrderIdentity)
+    let sell_identity: OrderIdentity = require(sell, OrderIdentity)
+
+    if bid.quantity == quantity {
+        remove(buy, BuyOrder)
+        remove(buy, OpenOrder)
+    } else {
+        set(buy, BuyOrder {
+            priority: bid.priority,
+            price: bid.price,
+            quantity: Quantity(u64(bid.quantity) - u64(quantity)),
+        })
+    }
+    if ask.quantity == quantity {
+        remove(sell, SellOrder)
+        remove(sell, OpenOrder)
+    } else {
+        set(sell, SellOrder {
+            priority: ask.priority,
+            price: ask.price,
+            quantity: Quantity(u64(ask.quantity) - u64(quantity)),
+        })
+    }
+    spawn(Fill {
+        buy_order: buy_identity.order_id,
+        sell_order: sell_identity.order_id,
+        price: price,
+        quantity: quantity,
+    })
+}
+
+pub transaction MatchBook(max_fills: int)
+    writes owned [OpenOrder, BuyOrder, SellOrder, Fill, MatchCycle]
+{
+    requires max_fills > 0
+    changes_only [OpenOrder, BuyOrder, SellOrder, Fill, MatchCycle, "$entities", "$entity_identity"]
+
+    let mut keep_matching = true
+    let mut matched = 0
+    while keep_matching and matched < max_fills {
+        let buy_result = first(BuyOrder, "priority")
+        let sell_result = first(SellOrder, "priority")
+        if is_none(buy_result) or is_none(sell_result) {
+            keep_matching = false
+        } else {
+            let buy: entity = buy_result |> unwrap
+            let sell: entity = sell_result |> unwrap
+            let bid: BuyOrder = require(buy, BuyOrder)
+            let ask: SellOrder = require(sell, SellOrder)
+            if bid.price < ask.price {
+                keep_matching = false
+            } else {
+                let quantity = if bid.quantity < ask.quantity { bid.quantity } else { ask.quantity }
+                apply_fill(buy, sell, ask.price, quantity)
+                matched = matched + 1
+            }
+        }
+    }
+    update(MatchCycle) {
+        fills = res(MatchCycle).fills + matched,
+        last_batch = matched,
+    }
+
+    ensures res(MatchCycle).last_batch <= max_fills
+
+    post_commit {
+        emit next MatchBatchCommitted { fills: res(MatchCycle).last_batch }
+    }
+}
+
+pub fn cancel_order(order_id: OrderId) -> bool
+    writes owned [OpenOrder, BuyOrder, SellOrder]
+{
+    let found = lookup(OrderIdentity, "order_id", order_id)
+    if is_none(found) { return false }
+    let target: entity = found |> unwrap
+    if not has(target, OpenOrder) { return false }
+    remove(target, OpenOrder)
+    if has(target, BuyOrder) { remove(target, BuyOrder) }
+    if has(target, SellOrder) { remove(target, SellOrder) }
+    return true
+}

@@ -1,16 +1,6 @@
-
-
 fn compile(src: &str) -> crate::compiler::CompileResult {
-    let mut lexer = Lexer::new(src);
-    let tokens = lexer.tokenize().0;
-    let mut parser = Parser::new(tokens);
-    let program = parser.parse();
-    assert!(
-        parser.errors().is_empty(),
-        "parse errors: {:?}",
-        parser.errors()
-    );
-    Compiler::new().compile(&program).expect("compile")
+    crate::test_support::compile_source(src, crate::parser::ParserOptions::default())
+        .expect("parse and compile")
 }
 
 fn run(src: &str) -> VM {

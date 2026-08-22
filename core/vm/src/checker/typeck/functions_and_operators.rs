@@ -294,6 +294,23 @@ fn check_expr_control_and_functions(&mut self, expr: &Expr) -> Ty {
                 {
                     return Ty::Str;
                 }
+                if matches!((&left, &right), (Ty::Native { .. }, _) | (_, Ty::Native { .. })) {
+                    if left != right {
+                        self.error(
+                            span,
+                            format!("Native arithmetic requires identical types, got {} and {}", left, right),
+                            Some("Use an explicit fixed-width conversion; nominal IDs never coerce implicitly".to_string()),
+                        );
+                        return Ty::Any;
+                    }
+                    if let Ty::Native { flavor, .. } = &left {
+                        if *flavor != crate::native_types::NativeTypeFlavor::Scalar {
+                            self.error(span, format!("Arithmetic is not defined for nominal type {}", left), None);
+                            return Ty::Any;
+                        }
+                    }
+                    return left;
+                }
                 // Element-wise tuple math (the vector dialect): tuple±tuple
                 // of matching arity, and scalar broadcast on * and /.
                 if matches!(op, BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div) {
@@ -383,10 +400,11 @@ fn check_expr_control_and_functions(&mut self, expr: &Expr) -> Ty {
                 }
             }
             BinOp::Eq | BinOp::Ne => {
+                let native_mismatch = matches!(lt, Ty::Native { .. }) || matches!(rt, Ty::Native { .. });
                 let comparable = lt == rt
                     || *lt == Ty::Any
                     || *rt == Ty::Any
-                    || (lt.is_numeric() && rt.is_numeric())
+                    || (!native_mismatch && lt.is_numeric() && rt.is_numeric())
                     || lt.assignable_from(rt)
                     || rt.assignable_from(lt);
                 if !comparable {
@@ -417,6 +435,13 @@ fn check_expr_control_and_functions(&mut self, expr: &Expr) -> Ty {
                 }
                 if (left.is_numeric() && right.is_numeric()) || left == Ty::Any || right == Ty::Any
                 {
+                    if (matches!(left, Ty::Native { .. }) || matches!(right, Ty::Native { .. }))
+                        && left != right
+                        && left != Ty::Any
+                        && right != Ty::Any
+                    {
+                        self.error(span, format!("Cannot compare {} and {} without an explicit conversion", left, right), None);
+                    }
                     Ty::Bool
                 } else {
                     self.error(
@@ -462,7 +487,23 @@ fn check_expr_control_and_functions(&mut self, expr: &Expr) -> Ty {
                         right = self.resolve_ty(&right);
                     }
                 }
-                if (left == Ty::Int || left == Ty::Any) && (right == Ty::Int || right == Ty::Any) {
+                if matches!((&left, &right), (Ty::Native { .. }, _) | (_, Ty::Native { .. })) {
+                    if left != right {
+                        self.error(span, format!("Native bitwise operations require identical types, got {} and {}", left, right), None);
+                        Ty::Any
+                    } else if let Ty::Native { repr, flavor, .. } = &left {
+                        if repr.is_float()
+                            || !matches!(flavor, crate::native_types::NativeTypeFlavor::Scalar | crate::native_types::NativeTypeFlavor::Bitflags)
+                        {
+                            self.error(span, format!("Bitwise operations are not defined for {}", left), None);
+                            Ty::Any
+                        } else {
+                            left
+                        }
+                    } else {
+                        unreachable!()
+                    }
+                } else if (left == Ty::Int || left == Ty::Any) && (right == Ty::Int || right == Ty::Any) {
                     Ty::Int
                 } else if *op == BinOp::Shl && matches!(left, Ty::List(_)) {
                     self.error(
@@ -653,10 +694,7 @@ fn check_expr_control_and_functions(&mut self, expr: &Expr) -> Ty {
             if *expected == Ty::Any {
                 continue;
             }
-            if expected.is_numeric() && actual.is_numeric() {
-                continue;
-            }
-            if !expected.assignable_from(actual) && *actual != Ty::Any {
+            if !expected.accepts_argument(actual) {
                 let hint = self.type_mismatch_hint(expected, actual);
                 self.error(
                     span,

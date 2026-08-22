@@ -1,0 +1,37 @@
+use "../schema.rad"
+use "../owners/decision_owner.rad"
+use "../owners/decision_owner.rad" as decisions
+use "../systems/adjudication.rad"
+use "../host/risk_model.rad" as model
+
+pub fn risk_input(index: int, transaction_offset: int) -> RiskInput {
+    let signals: u64 = if index % 4 == 0 { u64(2) } else if index % 4 == 1 { u64(8) } else if index % 4 == 2 { u64(4) } else { u64(1) }
+    return RiskInput {
+        customer: CustomerId(u64(index + 1)),
+        transaction: TransactionId(u64(transaction_offset + index + 1)),
+        amount: MoneyCents(i64(1000 + index * 100)),
+        merchant_category: u16(5411),
+        country: u16(156),
+        signals: RiskSignals(signals),
+        model: ModelId(u32(17)),
+    }
+}
+
+pub fn run_differential_corpus(count: int) -> entity {
+    let mut first_attempt: entity = decisions.register_customer(CustomerId(u64(0)))
+    for i in range(0, count) {
+        let customer: entity = decisions.register_customer(CustomerId(u64(i + 1)))
+        let request: RiskInput = risk_input(i, 0)
+        let native_attempt: entity = adjudicate_native(customer, request, u64(i))
+        let reference_output: RiskOutput = model.score_reference(request)
+        if i == 0 { first_attempt = native_attempt }
+        let native_score: ModelScore = require(native_attempt, ModelScore)
+        let native_decision: PolicyDecision = require(native_attempt, PolicyDecision)
+        assert(native_score.score == reference_output.score, "native and RAD scores agree")
+        assert(native_score.reason_mask == reference_output.reason_mask, "reason flags agree")
+        assert(native_decision.disposition == reference_output.disposition, "policy outcomes agree")
+    }
+    flush_events()
+    assert(res(DecisionAudit).committed == count, "every decision published exactly once")
+    return first_attempt
+}

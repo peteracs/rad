@@ -18,6 +18,7 @@ pub struct CheckerOutput {
     pub(crate) functions: HashMap<String, crate::checker::FunctionSig>,
     pub(crate) systems: HashMap<String, SystemType>,
     pub(crate) sum_types: HashMap<String, SumTypeDef>,
+    pub(crate) events: HashMap<String, EventType>,
     /// StateRef nodes the checker resolved as zero-field sum variant constructors.
     /// Keyed by (type_name, variant_name) so the compiler can emit MakeVariant
     /// without re-deriving the disambiguation.
@@ -39,29 +40,43 @@ impl CheckerOutput {
     }
 }
 
+/// Absorb one length-prefixed segment.
+///
+/// The length prefix is what stops two different field splits from hashing
+/// identically ("ab" + "c" must not collide with "a" + "bc"). Both
+/// fingerprints defined their own copy of this, so the property held only as
+/// long as nobody edited one of them.
+fn update_segment(hasher: &mut blake3::Hasher, bytes: &[u8]) {
+    hasher.update(&(bytes.len() as u64).to_le_bytes());
+    hasher.update(bytes);
+}
+
 pub(crate) fn semantic_program_fingerprint(
     program: &crate::ast::Program,
-    aliases: &HashMap<String, Vec<crate::ast::Decl>>,
+    aliases: &HashMap<String, crate::ast::ModuleAlias>,
     options: &crate::checker::CheckerOptions,
 ) -> [u8; 32] {
-    fn update_segment(hasher: &mut blake3::Hasher, bytes: &[u8]) {
-        hasher.update(&(bytes.len() as u64).to_le_bytes());
-        hasher.update(bytes);
-    }
-
     let mut hasher = blake3::Hasher::new();
-    hasher.update(b"RAD_CHECKED_PROGRAM_V2");
-    let program_debug = format!("{program:#?}");
+    hasher.update(b"RAD_CHECKED_PROGRAM_V3");
+    let mut normalized_program = program.clone();
+    super::semantic_input::normalize_program(&mut normalized_program, aliases);
+    let program_debug = format!("{normalized_program:#?}");
     update_segment(&mut hasher, program_debug.as_bytes());
-    let mut alias_names = aliases.keys().collect::<Vec<_>>();
-    alias_names.sort();
-    for alias in alias_names {
-        update_segment(&mut hasher, alias.as_bytes());
-        let declarations = format!("{:#?}", aliases[alias]);
+    let mut modules = std::collections::BTreeMap::new();
+    for binding in aliases.values() {
+        modules
+            .entry(binding.module_identity())
+            .or_insert(binding.declarations());
+    }
+    for (module_identity, declarations) in modules {
+        update_segment(&mut hasher, module_identity.as_bytes());
+        let mut declarations = declarations.to_vec();
+        super::semantic_input::normalize_declarations(&mut declarations, aliases);
+        let declarations = format!("{declarations:#?}");
         update_segment(&mut hasher, declarations.as_bytes());
     }
     let mut features = options.features.clone();
-    features.sort();
+    features.sort_unstable();
     features.dedup();
     for feature in features {
         update_segment(&mut hasher, feature.as_bytes());
@@ -75,11 +90,6 @@ pub(crate) fn semantic_program_fingerprint(
 }
 
 pub(crate) fn semantic_product_fingerprint(output: &CheckerOutput) -> [u8; 32] {
-    fn update_segment(hasher: &mut blake3::Hasher, bytes: &[u8]) {
-        hasher.update(&(bytes.len() as u64).to_le_bytes());
-        hasher.update(bytes);
-    }
-
     fn update_debug_map<K: std::fmt::Debug, V: std::fmt::Debug>(
         hasher: &mut blake3::Hasher,
         values: &HashMap<K, V>,
@@ -88,7 +98,7 @@ pub(crate) fn semantic_product_fingerprint(output: &CheckerOutput) -> [u8; 32] {
             .iter()
             .map(|(key, value)| format!("{key:?}\0{value:#?}"))
             .collect::<Vec<_>>();
-        entries.sort();
+        entries.sort_unstable();
         for entry in entries {
             update_segment(hasher, entry.as_bytes());
         }
@@ -111,15 +121,16 @@ pub(crate) fn semantic_product_fingerprint(output: &CheckerOutput) -> [u8; 32] {
     update_debug_map(&mut hasher, &output.functions);
     update_debug_map(&mut hasher, &output.systems);
     update_debug_map(&mut hasher, &output.sum_types);
+    update_debug_map(&mut hasher, &output.events);
     let mut variants = output.variant_shorthand.iter().collect::<Vec<_>>();
-    variants.sort();
+    variants.sort_unstable();
     update_segment(&mut hasher, format!("{variants:#?}").as_bytes());
     let mut spreads = output
         .spread_lengths
         .iter()
         .map(|(span, length)| format!("{span:?}\0{length}"))
         .collect::<Vec<_>>();
-    spreads.sort();
+    spreads.sort_unstable();
     update_segment(&mut hasher, format!("{spreads:#?}").as_bytes());
     update_debug_map(&mut hasher, &output.type_redirects);
     update_segment(&mut hasher, format!("{:#?}", output.authority).as_bytes());

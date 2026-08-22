@@ -2,22 +2,25 @@
 
 
 
-fn check_causal_source(source: &str) -> Vec<crate::checker::TypeError> {
-    let mut lexer = Lexer::new(source);
-    let (tokens, lex_errors) = lexer.tokenize();
-    assert!(lex_errors.is_empty(), "lex errors: {lex_errors:?}");
-    let mut parser = Parser::new(tokens);
-    let program = parser.parse();
-    assert!(
-        parser.errors().is_empty(),
-        "parse errors: {:?}",
-        parser.errors()
-    );
-    let mut checker = Checker::new_with_options(CheckerOptions {
+fn causal_checker_options() -> CheckerOptions {
+    CheckerOptions {
         features: vec![FEATURE.to_string()],
         ..CheckerOptions::default()
-    });
-    checker.check(&program)
+    }
+}
+
+fn parse_causal_source(source: &str) -> crate::ast::Program {
+    crate::test_support::parse_program(source, crate::parser::ParserOptions::default())
+        .expect("causal test source must parse")
+}
+
+fn check_causal_source(source: &str) -> Vec<crate::checker::TypeError> {
+    crate::test_support::check_source_with(
+        source,
+        crate::parser::ParserOptions::default(),
+        causal_checker_options(),
+    )
+    .errors
 }
 
 #[test]
@@ -31,14 +34,7 @@ constraint WorldBounds for Position(subject, proposed) {
     require proposed.x >= 0 else "position.below_min"
 }
 "#;
-    let mut lexer = Lexer::new(source);
-    let (tokens, lex_errors) = lexer.tokenize();
-    assert!(lex_errors.is_empty());
-    let mut parser = Parser::new(tokens);
-    let program = parser.parse();
-    assert!(parser.errors().is_empty());
-    let mut checker = Checker::new();
-    let errors = checker.check(&program);
+    let errors = crate::test_support::check_source(source).errors;
     assert!(
         errors
             .iter()
@@ -219,26 +215,26 @@ settle {
     }
 }
 "#;
-    let mut lexer = Lexer::new(source);
-    let (tokens, lex_errors) = lexer.tokenize();
-    assert!(lex_errors.is_empty(), "lex errors: {lex_errors:?}");
-    let mut parser = Parser::new(tokens);
-    let program = parser.parse();
-    assert!(
-        parser.errors().is_empty(),
-        "parse errors: {:?}",
-        parser.errors()
+    let program = parse_causal_source(source);
+    let analysis = crate::pipeline::analyze_program(
+        &program,
+        &std::collections::HashMap::new(),
+        causal_checker_options(),
     );
-    let mut checker = Checker::new_with_options(CheckerOptions {
-        features: vec![FEATURE.to_string()],
-        ..CheckerOptions::default()
-    });
-    let errors = checker.check(&program);
-    assert!(errors.is_empty(), "check errors: {errors:?}");
-    let error = Compiler::new()
-        .with_checker_output(checker.output())
-        .with_features(vec![FEATURE.to_string()])
-        .compile(&program)
+    assert!(
+        analysis.errors().is_empty(),
+        "check errors: {:?}",
+        analysis.errors()
+    );
+    let checked = analysis
+        .into_checked()
+        .expect("error-free causal analysis must produce checked semantics");
+    let error = crate::pipeline::compile_checked_program(
+        &program,
+        std::collections::HashMap::new(),
+        checked,
+        crate::pipeline::CheckedCompileOptions::default(),
+    )
         .expect_err("causal map iterator needs mutable heap cursor state");
     assert!(
         error
@@ -251,15 +247,15 @@ settle {
 #[test]
 fn compiler_rejects_cross_settlement_loop_escape_without_checker_output() {
     let source = "while true { settle { break } }";
-    let mut lexer = Lexer::new(source);
-    let (tokens, lex_errors) = lexer.tokenize();
-    assert!(lex_errors.is_empty());
-    let mut parser = Parser::new(tokens);
-    let program = parser.parse();
-    assert!(parser.errors().is_empty());
-    let error = Compiler::new()
-        .with_features(vec![FEATURE.to_string()])
-        .compile(&program)
+    let program = parse_causal_source(source);
+    let error = crate::pipeline::compile_unchecked_program(
+        &program,
+        std::collections::HashMap::new(),
+        crate::pipeline::UncheckedCompileOptions {
+            features: vec![FEATURE.to_string()],
+            ..crate::pipeline::UncheckedCompileOptions::default()
+        },
+    )
         .expect_err("compiler must defend against a bypassed checker");
     assert_eq!(error.message, "`break` cannot cross a settlement boundary");
 }
@@ -343,26 +339,26 @@ fn malformed_host_function_cannot_return_with_active_settlement() {
 }
 
 pub(crate) fn compile_vm(source: &str) -> VM {
-    let mut lexer = Lexer::new(source);
-    let (tokens, lex_errors) = lexer.tokenize();
-    assert!(lex_errors.is_empty(), "lex errors: {lex_errors:?}");
-    let mut parser = Parser::new(tokens);
-    let program = parser.parse();
-    assert!(
-        parser.errors().is_empty(),
-        "parse errors: {:?}",
-        parser.errors()
+    let program = parse_causal_source(source);
+    let analysis = crate::pipeline::analyze_program(
+        &program,
+        &std::collections::HashMap::new(),
+        causal_checker_options(),
     );
-    let mut checker = Checker::new_with_options(CheckerOptions {
-        features: vec![FEATURE.to_string()],
-        ..CheckerOptions::default()
-    });
-    let errors = checker.check(&program);
-    assert!(errors.is_empty(), "check errors: {errors:?}");
-    let result = Compiler::new()
-        .with_checker_output(checker.output())
-        .with_features(vec![FEATURE.to_string()])
-        .compile(&program)
+    assert!(
+        analysis.errors().is_empty(),
+        "check errors: {:?}",
+        analysis.errors()
+    );
+    let checked = analysis
+        .into_checked()
+        .expect("error-free causal analysis must produce checked semantics");
+    let result = crate::pipeline::compile_checked_program(
+        &program,
+        std::collections::HashMap::new(),
+        checked,
+        crate::pipeline::CheckedCompileOptions::default(),
+    )
         .expect("compile causal source");
     let mut vm = VM::new_with_seed(7);
     vm.suppress_output();
@@ -371,34 +367,31 @@ pub(crate) fn compile_vm(source: &str) -> VM {
 }
 
 fn compile_vm_with_alias(source: &str, alias: &str, module_source: &str) -> VM {
-    let parse = |text: &str| {
-        let mut lexer = Lexer::new(text);
-        let (tokens, lex_errors) = lexer.tokenize();
-        assert!(lex_errors.is_empty(), "lex errors: {lex_errors:?}");
-        let mut parser = Parser::new(tokens);
-        let program = parser.parse();
-        assert!(
-            parser.errors().is_empty(),
-            "parse errors: {:?}",
-            parser.errors()
-        );
-        program
-    };
-    let program = parse(source);
-    let module = parse(module_source);
-    let aliases = std::collections::HashMap::from([(alias.to_string(), module.declarations)]);
-    let mut checker = Checker::new_with_options(CheckerOptions {
-        features: vec![FEATURE.to_string()],
-        ..CheckerOptions::default()
-    });
-    checker.set_aliases(aliases.clone());
-    let errors = checker.check(&program);
-    assert!(errors.is_empty(), "check errors: {errors:?}");
-    let result = Compiler::new()
-        .with_aliases(aliases)
-        .with_checker_output(checker.output())
-        .with_features(vec![FEATURE.to_string()])
-        .compile(&program)
+    let program = parse_causal_source(source);
+    let module = parse_causal_source(module_source);
+    let aliases = std::collections::HashMap::from([(
+        alias.to_string(),
+        crate::ast::ModuleAlias::namespaced(
+            module.declarations,
+            format!("test:{alias}"),
+        ),
+    )]);
+    let analysis =
+        crate::pipeline::analyze_program(&program, &aliases, causal_checker_options());
+    assert!(
+        analysis.errors().is_empty(),
+        "check errors: {:?}",
+        analysis.errors()
+    );
+    let checked = analysis
+        .into_checked()
+        .expect("error-free aliased analysis must produce checked semantics");
+    let result = crate::pipeline::compile_checked_program(
+        &program,
+        aliases,
+        checked,
+        crate::pipeline::CheckedCompileOptions::default(),
+    )
         .expect("compile aliased causal source");
     let mut vm = VM::new();
     vm.suppress_output();

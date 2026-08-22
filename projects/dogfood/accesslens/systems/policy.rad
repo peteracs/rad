@@ -1,0 +1,18 @@
+use "../schema.rad"
+use "../owners/access_owner.rad" as owner
+
+on EntitlementRevoked(evt) {
+    emit next AccessDecisionPublished { user: evt.user, allowed: false }
+}
+
+on AccessDecisionPublished(evt) {
+    assert(require(evt.user, AccessDecision).allowed == evt.allowed, "published decision matches committed state")
+}
+
+pub fn expire_contractor(user: entity, batch: RevocationBatchId) -> nil {
+    owner.RevokeProductionAccess(user, batch, "HR contract expired")
+}
+
+pub fn improve_device_posture(user: entity) -> nil {
+    owner.SetDeviceTrust(user, 3)
+}

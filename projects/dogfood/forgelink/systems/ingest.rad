@@ -1,0 +1,26 @@
+use "../schema.rad"
+use "../owners/telemetry.rad"
+
+pub fn decode_frame(bytes: any) -> TelemetryFrame {
+    return TelemetryFrame {
+        device: decode_le(bytes, 0, DeviceId),
+        sequence: decode_le(bytes, 4, u32),
+        status: decode_le(bytes, 8, DeviceStatus),
+        temperature: decode_le(bytes, 10, f32),
+        checksum: decode_le(bytes, 14, u16),
+    }
+}
+
+pub fn canonical_frame_bytes(frame: TelemetryFrame) -> list {
+    return [
+        bytebuf_to_list(encode_le(frame.device)),
+        bytebuf_to_list(encode_le(frame.sequence)),
+        bytebuf_to_list(encode_le(frame.status)),
+        bytebuf_to_list(encode_le(frame.temperature)),
+        bytebuf_to_list(encode_le(frame.checksum)),
+    ]
+}
+
+pub fn ingest(bytes: any, target: entity) -> nil {
+    StoreFrame(target, decode_frame(bytes))
+}

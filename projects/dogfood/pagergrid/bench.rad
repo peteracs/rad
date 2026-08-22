@@ -1,0 +1,12 @@
+use "schema.rad"
+use "systems/routing.rad"
+use "scenarios/production.rad"
+
+fn main() -> nil {
+    assert(seed_alerts(50000) == 50000, "50k alert corpus seeded")
+    schedule [RouteCritical, RouteRoutine]
+    assert(len(entities(Incident)) == 50000, "50k incidents retained")
+    assert(len(entities(EscalationState)) == 5000, "critical routes exact")
+    assert(len(entities(NotificationState)) == 45000, "routine routes exact")
+    print("pagergrid-bench: ok incidents=50000")
+}

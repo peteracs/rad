@@ -1,0 +1,13 @@
+use "schema.rad"
+use "owners/catalog_owner.rad"
+use "scenarios/production.rad"
+
+fn main() -> nil {
+    seed_catalog(1000000)
+    assert(len(entities(SellableProducts)) > 800000, "million-product view maintained")
+    for i in range(1, 50001) {
+        let catalog_item: entity = lookup(Product, "product_id", ProductId(u64(i))) |> unwrap
+        SetInventory(catalog_item, i % 23)
+    }
+    print(f"marketlens-bench: products=1000000 updates=50000 revision={revision(SellableProducts)}")
+}

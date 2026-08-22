@@ -1,12 +1,9 @@
     fn authority_src(src: &str) -> (Vec<TypeError>, crate::types::AuthorityReport) {
-        use crate::lexer::Lexer;
-        use crate::parser::Parser;
-
-        let tokens = Lexer::new(src).tokenize().0;
-        let program = Parser::new(tokens).parse();
-        let mut checker = Checker::new();
-        let errors = checker.check(&program);
-        (errors, checker.output().authority)
+        let checked = crate::test_support::check_source(src);
+        // `authority_report()` rather than `output()`: these tests want the
+        // graph, not the compiler's semantic product and its fingerprint.
+        let (authority, _) = checked.checker.authority_report();
+        (checked.errors, authority)
     }
 
     #[test]
@@ -333,6 +330,10 @@
                 .iter()
                 .any(|error| error.message.contains("exceeds its declared authority")),
             "callers must not inherit each other's callback effects: {errors:?}"
+        );
+        assert_eq!(
+            report.path("SystemX", "invoke").unwrap().unwrap(),
+            vec!["SystemX", "invoke"]
         );
     }
 
@@ -763,6 +764,7 @@
             system Publish(
                 root: Root,
                 writes Named,
+                writes "$entities",
                 writes "$entity_names",
                 writes "$entity_identity"
             ) {
@@ -786,7 +788,7 @@
         );
         assert_eq!(
             report.resolve("Publish").unwrap().synchronous.writes,
-            vec!["$entity_identity", "$entity_names", "Named"]
+            vec!["$entities", "$entity_identity", "$entity_names", "Named"]
         );
     }
 

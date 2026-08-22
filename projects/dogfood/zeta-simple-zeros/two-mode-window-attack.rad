@@ -1,0 +1,185 @@
+// Twenty-five-way bandwidth-one window barrage.  The two added cosine modes
+// have zero integral, preserving normalization while attacking the active
+// near-integer six-gap configuration in two independent directions.
+
+use "../native-math-kernels/math_kernels.rad"
+
+let SCALE = 1000000000
+let TARGET = 700000000
+
+resource TwoModeUniverse {
+    first_micros: int = 0
+    second_micros: int = 0
+    baseline_scaled: int = 0
+    local_c_scaled: int = 0
+    block_size: int = 0
+    bound_scaled: int = 0
+    gaps_micros: list = []
+    evaluated: bool = false
+}
+
+system EvaluateTwoMode(candidate: mut TwoModeUniverse) {
+    let report = zeta_perturbed_window_two_mode_scout(
+        candidate.first_micros,
+        candidate.second_micros,
+    )
+    candidate = TwoModeUniverse {
+        first_micros: candidate.first_micros,
+        second_micros: candidate.second_micros,
+        baseline_scaled: report["baseline_scaled"],
+        local_c_scaled: report["local_c_scaled"],
+        block_size: report["best_block_size"],
+        bound_scaled: report["simple_bound_scaled"],
+        gaps_micros: report["minimizing_gaps_micros"],
+        evaluated: true,
+    }
+}
+
+component TwoModeExpectation {
+    proposal_count: int = 0
+}
+
+component TwoModeSelection {
+    proposal_count: int = 0
+    cells_seen: list = []
+    best: TwoModeUniverse = TwoModeUniverse {}
+    crossings: int = 0
+}
+
+intent TwoModeFinding {
+    key target: entity
+    candidate: TwoModeUniverse
+}
+
+law SubmitTwoMode(target: entity, candidate: TwoModeUniverse) {
+    propose TwoModeFinding { target: target, candidate: candidate }
+}
+
+resolver SelectTwoMode for TwoModeFinding(target, proposals) {
+    let mut cells = []
+    let mut best = TwoModeUniverse {}
+    let mut crossings = 0
+    for proposal in proposals {
+        let candidate = proposal.candidate
+        assert(candidate.evaluated, "unevaluated two-mode branch")
+        let cell = f"{candidate.first_micros}:{candidate.second_micros}"
+        assert(not contains(cells, cell), "duplicate two-mode branch")
+        cells = push(cells, cell)
+        if candidate.bound_scaled >= TARGET {
+            crossings = crossings + 1
+        }
+        if candidate.bound_scaled > best.bound_scaled {
+            best = candidate
+        }
+    }
+    next(target, TwoModeSelection {
+        proposal_count: len(proposals),
+        cells_seen: cells,
+        best: best,
+        crossings: crossings,
+    })
+}
+
+constraint CompleteTwoModeGrid
+for TwoModeSelection(subject, proposed)
+watches TwoModeExpectation
+{
+    let expected = candidate(subject, TwoModeExpectation)
+    require proposed.proposal_count == expected.proposal_count else "zeta.70.two_mode_count"
+    require len(proposed.cells_seen) == expected.proposal_count else "zeta.70.two_mode_partition"
+    require proposed.best.evaluated else "zeta.70.two_mode_selection"
+}
+
+entity two_mode_judge {
+    TwoModeExpectation {}
+    TwoModeSelection {}
+}
+
+entity reversed_two_mode_judge {
+    TwoModeExpectation {}
+    TwoModeSelection {}
+}
+
+event TwoModeReady {
+    target: entity
+    candidates: list
+    reversed: bool
+}
+
+on TwoModeReady(evt) {
+    settle {
+        if evt.reversed {
+            for index in range(len(evt.candidates)) {
+                SubmitTwoMode(evt.target, evt.candidates[len(evt.candidates) - index - 1])
+            }
+        } else {
+            for candidate in evt.candidates {
+                SubmitTwoMode(evt.target, candidate)
+            }
+        }
+    }
+}
+
+fn main() -> nil {
+    let first_grid = [0, 2500, 5000, 7500, 10000]
+    let second_grid = [-15000, -12500, -10000, -7500, -5000]
+    let root = fork()
+    let before = world_digest()
+    let mut worlds = []
+    for first in first_grid {
+        for second in second_grid {
+            worlds = push(worlds, fork_with(root, TwoModeUniverse {
+                first_micros: first,
+                second_micros: second,
+            }))
+        }
+    }
+    let futures = simulate_many(worlds, [system::EvaluateTwoMode], 1, 2099)
+    assert(world_digest() == before, "two-mode speculation leaked")
+
+    let mut reports = []
+    let mut wire_digests = []
+    for future in futures {
+        assert_only_changed(root, future, [TwoModeUniverse])
+        let restored = fork_from_bytes(fork_to_bytes(future)) |> unwrap
+        assert(world_digest(restored) == world_digest(future), "two-mode wire mismatch")
+        reports = push(reports, peek_resource(restored, TwoModeUniverse) |> unwrap)
+        wire_digests = push(wire_digests, world_digest(restored))
+    }
+    let speculation_isolated = world_digest() == before
+
+    set(two_mode_judge, TwoModeExpectation { proposal_count: len(reports) })
+    set(reversed_two_mode_judge, TwoModeExpectation { proposal_count: len(reports) })
+    emit TwoModeReady { target: two_mode_judge, candidates: reports, reversed: false }
+    emit TwoModeReady { target: reversed_two_mode_judge, candidates: reports, reversed: true }
+    flush_events()
+    let selected = require(two_mode_judge, TwoModeSelection)
+    let reversed = require(reversed_two_mode_judge, TwoModeSelection)
+    assert(selected == reversed, "two-mode selection depends on proposal order")
+
+    let receipt: map<str, any> = {
+        "schema": "rad.zeta-two-mode-window-attack.v1",
+        "rigorous": false,
+        "target_scaled": TARGET,
+        "scouts": reports,
+        "selection": selected,
+        "crosses_target_numerically": selected.best.bound_scaled >= TARGET,
+        "proposal_order_independent": selected == reversed,
+        "speculation_isolated": speculation_isolated,
+        "wire_digests": wire_digests,
+        "selection_why": why(two_mode_judge, TwoModeSelection),
+    }
+    create_dir("projects/dogfood/zeta-simple-zeros/out")
+    write_file(
+        "projects/dogfood/zeta-simple-zeros/out/two-mode-window-attack.json",
+        json_stringify(receipt),
+    )
+    print("25-way two-mode bandwidth-one attack")
+    print("best coefficients:", selected.best.first_micros, selected.best.second_micros)
+    print("best baseline:", selected.best.baseline_scaled, "/", SCALE)
+    print("best local C:", selected.best.local_c_scaled, "/", SCALE)
+    print("best block:", selected.best.block_size)
+    print("best bound:", selected.best.bound_scaled, "/", SCALE)
+    print("crossings:", selected.crossings)
+    print(why(two_mode_judge, TwoModeSelection))
+}

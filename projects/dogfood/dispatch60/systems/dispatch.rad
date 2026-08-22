@@ -1,0 +1,24 @@
+use "../schema.rad"
+use "../owners/fleet_owner.rad"
+
+fn advance_one(target: entity) -> nil {
+    advance_trip(target)
+}
+
+@frame
+@no_full_scan
+@no_guest_allocation
+@budget(instructions: 80000)
+pub system AdvanceActiveTrips(
+    reads ActiveTrip,
+    reads VehicleProfile,
+    reads TripPosition,
+    reads TripVelocity,
+    writes TripPosition,
+) {
+    visit_view(ActiveTrips, advance_one)
+}
+
+pub fn global_capacity() -> int {
+    return len(entities(VehicleProfile))
+}

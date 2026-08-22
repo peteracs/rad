@@ -783,4 +783,5 @@ impl Checker {
 
     fn check_match(&mut self, stmt: &MatchStmt) -> Ty {
         self.check_match_with_mode(stmt, true)
-    }}
+    }
+}

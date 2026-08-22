@@ -133,30 +133,18 @@ mod tests {
         let start =
             or_deletion_rollout(&[], 6, 48, usize::MAX, 1979, OrDeletionObjective::MaxMin, 0)
                 .unwrap();
-        let left = or_exchange_rollout(
-            &start.deleted,
-            6,
-            12,
-            64,
-            2026,
-            OrDeletionObjective::MaxMin,
-            0,
-            OrExchangeAcceptance::NonWorsening,
-            1,
-        )
-        .unwrap();
-        let right = or_exchange_rollout(
-            &start.deleted,
-            6,
-            12,
-            64,
-            2026,
-            OrDeletionObjective::MaxMin,
-            0,
-            OrExchangeAcceptance::NonWorsening,
-            1,
-        )
-        .unwrap();
+        let config = OrExchangeConfig {
+            width: 6,
+            steps: 12,
+            choices_per_step: 64,
+            seed: 2026,
+            objective: OrDeletionObjective::MaxMin,
+            minimum_density_per_mille: 0,
+            acceptance: OrExchangeAcceptance::NonWorsening,
+            repair_beam_width: 1,
+        };
+        let left = or_exchange_rollout(&start.deleted, config).unwrap();
+        let right = or_exchange_rollout(&start.deleted, config).unwrap();
         assert_eq!(left.deleted, right.deleted);
         assert_eq!(left.state.family_size, start.state.family_size);
         assert!(left.state.separating);
@@ -179,30 +167,18 @@ mod tests {
         let start =
             or_deletion_rollout(&[], 6, 48, usize::MAX, 1979, OrDeletionObjective::MaxMin, 0)
                 .unwrap();
-        let left = or_exchange_rollout(
-            &start.deleted,
-            6,
-            24,
-            16,
-            8675309,
-            OrDeletionObjective::MaxMin,
-            0,
-            OrExchangeAcceptance::Exploratory,
-            4,
-        )
-        .unwrap();
-        let right = or_exchange_rollout(
-            &start.deleted,
-            6,
-            24,
-            16,
-            8675309,
-            OrDeletionObjective::MaxMin,
-            0,
-            OrExchangeAcceptance::Exploratory,
-            4,
-        )
-        .unwrap();
+        let config = OrExchangeConfig {
+            width: 6,
+            steps: 24,
+            choices_per_step: 16,
+            seed: 8675309,
+            objective: OrDeletionObjective::MaxMin,
+            minimum_density_per_mille: 0,
+            acceptance: OrExchangeAcceptance::Exploratory,
+            repair_beam_width: 4,
+        };
+        let left = or_exchange_rollout(&start.deleted, config).unwrap();
+        let right = or_exchange_rollout(&start.deleted, config).unwrap();
         assert_eq!(left.deleted, right.deleted);
         assert_eq!(left.state.family_size, start.state.family_size);
         assert!(left.state.separating);
@@ -216,28 +192,23 @@ mod tests {
         let start =
             or_deletion_rollout(&[], 6, 48, usize::MAX, 1979, OrDeletionObjective::MaxMin, 0)
                 .unwrap();
-        let greedy = or_exchange_rollout(
-            &start.deleted,
-            6,
-            1,
-            64,
-            99,
-            OrDeletionObjective::MaxMin,
-            0,
-            OrExchangeAcceptance::NonWorsening,
-            1,
-        )
-        .unwrap();
+        let config = OrExchangeConfig {
+            width: 6,
+            steps: 1,
+            choices_per_step: 64,
+            seed: 99,
+            objective: OrDeletionObjective::MaxMin,
+            minimum_density_per_mille: 0,
+            acceptance: OrExchangeAcceptance::NonWorsening,
+            repair_beam_width: 1,
+        };
+        let greedy = or_exchange_rollout(&start.deleted, config).unwrap();
         let beamed = or_exchange_rollout(
             &start.deleted,
-            6,
-            1,
-            64,
-            99,
-            OrDeletionObjective::MaxMin,
-            0,
-            OrExchangeAcceptance::NonWorsening,
-            8,
+            OrExchangeConfig {
+                repair_beam_width: 8,
+                ..config
+            },
         )
         .unwrap();
         let greedy_machine = IncrementalOrDeletion::new(&greedy.deleted, 6).unwrap();

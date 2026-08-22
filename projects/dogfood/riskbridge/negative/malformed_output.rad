@@ -1,0 +1,5 @@
+use "fixture_adapter.rad"
+
+let _output = decode_risk_output(
+    fixture_score("target/riskbridge-fixtures/malformed_output.dll"),
+)

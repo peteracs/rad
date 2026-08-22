@@ -1,0 +1,10 @@
+component Product { active: bool = false }
+
+fn rebuild_catalog() -> list<entity> {
+    return entities(Product)
+}
+
+@frame
+system RenderCatalog() {
+    let products = rebuild_catalog()
+}

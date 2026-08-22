@@ -1,0 +1,8 @@
+component Root {}
+component IncidentTimeline { entries: int = 0 }
+event Paged { incident: entity }
+on Paged(page) { set(page.incident, IncidentTimeline { entries: 1 }) }
+system RouteIncident(_root: Root, emits Paged) {
+    emit Paged { incident: self }
+    flush_events()
+}

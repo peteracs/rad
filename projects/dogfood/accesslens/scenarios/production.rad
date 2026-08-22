@@ -1,0 +1,50 @@
+use "../schema.rad"
+use "../owners/access_owner.rad"
+use "../systems/policy.rad"
+
+pub fn seed_directory(user_count: int) -> nil {
+    let mut i = 0
+    while i < user_count {
+        publish_user(
+            UserId(u64(i + 1)),
+            if i == 0 { "Alice" } else { f"Employee {i + 1}" },
+            i != 0,
+        )
+        i = i + 1
+    }
+    assert(len(entities(UserIdentity)) == user_count, "directory publication is complete")
+}
+
+pub fn run_access_incident(user_count: int) -> entity {
+    seed_directory(user_count)
+    let alice = user_by_id(UserId(u64(1)))
+
+    assert(contains(why_not_in_view(ProductionDeployers, alice), "DeviceTrust.level >= 2"), "why-not names the failed predicate")
+
+    improve_device_posture(alice)
+    assert(contains(why_field(alice, DeviceTrust, "level"), "SetDeviceTrust"), "field provenance names its transaction")
+    assert(contains(why_revision_changed(ProductionDeployers), "entered"), "view entry has a revision cause")
+
+    let stable_revision = revision(ProductionDeployers)
+    RenameUser(alice, "Alice Chen")
+    assert(revision(ProductionDeployers) == stable_revision, "nonpredicate field does not move the view revision")
+    assert(contains(why_revision_did_not_change(ProductionDeployers, stable_revision), "stayed"), "stable revision is explainable")
+
+    expire_contractor(alice, RevocationBatchId(u64(771)))
+    flush_events()
+    flush_events()
+    let denied_reason = why_not_in_view(ProductionDeployers, alice)
+    assert(contains(denied_reason, "missing Entitlement"), denied_reason)
+    assert(contains(why_removed(alice, Entitlement), "RevokeProductionAccess"), "tombstone retains the transaction cause")
+    assert(contains(why_missing(Entitlement, UserId(u64(1))), "RevokeProductionAccess"), "missing indexed value retains the cause")
+
+    let explanation_before_wire = why_removed(alice, Entitlement)
+    let digest_before_wire = world_digest()
+    let restored = fork_from_bytes(fork_to_bytes(fork())) |> unwrap
+    assert(world_digest(restored) == digest_before_wire, "wire snapshot preserves authoritative state")
+    commit(restored)
+    assert(contains(why_removed(alice, Entitlement), "RevokeProductionAccess"), "wire restoration preserves provenance")
+    assert(contains(why_removed(alice, Entitlement), "wire"), "restored provenance discloses its origin")
+    assert(explanation_before_wire != "", "pre-wire explanation was observable")
+    return alice
+}

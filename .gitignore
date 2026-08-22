@@ -115,6 +115,7 @@ Trace-*.json
 
 # Generated reports
 /reports/
+/artifacts/
 
 # Docs site (mdBook)
 /docs/book/
@@ -123,3 +124,12 @@ Trace-*.json
 # Dev scratch / temp files
 /temp/
 /scratch/
+
+# .NET devtools build output (devtools/rustc-memory*)
+devtools/**/bin/
+devtools/**/obj/
+
+# Local compiler-profiling artifacts
+*.etl
+*.etlx
+*.mm_profdata

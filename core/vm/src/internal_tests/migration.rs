@@ -1,9 +1,6 @@
 //! Schema migration tests (list item #5): `save_world()` / `load_world()`
 //! and the `migrate X(old) { … }` declaration.
 
-use crate::compiler::Compiler;
-use crate::lexer::Lexer;
-use crate::parser::Parser;
 use crate::value::{Builtin, Value};
 use crate::vm::VM;
 

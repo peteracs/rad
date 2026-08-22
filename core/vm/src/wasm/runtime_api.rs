@@ -1,16 +1,74 @@
-
-
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 impl RadRuntime {
-    fn checker() -> Checker {
-        Checker::new_with_options(CheckerOptions {
+    fn checker_options() -> CheckerOptions {
+        CheckerOptions {
             features: vec!["causal_laws".to_string()],
             ..CheckerOptions::default()
-        })
+        }
     }
 
-    fn compiler() -> Compiler {
-        Compiler::new().with_features(vec!["causal_laws".to_string()])
+    fn analyze_browser_source(
+        source: &str,
+        kind: BrowserSourceKind,
+    ) -> Result<(crate::ast::Program, crate::pipeline::SemanticAnalysis), String> {
+        let analyzed = crate::pipeline::analyze_source(
+            source,
+            crate::parser::ParserOptions::default(),
+            &std::collections::HashMap::new(),
+            Self::checker_options(),
+        );
+        let mut diagnostics = analyzed
+            .lexer_errors
+            .iter()
+            .map(|error| {
+                format!(
+                    "[line {}:{}] Lex error: {}",
+                    error.line, error.col, error.message
+                )
+            })
+            .collect::<Vec<_>>();
+        diagnostics.extend(analyzed.parser_errors.iter().map(|error| {
+            format!(
+                "[line {}:{}] Parse error: {}",
+                error.line, error.col, error.message
+            )
+        }));
+        if analyzed
+            .program
+            .declarations
+            .iter()
+            .any(|declaration| matches!(declaration, crate::ast::Decl::Use(_)))
+        {
+            diagnostics.push(kind.import_error().to_string());
+        }
+        diagnostics.extend(analyzed.semantic().errors().iter().map(|error| {
+            format!(
+                "[line {}:{}] Type error: {}",
+                error.line, error.col, error.message
+            )
+        }));
+        if diagnostics.is_empty() {
+            Ok(analyzed.into_parts())
+        } else {
+            Err(diagnostics.join("\n"))
+        }
+    }
+
+    fn compile_browser_source(
+        source: &str,
+        kind: BrowserSourceKind,
+    ) -> Result<crate::compiler::CompileResult, String> {
+        let (program, analysis) = Self::analyze_browser_source(source, kind)?;
+        let checked = analysis
+            .into_checked()
+            .map_err(|_| "error-free browser analysis did not produce checked semantics")?;
+        crate::pipeline::compile_checked_program(
+            &program,
+            std::collections::HashMap::new(),
+            checked,
+            crate::pipeline::CheckedCompileOptions::default(),
+        )
+        .map_err(|error| format!("Compile error: {}", error.message))
     }
 
     fn invalidate_presentation_stream(&mut self) {
@@ -223,59 +281,8 @@ impl RadRuntime {
         self.vm = VM::new();
         self.output.clear();
 
-        let mut lexer = Lexer::new(source);
-        let (tokens, lex_errors) = lexer.tokenize();
-
-        let mut parser = Parser::new(tokens);
-        let program = parser.parse();
-
-        let mut all_errors = Vec::new();
-
-        for e in lex_errors {
-            all_errors.push(format!(
-                "[line {}:{}] Lex error: {}",
-                e.line, e.col, e.message
-            ));
-        }
-
-        for e in parser.errors() {
-            all_errors.push(format!(
-                "[line {}:{}] Parse error: {}",
-                e.line, e.col, e.message
-            ));
-        }
-
-        if program
-            .declarations
-            .iter()
-            .any(|d| matches!(d, Decl::Use(_)))
-        {
-            return Err("Module imports are not supported in browser playground yet"
-                .to_string()
-                .into());
-        }
-
-        let mut checker = Self::checker();
-        let checker_errors = checker.check(&program);
-        let checker_output = checker.output();
-
-        for e in checker_errors {
-            all_errors.push(format!(
-                "[line {}:{}] Type error: {}",
-                e.line, e.col, e.message
-            ));
-        }
-
-        if !all_errors.is_empty() {
-            return Err(all_errors.join("\n").into());
-        }
-
-        let compile_result = Self::compiler()
-            .with_checker_output(checker_output)
-            .compile(&program)
-            .map_err(|e| {
-                crate::constraint_types::VmFailure::from(format!("Compile error: {}", e.message))
-            })?;
+        let compile_result = Self::compile_browser_source(source, BrowserSourceKind::Playground)
+            .map_err(crate::constraint_types::VmFailure::from)?;
         self.vm.load_compile_result(compile_result);
 
         self.vm.print_buffer.clear();
@@ -313,55 +320,7 @@ impl RadRuntime {
     }
 
     pub fn compile_only(&self, source: &str) -> Result<String, String> {
-        let mut lexer = Lexer::new(source);
-        let (tokens, lex_errors) = lexer.tokenize();
-
-        let mut parser = Parser::new(tokens);
-        let program = parser.parse();
-
-        let mut all_errors = Vec::new();
-
-        for e in lex_errors {
-            all_errors.push(format!(
-                "[line {}:{}] Lex error: {}",
-                e.line, e.col, e.message
-            ));
-        }
-
-        for e in parser.errors() {
-            all_errors.push(format!(
-                "[line {}:{}] Parse error: {}",
-                e.line, e.col, e.message
-            ));
-        }
-
-        if program
-            .declarations
-            .iter()
-            .any(|d| matches!(d, Decl::Use(_)))
-        {
-            return Err("Module imports are not supported in browser playground yet".to_string());
-        }
-
-        let mut checker = Self::checker();
-        let checker_errors = checker.check(&program);
-        let checker_output = checker.output();
-
-        for e in checker_errors {
-            all_errors.push(format!(
-                "[line {}:{}] Type error: {}",
-                e.line, e.col, e.message
-            ));
-        }
-
-        if !all_errors.is_empty() {
-            return Err(all_errors.join("\n"));
-        }
-
-        let compile_result = Self::compiler()
-            .with_checker_output(checker_output)
-            .compile(&program)
-            .map_err(|e| format!("Compile error: {}", e.message))?;
+        let compile_result = Self::compile_browser_source(source, BrowserSourceKind::Playground)?;
         let n = compile_result.chunks.len();
         let m = compile_result.systems.len();
         let k = compile_result.handlers.len();
@@ -372,50 +331,7 @@ impl RadRuntime {
     }
 
     pub fn check_source(&self, source: &str) -> Result<String, String> {
-        let mut lexer = Lexer::new(source);
-        let (tokens, lex_errors) = lexer.tokenize();
-
-        let mut parser = Parser::new(tokens);
-        let program = parser.parse();
-
-        let mut all_errors = Vec::new();
-
-        for e in lex_errors {
-            all_errors.push(format!(
-                "[line {}:{}] Lex error: {}",
-                e.line, e.col, e.message
-            ));
-        }
-
-        for e in parser.errors() {
-            all_errors.push(format!(
-                "[line {}:{}] Parse error: {}",
-                e.line, e.col, e.message
-            ));
-        }
-
-        if program
-            .declarations
-            .iter()
-            .any(|d| matches!(d, Decl::Use(_)))
-        {
-            return Err("Module imports are not supported in browser playground yet".to_string());
-        }
-
-        let mut checker = Self::checker();
-        let checker_errors = checker.check(&program);
-
-        for e in checker_errors {
-            all_errors.push(format!(
-                "[line {}:{}] Type error: {}",
-                e.line, e.col, e.message
-            ));
-        }
-
-        if !all_errors.is_empty() {
-            return Err(all_errors.join("\n"));
-        }
-
+        let _ = Self::analyze_browser_source(source, BrowserSourceKind::Playground)?;
         Ok("OK".to_string())
     }
 
@@ -737,6 +653,69 @@ impl RadRuntime {
         Ok(self.vm.ledger.explain_entity(eid, component, u64::MAX))
     }
 
+    /// Invoke a public RAD function through the same tagged JSON contract as
+    /// generated TypeScript declarations.
+    pub fn session_call(&mut self, name: &str, args_json: &str) -> Result<String, String> {
+        let parsed: serde_json::Value = serde_json::from_str(args_json)
+            .map_err(|error| format!("session_call: invalid JSON: {error}"))?;
+        let args = parsed
+            .as_array()
+            .ok_or_else(|| "session_call: arguments must be a JSON array".to_string())?
+            .iter()
+            .map(crate::conformance::frozen_from_json)
+            .collect::<Result<Vec<_>, _>>()?;
+        let result = self.vm.call_global(name, &args)?;
+        serde_json::to_string(&crate::conformance::frozen_json(&result))
+            .map_err(|error| format!("session_call: cannot encode result: {error}"))
+    }
+
+    /// Execute and trace a transition for browser/native differential tests.
+    pub fn session_execute_transition(
+        &mut self,
+        name: &str,
+        args_json: &str,
+    ) -> Result<String, String> {
+        let parsed: serde_json::Value = serde_json::from_str(args_json)
+            .map_err(|error| format!("session_execute_transition: invalid JSON: {error}"))?;
+        let args = parsed
+            .as_array()
+            .ok_or_else(|| {
+                "session_execute_transition: arguments must be a JSON array".to_string()
+            })?
+            .iter()
+            .map(crate::conformance::frozen_from_json)
+            .collect::<Result<Vec<_>, _>>()?;
+        let trace = self.vm.execute_transition(name, &args)?;
+        serde_json::to_string(&trace)
+            .map_err(|error| format!("session_execute_transition: cannot encode trace: {error}"))
+    }
+
+    pub fn session_compare_transition(
+        &self,
+        actual_json: &str,
+        expected_json: &str,
+    ) -> Result<String, String> {
+        let actual: crate::conformance::TransitionTrace = serde_json::from_str(actual_json)
+            .map_err(|error| format!("invalid actual transition trace: {error}"))?;
+        let expected: crate::conformance::TransitionTrace = serde_json::from_str(expected_json)
+            .map_err(|error| format!("invalid expected transition trace: {error}"))?;
+        serde_json::to_string(&actual.compare(&expected))
+            .map_err(|error| format!("cannot encode transition comparison: {error}"))
+    }
+
+    pub fn session_export_snapshot(&mut self) -> Result<Vec<u8>, String> {
+        self.vm.export_snapshot()
+    }
+
+    pub fn session_import_snapshot(&mut self, snapshot: &[u8]) -> Result<(), String> {
+        self.vm.import_snapshot(snapshot)?;
+        self.session_base = Some(std::sync::Arc::new(self.vm.world_snapshot()));
+        self.render_base = None;
+        self.undo_stack.clear();
+        self.redo_stack.clear();
+        Ok(())
+    }
+
     /// Speculative preview: run `event` in a FORK of the live session and
     /// return the world it would produce — then put everything back,
     /// bit-for-bit. The renderer diffs the two snapshots and paints ghosts.
@@ -883,47 +862,7 @@ impl RadRuntime {
     /// Shared compile-and-run against the CURRENT vm (does not reset) —
     /// used by traced runs which pre-configure the VM.
     fn compile_into_current_vm_and_run(&mut self, source: &str) -> Result<String, String> {
-        let mut lexer = Lexer::new(source);
-        let (tokens, lex_errors) = lexer.tokenize();
-        let mut parser = Parser::new(tokens);
-        let program = parser.parse();
-
-        let mut all_errors = Vec::new();
-        for e in lex_errors {
-            all_errors.push(format!(
-                "[line {}:{}] Lex error: {}",
-                e.line, e.col, e.message
-            ));
-        }
-        for e in parser.errors() {
-            all_errors.push(format!(
-                "[line {}:{}] Parse error: {}",
-                e.line, e.col, e.message
-            ));
-        }
-        if program
-            .declarations
-            .iter()
-            .any(|d| matches!(d, Decl::Use(_)))
-        {
-            return Err("Module imports are not supported in browser playground yet".to_string());
-        }
-        let mut checker = Self::checker();
-        let checker_errors = checker.check(&program);
-        let checker_output = checker.output();
-        for e in checker_errors {
-            all_errors.push(format!(
-                "[line {}:{}] Type error: {}",
-                e.line, e.col, e.message
-            ));
-        }
-        if !all_errors.is_empty() {
-            return Err(all_errors.join("\n"));
-        }
-        let compile_result = Self::compiler()
-            .with_checker_output(checker_output)
-            .compile(&program)
-            .map_err(|e| format!("Compile error: {}", e.message))?;
+        let compile_result = Self::compile_browser_source(source, BrowserSourceKind::Playground)?;
         self.vm.load_compile_result(compile_result);
         self.vm.print_buffer.clear();
         match self.vm.run(0) {
@@ -943,4 +882,5 @@ impl RadRuntime {
         v.as_world_fork()
             .cloned()
             .ok_or_else(|| "internal: fork() returned a non-fork".to_string())
-    }}
+    }
+}

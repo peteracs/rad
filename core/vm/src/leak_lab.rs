@@ -21,9 +21,7 @@
 
 #![cfg(test)]
 
-use crate::compiler::Compiler;
-use crate::lexer::Lexer;
-use crate::parser::Parser;
+use crate::parser::ParserOptions;
 use crate::vm::VM;
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::cell::Cell;
@@ -77,6 +75,7 @@ unsafe impl GlobalAlloc for CountingAlloc {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         let p = System.alloc(layout);
         if !p.is_null() {
+            crate::allocation_meter::record_allocation(layout.size());
             let _ = TL_ALLOCATED.try_with(|c| c.set(c.get() + layout.size()));
             measure_allocated(layout.size());
         }
@@ -90,6 +89,7 @@ unsafe impl GlobalAlloc for CountingAlloc {
     unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
         let p = System.realloc(ptr, layout, new_size);
         if !p.is_null() {
+            crate::allocation_meter::record_allocation(new_size);
             let _ = TL_ALLOCATED.try_with(|c| c.set(c.get() + new_size));
             let _ = TL_FREED.try_with(|c| c.set(c.get() + layout.size()));
             measure_freed(layout.size());
@@ -148,16 +148,7 @@ pub(crate) static LAB: std::sync::RwLock<()> = std::sync::RwLock::new(());
 // ---------------------------------------------------------------------------
 
 fn compile(src: &str) -> crate::compiler::CompileResult {
-    let mut lexer = Lexer::new(src);
-    let tokens = lexer.tokenize().0;
-    let mut parser = Parser::new(tokens);
-    let program = parser.parse();
-    assert!(
-        parser.errors().is_empty(),
-        "parse errors: {:?}",
-        parser.errors()
-    );
-    Compiler::new().compile(&program).expect("compile")
+    crate::test_support::compile_source(src, ParserOptions::default()).expect("parse and compile")
 }
 
 /// The syncdesk-shaped world every phase runs in: two named tickets, an

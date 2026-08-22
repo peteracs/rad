@@ -1,0 +1,15 @@
+use "schema.rad"
+use "systems/routing.rad"
+use "scenarios/production.rad"
+
+fn main() -> nil {
+    assert(seed_alerts(500) == 500, "all alerts were ingested")
+    schedule [RouteCritical, RouteRoutine]
+    assert(len(entities(Incident)) == 500, "incident cardinality is stable")
+    assert(len(entities(EscalationState)) == 50, "critical callback stayed specialized")
+    assert(len(entities(NotificationState)) == 450, "routine callback stayed specialized")
+    let first_incident: entity = require_entity("incident_0")
+    assert(require(first_incident, Incident).status == "paged", "critical incident was paged")
+    assert(require(first_incident, IncidentTimeline).entries == 2, "timeline is complete")
+    print("pagergrid: routed 500 deterministic incidents")
+}

@@ -357,7 +357,17 @@ impl Compiler {
         if e.delay.is_some() {
             self.emit_op(Op::EmitAfter, line);
         } else {
-            self.emit_op(Op::Emit, line);
+            match &e.delivery {
+                EventDelivery::Next => self.emit_op(Op::Emit, line),
+                EventDelivery::Sync => self.emit_op(Op::EmitSync, line),
+                EventDelivery::Phase(phase) => {
+                    let phase = self.resolve_canonical_name(phase);
+                    let phase_idx =
+                        self.add_constant_gc(|gc| Value::from_string(gc, phase.clone()));
+                    self.emit_op(Op::EmitPhase, line);
+                    self.emit_u16(phase_idx, line);
+                }
+            }
         }
         Ok(())
     }

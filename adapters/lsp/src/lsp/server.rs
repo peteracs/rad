@@ -220,15 +220,7 @@ impl LanguageServer for LspBackend {
             compat_v0_5_dx: false,
         };
         if let Ok(r) = load_program_with_overrides(&entry_path, parser_options, &overrides) {
-            let mut checker = Checker::new_with_options(CheckerOptions {
-                features: vec!["causal_laws".to_string()],
-                compat_v0_5_dx: false,
-                warn_compat: true,
-                strict_types: false,
-            });
-            checker.set_aliases(r.aliases.clone());
-            let _ = checker.check(&r.program);
-            let semantic = checker.semantic_index();
+            let semantic = editor_semantics(&r);
 
             if let Some(path) = system_ref_path_at(line_text, char_col) {
                 let q = simulate_syntax::system_ref_qualified_string(&path);
@@ -432,15 +424,7 @@ impl LanguageServer for LspBackend {
         if let Ok(r) = load_program_with_overrides(&entry_path, parser_options, &overrides) {
             if let Some(path) = system_ref_path_at(line_text, char_col) {
                 let q = simulate_syntax::system_ref_qualified_string(&path);
-                let mut checker = Checker::new_with_options(CheckerOptions {
-                    features: vec!["causal_laws".to_string()],
-                    compat_v0_5_dx: false,
-                    warn_compat: true,
-                    strict_types: false,
-                });
-                checker.set_aliases(r.aliases.clone());
-                let _ = checker.check(&r.program);
-                let semantic = checker.semantic_index();
+                let semantic = editor_semantics(&r);
                 let resolved = semantic.canonical_name(&q);
                 for decl in &r.program.declarations {
                     if let rad_vm::ast::Decl::System(s) = decl {
@@ -622,15 +606,7 @@ impl LanguageServer for LspBackend {
         let mut items = vec![];
 
         if let Ok(r) = load_program_with_overrides(&entry_path, parser_options, &overrides) {
-            let mut checker = Checker::new_with_options(CheckerOptions {
-                features: vec!["causal_laws".to_string()],
-                compat_v0_5_dx: false,
-                warn_compat: true,
-                strict_types: false,
-            });
-            checker.set_aliases(r.aliases.clone());
-            let _ = checker.check(&r.program);
-            let semantic = checker.semantic_index();
+            let semantic = editor_semantics(&r);
 
             if let Some((segs, partial)) = system_path_completion_prefix(line_text, char_col) {
                 let q_dot_prefix = if segs.is_empty() {

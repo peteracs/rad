@@ -1,0 +1,19 @@
+pub component Order {
+    order_id: int = 0,
+    sku: str = "",
+    quantity: int = 1,
+    status: str = "new",
+}
+
+pub component Shipment {
+    order_id: int = 0,
+    sku: str = "",
+    status: str = "created",
+}
+
+pub component Cancellation {
+    order_id: int = 0,
+}
+
+pub event OrderReserved { order: entity }
+pub event ShipmentCreated { shipment: entity }

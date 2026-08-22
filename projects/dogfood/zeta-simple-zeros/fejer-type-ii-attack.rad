@@ -1,0 +1,225 @@
+// Ten-way budget allocation for the Fejer/Type-II fourth-moment route.
+//
+// At bandwidth lambda<1, Y=X^2 and H=X^2/T give a controlled smaller-factor
+// amplitude r = 2-1/lambda; the balanced tip has amplitude delta=1/lambda-1.
+// If its Fejer quadratic form has a sieve upper constant C, positivity and
+// the seminorm triangle inequality give the conservative full ratio
+//     (r + sqrt(C)*delta)^2.
+
+let SCALE = 1000000000
+let FULL_RATIO_CAP = 118 * SCALE / 117
+let RESERVED_RATIO_CAP = 235 * SCALE / 234
+
+resource FejerUniverse {
+    lambda_micros: int = 0
+    tail_sieve_constant: int = 1
+    controlled_amplitude_scaled: int = 0
+    tail_amplitude_scaled: int = 0
+    envelope_ratio_scaled: int = 0
+    full_budget_pass: bool = false
+    reserved_budget_pass: bool = false
+    score_scaled: int = 0
+    evaluated: bool = false
+}
+
+pure fn integer_sqrt(value: int) -> int {
+    let mut root = 0
+    while (root + 1) * (root + 1) <= value {
+        root = root + 1
+    }
+    return root
+}
+
+system EvaluateFejer(candidate: mut FejerUniverse) {
+    let lambda = candidate.lambda_micros
+    assert(lambda > 500000 and lambda < 1000000, "Fejer lambda out of range")
+    let tail = (SCALE * (1000000 - lambda) + lambda - 1) / lambda
+    let controlled = SCALE - tail
+    let root_c = integer_sqrt(candidate.tail_sieve_constant)
+    assert(root_c * root_c == candidate.tail_sieve_constant, "sieve constant must be square")
+    let seminorm_scaled = controlled + root_c * tail
+    let envelope = (seminorm_scaled * seminorm_scaled) / SCALE
+    let full_pass = envelope <= FULL_RATIO_CAP
+    let reserved_pass = envelope <= RESERVED_RATIO_CAP
+    // Prefer a wider proof margin, then a smaller sieve obligation.
+    let score = RESERVED_RATIO_CAP - envelope - candidate.tail_sieve_constant * 10000
+    candidate = FejerUniverse {
+        lambda_micros: lambda,
+        tail_sieve_constant: candidate.tail_sieve_constant,
+        controlled_amplitude_scaled: controlled,
+        tail_amplitude_scaled: tail,
+        envelope_ratio_scaled: envelope,
+        full_budget_pass: full_pass,
+        reserved_budget_pass: reserved_pass,
+        score_scaled: score,
+        evaluated: true,
+    }
+}
+
+component FejerExpectation {
+    proposal_count: int = 0
+}
+
+component FejerSelection {
+    proposal_count: int = 0
+    cells_seen: list = []
+    best: FejerUniverse = FejerUniverse { score_scaled: -SCALE }
+    full_passes: int = 0
+    reserved_passes: int = 0
+}
+
+intent FejerFinding {
+    key target: entity
+    candidate: FejerUniverse
+}
+
+law SubmitFejer(target: entity, candidate: FejerUniverse) {
+    propose FejerFinding { target: target, candidate: candidate }
+}
+
+resolver SelectFejer for FejerFinding(target, proposals) {
+    let mut cells = []
+    let mut best = FejerUniverse { score_scaled: -SCALE }
+    let mut full_passes = 0
+    let mut reserved_passes = 0
+    for proposal in proposals {
+        let candidate = proposal.candidate
+        assert(candidate.evaluated, "unevaluated Fejer branch")
+        let cell = f"{candidate.lambda_micros}:{candidate.tail_sieve_constant}"
+        assert(not contains(cells, cell), "duplicate Fejer branch")
+        cells = push(cells, cell)
+        if candidate.full_budget_pass {
+            full_passes = full_passes + 1
+        }
+        if candidate.reserved_budget_pass {
+            reserved_passes = reserved_passes + 1
+        }
+        if candidate.reserved_budget_pass and candidate.score_scaled > best.score_scaled {
+            best = candidate
+        }
+    }
+    next(target, FejerSelection {
+        proposal_count: len(proposals),
+        cells_seen: cells,
+        best: best,
+        full_passes: full_passes,
+        reserved_passes: reserved_passes,
+    })
+}
+
+constraint CompleteFejerPortfolio
+for FejerSelection(subject, proposed)
+watches FejerExpectation
+{
+    let expected = candidate(subject, FejerExpectation)
+    require proposed.proposal_count == expected.proposal_count else "zeta.70.fejer_count"
+    require len(proposed.cells_seen) == expected.proposal_count else "zeta.70.fejer_partition"
+    require proposed.reserved_passes > 0 else "zeta.70.fejer_no_reserved_hit"
+    require proposed.best.evaluated else "zeta.70.fejer_selection"
+}
+
+entity fejer_judge {
+    FejerExpectation {}
+    FejerSelection {}
+}
+
+entity reversed_fejer_judge {
+    FejerExpectation {}
+    FejerSelection {}
+}
+
+event FejerReady {
+    target: entity
+    candidates: list
+    reversed: bool
+}
+
+on FejerReady(evt) {
+    settle {
+        if evt.reversed {
+            for index in range(len(evt.candidates)) {
+                SubmitFejer(evt.target, evt.candidates[len(evt.candidates) - index - 1])
+            }
+        } else {
+            for candidate in evt.candidates {
+                SubmitFejer(evt.target, candidate)
+            }
+        }
+    }
+}
+
+fn main() -> nil {
+    let parameters = [
+        [995000, 4],
+        [997000, 4],
+        [998000, 9],
+        [999000, 9],
+        [999000, 16],
+        [999000, 25],
+        [999500, 25],
+        [999500, 49],
+        [999500, 81],
+        [999750, 81],
+    ]
+    let root = fork()
+    let before = world_digest()
+    let mut worlds = []
+    for parameter in parameters {
+        worlds = push(worlds, fork_with(root, FejerUniverse {
+            lambda_micros: parameter[0],
+            tail_sieve_constant: parameter[1],
+        }))
+    }
+    let futures = simulate_many(worlds, [system::EvaluateFejer], 1, 2111)
+    assert(world_digest() == before, "Fejer speculation leaked")
+    let mut reports = []
+    let mut wire_digests = []
+    for future in futures {
+        assert_only_changed(root, future, [FejerUniverse])
+        let restored = fork_from_bytes(fork_to_bytes(future)) |> unwrap
+        assert(world_digest(restored) == world_digest(future), "Fejer wire mismatch")
+        reports = push(reports, peek_resource(restored, FejerUniverse) |> unwrap)
+        wire_digests = push(wire_digests, world_digest(restored))
+    }
+    let speculation_isolated = world_digest() == before
+    set(fejer_judge, FejerExpectation { proposal_count: len(parameters) })
+    set(reversed_fejer_judge, FejerExpectation { proposal_count: len(parameters) })
+    emit FejerReady { target: fejer_judge, candidates: reports, reversed: false }
+    emit FejerReady { target: reversed_fejer_judge, candidates: reports, reversed: true }
+    flush_events()
+    let selected = require(fejer_judge, FejerSelection)
+    let reversed = require(reversed_fejer_judge, FejerSelection)
+    assert(selected == reversed, "Fejer selection depends on proposal order")
+
+    let receipt: map<str, any> = {
+        "schema": "rad.zeta-fejer-type-ii-attack.v1",
+        "rigorous_algebra": true,
+        "analytic_transfer_proved": false,
+        "full_ratio_cap_scaled": FULL_RATIO_CAP,
+        "reserved_ratio_cap_scaled": RESERVED_RATIO_CAP,
+        "scouts": reports,
+        "selection": selected,
+        "remaining_lemmas": [
+            "factor-sliced Evans correlation uniformly for P <= H/log^K(Y)",
+            "fixed-constant upper sieve for the balanced-factor Fejer tail",
+            "trace localisation preserving the positive Fejer shift weight",
+        ],
+        "proposal_order_independent": selected == reversed,
+        "speculation_isolated": speculation_isolated,
+        "wire_digests": wire_digests,
+        "selection_why": why(fejer_judge, FejerSelection),
+    }
+    create_dir("projects/dogfood/zeta-simple-zeros/out")
+    write_file(
+        "projects/dogfood/zeta-simple-zeros/out/fejer-type-ii-attack.json",
+        json_stringify(receipt),
+    )
+    print("ten-way Fejer/Type-II budget attack")
+    print("full-budget passes:", selected.full_passes, "/", len(parameters))
+    print("half-reserved passes:", selected.reserved_passes, "/", len(parameters))
+    print("selected lambda:", selected.best.lambda_micros)
+    print("selected tail sieve constant:", selected.best.tail_sieve_constant)
+    print("selected envelope ratio:", selected.best.envelope_ratio_scaled, "/", SCALE)
+    print("tail amplitude:", selected.best.tail_amplitude_scaled, "/", SCALE)
+    print(why(fejer_judge, FejerSelection))
+}

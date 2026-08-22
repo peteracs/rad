@@ -25,6 +25,7 @@ FORBIDDEN_DIRECTORY_NAMES = {
 RFC_SOURCE = Path("docs/rfcs")
 RFC_WRAPPERS = Path("docs/src/rfcs")
 FOLDER_TREE = Path("docs/src/project/folder_tree.md")
+AUTHORITATIVE_CORE_PREFIXES = ("core/relation/", "core/vm/")
 
 
 def repository_files(root: Path) -> list[PurePosixPath]:
@@ -34,11 +35,14 @@ def repository_files(root: Path) -> list[PurePosixPath]:
         check=True,
         stdout=subprocess.PIPE,
     )
-    return [
+    files = [
         PurePosixPath(item.decode("utf-8"))
         for item in result.stdout.split(b"\0")
         if item
     ]
+    # `git ls-files --cached` also reports tracked paths deleted in the worktree.
+    # Architecture is validated against the tree that will actually be built.
+    return [path for path in files if (root / Path(*path.parts)).is_file()]
 
 
 def audit(root: Path) -> list[str]:
@@ -56,17 +60,23 @@ def audit(root: Path) -> list[str]:
                 f"{name}: directory '{part}' describes a file-splitting mechanism, "
                 "not a responsibility"
             )
-        if name.startswith("core/") and not name.startswith("core/vm/"):
+        if name.startswith("core/") and not name.startswith(AUTHORITATIVE_CORE_PREFIXES):
             errors.append(
                 f"{name}: core/ is reserved for the authoritative language/runtime"
             )
 
-    manifest = (root / "core/vm/Cargo.toml").read_text(encoding="utf-8")
-    for forbidden in ("../../adapters", "../../projects", "../adapters", "../projects"):
-        if forbidden in manifest:
-            errors.append(
-                f"core/vm/Cargo.toml: core must not depend on {forbidden!r}"
-            )
+    core_manifests = [
+        path
+        for path in files
+        if path.parts[0] == "core" and path.name == "Cargo.toml"
+    ]
+    for manifest_path in core_manifests:
+        manifest = (root / Path(*manifest_path.parts)).read_text(encoding="utf-8")
+        for forbidden in ("../../adapters", "../../projects", "../adapters", "../projects"):
+            if forbidden in manifest:
+                errors.append(
+                    f"{manifest_path.as_posix()}: core must not depend on {forbidden!r}"
+                )
 
     source_names = {
         path.name for path in (root / RFC_SOURCE).glob("*.md") if path.is_file()

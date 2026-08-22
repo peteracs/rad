@@ -1,0 +1,18 @@
+pub opaque type JobId = u64
+pub opaque type WorkerId = u64
+pub opaque type LeaseToken = u64
+
+pub event JobLeased {
+    job: entity,
+    worker: entity,
+    token: LeaseToken,
+}
+
+pub event JobStarted { job: entity }
+pub event JobCompleted { job: entity, key: str }
+pub event JobFailed { job: entity, token: LeaseToken }
+pub event JobTimedOut { job: entity, token: LeaseToken }
+pub event CancellationRequested { job: entity }
+pub event JobCancelled { job: entity }
+pub event JobDeadLettered { job: entity }
+pub event StaleCompletionRejected { job: entity, token: LeaseToken }

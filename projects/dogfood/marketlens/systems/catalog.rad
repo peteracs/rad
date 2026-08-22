@@ -1,0 +1,25 @@
+use "../schema.rad"
+use "../owners/catalog_owner.rad"
+
+pub resource CatalogOperations {
+    sellable_observations: int = 0,
+}
+
+pub system InspectSellable(
+    reads Product,
+    reads Price,
+    reads Inventory,
+    reads SellerStatus,
+    reads ComplianceRestriction,
+    reads CatalogOperations,
+    writes CatalogOperations,
+) {
+    let current = entities(SellableProducts)
+    update(CatalogOperations) {
+        sellable_observations = res(CatalogOperations).sellable_observations + len(current)
+    }
+}
+
+pub readonly fn find_sellable(id: ProductId) -> Option<entity> {
+    return lookup(SellableProducts, id)
+}

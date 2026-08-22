@@ -61,17 +61,135 @@ impl VM {
             self.pop().map_err(Into::into)
         } else if let Some(builtin) = callee.as_builtin() {
             self.call_builtin(builtin, args).map_err(Into::into)
-        } else if let Some(native) = callee.as_native_fn() {
-            if self.settlement.is_some() || self.observational_attempt_replay {
-                return Err(
-                    "Effect firewall: native/FFI calls are forbidden during causal or observational replay execution"
-                        .to_string(),
-                );
+        } else if let Some(native) = callee.as_native_fn().cloned() {
+            self.call_native(&native, args).map_err(Into::into)
+        } else if let Some(native_type) = callee.as_native_type().cloned() {
+            if args.len() != 1 {
+                return Err(format!(
+                    "{}() expects exactly one explicit conversion argument, got {}",
+                    native_type.name,
+                    args.len()
+                ));
             }
-            crate::ffi::invoke_native(native, &args, &mut self.gc).map_err(Into::into)
+            cast_native_value(&mut self.gc, &native_type, &args[0]).map_err(Into::into)
         } else {
             Err(format!("Not callable: {}", callee.type_name()))
         }
+    }
+
+    /// One deterministic boundary for every native extension call. Replay
+    /// never executes the library; recording captures both values and errors.
+    pub(crate) fn call_native(
+        &mut self,
+        native: &crate::value::NativeFnInfo,
+        args: Vec<Value>,
+    ) -> Result<Value, String> {
+        if args.len() != native.arity as usize {
+            return Err(format!(
+                "native function {}() expects {} arguments, got {}",
+                native.name,
+                native.arity,
+                args.len()
+            ));
+        }
+        if self.settlement.is_some()
+            || self.transaction.is_some()
+            || self.observational_attempt_replay
+        {
+            return Err(
+                "Effect firewall: native calls are forbidden during transactions, settlements, and observational replay"
+                    .to_string(),
+            );
+        }
+        if self.in_simulation_fork > 0
+            && (native.effects.performs_io()
+                || native.effects.is_async()
+                || !native.effects.writes().is_empty()
+                || !native.effects.emits().is_empty())
+        {
+            return Err(format!(
+                "simulation effect firewall: native function {}() declares effects [{}]",
+                native.name,
+                native
+                    .effects
+                    .canonical_strings_for_runtime()
+                    .join(", ")
+            ));
+        }
+
+        let boundary = format!(
+            "native:{}:{}",
+            native.extension.digest(),
+            native.name
+        );
+        let digest = crate::replay::args_digest(&args)?;
+        if (self.replayer.is_some() || self.recorder.is_some()) && !native.replayable {
+            return Err(format!(
+                "native function {}() declares replayable=false and cannot cross a record/replay boundary",
+                native.name
+            ));
+        }
+        if let Some(replayer) = self.replayer.as_mut() {
+            let record = replayer.next_io(&boundary, &digest)?;
+            let result = match record.result {
+                Ok(value) => crate::replay::decode_value(&mut self.gc, &value),
+                Err(error) => Err(error),
+            };
+            if let Ok(value) = &result {
+                self.remember_native_cause(native, &digest, value);
+            }
+            return result;
+        }
+
+        let result = crate::allocation_meter::host_boundary(|| {
+            crate::ffi::invoke_native(native, &args, &mut self.gc)
+        });
+        if self.recorder.is_some() {
+            let encoded = match &result {
+                Ok(value) => crate::replay::encode_value(value).map_err(|error| {
+                    format!(
+                        "--record: cannot encode result of native {}(): {}",
+                        native.name, error
+                    )
+                })?,
+                Err(error) => {
+                    if let Some(recorder) = self.recorder.as_mut() {
+                        recorder.record_io(&boundary, digest, &Err(error.clone()));
+                    }
+                    return result;
+                }
+            };
+            if let Some(recorder) = self.recorder.as_mut() {
+                recorder.record_io(&boundary, digest.clone(), &Ok(encoded));
+            }
+        }
+        if let Ok(value) = &result {
+            self.remember_native_cause(native, &digest, value);
+        }
+        result
+    }
+
+    fn remember_native_cause(
+        &mut self,
+        native: &crate::value::NativeFnInfo,
+        input_digest: &str,
+        value: &Value,
+    ) {
+        let output_digest = crate::replay::args_digest(std::slice::from_ref(value))
+            .unwrap_or_else(|_| "unrecordable".to_string());
+        let parent = self
+            .pending_host_cause
+            .take()
+            .unwrap_or_else(|| self.current_cause.clone());
+        self.pending_host_cause = Some(crate::causality::Cause::HostCall {
+            extension: native.extension.extension_id().into(),
+            generation: native.extension.extension_version().unwrap_or_default().into(),
+            plugin_digest: native.extension.content_digest().into(),
+            export: native.name.as_str().into(),
+            input_digest: input_digest.into(),
+            output_digest: output_digest.into(),
+            parent: Box::new(parent),
+        });
     }
 
     pub(crate) fn exec_bitset_set_inplace(&mut self) -> Result<(), String> {
@@ -501,4 +619,136 @@ impl VM {
         self.push_list_vec(copied);
         Ok(())
     }
+}
+
+fn cast_native_value(
+    gc: &mut crate::gc::GcHeap,
+    target: &crate::native_types::NativeTypeDescriptor,
+    source: &Value,
+) -> Result<Value, String> {
+    use crate::native_types::{NativeScalarKind as Repr, NativeScalarValue, NativeTypeFlavor};
+
+    #[derive(Clone, Copy)]
+    enum Number {
+        Signed(i64),
+        Unsigned(u64),
+        Float(f64),
+    }
+
+    let number = if let Some(native) = source.as_native_scalar() {
+        if target.flavor != NativeTypeFlavor::Scalar
+            && !(native.type_name == target.name
+                || (native.flavor == NativeTypeFlavor::Scalar && native.repr == target.repr))
+        {
+            return Err(format!(
+                "cannot convert {} directly to {}: unwrap to {} explicitly first",
+                native.type_name, target.name, target.repr
+            ));
+        }
+        if let Some(value) = native.float() {
+            Number::Float(value)
+        } else if native.repr.is_signed() {
+            Number::Signed(native.signed().unwrap())
+        } else {
+            Number::Unsigned(native.unsigned().unwrap())
+        }
+    } else if let Some(value) = source.as_int() {
+        if target.flavor != NativeTypeFlavor::Scalar {
+            return Err(format!(
+                "{}() requires an explicit {} value, not int; use {}(int_value) first",
+                target.name, target.repr, target.repr
+            ));
+        }
+        Number::Signed(value)
+    } else if let Some(value) = source.as_float() {
+        if target.flavor != NativeTypeFlavor::Scalar {
+            return Err(format!(
+                "{}() requires an explicit {} value, not float; use {}(float_value) first",
+                target.name, target.repr, target.repr
+            ));
+        }
+        Number::Float(value)
+    } else {
+        return Err(format!(
+            "{}() cannot convert a {} value",
+            target.name,
+            source.type_name()
+        ));
+    };
+
+    fn integral(number: Number, target: &str) -> Result<i128, String> {
+        match number {
+            Number::Signed(value) => Ok(value as i128),
+            Number::Unsigned(value) => Ok(value as i128),
+            Number::Float(value)
+                if value.is_finite()
+                    && value.fract() == 0.0
+                    && value >= i64::MIN as f64
+                    && value <= u64::MAX as f64 =>
+            {
+                Ok(value as i128)
+            }
+            Number::Float(value) => Err(format!(
+                "{} conversion requires a finite integral value, got {}",
+                target, value
+            )),
+        }
+    }
+
+    let bits = match target.repr {
+        Repr::U8 => u8::try_from(integral(number, &target.name)?)
+            .map(u64::from)
+            .map_err(|_| format!("{} conversion overflow for u8", target.name))?,
+        Repr::U16 => u16::try_from(integral(number, &target.name)?)
+            .map(u64::from)
+            .map_err(|_| format!("{} conversion overflow for u16", target.name))?,
+        Repr::U32 => u32::try_from(integral(number, &target.name)?)
+            .map(u64::from)
+            .map_err(|_| format!("{} conversion overflow for u32", target.name))?,
+        Repr::U64 => u64::try_from(integral(number, &target.name)?)
+            .map_err(|_| format!("{} conversion overflow for u64", target.name))?,
+        Repr::I8 => i8::try_from(integral(number, &target.name)?)
+            .map(|value| value as u8 as u64)
+            .map_err(|_| format!("{} conversion overflow for i8", target.name))?,
+        Repr::I16 => i16::try_from(integral(number, &target.name)?)
+            .map(|value| value as u16 as u64)
+            .map_err(|_| format!("{} conversion overflow for i16", target.name))?,
+        Repr::I32 => i32::try_from(integral(number, &target.name)?)
+            .map(|value| value as u32 as u64)
+            .map_err(|_| format!("{} conversion overflow for i32", target.name))?,
+        Repr::I64 => i64::try_from(integral(number, &target.name)?)
+            .map(|value| value as u64)
+            .map_err(|_| format!("{} conversion overflow for i64", target.name))?,
+        Repr::F32 => {
+            let value = match number {
+                Number::Signed(value) => value as f32,
+                Number::Unsigned(value) => value as f32,
+                Number::Float(value) => value as f32,
+            };
+            if value.is_nan() { f32::NAN.to_bits() as u64 } else { value.to_bits() as u64 }
+        }
+        Repr::F64 => {
+            let value = match number {
+                Number::Signed(value) => value as f64,
+                Number::Unsigned(value) => value as f64,
+                Number::Float(value) => value,
+            };
+            if value.is_nan() { f64::NAN.to_bits() } else { value.to_bits() }
+        }
+    };
+    if !target.accepts_bits(bits) {
+        return Err(format!(
+            "0x{bits:x} is not a declared value of {}",
+            target.name
+        ));
+    }
+    Ok(Value::from_native_scalar(
+        gc,
+        NativeScalarValue {
+            type_name: target.name.clone(),
+            repr: target.repr,
+            flavor: target.flavor,
+            bits,
+        },
+    ))
 }

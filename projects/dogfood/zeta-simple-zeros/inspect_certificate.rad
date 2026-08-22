@@ -1,0 +1,18 @@
+// Fast single-lane inspection of an Arb-produced candidate certificate.
+// This is a RAD program; the project-owned native extension only accelerates
+// the deterministic integer branch-and-bound kernel.
+
+use "../native-math-kernels/math_kernels.rad"
+
+fn main() -> nil {
+    let args = sys_args()
+    let path = if len(args) > 0 {
+        args[0]
+    } else {
+        "projects/dogfood/zeta-simple-zeros/certificate.json"
+    }
+    let started = clock()
+    let report = zeta_cover_lane(read_file(path), 0, 1)
+    print(json_stringify(report))
+    print("elapsed_seconds", clock() - started)
+}

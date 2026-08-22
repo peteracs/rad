@@ -1,0 +1,12 @@
+use "schema.rad"
+use "owners/inventory_owner.rad"
+use "systems/fulfillment.rad"
+use "scenarios/production.rad"
+
+fn main() -> nil {
+    seed_orders(10000)
+    schedule [ReserveOrders, ShipOrders]
+    assert(len(entities(Shipment)) == 10000, "10k shipments")
+    assert(available_stock("RAD-BOOK") == 0, "inventory exact")
+    print("fulfillos-bench: ok orders=10000")
+}

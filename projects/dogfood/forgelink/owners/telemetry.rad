@@ -1,0 +1,29 @@
+use "../schema.rad"
+
+pub component DeviceTelemetry owned {
+    device: DeviceId = DeviceId(u32(0)),
+    sequence: u32 = u32(0),
+    status: DeviceStatus = DeviceStatus(u16(0)),
+    temperature: f32 = f32(0.0),
+    checksum: u16 = u16(0),
+}
+
+pub fn register_device(device: DeviceId) -> entity writes owned [DeviceTelemetry] {
+    return spawn(DeviceTelemetry { device: device })
+}
+
+pub transaction StoreFrame(target: entity, frame: TelemetryFrame)
+    writes owned [DeviceTelemetry]
+{
+    requires has(target, DeviceTelemetry)
+    changes_only [DeviceTelemetry]
+    set(target, DeviceTelemetry {
+        device: frame.device,
+        sequence: frame.sequence,
+        status: frame.status,
+        temperature: frame.temperature,
+        checksum: frame.checksum,
+    })
+    ensures require(target, DeviceTelemetry).sequence == frame.sequence
+    post_commit { emit next FrameStored { target: target, sequence: frame.sequence } }
+}

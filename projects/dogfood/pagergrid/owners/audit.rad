@@ -1,0 +1,16 @@
+use "../schema.rad"
+
+pub fn append_timeline(incident: entity, action: str) -> nil {
+    let current: IncidentTimeline = require(incident, IncidentTimeline)
+    set(incident, IncidentTimeline {
+        entries: current.entries + 1,
+        last_action: action,
+    })
+}
+
+on ResponderPaged(page) {
+    append_timeline(page.incident, "responder paged")
+    if name_of(page.incident) == "incident_0" {
+        print(f"PAGE incident={name_of(page.incident)} responder={name_of(page.responder)}")
+    }
+}

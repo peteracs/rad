@@ -1,0 +1,11 @@
+component Order { price: int = 0 }
+
+fn rebuild_book() -> list<entity> {
+    let all = entities(Order)
+    return sort(all)
+}
+
+@frame
+system MatchOrders() {
+    let ordered = rebuild_book()
+}

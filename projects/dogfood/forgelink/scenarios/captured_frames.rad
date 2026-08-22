@@ -1,0 +1,21 @@
+use "../schema.rad"
+
+pub fn captured_frame() -> any {
+    return bytebuf_from_list([
+        42, 0, 0, 0,
+        7, 0, 0, 0,
+        3, 0,
+        0, 0, 128, 63,
+        52, 18,
+    ])
+}
+
+pub fn verify_scalar_corpus(count: int) -> nil {
+    for i in range(0, count) {
+        let sequence: u32 = u32(i)
+        let encoded: any = encode_le(sequence)
+        assert(decode_le(encoded, 0, u32) == sequence, "u32 roundtrip")
+        let signed: i32 = i32(-i)
+        assert(decode_le(encode_le(signed), 0, i32) == signed, "i32 roundtrip")
+    }
+}
