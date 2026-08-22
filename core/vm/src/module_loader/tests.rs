@@ -46,45 +46,9 @@ mod tests {
         vm.print_buffer
     }
 
-    #[test]
-    fn aliased_module_forward_callback_is_compiled_as_a_view_kernel() {
-        let dir = mk_temp_dir();
-        fs::write(
-            dir.join("owner.rad"),
-            r#"
-pub component Active {}
-pub component Position { x: int = 0 }
-pub materialized view Movers { depends [Active, Position] }
-
-pub fn run() -> nil {
-    let target = spawn(Active {}, Position { x: 4 })
-    visit_view(Movers, advance)
-    assert(require(target, Position).x == 5, "aliased callback ran once")
-}
-
-fn advance(target: entity) -> nil {
-    let x = read_field(target, Position, "x")
-    write_field(target, Position, "x", x + 1)
-}
-"#,
-        )
-        .unwrap();
-        fs::write(
-            dir.join("main.rad"),
-            "use \"owner.rad\" as owner\nfn main() -> nil { owner.run() }\n",
-        )
-        .unwrap();
-
-        let compiled = compile_module_entry(&dir.join("main.rad"));
-        assert_eq!(
-            compiled.view_kernels.len(),
-            1,
-            "a later callback declaration in an aliased module must emit RunViewKernel"
-        );
-        let mut vm = VM::new();
-        vm.load_compile_result(compiled);
-        vm.run(0).expect("run fused aliased callback");
-    }
+    // Canonical module identity, phase expansion, semantic analysis, and
+    // runtime metadata are one integration boundary.
+    include!("tests/canonical_semantics.rs");
 
     #[test]
     fn lockfile_roundtrip_preserves_sha256_pins() {

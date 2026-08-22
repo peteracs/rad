@@ -265,6 +265,44 @@ impl Decl {
         }
     }
 
+    /// Clone a declaration with its ordinary module-namespace name replaced.
+    ///
+    /// Canonical module loading used to rename selected declaration kinds in
+    /// each semantic pass. Keeping the exhaustive rename beside
+    /// [`Self::namespace_name`] gives every pass one complete operation and
+    /// makes a new named declaration a compile-time decision.
+    pub(crate) fn with_namespace_name(&self, replacement: &str) -> Self {
+        let mut declaration = self.clone();
+        match &mut declaration {
+            Decl::Component(value) | Decl::Struct(value) => {
+                value.name = replacement.to_string()
+            }
+            Decl::Resource(value) => value.name = replacement.to_string(),
+            Decl::Intent(value) => value.name = replacement.to_string(),
+            Decl::Law(value) => value.name = replacement.to_string(),
+            Decl::Resolver(value) => value.name = replacement.to_string(),
+            Decl::Constraint(value) => value.name = replacement.to_string(),
+            Decl::Entity(value) => value.name = replacement.to_string(),
+            Decl::State(value) => value.name = replacement.to_string(),
+            Decl::System(value) => value.name = replacement.to_string(),
+            Decl::Event(value) => value.name = replacement.to_string(),
+            Decl::Phase(value) => value.name = replacement.to_string(),
+            Decl::Fn(value) => value.name = replacement.to_string(),
+            Decl::Type(value) => value.name = replacement.to_string(),
+            Decl::TypeAlias(value) => value.name = replacement.to_string(),
+            Decl::NativeType(value) => value.name = replacement.to_string(),
+            Decl::MaterializedView(value) => value.name = replacement.to_string(),
+            Decl::OnHandler(_)
+            | Decl::Migration(_)
+            | Decl::Use(_)
+            | Decl::Test(_)
+            | Decl::Model(_)
+            | Decl::Stmt(_)
+            | Decl::Error => {}
+        }
+        declaration
+    }
+
     pub fn is_public(&self) -> bool {
         match self {
             Decl::Component(declaration) | Decl::Struct(declaration) => declaration.is_pub,

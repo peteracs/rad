@@ -1,6 +1,13 @@
 use "../schema.rad"
 use "../owners/order_book.rad"
 
+pub fn drain_crossing_book(batch_size: int) -> nil {
+    MatchBook(batch_size)
+    while res(MatchCycle).has_more_crossing_orders {
+        MatchBook(batch_size)
+    }
+}
+
 @no_full_scan
 pub system MatchOrders(
     reads OrderIdentity,
@@ -17,5 +24,5 @@ pub system MatchOrders(
     writes "$entity_identity",
     emits MatchBatchCommitted,
 ) {
-    MatchBook(100000)
+    drain_crossing_book(100000)
 }

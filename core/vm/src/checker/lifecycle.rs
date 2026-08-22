@@ -219,6 +219,11 @@ impl Checker {
             .chain(self.resources.iter().map(|(name, def)| (name, def.file_id)))
             .chain(self.events.iter().map(|(name, def)| (name, def.file_id)))
             .chain(self.type_aliases.iter().map(|(name, def)| (name, def.file_id)))
+            .chain(
+                self.native_types
+                    .iter()
+                    .map(|(name, declaration)| (name, declaration.span.file)),
+            )
             .find(|(name, declared)| {
                 *declared == Some(file_id)
                     && (name.as_str() == orig_name || name.ends_with(&module_suffix))
@@ -238,28 +243,16 @@ impl Checker {
         ));
         self.collect_declarations(program);
         self.collect_system_list_consts(program);
-        // handler bodies indexed before any system is checked: the
-        // simulate() safety walk follows emits into their handlers.
-        // Keyed by the raw name AND its last segment, and looked up the
-        // same way — matching too many handlers is conservative (more
-        // bodies vetted); missing one would let IO into a simulation.
-        for decl in &program.declarations {
-            if let Decl::OnHandler(h) = decl {
-                self.event_handler_blocks
-                    .entry(h.event_name.clone())
-                    .or_default()
-                    .push(h.body.clone());
-                if let Some(last) = h.event_name.rsplit('.').next() {
-                    if last != h.event_name {
-                        self.event_handler_blocks
-                            .entry(last.to_string())
-                            .or_default()
-                            .push(h.body.clone());
-                    }
-                }
-            }
-        }
+        // Handler bodies are indexed before any system is checked: the
+        // simulation-safety walk follows emissions into their handlers. Raw,
+        // canonical, and final-segment names are all retained; matching extra
+        // handlers is conservative, while missing one could let IO escape.
+        self.index_event_handler_blocks(&program.declarations);
         self.register_alias_declarations();
+        // Dependencies can cross canonical module boundaries, so cycle
+        // detection is complete only after both main and aliased systems have
+        // been registered.
+        self.check_system_cycles();
         // Build the fine-grained graph after aliases and type redirects are
         // complete, but before body checking, so authority diagnostics are
         // declaration-order independent just like coarse effect inference.
@@ -309,6 +302,7 @@ impl Checker {
             let decls = binding.declarations();
             let all_names = binding.local_redirects();
             self.current_alias_redirects = Some(all_names.clone());
+            self.index_event_handler_blocks(decls);
             for d in decls {
                 let orig = match d.namespace_name() {
                     Some(n) => n.to_string(),
@@ -318,161 +312,7 @@ impl Checker {
                     Some(m) => m.clone(),
                     None => continue,
                 };
-                match d {
-                    Decl::Component(c) => {
-                        if let Some(canonical) = self.find_canonical_type_name(c.span.file, &orig) {
-                            self.type_redirects.insert(mangled.clone(), canonical);
-                            self.define(&mangled, Ty::Str, false, c.span.clone(), c.is_pub, false);
-                        } else {
-                            let mut mc = c.clone();
-                            mc.name = mangled.clone();
-                            self.register_component(&mc);
-                            self.define(&mangled, Ty::Str, false, c.span.clone(), c.is_pub, false);
-                        }
-                    }
-                    Decl::Resource(r) => {
-                        if let Some(canonical) = self.find_canonical_type_name(r.span.file, &orig) {
-                            self.type_redirects.insert(mangled.clone(), canonical);
-                            self.define(&mangled, Ty::Str, false, r.span.clone(), r.is_pub, false);
-                        } else {
-                            let mut mr = r.clone();
-                            mr.name = mangled.clone();
-                            self.register_resource(&mr);
-                            self.define(&mangled, Ty::Str, false, r.span.clone(), r.is_pub, false);
-                        }
-                    }
-                    Decl::Struct(s) => {
-                        if let Some(canonical) = self.find_canonical_type_name(s.span.file, &orig) {
-                            self.type_redirects.insert(mangled.clone(), canonical);
-                            self.define(&mangled, Ty::Str, false, s.span.clone(), s.is_pub, false);
-                        } else {
-                            let mut ms = s.clone();
-                            ms.name = mangled.clone();
-                            self.register_struct(&ms);
-                            self.define(&mangled, Ty::Str, false, s.span.clone(), s.is_pub, false);
-                        }
-                    }
-                    Decl::Intent(i) => {
-                        let mut intent = i.clone();
-                        intent.name = mangled.clone();
-                        self.register_intent(&intent);
-                    }
-                    Decl::Law(l) => {
-                        let mut law = l.clone();
-                        law.name = mangled.clone();
-                        self.register_law(&law);
-                    }
-                    Decl::Resolver(r) => {
-                        let mut resolver = r.clone();
-                        resolver.name = mangled.clone();
-                        self.register_resolver(&resolver);
-                    }
-                    Decl::Constraint(c) => {
-                        let mut constraint = c.clone();
-                        constraint.name = mangled.clone();
-                        self.register_constraint(&constraint);
-                    }
-                    Decl::State(s) => {
-                        if let Some(canonical) = self.find_canonical_type_name(s.span.file, &orig) {
-                            self.type_redirects.insert(mangled.clone(), canonical);
-                            self.define(&mangled, Ty::Any, false, s.span.clone(), s.is_pub, false);
-                        } else {
-                            let mut ms = s.clone();
-                            ms.name = mangled.clone();
-                            self.register_state_machine(&ms);
-                            self.define(&mangled, Ty::Any, false, s.span.clone(), s.is_pub, false);
-                        }
-                    }
-                    Decl::System(s) => {
-                        let mut ms = s.clone();
-                        ms.name = mangled.clone();
-                        self.register_system(&ms);
-                    }
-                    Decl::Event(e) => {
-                        if let Some(canonical) = self.find_canonical_type_name(e.span.file, &orig) {
-                            self.type_redirects.insert(mangled.clone(), canonical);
-                            self.define(&mangled, Ty::Str, false, e.span.clone(), e.is_pub, false);
-                        } else {
-                            let mut me = e.clone();
-                            me.name = mangled.clone();
-                            self.register_event(&me);
-                            self.define(&mangled, Ty::Str, false, e.span.clone(), e.is_pub, false);
-                        }
-                    }
-                    Decl::Fn(f) => {
-                        let mut mf = f.clone();
-                        mf.name = mangled.clone();
-                        self.register_function(&mf);
-                        if let Some(sig) = self.functions.get(&mangled) {
-                            let fn_ty = Ty::Fn {
-                                params: sig.params.clone(),
-                                ret: Box::new(sig.ret.clone()),
-                                purity: if sig.effects.is_pure() {
-                                    FnPurity::Pure
-                                } else if sig.effects.is_readonly() {
-                                    FnPurity::Readonly
-                                } else {
-                                    FnPurity::Impure
-                                },
-                            };
-                            self.define(&mangled, fn_ty, false, f.span.clone(), f.is_pub, false);
-                        }
-                    }
-                    Decl::Type(t) => {
-                        if let Some(canonical) = self.find_canonical_type_name(t.span.file, &orig) {
-                            self.type_redirects.insert(mangled.clone(), canonical);
-                            self.define(&mangled, Ty::Any, false, t.span.clone(), t.is_pub, false);
-                        } else {
-                            let mut mt = t.clone();
-                            mt.name = mangled.clone();
-                            self.register_sum_type(&mt);
-                            self.define(&mangled, Ty::Any, false, t.span.clone(), t.is_pub, false);
-                        }
-                    }
-                    Decl::TypeAlias(a) => {
-                        if let Some(canonical) = self.find_canonical_type_name(a.span.file, &orig) {
-                            self.type_redirects.insert(mangled.clone(), canonical);
-                            self.define(&mangled, Ty::Any, false, a.span.clone(), a.is_pub, false);
-                        } else {
-                            let mut ma = a.clone();
-                            ma.name = mangled.clone();
-                            self.register_type_alias(&ma);
-                            self.define(&mangled, Ty::Any, false, a.span.clone(), a.is_pub, false);
-                        }
-                    }
-                    Decl::NativeType(n) => {
-                        if let Some(canonical) = self.find_canonical_type_name(n.span.file, &orig) {
-                            self.type_redirects.insert(mangled.clone(), canonical);
-                            self.define(&mangled, Ty::Any, false, n.span.clone(), n.is_pub, false);
-                        } else {
-                            let mut native = n.clone();
-                            native.name = mangled.clone();
-                            self.register_native_type(&native);
-                        }
-                    }
-                    Decl::MaterializedView(view) => {
-                        self.materialized_views.insert(mangled.clone());
-                        self.define(
-                            &mangled,
-                            Ty::Str,
-                            false,
-                            view.span.clone(),
-                            view.is_pub,
-                            false,
-                        );
-                    }
-                    Decl::Entity(e) => {
-                        self.define(
-                            &mangled,
-                            Ty::EntityId,
-                            false,
-                            e.span.clone(),
-                            e.is_pub,
-                            false,
-                        );
-                    }
-                    _ => {}
-                }
+                self.register_declaration(d, Some(&mangled));
             }
             self.current_alias_redirects = None;
         }
@@ -531,45 +371,46 @@ impl Checker {
                 }
             }
             for d in decls {
-                match d {
-                    Decl::Fn(f) => {
-                        let mut mf = f.clone();
-                        mf.name = all_names
-                            .get(&f.name)
-                            .cloned()
-                            .unwrap_or_else(|| f.name.clone());
-                        self.check_decl(&Decl::Fn(mf));
-                    }
-                    Decl::System(s) => {
-                        let mut ms = s.clone();
-                        ms.name = all_names
-                            .get(&s.name)
-                            .cloned()
-                            .unwrap_or_else(|| s.name.clone());
-                        self.check_decl(&Decl::System(ms));
-                    }
-                    Decl::Law(l) => {
-                        let mut law = l.clone();
-                        law.name = all_names
-                            .get(&l.name)
-                            .cloned()
-                            .unwrap_or_else(|| l.name.clone());
-                        self.check_decl(&Decl::Law(law));
-                    }
-                    Decl::Resolver(r) => {
-                        let mut resolver = r.clone();
-                        resolver.name = all_names
-                            .get(&r.name)
-                            .cloned()
-                            .unwrap_or_else(|| r.name.clone());
-                        self.check_decl(&Decl::Resolver(resolver));
-                    }
-                    _ => {}
+                if matches!(d, Decl::Stmt(Stmt::Let(_) | Stmt::LetElse(_))) {
+                    continue;
                 }
+                let mapped = d.namespace_name().map_or_else(
+                    || d.clone(),
+                    |name| {
+                        all_names
+                            .get(name)
+                            .map_or_else(|| d.clone(), |canonical| d.with_namespace_name(canonical))
+                    },
+                );
+                self.check_decl(&mapped);
             }
             self.current_alias_redirects = None;
         }
         self.alias_decls = alias_decls;
+    }
+
+    fn index_event_handler_blocks(&mut self, declarations: &[Decl]) {
+        for declaration in declarations {
+            let Decl::OnHandler(handler) = declaration else {
+                continue;
+            };
+            let canonical = self.resolve_canonical_name(&handler.event_name);
+            let mut names = std::collections::BTreeSet::from([
+                handler.event_name.clone(),
+                canonical,
+            ]);
+            for name in names.clone() {
+                if let Some(last) = name.rsplit('.').next() {
+                    names.insert(last.to_string());
+                }
+            }
+            for name in names {
+                self.event_handler_blocks
+                    .entry(name)
+                    .or_default()
+                    .push(handler.body.clone());
+            }
+        }
     }
 
     pub fn for_iter_kinds(&self) -> HashMap<NodeId, ForIterKind> {
@@ -777,7 +618,8 @@ struct SystemInvocationCollector<'a> {
 impl AstVisitor for SystemInvocationCollector<'_> {
     fn visit_schedule_stmt(&mut self, stmt: &ScheduleStmt) {
         for sys in &stmt.systems {
-            if let Some(phase_systems) = self.checker.phases.get(sys) {
+            let resolved_schedule_name = self.checker.resolve_canonical_name(sys);
+            if let Some(phase_systems) = self.checker.phases.get(&resolved_schedule_name) {
                 for ps in phase_systems {
                     let resolved = self.checker.resolve_canonical_name(ps);
                     if self.checker.systems.contains_key(&resolved) {
@@ -785,9 +627,8 @@ impl AstVisitor for SystemInvocationCollector<'_> {
                     }
                 }
             } else {
-                let resolved = self.checker.resolve_canonical_name(sys);
-                if self.checker.systems.contains_key(&resolved) {
-                    self.set.insert(resolved);
+                if self.checker.systems.contains_key(&resolved_schedule_name) {
+                    self.set.insert(resolved_schedule_name);
                 }
             }
         }

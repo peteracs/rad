@@ -98,7 +98,12 @@ use "redis_storage.rad" as storage : StoragePort
 
 Contracts are intended for function-port boundaries. Use ordinary aliased imports for components, resources, structs, sum types, state machines, and events.
 
-Aliased modules work with all declaration kinds: functions, components, resources, structs, types, state machines, and events. Type references within the aliased module's own code work correctly — `Color::Red` inside `types.rad` still refers to the module's own `Color` type.
+Aliased modules preserve every declaration's semantics, including functions,
+systems, phases, components, resources (including `transient resource`),
+structs, sum/native/opaque types, state machines, events, ownership policies,
+and materialized views. Type and schedule references inside the module are
+resolved in that module's canonical namespace: `Color::Red` still means the
+module's own `Color`, and `phase Frame [Tick]` still schedules its own `Tick`.
 
 ```rad,ignore
 // types.rad
@@ -115,6 +120,35 @@ use "types.rad" as t
 let c = t.make_red(5)
 let r = t.Color::Red { intensity: 42 }
 ```
+
+Phases are exports too. Mark both the phase and any systems it exposes `pub`,
+then schedule the phase through the alias:
+
+```rad,ignore
+// simulation.rad
+pub resource Clock { frame: int = 0 }
+pub system Tick(clock: mut Clock) { clock.frame = clock.frame + 1 }
+pub phase Frame [Tick]
+
+// main.rad
+use "simulation.rad" as simulation
+schedule [simulation.Frame]
+```
+
+Module identity comes from the normalized module path, never the alias
+spelling or source text:
+
+- two aliases of the same normalized path share one component/resource/phase
+  identity;
+- importing the same path bare and through an alias also shares one identity;
+- `./state.rad` and `mods/../state.rad` normalize to one identity;
+- different paths remain separate identities even when their source bytes are
+  identical.
+
+Consequently, listing the same phase through two aliases in one schedule does
+not run its system twice: schedule construction deduplicates the one canonical
+system. A private phase is not exported, and an aliased phase with an unknown
+member is rejected while checking its defining module.
 
 ## Flat namespace
 
@@ -204,7 +238,10 @@ yet.
 
 ## Visibility and Strict Boundaries
 
-By default, all top-level declarations (`fn`, `component`, `struct`, `entity`, `state`, `event`, `type`) are **private** to the file they are defined in. To make a declaration accessible from other files, it must be prefixed with the `pub` keyword:
+By default, named top-level declarations (including `fn`, `system`, `phase`,
+`component`, `resource`, `struct`, `entity`, `state`, `event`, types, and
+materialized views) are **private** to the file that defines them. Prefix a
+declaration with `pub` to expose it through an import:
 
 ```rad,ignore
 pub fn public_helper(x: int) -> int { return x }

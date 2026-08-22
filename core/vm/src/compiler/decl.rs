@@ -1,6 +1,17 @@
 use super::*;
 
 impl Compiler {
+    fn canonical_phase(&self, phase: &PhaseDecl) -> (String, Vec<String>) {
+        (
+            self.resolve_canonical_name(&phase.name),
+            phase
+                .systems
+                .iter()
+                .map(|system| self.resolve_canonical_name(system))
+                .collect(),
+        )
+    }
+
     pub(crate) fn compile_decl(&mut self, decl: &Decl) -> Result<(), CompileError> {
         let prev_file_scope = self.current_file_scope.clone();
         if let Some(span) = decl.span() {
@@ -30,16 +41,12 @@ impl Compiler {
             Decl::System(s) => self.compile_system_decl(s),
             Decl::Event(_e) => Ok(()),
             Decl::Phase(p) => {
-                self.phases.insert(p.name.clone(), p.systems.clone());
-                if p.serial && !self.serial_phases.iter().any(|(n, _)| n == &p.name) {
+                let (name, resolved) = self.canonical_phase(p);
+                self.phases.insert(name.clone(), resolved.clone());
+                if p.serial && !self.serial_phases.iter().any(|(n, _)| n == &name) {
                     // Resolve member names now, while the module scope is
                     // live — group stamping runs after scopes are gone.
-                    let resolved = p
-                        .systems
-                        .iter()
-                        .map(|s| self.resolve_canonical_name(s))
-                        .collect();
-                    self.serial_phases.push((p.name.clone(), resolved));
+                    self.serial_phases.push((name, resolved));
                 }
                 Ok(())
             }
@@ -155,9 +162,8 @@ impl Compiler {
                 self.declared_systems.insert(resolved);
             }
             Decl::Phase(phase) => {
-                self.phases
-                    .entry(phase.name.clone())
-                    .or_insert_with(|| phase.systems.clone());
+                let (name, systems) = self.canonical_phase(phase);
+                self.phases.entry(name).or_insert(systems);
             }
             Decl::Stmt(statement) => match statement {
                 Stmt::Let(binding) => {

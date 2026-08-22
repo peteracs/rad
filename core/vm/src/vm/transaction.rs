@@ -448,6 +448,19 @@ impl VM {
         }
     }
 
+    /// Discard every effect-scoped execution region at a full host boundary.
+    ///
+    /// Keep this distinct from `run_frames` error unwinding: the inner runner
+    /// intentionally preserves settlement state for the settlement kernel,
+    /// while a public run boundary owns and clears the complete region stack.
+    /// Centralizing the complete cleanup prevents a newly added region from
+    /// being wired into only some host-boundary paths.
+    pub(crate) fn abort_effect_regions(&mut self) {
+        self.abort_settlement();
+        self.abort_transaction();
+        self.abort_post_commit();
+    }
+
     /// No public execution boundary may expose an unfinished transaction or
     /// post-commit effect region. A failed transaction restores its exact base
     /// snapshot; a failed post-commit effect leaves the already committed
@@ -521,9 +534,7 @@ impl VM {
         let Some(region) = unbalanced else {
             return result;
         };
-        self.abort_settlement();
-        self.abort_transaction();
-        self.abort_post_commit();
+        self.abort_effect_regions();
         match result {
             Ok(_) => Err(format!("Internal VM error: unbalanced {region}").into()),
             Err(error) => Err(error),

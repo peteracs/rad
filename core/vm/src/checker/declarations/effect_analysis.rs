@@ -915,7 +915,7 @@ impl Checker {
         }
     }
 
-    fn check_system_cycles(&mut self) {
+    pub(super) fn check_system_cycles(&mut self) {
         let names: Vec<String> = self.systems.keys().cloned().collect();
         let mut graph: HashMap<String, Vec<String>> = HashMap::new();
         for name in &names {

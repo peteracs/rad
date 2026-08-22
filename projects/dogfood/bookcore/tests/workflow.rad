@@ -8,6 +8,16 @@ test "price-time priority drains a crossing book" {
     assert(len(entities(Fill)) == 500, "fills exact")
 }
 
+test "matching continues across bounded atomic batches" {
+    seed_orders(42)
+    drain_crossing_book(10)
+    flush_events()
+    assert(res(MatchCycle).fills == 21, "all crossing pairs filled")
+    assert(res(MatchCycle).last_batch == 1, "final bounded batch is reported")
+    assert(not res(MatchCycle).has_more_crossing_orders, "indexed continuation flag drains")
+    assert(len(entities(OpenOrders)) == 0, "open-order view drained across batches")
+}
+
 test "range traversal is a stable snapshot during cancellation" {
     submit_sell(OrderId(u64(7001)), AccountId(u64(1)), PriceTicks(i64(-2)), Quantity(u64(1)), Sequence(u64(1)))
     submit_sell(OrderId(u64(7002)), AccountId(u64(1)), PriceTicks(i64(-1)), Quantity(u64(1)), Sequence(u64(2)))

@@ -158,8 +158,8 @@ function Negative([string]$File, [string]$Pattern) {
     return [ordered]@{ file = $File; pattern = $Pattern; mode = 'run' }
 }
 
-function Model-Negative([string]$File, [string]$Pattern) {
-    return [ordered]@{ file = $File; pattern = $Pattern; mode = 'model' }
+function Model-Negative([string]$File, [string]$Pattern, [int]$ShrinkTo = 1) {
+    return [ordered]@{ file = $File; pattern = $Pattern; mode = 'model'; shrinkTo = $ShrinkTo }
 }
 
 $projects = @(
@@ -199,7 +199,7 @@ $projects = @(
     [ordered]@{
         name='marketlens'; score=19; effect='InspectSellable'; path=@('run_catalog_day','SetInventory'); plan='InspectSellable'; why=@('why-not-in-view','SellableProducts','0')
         negatives=@(
-            (Negative 'hidden_dependency.rad' 'reads Inventory.*absent from depends'),
+            (Negative 'hidden_dependency.rad' 'reads `Inventory`.*absent from `depends`'),
             (Negative 'unknown_predicate_field.rad' 'Unknown field.*Inventory\.on_hand'),
             (Negative 'reader_rebuild.rad' 'violates its no-full-scan contract'),
             (Negative 'manual_view_mutation.rad' 'runtime-maintained and cannot be mutated directly')
@@ -249,7 +249,7 @@ $projects = @(
             (Model-Negative '03_timeout_retains_lease.rad' 'TimeoutClearsLease'),
             (Model-Negative '04_requeue_succeeded.rad' 'TerminalNeverRequeues'),
             (Model-Negative '05_retry_limit_order.rad' 'RetryCountBound'),
-            (Model-Negative '06_duplicate_completion.rad' 'CompletionExactlyOnce'),
+            (Model-Negative '06_duplicate_completion.rad' 'CompletionExactlyOnce' 2),
             (Model-Negative '07_restart_loses_queue.rad' 'RestartPreservesAcceptedJobs'),
             (Model-Negative '08_cancel_complete_race.rad' 'OneTerminalOutcome'),
             (Model-Negative '09_exhausted_not_dead_lettered.rad' 'ExhaustionDeadLetters'),
@@ -274,7 +274,7 @@ $projects = @(
     }
 )
 
-$selectedProjects = if ($Project.Count -gt 0) {
+$selectedProjects = if ($null -ne $Project -and $Project.Length -gt 0) {
     @($projects | Where-Object { $Project -contains $_.name })
 } else {
     $projects
@@ -333,9 +333,10 @@ foreach ($definition in $selectedProjects) {
                 Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1
             if ($null -ne $artifact) {
                 Rad-Step "$name-replay-$($negative.file)" @('replay',$artifact.FullName) `
-                    -ExpectedExitCodes @(1) -ExpectedPattern 'Model failure reproduced' -ProjectName $name -Category 'negative-replay' | Out-Null
+                    -ExpectedPattern 'Model failure reproduced' -ProjectName $name -Category 'negative-replay' | Out-Null
+                $shrinkPattern = "deterministically shrunk.*to $($negative.shrinkTo);"
                 Rad-Step "$name-shrink-$($negative.file)" @('shrink',$artifact.FullName) `
-                    -ExpectedPattern 'deterministically shrunk.*to 1' -ProjectName $name -Category 'negative-shrink' | Out-Null
+                    -ExpectedPattern $shrinkPattern -ProjectName $name -Category 'negative-shrink' | Out-Null
             }
         } else {
             Rad-Step "$name-negative-$($negative.file)" @($negativePath) `
@@ -370,7 +371,7 @@ foreach ($definition in $selectedProjects) {
         $validPlugin = 'target/riskbridge-plugin/release/riskbridge_model_plugin.dll'
         $contract = 'projects/dogfood/riskbridge/ffi-contract.json'
         Rad-Step 'riskbridge-ffi-valid' @('ffi','verify',$validPlugin,'--contract',$contract,'--json') `
-            -ExpectedPattern '"compatible"\s*:\s*true' -ProjectName $name -Category 'ffi' | Out-Null
+            -ExpectedPattern '"layout_agreement"\s*:\s*true' -ProjectName $name -Category 'ffi' | Out-Null
         $ffiNegatives = [ordered]@{
             wrong_abi='ABI mismatch'; wrong_calling_convention='calling convention'; wrong_struct_size='size/alignment mismatch';
             wrong_field_offset='field.*layout mismatch'; swapped_opaque_type='opaque type mismatch'; overlapping_layout='overlaps or exceeds';

@@ -227,7 +227,10 @@ place that system in a single-system schedule when it must arm a timer.
 schedule [ <SystemName>, <SystemName>, ... ]
 ```
 
-Each target may be **`Alias.Sys`** (module alias and system name) or **`system::path::ToSys`** (same path rules as `system::…` expressions).
+Each target may be a local system/phase, **`Alias.Sys`**,
+**`Alias.Phase`**, or **`system::path::ToSys`** (the same path rules as
+`system::…` expressions). An aliased phase expands to its canonically named
+member systems before validation and lowering.
 
 `<SystemName>()` executes a single system across all matching entities.
 

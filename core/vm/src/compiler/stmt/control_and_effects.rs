@@ -376,10 +376,11 @@ impl Compiler {
         let line = s.span.line;
         let mut expanded = Vec::new();
         for sys in &s.systems {
-            if let Some(phase_systems) = self.phases.get(sys).cloned() {
+            let resolved = self.resolve_canonical_name(sys);
+            if let Some(phase_systems) = self.phases.get(&resolved).cloned() {
                 expanded.extend(phase_systems);
             } else {
-                expanded.push(sys.clone());
+                expanded.push(resolved);
             }
         }
         let count = Self::checked_u16(expanded.len(), "schedule", line)?;
@@ -395,8 +396,7 @@ impl Compiler {
         );
         self.emit_u16(count, line);
         for sys in &expanded {
-            let resolved_sys = self.resolve_canonical_name(sys);
-            let name_idx = self.add_constant_gc(|gc| Value::system_ref(gc, resolved_sys));
+            let name_idx = self.add_constant_gc(|gc| Value::system_ref(gc, sys.clone()));
             self.emit_u16(name_idx, line);
         }
         Ok(())

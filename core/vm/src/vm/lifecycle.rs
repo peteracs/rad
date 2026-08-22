@@ -203,9 +203,7 @@ impl VM {
         // A previous public boundary must already have enforced this
         // invariant. Restore transaction-local state defensively instead of
         // merely dropping a stale context if an internal caller violated it.
-        self.abort_settlement();
-        self.abort_transaction();
-        self.abort_post_commit();
+        self.abort_effect_regions();
         let next_frame_id_before = self.next_frame_id;
         crate::value::set_profile_copy_context(self.profile_copies, 0);
         self.frames.clear();
@@ -243,10 +241,8 @@ impl VM {
         if result.is_err() {
             // BeginSettlement and EndSettlement are separate bytecodes. A
             // body/law failure can bypass EndSettlement, so every public run
-            // return must explicitly discard an unfinished transaction.
-            self.abort_settlement();
-            self.abort_transaction();
-            self.abort_post_commit();
+            // return must explicitly discard every unfinished effect region.
+            self.abort_effect_regions();
             self.frames.clear();
             self.stack.truncate(stack_base);
             self.next_frame_id = next_frame_id_before;

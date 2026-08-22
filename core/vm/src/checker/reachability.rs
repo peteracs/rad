@@ -291,14 +291,8 @@ impl Checker {
         }
 
         for binding in crate::ast::canonical_module_bindings(&self.alias_decls) {
-            let alias_name = binding
-                .canonical_namespace()
-                .expect("canonical bindings are namespaced");
             let decls = binding.declarations();
-            let name_map = match self.module_aliases.get(alias_name) {
-                Some(m) => m,
-                None => continue,
-            };
+            let name_map = binding.local_redirects();
             for decl in decls {
                 match decl {
                     Decl::Fn(f) => {

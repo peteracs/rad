@@ -454,6 +454,11 @@ transient resource Tape { orders: list = [] }
 
 A replay tape recorded into a transient resource leaves the match digest untouched, which is what makes tape-driven replay bit-exact by construction.
 
+That guarantee is independent of import spelling. A transient resource in a
+module imported with `use "cache.rad" as cache` remains excluded under its
+canonical resource identity; aliasing cannot accidentally make it persistent
+or change `world_digest()`.
+
 ## Systems
 
 A system is a function that runs on every entity matching a component signature:
@@ -591,7 +596,7 @@ system Render(p: Position, io true) after Physics {
 
 `Render` always runs after `Physics` has finished updating positions.
 
-When you group systems in a `schedule [...]` block, the runtime topologically sorts them based on these dependencies, then partitions them into conflict-free batches. You can list systems as **`alias.Sys`** or **`system::path::Sys`** (same `system::` paths as in `simulate`).
+When you group systems in a `schedule [...]` block, the runtime topologically sorts them based on these dependencies, then partitions them into conflict-free batches. You can list systems as **`alias.Sys`**, phases as **`alias.Phase`**, or systems as **`system::path::Sys`** (same `system::` paths as in `simulate`). Aliased phases expand to canonical system identities before sorting and conflict analysis.
 
 ## Parallel scheduling
 

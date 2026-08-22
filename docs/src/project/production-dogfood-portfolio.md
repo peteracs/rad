@@ -43,9 +43,17 @@ The full run then checks formatting, workspace compilation, VM/CLI/LSP suites,
 strict Clippy, architecture/folder-tree/line-limit policy, ordinary and causal
 snapshots, documentation links, mdBook, release build, and WASM compilation.
 
+This is a release campaign, not a quick smoke test. RiskBridge alone executes
+one million adjudications in native benchmark, record, replay, and pure-reference
+modes, so a full run can take tens of minutes and retain several gigabytes on a
+development machine. Do not rerun the complete project merely to validate an
+acceptance-regex or report-format edit: execute the affected command directly,
+then reserve the complete matrix for one final clean source generation.
+
 `-Project` and `-AllowDirty` exist for development diagnosis only. Such reports
 are explicitly `releaseEligible: false`; they cannot be presented as release
-evidence. `-SkipRepositoryGates` has the same status.
+evidence. `-Project riskbridge` still runs RiskBridge's complete scale matrix;
+it is not a lightweight check. `-SkipRepositoryGates` has the same status.
 
 The JSON report is the source of truth. Human summaries must not combine
 numbers from different source trees, binaries, profiles, machines, or cached

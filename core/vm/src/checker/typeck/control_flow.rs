@@ -736,10 +736,11 @@ impl Checker {
         }
         let mut expanded = Vec::new();
         for name in &stmt.systems {
-            if let Some(phase_systems) = self.phases.get(name).cloned() {
+            let resolved = self.resolve_canonical_name(name);
+            if let Some(phase_systems) = self.phases.get(&resolved).cloned() {
                 expanded.extend(phase_systems);
             } else {
-                expanded.push(name.clone());
+                expanded.push(resolved);
             }
         }
         for name in &expanded {

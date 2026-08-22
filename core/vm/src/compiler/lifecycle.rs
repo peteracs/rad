@@ -360,38 +360,6 @@ impl Compiler {
             let decls = binding.declarations();
             let all_names = binding.local_redirects();
             self.current_alias_scope = Some(all_names.clone());
-            for d in decls {
-                match d {
-                    Decl::Component(c) => {
-                        self.component_types.insert(
-                            all_names
-                                .get(&c.name)
-                                .cloned()
-                                .unwrap_or_else(|| c.name.clone()),
-                            Self::component_fields_as_defaults(&c.fields),
-                        );
-                    }
-                    Decl::Resource(r) => {
-                        self.resource_types.insert(
-                            all_names
-                                .get(&r.name)
-                                .cloned()
-                                .unwrap_or_else(|| r.name.clone()),
-                            Self::component_fields_as_defaults(&r.fields),
-                        );
-                    }
-                    Decl::Struct(s) => {
-                        self.component_types.insert(
-                            all_names
-                                .get(&s.name)
-                                .cloned()
-                                .unwrap_or_else(|| s.name.clone()),
-                            Self::component_fields_as_defaults(&s.fields),
-                        );
-                    }
-                    _ => {}
-                }
-            }
             // Namespaced modules obey the same declaration semantics as the
             // entry module. Register every compile-time fact before lowering
             // any body so forward references, system classification, and
@@ -525,42 +493,11 @@ impl Compiler {
             .iter()
             .any(|d| matches!(d, Decl::Fn(f) if f.name == "main"));
 
-        for decl in &program.declarations {
-            let mut resolved_name = None;
-            if let Some(span) = decl.span() {
-                if let Some(file_id) = span.file {
-                    if let Some(scope) = self.file_private_scopes.get(&file_id.0) {
-                        if let Some(name) = decl.namespace_name() {
-                            if let Some(mangled) = scope.get(name) {
-                                resolved_name = Some(mangled.clone());
-                            }
-                        }
-                    }
-                }
-            }
-
-            match decl {
-                Decl::Component(c) => {
-                    self.component_types.insert(
-                        resolved_name.unwrap_or_else(|| c.name.clone()),
-                        Self::component_fields_as_defaults(&c.fields),
-                    );
-                }
-                Decl::Resource(r) => {
-                    self.resource_types.insert(
-                        resolved_name.unwrap_or_else(|| r.name.clone()),
-                        Self::component_fields_as_defaults(&r.fields),
-                    );
-                }
-                Decl::Struct(s) => {
-                    self.component_types.insert(
-                        resolved_name.unwrap_or_else(|| s.name.clone()),
-                        Self::component_fields_as_defaults(&s.fields),
-                    );
-                }
-                _ => {}
-            }
-        }
+        let mut declaration_metadata = self.collect_declaration_metadata(program);
+        self.component_types
+            .extend(std::mem::take(&mut declaration_metadata.component_types));
+        self.resource_types
+            .extend(std::mem::take(&mut declaration_metadata.resource_types));
 
         self.compile_alias_decls()?;
 
@@ -644,118 +581,10 @@ impl Compiler {
                 ct.indexed_fields.iter().cloned().collect::<Vec<String>>(),
             );
         }
-        for decl in &program.declarations {
-            let mut resolved_name = None;
-            if let Some(span) = decl.span() {
-                if let Some(file_id) = span.file {
-                    if let Some(scope) = self.file_private_scopes.get(&file_id.0) {
-                        if let Some(name) = decl.namespace_name() {
-                            if let Some(mangled) = scope.get(name) {
-                                resolved_name = Some(mangled.clone());
-                            }
-                        }
-                    }
-                }
-            }
-
-            match decl {
-                Decl::Event(e) => {
-                    component_layouts.insert(
-                        resolved_name.unwrap_or_else(|| e.name.clone()),
-                        e.fields.iter().map(|(n, _)| n.clone()).collect(),
-                    );
-                }
-                Decl::Component(c) => {
-                    let name = resolved_name.unwrap_or_else(|| c.name.clone());
-                    component_layouts.insert(
-                        name.clone(),
-                        c.fields
-                            .iter()
-                            .map(|field| field.name.clone())
-                            .collect::<Vec<String>>(),
-                    );
-                    // `indexed` declarations must survive checker-less
-                    // compiles (replay of embedded trace source) — the AST
-                    // is the source of truth, the checker copy is a cache.
-                    indexed_component_fields
-                        .entry(name.clone())
-                        .or_insert_with(|| c.indexed_fields.clone());
-                    ordered_component_fields
-                        .entry(name)
-                        .or_insert_with(|| c.ordered_indexed_fields.clone());
-                }
-                Decl::Resource(r) => {
-                    let name = resolved_name.unwrap_or_else(|| r.name.clone());
-                    if r.transient {
-                        transient_resources.insert(name.clone());
-                    }
-                    component_layouts.insert(
-                        name,
-                        r.fields
-                            .iter()
-                            .map(|field| field.name.clone())
-                            .collect::<Vec<String>>(),
-                    );
-                }
-                Decl::Struct(s) => {
-                    component_layouts.insert(
-                        resolved_name.unwrap_or_else(|| s.name.clone()),
-                        s.fields
-                            .iter()
-                            .map(|field| field.name.clone())
-                            .collect::<Vec<String>>(),
-                    );
-                }
-                _ => {}
-            }
-        }
-        for binding in crate::ast::canonical_module_bindings(&self.alias_decls) {
-            let alias_name = binding
-                .canonical_namespace()
-                .expect("canonical bindings are namespaced");
-            let decls = binding.declarations();
-            for decl in decls {
-                match decl {
-                    Decl::Event(e) => {
-                        component_layouts.insert(
-                            crate::ast::canonical_module_symbol(alias_name, &e.name),
-                            e.fields.iter().map(|(n, _)| n.clone()).collect(),
-                        );
-                    }
-                    Decl::Component(c) => {
-                        let name = crate::ast::canonical_module_symbol(alias_name, &c.name);
-                        component_layouts.insert(
-                            name.clone(),
-                            c.fields
-                                .iter()
-                                .map(|field| field.name.clone())
-                                .collect::<Vec<String>>(),
-                        );
-                        indexed_component_fields.insert(name.clone(), c.indexed_fields.clone());
-                        ordered_component_fields.insert(name, c.ordered_indexed_fields.clone());
-                    }
-                    Decl::Resource(r) => {
-                        component_layouts.insert(
-                            crate::ast::canonical_module_symbol(alias_name, &r.name),
-                            r.fields
-                                .iter()
-                                .map(|field| field.name.clone())
-                                .collect::<Vec<String>>(),
-                        );
-                    }
-                    Decl::Struct(s) => {
-                        component_layouts.insert(
-                            crate::ast::canonical_module_symbol(alias_name, &s.name),
-                            s.fields
-                                .iter()
-                                .map(|field| field.name.clone())
-                                .collect::<Vec<String>>(),
-                        );
-                    }
-                    _ => {}
-                }
-            }
-        }
+        component_layouts.extend(declaration_metadata.component_layouts);
+        indexed_component_fields.extend(declaration_metadata.indexed_component_fields);
+        ordered_component_fields.extend(declaration_metadata.ordered_component_fields);
+        transient_resources.extend(declaration_metadata.transient_resources);
         let mut variant_layouts = HashMap::new();
         for (type_name, stdef) in &self.checker_sum_types {
             for variant in &stdef.variants {

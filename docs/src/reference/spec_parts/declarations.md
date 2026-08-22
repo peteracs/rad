@@ -229,6 +229,7 @@ The special variable `self` is bound to the current entity ID (unavailable in re
 ```
 phase <Name> [<System>, <System>, ...]
 serial phase <Name> [<System>, <System>, ...]
+pub phase <Name> [<PublicSystem>, <PublicSystem>, ...]
 ```
 
 Declares a named group of systems. Phase names can be used anywhere a system name is accepted in `schedule` blocks:
@@ -241,6 +242,25 @@ schedule [Physics, Rendering]
 ```
 
 The phase expands inline into its constituent systems. The checker validates that all listed systems exist and marks them as invoked (suppressing "unused system" warnings). Phases cannot nest other phases.
+
+A public phase can be scheduled through a module alias:
+
+```
+// simulation.rad
+pub resource Clock { frame: int = 0 }
+pub system Tick(clock: mut Clock) { clock.frame = clock.frame + 1 }
+pub phase Frame [Tick]
+
+// main.rad
+use "simulation.rad" as simulation
+schedule [simulation.Frame]
+```
+
+The phase name and every member are resolved to the defining module's
+canonical identity before checking, authority analysis, serial-group stamping,
+and bytecode lowering. A public phase does not make a private system public;
+systems exposed by that phase must also be `pub`. Private phases cannot be
+named outside their module.
 
 A **`serial phase`** additionally declares that its members must never share a parallel batch with each other, no matter how disjoint their data access is — "these systems are ordered and I do not want them raced", stated in the program instead of relied on implicitly. Members run in separate batches, in schedule order, in every schedule that includes them; systems outside the group may still run in parallel with them. The whole-schedule spelling is `schedule serial [...]` (§7.2).
 
@@ -381,11 +401,14 @@ print(math.square(5))
 let c = math.Color::Red { intensity: 42 }
 ```
 
-Aliasing prevents name collisions: two modules may define identically named `pub` declarations without conflict, as long as they are imported under different aliases. If `use "path"` is used without `as`, behavior is unchanged — declarations merge into the flat namespace.
+Aliasing prevents name collisions: two modules may define identically named `pub` declarations without conflict, as long as they are imported under different aliases. If `use "path"` is used without `as`, behavior is unchanged — declarations merge into the flat namespace. Systems and phases use the same dot-qualified access (`simulation.Tick`, `simulation.Frame`) as functions and types.
 
 **Visibility:**
 
-By default, all top-level declarations (`fn`, `component`, `struct`, `entity`, `state`, `event`, `type`) are **private** to the file they are defined in. To make a declaration accessible from other files, it must be prefixed with the `pub` keyword:
+By default, named top-level declarations (`fn`, `system`, `phase`, `component`,
+`resource`, `struct`, `entity`, `state`, `event`, types, and materialized
+views) are **private** to the file they are defined in. To make one accessible
+from another file, prefix it with `pub`:
 
 ```
 pub fn public_helper(x: int) -> int { return x }
@@ -399,13 +422,17 @@ If a file imports another file but attempts to use a private declaration from it
 **Resolution rules:**
 
 - Paths are resolved relative to the importing file, then canonicalized.
+- Semantic module identity is the normalized path, not an alias spelling or a
+  hash of source bytes. Multiple aliases, bare-plus-aliased imports, and
+  equivalent relative paths share one identity; different normalized paths
+  remain distinct even when their contents match.
 - The module loader recursively processes `use` statements depth-first.
 - Circular imports are safe: the loader tracks visited files and skips already-loaded modules.
 - Duplicate top-level symbol names across files are rejected with an error that names both definition sites.
 
 **Namespace:**
 
-Bare `use` imports merge declarations into a single flat namespace where every top-level name must be unique. Aliased imports (`use "path" as name`) keep their declarations separate — accessible only through the alias prefix — so identical names in different aliased modules do not collide.
+Bare `use` imports merge declarations into a single flat namespace where every top-level name must be unique. Aliased imports (`use "path" as name`) keep their declarations separate — accessible only through the alias prefix — so identical names in different aliased modules do not collide. All semantic tables use the same canonical identity: type checking, ownership, authority, phase expansion, scheduler metadata, runtime layouts, transient-resource metadata, snapshots, and replay cannot create a second module instance merely because its alias spelling changed.
 
 **Lockfile:**
 

@@ -9,7 +9,7 @@ rad query-plan MatchOrders --file projects/dogfood/bookcore/main.rad
 rad test projects/dogfood/bookcore/tests
 ```
 
-The production scenario submits 10,000 orders, rejects duplicate IDs and priority keys at the owner boundary, fills every crossing pair atomically, and proves the `OpenOrders` view drains with the book. `bench.rad` replays one million orders. Signed native values use numeric ordering; composite keys are lexicographic; equal-key buckets and entity traversal remain deterministic across snapshots and replay.
+The production scenario submits 10,000 orders, rejects duplicate IDs and priority keys at the owner boundary, fills every crossing pair through bounded atomic batches, and proves the `OpenOrders` view drains with the book. Each transaction publishes an indexed continuation fact, so `MatchOrders` keeps committing bounded batches until no crossing pair remains; the one-million-order benchmark cannot silently stop at a per-transaction cap. Signed native values use numeric ordering; composite keys are lexicographic; equal-key buckets and entity traversal remain deterministic across snapshots and replay.
 
 Failure fixtures cover owner bypass, signed/unsigned namespace collapse, amendment outside the owner, and a frame-reachable scan plus sort. The compiler points to `order_book.submit_*`, the nominal type boundary, or the transitive cost path.
 

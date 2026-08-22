@@ -30,6 +30,9 @@ Systems run when explicitly invoked via `<SystemName>()` or `schedule [ S1, S2, 
 - A single system call executes one system immediately.
 - `schedule [ ... ]` first computes a deterministic **topological sort** from each system’s `after` / `before` constraints.
 - Circular dependency among the listed systems is an error.
+- Named phases expand before sorting. Local and `Alias.Phase` spellings resolve
+  through canonical module identity, and repeated aliases of one module
+  deduplicate to one scheduled system identity.
 - After ordering, the runtime partitions systems into conflict-free batches using each system parameter’s mutability:
   - `mut` parameters are writes
   - non-`mut` parameters are reads

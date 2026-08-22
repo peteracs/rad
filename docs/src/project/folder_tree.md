@@ -69,6 +69,7 @@ rad/
         - `core/vm/src/linter/` - Lint engine and lint-specific tests.
         - `core/vm/src/merge/` - Three-way world merge engine and conflict tests.
         - `core/vm/src/module_loader/` - Module resolution, aliases, lockfiles, and loader tests.
+          - `core/vm/src/module_loader/tests/` - Canonical module-identity, phase, semantic-analysis, and runtime-metadata integration tests.
         - `core/vm/src/parser/` - Syntax parser, recovery, types, and causal extensions.
           - `core/vm/src/parser/decl/` - Callable, data, and dispatch declaration parsing.
           - `core/vm/src/parser/expr/` - Operator, postfix, and primary expression parsing.

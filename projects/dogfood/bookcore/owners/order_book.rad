@@ -29,6 +29,7 @@ pub component Fill owned {
 pub resource MatchCycle owned {
     fills: int = 0,
     last_batch: int = 0,
+    has_more_crossing_orders: bool = false,
 }
 
 pub materialized view OpenOrders {
@@ -111,6 +112,15 @@ fn apply_fill(
     })
 }
 
+readonly fn crossing_orders_remain() -> bool {
+    let buy_result = first(BuyOrder, "priority")
+    let sell_result = first(SellOrder, "priority")
+    if is_none(buy_result) or is_none(sell_result) { return false }
+    let buy: entity = buy_result |> unwrap
+    let sell: entity = sell_result |> unwrap
+    return require(buy, BuyOrder).price >= require(sell, SellOrder).price
+}
+
 pub transaction MatchBook(max_fills: int)
     writes owned [OpenOrder, BuyOrder, SellOrder, Fill, MatchCycle]
 {
@@ -141,9 +151,11 @@ pub transaction MatchBook(max_fills: int)
     update(MatchCycle) {
         fills = res(MatchCycle).fills + matched,
         last_batch = matched,
+        has_more_crossing_orders = crossing_orders_remain(),
     }
 
     ensures res(MatchCycle).last_batch <= max_fills
+    ensures not res(MatchCycle).has_more_crossing_orders or res(MatchCycle).last_batch == max_fills
 
     post_commit {
         emit next MatchBatchCommitted { fills: res(MatchCycle).last_batch }

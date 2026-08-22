@@ -28,6 +28,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File devtools/accept-portfolio.ps
 
 The command retains a source-, binary-, replay-, diagnostic-, memory-, and
 benchmark-bound JSON report under `artifacts/portfolio/`.
+It is intentionally expensive: the RiskBridge capstone runs four separate
+million-adjudication modes. Use direct `rad` commands for a focused diagnostic
+and save the complete portfolio for a final clean release generation.
 
 Add a new workload here only when it exercises several language/runtime
 boundaries. Small teaching examples belong under `examples/`; canonical

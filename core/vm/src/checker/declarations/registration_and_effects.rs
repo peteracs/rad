@@ -1,83 +1,4 @@
-
 impl Checker {
-    pub(super) fn collect_declarations(&mut self, program: &Program) {
-        for decl in &program.declarations {
-            match decl {
-                Decl::Component(c) => {
-                    self.register_component(c);
-                    self.define(&c.name, Ty::Str, false, c.span.clone(), c.is_pub, false);
-                }
-                Decl::Resource(r) => {
-                    self.register_resource(r);
-                    self.define(&r.name, Ty::Str, false, r.span.clone(), r.is_pub, false);
-                }
-                Decl::Struct(s) => {
-                    self.register_struct(s);
-                    self.define(&s.name, Ty::Str, false, s.span.clone(), s.is_pub, false);
-                }
-                Decl::Intent(i) => self.register_intent(i),
-                Decl::Law(l) => self.register_law(l),
-                Decl::Resolver(r) => self.register_resolver(r),
-                Decl::Constraint(c) => self.register_constraint(c),
-                Decl::State(s) => {
-                    self.register_state_machine(s);
-                    self.define(&s.name, Ty::Any, false, s.span.clone(), s.is_pub, false);
-                }
-                Decl::System(s) => self.register_system(s),
-                Decl::Event(e) => {
-                    self.register_event(e);
-                    self.define(&e.name, Ty::Str, false, e.span.clone(), e.is_pub, false);
-                }
-                Decl::Fn(f) => {
-                    self.register_function(f);
-                    if let Some(sig) = self.functions.get(&f.name) {
-                        let fn_ty = Ty::Fn {
-                            params: sig.params.clone(),
-                            ret: Box::new(sig.ret.clone()),
-                            purity: if sig.effects.is_pure() {
-                                FnPurity::Pure
-                            } else if sig.effects.is_readonly() {
-                                FnPurity::Readonly
-                            } else {
-                                FnPurity::Impure
-                            },
-                        };
-                        self.define(&f.name, fn_ty, false, f.span.clone(), f.is_pub, false);
-                    }
-                }
-                Decl::Type(t) => {
-                    self.register_sum_type(t);
-                    self.define(&t.name, Ty::Any, false, t.span.clone(), t.is_pub, false);
-                }
-                Decl::TypeAlias(a) => {
-                    self.register_type_alias(a);
-                    self.define(&a.name, Ty::Any, false, a.span.clone(), a.is_pub, false);
-                }
-                Decl::NativeType(native) => {
-                    self.register_native_type(native);
-                }
-                Decl::MaterializedView(view) => {
-                    self.materialized_views.insert(view.name.clone());
-                    self.define(&view.name, Ty::Str, false, view.span.clone(), view.is_pub, false);
-                }
-                Decl::Phase(p) => {
-                    self.phases.insert(p.name.clone(), p.systems.clone());
-                }
-                Decl::Entity(e) => {
-                    self.define(
-                        &e.name,
-                        Ty::EntityId,
-                        false,
-                        e.span.clone(),
-                        e.is_pub,
-                        false,
-                    );
-                }
-                _ => {}
-            }
-        }
-        self.check_system_cycles();
-    }
     pub(super) fn register_sum_type(&mut self, decl: &TypeDeclNode) {
         let type_params = &decl.type_params;
         let variants: Vec<VariantType> = decl
@@ -418,7 +339,7 @@ impl Checker {
             .iter()
             .map(|(name, is_mut, comp_type)| SystemParam {
                 name: name.clone(),
-                component_type: comp_type.clone(),
+                component_type: self.resolve_canonical_name(comp_type),
                 is_mut: *is_mut,
                 is_resource: false,
             })
@@ -441,7 +362,17 @@ impl Checker {
         );
         self.system_deps.insert(
             decl.name.clone(),
-            (decl.after.clone(), decl.before.clone(), decl.span.clone()),
+            (
+                decl.after
+                    .iter()
+                    .map(|dependency| self.resolve_canonical_name(dependency))
+                    .collect(),
+                decl.before
+                    .iter()
+                    .map(|dependency| self.resolve_canonical_name(dependency))
+                    .collect(),
+                decl.span.clone(),
+            ),
         );
     }
     pub(super) fn register_event(&mut self, decl: &EventDecl) {

@@ -1,5 +1,6 @@
 mod causal;
 mod decl;
+mod declaration_metadata;
 mod egraph;
 mod emit;
 mod escape;
