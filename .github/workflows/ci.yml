@@ -66,7 +66,10 @@ jobs:
         run: cargo test -p rad-vm --verbose
       - name: Compiler-owned language and host API coverage
         run: |
-          cargo build -p rad-cli -j 1
+          # Native FFI syntax/API evidence is part of the mandatory surface.
+          # Build the isolated worker beside `rad`; the runtime deliberately
+          # has no in-process or missing-worker fallback.
+          cargo build -p rad-cli -p rad-ffi-worker -j 1
           python3 tooling/language_surface.py --check
           python3 tooling/host_api_surface.py --check
           python3 tooling/generate_language_coverage.py --rad target/debug/rad --check
