@@ -477,12 +477,10 @@ mod tests {
 
         let err = load_program_with_uses(dir.join("main.rad").to_str().unwrap());
         if let Err(err_vec) = err {
-            assert!(
-                err_vec[0]
-                    .message
-                    .contains("Duplicate top-level declaration 'LIMIT'"),
-                "expected duplicate pub let error, got: {}",
-                err_vec[0].message
+            assert_eq!(
+                err_vec[0].message,
+                "Duplicate top-level declaration 'LIMIT' (already defined at a.rad:1)",
+                "duplicate diagnostics must use the root-independent semantic module identity"
             );
         } else {
             panic!("Expected duplicate pub let error, got Ok");

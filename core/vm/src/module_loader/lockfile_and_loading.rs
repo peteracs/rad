@@ -701,6 +701,17 @@ fn logical_child_module_identity(importer_identity: &str, import: &str) -> Strin
     format!("local:{}", parts.join("/"))
 }
 
+/// Present a canonical module identity without exposing its storage scheme.
+/// Diagnostics must survive a checkout moving between operating systems and
+/// workspace roots, so physical cache/canonicalized paths are never suitable
+/// source labels.
+fn module_identity_label(identity: &str) -> &str {
+    identity
+        .strip_prefix("local:")
+        .or_else(|| identity.strip_prefix("url:"))
+        .unwrap_or(identity)
+}
+
 fn parse_pass(
     path: &Path,
     ctx: &mut LoadContext,
@@ -933,7 +944,8 @@ fn merge_pass(entry_path: &Path, ctx: &mut LoadContext) -> Result<(), ()> {
                         .namespace_symbol()
                         .map(|(name, span)| (name.to_string(), span.line, span.col));
                     if let Some((name, line, col)) = symbol {
-                        let current_file = path.to_string_lossy().to_string();
+                        let current_file =
+                            module_identity_label(&parsed.module_identity).to_string();
                         let is_pub = decl.is_public();
                         let is_entry = path == entry_path;
 

@@ -4,4 +4,4 @@ exit_code: 1
 ---
 
 ---stderr---
-Error: Duplicate top-level declaration 'LIMIT' (already defined at \\?\H:\Projects\rad-lang\tests\conformance\modules\pub_let_dup_a.rad:3)
+Error: Duplicate top-level declaration 'LIMIT' (already defined at pub_let_dup_a.rad:3)
