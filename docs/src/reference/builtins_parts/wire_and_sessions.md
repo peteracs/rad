@@ -5,7 +5,7 @@ in-flight events. The wire codec moves that state between processes and
 machines, so two copies of a program can diverge offline and merge one world
 on reconnect:
 
-```rad
+```text
 // machine A
 tcp_write(conn, fork_to_bytes(fork()))
 
@@ -88,7 +88,7 @@ closure **restricted to touched values** complete the payload. Delta sync pays d
 and history at once, because the receiver already ingested the base's
 provenance when it ingested the base.
 
-```rad
+```text
 // receiver, once: full transfer establishes the shared base
 let base = fork_from_bytes(bytes) |> unwrap
 commit(base)
@@ -115,8 +115,8 @@ Guarantees, each backed by a composition test:
   `wire <digest>` origin — that is the one difference, and it is disclosed,
   not hidden.
 - **Cost tracks the divergence, not the world.** Touched entities are found
-  by CoW pointer comparison (O(divergence) when the forks share lineage,
-  full-scan fallback when they don't), and every candidate is re-verified
+  by CoW pointer comparison (O(divergence) for shared-lineage forks; unrelated
+  worlds require explicit whole-world comparison), and every candidate is re-verified
   by value, so false positives cost a comparison, never bytes.
 - **The reconstruction shares lineage with the receiver's base.** Apply is
   a CoW restore plus surgical edits — untouched columns stay shared — so
@@ -261,7 +261,7 @@ const why = runtime.session_why("button-1", "Style")
 > speculative execution and event semantics. The historical C backend is frozen
 > and should not be used as current feature-support evidence.
 
-```rad
+```text
 let future = fork()
 let predicted = simulate(future, [system::Physics, system::AI], 10)
 

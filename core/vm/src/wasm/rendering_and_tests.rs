@@ -693,9 +693,9 @@ on ClearNotes(e) {
     }
 
     #[test]
-    fn emit_op_rejects_legacy_pipe_and_break() {
+    fn emit_op_rejects_removed_pipe_and_break() {
         let rt = RadRuntime::new();
-        let mut chunk = rt.create_chunk("legacy");
+        let mut chunk = rt.create_chunk("removed-opcodes");
         let pipe_err = chunk.emit_op("Pipe", 1).unwrap_err();
         assert!(pipe_err.contains("Unknown opcode"), "got: {pipe_err}");
         let break_err = chunk.emit_op("Break", 1).unwrap_err();

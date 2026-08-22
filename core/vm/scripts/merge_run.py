@@ -63,7 +63,7 @@ def main() -> None:
         sys.exit(2)
     out.write_text(merged + "\n", encoding="utf-8")
     r = subprocess.run(
-        ["cargo", "run", "--quiet", "--", "--compat-v0.5-dx", str(out)],
+        ["cargo", "run", "--quiet", "--", str(out)],
         cwd=str(VM_ROOT),
     )
     sys.exit(r.returncode)

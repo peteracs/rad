@@ -260,7 +260,7 @@ mod tests {
         let replayed = load_program_from_source_bundle(
             &recorded.merged_source,
             &recorded.source_layout,
-            ParserOptions::default(),
+            ParserOptions,
         )
         .unwrap();
         assert!(replayed.errors.is_empty(), "{:?}", replayed.errors);

@@ -42,6 +42,34 @@
     }
 
     #[test]
+    fn transaction_stages_state_machine_transition_without_emitting() {
+        let output = run_source(
+            r#"
+            state Flow {
+                Ready { on start -> Running }
+                Running {}
+            }
+            component Job { flow: Flow::Ready }
+
+            transaction Start(target: entity) {
+                requires has(target, Job)
+                changes_only [Job]
+                let job = require(target, Job)
+                set(target, Job {
+                    flow: transition(job.flow, "start") |> unwrap,
+                })
+                ensures require(target, Job).flow == Flow::Running
+            }
+
+            let job = spawn(Job {})
+            Start(job)
+            print(require(job, Job).flow)
+            "#,
+        );
+        assert_eq!(output, ["Flow::Running"]);
+    }
+
+    #[test]
     fn failed_precondition_restores_the_exact_base_world() {
         let (vm, outcome) = transaction_vm(
             r#"

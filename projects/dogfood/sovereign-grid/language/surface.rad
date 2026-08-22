@@ -1,0 +1,90 @@
+use "../schema.rad"
+
+pub component SyntaxCell {
+    value: int = 0,
+    labels: list<str> = [],
+}
+
+pub event AsyncSurfaceProbe { expected: int }
+
+pub entity declared_surface_cell {
+    SyntaxCell { value: 1, labels: ["declared"] }
+}
+
+pure fn increment(value: int) -> int { return value + 1 }
+
+readonly fn read_value(target: entity) -> int {
+    return require(target, SyntaxCell).value
+}
+
+fn sum_three(first_value: int, second: int, third: int) -> int {
+    return first_value + second + third
+}
+
+async fn double_async(value: int) -> int { return value * 2 }
+
+async on AsyncSurfaceProbe(evt) {
+    let task: task<int> = async double_async(evt.expected / 2)
+    let value: int = await task
+    assert(value == evt.expected, "async call and await preserve the result")
+}
+
+@no_guest_allocation
+@no_runtime_allocation
+@no_host_allocation
+pub system AllocationContractProbe() {}
+
+pub fn exercise_surface() -> nil {
+    let unique mut owned_values: list<int> = [1, 2, 3]
+    owned_values[0] = 2
+    assert(owned_values[0] == 2, "unique mutable binding remains writable")
+
+    let rec factorial: fn(int) -> int = fn(value: int) -> int {
+        if value <= 1 { return 1 }
+        return value * factorial(value - 1)
+    }
+    assert(factorial(5) == 120, "recursive closure resolves its own binding")
+
+    let ordinary_callback: fn(int) -> int = fn(value: int) -> int { return value + 1 }
+    let pure_callback: pure fn(int) -> int = increment
+    let readonly_callback: readonly fn(entity) -> int = read_value
+    assert(ordinary_callback(1) == pure_callback(1), "function type purity is explicit")
+
+    let scalar: int | str = 7
+    assert(typeof(scalar) == "int", "union annotation preserves its selected value")
+    assert(!false, "bang is the symbolic logical-not spelling")
+    assert(sum_three(..(1, 2, 3)) == 6, "spread arguments retain order")
+
+    let runtime_cell: entity = entity "surface-runtime" {
+        SyntaxCell { value: 4, labels: ["runtime"] }
+    }
+    update(runtime_cell, SyntaxCell) {
+        value = 5,
+        labels[0] = "updated",
+    }
+    assert(readonly_callback(runtime_cell) == 5, "update writes the selected component")
+    assert(require(runtime_cell, SyntaxCell).labels == ["updated"], "indexed update writes back")
+
+    let selected: list<entity> = query { SyntaxCell } where SyntaxCell.value >= 1
+    assert(len(selected) >= 2, "query expression includes declared and runtime entities")
+
+    let mut component_pattern_seen: bool = false
+    match runtime_cell {
+        has SyntaxCell(cell) => { component_pattern_seen = cell.value == 5 }
+        _ => { component_pattern_seen = false }
+    }
+    assert(component_pattern_seen, "component match pattern binds the component")
+
+    let mut literal_pattern_seen: bool = false
+    match read_value(runtime_cell) {
+        5 => { literal_pattern_seen = true }
+        _ => { literal_pattern_seen = false }
+    }
+    assert(literal_pattern_seen, "literal and wildcard statement patterns execute")
+
+    let speculative: world_fork = simulate(fork(), [system::AllocationContractProbe], 1)
+    assert(typeof(speculative) == "world_fork", "qualified system references execute in simulation")
+
+    emit next AsyncSurfaceProbe { expected: 12 }
+    flush_events()
+}

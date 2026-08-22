@@ -66,7 +66,7 @@ Each fork gets an RNG seed derived from `(seed, fork_index)` with a SplitMix64 f
 runs are **bit-identical for the same inputs at any thread count**. Use it to score
 alternative strategies and `commit()` the winner:
 
-```rad
+```text
 let futures = simulate_par(fork(), [system::Economy], 10, 8, 42)
 let best = max_by(futures, fn(f) { return (peek(f, kingdom, Treasury) |> unwrap).gold })
 commit(best)
@@ -77,7 +77,7 @@ rollouts of one — pair `fork_with` with `simulate_many`. `fork_with` seeds eac
 shared root fork without mutating the live world, and `simulate_many` evaluates them all in
 parallel:
 
-```rad
+```text
 let root = fork()
 let candidates = [
     fork_with(root, Policy { rate: 1 }),
@@ -101,7 +101,7 @@ six rollouts of the root with `Policy` overridden, and the live world is never w
 produced it. When rollout 4 of 6 is the outlier that decides a candidate's worst-case score,
 pull its seed and re-run exactly that future in isolation:
 
-```rad
+```text
 let outs = simulate_par(root, SYSTEMS, 10, 6, 42)
 let outlier_seed = fork_seed(outs[4])              // never 0 for a rollout result
 let again = simulate_seeded(root, SYSTEMS, 10, outlier_seed)
@@ -117,7 +117,7 @@ turns "the SET of rollouts is reproducible" into "each individual rollout is rep
 Tests normally assert what changed — never what *didn't*. Because forks are CoW snapshots of
 100% of program state, RAD can check the negative space cheaply:
 
-```rad
+```text
 let before = fork()
 emit Hit { amount: 25 }
 flush_events()
@@ -150,7 +150,7 @@ The optional `input` argument is serialized to JSON at the boundary and surfaces
 guest as `sandbox_input()` — pass identity and parameters through this typed, data-only
 channel instead of splicing host values into the guest's source text:
 
-```rad
+```text
 match sandbox_run(bot_src, fork(), caps, { "unit": name, "round": n }) {
     Ok(f) => { /* guest read it via sandbox_input()["unit"] */ }
     Err(m) => { print(m) }
@@ -198,7 +198,7 @@ private double-buffered event queues, so its handlers run normally inside the cl
 (captured-events mode), and pending events are drained after the guest's main completes.
 Guest `print` output is surfaced to the host prefixed with `[sandbox]`.
 
-```rad
+```text
 let proposal = f"""
 component Morale { level: 50 }
 set(get_entity("kingdom"), Morale { level: 80 })
@@ -219,7 +219,7 @@ result with `sandbox_output(v)` and always spends fuel. After the call, the host
 back from the calling VM — no need to make the guest WRITE state just to communicate, and no
 need to parse `print` text:
 
-```rad
+```text
 match sandbox_run(bot_src, fork(), caps, { "round": n }) {
     Ok(f)  => {
         let plan = sandbox_last_output()   // the guest's sandbox_output(v), or nil
@@ -315,8 +315,11 @@ Each io record carries `f`/`s` (frame/sequence coordinates — frames are main-t
 `flush_events` flips; speculative flushes inside `simulate()` don't advance the clock) and
 `a`, a digest of the arguments. Traces are **self-contained**: the header embeds the full
 authenticated module bundle, including resolved import edges, and the final record carries
-both a blake3 content digest of the world and the terminal success/error outcome. Traces are
-written even when the run crashes — a trace of the crash is the point.
+both a blake3 content digest of the world and the terminal success/error outcome. The CLI
+streams JSONL records through zstd into an atomic staging file while incrementally hashing
+the uncompressed body; recording memory is independent of I/O-record count. A complete,
+digest-sealed file replaces the destination only at finalization. Traces are written even
+when the run crashes — a trace of the crash is the point.
 
 ### Replaying: `rad replay`
 
@@ -324,7 +327,10 @@ written even when the run crashes — a trace of the crash is the point.
 rad replay trace.radr [--to-frame <n>] [--force]
 ```
 
-Re-executes the recorded run **bit-for-bit** from nothing but the trace file. Replay-managed
+Re-executes the recorded run **bit-for-bit** from nothing but the trace file. Ordinary
+faithful replay verifies and indexes the envelope with no retained `IoRecord` vector, then
+reopens it and consumes one result at a time; memory is independent of trace length.
+Replay-managed
 builtins never execute — `read_file` returns the recorded payload even if the file was
 deleted, `http_get` replays the recorded response without touching the network, and a
 recorded crash is reproduced verbatim. The RNG is rewound to the recorded seed; everything
@@ -345,6 +351,10 @@ Three protection layers, all loud:
 
 `--to-frame N` halts at the start of frame `N` (handlers dispatched by the k-th
 `flush_events` belong to frame k), leaving the world exactly as it was mid-history.
+
+`--serve` and `--with` intentionally materialize the complete trace because time travel
+requires random frame access and retroactive replay requires an argument-keyed oracle.
+Use ordinary `rad replay` for unbounded production tapes.
 
 ### Time travel: `rad replay --serve`
 

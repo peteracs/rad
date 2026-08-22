@@ -22,7 +22,7 @@ impl Checker {
         }
     }
 
-    fn with_mixed_list_warning_suppressed<F>(&mut self, f: F) -> Ty
+    pub(crate) fn with_mixed_list_warning_suppressed<F>(&mut self, f: F) -> Ty
     where
         F: FnOnce(&mut Checker) -> Ty,
     {

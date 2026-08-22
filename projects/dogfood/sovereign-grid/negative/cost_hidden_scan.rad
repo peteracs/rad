@@ -1,0 +1,5 @@
+component Asset {}
+fn count_assets() -> int { return len(entities(Asset)) }
+@frame
+@no_full_scan
+system Render(reads Asset) { let _count = count_assets() }

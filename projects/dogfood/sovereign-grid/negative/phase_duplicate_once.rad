@@ -1,0 +1,5 @@
+event DispatchPublished {}
+@exactly_once
+on DispatchPublished(_evt) {}
+signal sync DispatchPublished {}
+signal sync DispatchPublished {}

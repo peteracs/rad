@@ -1,0 +1,12 @@
+component Balance { value: int = 0 }
+component RiskState { score: int = 0 }
+fn hidden(target: entity) { set(target, RiskState { score: 99 }) }
+transaction Capture(target: entity) {
+    requires has(target, Balance)
+    changes_only [Balance]
+    update(target, Balance) { value = 1 }
+    hidden(target)
+    ensures has(target, Balance)
+}
+let account = spawn(Balance {}, RiskState {})
+Capture(account)

@@ -259,6 +259,7 @@ impl VM {
             ordered_decl: Arc::new(HashMap::new()),
             timeline: Vec::new(),
             event_log: VecDeque::new(),
+            capture_isolated_event_log: false,
             rng_state: shared.rng_state,
             tasks: HashMap::new(),
             next_task_id: 1,
@@ -370,8 +371,12 @@ impl VM {
     ///
     /// This is the deterministic embedding entry point for tests, replay
     /// harnesses, and isolated interpreters such as Miri. A zero seed is
-    /// normalized to the same non-zero fallback used by `set_random_seed`.
+    /// normalized to the same deterministic non-zero seed used by `set_random_seed`.
     pub fn new_with_seed(seed: u64) -> Self {
+        // Runtime arity validation is a hot-path table lookup. Derive that
+        // table before any system allocation scope can begin, including for
+        // checker-less bytecode embedders.
+        crate::builtins::initialize_builtin_call_shapes();
         let mut gc = GcHeap::new();
         let mut globals = Vec::new();
         let mut global_names = Vec::new();
@@ -431,6 +436,7 @@ impl VM {
             ordered_decl: Arc::new(HashMap::new()),
             timeline: Vec::new(),
             event_log: VecDeque::new(),
+            capture_isolated_event_log: false,
             rng_state: Self::normalize_random_seed(seed),
             tasks: HashMap::new(),
             next_task_id: 1,
@@ -507,6 +513,29 @@ impl VM {
         ));
     }
 
+    /// Stream a canonical compressed trace directly to `output_path`.
+    /// Recording memory is O(one serialized record), independent of session
+    /// length; publication is atomic and happens only when recording finishes.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn enable_recording_to_file(
+        &mut self,
+        source: &str,
+        features: &[String],
+        source_layout: &crate::source_bundle::SourceLayout,
+        output_path: &std::path::Path,
+    ) -> Result<(), String> {
+        self.recorder = Some(
+            crate::replay::TraceRecorder::new_file_with_features_and_layout(
+                source,
+                self.rng_state,
+                features,
+                source_layout,
+                output_path,
+            )?,
+        );
+        Ok(())
+    }
+
     /// Finish recording and return the trace as JSONL, if recording was on.
     /// Appends the end record (world digest at exit or crash point) that
     /// replay verifies itself against.
@@ -520,6 +549,19 @@ impl VM {
             r.record_end_with_outcome(&digest, error);
             r.to_jsonl()
         })
+    }
+
+    /// Finish either an in-memory embedding trace or a file-backed CLI trace.
+    pub fn finish_recording_with_outcome(
+        &mut self,
+        error: Option<&str>,
+    ) -> Result<Option<crate::replay::FinishedTrace>, String> {
+        let digest = self.world.content_digest();
+        let Some(mut recorder) = self.recorder.take() else {
+            return Ok(None);
+        };
+        recorder.record_end_with_outcome(&digest, error);
+        recorder.finish().map(Some)
     }
 
     /// Enter replay mode: managed builtins are served from the trace, and

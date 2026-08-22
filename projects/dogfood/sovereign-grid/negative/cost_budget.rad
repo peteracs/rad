@@ -1,0 +1,9 @@
+component Asset {}
+@frame
+@allow_full_scan(reason: "intentional negative budget fixture")
+@budget(instructions: 1)
+system Render(reads Asset) {
+    for _asset in entities(Asset) {}
+}
+spawn(Asset {})
+Render()

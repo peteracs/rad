@@ -244,21 +244,8 @@ pub struct Checker {
     pub(crate) semantic_input_fingerprint: Option<[u8; 32]>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct CheckerOptions {
-    pub compat_v0_5_dx: bool,
-    pub warn_compat: bool,
     pub strict_types: bool,
     pub features: Vec<String>,
-}
-
-impl Default for CheckerOptions {
-    fn default() -> Self {
-        Self {
-            compat_v0_5_dx: false,
-            warn_compat: true,
-            strict_types: false,
-            features: Vec::new(),
-        }
-    }
 }

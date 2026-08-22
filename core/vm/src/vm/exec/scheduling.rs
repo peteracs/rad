@@ -325,12 +325,12 @@ impl VM {
                 .systems
                 .get(name)
                 .ok_or_else(|| format!("Unknown system '{}'", name))?;
-            for dep in &info.after {
+            for dep in info.after.iter() {
                 if name_set.contains(dep.as_str()) {
                     graph.entry(name.clone()).or_default().push(dep.clone());
                 }
             }
-            for dep in &info.before {
+            for dep in info.before.iter() {
                 if name_set.contains(dep.as_str()) {
                     graph.entry(dep.clone()).or_default().push(name.clone());
                 }
@@ -466,15 +466,15 @@ impl VM {
         }
         let resource_only = info.params.is_empty();
         let ctypes: Vec<String> = info.params.iter().map(|(_, _, t)| t.clone()).collect();
-        let eids = if resource_only {
-            vec![0_u32]
+        let eids: smallvec::SmallVec<[u32; 1]> = if resource_only {
+            smallvec::smallvec![0_u32]
         } else {
-            self.get_world().query(&ctypes, &[])
+            self.get_world().query(&ctypes, &[]).into()
         };
         for eid in eids {
             let saved_depth = self.frames.len();
             let stack_base = self.stack.len();
-            for (_pname, _is_mut, ctype) in &info.params {
+            for (_pname, _is_mut, ctype) in info.params.iter() {
                 if let Some(comp) = self.get_world().get_component(eid, ctype) {
                     let __v = Value::from_component_data(&mut self.gc, comp);
                     self.push(__v);
@@ -538,8 +538,13 @@ impl VM {
 
     pub(crate) fn exec_run_system(&mut self) -> Result<(), String> {
         let name_idx = self.read_u16()? as usize;
-        let sys_name = helpers::constant_resolved_system_name(self.current_chunk(), name_idx)?;
-        self.run_system_by_name(&sys_name)?;
+        let name_value =
+            helpers::constant_resolved_system_name_value(self.current_chunk(), name_idx)?;
+        let sys_name = name_value
+            .as_str()
+            .or_else(|| name_value.as_system_ref())
+            .expect("resolved system-name value was validated");
+        self.run_system_by_name(sys_name)?;
         self.bi_flush_events(vec![])?;
         Ok(())
     }

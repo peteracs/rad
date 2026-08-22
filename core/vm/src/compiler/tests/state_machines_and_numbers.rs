@@ -127,7 +127,7 @@
 
     #[test]
     fn compile_match_nested_destructuring_and_guard() {
-        let output = run_source_result_with_compat(
+        let output = run_source_result(
             r#"
             type Meta {
                 Info { code: 0 }
@@ -141,7 +141,7 @@
                     print(code)
                 }
                 Alarm { .. } => {
-                    print("fallback")
+                    print("remaining alarm")
                 }
             }
         "#,

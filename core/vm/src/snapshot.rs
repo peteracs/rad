@@ -241,9 +241,7 @@ fn run_file_in_memory_with_features(
     filepath: &str,
     experimental_laws: bool,
 ) -> (String, String, i32) {
-    let parser_options = ParserOptions {
-        compat_v0_5_dx: false,
-    };
+    let parser_options = ParserOptions;
     let loaded = match load_program_with_source_map_and_options(filepath, parser_options) {
         Ok(loaded) => loaded,
         Err(errors) => {
@@ -264,8 +262,6 @@ fn run_file_in_memory_with_features(
         &loaded.program,
         &loaded.aliases,
         CheckerOptions {
-            compat_v0_5_dx: false,
-            warn_compat: true,
             strict_types: false,
             features: if experimental_laws {
                 vec!["causal_laws".to_string()]

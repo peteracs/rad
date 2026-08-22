@@ -1,5 +1,5 @@
 fn run_authority_command(query: AuthorityQuery, filepath: String, json: bool) {
-    let loaded = match load_cli_program(&filepath, ParserOptions::default()) {
+    let loaded = match load_cli_program(&filepath, ParserOptions) {
         Ok(loaded) => loaded,
         Err(errors) => {
             eprintln!("{errors}");

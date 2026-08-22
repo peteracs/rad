@@ -1,0 +1,108 @@
+use "../schema.rad"
+use "../owners/grid_owner.rad"
+
+on MissionSubmitted(evt) {
+    mark_phase(evt.mission, "Intake")
+}
+
+@non_reentrant
+@no_nested_flush
+@must_complete_before(Publish)
+
+on MissionReserved(evt) {
+    mark_phase(evt.mission, "Plan")
+    launch(evt.mission)
+}
+
+on MissionLaunched(evt) {
+    mark_phase(evt.mission, "Commit")
+    assert(has(evt.asset, AssetCapacity), "assigned asset remains published")
+}
+
+@exactly_once
+
+on MissionCompleted(evt) {
+    let audit: AuditTrail = require(evt.mission, AuditTrail)
+    mark_phase(evt.mission, "Publish")
+    signal sync AuditPublished { mission: evt.mission, revision: audit.revision }
+}
+
+on AuditPublished(evt) {
+    assert(require(evt.mission, AuditTrail).revision == evt.revision, "audit publication is atomic")
+}
+
+on MaintenanceWindow once (evt) where has(evt.asset, AssetIdentity) {
+    mark_phase(evt.asset, "Maintenance")
+}
+
+fn account_active(_mission: entity) -> nil {
+    let scratch: DispatchScratch = res(DispatchScratch)
+    set_resource(DispatchScratch, DispatchScratch {
+        probes: scratch.probes + 1,
+        last_asset: scratch.last_asset,
+    })
+}
+
+@frame
+@no_full_scan
+@budget(instructions: 50000)
+pub system AccountActiveMissions(
+    reads ActiveMission,
+    reads Mission,
+    reads DispatchScratch,
+    writes DispatchScratch,
+) {
+    visit_view(ActiveMissions, account_active)
+}
+
+@tick
+@no_full_scan
+@budget(instructions: 10000)
+pub system ObservePriorityAsset(
+    reads AssetIdentity,
+    reads DispatchScratch,
+    writes DispatchScratch,
+) {
+    let first_asset: Option<entity> = first(AssetIdentity, "dispatch_key")
+    if is_some(first_asset) {
+        let asset: entity = first_asset |> unwrap
+        let identity: AssetIdentity = require(asset, AssetIdentity)
+        let scratch: DispatchScratch = res(DispatchScratch)
+        set_resource(DispatchScratch, DispatchScratch {
+            probes: scratch.probes + 1,
+            last_asset: identity.id,
+        })
+    }
+}
+
+@render
+@allow_full_scan(reason: "offline acceptance baseline, never scheduled in production")
+pub system BaselineAssetProbe(
+    reads AssetIdentity,
+    reads DispatchScratch,
+    writes DispatchScratch,
+) {
+    let mut observed: int = 0
+    for _asset in entities(AssetIdentity) {
+        observed = observed + 1
+    }
+    let scratch: DispatchScratch = res(DispatchScratch)
+    set_resource(DispatchScratch, DispatchScratch {
+        probes: scratch.probes + observed,
+        last_asset: scratch.last_asset,
+    })
+}
+
+pub fn execute_cycle(mission: entity, asset: entity) -> nil {
+    enter_phase("Intake")
+    flush_events()
+    enter_phase("Plan")
+    ReserveMission(mission, asset, Credits(i64(250)))
+    flush_events()
+    enter_phase("Commit")
+    flush_events()
+    CompleteMission(mission)
+    enter_phase("Publish")
+    flush_events()
+    assert_trace(mission, ["Intake", "Plan", "Commit", "Publish"])
+}

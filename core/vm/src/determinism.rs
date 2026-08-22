@@ -21,8 +21,8 @@ use std::collections::HashMap;
 /// Compile `src` from scratch and run it in a fresh VM with the given RNG
 /// seed. Returns the print buffer and the final world content digest.
 fn run_fresh(src: &str, seed: u64) -> (Vec<String>, String) {
-    let result = crate::test_support::compile_source(src, ParserOptions::default())
-        .expect("parse and compile");
+    let result =
+        crate::test_support::compile_source(src, ParserOptions).expect("parse and compile");
     let mut vm = VM::new();
     vm.suppress_output();
     vm.set_random_seed(seed);

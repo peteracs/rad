@@ -180,8 +180,6 @@ fn fixed_operand_bytes(op: Op) -> Option<usize> {
         | Lte
         | Gte
         | Not
-        | And
-        | Or
         | Await
         | Yield
         | Return
@@ -192,7 +190,6 @@ fn fixed_operand_bytes(op: Op) -> Option<usize> {
         | Emit
         | TypeOf
         | Len
-        | Break
         | Snapshot
         | Rollback
         | Unpack
@@ -235,8 +232,7 @@ fn fixed_operand_bytes(op: Op) -> Option<usize> {
         | BeginSettlement
         | EndSettlement
         | StageCandidate
-        | EndPostCommit
-        | Pipe => Some(0),
+        | EndPostCommit => Some(0),
     }
 }
 

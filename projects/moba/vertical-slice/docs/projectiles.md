@@ -16,7 +16,7 @@ authoritative projectile ids when snapshots arrive.
 | `server/src/sim/lag_compensation.rad` | `PositionHistory` ring entities keyed by `player_id`, per-tick recording, and tick-indexed rollback queries. |
 | `server/src/server/clock.rad` | Live fixed-tick integration: apply queued inputs, flush movement, record history, advance projectiles, resolve hits. |
 | `server/src/server/input_queue.rad` | Peer expiration/disconnect cleanup for player avatars and position-history entities. |
-| `server/src/protocol/match_protocol.rad` | Cast packet decode plus projectile and projectile-impact records in state snapshots. |
+| `server/src/transport/match_protocol.rad` | Cast packet decode plus projectile and projectile-impact records in state snapshots. |
 | `client/src/transport/matchProtocol.ts` | Browser cast packet encode plus projectile and projectile-impact record parse. |
 | `client/src/transport/matchWire.ts` | Shared browser wire primitives for fixed-point projectile coordinates. |
 | `client/src/transport/serverStateBuffer.ts` | Reusable projectile and impact records for pooled snapshot parsing. |

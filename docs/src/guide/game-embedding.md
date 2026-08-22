@@ -152,7 +152,7 @@ Relevant files:
 - `projects/moba/vertical-slice/server/src/server/input_queue.rad` - target-tick jitter
   buffer with late/future/duplicate input rejection, shared peer-status helpers,
   and receipt/applied ACK tracking for move and cast inputs.
-- `projects/moba/vertical-slice/server/src/protocol/match_protocol.rad` - compact UDP
+- `projects/moba/vertical-slice/server/src/transport/match_protocol.rad` - compact UDP
   packet encode/decode helpers.
 - `projects/moba/vertical-slice/server/src/transport/udp_match.rad` - bounded datagram
   receive loop and state snapshot sends.
@@ -218,8 +218,8 @@ Dogfooding this phase added native RAD networking primitives:
 `udp_send_to_bytes`, `udp_recv_bytebuf`, `udp_recv_bytebuf_timeout`,
 `udp_send_bytebuf`, and `udp_close`. Timeout receives return `Option` instead of
 sentinel handles so server loops can poll sockets without blocking simulation.
-The bytebuf variants are the preferred binary-packet path; byte-list variants
-remain compatibility helpers, and string variants remain useful for diagnostics
+The bytebuf variants are the production binary-packet path; byte-list variants
+provide explicit list interchange, and string variants remain useful for diagnostics
 and simple text protocols. The MOBA project uses UDP directly on the authority
 side and WebTransport on the browser side; TCP/HTTP probes are deliberately
 absent from this project.
@@ -238,7 +238,7 @@ live browser netcode telemetry, and
 binary `moba-rad/udp-v10-peer-snapshot` packet encoding over RAD bytebuf
 UDP builtins. The RAD authority also owns `ServerControl` lifecycle state and
 closes its UDP socket with `udp_close` on graceful loop exit.
-Next protocol work belongs in `server/src/protocol/match_protocol.rad` and the
+Next protocol work belongs in `server/src/transport/match_protocol.rad` and the
 matching client `transport/matchProtocol.ts`: input flags and richer
 authority-side resend policy tuning. Do
 not add a second JSON/HTTP protocol for those features.

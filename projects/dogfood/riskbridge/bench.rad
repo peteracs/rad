@@ -14,21 +14,37 @@ fn main() -> nil {
     assert(flush_batch > 0, "event flush batch must be positive")
     assert(mode == "native" or mode == "reference", "mode must be native or reference")
     let customer: entity = decisions.register_customer(CustomerId(u64(1)))
+    let mut attempt_slots: list<entity> = []
+    for _slot_index in range(0, flush_batch) {
+        attempt_slots = push(attempt_slots, spawn())
+    }
     for i in range(0, adjudications) {
         let request = risk_input(i, 0)
-        let _attempt: entity = if mode == "native" {
-            adjudicate_native(customer, request, u64(i))
+        let slot = attempt_slots[i % flush_batch]
+        let attempt: entity = if mode == "native" {
+            adjudicate_native_into(slot, customer, request, u64(i))
         } else {
-            adjudicate_reference(customer, request, u64(i))
+            adjudicate_reference_into(slot, customer, request, u64(i))
         }
+        assert(attempt == slot, "the adjudication stays in its bounded online slot")
         if (i + 1) % flush_batch == 0 {
             flush_events()
+            for completed in attempt_slots {
+                decisions.ArchiveDecision(completed)
+            }
             if collect_each_batch {
                 let _swept = gc_collect()
             }
         }
     }
     flush_events()
+    for completed in attempt_slots {
+        if has(completed, TransactionAttempt) {
+            decisions.ArchiveDecision(completed)
+        }
+    }
     assert(res(DecisionAudit).committed == adjudications, "every native decision committed")
+    assert(res(ArchivedDecisionReceipt).decisions == adjudications, "every completed decision archived")
+    assert(len(entities(TransactionAttempt)) == 0, "online attempt retention is bounded by the flush batch")
     print(f"riskbridge-bench: adjudications={adjudications} mode={mode} generation=17 flush_batch={flush_batch} explicit_gc={collect_each_batch}")
 }

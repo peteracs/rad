@@ -187,8 +187,15 @@ impl Checker {
                     );
                 }
 
-                for (comp, _) in &q.components {
-                    if let Some(ct) = self.components.get(comp) {
+                let canonical_components = q
+                    .components
+                    .iter()
+                    .map(|(component, _)| self.resolve_canonical_name(component))
+                    .collect::<Vec<_>>();
+                for ((comp, _), resolved) in
+                    q.components.iter().zip(canonical_components.iter())
+                {
+                    if let Some(ct) = self.components.get(resolved) {
                         if !ct.is_pub && is_cross_file(ct.file_id, span.file) {
                             self.error(
                                 span,
@@ -209,10 +216,12 @@ impl Checker {
 
                 if let Some(filter) = &q.filter {
                     self.push_scope();
-                    for (comp, _is_mut) in &q.components {
+                    for ((comp, _is_mut), resolved) in
+                        q.components.iter().zip(canonical_components.iter())
+                    {
                         self.define(
                             comp,
-                            Ty::Component(comp.clone()),
+                            Ty::Component(resolved.clone()),
                             false,
                             span.clone(),
                             false,
@@ -226,8 +235,13 @@ impl Checker {
 
                 let num_comps = q.components.len();
                 if stmt.bindings.len() == num_comps {
-                    for (i, (comp, is_mut)) in q.components.iter().enumerate() {
-                        if !self.components.contains_key(comp) {
+                    for (i, ((comp, is_mut), resolved)) in q
+                        .components
+                        .iter()
+                        .zip(canonical_components.iter())
+                        .enumerate()
+                    {
+                        if !self.components.contains_key(resolved) {
                             self.error(
                                 &stmt.span,
                                 format!("Unknown component '{}' in query unpack", comp),
@@ -236,7 +250,7 @@ impl Checker {
                         }
                         self.define(
                             &stmt.bindings[i],
-                            Ty::Component(comp.clone()),
+                            Ty::Component(resolved.clone()),
                             *is_mut,
                             stmt.span.clone(),
                             false,
@@ -252,8 +266,13 @@ impl Checker {
                         false,
                         true,
                     );
-                    for (i, (comp, is_mut)) in q.components.iter().enumerate() {
-                        if !self.components.contains_key(comp) {
+                    for (i, ((comp, is_mut), resolved)) in q
+                        .components
+                        .iter()
+                        .zip(canonical_components.iter())
+                        .enumerate()
+                    {
+                        if !self.components.contains_key(resolved) {
                             self.error(
                                 &stmt.span,
                                 format!("Unknown component '{}' in query unpack", comp),
@@ -262,7 +281,7 @@ impl Checker {
                         }
                         self.define(
                             &stmt.bindings[i + 1],
-                            Ty::Component(comp.clone()),
+                            Ty::Component(resolved.clone()),
                             *is_mut,
                             stmt.span.clone(),
                             false,

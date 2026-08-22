@@ -1,37 +1,38 @@
-# RAD v0.5 Enterprise DX Specification (Draft)
+# RAD Enterprise DX Semantics
 
-Status: Draft proposal
-Target release: v0.5.0
+Status: Current
 Authors: RAD contributors
 
 ## 1. Goals
 
-This document defines a concrete v0.5 developer-experience upgrade focused on:
+This document defines the current developer-experience contract focused on:
 
 - Reducing syntax surprises in sum-type construction.
 - Reducing boilerplate in `match` destructuring.
-- Improving diagnostic quality and migration safety.
+- Improving diagnostic quality and refactor safety.
 - Providing enterprise-oriented coding conventions.
 
-The proposal is additive and migration-safe for v0.5.x.
+These forms are part of the one canonical grammar.
 
 ## 2. Pain Points Addressed
 
 ### 2.1 Zero-field sum variants are unintuitive
 
-Current behavior requires:
+The explicit form is:
 
-```rad
+```text
 AccessSignal::MfaDisabled { }
 ```
 
-Using `AccessSignal::MfaDisabled` can be interpreted as a state-machine reference and produce confusing errors.
+The canonical shorthand `AccessSignal::MfaDisabled` constructs the same
+zero-field variant unless the name is also a state-machine state; Section 4
+defines that ambiguity.
 
 ### 2.2 Match patterns become noisy
 
 Large sum variants force all-needed-names style bindings:
 
-```rad
+```text
 match sig {
   SuspiciousGeo { account, region, severity } => { ... }
 }
@@ -47,17 +48,17 @@ When `Type::Variant` is misinterpreted, diagnostics mention state-machine errors
 
 ## 3.1 Zero-field constructor shorthand
 
-### New syntax
+### Syntax
 
 Allow:
 
-```rad
+```text
 TypeName::VariantName
 ```
 
 as shorthand for:
 
-```rad
+```text
 TypeName::VariantName { }
 ```
 
@@ -75,18 +76,18 @@ Current (simplified):
 primary = IDENT "::" IDENT [ "{" field_init* "}" ] | ...
 ```
 
-v0.5 interpretation:
+Canonical interpretation:
 
 - `IDENT "::" IDENT "{" ... "}"` -> explicit variant constructor.
 - `IDENT "::" IDENT` -> either zero-field variant constructor or state reference (resolved by disambiguation rules in Section 4).
 
 ## 3.2 Match rest binding
 
-### New syntax
+### Syntax
 
 Allow:
 
-```rad
+```text
 match sig {
   SuspiciousGeo { region, .. } => { ... }
   MfaDisabled => { ... }
@@ -95,7 +96,7 @@ match sig {
 
 Equivalent explicit zero-field arm remains valid:
 
-```rad
+```text
 MfaDisabled { } => { ... }
 ```
 
@@ -121,9 +122,8 @@ Note: A bare variant match (`VariantName => { ... }`) is now supported for all v
 Resolution order for `A::B` in expression position:
 
 1. If followed by `{ ... }`, parse as explicit variant constructor syntax candidate.
-2. If `A` is both a known sum type and state machine:
-   - If sum type contains variant `B` with zero fields and no braces are provided, treat as sum constructor and emit informational note in `-W pedantic` mode.
-   - If both interpretations remain valid and incompatible with context, emit explicit ambiguity error with fix-it choices.
+2. If `A` is both a known sum type and state machine, unbraced `A::B` denotes
+   the state-machine state. Use `A::B { }` to select the sum variant.
 3. If only sum type interpretation is valid, construct sum variant.
 4. If only state-machine interpretation is valid, construct state reference.
 5. If neither is valid, keep existing unknown-type/state diagnostic behavior but append contextual hint.
@@ -163,11 +163,11 @@ This section defines responsibilities, not implementation details.
 
 Add codes for new/changed diagnostics:
 
-- `E2501`: reserved — ambiguous qualified reference (`A::B`) between state and sum variant. Currently unreachable at the source level because RAD's flat namespace prevents `type X` and `state X` from coexisting. Implemented as defense-in-depth for synthetic ASTs and future namespace evolution.
+- `E2501`: ambiguous qualified reference (`A::B`) between state and sum variant
+  in an invalid or synthetic semantic product.
 - `E2502`: zero-field shorthand used on non-zero-field variant.
 - `E2503`: invalid rest marker placement in match pattern.
 - `E2504`: unknown named binding in variant match pattern.
-- `W2501`: compatibility warning for behavior that will become stricter in v0.6.
 
 Code format should be stable and testable.
 
@@ -186,30 +186,23 @@ Error[E2502]: Variant 'AccessSignal::LoginBurst' requires fields but shorthand w
 help: use 'AccessSignal::LoginBurst { extra_sessions: ..., region: ... }'
 ```
 
-## 6.3 Warning policy flags
+## 6.3 Warning policy
 
-v0.5 CLI policy:
+CLI policy:
 
 - `--deny-warnings` : warnings produce non-zero exit.
-- `--warn-compat` : enable migration warnings (default: on for CLI, off for playground).
 
-## 7. Migration and Compatibility Policy
+## 7. Canonical Source Policy
 
-## 7.1 v0.5.0 (additive)
+RAD does not select grammar or name-resolution semantics through command-line
+flags. A source file has the same meaning in the CLI, LSP, embedding API, and
+playground.
+
+The accepted forms are:
 
 - Accept both `Type::Variant` and `Type::Variant { }` for zero-field variants.
 - Accept both `Variant` and `Variant { }` as zero-field match arms.
 - Accept `Variant { fields, .. }`.
-
-## 7.2 v0.5.x (warning hardening)
-
-- Emit `W2501` when ambiguous syntax resolves through legacy fallback behavior.
-- Encourage explicit form in diagnostics.
-
-## 7.3 v0.6.0 (candidate)
-
-- Turn unresolved `A::B` ambiguity into `E2501`.
-- Keep compatibility flag (`--compat=0.5`) for one minor cycle if maintenance cost remains acceptable.
 
 ## 8. Test Matrix
 
@@ -272,7 +265,7 @@ Recommended envelope fields for audited systems:
 
 Before:
 
-```rad
+```text
 type AccessSignal {
   MfaDisabled { account: "" }
 }
@@ -281,18 +274,18 @@ apply_signal(ci_bot, AccessSignal::MfaDisabled { account: "svc-ci-prod" })
 
 After (v0.5 style):
 
-```rad
+```text
 type AccessSignal {
   MfaDisabled { }
 }
 apply_signal(ci_bot, AccessSignal::MfaDisabled)
 ```
 
-## 10. Rollout Checklist
+## 10. Acceptance receipt
 
-- [ ] Language spec updated with v0.5 syntax and examples.
-- [ ] Parser/checker implementations complete with code-tagged diagnostics.
-- [ ] Rust unit tests and conformance fixtures added.
-- [ ] Changelog migration notes published.
-- [ ] README includes link to this spec.
+- [x] Language spec updated with v0.5 syntax and examples.
+- [x] Parser/checker implementations complete with code-tagged diagnostics.
+- [x] Rust unit tests and conformance fixtures added.
+- [x] Changelog migration notes published.
+- [x] README links this current semantics reference.
 

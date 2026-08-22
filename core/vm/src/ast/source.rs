@@ -97,6 +97,15 @@ impl SourceMap {
         self.files.len()
     }
 
+    /// Iterate the exact source units loaded into this semantic program.
+    ///
+    /// Tooling uses source units rather than a reconstructed concatenation so
+    /// lexical coverage, diagnostics, and source digests share module-loader
+    /// boundaries.
+    pub fn files(&self) -> impl ExactSizeIterator<Item = &SourceFile> {
+        self.files.iter()
+    }
+
     pub fn resolve_span(&self, span: &Span) -> Option<(&str, u32, u32)> {
         let file_id = span.file?;
         let file = self.get_file(file_id)?;

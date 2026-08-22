@@ -1,0 +1,165 @@
+// Executable acceptance for deterministic value, collection, text, buffer,
+// native-layout, and model-generator builtins. Every call participates in an
+// assertion before the completion marker; this is not a parse-only catalog.
+
+opaque type SurfaceId = u32
+
+enum SurfaceMode: u8 {
+    Idle = 0,
+    Active = 1,
+}
+
+bitflags SurfaceFlags: u16 {
+    Ready = 1,
+    Urgent = 2,
+}
+
+packed repr(C) struct SurfacePacket {
+    id: SurfaceId,
+    mode: SurfaceMode,
+    flags: SurfaceFlags,
+    reading: i32,
+}
+
+type Choice {
+    SomeValue { value: int }
+    Empty {}
+}
+
+pure fn double(value: int) -> int { return value * 2 }
+pure fn odd(value: int) -> bool { return value % 2 == 1 }
+pure fn positive(value: int) -> bool { return value > 0 }
+pure fn key_mod_two(value: int) -> int { return value % 2 }
+pure fn expand(value: int) -> list<int> { return [value, value + 10] }
+pure fn add(left: int, right: int) -> int { return left + right }
+pure fn option_value(value: int) -> int { return value + 1 }
+
+fn exercise_values_collections_text() -> nil {
+    assert(len([1, 2, 3]) == 3, "len")
+    assert(typeof({ "a": 1 }) == "map", "typeof")
+    assert(variant_of(Choice::SomeValue { value: 7 }) == "SomeValue", "variant_of")
+    assert(str(42) == "42" and int("42") == 42, "str and int")
+    assert(float(4) == 4.0, "float")
+    assert(abs(-9) == 9 and sign(-9) == -1, "abs and sign")
+    assert(min(4, 9) == 4 and max(4, 9) == 9, "min and max")
+
+    let parsed: Option<int> = try_int("17")
+    assert(unwrap(parsed) == 17, "unwrap")
+    assert(expect(try_float("2.5"), "float required") == 2.5, "expect")
+    assert(unwrap_or(try_int("bad"), 23) == 23, "unwrap_or")
+    assert(is_some(parsed) and is_none(try_int("bad")), "option predicates")
+    assert(map_or(parsed, 0, option_value) == 18, "map_or")
+
+    assert(push([1, 2], 3) == [1, 2, 3], "push list")
+    assert(push("rad", "!") == "rad!", "push string")
+    assert(pop([4, 5]) == 5 and pop_last([4, 5]) == 5, "pop aliases")
+    assert(drop_last([4, 5, 6]) == [4, 5], "drop_last")
+    assert(drop_first([4, 5, 6]) == [5, 6], "drop_first")
+    assert(sort([3, 1, 2]) == [1, 2, 3], "sort")
+    assert(sort_by([3, 1, 2], fn(value: int) -> int { return -value }) == [3, 2, 1], "sort_by")
+    assert(reverse([1, 2, 3]) == [3, 2, 1], "reverse")
+    assert(slice([0, 1, 2, 3], 1, 3) == [1, 2], "slice list")
+    assert(slice("abcd", 1, 3) == "bc", "slice string")
+    assert(map([1, 2, 3], double) == [2, 4, 6], "map")
+    assert(filter([1, 2, 3, 4], odd) == [1, 3], "filter")
+    assert(reduce([1, 2, 3], 0, add) == 6, "reduce")
+    assert(range(4) == [0, 1, 2, 3], "range stop")
+    assert(range(2, 5) == [2, 3, 4], "range bounds")
+    assert(range(5, 0, -2) == [5, 3, 1], "range step")
+    assert(filled(3, 7) == [7, 7, 7], "filled")
+    assert(set_at([1, 2, 3], 1, 9) == [1, 9, 3], "set_at")
+    assert(sum([1, 2, 3]) == 6 and product([2, 3, 4]) == 24, "sum product")
+    assert(index_of([8, 9], 9) == 1, "index_of")
+    assert(any([-1, 2], positive) and not all([-1, 2], positive), "any all")
+
+    let left: map<str, int> = { "a": 1, "b": 2 }
+    let right: map<str, int> = { "b": 20, "c": 3 }
+    assert(keys(left) == ["a", "b"], "keys")
+    assert(values(left) == [1, 2], "values")
+    assert(contains([1, 2, 3], 2), "contains")
+    let rows: list<list<any>> = entries(left)
+    assert(len(rows) == 2 and rows[0][0] == "a" and rows[0][1] == 1, "entries")
+    assert(merge(left, right) == { "a": 1, "b": 20, "c": 3 }, "merge")
+    assert(remove_key(left, "a") == { "b": 2 }, "remove_key")
+    assert(group_by([1, 2, 3, 4], key_mod_two) == { 0: [2, 4], 1: [1, 3] }, "group_by")
+    assert(append([1, 2], [3, 4]) == [1, 2, 3, 4], "append")
+    assert(extend([1, 2], [3, 4]) == [1, 2, 3, 4], "extend")
+    assert(zip([1, 2], ["a", "b"]) == [(1, "a"), (2, "b")], "zip")
+    assert(flat_map([1, 2], expand) == [1, 11, 2, 12], "flat_map")
+    assert(enumerate([8, 9]) == [(0, 8), (1, 9)], "enumerate")
+    assert(unwrap(find([1, 4, 7], odd)) == 1, "find")
+    assert(unwrap(max_by([3, 8, 4], fn(value: int) -> int { return value })) == 8, "max_by")
+    assert(unwrap(min_by([3, 8, 4], fn(value: int) -> int { return value })) == 3, "min_by")
+    assert(get_or({ "a": 4 }, "a", 0) == 4, "get_or map")
+    assert(clamp(15, 0, 10) == 10, "clamp")
+
+    assert(format("{}:{}", "grid", 7) == "grid:7", "format")
+    assert(split("a,b", ",") == ["a", "b"], "split")
+    assert(join(["a", "b"], "|") == "a|b", "join")
+    assert(trim("  rad  ") == "rad", "trim")
+    assert(replace("grid", "g", "G") == "Grid", "replace")
+    assert(starts_with("grid", "gr") and ends_with("grid", "id"), "prefix suffix")
+    assert(chr(65) == "A" and ord("A") == 65, "chr ord")
+    assert(chars("Aé") == ["A", "é"], "chars")
+    assert(to_upper("Rad") == "RAD" and to_lower("Rad") == "rad", "case")
+    assert(regex_is_match("^r.*d$", "rad"), "regex_is_match")
+    assert(unwrap(regex_find("[0-9]+", "grid-42")) == "42", "regex_find")
+    assert(byte_at("é", 0) == 195 and byte_len("é") == 2, "UTF-8 bytes")
+    assert(substring_bytes("grid", 1, 3) == "ri", "substring_bytes")
+    assert(format_value(12.345, ".2f") == "12.35", "format_value")
+    assert(to_fixed(12.345, 2) == "12.35", "to_fixed")
+    let json_value: map<str, any> = { "ok": true, "n": 2 }
+    let json: str = json_stringify(json_value)
+    assert(is_some(json_parse(json)), "JSON round trip")
+
+    assert(int_div(7, 2) == 3, "int_div")
+    assert(round(2.6) == 3 and floor(2.9) == 2 and ceil(2.1) == 3, "rounding")
+    assert(sqrt(81) == 9.0 and pow(3, 4) == 81, "sqrt pow")
+    assert(popcount(11) == 3 and ctz(8) == 3, "bit counts")
+    assert(shl(1, 5) == 32 and shr(32, 5) == 1, "shift builtins")
+
+    let mut bits: bitset = bitset_new()
+    bits = bitset_set(bits, 19)
+    assert(bitset_has(bits, 19), "bitset_set")
+    bits = bitset_clear(bits, 19)
+    assert(not bitset_has(bits, 19), "bitset_clear")
+
+    let mut text_buffer: any = buffer_new()
+    text_buffer = buffer_append(text_buffer, "sovereign")
+    text_buffer = buffer_append(text_buffer, "-grid")
+    assert(buffer_to_str(text_buffer) == "sovereign-grid", "text buffer")
+
+    let mut bytes: any = bytebuf_new(9)
+    bytes = bytebuf_set_u8(bytes, 0, 255)
+    bytes = bytebuf_set_u32_le(bytes, 1, 305419896)
+    bytes = bytebuf_set_i32_le(bytes, 5, -2)
+    assert(bytebuf_len(bytes) == 9, "bytebuf checked writes preserve capacity")
+    assert(bytebuf_get(bytes, 0) == 255, "bytebuf_get")
+    assert(bytebuf_get_u32_le(bytes, 1) == 305419896, "bytebuf u32")
+    assert(bytebuf_get_i32_le(bytes, 5) == -2, "bytebuf i32")
+    assert(bytebuf_to_list(bytebuf_from_list([1, 2, 3])) == [1, 2, 3], "bytebuf list")
+
+    assert(size_of(SurfacePacket) == 11, "packed native size")
+    assert(offset_of(SurfacePacket, "reading") == 7, "native offset")
+    let identifier: SurfaceId = SurfaceId(u32(305419896))
+    assert(decode_le(encode_le(identifier), 0, SurfaceId) == identifier, "little endian")
+    assert(decode_be(encode_be(i32(-91)), 0, i32) == i32(-91), "big endian")
+
+    rand_seed(24301)
+    let first_random: int = rand_int(1, 100000)
+    rand_seed(24301)
+    assert(rand_int(1, 100000) == first_random, "seeded rand_int")
+    assert(rand_float() >= 0.0, "rand_float")
+    assert(typeof(rand_bool()) == "bool", "rand_bool")
+    assert(len(gen_int()) > 0 and len(gen_float()) > 0, "numeric generators")
+    assert(len(gen_str()) > 0 and len(gen_bool()) > 0, "scalar generators")
+    assert(len(gen_list([1, 2])) > 0, "list generator")
+
+    assert_eq(debug_trace("surface"), "surface")
+    assert(gc_collect() >= 0, "gc_collect")
+}
+
+fn main() -> nil {
+    exercise_values_collections_text()
+    print("sovereign-grid: values collections text builtins complete")
+}

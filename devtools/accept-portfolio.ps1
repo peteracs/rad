@@ -44,6 +44,7 @@ function Invoke-AcceptanceProcess {
         [int[]]$ExpectedExitCodes = @(0),
         [string]$ExpectedPattern,
         [int]$TimeoutSeconds = 7200,
+        [uint64]$MaxPrivateBytes = 0,
         [string]$Category = "portfolio",
         [string]$ProjectName
     )
@@ -79,16 +80,22 @@ function Invoke-AcceptanceProcess {
     $peakPagedMemoryBytes = [uint64]0
     $cpuNs = [uint64]0
     $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
+    $memoryExceeded = $false
     while (-not $process.WaitForExit(50)) {
         $process.Refresh()
         $peakWorkingSetBytes = [Math]::Max($peakWorkingSetBytes, [uint64]$process.WorkingSet64)
         $peakPrivateBytes = [Math]::Max($peakPrivateBytes, [uint64]$process.PrivateMemorySize64)
         $peakPagedMemoryBytes = [Math]::Max($peakPagedMemoryBytes, [uint64]$process.PagedMemorySize64)
         $cpuNs = [uint64]($process.TotalProcessorTime.TotalMilliseconds * 1000000)
+        if ($MaxPrivateBytes -ne 0 -and $peakPrivateBytes -gt $MaxPrivateBytes) {
+            $memoryExceeded = $true
+            break
+        }
         if ([DateTime]::UtcNow -ge $deadline) { break }
     }
-    $timedOut = -not $process.HasExited
-    if ($timedOut) {
+    $needsTermination = -not $process.HasExited
+    $timedOut = $needsTermination -and -not $memoryExceeded
+    if ($needsTermination) {
         $process.Kill()
         $process.WaitForExit()
     }
@@ -100,10 +107,10 @@ function Invoke-AcceptanceProcess {
     [IO.File]::WriteAllText($stdoutPath, $stdout, [Text.UTF8Encoding]::new($false))
     [IO.File]::WriteAllText($stderrPath, $stderr, [Text.UTF8Encoding]::new($false))
     $combined = $stdout + "`n" + $stderr
-    $exitCode = if ($timedOut) { -1 } else { $process.ExitCode }
+    $exitCode = if ($memoryExceeded) { -2 } elseif ($timedOut) { -1 } else { $process.ExitCode }
     $exitPass = $ExpectedExitCodes -contains $exitCode
     $patternPass = [string]::IsNullOrEmpty($ExpectedPattern) -or $combined -match $ExpectedPattern
-    $passed = -not $timedOut -and $exitPass -and $patternPass
+    $passed = -not $timedOut -and -not $memoryExceeded -and $exitPass -and $patternPass
 
     $result = [ordered]@{
         sequence = $script:sequence
@@ -122,6 +129,8 @@ function Invoke-AcceptanceProcess {
         expectedExitCodes = @($ExpectedExitCodes)
         expectedPattern = $ExpectedPattern
         timedOut = $timedOut
+        memoryExceeded = $memoryExceeded
+        maxPrivateBytes = $MaxPrivateBytes
         passed = $passed
         stdout = Get-RepoRelativePath $stdoutPath
         stderr = Get-RepoRelativePath $stderrPath
@@ -146,12 +155,14 @@ function Rad-Step {
         [string]$ExpectedPattern,
         [string]$Category = "portfolio",
         [string]$ProjectName,
-        [int]$TimeoutSeconds = 7200
+        [int]$TimeoutSeconds = 7200,
+        [uint64]$MaxPrivateBytes = 0
     )
     return Invoke-AcceptanceProcess -Name $Name -Executable $script:resolvedRad `
         -Arguments $Arguments -ExpectedExitCodes $ExpectedExitCodes `
         -ExpectedPattern $ExpectedPattern -Category $Category `
-        -ProjectName $ProjectName -TimeoutSeconds $TimeoutSeconds
+        -ProjectName $ProjectName -TimeoutSeconds $TimeoutSeconds `
+        -MaxPrivateBytes $MaxPrivateBytes
 }
 
 function Negative([string]$File, [string]$Pattern) {
@@ -385,12 +396,12 @@ foreach ($definition in $selectedProjects) {
         $riskScaleTrace = Join-Path $traceDirectory 'riskbridge-million.radr'
         Rad-Step 'riskbridge-million-record' @(
             "$root/bench.rad",'--record',$riskScaleTrace,'--','1000000','1000','native','none'
-        ) -ProjectName $name -Category 'benchmark-replay' -TimeoutSeconds 14400 | Out-Null
+        ) -ProjectName $name -Category 'benchmark-replay' -TimeoutSeconds 14400 -MaxPrivateBytes 536870912 | Out-Null
         Rad-Step 'riskbridge-million-replay' @('replay',$riskScaleTrace) `
-            -ExpectedPattern 'Replay verified: world digest matches' -ProjectName $name -Category 'benchmark-replay' -TimeoutSeconds 14400 | Out-Null
+            -ExpectedPattern 'Replay verified: world digest matches' -ProjectName $name -Category 'benchmark-replay' -TimeoutSeconds 14400 -MaxPrivateBytes 536870912 | Out-Null
         Rad-Step 'riskbridge-million-reference' @(
             'bench',"$root/bench.rad",'--json','--','1000000','1000','reference','none'
-        ) -ProjectName $name -Category 'benchmark-reference' -TimeoutSeconds 14400 | Out-Null
+        ) -ProjectName $name -Category 'benchmark-reference' -TimeoutSeconds 14400 -MaxPrivateBytes 536870912 | Out-Null
     }
 
     $projectResults = @($script:results | Select-Object -Skip $before)

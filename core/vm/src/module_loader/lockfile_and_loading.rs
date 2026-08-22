@@ -306,7 +306,7 @@ pub fn load_program_with_uses(
 }
 
 pub fn load_program_with_source_map(entry_path: &str) -> Result<LoadResult, Vec<ModuleLoadError>> {
-    load_program_with_source_map_and_options(entry_path, ParserOptions::default())
+    load_program_with_source_map_and_options(entry_path, ParserOptions)
 }
 
 pub fn load_program_with_source_map_and_options(

@@ -250,7 +250,7 @@ fn frozen_key_from_json(value: &Json) -> Result<FrozenMapKey, String> {
                 type_name: values[1]
                     .as_str()
                     .ok_or_else(|| "$map native key type must be a string".to_string())?
-                    .to_string(),
+                    .into(),
                 repr: values[2]
                     .as_str()
                     .and_then(crate::native_types::NativeScalarKind::parse)
@@ -445,7 +445,7 @@ pub fn frozen_from_json(value: &Json) -> Result<FrozenValue, String> {
                     .ok_or_else(|| "$native requires u64 bits".to_string())?;
                 return Ok(FrozenValue::Native(
                     crate::native_types::NativeScalarValue {
-                        type_name: native.to_string(),
+                        type_name: native.into(),
                         repr,
                         flavor,
                         bits,
@@ -514,7 +514,7 @@ mod tests {
 
     fn native_id(bits: u64) -> NativeScalarValue {
         NativeScalarValue {
-            type_name: "ManagerGid".to_string(),
+            type_name: "ManagerGid".into(),
             repr: NativeScalarKind::U32,
             flavor: NativeTypeFlavor::Opaque,
             bits,

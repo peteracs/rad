@@ -1,0 +1,6 @@
+component Listing { active: bool = true }
+component Stock { available: int = 1 }
+materialized view BrokenView {
+    depends [Listing]
+    where Listing.active == true and Stock.available > 0
+}

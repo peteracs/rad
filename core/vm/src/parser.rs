@@ -35,13 +35,15 @@ pub struct Parser {
 }
 
 #[derive(Debug, Clone, Copy, Default)]
-pub struct ParserOptions {
-    pub compat_v0_5_dx: bool,
-}
+pub struct ParserOptions;
 
 impl Parser {
     fn is_identifier_token(&self, ty: TokenType) -> bool {
-        matches!(ty, TokenType::Ident | TokenType::State | TokenType::Entity)
+        // `state` is contextual and parses unambiguously as an expression
+        // name. `entity` begins an entity-literal expression, so accepting it
+        // as a binding created a binding that could never be referenced
+        // (`return entity` was parsed as a malformed literal).
+        matches!(ty, TokenType::Ident | TokenType::State)
     }
 
     pub fn new(tokens: Vec<Token>) -> Self {
@@ -51,7 +53,7 @@ impl Parser {
             errors: Vec::new(),
             id_gen: NodeIdGen::new(),
             file_id: None,
-            options: ParserOptions::default(),
+            options: ParserOptions,
             suppress_braced_init: false,
             constraint_depth: 0,
         }
@@ -297,10 +299,6 @@ impl Parser {
             col: t.col,
             file: self.file_id,
         }
-    }
-
-    fn compat_v0_5_dx_enabled(&self) -> bool {
-        self.options.compat_v0_5_dx
     }
 
     fn ensure_fn_param_alignment(

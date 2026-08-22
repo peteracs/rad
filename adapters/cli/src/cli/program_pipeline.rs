@@ -115,7 +115,7 @@ fn checked_source_identity(loaded: &rad_vm::module_loader::LoadResult) -> Result
 }
 
 fn load_checked_cli_program(filepath: &str) -> Result<CliCompiledProgram, String> {
-    let loaded = load_cli_program(filepath, ParserOptions::default())?;
+    let loaded = load_cli_program(filepath, ParserOptions)?;
     let analysis = analyze_cli_program(&loaded, filepath, CheckerOptions::default());
     if analysis.has_errors() {
         return Err(analysis.rendered_errors());

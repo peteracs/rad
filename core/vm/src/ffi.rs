@@ -27,6 +27,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 include!("ffi/manifest.rs");
 include!("ffi/plugin_api.rs");
 include!("ffi/loading.rs");
+#[cfg(not(target_arch = "wasm32"))]
 include!("ffi/replay.rs");
 include!("ffi/worker.rs");
 include!("ffi/verification.rs");

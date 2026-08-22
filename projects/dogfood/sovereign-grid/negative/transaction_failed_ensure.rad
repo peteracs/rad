@@ -1,0 +1,9 @@
+component Balance { value: int = 10 }
+transaction Broken(target: entity) {
+    requires has(target, Balance)
+    changes_only [Balance]
+    update(target, Balance) { value = 0 }
+    ensures require(target, Balance).value == 10
+}
+let account: entity = spawn(Balance {})
+Broken(account)

@@ -1,0 +1,5 @@
+component QueuedItem { ordered indexed priority: int = 0 }
+fn sort_queue() -> list<entity> { return sort(entities(QueuedItem)) }
+@frame
+@no_full_scan
+system Dispatch(reads QueuedItem) { let _items = sort_queue() }

@@ -642,7 +642,7 @@ impl VM {
             let mut bounded = SettlementRejection {
                 settlement_id: context.settlement_id,
                 base_world_digest: base_world_digest.clone(),
-                // The fallback is a fixed-size envelope. Keeping the full
+                // This rejection marker is a fixed-size envelope. Keeping the full
                 // registry or capability set here could make the value that
                 // reports an output-limit failure exceed that same limit.
                 applicable_constraints: Vec::new(),

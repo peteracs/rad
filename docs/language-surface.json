@@ -1,0 +1,1458 @@
+{
+  "formatVersion": 1,
+  "ownerDigest": "fd12b940fc74a7c4e2a97bd1fc29c7074296d31d502e6a77a235a166b8b2f4f1",
+  "sources": [
+    {
+      "role": "builtins",
+      "path": "core/vm/src/value/builtin_catalog.rs",
+      "sha256": "5367958132f6c2234acc4b8ff03247fafa39986c68e1cca50b2a7ad0b472b51f"
+    },
+    {
+      "role": "contracts",
+      "path": "core/vm/src/parser/decl/declaration_dispatch.rs",
+      "sha256": "f07c3dafb481e1d47e0f6207b9f000b07085d88cb6279830c7c54203d1545083"
+    },
+    {
+      "role": "declarations",
+      "path": "core/vm/src/ast/modules.rs",
+      "sha256": "7e23f6b41528fc213685748462512dca016af16fcc5823f4f2745cc780dc3fe4"
+    },
+    {
+      "role": "expressions",
+      "path": "core/vm/src/ast/expressions.rs",
+      "sha256": "4288133aebee5f531d63e6cf1dbfb63777a4dbbef1c5456d47fe9f0bc740d1f5"
+    },
+    {
+      "role": "keywords",
+      "path": "core/vm/src/lexer/decl.rs",
+      "sha256": "09cf308ad7621c80f570a1e8ffd5168e6067baa77519021b1d306c08daec840a"
+    },
+    {
+      "role": "statements",
+      "path": "core/vm/src/ast/statements.rs",
+      "sha256": "b2ae4a162376aea38217ec909fb1ca617eec14acbfb50ee0ecf108c01d4e4b86"
+    },
+    {
+      "role": "tokens",
+      "path": "core/vm/src/lexer/engine.rs",
+      "sha256": "87e267766a23af2a9374a4cae8c50ded40b64c52acd952dd66ae4e26fc82c1d4"
+    }
+  ],
+  "tokens": [
+    "Int",
+    "Float",
+    "String",
+    "Ident",
+    "Component",
+    "Struct",
+    "Entity",
+    "Resource",
+    "State",
+    "System",
+    "Event",
+    "On",
+    "Emit",
+    "Fn",
+    "Let",
+    "Mut",
+    "If",
+    "Else",
+    "While",
+    "For",
+    "In",
+    "Return",
+    "True",
+    "False",
+    "Nil",
+    "Schedule",
+    "And",
+    "Or",
+    "Not",
+    "Match",
+    "When",
+    "Use",
+    "Break",
+    "Continue",
+    "Type",
+    "Pure",
+    "Once",
+    "Async",
+    "Await",
+    "Rec",
+    "Pub",
+    "As",
+    "Indexed",
+    "Unique",
+    "FStringStart",
+    "FStringFragment",
+    "InterpolationStart",
+    "InterpolationEnd",
+    "FStringEnd",
+    "LBrace",
+    "RBrace",
+    "LParen",
+    "RParen",
+    "LBracket",
+    "RBracket",
+    "Comma",
+    "Dot",
+    "DotDot",
+    "Colon",
+    "Arrow",
+    "FatArrow",
+    "PipeOp",
+    "Pipe",
+    "Amp",
+    "Caret",
+    "Question",
+    "Assign",
+    "Eq",
+    "Neq",
+    "Lt",
+    "Gt",
+    "Lte",
+    "Gte",
+    "LessLess",
+    "Plus",
+    "Minus",
+    "Star",
+    "Slash",
+    "Percent",
+    "Bang",
+    "Tilde",
+    "At",
+    "DColon",
+    "Comment",
+    "Whitespace",
+    "Error",
+    "Eof"
+  ],
+  "hardKeywords": [
+    {
+      "spelling": "component",
+      "token": "Component"
+    },
+    {
+      "spelling": "struct",
+      "token": "Struct"
+    },
+    {
+      "spelling": "entity",
+      "token": "Entity"
+    },
+    {
+      "spelling": "resource",
+      "token": "Resource"
+    },
+    {
+      "spelling": "state",
+      "token": "State"
+    },
+    {
+      "spelling": "system",
+      "token": "System"
+    },
+    {
+      "spelling": "event",
+      "token": "Event"
+    },
+    {
+      "spelling": "on",
+      "token": "On"
+    },
+    {
+      "spelling": "emit",
+      "token": "Emit"
+    },
+    {
+      "spelling": "fn",
+      "token": "Fn"
+    },
+    {
+      "spelling": "let",
+      "token": "Let"
+    },
+    {
+      "spelling": "mut",
+      "token": "Mut"
+    },
+    {
+      "spelling": "if",
+      "token": "If"
+    },
+    {
+      "spelling": "else",
+      "token": "Else"
+    },
+    {
+      "spelling": "while",
+      "token": "While"
+    },
+    {
+      "spelling": "for",
+      "token": "For"
+    },
+    {
+      "spelling": "in",
+      "token": "In"
+    },
+    {
+      "spelling": "return",
+      "token": "Return"
+    },
+    {
+      "spelling": "true",
+      "token": "True"
+    },
+    {
+      "spelling": "false",
+      "token": "False"
+    },
+    {
+      "spelling": "nil",
+      "token": "Nil"
+    },
+    {
+      "spelling": "schedule",
+      "token": "Schedule"
+    },
+    {
+      "spelling": "and",
+      "token": "And"
+    },
+    {
+      "spelling": "or",
+      "token": "Or"
+    },
+    {
+      "spelling": "not",
+      "token": "Not"
+    },
+    {
+      "spelling": "match",
+      "token": "Match"
+    },
+    {
+      "spelling": "when",
+      "token": "When"
+    },
+    {
+      "spelling": "use",
+      "token": "Use"
+    },
+    {
+      "spelling": "break",
+      "token": "Break"
+    },
+    {
+      "spelling": "continue",
+      "token": "Continue"
+    },
+    {
+      "spelling": "type",
+      "token": "Type"
+    },
+    {
+      "spelling": "pure",
+      "token": "Pure"
+    },
+    {
+      "spelling": "once",
+      "token": "Once"
+    },
+    {
+      "spelling": "async",
+      "token": "Async"
+    },
+    {
+      "spelling": "await",
+      "token": "Await"
+    },
+    {
+      "spelling": "rec",
+      "token": "Rec"
+    },
+    {
+      "spelling": "pub",
+      "token": "Pub"
+    },
+    {
+      "spelling": "as",
+      "token": "As"
+    },
+    {
+      "spelling": "indexed",
+      "token": "Indexed"
+    },
+    {
+      "spelling": "unique",
+      "token": "Unique"
+    }
+  ],
+  "declarations": [
+    "Component",
+    "Resource",
+    "Struct",
+    "Intent",
+    "Law",
+    "Resolver",
+    "Constraint",
+    "Entity",
+    "State",
+    "System",
+    "Event",
+    "OnHandler",
+    "Migration",
+    "Phase",
+    "Fn",
+    "Type",
+    "TypeAlias",
+    "NativeType",
+    "MaterializedView",
+    "Use",
+    "Test",
+    "Model",
+    "Stmt",
+    "Error"
+  ],
+  "statements": [
+    "Let",
+    "LetElse",
+    "Assign",
+    "If",
+    "While",
+    "For",
+    "Return",
+    "Break",
+    "Continue",
+    "Emit",
+    "Schedule",
+    "Update",
+    "Transaction",
+    "Settle",
+    "Propose",
+    "Next",
+    "Require",
+    "Match",
+    "Expr",
+    "OnceGuardPass",
+    "Error"
+  ],
+  "expressions": [
+    "IntLit",
+    "FloatLit",
+    "StrLit",
+    "BoolLit",
+    "NilLit",
+    "ListLit",
+    "MapLit",
+    "TupleLit",
+    "FStringExpr",
+    "Ident",
+    "Binary",
+    "Unary",
+    "Pipe",
+    "Call",
+    "Field",
+    "Index",
+    "ComponentExpr",
+    "StateRef",
+    "SystemRef",
+    "VariantExpr",
+    "MatchExpr",
+    "IfExpr",
+    "FnExpr",
+    "QueryExpr",
+    "Await",
+    "AsyncCall",
+    "Try",
+    "Spread",
+    "EntityLiteral",
+    "Error"
+  ],
+  "patterns": [
+    "Wildcard",
+    "Literal",
+    "Variant",
+    "HasComponent"
+  ],
+  "binaryOperators": [
+    "Add",
+    "Sub",
+    "Mul",
+    "Div",
+    "Mod",
+    "Eq",
+    "Ne",
+    "Lt",
+    "Le",
+    "Gt",
+    "Ge",
+    "And",
+    "Or",
+    "Is",
+    "BitAnd",
+    "BitOr",
+    "BitXor",
+    "Shl",
+    "Shr"
+  ],
+  "unaryOperators": [
+    "Neg",
+    "Not",
+    "BitNot"
+  ],
+  "typeExpressions": [
+    "Named",
+    "Generic",
+    "Tuple",
+    "FnType",
+    "Union"
+  ],
+  "functionTypePurities": [
+    "Default",
+    "Pure",
+    "Readonly"
+  ],
+  "callableContracts": [
+    "frame",
+    "tick",
+    "render",
+    "no_full_scan",
+    "no_guest_allocation",
+    "no_runtime_allocation",
+    "no_host_allocation",
+    "no_nested_flush",
+    "non_reentrant",
+    "exactly_once",
+    "budget",
+    "allow_full_scan",
+    "must_complete_before"
+  ],
+  "builtins": [
+    {
+      "variant": "Print",
+      "name": "print"
+    },
+    {
+      "variant": "Len",
+      "name": "len"
+    },
+    {
+      "variant": "TypeOf",
+      "name": "typeof"
+    },
+    {
+      "variant": "VariantOf",
+      "name": "variant_of"
+    },
+    {
+      "variant": "SysArgs",
+      "name": "sys_args"
+    },
+    {
+      "variant": "Str",
+      "name": "str"
+    },
+    {
+      "variant": "Int",
+      "name": "int"
+    },
+    {
+      "variant": "Float",
+      "name": "float"
+    },
+    {
+      "variant": "Abs",
+      "name": "abs"
+    },
+    {
+      "variant": "Sign",
+      "name": "sign"
+    },
+    {
+      "variant": "Min",
+      "name": "min"
+    },
+    {
+      "variant": "Max",
+      "name": "max"
+    },
+    {
+      "variant": "Unwrap",
+      "name": "unwrap"
+    },
+    {
+      "variant": "Expect",
+      "name": "expect"
+    },
+    {
+      "variant": "Push",
+      "name": "push"
+    },
+    {
+      "variant": "Pop",
+      "name": "pop"
+    },
+    {
+      "variant": "PopLast",
+      "name": "pop_last"
+    },
+    {
+      "variant": "DropLast",
+      "name": "drop_last"
+    },
+    {
+      "variant": "Sort",
+      "name": "sort"
+    },
+    {
+      "variant": "Reverse",
+      "name": "reverse"
+    },
+    {
+      "variant": "Slice",
+      "name": "slice"
+    },
+    {
+      "variant": "Map",
+      "name": "map"
+    },
+    {
+      "variant": "Filter",
+      "name": "filter"
+    },
+    {
+      "variant": "Reduce",
+      "name": "reduce"
+    },
+    {
+      "variant": "Range",
+      "name": "range"
+    },
+    {
+      "variant": "Get",
+      "name": "get"
+    },
+    {
+      "variant": "ReadField",
+      "name": "read_field"
+    },
+    {
+      "variant": "Lookup",
+      "name": "lookup"
+    },
+    {
+      "variant": "LookupAll",
+      "name": "lookup_all"
+    },
+    {
+      "variant": "Set",
+      "name": "set"
+    },
+    {
+      "variant": "WriteField",
+      "name": "write_field"
+    },
+    {
+      "variant": "Has",
+      "name": "has"
+    },
+    {
+      "variant": "Spawn",
+      "name": "spawn"
+    },
+    {
+      "variant": "GetEntity",
+      "name": "get_entity"
+    },
+    {
+      "variant": "RequireEntity",
+      "name": "require_entity"
+    },
+    {
+      "variant": "Remove",
+      "name": "remove"
+    },
+    {
+      "variant": "Despawn",
+      "name": "despawn"
+    },
+    {
+      "variant": "Entities",
+      "name": "entities"
+    },
+    {
+      "variant": "VisitView",
+      "name": "visit_view"
+    },
+    {
+      "variant": "GetResource",
+      "name": "get_resource"
+    },
+    {
+      "variant": "SetResource",
+      "name": "set_resource"
+    },
+    {
+      "variant": "Transition",
+      "name": "transition"
+    },
+    {
+      "variant": "Keys",
+      "name": "keys"
+    },
+    {
+      "variant": "Contains",
+      "name": "contains"
+    },
+    {
+      "variant": "Format",
+      "name": "format"
+    },
+    {
+      "variant": "Entries",
+      "name": "entries"
+    },
+    {
+      "variant": "Merge",
+      "name": "merge"
+    },
+    {
+      "variant": "RemoveKey",
+      "name": "remove_key"
+    },
+    {
+      "variant": "GroupBy",
+      "name": "group_by"
+    },
+    {
+      "variant": "Split",
+      "name": "split"
+    },
+    {
+      "variant": "Join",
+      "name": "join"
+    },
+    {
+      "variant": "Trim",
+      "name": "trim"
+    },
+    {
+      "variant": "Replace",
+      "name": "replace"
+    },
+    {
+      "variant": "StartsWith",
+      "name": "starts_with"
+    },
+    {
+      "variant": "EndsWith",
+      "name": "ends_with"
+    },
+    {
+      "variant": "Append",
+      "name": "append"
+    },
+    {
+      "variant": "Extend",
+      "name": "extend"
+    },
+    {
+      "variant": "Zip",
+      "name": "zip"
+    },
+    {
+      "variant": "FlatMap",
+      "name": "flat_map"
+    },
+    {
+      "variant": "TryInt",
+      "name": "try_int"
+    },
+    {
+      "variant": "TryFloat",
+      "name": "try_float"
+    },
+    {
+      "variant": "Chr",
+      "name": "chr"
+    },
+    {
+      "variant": "Ord",
+      "name": "ord"
+    },
+    {
+      "variant": "Chars",
+      "name": "chars"
+    },
+    {
+      "variant": "ToUpper",
+      "name": "to_upper"
+    },
+    {
+      "variant": "ToLower",
+      "name": "to_lower"
+    },
+    {
+      "variant": "Values",
+      "name": "values"
+    },
+    {
+      "variant": "ReadFile",
+      "name": "read_file"
+    },
+    {
+      "variant": "WriteFile",
+      "name": "write_file"
+    },
+    {
+      "variant": "HttpGet",
+      "name": "http_get"
+    },
+    {
+      "variant": "RegexIsMatch",
+      "name": "regex_is_match"
+    },
+    {
+      "variant": "RegexFind",
+      "name": "regex_find"
+    },
+    {
+      "variant": "NowUnixS",
+      "name": "now_unix_s"
+    },
+    {
+      "variant": "NowUnixMs",
+      "name": "now_unix_ms"
+    },
+    {
+      "variant": "RandInt",
+      "name": "rand_int"
+    },
+    {
+      "variant": "RandFloat",
+      "name": "rand_float"
+    },
+    {
+      "variant": "RandBool",
+      "name": "rand_bool"
+    },
+    {
+      "variant": "RandSeed",
+      "name": "rand_seed"
+    },
+    {
+      "variant": "GenInt",
+      "name": "gen_int"
+    },
+    {
+      "variant": "GenFloat",
+      "name": "gen_float"
+    },
+    {
+      "variant": "GenStr",
+      "name": "gen_str"
+    },
+    {
+      "variant": "GenBool",
+      "name": "gen_bool"
+    },
+    {
+      "variant": "GenList",
+      "name": "gen_list"
+    },
+    {
+      "variant": "Input",
+      "name": "input"
+    },
+    {
+      "variant": "Readline",
+      "name": "readline"
+    },
+    {
+      "variant": "Assert",
+      "name": "assert"
+    },
+    {
+      "variant": "AssertEq",
+      "name": "assert_eq"
+    },
+    {
+      "variant": "IntDiv",
+      "name": "int_div"
+    },
+    {
+      "variant": "SortBy",
+      "name": "sort_by"
+    },
+    {
+      "variant": "UnwrapOr",
+      "name": "unwrap_or"
+    },
+    {
+      "variant": "IsSome",
+      "name": "is_some"
+    },
+    {
+      "variant": "IsNone",
+      "name": "is_none"
+    },
+    {
+      "variant": "Require",
+      "name": "require"
+    },
+    {
+      "variant": "RequireAll",
+      "name": "require_all"
+    },
+    {
+      "variant": "MapOr",
+      "name": "map_or"
+    },
+    {
+      "variant": "LoadExtension",
+      "name": "load_extension"
+    },
+    {
+      "variant": "HostTry",
+      "name": "host_try"
+    },
+    {
+      "variant": "HostTry0",
+      "name": "host_try0"
+    },
+    {
+      "variant": "GcCollect",
+      "name": "gc_collect"
+    },
+    {
+      "variant": "Eprint",
+      "name": "eprint"
+    },
+    {
+      "variant": "WriteStdout",
+      "name": "write_stdout"
+    },
+    {
+      "variant": "WriteStderr",
+      "name": "write_stderr"
+    },
+    {
+      "variant": "ReadStdinAll",
+      "name": "read_stdin_all"
+    },
+    {
+      "variant": "FlushStdout",
+      "name": "flush_stdout"
+    },
+    {
+      "variant": "SleepMs",
+      "name": "sleep_ms"
+    },
+    {
+      "variant": "NameOf",
+      "name": "name_of"
+    },
+    {
+      "variant": "IdOf",
+      "name": "id_of"
+    },
+    {
+      "variant": "AppendFile",
+      "name": "append_file"
+    },
+    {
+      "variant": "FileExists",
+      "name": "file_exists"
+    },
+    {
+      "variant": "RemoveFile",
+      "name": "remove_file"
+    },
+    {
+      "variant": "ListDir",
+      "name": "list_dir"
+    },
+    {
+      "variant": "CreateDir",
+      "name": "create_dir"
+    },
+    {
+      "variant": "RemoveDir",
+      "name": "remove_dir"
+    },
+    {
+      "variant": "ReadFileBytes",
+      "name": "read_file_bytes"
+    },
+    {
+      "variant": "WriteFileBytes",
+      "name": "write_file_bytes"
+    },
+    {
+      "variant": "HttpPost",
+      "name": "http_post"
+    },
+    {
+      "variant": "HttpPostJson",
+      "name": "http_post_json"
+    },
+    {
+      "variant": "HttpRequest",
+      "name": "http_request"
+    },
+    {
+      "variant": "TcpConnect",
+      "name": "tcp_connect"
+    },
+    {
+      "variant": "TcpListen",
+      "name": "tcp_listen"
+    },
+    {
+      "variant": "TcpAccept",
+      "name": "tcp_accept"
+    },
+    {
+      "variant": "TcpAcceptTimeout",
+      "name": "tcp_accept_timeout"
+    },
+    {
+      "variant": "TcpRead",
+      "name": "tcp_read"
+    },
+    {
+      "variant": "TcpWrite",
+      "name": "tcp_write"
+    },
+    {
+      "variant": "TcpClose",
+      "name": "tcp_close"
+    },
+    {
+      "variant": "UdpBind",
+      "name": "udp_bind"
+    },
+    {
+      "variant": "UdpRecvFrom",
+      "name": "udp_recv_from"
+    },
+    {
+      "variant": "UdpRecvFromTimeout",
+      "name": "udp_recv_from_timeout"
+    },
+    {
+      "variant": "UdpRecvFromBytes",
+      "name": "udp_recv_from_bytes"
+    },
+    {
+      "variant": "UdpRecvFromBytesTimeout",
+      "name": "udp_recv_from_bytes_timeout"
+    },
+    {
+      "variant": "UdpRecvByteBuf",
+      "name": "udp_recv_bytebuf"
+    },
+    {
+      "variant": "UdpRecvByteBufTimeout",
+      "name": "udp_recv_bytebuf_timeout"
+    },
+    {
+      "variant": "UdpSendTo",
+      "name": "udp_send_to"
+    },
+    {
+      "variant": "UdpSendToBytes",
+      "name": "udp_send_to_bytes"
+    },
+    {
+      "variant": "UdpSendByteBuf",
+      "name": "udp_send_bytebuf"
+    },
+    {
+      "variant": "UdpClose",
+      "name": "udp_close"
+    },
+    {
+      "variant": "QueryWhere",
+      "name": "query_where"
+    },
+    {
+      "variant": "QueryMap",
+      "name": "query_map"
+    },
+    {
+      "variant": "QueryCount",
+      "name": "query_count"
+    },
+    {
+      "variant": "WithField",
+      "name": "with_field"
+    },
+    {
+      "variant": "Log",
+      "name": "log"
+    },
+    {
+      "variant": "Metric",
+      "name": "metric"
+    },
+    {
+      "variant": "TraceId",
+      "name": "trace_id"
+    },
+    {
+      "variant": "FlushEvents",
+      "name": "flush_events"
+    },
+    {
+      "variant": "ByteAt",
+      "name": "byte_at"
+    },
+    {
+      "variant": "SubstringBytes",
+      "name": "substring_bytes"
+    },
+    {
+      "variant": "ByteLen",
+      "name": "byte_len"
+    },
+    {
+      "variant": "BitsetNew",
+      "name": "bitset_new"
+    },
+    {
+      "variant": "BitsetSet",
+      "name": "bitset_set"
+    },
+    {
+      "variant": "BitsetHas",
+      "name": "bitset_has"
+    },
+    {
+      "variant": "BitsetClear",
+      "name": "bitset_clear"
+    },
+    {
+      "variant": "BufferNew",
+      "name": "buffer_new"
+    },
+    {
+      "variant": "BufferAppend",
+      "name": "buffer_append"
+    },
+    {
+      "variant": "BufferToStr",
+      "name": "buffer_to_str"
+    },
+    {
+      "variant": "ByteBufNew",
+      "name": "bytebuf_new"
+    },
+    {
+      "variant": "ByteBufLen",
+      "name": "bytebuf_len"
+    },
+    {
+      "variant": "ByteBufGet",
+      "name": "bytebuf_get"
+    },
+    {
+      "variant": "ByteBufSetU8",
+      "name": "bytebuf_set_u8"
+    },
+    {
+      "variant": "ByteBufSetU32Le",
+      "name": "bytebuf_set_u32_le"
+    },
+    {
+      "variant": "ByteBufSetI32Le",
+      "name": "bytebuf_set_i32_le"
+    },
+    {
+      "variant": "ByteBufGetU32Le",
+      "name": "bytebuf_get_u32_le"
+    },
+    {
+      "variant": "ByteBufGetI32Le",
+      "name": "bytebuf_get_i32_le"
+    },
+    {
+      "variant": "ByteBufToList",
+      "name": "bytebuf_to_list"
+    },
+    {
+      "variant": "ByteBufFromList",
+      "name": "bytebuf_from_list"
+    },
+    {
+      "variant": "SizeOf",
+      "name": "size_of"
+    },
+    {
+      "variant": "OffsetOf",
+      "name": "offset_of"
+    },
+    {
+      "variant": "DecodeLe",
+      "name": "decode_le"
+    },
+    {
+      "variant": "DecodeBe",
+      "name": "decode_be"
+    },
+    {
+      "variant": "EncodeLe",
+      "name": "encode_le"
+    },
+    {
+      "variant": "EncodeBe",
+      "name": "encode_be"
+    },
+    {
+      "variant": "ViewRevision",
+      "name": "revision"
+    },
+    {
+      "variant": "ChangesSince",
+      "name": "changes_since"
+    },
+    {
+      "variant": "WhyInView",
+      "name": "why_in_view"
+    },
+    {
+      "variant": "WhyNotInView",
+      "name": "why_not_in_view"
+    },
+    {
+      "variant": "WhyField",
+      "name": "why_field"
+    },
+    {
+      "variant": "WhyRemoved",
+      "name": "why_removed"
+    },
+    {
+      "variant": "WhyMissing",
+      "name": "why_missing"
+    },
+    {
+      "variant": "WhyRevisionChanged",
+      "name": "why_revision_changed"
+    },
+    {
+      "variant": "WhyRevisionDidNotChange",
+      "name": "why_revision_did_not_change"
+    },
+    {
+      "variant": "LowerBound",
+      "name": "lower_bound"
+    },
+    {
+      "variant": "UpperBound",
+      "name": "upper_bound"
+    },
+    {
+      "variant": "First",
+      "name": "first"
+    },
+    {
+      "variant": "Last",
+      "name": "last"
+    },
+    {
+      "variant": "Next",
+      "name": "next"
+    },
+    {
+      "variant": "Previous",
+      "name": "previous"
+    },
+    {
+      "variant": "EnterPhase",
+      "name": "enter_phase"
+    },
+    {
+      "variant": "MarkPhase",
+      "name": "mark_phase"
+    },
+    {
+      "variant": "AssertTrace",
+      "name": "assert_trace"
+    },
+    {
+      "variant": "ModelCheck",
+      "name": "model_check"
+    },
+    {
+      "variant": "Fork",
+      "name": "fork"
+    },
+    {
+      "variant": "Simulate",
+      "name": "simulate"
+    },
+    {
+      "variant": "Commit",
+      "name": "commit"
+    },
+    {
+      "variant": "Clock",
+      "name": "clock"
+    },
+    {
+      "variant": "Peek",
+      "name": "peek"
+    },
+    {
+      "variant": "PeekResource",
+      "name": "peek_resource"
+    },
+    {
+      "variant": "DebugTrace",
+      "name": "debug_trace"
+    },
+    {
+      "variant": "FormatValue",
+      "name": "format_value"
+    },
+    {
+      "variant": "Enumerate",
+      "name": "enumerate"
+    },
+    {
+      "variant": "Find",
+      "name": "find"
+    },
+    {
+      "variant": "MaxBy",
+      "name": "max_by"
+    },
+    {
+      "variant": "MinBy",
+      "name": "min_by"
+    },
+    {
+      "variant": "Round",
+      "name": "round"
+    },
+    {
+      "variant": "Floor",
+      "name": "floor"
+    },
+    {
+      "variant": "Ceil",
+      "name": "ceil"
+    },
+    {
+      "variant": "Sqrt",
+      "name": "sqrt"
+    },
+    {
+      "variant": "Pow",
+      "name": "pow"
+    },
+    {
+      "variant": "ToFixed",
+      "name": "to_fixed"
+    },
+    {
+      "variant": "JsonStringify",
+      "name": "json_stringify"
+    },
+    {
+      "variant": "JsonParse",
+      "name": "json_parse"
+    },
+    {
+      "variant": "SimulatePar",
+      "name": "simulate_par"
+    },
+    {
+      "variant": "SandboxRun",
+      "name": "sandbox_run"
+    },
+    {
+      "variant": "SandboxInput",
+      "name": "sandbox_input"
+    },
+    {
+      "variant": "SandboxOutput",
+      "name": "sandbox_output"
+    },
+    {
+      "variant": "SandboxLastOutput",
+      "name": "sandbox_last_output"
+    },
+    {
+      "variant": "SandboxLastFuel",
+      "name": "sandbox_last_fuel"
+    },
+    {
+      "variant": "SimulateMany",
+      "name": "simulate_many"
+    },
+    {
+      "variant": "SimulateSeeded",
+      "name": "simulate_seeded"
+    },
+    {
+      "variant": "ForkWith",
+      "name": "fork_with"
+    },
+    {
+      "variant": "ForkSeed",
+      "name": "fork_seed"
+    },
+    {
+      "variant": "Diff",
+      "name": "diff"
+    },
+    {
+      "variant": "AssertOnlyChanged",
+      "name": "assert_only_changed"
+    },
+    {
+      "variant": "Why",
+      "name": "why"
+    },
+    {
+      "variant": "WhyResource",
+      "name": "why_resource"
+    },
+    {
+      "variant": "WhyFact",
+      "name": "why_fact"
+    },
+    {
+      "variant": "SaveWorld",
+      "name": "save_world"
+    },
+    {
+      "variant": "LoadWorld",
+      "name": "load_world"
+    },
+    {
+      "variant": "TryLoadWorld",
+      "name": "try_load_world"
+    },
+    {
+      "variant": "WorldDigest",
+      "name": "world_digest"
+    },
+    {
+      "variant": "SchemaDigest",
+      "name": "schema_digest"
+    },
+    {
+      "variant": "MergeForks",
+      "name": "merge_forks"
+    },
+    {
+      "variant": "MergeForksWith",
+      "name": "merge_forks_with"
+    },
+    {
+      "variant": "ForkToBytes",
+      "name": "fork_to_bytes"
+    },
+    {
+      "variant": "ForkFromBytes",
+      "name": "fork_from_bytes"
+    },
+    {
+      "variant": "ForkDelta",
+      "name": "fork_delta"
+    },
+    {
+      "variant": "ForkApply",
+      "name": "fork_apply"
+    },
+    {
+      "variant": "Popcount",
+      "name": "popcount"
+    },
+    {
+      "variant": "Ctz",
+      "name": "ctz"
+    },
+    {
+      "variant": "Shl",
+      "name": "shl"
+    },
+    {
+      "variant": "Shr",
+      "name": "shr"
+    },
+    {
+      "variant": "Filled",
+      "name": "filled"
+    },
+    {
+      "variant": "SetAt",
+      "name": "set_at"
+    },
+    {
+      "variant": "Res",
+      "name": "res"
+    },
+    {
+      "variant": "Sum",
+      "name": "sum"
+    },
+    {
+      "variant": "Product",
+      "name": "product"
+    },
+    {
+      "variant": "GetOr",
+      "name": "get_or"
+    },
+    {
+      "variant": "Clamp",
+      "name": "clamp"
+    },
+    {
+      "variant": "IndexOf",
+      "name": "index_of"
+    },
+    {
+      "variant": "Any",
+      "name": "any"
+    },
+    {
+      "variant": "All",
+      "name": "all"
+    },
+    {
+      "variant": "DropFirst",
+      "name": "drop_first"
+    },
+    {
+      "variant": "RecentEvents",
+      "name": "recent_events"
+    },
+    {
+      "variant": "BaseFact",
+      "name": "base_fact"
+    },
+    {
+      "variant": "CandidateFact",
+      "name": "candidate_fact"
+    },
+    {
+      "variant": "InsertFact",
+      "name": "insert_fact"
+    },
+    {
+      "variant": "RemoveFact",
+      "name": "remove_fact"
+    },
+    {
+      "variant": "ReplaceFactBy",
+      "name": "replace_fact_by"
+    }
+  ]
+}

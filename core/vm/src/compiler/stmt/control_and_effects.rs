@@ -526,8 +526,7 @@ impl Compiler {
                 }
                 Pattern::HasComponent { component, .. } => {
                     self.emit_get_local(subject_slot, line);
-                    let comp_idx =
-                        self.add_constant_gc(|gc| Value::from_string(gc, component.clone()));
+                    let comp_idx = self.add_canonical_name_constant(component);
                     self.emit_op(Op::EcsHas, line);
                     self.emit_u16(comp_idx, line);
                     Some(self.emit_jump(Op::JumpIfFalse, line))
@@ -562,7 +561,7 @@ impl Compiler {
             } = &case.pattern
             {
                 self.emit_get_local(subject_slot, line);
-                let comp_idx = self.add_constant_gc(|gc| Value::from_string(gc, component.clone()));
+                let comp_idx = self.add_canonical_name_constant(component);
                 self.emit_op(Op::EcsGet, line);
                 self.emit_u16(comp_idx, line);
                 self.add_local(bind_name.clone(), false);

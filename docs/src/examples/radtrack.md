@@ -132,7 +132,8 @@ After the fixes, the identical soak: **552,000 cases, 0 panics** —
 the gc_pause stress (collector firing at *every* allocation through the
 full codec+merge+commit path). The harness also fuzzes itself: a planted
 panic must be caught and reported, so a forever-green gate stays
-falsifiable. All 809 + 17 tests green; findings auto-dump repro files to
+falsifiable. At that checkpoint, all 809 VM + 17 CLI tests were green;
+findings auto-dump repro files to
 `temp/rad_fuzz_findings/`.
 
 ## D3: name claims become resolvable — the gap #6 payoff
@@ -166,7 +167,7 @@ Receipts from `demo/run_name_demo.ps1` (real output):
   history `[via wire 4dd4cae3, remote frame]` under the *new* name.
 - `Tracker.next_id` didn't even conflict: both sides bumped 3 → 4, and
   convergent edits are not conflicts.
-- Safety is pinned in `core/vm/src/merge.rs` tests: renames that still collide
+- Safety is pinned in `core/vm/src/merge/tests.rs`: renames that still collide
   re-conflict (`rename_resolution_still_colliding_reconflicts`), renames
   cannot steal an untouched entity's name
   (`rename_resolution_cannot_steal_untouched_name`), and `""` unnames
@@ -202,9 +203,10 @@ in a worker):
   edits including spawn + resource bump.
 - Wrong-lineage protection live: a delta applied out of order is refused
   by the base fingerprint (`fuzz`-grade honesty in a UI path).
-- Pinned natively in `core/vm/src/wasm.rs` tests: 3-session convergence with
+- Pinned natively in `core/vm/src/wasm/rendering_and_tests.rs`: 3-session convergence with
   equal digests per frame, out-of-order refusal, late-joiner state
-  adoption, per-frame output, host-event causality — 6 tests, all green.
+  adoption, per-frame output, host-event causality — the checkpoint's six
+  focused tests were green.
 - Dogfooding found two real embedding bugs before any user did: the
   host-election reply raced WASM init (a replica flipped to host because
   the `host-here` answer arrived before the channel handler existed), and
@@ -335,7 +337,8 @@ The fix, in three layers:
 Receipts (release, 60k-iteration str_build, same-run ratios from the
 baselines harness): **10.2x behind Lua → 6.1x** on the naive loop; the
 O(n) idiom `join(map(range(n), fn), "")` runs **57 ms — ~9x faster than
-Lua's naive loop**. All 839 + 17 tests green through the new lowering
+Lua's naive loop**. At that checkpoint, all 839 VM + 17 CLI tests were green
+through the new lowering
 (every f-string in the suite now compiles to ConcatN).
 
 And the benchmark caught a fresh Tier-1-class finding: the "builder"
@@ -380,7 +383,7 @@ Receipts from `demo/run_rolling_demo.ps1` (real output):
 - Honesty preserved: alice edits offline and asks again →
   `DIVERGED (certified): … MISMATCH` — a real divergence still reports
   truthfully, through the same migrated-view lens.
-- Pinned in `core/vm/src/migration_tests.rs`: cross-version certification
+- Pinned in `core/vm/src/internal_tests/migration/`: cross-version certification
   (migrated v1 view ≡ native v2 twin), derived-field coverage (a twin
   with one wrong derived value does NOT certify), state-only fork
   digests (in-flight events don't move them; inspecting a fork doesn't

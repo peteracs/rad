@@ -125,6 +125,7 @@ pub struct NativeFieldLayout {
 }
 
 impl NativeAbiContract {
+    #[cfg(not(target_arch = "wasm32"))]
     pub(crate) fn parse(encoded: &str) -> Result<Self, String> {
         let contract: Self = serde_json::from_str(encoded)
             .map_err(|error| format!("native ABI contract is invalid JSON: {error}"))?;
@@ -132,6 +133,7 @@ impl NativeAbiContract {
         Ok(contract)
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     fn validate(&self) -> Result<(), String> {
         if self.contract_version != 1 {
             return Err(format!(
@@ -383,6 +385,7 @@ pub struct NativeExtensionManifest {
 }
 
 impl NativeExtensionManifest {
+    #[cfg(not(target_arch = "wasm32"))]
     fn semantic_digest(
         extension_id: &str,
         extension_version: &str,
@@ -456,6 +459,7 @@ impl NativeExtensionManifest {
         }
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     fn from_replay(
         extension_id: String,
         extension_version: String,

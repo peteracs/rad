@@ -191,7 +191,7 @@ impl Compiler {
     fn compile_native_type_decl(&mut self, native: &NativeTypeDecl) -> Result<(), CompileError> {
         let resolved = self.resolve_canonical_name(&native.name);
         let mut descriptor = crate::native_types::NativeTypeDescriptor::from(native);
-        descriptor.name = resolved.clone();
+        descriptor.name = resolved.as_str().into();
         self.native_types
             .insert(resolved.clone(), descriptor.clone());
         let line = native.span.line;

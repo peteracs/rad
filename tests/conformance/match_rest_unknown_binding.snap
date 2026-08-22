@@ -1,0 +1,8 @@
+---
+source: tests\conformance\match_rest_unknown_binding.rad
+exit_code: 1
+---
+
+---stderr---
+Error: Error[E2504]: Unknown binding 'bogus' for variant 'Sig::Alarm'
+Error: Undefined variable 'bogus'

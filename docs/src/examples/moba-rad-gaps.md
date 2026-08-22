@@ -11,7 +11,7 @@ stayed bit-identical through both rewrites — the conformance gate did
 its job. Conformance coverage lives in `tests/conformance/` (shift_ops,
 update_indexed, field_names_keywords, resource_res, modules/pub_let_*,
 plus the *_reject diagnostics) and the checker unit tests at the bottom
-of `core/vm/src/checker/tests.rs`.
+of `core/vm/src/checker/tests/`.
 
 ## 1. Array fields in components — FIXED
 List fields in components already worked (`shields: list = [0, 0, 0]`);
@@ -190,7 +190,7 @@ Features the dream code forced:
    era-engine timer are this shape. Stale timers are harmless: the
    handler guards on current state (the interrupt race in spellwork).
    Payloads are GC roots; parallel-batch workers reject it loudly (v1).
-2. **`get_or(coll, key, default)`** — map/list lookup with a fallback;
+2. **`get_or(coll, key, default)`** — map/list lookup with an explicit default;
    the cooldown-table read (`c.cooldowns |> get_or(slot, 0)`).
 3. **`clamp(x, lo, hi)`** — the CDR formula
    (`cd * (1.0 - clamp(cdr, 0.0, 0.4))`), int-preserving.
@@ -456,7 +456,7 @@ none:
 
 3. **`sort()` couldn't order tuples** — sort_by/min_by/max_by gained
    lexicographic tuples in round 7, but plain `sort()` kept a private
-   comparator. Its fallback now delegates to the same `compare_values`
+   comparator. It now delegates to the same `compare_values`
    total order: one ordering everywhere.
 
 Bonus formatter bug, found while gating: unary minus formatted as
@@ -507,10 +507,9 @@ again — five features/fixes and TWO real VM bugs:
    the slots aliased live operand values (symptom: `VecBroadcast:
    expected list template`, or garbage results). The vectorized path
    now uses a GLOBAL scratch slot (same pattern as match-expression
-   results) and stays enabled everywhere; the scalar loop fallback is
-   gated to statement roots (let/assign/return/expr-stmt) via a
-   one-shot `allow_pipe_fusion` grant, falling back to plain unfused
-   calls in expression position.
+   results) and stays enabled everywhere; scalar loop lowering is gated to
+   statement roots (let/assign/return/expr-stmt) via a one-shot
+   `allow_pipe_fusion` grant. Expression positions use ordinary calls.
 
 6. **Bonus checker bug**: components used ONLY in entity literals were
    flagged "unused" — the reachability walker had no `EntityLiteral`
@@ -644,8 +643,8 @@ expedient instead of right. All three are now solved properly:
    is conservative (more handler bodies vetted), under-matching was the
    unsound direction.
 
-Reviewed and deliberately NOT changed: the scalar pipeline fallback
-stays statement-root-only (correct, just slower in expression position
+Reviewed and deliberately NOT changed: scalar pipeline lowering stays
+statement-root-only (correct, just slower in expression position
 — the vectorized path covers the hot shapes), and group_by's stricter
 key errors (float/nil used to stringify silently) are the intended
 semantics.

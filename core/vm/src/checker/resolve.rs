@@ -89,6 +89,8 @@ impl Checker {
                         Box::new(Ty::Str),
                         Box::new(resolved_args[0].clone()),
                     ))
+                } else if name == "task" && resolved_args.len() == 1 {
+                    Some(Ty::Task(Box::new(resolved_args[0].clone())))
                 } else {
                     Some(Ty::App(name.clone(), resolved_args))
                 }

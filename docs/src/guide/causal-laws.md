@@ -106,7 +106,7 @@ spawn/despawn, emit/propose, or stage the same component twice in one resolver
 invocation.
 
 If two resolution paths stage the same `(entity, component type)`, the
-settlement aborts. There is no last-write-wins fallback. Any law/resolver error,
+settlement aborts. Last-write-wins is not part of settlement semantics. Any law/resolver error,
 candidate conflict, or sandbox ACL denial leaves both the world and the main
 provenance ledger unchanged.
 

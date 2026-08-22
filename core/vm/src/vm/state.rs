@@ -154,6 +154,11 @@ pub struct VM {
     pub(crate) arena: BumpArena,
     pub(crate) timeline: Vec<WorldSnapshot>,
     pub(crate) event_log: VecDeque<EventLogEntry>,
+    /// Permit a private simulation VM to retain its own bounded event history
+    /// for temporal-model observations. This does not make the VM a main-
+    /// timeline participant: causal recording, host effects, and publication
+    /// remain suppressed by `in_simulation_fork`.
+    pub(crate) capture_isolated_event_log: bool,
     pub(crate) rng_state: u64,
     pub(crate) tasks: HashMap<u64, TaskRecord>,
     pub(crate) next_task_id: u64,
@@ -269,11 +274,11 @@ pub struct SystemWriteback {
 
 #[derive(Clone)]
 pub struct SystemRuntimeInfo {
-    pub(crate) params: SystemSignature,
-    pub(crate) resource_params: SystemSignature,
+    pub(crate) params: Arc<SystemSignature>,
+    pub(crate) resource_params: Arc<SystemSignature>,
     pub(crate) chunk_id: usize,
-    pub(crate) after: Vec<String>,
-    pub(crate) before: Vec<String>,
+    pub(crate) after: Arc<Vec<String>>,
+    pub(crate) before: Arc<Vec<String>>,
     /// Systems sharing a `serial phase` group id never share a parallel
     /// batch — they run in separate batches, in schedule order (dogfood
     /// feature seq 83).
@@ -282,6 +287,6 @@ pub struct SystemRuntimeInfo {
     /// IDEA 02): the batch merge folds each worker's per-field delta into
     /// the base instead of last-write-wins, and the conflict analysis lets
     /// accum-writers of the same resource share a batch.
-    pub(crate) accum_resources: std::collections::HashSet<String>,
+    pub(crate) accum_resources: Arc<std::collections::HashSet<String>>,
     pub(crate) instruction_budget: Option<u64>,
 }

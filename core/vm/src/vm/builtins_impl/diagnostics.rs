@@ -123,13 +123,12 @@ impl VM {
         if !args.is_empty() {
             return Err("flush_events() takes no arguments".into());
         }
-        let active_chunks = self
-            .frames
-            .iter()
-            .map(|frame| frame.chunk_id)
-            .collect::<std::collections::HashSet<_>>();
         if self.event_handlers.values().flatten().any(|handler| {
-            handler.contracts.no_nested_flush && active_chunks.contains(&handler.chunk_id)
+            handler.contracts.no_nested_flush
+                && self
+                    .frames
+                    .iter()
+                    .any(|frame| frame.chunk_id == handler.chunk_id)
         }) {
             return Err(
                 "flush_events() is forbidden by the active @no_nested_flush handler".to_string(),
@@ -265,7 +264,7 @@ impl VM {
         //    queryable past behind recent_events() (death recaps, combat
         //    windows). Main timeline only, ring-capped so long runs stay
         //    bounded.
-        if !self.is_worker && self.in_simulation_fork == 0 {
+        if self.captures_event_log() {
             for (name, data, _) in &processing {
                 self.record_event_log(crate::vm::EventLogEntry {
                     tick: self.causality_frame,

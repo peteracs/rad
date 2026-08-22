@@ -1,460 +1,351 @@
+<a id="declarations"></a>
 ## 3. Declarations
 
-### 3.1 Component Declaration
+Declarations install nominal schemas, callable code, execution topology, test
+contracts, or top-level behavior. Unless stated otherwise, a named declaration
+is file-private; prefix it with `pub` to export it. Public fields, parameters,
+and returns require explicit types.
 
+<a id="decl-components"></a>
+### 3.1 Components and resources
+
+```text
+pub component AssetIdentity owned with [migration_tools] {
+    indexed id: AssetId = AssetId(u64(0)),
+    ordered indexed priority: (u16, u64) = (u16(0), u64(0)),
+    zone: ZoneId = ZoneId(u16(0)),
+}
+
+pub component Profile {
+    name: str = "",
+    owned rank: int = 0,
+}
+
+pub resource Ledger owned { revision: u64 = u64(0) }
+pub transient resource Scratch { probes: int = 0 }
 ```
-component <Name> {
-    <field>: <default_value>,
-    indexed <field>: <default_value>,
-    ...
+
+A component may be attached to entities. A resource is one runtime-owned
+singleton. `transient resource` participates in execution/forks but is omitted
+from persistent world encoding and semantic world digests.
+
+`indexed` maintains exact-key lookup. `ordered indexed` additionally maintains
+ascending deterministic traversal. An index declaration is part of the schema
+and is rebuilt/validated on load.
+
+`owned` grants semantic writes to the declaring canonical module. `with [...]`
+names co-owner module identities. `transfer to module` moves ownership and
+revokes the declaring module. Field-level `owned` restricts writes to that
+field while leaving other fields writable. Owner/co-owner/test code must still
+declare `writes owned [Type]` or `writes owned [Type.field]` on the callable;
+outside modules cannot forge that grant.
+
+Schema versions use `component Name v2 { ... }` and `resource Name v3 { ... }`.
+The version is persisted and supplied to the owning migration.
+
+<a id="decl-structs-native"></a>
+### 3.2 Structs and native declarations
+
+```text
+pub struct Point { x: float = 0.0, y: float = 0.0 }
+pub opaque type MissionId = u64
+pub enum MissionKind: u8 { Medical = 1, Power = 2 }
+pub bitflags Flags: u16 { Active = 1, Priority = 8 }
+pub repr(C) packed struct Packet { id: MissionId, flags: Flags }
+```
+
+Ordinary structs are immutable-shaped values and cannot be attached as ECS
+components. `opaque type`, fixed-representation `enum`, `bitflags`, and
+`repr(C)` structs are represented by the `NativeType` declaration node and obey
+the nominal/layout rules in §2.6.
+
+<a id="decl-entities"></a>
+### 3.3 Entity declarations
+
+```text
+pub entity control_room {
+    Point { x: 1.0, y: 2.0 },
+    Health { hp: 100 },
 }
 ```
 
-Declares a component type. Fields have names and default values. The type of each field is inferred from its default value.
+An entity declaration creates one named entity during program initialization.
+Its component entries are validated against component schemas. Named identity
+participates in `$entity_names`/`$entity_identity`, snapshots, and replay.
 
-**Indexed fields:** Prefixing a field with the `indexed` keyword creates a runtime index for O(1) entity lookup by that field's value via the `lookup()` builtin (see §6). Only fields with hashable types (`int`, `float`, `str`, `bool`, `entity`) may be indexed; function or compound types are rejected. The index is maintained automatically when components are added, removed, or modified via `set()`. Example:
+<a id="decl-sums-aliases"></a>
+### 3.4 Sum types and aliases
 
-```
-component Username {
-    indexed name: "",
+```text
+pub type Outcome {
+    Assigned { mission: MissionId, asset: AssetId }
+    Rejected { mission: MissionId, reason: str }
 }
 
-let hero = spawn(Username { name: "Hero" })
-let found = lookup(Username, "name", "Hero")  // Some(hero_entity_id)
+pub type Pair<T> = (T, T)
+pub type Buckets<K, V> = map<K, list<V>>
 ```
 
-**Plain-data rule:** Component fields cannot have function or closure types (including nested list/map/tuple types that contain them). The checker rejects such fields so ECS storage stays data-only. See [Memory model](memory-model.md).
+A sum variant is nominal and constructed as `Outcome::Assigned { ... }`.
+Variant fields are type declarations, not component defaults. A type alias is
+transparent and may be parameterized; substitution is recursive through its
+complete type expression.
 
-### 3.1.1 Resource Declaration
+<a id="decl-states"></a>
+### 3.5 State machines
 
-```
-resource <Name> {
-    <field>: <default_value>,
-    ...
-}
-```
-
-Declares a global singleton data type. Resources are structurally identical to components — named fields with default values — but they are **not attached to entities**. A resource is initialized once when the program starts and is accessed via `get_resource(Name)` (returns `Option`) and `set_resource(Name, value)`.
-
-Resources can be injected into systems as parameters: `system Foo(r: mut MyResource) { ... }`. A resource-only system (no component parameters) runs exactly once per schedule invocation. A mixed system iterates entities while injecting the same resource instance on each iteration.
-
-The checker enforces: a resource name cannot collide with a component name (and vice versa), duplicate `resource` declarations are rejected, and `spawn()` / `entities()` cannot accept resource types.
-
-**Plain-data rule:** Like components, resource fields cannot have function or closure types.
-
-### 3.2 Struct Declaration
-
-```
-struct <Name> {
-    <field>: <default_value>,
-    ...
-}
-```
-
-Declares a plain data record type. Structs are structurally identical to components — they have named fields with default values and support the same field access and spread syntax — but they are **not eligible for ECS operations**. You cannot use a struct with `system` parameters, `entity` declarations, `get()`, `set()`, `has()`, `spawn()`, or `query`.
-
-```
-struct Point { x: 0.0, y: 0.0 }
-let p = Point { x: 3.0, y: 4.0 }
-print(p.x)                         // 3.0
-
-let p2 = Point { x: 10.0, ..p }    // spread syntax
-print(p2.y)                        // 4.0 (from p)
-```
-
-Use `struct` for general-purpose data records that don't need to participate in the ECS. Use `component` for data that will be attached to entities. The same **plain-data** restriction applies to `struct` fields (structs can nest inside components). Both `struct` and `component` instances share the same flat memory layout (`ComponentData` internally) providing O(1) field access when used as local variables. When components are inserted into the ECS, they are stripped apart into a highly optimized Structure-of-Arrays (SoA) layout; values written to the world are deep-copied into persistent ECS storage (see [Memory model](memory-model.md)).
-
-### 3.3 Entity Declaration
-
-```
-entity <name> {
-    <Component> { <field>: <value>, ... },
-    ...
-}
-```
-
-Creates a named entity with the specified components. The entity name is bound as a variable containing the entity ID.
-
-#### Entity Literal Expression
-
-```
-entity {
-    <Component> { <field>: <value>, ... },
-    <expr>,
-    ...
-}
-
-entity <name_expr> {
-    <Component> { <field>: <value>, ... },
-    <expr>,
-    ...
-}
-```
-
-When `entity` appears in expression position, it is parsed as an **entity literal expression**. It spawns a new entity, attaches the listed components, and evaluates to the entity ID. Because it is an expression, it can appear in let-bindings, function arguments, return values, and anywhere else an `entity`-typed value is expected.
-
-An optional name expression between `entity` and `{` creates a **named** entity (retrievable via `get_entity()`). The name can be any expression that evaluates to a string — a string literal, variable, f-string, or function call. If omitted, the entity is anonymous.
-
-Each entry inside the braces is a **component entry** — either a traditional component initializer (`Component { field: value }`) or an arbitrary expression that evaluates to a component value. The parser uses lookahead to disambiguate: `Ident {`, `Ident.path`, and `Ident::path` are parsed as component initializers; everything else is parsed as an expression. This allows variables, function calls, and other expressions to be used directly as component entries alongside traditional initializers.
-
-```rad
-// Anonymous (no name)
-let hero = entity {
-    Name { value: "Hero" },
-    Health { hp: 100, max: 100 },
-    Position { x: 0.0, y: 0.0 }
-}
-
-// Named with a string literal
-let e = entity "player" { Health { hp: 100 }, Position { x: 0, y: 0 } }
-
-// Named with a variable
-let path = "assets/level.rad"
-let file = entity path { FilePath { path: path }, Unparsed {} }
-
-// Named with an f-string
-let npc = entity f"npc_{id}" { Name { value: n } }
-
-set_parent(entity { Child {} }, hero)
-
-// Expression components: variables and function calls
-let pos = Position { x: 1.0, y: 2.0 }
-let e = entity { Name { value: "Hero" }, pos, make_health(100) }
-```
-
-**Disambiguation:** At statement level, `entity Ident` is a declaration (§3.3). In expression position, `entity {` is an anonymous literal; `entity <expr> {` is a named literal. The expression form has type `entity`.
-
-### 3.4 State Machine Declaration
-
-```
-state <Name> {
-    <StateName> {
-        on <event_name> -> <TargetState>
-        on <event_name> -> <TargetState> when <guard_expr>
-        // optional comma separators are accepted
-        // on <event_name> -> <TargetState>, on <event_name> -> <TargetState>
+```text
+pub state MissionFlow {
+    Queued { on reserve -> Reserved }
+    Reserved {
+        on launch -> Active
+        on cancel -> Cancelled when cancellation_allowed()
     }
-    ...
+    Active { on complete -> Completed }
+    Completed {}
+    Cancelled {}
 }
 ```
 
-Declares a finite state machine. Each state lists its valid transitions. Optional `when` clauses add guard expressions evaluated at transition time. Transition entries may be separated by newlines and/or optional commas.
+State names and transition names are local to the machine. A transition is
+valid only from its declared source and only when its guard is true.
+`transition(value, "name")` returns an `Option` containing the next state; the
+caller explicitly stages that value.
 
-### 3.5 System Declaration
+<a id="decl-functions"></a>
+### 3.6 Functions and transactions
 
+```ebnf
+function_decl = [ "pub" ] [ "pure" | "readonly" | "async" | effect { effect } ]
+                "fn" IDENT [ "<" IDENT { "," IDENT } ">" ]
+                "(" [ parameter { "," parameter } ] ")"
+                [ "->" type_expr ] [ ownership_grant ] block ;
+parameter     = [ "mut" ] IDENT [ ":" type_expr ] ;
+effect        = "io" | "ecs" | "event" | "readonly" ;
+ownership_grant = "writes" "owned" "[" ownership_target { "," ownership_target } "]" ;
 ```
-system <Name>(
-    <param>: [mut|accum] <ComponentOrResourceType>,
-    [reads <ComponentOrResourceType>|reads *],
-    [writes <ComponentOrResourceType>|writes *],
-    ...
-) [after <System> [, <System> ...]] [before <System> [, <System> ...]] {
-    <body>
+
+`pure`, `readonly`, and `async` are mutually meaningful effect declarations.
+Ordinary effects are inferred transitively and checked against restricted
+callers. A `mut` parameter permits rebinding that parameter; it does not grant
+component ownership.
+
+Stable atomic transactions are named function declarations:
+
+```text
+pub transaction Reserve(subject: entity)
+writes owned [Mission, Capacity]
+{
+    requires has(subject, Mission)
+    changes_only [Mission, Capacity, ActiveMission]
+
+    set(subject, ActiveMission {})
+
+    ensures has(subject, ActiveMission)
+    post_commit { emit next MissionReserved { mission: subject } }
 }
 ```
 
-`after` and `before` clauses are optional and may be repeated. They declare **ordering constraints** relative to other systems:
+A transaction requires at least one `requires`, exactly one nonempty
+`changes_only`, and at least one `ensures`. It stages one patch against one base
+snapshot and commits all or none. `post_commit`, when present, is final and may
+emit/perform allowed external effects but cannot mutate authoritative state.
+Transactions are not generic or async and return `nil`.
 
-- `after Physics` — this system must run **after** `Physics` when both appear in the same scheduled run.
-- `before Render` — this system must run **before** `Render` when both appear in the same scheduled run.
+<a id="decl-systems"></a>
+### 3.7 Systems and authority signatures
 
-Example:
-
-```
-system Render(p: Position) after Physics {
-    ...
+```text
+system Route(
+    mission: mut Mission,
+    available: AvailableAsset,
+    ledger: accum Ledger,
+    reads AuditTrail,
+    writes Projection,
+    emits MissionRouted,
+    io true,
+    async false,
+) after Intake before Publish {
+    // `self` is the current entity for a component query row.
 }
 ```
 
-Declares a system that operates on entities and/or global resources. Named parameters specify which component types to query and which resource types to inject. The `mut` modifier grants read/write authority and enables writeback; an immutable parameter grants read authority only.
+Component parameters determine query cardinality. A mutable component/resource
+parameter grants writeback; `accum` values merge through the accumulator
+contract. Type-only filters constrain membership without binding a value.
+Authority-only `reads`/`writes`/`emits` entries do not alter cardinality and may
+be single names, qualified fields, a bracketed list, a quoted synthetic
+authority, or `*` where a language rule explicitly allows it. `io` and `async`
+are opt-in booleans.
 
-**Component parameters** query the entity world: the system iterates over all entities that have ALL the specified component types. **Resource parameters** inject global singletons declared with `resource`. A system may mix both: `system Tally(u: Unit, s: mut Stats) { ... }` iterates entities with `Unit` while injecting the `Stats` resource on each iteration. A **resource-only** system runs exactly once per schedule invocation.
+The declared signature is an enforced upper bound on call-site-specialized
+synchronous effects. `after` and `before` add scheduler edges; cycles are
+errors. Scheduler conflicts consume the same specialized graph.
 
-Authority-only entries declare effects without changing iteration cardinality:
+<a id="callable-contracts"></a>
+### 3.8 Callable contracts
 
-- `reads X` / `writes X` permit transitive live-world state access.
-- `emits Event` permits transitive emission of that event; `emits *` permits any event.
-- `io true` permits transitively reachable host effects, including console, file,
-  network, clock, sleep, and random builtins. IO is denied when omitted or written
-  as `io false`.
-- `async true` permits transitively reachable async execution. Async is denied
-  when omitted or written as `async false`.
-- `reads *` / `writes *` are explicit whole-world state grants for operations
-  whose target cannot be bounded more narrowly.
+Contracts prefix systems or handlers and apply transitively:
 
-These entries create no binding, inject no resource, and add no component to the entity query:
+| Contract | Meaning |
+|---|---|
+| `@frame`, `@tick`, `@render` | Marks a latency-sensitive root. |
+| `@no_full_scan` | Rejects reachable population scans. |
+| `@allow_full_scan(reason: "...")` | Documents one intentional scan. |
+| `@no_guest_allocation` | Rejects RAD-managed guest allocation. |
+| `@no_runtime_allocation` | Measures/rejects VM runtime allocation. |
+| `@no_host_allocation` | Measures/rejects host-boundary allocation. |
+| `@budget(instructions: N)` | Enforces deterministic semantic work. |
+| `@no_nested_flush` | Rejects nested `flush_events()`. |
+| `@non_reentrant` | Rejects recursive callable entry. |
+| `@exactly_once` | Rejects duplicate handler delivery. |
+| `@must_complete_before(Phase)` | Rejects delivery after a phase barrier. |
 
-```rad
-system RemoveEntity(
-    live: mut LiveMembership,
-    writes WireIdentity,
-    emits EntityRetired,
-) {
-    rewrite_wire(self) // helper may write WireIdentity
-    emit EntityRetired { target: self }
-    live.active = false
+The compiler reports the transitive effect/cost path. A measurement contract
+fails if its required native meter is unavailable.
+
+<a id="decl-events"></a>
+### 3.9 Events and handlers
+
+```text
+pub event MissionReserved { mission: entity, asset: entity }
+
+@non_reentrant
+on MissionReserved(evt) when has(evt.mission, Mission) { }
+
+on MaintenanceWindow once (evt) where has(evt.asset, AssetIdentity) { }
+async on RemoteReply(evt) { await process(evt) }
+```
+
+Event fields are typed. A handler receives one payload binding. `when` and
+`where` are the guard positions. `once` runs the handler at most once for the
+VM lifetime; `@exactly_once` additionally diagnoses a duplicate delivery.
+Handlers cannot be `pub`.
+
+<a id="decl-phases"></a>
+### 3.10 Phases
+
+```text
+phase Input { ReadInput }
+phase Simulate { Integrate, Resolve }
+serial phase Commit { CommitWorld }
+phase Publish {}
+```
+
+A phase names a system group and may participate in `after`/`before` ordering.
+Brace and bracket member forms are equivalent. `serial` forbids parallel
+batches inside the phase. A schedule may reference a phase directly or through
+an import alias.
+
+<a id="decl-views"></a>
+### 3.11 Materialized views
+
+```text
+pub materialized view ActiveMissions {
+    depends [Mission, ActiveMission]
+    key Mission.id
 }
 ```
 
-The checker follows effects through ordinary and imported function calls,
-closures, callbacks, bounded function values, state transitions, resources, and
-event-handler chains. Each system is specialized for its statically resolved
-callback arguments, so two callers of one higher-order helper retain separate
-effect sets. A generic helper report may conservatively union its known callback
-targets, but that union is not used to authorize or batch an unrelated system.
+A view declares its exact source dependencies and optional key projection.
+The runtime owns membership, key indexes, revisions, change history, and
+provenance; user code cannot mutate a view. Maintenance is atomic with the
+source write and is restored/reinstalled when a compatible world is loaded.
 
-A system's query parameters plus authority-only entries are an enforced upper
-bound over synchronous reads, writes, emissions, IO, and async execution. An
-undeclared effect or unbounded dynamic call is a compile-time error with an
-authority path. Emission itself must be granted with `emits`; queued handlers are
-deferred authority boundaries, so their bodies do not borrow the emitter's
-synchronous state/IO/async grants. `flush_events()` executes reachable handlers
-synchronously and therefore brings their effects into the caller's bound.
+<a id="decl-migrations"></a>
+### 3.12 Migrations
 
-Runtime-owned entity indexes have narrow quoted authorities. `get_entity` and
-`require_entity` read `"$entity_names"`; `name_of` reads
-`"$entity_identity"`. Spawning writes `"$entity_identity"` and, when named,
-`"$entity_names"`; despawning writes both indexes as well as the removed
-component world. Systems must declare these authorities exactly like component
-or resource access.
-
-Parallel conflict analysis consumes the same synchronous inferred effects, not a second syntax scan. Consequently a helper-hidden resource write serializes correctly, while a queued handler that runs after the batch does not create a false conflict. The checker still rejects `update(Resource)` and `set_resource(Resource, ...)` inside a system that already holds the same resource as a `mut` parameter to prevent writeback-overwrite bugs.
-
-**`accum` resource parameters** (`d: accum DamageLog`) declare an **additive reduction**: the parameter is writable like `mut`, but when the system runs in a parallel batch, each worker's per-field **delta** against the batch's base snapshot is *folded into* the base (in schedule order — deterministic, floats included) instead of last-write-wins. Two `accum`-writers of the same resource therefore commute and may share a batch, while a plain reader or `mut`-writer of that resource still serializes against them. The contract is checked statically: `accum` is only valid on **resource** parameters, and every field of the resource must be `int` or `float` (folding is defined per numeric field). The fold is additive — `d.total = d.total + x` per entity aggregates exactly; non-additive updates (min/max/overwrite) belong in an event handler, which is serial by design.
-
-The special variable `self` is bound to the current entity ID (unavailable in resource-only systems).
-
-### 3.5.1 Phase Declaration
-
-```
-phase <Name> [<System>, <System>, ...]
-serial phase <Name> [<System>, <System>, ...]
-pub phase <Name> [<PublicSystem>, <PublicSystem>, ...]
-```
-
-Declares a named group of systems. Phase names can be used anywhere a system name is accepted in `schedule` blocks:
-
-```
-phase Physics [Gravity, Collision, Movement]
-phase Rendering [ClearScreen, DrawSprites, DrawUI]
-
-schedule [Physics, Rendering]
-```
-
-The phase expands inline into its constituent systems. The checker validates that all listed systems exist and marks them as invoked (suppressing "unused system" warnings). Phases cannot nest other phases.
-
-A public phase can be scheduled through a module alias:
-
-```
-// simulation.rad
-pub resource Clock { frame: int = 0 }
-pub system Tick(clock: mut Clock) { clock.frame = clock.frame + 1 }
-pub phase Frame [Tick]
-
-// main.rad
-use "simulation.rad" as simulation
-schedule [simulation.Frame]
-```
-
-The phase name and every member are resolved to the defining module's
-canonical identity before checking, authority analysis, serial-group stamping,
-and bytecode lowering. A public phase does not make a private system public;
-systems exposed by that phase must also be `pub`. Private phases cannot be
-named outside their module.
-
-A **`serial phase`** additionally declares that its members must never share a parallel batch with each other, no matter how disjoint their data access is — "these systems are ordered and I do not want them raced", stated in the program instead of relied on implicitly. Members run in separate batches, in schedule order, in every schedule that includes them; systems outside the group may still run in parallel with them. The whole-schedule spelling is `schedule serial [...]` (§7.2).
-
-### 3.6 Event Declaration
-
-```
-event <Name> { <field>, <field>, ... }
-event <Name> { <field>: <Type>, ... }
-```
-
-Declares an event type with named fields. Field types are optional (unannotated fields are equivalent to `any`). **`pub` events** require an explicit type on every field (same rule as `pub` components / structs). Omit default values: events are instantiated only at `emit` sites.
-
-### 3.7 Event Handler
-
-```
-on <EventName>(<param>) {
-    <body>
-}
-
-on <EventName>(<param>) where <guard_expr> {
-    <body>
-}
-
-on <EventName>(<param>) when <guard_expr> {
-    <body>
-}
-
-on <EventName> once (<param>) {
-    <body>
-}
-
-on <EventName> once (<param>) where <guard_expr> {
-    <body>
-}
-
-on <EventName> once (<param>) when <guard_expr> {
-    <body>
+```text
+migrate AuditTrail(old, from_version) {
+    return AuditTrail {
+        revision: get_or(old, "revision", 0),
+        notes: get_or(old, "notes", []),
+    }
 }
 ```
 
-Registers a handler for an event type. When the event is emitted, all handlers are called in registration order. The parameter is bound to the event data (as a read-only ComponentData).
+Loading invokes the matching migration when persisted shape/version differs.
+The old row is data, and the function must return the current declared type.
+Migration runs before adoption; any error rejects the load without partial
+world mutation.
 
-Multiple handlers can be registered for the same event.
+<a id="decl-modules"></a>
+### 3.13 Module imports and visibility
 
-The optional `where` or `when` clause adds a **guard expression**. The handler body only executes when the guard evaluates to truthy. `where` and `when` are interchangeable — use whichever reads more naturally. The guard is desugared to an `if` wrapper at parse time.
-
+```text
+use "schema.rad"
+use "owners/grid_owner.rad" as owner
 ```
-event Hit { target_id: str, amount: int }
 
-on Hit(e) where e.amount > 10 {
-    let target = lookup(Name, "value", e.target_id)?
-    print("heavy hit on", target)
+Paths resolve relative to the importing file and normalize to one canonical
+module identity. Bare imports expose public names in the flat namespace;
+aliased imports expose public names as `owner.name`. Multiple aliases,
+bare-plus-aliased access, and normalized relative spellings share one semantic
+module/runtime identity. Different canonical paths remain different modules
+even when their bytes match. Cycles and duplicate flat symbols are diagnosed.
+
+`pub let` exports an immutable, explicitly typed value. Private declarations
+cannot be reached through an alias. Source maps preserve the defining file and
+span for diagnostics, authority, ownership, fingerprints, and replay.
+
+<a id="decl-tests"></a>
+### 3.14 Tests and stateful models
+
+```text
+test "isolated workflow" { }
+shared test "intentional shared producer" { }
+test property for value in gen_int(), flag in gen_bool() { }
+test "owned fixture" writes owned [Inventory] { }
+```
+
+Tests are isolated by default: each starts from the file's post-initialization
+fixture snapshot. Adjacent `shared test` declarations intentionally form one
+shared chain; isolation resumes afterward. Property generators execute the
+body once per generated tuple. Test ownership grants are scoped to that test
+body and cannot be exported.
+
+```text
+model Lifecycle {
+    commands [enqueue, lease, complete, timeout]
+    invariant { return active_lease_count(job) <= 1 }
+    temporal {
+        always Observable,
+        Requested eventually Completed,
+        Active until Completed,
+        exactly_once CompletionObserved,
+        Running never_after Succeeded,
+        Requested eventually_within Completed 2,
+    }
+    runs 10000
+    max_commands 200
+    seed 1234
 }
 ```
 
-For **`once`** handlers that also have a guard, the guard desugaring is unchanged, but the runtime only marks the handler as **fired** (so later emissions skip it) after an invocation where the guard was truthy and the then-branch ran. If the guard is false, the handler is **not** consumed and remains eligible for future emissions.
+Models run private simulation forks, vary command and flush boundaries, check
+invariants after each boundary, observe component/event signals, and produce a
+deterministically shrunk replay artifact on failure.
 
-The `once` form registers a one-shot handler: it runs at most **once per handler declaration for the lifetime of the program** (see §9). Ordinary handlers (without `once`) run on every emission.
+<a id="decl-causal"></a>
+### 3.15 Causal declarations (experimental)
 
-### 3.8 Function Declaration
-
-```
-fn <name>(<param>, <param>, ...) {
-    <body>
-}
-
-pure fn <name>(<param>, <param>, ...) {
-    <body>
-}
-```
-
-Optional type annotations are supported:
-
-```
-fn <name>(a: int, b: int) -> int {
-    return a + b
+```text
+intent Adjustment { key target: entity, amount: int }
+law Forecast(target: entity) { propose Adjustment { target: target, amount: 5 } }
+resolver Resolve for Adjustment(target, proposals) { next(target, Load { value: sum(proposals) }) }
+constraint Capacity for Load(subject, proposed) watches Limit {
+    require proposed.value <= candidate(subject, Limit).value else "capacity.exceeded"
 }
 ```
 
-Parameters can be marked as `mut` to allow in-place modification. When a parameter is marked as `mut`, it acts as an in-out reference. The caller must explicitly use the `&` operator to pass a mutable reference to the function. Inside the function body, the parameter is implicitly dereferenced, so you can use it like a normal variable:
+`intent`, `law`, `resolver`, and `constraint` require the causal feature flag.
+Laws propose immutable intents; one resolver owns candidate writes;
+constraints observe one base and complete candidate and may only require or
+reject. Their settlement is atomic and distinct from stable transactions.
 
-```
-fn do_something(mut tab: entity) {
-    let t = require(tab, Tab)
-    set(tab, Tab { count: t.count + 1 })
-}
+<a id="decl-top-level"></a>
+### 3.16 Top-level statements
 
-let tab = spawn()
-do_something(&tab) // explicit mutation at call site
-```
-
-Declares a named function. Functions are first-class values and can be passed to other functions.
-
-A **`pure fn`** declares a function that must not rely on impure effects in contexts that require purity (see §8). Non-`pure` functions are treated as impure for pipeline checking.
-
-A **`readonly fn`** declares a function that may perform ECS read operations (`get`, `has`, `entities`, `query_*`, `with_field`, `peek`, `lookup`) but no world-mutating or I/O side effects. `readonly` functions are allowed inside pipeline expressions alongside `pure` functions (see §8). This lets you use ECS lookups in pipeline stages without having to extract them beforehand.
-
-```
-readonly fn get_hp(e: entity) -> int {
-    let h = require(e, Health)
-    return h.hp
-}
-
-let hps = entities(Health) |> map(get_hp)
-```
-
-### 3.9 Type (Sum Type) Declaration
-
-```
-type <Name> {
-    <Variant> { <field>: <default>, ... }
-    ...
-}
-```
-
-Declares a sum type at top level. Variants are separated by whitespace (no comma between variants). Fields use `field: default` syntax — not the `field: Type = default` form used by components and structs (see §2.4 for details). A recursive or self-referential field is written with the bare type name in the default slot (`left: Expr`); see §2.4 for the tree example. Construction, `Option` / `Result`, and `match` are covered in §2.4 and §2.5.
-
-### 3.10 Module Import
-
-```
-use "<relative_path>"
-use "<relative_path>" as <alias>
-use "<relative_path>" as <alias> : <Contract>
-```
-
-Imports top-level declarations from another `.rad` file. The path is relative to the directory of the importing file.
-
-**Import Aliasing & Contracts:**
-
-When `as <alias>` is specified, the imported module's `pub` declarations are scoped under the alias and accessed with dot notation (`alias.name`). Non-pub declarations are not accessible from outside; attempting to use them produces a compile-time error. Aliased declarations do **not** enter the flat namespace — they exist only behind their alias prefix.
-
-When `: <Contract>` is added, the compiler verifies that the imported module satisfies the specified structural contract. The contract must be a `struct` type defining the required function signatures and types. If the imported module fails to provide the required `pub` exports with matching types, it is a compile-time error. This implements the **Ports & Adapters** pattern at the module boundary.
-
-```
-use "math.rad" as math
-
-print(math.square(5))
-let c = math.Color::Red { intensity: 42 }
-```
-
-Aliasing prevents name collisions: two modules may define identically named `pub` declarations without conflict, as long as they are imported under different aliases. If `use "path"` is used without `as`, behavior is unchanged — declarations merge into the flat namespace. Systems and phases use the same dot-qualified access (`simulation.Tick`, `simulation.Frame`) as functions and types.
-
-**Visibility:**
-
-By default, named top-level declarations (`fn`, `system`, `phase`, `component`,
-`resource`, `struct`, `entity`, `state`, `event`, types, and materialized
-views) are **private** to the file they are defined in. To make one accessible
-from another file, prefix it with `pub`:
-
-```
-pub fn public_helper(x: int) -> int { return x }
-pub component PublicComp { x: int = 0 }
-```
-
-**Strict Module Boundaries:** Any declaration marked `pub` requires explicit type annotations, regardless of whether `--strict-types` is enabled. For functions, this means parameter and return types must be specified. For components and structs, all fields must have type annotations. The compiler enforces this during the lowering phase and performs a reachability analysis to ensure public APIs do not leak private types. This ensures that the public API of a module is always strictly typed, preventing the ecosystem from fracturing into "typed" and "untyped" code while allowing fast, inferred iteration inside private module bodies.
-
-If a file imports another file but attempts to use a private declaration from it, a compile-time error is raised.
-
-**Resolution rules:**
-
-- Paths are resolved relative to the importing file, then canonicalized.
-- Semantic module identity is the normalized path, not an alias spelling or a
-  hash of source bytes. Multiple aliases, bare-plus-aliased imports, and
-  equivalent relative paths share one identity; different normalized paths
-  remain distinct even when their contents match.
-- The module loader recursively processes `use` statements depth-first.
-- Circular imports are safe: the loader tracks visited files and skips already-loaded modules.
-- Duplicate top-level symbol names across files are rejected with an error that names both definition sites.
-
-**Namespace:**
-
-Bare `use` imports merge declarations into a single flat namespace where every top-level name must be unique. Aliased imports (`use "path" as name`) keep their declarations separate — accessible only through the alias prefix — so identical names in different aliased modules do not collide. All semantic tables use the same canonical identity: type checking, ownership, authority, phase expansion, scheduler metadata, runtime layouts, transient-resource metadata, snapshots, and replay cannot create a second module instance merely because its alias spelling changed.
-
-**Lockfile:**
-
-Running with `--write-lock` produces a `forge.lock` file alongside the entry point. The lockfile records the path, byte size, FNV-1a checksum, and SHA-256 digest of every module in the graph and can be used to verify that dependencies have not changed unexpectedly.
-
-**Source maps:**
-
-When multiple files are loaded, error messages resolve to the original file and line number via an internal source map. Diagnostics always report the file-local position, not the merged offset.
-
-**Scope:**
-
-The current module system is file-based and local. All paths must point to files on disk. There is no remote package registry, no dependency resolution, and no `rad install` yet — these are planned for Q4 2026 (see §12).
-
-**Example — multi-file project:**
-
-```
-// math.rad
-fn square(x) { return x * x }
-
-// main.rad
-use "math.rad"
-print(square(5))   // 25
-```
-
----
+Any ordinary statement may be a `Decl::Stmt` and executes in source order
+during initialization. A private `fn main() -> nil` is invoked after top-level
+initialization. Recovery-only `Decl::Error` is not source syntax.

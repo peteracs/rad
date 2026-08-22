@@ -550,7 +550,7 @@ fn check_typed_collection_builtin(
             }
             "zip" => {
                 if !self.check_builtin_arg_count(name, 2, arg_tys, arg_exprs) {
-                    return Some(Ty::List(Box::new(Ty::List(Box::new(Ty::Any)))));
+                    return Some(Ty::List(Box::new(Ty::Tuple(vec![Ty::Any, Ty::Any]))));
                 }
                 let mut valid = true;
                 for i in 0..2 {
@@ -569,7 +569,7 @@ fn check_typed_collection_builtin(
                     }
                 }
                 if !valid {
-                    return Some(Ty::List(Box::new(Ty::List(Box::new(Ty::Any)))));
+                    return Some(Ty::List(Box::new(Ty::Tuple(vec![Ty::Any, Ty::Any]))));
                 }
                 let t1 = match self.resolve_ty(&arg_tys[0]) {
                     Ty::List(inner) => *inner,
@@ -581,11 +581,10 @@ fn check_typed_collection_builtin(
                     Ty::Str => Ty::Str,
                     _ => Ty::Any,
                 };
-                if t1 == t2 && t1 != Ty::Any {
-                    Some(Ty::List(Box::new(Ty::List(Box::new(t1)))))
-                } else {
-                    Some(Ty::List(Box::new(Ty::List(Box::new(Ty::Any)))))
-                }
+                // `bi_zip` constructs tuple values. Preserve both element
+                // types independently instead of describing the runtime
+                // result as a nested homogeneous list.
+                Some(Ty::List(Box::new(Ty::Tuple(vec![t1, t2]))))
             }
             _ => None,
         }

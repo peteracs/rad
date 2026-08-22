@@ -340,8 +340,6 @@ impl VM {
             | Op::Lte
             | Op::Gte
             | Op::Not
-            | Op::And
-            | Op::Or
             | Op::DefGlobal
             | Op::GetGlobal
             | Op::SetGlobal
@@ -366,8 +364,7 @@ impl VM {
             | Op::ConstArith
             | Op::IncLocal
             | Op::JumpBack
-            | Op::ForRangeNext
-            | Op::Pipe => self.execute_stack_and_flow_opcode(op),
+            | Op::ForRangeNext => self.execute_stack_and_flow_opcode(op),
             Op::Call
             | Op::AsyncCall
             | Op::Await
@@ -424,7 +421,6 @@ impl VM {
             | Op::Print
             | Op::Len
             | Op::TypeOf
-            | Op::Break
             | Op::GetFieldSlot
             | Op::SetFieldSlot
             | Op::MakeCompSlot
@@ -609,12 +605,6 @@ impl VM {
             Op::Not => {
                 let v = self.pop()?;
                 self.push(Value::from_bool(!v.is_truthy()));
-            }
-            Op::And => {
-                return Err("Opcode And is unsupported: logical 'and' must be compiled via short-circuit jumps".to_string());
-            }
-            Op::Or => {
-                return Err("Opcode Or is unsupported: logical 'or' must be compiled via short-circuit jumps".to_string());
             }
 
             Op::DefGlobal => {
@@ -944,13 +934,6 @@ impl VM {
                     }
                     self.current_frame_mut().ip = ip - delta;
                 }
-            }
-
-            Op::Pipe => {
-                return Err(
-                    "Opcode Pipe is unsupported: pipe expressions are compiled directly to Call"
-                        .to_string(),
-                );
             }
             _ => unreachable!("opcode dispatcher selected the wrong partition"),
         }

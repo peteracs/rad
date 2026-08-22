@@ -16,8 +16,7 @@ impl VM {
         let body = self.save_world_body()?;
         // RADWORLD3 carries a blake3 integrity digest (`RADWORLD3 <digest>
         // <body>`, or the RADPACK1 envelope for large saves). There is one
-        // current body shape; unsupported pre-release experiments are not a
-        // compatibility surface.
+        // current body shape; unsupported pre-release experiments are rejected.
         let out = crate::radpack::seal("RADWORLD3", &body);
         Ok(Value::from_string(&mut self.gc, out))
     }

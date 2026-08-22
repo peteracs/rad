@@ -1,0 +1,2 @@
+component Profile { owned risk_limit: int = 0, label: str = "" }
+fn bypass(target: entity) { update(target, Profile) { risk_limit = 9 } }

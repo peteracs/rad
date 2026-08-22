@@ -1,14 +1,6 @@
-// BUG 01: spec §3.5.1 documents `phase <Name> [<System>, ...]` with BRACKETS,
-// but the parser (core/vm/src/parser/decl.rs::parse_phase_decl) expects BRACES.
-//
-// Expected: this file runs (it is copied verbatim from the spec's own example
-//           shape, and `schedule [...]` uses brackets, so brackets are the
-//           consistent spelling).
-// Actual:   parse error "Expected LBrace, got LBracket" at the phase line,
-//           followed by "Running unknown system 'Front'".
-//
-// Swap the brackets for braces (`phase Front { A, B }`) and it runs, so only
-// the surface syntax diverges from the documented grammar.
+// Regression 01: phase declarations have one canonical brace-delimited form.
+// Scheduling remains list-shaped because it is an invocation list, while a
+// phase is a declaration body.
 
 component Widget { n: 0 }
 
@@ -22,7 +14,7 @@ system Beta(t: mut Tally) after Alpha {
     t.b = t.b + 1
 }
 
-phase Front [Alpha, Beta]
+phase Front { Alpha, Beta }
 
 spawn(Widget { n: 5 })
 

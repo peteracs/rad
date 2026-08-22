@@ -1,5 +1,32 @@
 # Performance
 
+## Sovereign Grid production-query receipt
+
+The repository's cumulative acceptance service compares the same business
+query two ways over 50,000 entities: a correct offline full scan and the
+production materialized-view traversal. `tooling/accept_sovereign_grid.py`
+warms each mode and records 30 release samples from the same binary and process
+entry. It rejects unequal world digests, less than 100× deterministic semantic
+work reduction, less than 100× median measured-entry wall reduction, or any
+guest/host-boundary allocation in the indexed root.
+
+The last local acceptance run before publication measured 8,933,200 ns versus
+44,350 ns median entry time (**201.43×**) and a **46,667.87×** instruction
+reduction. These are a source-bound machine receipt, not universal latency
+claims; the authoritative values, source digest, binary SHA-256, p95, whole
+process CPU, peak RSS, and all allocation categories are emitted in
+`target/sovereign-grid-acceptance/report.json` by:
+
+```powershell
+projects/dogfood/sovereign-grid/accept.ps1
+```
+
+`medianElapsedNs` measures the VM benchmark entry. `medianProcessCpuNs` and
+`peakRssBytes` cover the complete CLI child, including program loading and
+fixture setup. The indexed entry measured zero guest and host-boundary
+allocations, but two runtime allocations totaling 32 bytes; it is therefore
+not described as globally allocation-free.
+
 Measured numbers for the world-state machinery — fork, merge, wire codec,
 persistence, events, causality. Reproduce with:
 
@@ -160,6 +187,34 @@ say so honestly. Replay a recorded trace when you need provenance older
 than the window.
 
 ## The 1-hour soak
+
+For retained-world memory rather than teardown leaks, run the ignored release
+diagnostic:
+
+```bash
+cargo test -p rad-vm --release world_retention_report -- --ignored --nocapture --test-threads=1
+```
+
+It reports live bytes and GC objects per retained entity while isolating plain,
+hashed-indexed, ordered-indexed, and materialized-view membership costs. It also
+compares short and long opaque type names; those checked-constructor phases
+must agree because they clone the declaration's type-name handle. Decode and
+external construction boundaries are measured separately when relevant; the
+runtime does not claim global string interning. This is a retention-cost
+profiler, not a leak test: a service that deliberately keeps one million live
+entities pays the per-entity world cost one million times. RiskBridge instead
+models a bounded online window: completed attempts are folded by the owner into
+a deterministic archive receipt, their operational components are removed, and
+fixed entity slots are reused. The archive count/digest remains part of world
+and replay identity without retaining a million hot rows.
+
+Long trace files are bounded separately. CLI recording streams each JSONL
+record through zstd and hashes the uncompressed bytes incrementally; faithful
+replay validates/indexes the file, then consumes one record at a time. The
+one-million RiskBridge receipt peaked at 327,761,920 private bytes while
+recording and 243,924,992 while replaying, versus 5.9 GiB before the world and
+trace retention owners were fixed. The portfolio kills either process above
+512 MiB.
 
 The longevity claim, held under sustained load: one syncdesk server, three
 clients looping PULL → diverge offline → `DPUSH` a delta, for one hour.

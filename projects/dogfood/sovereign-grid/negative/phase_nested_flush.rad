@@ -1,0 +1,4 @@
+event DispatchRequested {}
+@no_nested_flush
+on DispatchRequested(_evt) { flush_events() }
+signal sync DispatchRequested {}

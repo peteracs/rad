@@ -39,9 +39,7 @@ fn retroactive_replay(trace_text: &str, new_path: &str, force: bool) {
     let retro = rad_vm::replay::TraceReplayer::parse(trace_text, force)
         .expect("trace parsed once already")
         .into_retro();
-    let parser_options = ParserOptions {
-        compat_v0_5_dx: false,
-    };
+    let parser_options = ParserOptions;
     let loaded = match load_cli_program(new_path, parser_options) {
         Ok(loaded) => loaded,
         Err(errors) => {
@@ -184,9 +182,7 @@ fn execute_test_command(test_dir: &str) {
         // Same pipeline as `rad <file>` (module graph + checker), but
         // in-process so the compiled `__test_*` functions can be called
         // after top-level code has run.
-        let parser_options = ParserOptions {
-            compat_v0_5_dx: false,
-        };
+        let parser_options = ParserOptions;
         let loaded = match load_cli_program(&path_str, parser_options) {
             Ok(loaded) => loaded,
             Err(errors) => {
@@ -205,10 +201,7 @@ fn execute_test_command(test_dir: &str) {
         let analysis = analyze_cli_program(
             &loaded,
             &path_str,
-            CheckerOptions {
-                warn_compat: false,
-                ..CheckerOptions::default()
-            },
+            CheckerOptions::default(),
         );
 
         if analysis.has_errors() {
@@ -375,15 +368,15 @@ fn model_failure_json(error: &str) -> Option<serde_json::Value> {
 fn resolve_source_for_error<'a>(
     file: Option<rad_vm::ast::FileId>,
     source_map: &'a SourceMap,
-    fallback_source: &'a str,
-    fallback_path: &'a str,
+    default_source: &'a str,
+    default_path: &'a str,
 ) -> (&'a str, &'a str) {
     if let Some(fid) = file {
         if let Some(sf) = source_map.get_file(fid) {
             return (&sf.source, &sf.path);
         }
     }
-    (fallback_source, fallback_path)
+    (default_source, default_path)
 }
 
 fn format_error(source: &str, filepath: &str, message: &str, line: u32, col: u32) -> String {

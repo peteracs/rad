@@ -3,9 +3,20 @@ impl Checker {
 fn check_expr_operations(&mut self, expr: &Expr) -> Ty {
         match expr {
             Expr::Ident(name, span) => {
-                let redirected = self.resolve_canonical_name(name);
-                if redirected != *name {
-                    return self.check_expr(&Expr::Ident(redirected, span.clone()));
+                // Lexical bindings win over module-local redirects. Query
+                // filters intentionally bind a component value under its
+                // source spelling (`Cell.value`); redirecting first turned
+                // that local into the module's global type descriptor (`str`).
+                // The compiler already performs this lookup-before-redirect
+                // ordering for locals and upvalues.
+                let has_lexical_binding = self
+                    .lookup_with_depth(name)
+                    .is_some_and(|(_, depth)| depth > 0);
+                if !has_lexical_binding {
+                    let redirected = self.resolve_canonical_name(name);
+                    if redirected != *name {
+                        return self.check_expr(&Expr::Ident(redirected, span.clone()));
+                    }
                 }
                 match self.lookup_with_depth(name) {
                     Some((binding, depth)) => {
@@ -356,6 +367,9 @@ fn check_expr_operations(&mut self, expr: &Expr) -> Ty {
                         return ty;
                     }
                     if let Some(ty) = self.check_constraint_read_call(name, args, span) {
+                        return ty;
+                    }
+                    if let Some(ty) = self.check_fact_explanation_call(name, args, span) {
                         return ty;
                     }
                     self.check_law_call_context(name, span);

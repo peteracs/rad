@@ -1,0 +1,40 @@
+component GridPending {}
+component GridCommitted {}
+component GridRequest {}
+component GridInvariant {}
+event GridCommitObserved { subject: entity }
+
+on GridCommitObserved(evt) {
+    assert(has(evt.subject, GridCommitted), "temporal event observes committed state")
+}
+
+let model_subject: entity = spawn(GridPending {}, GridRequest {}, GridInvariant {})
+
+fn commit_grid_request() -> nil {
+    if has(model_subject, GridPending) {
+        remove(model_subject, GridPending)
+        remove(model_subject, GridRequest)
+        set(model_subject, GridCommitted {})
+        emit next GridCommitObserved { subject: model_subject }
+        flush_events()
+    }
+}
+
+model GridLifecycleModel {
+    commands [commit_grid_request]
+    invariant {
+        return has(model_subject, GridPending) != has(model_subject, GridCommitted)
+    }
+    temporal {
+        always GridInvariant,
+        eventually GridCommitted,
+        GridPending until GridCommitted,
+        GridRequest eventually GridCommitted,
+        exactly_once GridCommitObserved,
+        GridPending never_after GridCommitted,
+        GridRequest eventually_within GridCommitted 1,
+    }
+    runs 8
+    max_commands 4
+    seed 424242
+}

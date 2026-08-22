@@ -12,7 +12,6 @@ This reference uses three labels to separate hard guarantees from evolving ergon
 | Label | Meaning |
 |------|---------|
 | `stable` | Expected to remain behaviorally compatible; changes require changelog callouts and conformance updates |
-| `compat` | Behavior gated by explicit compatibility flags (`--compat-v0.5-dx`) |
 | `experimental` | Usability/documentation areas that may evolve quickly (for example, wording of diagnostics and guidance) |
 
 Unless explicitly marked otherwise, sections below describe `stable` contracts.
@@ -23,7 +22,7 @@ Unless explicitly marked otherwise, sections below describe `stable` contracts.
 
 All bindings are immutable unless explicitly declared `mut`.
 
-```rad,ignore
+```text
 let x = 10
 x = 20        // ← compile error: x is not mutable
 
@@ -34,7 +33,7 @@ y = 20        // ← ok
 Containers (lists, maps, components) follow the same rule.
 Writing to an element of an immutable container is a compile-time error:
 
-```rad,ignore
+```text
 let xs = [1, 2, 3]
 xs[0] = 99    // ← compile error
 ```
@@ -100,7 +99,7 @@ This holds for every builtin that transforms data: `push`, `pop`, `sort`, `sort_
 Pipeline expressions (`|>`) enforce purity or readonly semantics.
 Only pure or `readonly` functions may appear in a pipeline — side-effecting builtins are rejected at compile time:
 
-```rad,ignore
+```text
 // ✓ All stages are pure
 let result = [1, 2, 3]
     |> filter(fn(x) { return x > 1 })
@@ -179,7 +178,7 @@ All collection builtins take the **collection as the first argument**, making th
 | `find(list, fn)` | `Some(element)` or `None` |
 | `max_by(list, fn)` | `Some(element)` with largest key, or `None` |
 | `min_by(list, fn)` | `Some(element)` with smallest key, or `None` |
-| `enumerate(list)` | New list of `[index, element]` pairs |
+| `enumerate(list<A>)` | New `list<(int, A)>` of typed index-element tuples |
 | `reverse(list_or_str)` | New reversed list or string |
 | `slice(list_or_str, start, end)` | New sub-list or sub-string |
 | `map(list, fn)` | New list of mapped values |
@@ -204,7 +203,9 @@ All collection builtins take the **collection as the first argument**, making th
 
 ### Frozen builtin contracts (`stable`)
 
-The contracts below are frozen for current major versions. Changes require explicit migration pathing (compat flags or major version bump), plus conformance and docs updates in the same change.
+The contracts below are frozen for the current release line. A breaking change
+requires a new release contract plus conformance and documentation updates in
+the same source generation; RAD does not retain alternate syntax modes.
 
 | Builtin | Maturity | Frozen contract |
 |---------|----------|-----------------|
@@ -280,7 +281,7 @@ At runtime, nested `simulate()` calls save and restore the active event queues s
 
 This guarantees that the value's `Arc` reference count never exceeds 1, so mutations via `push`, element assignment, or `extend` are always in-place — no hidden O(n) deep clones.
 
-```rad,ignore
+```text
 let unique mut xs = [1, 2, 3]
 xs << 4           // guaranteed in-place
 xs = sort(xs)     // OK — reassignment to same name
@@ -312,7 +313,7 @@ A component or resource field declared `float` always stores a `float`, even
 when the supplied value's runtime tag is `int`. The compiler coerces the value
 at every construction and `update` site.
 
-```rad,ignore
+```text
 component Position { x: float = 0.0, y: float = 0.0 }
 
 // `0` is an int literal, but the field is declared float:

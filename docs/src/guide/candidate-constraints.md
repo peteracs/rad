@@ -124,10 +124,9 @@ candidate patch      discarded
 VM                   reusable
 ```
 
-Hosts should use `run_detailed`, `call_global_detailed`, or
-`call_global_attempt` to receive a typed `VmFailure::SettlementRejected`.
-The older `run` and `call_global` methods remain compatibility wrappers that
-render the same typed result as text. Browser hosts can use
+Hosts use `run_detailed`, `call_global_detailed`, or `call_global_attempt` to
+receive a typed `VmFailure::SettlementRejected`. The convenience `run` and
+`call_global` entry points render that typed result as text. Browser hosts use
 `compile_and_run_result_json`, whose result is tagged with
 `"kind": "settlement_rejected"`.
 

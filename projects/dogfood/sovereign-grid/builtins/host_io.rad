@@ -1,0 +1,42 @@
+// Run with stdin containing exactly three lines: alpha, beta, gamma.
+fn main() -> nil {
+    let runtime_dir: str = "target/sovereign-grid-runtime"
+    let text_path: str = "target/sovereign-grid-runtime/state.txt"
+    let bytes_path: str = "target/sovereign-grid-runtime/state.bin"
+
+    if file_exists(text_path) { remove_file(text_path) }
+    if file_exists(bytes_path) { remove_file(bytes_path) }
+    if file_exists(runtime_dir) { remove_dir(runtime_dir) }
+    create_dir(runtime_dir)
+
+    write_file(text_path, "alpha")
+    append_file(text_path, "-beta")
+    assert(file_exists(text_path), "file_exists")
+    assert(read_file(text_path) == "alpha-beta", "text file round trip")
+    write_file_bytes(bytes_path, [0, 1, 127, 255])
+    assert(read_file_bytes(bytes_path) == [0, 1, 127, 255], "byte file round trip")
+    let names: list<str> = list_dir(runtime_dir)
+    assert(contains(names, "state.txt") and contains(names, "state.bin"), "list_dir")
+
+    let seconds: int = now_unix_s()
+    let milliseconds: int = now_unix_ms()
+    assert(seconds > 0 and milliseconds >= seconds * 1000, "wall clock")
+    sleep_ms(1)
+
+    write_stdout("sovereign-grid: stdout")
+    flush_stdout()
+    write_stderr("sovereign-grid: stderr\n")
+    eprint("sovereign-grid: eprint")
+
+    let first_line: str = input("first> ")
+    let second: str = readline()
+    let remainder: str = read_stdin_all()
+    assert(first_line == "alpha" and second == "beta", "line input")
+    assert(trim(remainder) == "gamma", "read_stdin_all")
+
+    remove_file(text_path)
+    remove_file(bytes_path)
+    remove_dir(runtime_dir)
+    assert(not file_exists(text_path), "remove_file")
+    print("sovereign-grid: host IO builtins complete")
+}

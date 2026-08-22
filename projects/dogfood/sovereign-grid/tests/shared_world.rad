@@ -1,0 +1,27 @@
+component SharedMarker { value: int = 0 }
+assert(get_entity("shared-probe") == nil, "top-level fixture has no test-body entity name")
+
+test "fixture starts without shared probe" {
+    assert(get_entity("shared-probe") == nil, "fixture has no test-body entity name")
+    assert(len(entities(SharedMarker)) == 0, "fixture has no test-body component")
+}
+
+test "shared producer" {
+    spawn("shared-probe", SharedMarker { value: 41 })
+}
+
+shared test "shared consumer" {
+    let probe: entity = require_entity("shared-probe")
+    assert(require(probe, SharedMarker).value == 41, "shared test receives the producer world")
+    set(probe, SharedMarker { value: 42 })
+}
+
+shared test "shared chain" {
+    let probe: entity = require_entity("shared-probe")
+    assert(require(probe, SharedMarker).value == 42, "shared tests form an explicit ordered chain")
+}
+
+test "isolation resumes after shared chain" {
+    assert(len(entities(SharedMarker)) == 0, "plain test restores component population")
+    assert(get_entity("shared-probe") == nil, "plain test restores the entity-name index")
+}

@@ -3,6 +3,7 @@
 macro_rules! define_builtins {
     ($( $variant:ident => $name:literal ),+ $(,)?) => {
         #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+        #[repr(u16)]
         pub enum Builtin {
             $( $variant, )+
         }
@@ -11,6 +12,11 @@ macro_rules! define_builtins {
             pub const ALL: [Builtin; [$(Builtin::$variant),+].len()] = [
                 $( Builtin::$variant, )+
             ];
+
+            #[inline]
+            pub const fn index(self) -> usize {
+                self as usize
+            }
 
             pub fn name(self) -> &'static str {
                 match self {

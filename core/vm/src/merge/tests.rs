@@ -4,7 +4,7 @@ mod tests {
     use crate::vm::VM;
 
     fn run(src: &str) -> VM {
-        let result = crate::test_support::compile_source(src, ParserOptions::default())
+        let result = crate::test_support::compile_source(src, ParserOptions)
             .expect("parse and compile");
         let mut vm = VM::new();
         vm.suppress_output();

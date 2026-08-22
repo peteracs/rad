@@ -15,6 +15,30 @@ impl Compiler {
                     {
                         return Ok(());
                     }
+                    if !is_shadowed && name == "has" && args.len() == 2 {
+                        let component = match &args[1] {
+                            Expr::Ident(component, _) => {
+                                Some(self.resolve_canonical_name(component))
+                            }
+                            Expr::Field(owner, member, _)
+                                if matches!(owner.as_ref(), Expr::Ident(_, _)) =>
+                            {
+                                let Expr::Ident(alias, _) = owner.as_ref() else {
+                                    unreachable!()
+                                };
+                                self.resolve_alias_member(alias, member)
+                            }
+                            _ => None,
+                        };
+                        if let Some(component) = component {
+                            self.compile_expr(&args[0])?;
+                            let component_idx =
+                                self.add_constant_gc(|gc| Value::from_string(gc, component));
+                            self.emit_op(Op::EcsHas, span.line);
+                            self.emit_u16(component_idx, span.line);
+                            return Ok(());
+                        }
+                    }
                     if !is_shadowed && matches!(name.as_str(), "read_field" | "write_field") {
                         let expected = if name == "read_field" { 3 } else { 4 };
                         if args.len() == expected {

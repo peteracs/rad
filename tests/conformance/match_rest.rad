@@ -1,0 +1,9 @@
+// backend: both
+// expect: 7
+
+let x = Option::Some { value: 7 }
+
+match x {
+    Some { value, .. } => { print(value) }
+    None => { print("none") }
+}

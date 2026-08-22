@@ -47,7 +47,8 @@ alike.
 
 ## Stage 1 — the model (`01_model.rad`)
 
-Create `projects/tutorial/task-board/tasks.rad`. A rad program is built from three primitives:
+Create a scratch `tasks.rad` beside the checkpoint files (or edit a copy of
+`01_model.rad`). A Rad program is built from three primitives:
 **components** (pure data, attached to entities), **events** (the messages
 that request changes), and **handlers** (the only logic that performs them).
 

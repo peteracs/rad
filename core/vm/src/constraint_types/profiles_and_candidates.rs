@@ -835,9 +835,9 @@ pub enum VmFailure {
 }
 
 impl VmFailure {
-    /// Preserve the pre-typed-API string contract for compatibility callers.
+    /// Render the concise message used by convenience string-returning APIs.
     /// Detailed callers retain the stable error code separately.
-    pub fn render_compat(&self) -> String {
+    pub fn render_message(&self) -> String {
         match self {
             Self::SettlementRejected(rejection) => rejection.render(),
             Self::Runtime(error) => error.message.clone(),

@@ -36,6 +36,8 @@ impl Substitution {
                 }
             }
             Ty::List(inner) => Ty::List(Box::new(self.resolve(inner))),
+            Ty::Tuple(items) => Ty::Tuple(items.iter().map(|item| self.resolve(item)).collect()),
+            Ty::Union(items) => Ty::Union(items.iter().map(|item| self.resolve(item)).collect()),
             Ty::Map(key, val) => Ty::Map(Box::new(self.resolve(key)), Box::new(self.resolve(val))),
             Ty::Fn {
                 params,
@@ -83,6 +85,32 @@ impl Substitution {
             (Ty::Float, Ty::Int) | (Ty::Int, Ty::Float) => Ok(()),
 
             (Ty::List(a_inner), Ty::List(b_inner)) => self.unify(a_inner, b_inner),
+            (Ty::Tuple(a_items), Ty::Tuple(b_items)) => {
+                if a_items.len() != b_items.len() {
+                    return Err(format!(
+                        "Tuple arity mismatch: {} vs {} elements",
+                        a_items.len(),
+                        b_items.len()
+                    ));
+                }
+                for (a_item, b_item) in a_items.iter().zip(b_items) {
+                    self.unify(a_item, b_item)?;
+                }
+                Ok(())
+            }
+            (Ty::Union(a_items), Ty::Union(b_items)) => {
+                if a_items.len() != b_items.len() {
+                    return Err(format!(
+                        "Union alternative mismatch: {} vs {} alternatives",
+                        a_items.len(),
+                        b_items.len()
+                    ));
+                }
+                for (a_item, b_item) in a_items.iter().zip(b_items) {
+                    self.unify(a_item, b_item)?;
+                }
+                Ok(())
+            }
             (Ty::Map(a_key, a_val), Ty::Map(b_key, b_val)) => {
                 self.unify(a_key, b_key)?;
                 self.unify(a_val, b_val)

@@ -57,11 +57,32 @@ fn run_bench_command(filepath: String, json: bool, program_args: Vec<String>) {
     if json {
         vm.suppress_output();
     }
-    vm.enable_system_metrics();
     vm.sys_args = program_args;
     vm.load_compile_result(inspected.compiled);
+    let measured_entry = vm
+        .global_symbols()
+        .iter()
+        .any(|name| name == "bench_run")
+        .then_some("bench_run");
+    if measured_entry.is_some() {
+        // A production benchmark commonly needs a large deterministic world
+        // before it can measure one hot operation. `main` is setup; the
+        // reserved zero-argument `bench_run` entry is the measured region.
+        // Metrics are enabled only after setup so both wall time and semantic
+        // work describe the operation under comparison, not fixture creation.
+        if let Err(error) = vm.run(0) {
+            eprintln!("Benchmark setup failed: {error}");
+            process::exit(1);
+        }
+    }
+    vm.enable_system_metrics();
     let started = std::time::Instant::now();
-    if let Err(error) = vm.run(0) {
+    let execution = if let Some(entry) = measured_entry {
+        vm.call_global(entry, &[]).map(|_| ())
+    } else {
+        vm.run(0).map_err(|error| error.to_string())
+    };
+    if let Err(error) = execution {
         eprintln!("Benchmark program failed: {error}");
         process::exit(1);
     }
@@ -136,6 +157,8 @@ fn run_bench_command(filepath: String, json: bool, program_args: Vec<String>) {
             "{}",
             serde_json::to_string_pretty(&serde_json::json!({
                 "file": filepath,
+                "measured_entry": measured_entry.unwrap_or("program"),
+                "setup_excluded": measured_entry.is_some(),
                 "elapsed_ns": elapsed.as_nanos(),
                 "systems": systems,
                 "world_digest": vm.world_digest(),

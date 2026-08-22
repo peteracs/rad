@@ -174,7 +174,7 @@ Single source of truth:
 
 | Side | File |
 |---|---|
-| RAD server | `projects/moba/vertical-slice/server/src/protocol/match_protocol.rad` |
+| RAD server | `projects/moba/vertical-slice/server/src/transport/match_protocol.rad` |
 | Browser client | `projects/moba/vertical-slice/client/src/transport/matchProtocol.ts` |
 | Edge proxy | forwards bytes only; no grammar |
 

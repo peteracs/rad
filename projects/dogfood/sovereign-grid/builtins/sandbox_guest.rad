@@ -1,0 +1,4 @@
+fn main() -> nil {
+    let payload: any = sandbox_input()
+    sandbox_output(payload)
+}

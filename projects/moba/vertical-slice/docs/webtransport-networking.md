@@ -22,8 +22,8 @@ WebTransport means HTTP/3, QUIC, TLS, browser certificate rules, and evolving
 browser APIs. That is host integration work, not deterministic game simulation.
 RAD should own the match state and packet meaning, while the edge moves bytes.
 The RAD authority uses `udp_recv_bytebuf_timeout` and `udp_send_bytebuf` for
-the competitive packet path. Byte-list UDP builtins are compatibility helpers;
-string UDP builtins are only appropriate for diagnostics.
+the competitive packet path. Byte-list UDP builtins are lower-level binary
+helpers; string UDP builtins are only appropriate for diagnostics.
 
 ## Edge Proxy Responsibilities
 
@@ -56,7 +56,7 @@ string UDP builtins are only appropriate for diagnostics.
 | `edge-proxy/src/main.rs` | WebTransport edge process |
 | `client/src/transport/webTransport.ts` | Browser WebTransport adapter |
 | `server/src/transport/udp_match.rad` | RAD UDP receive/send loop |
-| `server/src/protocol/match_protocol.rad` | RAD packet grammar |
+| `server/src/transport/match_protocol.rad` | RAD packet grammar |
 | `client/src/transport/matchProtocol.ts` | Browser packet grammar mirror |
 | `client/src/transport/matchWire.ts` | Browser endian/fixed-point wire primitives |
 | `client/src/transport/serverStateBuffer.ts` | Browser reusable `ServerState` object graph owner |

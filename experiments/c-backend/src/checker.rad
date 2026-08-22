@@ -27,7 +27,6 @@ component CheckerState {
 }
 
 component FieldTypeEntry { comp_name: str = "", field_name: str = "", field_type: str = "any" }
-component CheckerFlags { compat_v05_dx: bool = false }
 component TypeVariantGroup { type_name: str = "", variants: list<str> = [], variant_field_counts: list<int> = [] }
 
 pub component CheckerNode {}
@@ -609,14 +608,6 @@ fn infer_expr_type(state: entity, eid: entity) -> str {
         if colon_pos >= 0 {
             let variant_part = substring_bytes(x.name, colon_pos + 2, name_len)
             if str_in_list(cs.type_variant_names, variant_part) and is_zero_field_variant(variant_part) {
-                let mut is_compat = false
-                for fl_eid in query { CheckerFlags } {
-                    if require(fl_eid, CheckerFlags).compat_v05_dx { is_compat = true }
-                }
-                if not is_compat {
-                    make_error(state, get_line(eid), get_col(eid),
-                        f"Zero-field variant shorthand '{x.name}' requires --compat-v0.5-dx. Use '{x.name} {{ }}' instead")
-                }
                 return variant_part
             }
         }
@@ -1438,16 +1429,6 @@ fn register_builtin_types(state: entity) -> nil {
 }
 
 pub fn check_program(root: entity) -> list<entity> {
-    return check_program_with_flags(root, false)
-}
-
-pub fn check_program_compat(root: entity, compat_v05_dx: bool) -> list<entity> {
-    return check_program_with_flags(root, compat_v05_dx)
-}
-
-fn check_program_with_flags(root: entity, compat_v05_dx: bool) -> list<entity> {
-    entity { CheckerNode {}, CheckerFlags { compat_v05_dx: compat_v05_dx } }
-
     let root_scope = entity { CheckerNode {}, Scope { bindings: [], parent: nil } }
     let state = entity {
         CheckerNode {},
@@ -1507,17 +1488,6 @@ fn check_program_with_flags(root: entity, compat_v05_dx: bool) -> list<entity> {
                     let ie_vpart = substring_bytes(ie_name, ie_cpos + 2, ie_len)
                     let cs3 = require(state, CheckerState)
                     if (str_in_list(cs3.type_variant_names, ie_vpart) or str_in_list(cs3.state_variant_names, ie_vpart)) and is_zero_field_variant(ie_vpart) {
-                        let is_state_variant = str_in_list(cs3.state_variant_names, ie_vpart)
-                        if not is_state_variant {
-                            let mut ie_compat = false
-                            for fl_eid in query { CheckerFlags } {
-                                if require(fl_eid, CheckerFlags).compat_v05_dx { ie_compat = true }
-                            }
-                            if not ie_compat {
-                                make_error(state, get_line(d), get_col(d),
-                                    f"Zero-field variant shorthand '{ie_name}' requires --compat-v0.5-dx. Use '{ie_name} {{ }}' instead")
-                            }
-                        }
                         bind_ty = ie_vpart
                     }
                 }

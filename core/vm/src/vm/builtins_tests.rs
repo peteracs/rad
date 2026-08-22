@@ -22,6 +22,27 @@ fn list_of(gc: &mut GcHeap, f: impl FnOnce(&mut GcHeap) -> Vec<Value>) -> Value 
     Value::list(gc, items)
 }
 
+fn tuple_of(gc: &mut GcHeap, f: impl FnOnce(&mut GcHeap) -> Vec<Value>) -> Value {
+    let items = f(gc);
+    Value::tuple(gc, items)
+}
+
+#[test]
+fn builtin_dispatch_enforces_canonical_arity_before_implementation() {
+    let mut vm = VM::new();
+    let error = vm
+        .call_builtin(Builtin::Len, vec![Value::NIL, Value::NIL])
+        .expect_err("embedding calls must not let len() ignore an extra argument");
+    assert!(
+        error.contains("exactly 1"),
+        "unexpected diagnostic: {error}"
+    );
+
+    let literal = Value::from_string(&mut vm.gc, "literal".to_string());
+    assert!(vm.call_builtin(Builtin::Format, vec![literal]).is_ok());
+    assert!(vm.call_builtin(Builtin::WorldDigest, Vec::new()).is_ok());
+}
+
 #[test]
 fn pop_returns_last_element() {
     let mut gc = GcHeap::default();
@@ -106,7 +127,7 @@ fn input_rejects_more_than_one_argument() {
     let err = vm
         .call_builtin(Builtin::Input, vec![a, b])
         .expect_err("input should reject extra args");
-    assert_eq!(err, "input() accepts at most 1 argument");
+    assert_eq!(err, "input() expects 0 to 1 argument(s), got 2");
 }
 
 #[test]
@@ -116,7 +137,7 @@ fn readline_rejects_arguments() {
     let err = vm
         .call_builtin(Builtin::Readline, vec![prompt])
         .expect_err("readline should reject args");
-    assert_eq!(err, "readline() takes no arguments");
+    assert_eq!(err, "readline() expects exactly 0 argument(s), got 1");
 }
 
 #[test]
@@ -514,10 +535,10 @@ fn zip_pairs_elements() {
         ]
     });
     let out = bi_zip(&mut gc, vec![nums, strs]).unwrap();
-    let pair0 = list_of(&mut gc, |gc| {
+    let pair0 = tuple_of(&mut gc, |gc| {
         vec![Value::from_int(gc, 1), Value::from_string(gc, "a".into())]
     });
-    let pair1 = list_of(&mut gc, |gc| {
+    let pair1 = tuple_of(&mut gc, |gc| {
         vec![Value::from_int(gc, 2), Value::from_string(gc, "b".into())]
     });
     assert_eq!(out, Value::list(&mut gc, vec![pair0, pair1]));
@@ -531,7 +552,7 @@ fn zip_truncates_to_shorter() {
         vec![Value::from_int(gc, 2), Value::from_int(gc, 3)]
     });
     let out = bi_zip(&mut gc, vec![short, long]).unwrap();
-    let inner = list_of(&mut gc, |gc| {
+    let inner = tuple_of(&mut gc, |gc| {
         vec![Value::from_int(gc, 1), Value::from_int(gc, 2)]
     });
     assert_eq!(out, Value::list(&mut gc, vec![inner]));

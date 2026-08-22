@@ -1,253 +1,162 @@
-## 8. Purity and Effects
+<a id="effects"></a>
+## 8. Effects, authority, cost, and errors
 
-### 8.1 Pure functions
+<a id="effect-kinds"></a>
+### 8.1 Effect kinds
 
-```
-pure fn <name>(<params>) {
-    <body>
-}
-```
-
-A function declared with `pure fn` is marked as **pure** for static analysis. The checker also performs conservative purity inference for unannotated functions; functions proven effect-free are treated as pure for pipeline validation.
-
-When purity inference fails for a function used in a pipeline, the compiler traces the exact call chain to find the source of the impurity (e.g., an impure builtin like `set` or `print`, or an event emission). It then reports the full chain in the error message and suggests which functions need to be explicitly annotated with `pure fn`.
-
-### 8.2 Readonly functions
-
-```
-readonly fn <name>(<params>) {
-    <body>
-}
-```
-
-A function declared with `readonly fn` may perform ECS **read** operations (`get`, `has`, `entities`, `query_where`, `query_map`, `query_count`, `with_field`, `peek`, `lookup`) but must not perform world-mutating operations (`set`, `spawn`, `remove`, `despawn`, `commit`), I/O, or event emission. The `readonly` effect is distinct from `ecs` (which permits both reads and writes).
-
-`readonly` functions are allowed inside pipeline expressions, alongside `pure` functions. This enables a common pattern where pipeline stages need to look up ECS data:
-
-```
-readonly fn enemy_hp(id: entity) -> int {
-    return require(id, Health).hp
-}
-
-let weakest = entities(Health)
-    |> filter(fn(id) { return enemy_hp(id) < 50 })
-```
-
-### 8.3 Effect levels
-
-Rad uses a lightweight effect system to classify function side effects:
-
-| Effect | Keyword | What it permits |
-|--------|---------|-----------------|
-| (none) | `pure fn` | No side effects — only local computation |
-| `readonly` | `readonly fn` | ECS reads (`get`, `has`, `entities`, `query_*`, `peek`, `lookup`) |
-| `ecs` | `ecs fn` | ECS reads **and** writes (`set`, `spawn`, `remove`, `despawn`, `commit`, `fork`) |
-| `io` | `io fn` | I/O operations (`print`, `read_file`, `http_get`, etc.) |
-| `event` | `event fn` | Event operations (`emit`, `flush_events`) |
-
-Effects can be combined: `io ecs fn` permits both I/O and ECS operations.
-
-**Function types carry a purity rank.** A fn type annotation may be written
-`pure fn(...) -> T`, `readonly fn(...) -> T`, or bare `fn(...) -> T`. The
-ranks order `pure < readonly < impure` (a bare `fn(...)` promises nothing),
-and an argument must rank at most as effectful as the parameter: a pure
-function value is accepted everywhere, a readonly value satisfies readonly or
-bare parameters, and an unannotated/impure value satisfies only bare ones.
-Named `pure fn`s and `readonly fn`s used as values, closures the checker can
-vouch for, and the readonly read builtins (`res`, `get`, `get_resource`, …)
-carry their real rank.
-
-**Function-typed parameters of effect-annotated functions are promoted.**
-Inside an effect-restricted body the annotation is the only contract the
-checker can trust, so a BARE `fn(...)` parameter of an explicitly
-effect-annotated function is promoted to the strongest callback type its row
-can call: `readonly fn(...)` when the row includes the `readonly` effect,
-`pure fn(...)` otherwise. Callers must then pass a conforming function, and
-in exchange the body may call the parameter without violating its effect row.
-Explicit `pure fn(...)` / `readonly fn(...)` annotations are left as written,
-and parameters of unannotated functions are never promoted.
-
-```
-pure fn apply(f: fn(int) -> int, v: int) -> int {
-    return f(v)          // allowed: `f` is a pure fn type here
-}
-
-readonly fn scan(pred: readonly fn(entity) -> bool) -> list<entity> {
-    return query_where(Hero, pred)   // readonly callback, readonly context
-}
-
-let a = apply(fn(x: int) -> int { return x * 2 }, 21)  // ok: pure closure
-let b = apply(writes_a_resource, 21)                   // error: impure argument
-```
-
-**Unverifiable or under-ranked callees are not callable in restricted
-contexts.** A pure function value is callable anywhere; a readonly value
-requires a context that allows the `readonly` effect; anything else — an
-impure `fn(...)` value, or a callee typed `any` — is treated exactly like
-calling a named function that requires unrestricted effects, and is an
-effect violation in any restricted context. Module-qualified calls
-(`alias.helper(...)`) are checked against the callee's declared effect row
-like any other named call.
-
-### 8.4 Transitive authority effects
-
-Every function, system, event handler, closure, and statically bounded function value has an inferred authority record:
+Every callable has a transitive semantic summary:
 
 ```text
-effect RemoveEntity {
-    reads:  [LiveMembership]
-    writes: [LiveMembership, WireIdentity]
-    emits:  [EntityRetired]
-    io:     false
-    async:  false
-    unknown: false
-}
+reads, writes, emits, io, async, allocation, query cost, unknown calls
 ```
 
-The graph follows ordinary calls, imported helpers, closures, callback arguments, static schedules, state transitions, resource operations, and emitted-event handler chains. Callback parameters typed `pure fn(...)` contribute no authority; `readonly fn(...)` contributes a bounded whole-world read; a bare `fn(...)` call is unbounded and sets `unknown`. Restricted callers reject `unknown` instead of assuming a dynamic target is safe.
+The graph follows ordinary calls, imported helpers, statically bounded
+callbacks, captures, transitions, synchronous signals, and handlers reached by
+an explicit flush. Queued event/schedule boundaries remain visible in impact
+reports but do not borrow the emitter's synchronous authority. Generic helper
+reports may conservatively union callback targets; system-root enforcement and
+scheduling specialize the graph for each statically resolved callback tuple.
 
-Higher-order analysis has two views. Generic callable reports conservatively
-union callback targets observed at their known call sites. System roots are
-instead specialized by the statically resolved callback tuple at each call
-site. Enforcement and scheduling consume the specialized system view, so
-`invoke(write_x, ...)` and `invoke(write_y, ...)` do not give their callers one
-another's writes.
+`rad effects`, `rad readers`, `rad writers`, and `rad path` expose this same
+compiler-owned graph. They are not separate source scanners.
 
-Each callable exposes three useful views. `direct` is written in that body. `synchronous` includes calls that execute before crossing a queued event or separately scheduled system boundary. `transitive` also follows those deferred edges and is the complete impact report. System sandbox enforcement and parallel batching use `synchronous`; inspection commands use the complete transitive graph.
+<a id="effect-purity"></a>
+### 8.2 Pure, readonly, and effectful functions
 
-For systems, named query/resource parameters and authority-only entries form an
-enforced upper bound (§3.5) over the complete synchronous effect record. `mut`
-grants read and write, an immutable parameter grants read only, and `writes X`
-does not silently grant a read. `emits Event`, `io true`, and `async true` grant
-event emission, host effects, and async execution respectively. Wildcard state
-or event authority must be written explicitly. The inferred effect report
-records actual effects, never unused grants.
+`pure fn` cannot read or mutate shared state, emit, perform IO, start async
+execution, or reach an unknown callable. `readonly fn` may read declared ECS,
+resource, identity-index, view, and relation state but cannot mutate or perform
+external effects. An ordinary function receives its inferred effects.
 
-Entity-name publication is shared runtime state with narrow synthetic keys:
+Purity is part of function-value types. A pure callback satisfies pure,
+readonly, or unrestricted parameters. A readonly callback satisfies readonly
+or unrestricted parameters. An unrestricted/effectful callback does not
+satisfy pure or readonly parameters. Calls through function values are checked
+with the same rule, preventing higher-order effect laundering.
+
+<a id="effect-authority"></a>
+### 8.3 Enforced system upper bounds
+
+A system's bound query parameters and explicit authority clauses form an upper
+bound on its specialized synchronous effects:
 
 ```text
-get_entity / require_entity    reads  $entity_names
-name_of                        reads  $entity_identity
-named spawn                    writes $entity_names, $entity_identity
-despawn                        writes $entity_names, $entity_identity, *
+system Dispatch(
+    mission: Mission,
+    reads [Asset, "$entity_names"],
+    writes [Mission, DispatchLedger],
+    emits MissionAssigned,
+    io false,
+    async false,
+) { }
 ```
 
-Write these keys as quoted grants in source, for example
-`reads "$entity_names"`. The scheduler uses them for conflicts between lookup
-and name publication/removal.
+Every inferred state read/write and emitted event must be declared. Reachable IO
+requires `io true`; async execution requires `async true`; an unknown or
+unbounded call is rejected. Diagnostics include the exact transitive path and
+the missing grant. Synthetic authorities such as `$entity_names` and
+`$entity_identity` model narrow runtime indexes rather than pretending indexed
+lookups are stateless.
 
-The checker product is opaque outside the VM crate. Its BLAKE3 semantic-input
-fingerprint covers the checked AST, deterministically ordered module
-declarations, enabled language features, and every checker option that changes
-semantic interpretation. A separate integrity digest covers every derived map
-in the product. Compilation validates both digests before installing any map;
-fingerprint-less, mutated, differently configured, or different-program output
-is rejected as a whole.
+Authority clauses do not grant semantic ownership. They say what the system may
+exercise; ownership says which module may ever acquire a write capability.
 
-The graph and reverse indexes are available without rescanning source:
+<a id="effect-ownership"></a>
+### 8.4 Component, resource, and field ownership
 
-```bash
-rad effects RemoveEntity --json
-rad writers LiveMembership
-rad readers WireIdentity
-rad path mission_frame "->" full_scan
-```
+An owned component/resource has one canonical owner module and only explicit
+canonical co-owners. An owned field applies the same rule to that field while
+other fields retain their declared policy. Direct `set`, `remove`, `update`,
+mutable query writeback, typed replacement values, helpers, callbacks, and
+transactions all require the capability; moving the write behind another
+callable does not conceal it.
 
-Outside a project containing `rad.toml`, add `--file path/to/main.rad`. Names are module-aware; an ambiguous short name is rejected and the diagnostic lists the qualified candidates.
+`writes owned [...]` is a scoped capability grant on an owner operation or
+test. Test grants cannot be imported by production modules. Ownership transfer
+is an explicit declaration tied to canonical module identity. Alias spelling
+and relative-path spelling do not create another owner.
 
-### 8.5 Pipeline restrictions (`|>`)
+<a id="effect-regions"></a>
+### 8.5 Transaction, post-commit, settlement, and sandbox regions
 
-The pipeline operator evaluates its left-hand side, then evaluates the right-hand side in a **pipeline context** where stricter rules apply (enforced by the static checker):
+Opcode and builtin policies are classified once per region:
 
-- World-mutating builtins (**`set`**, **`spawn`**, `set_resource`, and the fork/simulate/persistence write family) and **IO builtins** (`print`, `log`, `sleep_ms`, file and network access) are not allowed inside a pipeline — neither as a direct stage (`x |> print`) nor inside a callback. **`emit`** is likewise banned.
-- Calls to user-defined functions that are not known pure or `readonly` are not allowed on the pipeline RHS (when the callee is resolved as a named function).
-- ECS **read** builtins (`get`, `has`, `entities`, `query_where`, `query_map`, `query_count`, `with_field`, `peek`, `lookup`) are classified as `readonly` and are permitted in pipelines.
-- **Assignment** to variables that are not introduced inside the pipeline-evaluated code (outer assignments) is rejected — pipelines must not mutate enclosing state through assignments.
+| Region | Permitted effect shape |
+|---|---|
+| Transaction body | Staged authoritative writes listed by `changes_only`; no pre-commit emit, IO, or async. |
+| Post-commit | Event/IO/async effects; no new authoritative patch. |
+| Experimental settlement | Pure/readonly candidate evaluation plus resolver-owned staged facts/components. |
+| Sandbox guest | Only effects named by read/write/call and resource limits. |
 
-These rules keep pipeline chains referentially transparent (modulo ECS reads, which are observationally stable within a single pipeline evaluation) and safe to reorder or optimize in future versions.
+Entering, leaving, returning, throwing, or aborting a region checks balanced
+ownership. A failure discards all private state owned by that region. The inner
+frame runner intentionally leaves a settlement alive long enough for its
+kernel to classify the failure; the public host boundary enforces final balance.
 
----
+<a id="effect-cost"></a>
+### 8.6 Query-cost and allocation contracts
 
-## 9. One-Shot Event Handlers
+Cost analysis follows the same transitive/callback-specialized graph as
+authority. It distinguishes constant indexed lookup, logarithmic ordered-index
+seek, output-linear traversal, population-linear scan, and population
+`n log n` sort. `@frame`, `@tick`, and `@render` roots reject full scans unless
+the callable declares a nonempty `@allow_full_scan(reason: "...")`.
 
-### 9.1 `once` handlers
+Allocation contracts are deliberately separate:
 
-```
-on <EventName> once (<param>) {
-    <body>
-}
-```
+| Contract | Metered domain |
+|---|---|
+| `@no_guest_allocation` | RAD values allocated in the guest GC/value domain. |
+| `@no_runtime_allocation` | Native allocations owned by VM execution outside explicit host calls. |
+| `@no_host_allocation` | Native allocations while crossing a metered host/FFI operation. |
 
-For each `once` handler declaration:
+`@budget(instructions: N)` limits deterministic VM semantic work, not CPU
+instructions. Runtime and host allocation contracts require the process
+allocation meter; if that evidence is unavailable the contract fails instead
+of reporting zero. Setup allocation is not silently subtracted from a
+steady-state contract: the measured callable boundary defines the interval.
 
-- **Without a guard:** the handler body runs **at most one time** — the first time the event is dispatched to it. Later emissions skip it.
-- **With `where` / `when`:** the handler is retired only after a dispatch where the guard is truthy and the body runs. Emissions where the guard is false do **not** consume the `once` slot; the handler can run on a later emission when the guard passes.
+<a id="effect-determinism"></a>
+### 8.7 Determinism and host effects
 
-Later emissions of the same event type skip handlers that are already fired.
+Clock, random, filesystem, network, and extension calls are observable effects.
+Deterministic execution requires a fixed seed or an exact host record. A host
+function marked pure/deterministic must return the same validated bytes for the
+same input and plugin generation and must not perform undeclared IO, clock,
+random, global mutation, or external-state mutation. Replay consumes recorded
+results and never invokes the live host operation.
 
-Nested event dispatch (e.g. a handler that causes `flush_events` while another handler is running) restores this bookkeeping so an outer guarded `once` handler is not marked fired solely because an inner dispatch set the guard flag.
+<a id="error-model"></a>
+### 8.8 Error model
 
-### 9.2 Normal handlers
+RAD reports four classes of failure:
 
-Normal handlers (`on` without `once`) run for **every** emission, in registration order, as described in §7.3.
+1. lexer/parser diagnostics with source span and recovery context;
+2. checker diagnostics for types, authority, ownership, cost, visibility,
+   exhaustiveness, feature gates, and semantic-product integrity;
+3. compile diagnostics for lowering constraints that require checked structure;
+4. typed runtime failures carrying stack, region, transaction/settlement,
+   replay, host, and provenance context.
 
-`once` handlers share the same dispatch order but are skipped after they are fired (including guarded `once` handlers only after a successful guarded run).
+No invalid operation silently substitutes a default value. APIs whose absence
+is ordinary return `Option`; recoverable domain failure returns `Result`;
+contract violations, invalid bytecode, corrupt persistence, and violated host
+descriptors fail the operation. A transaction or load failure leaves the live
+world unchanged.
 
----
+`panic(message)` creates a runtime failure. `assert(condition, message)` fails
+when the condition is false. `?` propagates only `Option`/`Result` values and
+does not intercept unrelated runtime failures.
 
-## 10. Error Handling
+<a id="error-diagnostics"></a>
+### 8.9 Diagnostic contract
 
-Rad does not have exceptions or try/catch. The compiler is designed for a robust Developer Experience (DX) and uses **error recovery** to report multiple syntax and type errors in a single run, rather than bailing on the first error.
+A semantic diagnostic identifies the attempted operation, violated rule,
+canonical owner/authority/type, transitive path when applicable, and a repair
+that uses the intended architectural boundary. Imported diagnostics resolve to
+the defining source file. Machine-readable CLI output preserves stable fields
+for tools; presentation text is not used as semantic authority.
 
-Errors are reported with:
-
-1. The exact line and column number
-2. The source line with a caret pointing to the error
-3. A plain-English explanation
-4. A suggested fix (when applicable)
-
-```
-  Error: Cannot reassign 'x' — declared with 'let' (immutable)
-   help: use 'let mut x = ...' for a mutable binding
-
-  --> path/to/file.rad:12:5
-   |
-11 |     let x = 1
-12 |     x = 2
-   |     ^
-13 | }
-```
-
-### 10.1 Parser Error Recovery
-
-The Rad parser implements synchronization strategies to recover from syntax errors. When the parser encounters malformed code (e.g., a missing brace or unexpected token), it will:
-1. Record the syntax error.
-2. Skip tokens until it finds a safe synchronization point (like the start of the next statement or top-level declaration).
-3. Continue parsing the rest of the file.
-
-This allows the compiler to build a partial Abstract Syntax Tree (AST) containing `Error` nodes, which enables the Type Checker to run and find semantic errors even when the syntax is not perfect. You will see all syntax and type errors across your entire project in one go.
-  --> game.rad:24:5
-   |
-     23 |     let x = 10
->>   24 |     x = 20
-              ^
-     25 | }
-```
-
----
-
-## 11. Shipped Since Initial Spec
-
-The following items from earlier drafts are now implemented:
-
-- **Static type system** — compile-time type checking with gradual typing, generic functions, type aliases, and sum types (see §2, §3)
-- **Module system** — `use` imports with recursive loading, cycle detection, duplicate symbol errors, source maps, and lockfile support (see §3.9)
-- **Import aliasing** — `use "path" as name` for scoped module access and collision avoidance (see §3.10)
-- **FFI / native plugins** — C-ABI plugin interface via `rad_extension_init`, with value marshalling and dynamic library loading (see `ffi.rs`)
-- **v0.5 DX improvements** — zero-field variant shorthand, match rest bindings, implicit tail return, improved diagnostics, and compat mode
-
-## 12. Future Additions
-
-- **Package registry** — `rad install`, `rad publish`, `rad.toml` `[dependencies]` section (struct scaffolding exists, no resolution or fetching logic yet)
-- **Standard library** — `std/collections`, `std/math`, `std/text` as distributable RAD modules
-- **AOT compilation** — compile RAD to native binaries via LLVM or Cranelift
+Parser recovery may create internal `Error` nodes so more diagnostics can be
+reported in one pass. A program containing any lexer, parser, checker, or
+compiler error is never executable.

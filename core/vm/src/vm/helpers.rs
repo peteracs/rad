@@ -67,6 +67,26 @@ pub(crate) fn constant_resolved_system_name(chunk: &Chunk, idx: usize) -> Result
     }
 }
 
+/// Resolve a system-name constant without allocating an owned string.
+///
+/// `Value` is a copy handle into the immutable constant heap, so callers may
+/// extract the name from this local while mutably executing the VM.
+pub(crate) fn constant_resolved_system_name_value(
+    chunk: &Chunk,
+    idx: usize,
+) -> Result<Value, String> {
+    let value = constant_value(chunk, idx)?;
+    if value.as_str().is_some() || value.as_system_ref().is_some() {
+        Ok(value)
+    } else {
+        Err(format!(
+            "Expected string or system reference constant at index {}, got {}",
+            idx,
+            value.type_name()
+        ))
+    }
+}
+
 pub(crate) fn entity_id(v: &Value) -> Result<u32, String> {
     v.as_entity_id()
         .ok_or_else(|| format!("Expected entity id, got {}", v.type_name()))

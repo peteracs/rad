@@ -400,7 +400,7 @@ mod tests {
             pub event Published { target: entity }
             pub fn find(manager: ManagerGid) -> Option<entity> { return None }
         "#;
-        let parsed = crate::pipeline::parse_source(source, crate::parser::ParserOptions::default());
+        let parsed = crate::pipeline::parse_source(source, crate::parser::ParserOptions);
         assert!(
             parsed.lexer_errors.is_empty(),
             "lex errors: {:?}",

@@ -1,0 +1,22 @@
+use "../schema.rad"
+use "../owners/grid_owner.rad" as owner
+use "../systems/control_loop.rad"
+
+pub fn seed_grid(asset_count: int) -> nil {
+    for i in range(0, asset_count) {
+        owner.publish_asset(
+            AssetId(u64(i + 1)),
+            ZoneId(u16(i % 32)),
+            u16(i % 1024),
+            10,
+        )
+    }
+    assert(len(entities(owner.AssetIdentity)) == asset_count, "all assets are published")
+}
+
+pub fn run_incident() -> entity {
+    let mission: entity = owner.submit_mission(MissionId(u64(7001)), ZoneId(u16(3)), u16(1), 2)
+    let asset: entity = owner.asset_by_id(AssetId(u64(4)))
+    execute_cycle(mission, asset)
+    return mission
+}

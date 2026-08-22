@@ -208,7 +208,7 @@ mod tests {
     }
 
     #[test]
-    fn watches_trigger_once_and_candidate_reads_complete_patch_with_base_fallback() {
+    fn watches_trigger_once_and_candidate_reads_complete_patch_with_base_values() {
         let view = CandidateView::new(
             BTreeMap::from([
                 (key("Position"), FrozenValue::Int(1)),

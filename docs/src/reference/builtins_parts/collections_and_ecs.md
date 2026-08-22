@@ -29,8 +29,8 @@
 | `slice(list, start, end)` | Return sub-list from `start` to `end` (exclusive); also works on strings |
 | `append(list1, list2)` | Concatenate two lists into a new list |
 | `extend(list1, list2)` | Alias for `append` |
-| `zip(list1, list2)` | Pair elements from two lists into `[[a₀, b₀], [a₁, b₁], …]` (stops at shorter). Pairs naturally with destructuring: `zip(xs, ys) \|> map(fn([a, b]) { ... })` |
-| `enumerate(list)` | Return a list of `[index, element]` pairs: `enumerate(["a","b"])` → `[[0,"a"],[1,"b"]]`. Use with destructuring: `for [i, val] in enumerate(items) { ... }` |
+| `zip(list1, list2)` | Pair elements into `list<(A, B)>` (stops at the shorter input). Pairs naturally with destructuring: `zip(xs, ys) \|> map(fn([a, b]) { ... })` |
+| `enumerate(list)` | Return `list<(int, A)>`: `enumerate(["a","b"])` → `[(0,"a"),(1,"b")]`. Use with destructuring: `for [i, val] in enumerate(items) { ... }` |
 
 ## Functional
 
@@ -48,7 +48,7 @@
 | `min_by(list, fn)` | Return `Some(element)` with the smallest key from `fn(element)`, or `None` for empty lists |
 | `sum(list)` | Numeric fold: total of all elements. Ints stay int, any float promotes; `sum([])` is `0` |
 | `product(list)` | Numeric fold: product of all elements; `product([])` is `1` |
-| `get_or(coll, key, default)` | Map lookup or list index with a fallback instead of nil/bounds-error — the cooldown-table read: `cds \|> get_or("q", 0)` |
+| `get_or(coll, key, default)` | Map lookup or list index with an explicit default instead of nil/bounds-error — the cooldown-table read: `cds \|> get_or("q", 0)` |
 | `index_of(list, v)` | First index holding `v` (structural equality), or `-1`. An int rather than an Option because the consumer is slot arithmetic: `if at >= 0 { set_at(slots, at, nil) }` |
 
 **Accessor shorthand:** anywhere a one-argument closure is expected, `.field`
@@ -112,7 +112,7 @@ stays functional: each append returns the next buffer value.
 | `buffer_append(buffer, str)` | Return a buffer with `str` appended |
 | `buffer_to_str(buffer)` | Convert a buffer to a string |
 
-```rad
+```text
 let mut b = buffer_new()
 b = buffer_append(b, "hp=")
 b = buffer_append(b, str(42))
@@ -135,10 +135,10 @@ reassignment patterns to in-place writes.
 | `bytebuf_set_i32_le(buf, offset, value)` | Return a buffer with a little-endian signed 32-bit int written |
 | `bytebuf_get_u32_le(buf, offset)` | Read a little-endian unsigned 32-bit int |
 | `bytebuf_get_i32_le(buf, offset)` | Read a little-endian signed 32-bit int |
-| `bytebuf_to_list(buf)` | Convert to `list<int>` for compatibility/tests |
+| `bytebuf_to_list(buf)` | Convert to `list<int>` for interchange and tests |
 | `bytebuf_from_list(bytes)` | Convert `list<int>` byte values into a byte buffer |
 
-```rad
+```text
 fn encode_move(client_seq: int, target_x: float, target_y: float) -> any {
     let mut packet = bytebuf_new(15)
     packet = bytebuf_set_u8(packet, 0, 77)
@@ -285,7 +285,7 @@ Fields whose declaration carries a usable default — `field: value` or
 `field: Type = value` — may be **omitted from literals**; the constructor
 fills them from the declaration:
 
-```rad
+```text
 component Incident { title: "", priority: 0, status: "open" }
 
 let i = spawn(Incident { title: "disk full" })   // priority: 0, status: "open"

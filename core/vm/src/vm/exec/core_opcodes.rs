@@ -768,11 +768,6 @@ impl VM {
                 let tname = Value::from_string(&mut self.gc, v.type_name().to_string());
                 self.push(tname);
             }
-            Op::Break => {
-                return Err(
-                    "Opcode Break is unsupported: 'break' must be compiled to Jump".to_string(),
-                );
-            }
             Op::GetFieldSlot => {
                 let slot = self.read_u16()? as usize;
                 let obj = self.pop()?;

@@ -148,7 +148,7 @@ pub(crate) static LAB: std::sync::RwLock<()> = std::sync::RwLock::new(());
 // ---------------------------------------------------------------------------
 
 fn compile(src: &str) -> crate::compiler::CompileResult {
-    crate::test_support::compile_source(src, ParserOptions::default()).expect("parse and compile")
+    crate::test_support::compile_source(src, ParserOptions).expect("parse and compile")
 }
 
 /// The syncdesk-shaped world every phase runs in: two named tickets, an
@@ -271,11 +271,20 @@ commit(lab_base)
 /// growth (ledger to its cap, gc threshold doubling) is absorbed by
 /// `n_small` being past it.
 fn measured_slope(body: &str, n_small: usize, n_big: usize) -> Slope {
+    measured_slope_with(DECLS, body, n_small, n_big)
+}
+
+/// As [`measured_slope`], with the declarations under test supplied by the
+/// caller. World-retention phases need their own components: what a retained
+/// entity costs depends on which of its fields are `indexed`, `ordered
+/// indexed`, or watched by a materialized view, which one fixed declaration
+/// set cannot express.
+fn measured_slope_with(decls: &str, body: &str, n_small: usize, n_big: usize) -> Slope {
     let pre = fixtures_for(body);
     let _guard = LAB.write().unwrap();
     let run = |n: usize| {
         let src = format!(
-            "{DECLS}\nseed()\n{pre}for lab_i in range(0, {n}) {{\n{body}\n}}\ngc_collect()\n"
+            "{decls}\nseed()\n{pre}for lab_i in range(0, {n}) {{\n{body}\n}}\ngc_collect()\n"
         );
         let compiled = compile(&src);
         let before = net_bytes();
@@ -365,4 +374,121 @@ commit(merged)"#;
         "push cycle accumulates {:.0} B/cycle that gc_collect cannot reclaim",
         last.live_per_iter
     );
+}
+
+// ---------------------------------------------------------------------------
+// World retention: what one *retained* entity costs, by index kind.
+//
+// RiskBridge keeps every adjudication, so its footprint is not a leak — it is
+// the per-entity price of the world, paid a million times. Process RSS cannot
+// say which part of that price is column storage and which is index
+// bookkeeping; these phases separate them by adding one index kind at a time.
+// ---------------------------------------------------------------------------
+
+const RETENTION_DECLS: &str = r#"
+component One { a: u64 = u64(0) }
+opaque type ShortId = u64
+opaque type AnExtremelyLongOpaqueTypeNameUsedOnlyToMeasureStringCostInStoredValues = u64
+component ShortNamed { a: ShortId = ShortId(u64(0)) }
+component LongNamed { a: AnExtremelyLongOpaqueTypeNameUsedOnlyToMeasureStringCostInStoredValues = AnExtremelyLongOpaqueTypeNameUsedOnlyToMeasureStringCostInStoredValues(u64(0)) }
+component IntOne { a: int = 0 }
+component IntTwo { a: int = 0, b: int = 0 }
+component FloatTwo { a: float = 0.0, b: float = 0.0 }
+component Two { a: u64 = u64(0), b: u64 = u64(0) }
+component Eight {
+    a: u64 = u64(0), b: u64 = u64(0), c: u64 = u64(0), d: u64 = u64(0),
+    e: u64 = u64(0), f: u64 = u64(0), g: u64 = u64(0), h: u64 = u64(0),
+}
+component P2 { a: u64 = u64(0) }
+component P3 { a: u64 = u64(0) }
+component P4 { a: u64 = u64(0) }
+component Plain { a: u64 = u64(0), b: u64 = u64(0) }
+component Hashed { indexed key: u64 = u64(0) }
+component Ordered { ordered indexed rank: u64 = u64(0) }
+component Viewed { flag: bool = true }
+materialized view ViewedRows { depends [Viewed] }
+fn seed() -> nil {}
+"#;
+
+fn retention_phases() -> Vec<(&'static str, String)> {
+    vec![
+        ("baseline (no spawn)", "let _x = lab_i".to_string()),
+        // The two opaque phases below must report the same figure: a value
+        // stores a shared handle to its type's name, not a copy of it. They
+        // differed by exactly the 63 extra characters before that was true.
+        (
+            "opaque field, 7-char type name",
+            "let _e = spawn(ShortNamed { a: ShortId(u64(lab_i)) })".to_string(),
+        ),
+        (
+            "opaque field, 70-char type name (must match)",
+            "let _e = spawn(LongNamed { a: AnExtremelyLongOpaqueTypeNameUsedOnlyToMeasureStringCostInStoredValues(u64(lab_i)) })".to_string(),
+        ),
+        (
+            "spawn: 1 int field (inline value)",
+            "let _e = spawn(IntOne { a: lab_i })".to_string(),
+        ),
+        (
+            "spawn: 2 int fields (inline)",
+            "let _e = spawn(IntTwo { a: lab_i, b: lab_i })".to_string(),
+        ),
+        (
+            "spawn: 2 float fields (inline)",
+            "let _e = spawn(FloatTwo { a: float(lab_i), b: float(lab_i) })".to_string(),
+        ),
+        (
+            "spawn: 1 component, 1 field",
+            "let _e = spawn(One { a: u64(lab_i) })".to_string(),
+        ),
+        (
+            "spawn: 1 component, 2 fields",
+            "let _e = spawn(Two { a: u64(lab_i), b: u64(lab_i) })".to_string(),
+        ),
+        (
+            "spawn: 1 component, 8 fields",
+            "let _e = spawn(Eight { a: u64(lab_i) })".to_string(),
+        ),
+        (
+            "spawn: 4 components, 1 field each",
+            "let _e = spawn(One { a: u64(lab_i) }, P2 { a: u64(lab_i) }, P3 { a: u64(lab_i) }, P4 { a: u64(lab_i) })".to_string(),
+        ),
+        (
+            "spawn: plain component",
+            "let _e = spawn(Plain { a: u64(lab_i), b: u64(lab_i) })".to_string(),
+        ),
+        (
+            "spawn: hashed-indexed component",
+            "let _e = spawn(Hashed { key: u64(lab_i) })".to_string(),
+        ),
+        (
+            "spawn: ordered-indexed component",
+            "let _e = spawn(Ordered { rank: u64(lab_i) })".to_string(),
+        ),
+        (
+            "spawn: view-watched component",
+            "let _e = spawn(Viewed { flag: true })".to_string(),
+        ),
+        (
+            "spawn: all four together",
+            "let _e = spawn(Plain { a: u64(lab_i), b: u64(lab_i) }, Hashed { key: u64(lab_i) }, Ordered { rank: u64(lab_i) }, Viewed { flag: true })".to_string(),
+        ),
+    ]
+}
+
+#[test]
+#[ignore = "diagnostic: run with --release --ignored --nocapture --test-threads=1"]
+fn world_retention_report() {
+    println!();
+    println!("== world retention: live bytes per RETAINED entity ==");
+    println!(
+        "{:<44} {:>12} {:>12}",
+        "phase", "live B/iter", "gc obj/iter"
+    );
+    for (name, body) in retention_phases() {
+        let slope = measured_slope_with(RETENTION_DECLS, &body, 2_000, 6_000);
+        println!(
+            "{:<44} {:>12.1} {:>12.2}",
+            name, slope.live_per_iter, slope.gc_objects_per_iter
+        );
+    }
 }

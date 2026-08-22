@@ -119,6 +119,52 @@ mod tests {
     }
 
     #[test]
+    fn builtin_api_catalog_is_complete_and_runtime_owned() {
+        let catalog = crate::builtins::builtin_api_catalog();
+        assert_eq!(catalog.len(), Builtin::ALL.len());
+        for (entry, builtin) in catalog.iter().zip(Builtin::ALL) {
+            assert_eq!(entry.name, builtin.name());
+            assert!(!entry.signature.is_empty());
+            assert!(!entry.signature.contains("..."));
+            assert!(!entry.category.is_empty());
+            assert!(!entry.arity.is_empty());
+            assert!(!entry.errors.is_empty());
+            assert!(!entry.determinism.is_empty());
+            assert!(!entry.complexity.is_empty());
+            assert!(!entry.allocation.is_empty());
+            assert!(!entry.transaction.is_empty());
+            assert!(!entry.post_commit.is_empty());
+            assert!(!entry.settlement.is_empty());
+        }
+    }
+
+    #[test]
+    fn builtin_call_shapes_capture_every_non_exact_contract() {
+        use crate::builtins::{builtin_call_shape, BuiltinCallShape};
+
+        assert_eq!(
+            builtin_call_shape(Builtin::Format),
+            BuiltinCallShape::Variadic { min: 1 }
+        );
+        assert_eq!(
+            builtin_call_shape(Builtin::RequireAll),
+            BuiltinCallShape::Variadic { min: 2 }
+        );
+        assert_eq!(
+            builtin_call_shape(Builtin::Range),
+            BuiltinCallShape::Range { min: 1, max: 4 }
+        );
+        assert_eq!(
+            builtin_call_shape(Builtin::WorldDigest),
+            BuiltinCallShape::Range { min: 0, max: 1 }
+        );
+        assert_eq!(
+            builtin_call_shape(Builtin::Len),
+            BuiltinCallShape::Exact(1)
+        );
+    }
+
+    #[test]
     fn every_float_nan_is_canonical_and_never_object_tagged() {
         let reserved_and_ieee_patterns = [
             0x7FF0_0000_0000_0001,

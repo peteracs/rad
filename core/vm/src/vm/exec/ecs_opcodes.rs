@@ -167,12 +167,14 @@ impl VM {
 
     pub(crate) fn exec_ecs_has(&mut self) -> Result<(), String> {
         let type_idx = self.read_u16()? as usize;
-        let ctype = helpers::constant_string(self.current_chunk(), type_idx)?;
+        let component_value = helpers::constant_string_value(self.current_chunk(), type_idx)?;
+        let ctype = component_value
+            .as_str()
+            .expect("validated component string constant");
         let ent = self.pop()?;
         let eid = helpers::entity_id(&ent)?;
-        self.push(Value::from_bool(
-            self.get_world().has_component(eid, &ctype),
-        ));
+        self.sandbox_check_read(ctype)?;
+        self.push(Value::from_bool(self.get_world().has_component(eid, ctype)));
         Ok(())
     }
 

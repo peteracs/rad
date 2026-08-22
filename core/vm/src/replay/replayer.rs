@@ -98,17 +98,8 @@ impl TraceReplayer {
                 .map_err(|e| format!("trace line {} is not valid JSON: {}", i + 2, e))?;
             match j["t"].as_str() {
                 Some("io") => {
-                    let frame = j["f"].as_u64().ok_or("io record missing frame")?;
-                    let rec = IoRecord {
-                        frame,
-                        seq: j["s"].as_u64().unwrap_or(0),
-                        builtin: j["b"].as_str().unwrap_or_default().to_string(),
-                        args_digest: j["a"].as_str().unwrap_or_default().to_string(),
-                        result: match j.get("e") {
-                            Some(e) => Err(e.as_str().unwrap_or_default().to_string()),
-                            None => Ok(j["r"].clone()),
-                        },
-                    };
+                    let rec = parse_io_record(&j)?;
+                    let frame = rec.frame;
                     frame_starts.entry(frame).or_insert(records.len());
                     records.push(rec);
                 }
@@ -137,12 +128,16 @@ impl TraceReplayer {
                 }
             }
         }
+        let total_io_records = records.len();
         Ok(Self {
             source,
             source_layout,
             features,
             seed,
             records,
+            total_io_records,
+            #[cfg(not(target_arch = "wasm32"))]
+            strict_stream: None,
             frame_starts,
             cursor: 0,
             current_frame: 0,
@@ -154,6 +149,19 @@ impl TraceReplayer {
             capture_timeline: false,
             timeline: Vec::new(),
         })
+    }
+
+    /// Index and verify a canonical trace file without retaining its I/O
+    /// records. Strict replay then consumes one record at a time from a second
+    /// bounded decoder; memory is independent of trace length.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn parse_file(path: &std::path::Path, force: bool) -> Result<Self, String> {
+        let index = index_trace_file(path)?;
+        let mut replayer = Self::parse(&index.metadata_jsonl, force)?;
+        replayer.total_io_records = index.total_io;
+        replayer.total_frames = index.total_frames;
+        replayer.strict_stream = Some(StrictTraceStream::open(path, index.total_io)?);
+        Ok(replayer)
     }
 
     pub fn features(&self) -> &[String] {
@@ -168,6 +176,11 @@ impl TraceReplayer {
     /// becomes an args-keyed oracle so *edited* source can be replayed
     /// against the original session's inputs.
     pub fn into_retro(mut self) -> Self {
+        #[cfg(not(target_arch = "wasm32"))]
+        assert!(
+            self.strict_stream.is_none(),
+            "retroactive replay requires an in-memory trace; CLI --with selects that mode before parsing"
+        );
         let mut oracle: HashMap<(String, String), std::collections::VecDeque<IoRecord>> =
             HashMap::new();
         for rec in &self.records {
@@ -242,7 +255,7 @@ impl TraceReplayer {
     }
 
     pub fn io_record_count(&self) -> usize {
-        self.records.len()
+        self.total_io_records
     }
 
     pub fn end_world_digest(&self) -> Option<&str> {
@@ -255,6 +268,12 @@ impl TraceReplayer {
     pub fn next_io(&mut self, builtin: &str, args_digest: &str) -> Result<IoRecord, String> {
         match &mut self.mode {
             ReplayMode::Strict => {
+                #[cfg(not(target_arch = "wasm32"))]
+                if let Some(stream) = &mut self.strict_stream {
+                    let record = stream.next_io(self.current_frame, builtin, args_digest)?;
+                    self.cursor = stream.consumed();
+                    return Ok(record);
+                }
                 let rec = self.records.get(self.cursor).ok_or_else(|| {
                     format!(
                         "replay divergence at frame {}: the replayed run calls {}() but the \
@@ -355,6 +374,11 @@ impl TraceReplayer {
     /// Reposition the io cursor to the first record of `frame` — used by
     /// keyframe seeking: restore a snapshot, seek the cursor, re-execute.
     pub fn seek_frame(&mut self, frame: u64) {
+        #[cfg(not(target_arch = "wasm32"))]
+        assert!(
+            self.strict_stream.is_none(),
+            "file-streamed replay cannot seek; use replay --serve for in-memory time travel"
+        );
         self.current_frame = frame;
         self.cursor = self
             .frame_starts
@@ -376,7 +400,18 @@ impl TraceReplayer {
         ReplayReport {
             frames_replayed: self.current_frame,
             io_replayed: self.cursor,
-            leftover_io: self.records.len() - self.cursor,
+            leftover_io: {
+                #[cfg(not(target_arch = "wasm32"))]
+                if let Some(stream) = &self.strict_stream {
+                    stream.remaining()
+                } else {
+                    self.records.len() - self.cursor
+                }
+                #[cfg(target_arch = "wasm32")]
+                {
+                    self.records.len() - self.cursor
+                }
+            },
             end_digest_match: self.end_world_digest.as_ref().map(|d| d == world_digest),
             end_outcome_match: self
                 .end_error

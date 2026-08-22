@@ -143,7 +143,9 @@ agent framework can drive it.
 
 `rad app.rad --record trace.radr` records **inputs, not state** — the RNG seed,
 IO results, and clock reads. Everything else re-derives, because the interpreter
-is deterministic. A session compresses to a few KB, and traces are written even
+is deterministic. The CLI writes a digest-sealed zstd stream atomically, so
+recording and ordinary faithful replay retain only one I/O record regardless of
+session length. Small sessions compress to a few KB, and traces are written even
 when the run crashes.
 
 `rad replay trace.radr --serve` then replays once, keyframing the world at every
@@ -247,14 +249,14 @@ check the specification against.
 
 | Component | Status |
 |---|---|
-| Rust bytecode VM (`rad`) | **Working** — lexer, parser, type checker, compiler, VM; 283 conformance programs and 69 examples in-tree |
+| Rust bytecode VM (`rad`) | **Working** — lexer, parser, type checker, compiler, VM; 280 conformance programs and 42 canonical examples in-tree |
 | Causality (`why`, `why_resource`) | **Working** — frame-indexed provenance ledger; retains the most recent 100,000 write and emit records, then evicts |
 | Forking & speculation | **Working** — `fork`, `simulate`, `simulate_par`, `peek`, `commit`; `simulate_par` is thread-count independent |
 | Blast radius (`diff`, `assert_only_changed`) | **Working** — O(archetypes) `Arc` pointer comparison; row counts are an upper bound |
 | Capability sandbox | **Working** — `sandbox_run` plus `rad sandbox serve` (JSON-RPC 2.0 over stdio); builtin mask, component-write ACL, fuel/memory budgets |
 | World merge | **Working** — `merge_forks` / `merge_forks_with`, field-level conflicts as data, entity-id remapping; `fork_to_bytes` / `fork_from_bytes` for cross-process merge |
 | Record / replay / time travel | **Working** — `--record`, `rad replay`, `--to-frame`, `--serve`, `--with` |
-| `rad` CLI | **Working** — `rad <file>` type-checks by default (`--no-check` skips); `run`, `test`, `fmt` / `fmt --check`, `lint`, `new`, `snapshot`, `play`, `replay`, `sandbox serve`, `build` |
+| `rad` CLI | **Working** — execution/checking, tests, formatting/linting, scaffolding, snapshots, WASM/type generation, replay/sandboxing, authority/query/provenance inspection, metered benchmarks, model checking/shrinking, FFI verification, relations, and LSP |
 | Browser playground | **Working** — Rust VM via WASM |
 | LSP server (`rad lsp`) | **Working** — Rust checker diagnostics, hover, go-to-definition, completions, formatting |
 | `build --target wasm` | **Stub** — emits the [Phase 3](./reference/wasm-phase3.md) reactor stub; the WASM guest returns no diagnostics until a real `compiler.wasm` implements checking |

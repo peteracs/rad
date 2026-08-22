@@ -731,7 +731,10 @@ fn builtin_type_scheme_simulation(name: &str) -> Option<BuiltinSig> {
         // even though their fork bytes legitimately differ.
         "world_digest" => BuiltinSig {
             type_params: vec![],
-            params: vec![],
+            // Optional at the call-shape layer: no argument hashes the live
+            // world; one argument hashes that fork. Keeping the parameter
+            // type here lets the checker validate the one-argument form.
+            params: vec![Ty::WorldFork],
             ret: Ty::Str,
             is_pure: false,
         },

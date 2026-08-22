@@ -155,7 +155,7 @@ pub struct PhaseDecl {
     pub name: String,
     pub is_pub: bool,
     pub systems: Vec<String>,
-    /// `serial phase P [ ... ]` — members form a serial group: they never
+    /// `serial phase P { ... }` — members form a serial group: they never
     /// share a parallel batch with each other, in any schedule that runs
     /// them (dogfood feature seq 83: "these systems are ordered and I do
     /// not want them raced" made sayable).

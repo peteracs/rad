@@ -1,0 +1,4 @@
+bitflags BrokenFlags: u16 {
+    First = 4,
+    Second = 4,
+}

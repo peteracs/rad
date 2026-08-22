@@ -334,6 +334,11 @@ impl VM {
         worker.world.restore(base.clone());
         worker.is_worker = false;
         worker.in_simulation_fork = 1;
+        // Model trials are private simulation forks, but temporal clauses must
+        // observe events emitted by that trial. This enables only the worker's
+        // bounded observation log; it does not re-enable main-timeline causal
+        // recording or effects forbidden in simulation.
+        worker.capture_isolated_event_log = true;
         worker.suppress_output = true;
         worker.set_random_seed(seed);
 

@@ -8,7 +8,7 @@ pub fn get_preset(name: &str) -> Option<LintPreset> {
         "standard" => Some(LintPreset {
             description:
                 "Sensible defaults: style and complexity warnings, no annotation requirements",
-            vm_flags: vec!["--warn-compat"],
+            vm_flags: vec![],
             require_type_annotations: false,
             require_pure_pipelines: false,
             require_ecs_system_flow: false,
@@ -48,7 +48,7 @@ pub fn get_preset(name: &str) -> Option<LintPreset> {
         }),
         "strict" => Some(LintPreset {
             description: "Strict type checking with warnings as errors",
-            vm_flags: vec!["--strict-types", "--deny-warnings", "--warn-compat"],
+            vm_flags: vec!["--strict-types", "--deny-warnings"],
             require_type_annotations: true,
             require_pure_pipelines: true,
             require_ecs_system_flow: true,
@@ -68,7 +68,7 @@ pub fn get_preset(name: &str) -> Option<LintPreset> {
         }),
         "teaching" => Some(LintPreset {
             description: "Beginner-friendly with helpful suggestions",
-            vm_flags: vec!["--warn-compat"],
+            vm_flags: vec![],
             require_type_annotations: false,
             require_pure_pipelines: false,
             require_ecs_system_flow: false,

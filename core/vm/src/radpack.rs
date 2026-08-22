@@ -139,7 +139,7 @@ pub fn seal_file(tag: &str, body: &str) -> Vec<u8> {
 
 /// zstd level for file envelopes. Fixed: part of the deterministic encode.
 #[cfg(not(target_arch = "wasm32"))]
-const ZSTD_LEVEL: i32 = 19;
+pub(crate) const ZSTD_LEVEL: i32 = 19;
 
 /// Open a file payload: RADPACKZ (zstd), RADPACKB (DEFLATE), RADPACK1
 /// (text envelope), or plain text — all normalize to the same plain string

@@ -39,6 +39,8 @@ use std::collections::HashMap;
 
 pub const TRACE_VERSION: u64 = 1;
 // Lexical sections preserve one private semantic namespace.
+#[cfg(not(target_arch = "wasm32"))]
+include!("replay/file_stream.rs");
 include!("replay/codec_and_identity.rs");
 include!("replay/replayer.rs");
 include!("replay/tests.rs");

@@ -228,6 +228,20 @@ mod tests {
     }
 
     #[test]
+    fn parse_cli_args_parses_compiler_owned_surface_report() {
+        let args = ["rad", "surface", "projects/dogfood/sovereign-grid/main.rad", "--json"]
+            .map(str::to_string)
+            .to_vec();
+        match parse_cli_args(&args).expect("surface command") {
+            CliCommand::Surface { filepath, json } => {
+                assert_eq!(filepath, "projects/dogfood/sovereign-grid/main.rad");
+                assert!(json);
+            }
+            parsed => panic!("expected surface command, got {parsed:?}"),
+        }
+    }
+
+    #[test]
     fn parse_cli_args_parses_model_check_campaign() {
         let args = [
             "rad",
@@ -435,6 +449,7 @@ mod tests {
                 assert!(skip_check);
             }
             CliCommand::Version
+            | CliCommand::Surface { .. }
             | CliCommand::Authority { .. }
             | CliCommand::Operational { .. }
             | CliCommand::Bench { .. } => {
@@ -477,6 +492,22 @@ mod tests {
         for args in cases {
             assert_parses_run_with_no_check(args);
         }
+    }
+
+    #[test]
+    fn parse_cli_args_rejects_recording_without_semantic_analysis() {
+        let args = vec![
+            "rad".to_string(),
+            "script.rad".to_string(),
+            "--no-check".to_string(),
+            "--record".to_string(),
+            "trace.radr".to_string(),
+        ];
+        let error = parse_cli_args(&args).expect_err("unchecked traces are not replay-safe");
+        assert!(
+            error.contains("replay requires the checked semantic product"),
+            "{error}"
+        );
     }
 
     #[test]
@@ -531,129 +562,15 @@ mod tests {
     }
 
     #[test]
-    fn parse_cli_args_accepts_compat_flag() {
-        let args = vec![
-            "rad".to_string(),
-            "--compat-v0.5-dx".to_string(),
-            "script.rad".to_string(),
-        ];
-        let parsed = parse_cli_args(&args).unwrap();
-        match parsed {
-            CliCommand::Run {
-                filepath,
-                skip_check,
-                compat_v0_5_dx,
-                deny_warnings,
-                warn_compat,
-                strict_types,
-                write_lock,
-                ..
-            } => {
-                assert_eq!(filepath, "script.rad");
-                assert!(!skip_check);
-                assert!(compat_v0_5_dx);
-                assert!(!deny_warnings);
-                assert!(warn_compat);
-                assert!(!strict_types);
-                assert!(!write_lock);
-            }
-            CliCommand::Version
-            | CliCommand::Authority { .. }
-            | CliCommand::Operational { .. }
-            | CliCommand::Bench { .. } => {
-                panic!("expected run command")
-            }
-            CliCommand::Fmt { .. } => panic!("expected run command"),
-            CliCommand::Lint { .. } => panic!("expected run command"),
-            CliCommand::Test { .. } => panic!("expected run command"),
-            CliCommand::Lsp { .. } | CliCommand::RelationsCheck { .. } => {
-                panic!("expected run command")
-            }
-            CliCommand::Build { .. } => panic!("expected run command"),
-            CliCommand::New { .. }
-            | CliCommand::Snapshot { .. }
-            | CliCommand::Play { .. }
-            | CliCommand::SandboxServe { .. }
-            | CliCommand::Types { .. }
-            | CliCommand::Replay { .. }
-            | CliCommand::ModelCheck { .. }
-            | CliCommand::ShrinkModel { .. }
-            | CliCommand::FfiVerify { .. } => todo!(),
-        }
-    }
-
-    #[test]
-    fn parse_cli_args_accepts_no_compat_flag() {
-        let args = vec![
-            "rad".to_string(),
-            "--no-compat-v0.5-dx".to_string(),
-            "script.rad".to_string(),
-        ];
-        let parsed = parse_cli_args(&args).unwrap();
-        match parsed {
-            CliCommand::Run { compat_v0_5_dx, .. } => {
-                assert!(!compat_v0_5_dx);
-            }
-            CliCommand::Version
-            | CliCommand::Authority { .. }
-            | CliCommand::Operational { .. }
-            | CliCommand::Bench { .. } => {
-                panic!("expected run command")
-            }
-            CliCommand::Fmt { .. } => panic!("expected run command"),
-            CliCommand::Lint { .. } => panic!("expected run command"),
-            CliCommand::Test { .. } => panic!("expected run command"),
-            CliCommand::Lsp { .. } | CliCommand::RelationsCheck { .. } => {
-                panic!("expected run command")
-            }
-            CliCommand::Build { .. } => panic!("expected run command"),
-            CliCommand::New { .. }
-            | CliCommand::Snapshot { .. }
-            | CliCommand::Play { .. }
-            | CliCommand::SandboxServe { .. }
-            | CliCommand::Types { .. }
-            | CliCommand::Replay { .. }
-            | CliCommand::ModelCheck { .. }
-            | CliCommand::ShrinkModel { .. }
-            | CliCommand::FfiVerify { .. } => todo!(),
-        }
-    }
-
-    #[test]
-    fn parse_cli_args_compat_last_flag_wins() {
-        let args = vec![
-            "rad".to_string(),
-            "--compat-v0.5-dx".to_string(),
-            "--no-compat-v0.5-dx".to_string(),
-            "script.rad".to_string(),
-        ];
-        let parsed = parse_cli_args(&args).unwrap();
-        match parsed {
-            CliCommand::Run { compat_v0_5_dx, .. } => {
-                assert!(!compat_v0_5_dx);
-            }
-            CliCommand::Version
-            | CliCommand::Authority { .. }
-            | CliCommand::Operational { .. }
-            | CliCommand::Bench { .. } => {
-                panic!("expected run command")
-            }
-            CliCommand::Fmt { .. } => panic!("expected run command"),
-            CliCommand::Lint { .. } => panic!("expected run command"),
-            CliCommand::Test { .. } => panic!("expected run command"),
-            CliCommand::Lsp { .. } | CliCommand::RelationsCheck { .. } => {
-                panic!("expected run command")
-            }
-            CliCommand::Build { .. } => panic!("expected run command"),
-            CliCommand::New { .. }
-            | CliCommand::Snapshot { .. }
-            | CliCommand::Play { .. }
-            | CliCommand::SandboxServe { .. }
-            | CliCommand::Types { .. }
-            | CliCommand::Replay { .. }
-            | CliCommand::ModelCheck { .. }
-            | CliCommand::ShrinkModel { .. }
-            | CliCommand::FfiVerify { .. } => todo!(),
+    fn parse_cli_args_rejects_removed_compatibility_flags() {
+        for removed in ["--compat-v0.5-dx", "--no-compat-v0.5-dx", "--warn-compat"] {
+            let args = vec![
+                "rad".to_string(),
+                removed.to_string(),
+                "script.rad".to_string(),
+            ];
+            let error = parse_cli_args(&args).expect_err("removed flag must not remain accepted");
+            assert!(error.contains("Unknown option"), "{removed}: {error}");
         }
     }
 
@@ -662,7 +579,6 @@ mod tests {
         let args = vec![
             "rad".to_string(),
             "--deny-warnings".to_string(),
-            "--no-warn-compat".to_string(),
             "script.rad".to_string(),
         ];
         let parsed = parse_cli_args(&args).unwrap();
@@ -670,22 +586,19 @@ mod tests {
             CliCommand::Run {
                 filepath,
                 skip_check,
-                compat_v0_5_dx,
                 deny_warnings,
-                warn_compat,
                 strict_types,
                 write_lock,
                 ..
             } => {
                 assert_eq!(filepath, "script.rad");
                 assert!(!skip_check);
-                assert!(!compat_v0_5_dx);
                 assert!(deny_warnings);
-                assert!(!warn_compat);
                 assert!(!strict_types);
                 assert!(!write_lock);
             }
             CliCommand::Version
+            | CliCommand::Surface { .. }
             | CliCommand::Authority { .. }
             | CliCommand::Operational { .. }
             | CliCommand::Bench { .. } => {
@@ -729,6 +642,7 @@ mod tests {
                 assert!(write_lock);
             }
             CliCommand::Version
+            | CliCommand::Surface { .. }
             | CliCommand::Authority { .. }
             | CliCommand::Operational { .. }
             | CliCommand::Bench { .. } => {
@@ -766,6 +680,7 @@ mod tests {
                 assert!(profile_copies);
             }
             CliCommand::Version
+            | CliCommand::Surface { .. }
             | CliCommand::Authority { .. }
             | CliCommand::Operational { .. }
             | CliCommand::Bench { .. } => {

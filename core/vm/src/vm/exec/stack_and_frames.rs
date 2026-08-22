@@ -114,7 +114,7 @@ impl VM {
 
     pub(crate) fn call_value(&mut self, callee: &Value, args: Vec<Value>) -> Result<Value, String> {
         self.call_value_detailed(callee, args)
-            .map_err(|failure| failure.render_compat())
+            .map_err(|failure| failure.render_message())
     }
 
     /// Invoke a callable behind an explicit language-level catch boundary.
@@ -133,7 +133,7 @@ impl VM {
         match result {
             Ok(value) => Ok(value),
             Err(failure) => {
-                let rendered = failure.render_compat();
+                let rendered = failure.render_message();
                 self.frames.truncate(frame_depth);
                 self.stack.truncate(stack_depth);
                 self.next_frame_id = next_frame_id_before;

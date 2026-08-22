@@ -401,6 +401,7 @@ impl Ty {
             Ty::Var(v) => *v == id,
             Ty::SystemRef => false,
             Ty::List(inner) => inner.contains_var(id),
+            Ty::Tuple(items) | Ty::Union(items) => items.iter().any(|item| item.contains_var(id)),
             Ty::Map(key, val) => key.contains_var(id) || val.contains_var(id),
             Ty::Fn {
                 params,
@@ -468,6 +469,9 @@ impl fmt::Display for Ty {
             }
             Ty::Var(id) => write!(f, "?T{}", id),
             Ty::App(name, args) => {
+                if args.is_empty() {
+                    return write!(f, "{}", name);
+                }
                 write!(f, "{}<", name)?;
                 for (i, a) in args.iter().enumerate() {
                     if i > 0 {

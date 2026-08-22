@@ -150,7 +150,7 @@ fn ping() { }
     assert!(
         rejection
             .canonical_bytes(vm.constraint_limit_profile())
-            .expect("bounded fallback encoding")
+            .expect("bounded rejection encoding")
             .len()
             <= 1024
     );

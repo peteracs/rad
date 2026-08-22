@@ -269,7 +269,7 @@ mod tests {
     "#;
 
     fn server() -> SandboxServer {
-        let result = crate::test_support::compile_source(HOST, ParserOptions::default())
+        let result = crate::test_support::compile_source(HOST, ParserOptions)
             .expect("host parse and compile");
         let mut vm = VM::new();
         vm.suppress_output();

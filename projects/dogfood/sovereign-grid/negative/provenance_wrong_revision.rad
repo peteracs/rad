@@ -1,0 +1,6 @@
+component Listing { indexed id: int = 0, label: str = "" }
+materialized view Listings { depends [Listing] key Listing.id }
+let listing: entity = spawn(Listing { id: 1, label: "before" })
+let before: int = revision(Listings)
+update(listing, Listing) { label = "after" }
+assert(revision(Listings) == before + 1, "unrelated field must not move view revision")

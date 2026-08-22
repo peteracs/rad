@@ -1,0 +1,83 @@
+use "../schema.rad"
+
+pub let GRID_NAME: str = "Sovereign Grid"
+
+pub pure fn identity<T>(value: T) -> T { return value }
+
+pub readonly fn classify(outcome: DispatchOutcome) -> str {
+    return match outcome {
+        Assigned { mission: _mission, asset: _asset } => { "assigned" }
+        Deferred { mission: _mission, reason } when len(reason) > 0 => { "deferred" }
+        Deferred { mission: _mission, reason: _reason } => { "invalid-defer" }
+        Rejected { mission: _mission, code } => { f"rejected:{code}" }
+    }
+}
+
+fn recursive_sum(items: list<int>, index: int) -> int {
+    if index >= len(items) { return 0 }
+    return items[index] + recursive_sum(items, index + 1)
+}
+
+fn try_value(result: Result<int, str>) -> Result<int, str> {
+    let value: int = result?
+    return Result::Ok { value: value }
+}
+
+pub fn exercise_values() -> nil {
+    let tuple: Pair<int> = (3, 7)
+    let (left, right): (int, int) = tuple
+    let mut numbers: list<int> = [left, right, 11]
+    numbers[1] = 9
+    numbers = numbers |> push(13) |> filter(fn(value: int) -> bool { return value % 2 == 1 })
+    let enumerated: list<(int, int)> = enumerate(numbers)
+    let rebuilt: list<int> = enumerated
+        |> map(fn([index, value]: (int, int)) -> int { return value + index - index })
+    assert_eq(rebuilt, [3, 9, 11, 13])
+    assert(recursive_sum(rebuilt, 0) == 36, "recursive calls preserve values")
+
+    let mut buckets: map<str, list<int>> = {}
+    buckets["odd"] << 3
+    buckets["odd"] << 9
+    let labels: map<str, str> = { "grid": GRID_NAME, "mode": "production" }
+    assert((keys(labels) |> sort) == ["grid", "mode"], "deterministic map keys")
+    assert(buckets["odd"] == [3, 9], "bucket-fill append")
+
+    let text: str = "  alpha,beta,gamma  " |> trim |> split(",") |> join("|")
+    assert(text == "alpha|beta|gamma", "string pipeline")
+    assert(("sovereign" |> to_upper |> to_lower) == "sovereign", "string transforms")
+    assert(starts_with(replace(text, "alpha", "A"), "A"), "replace and prefix")
+    assert(ends_with(text, "gamma"), "suffix")
+
+    let maybe: Option<int> = find(numbers, fn(value: int) -> bool { return value == 11 })
+    let Some { value: found } = maybe else { assert(false, "find must produce Some") return }
+    assert(found == 11, "let-else destructures Option")
+    let result: Result<int, str> = try_value(Result::Ok { value: found })
+    let unwrapped: int = result |> unwrap
+    assert(unwrapped == 11, "try propagation")
+
+    let outcome: DispatchOutcome = DispatchOutcome::Assigned {
+        mission: MissionId(u64(9)),
+        asset: AssetId(u64(4)),
+    }
+    assert(outcome is Assigned, "sum variant identity")
+    assert(classify(outcome) == "assigned", "match expression")
+    let grade: str = if left < right { "ordered" } else { "reversed" }
+    assert(grade == "ordered", "if expression")
+
+    let mut visited: int = 0
+    for value in numbers {
+        if value == 9 { continue }
+        visited = visited + 1
+        if visited == 3 { break }
+    }
+    let mut countdown: int = 3
+    while countdown > 0 { countdown = countdown - 1 }
+    assert(visited == 3 and countdown == 0, "loop control")
+
+    let arithmetic: int = ((5 + 3) * 2 - 4) / 2
+    let bits: int = ((12 & 10) | 1) ^ 2
+    assert(arithmetic == 6 and bits == 11, "numeric and bitwise operators")
+    assert((1 << 4) == 16 and (16 >> 2) == 4 and ~0 == -1, "shift and bit-not")
+    assert(not false and true or false, "logical operators")
+    assert(identity(f"{GRID_NAME}:{typeof(labels)}") == "Sovereign Grid:map", "generic f-string")
+}

@@ -124,15 +124,9 @@ fn reserved_keyword_as_identifier_reports_actionable_error() {
 }
 
 #[test]
-fn contextual_entity_keyword_is_allowed_as_identifier() {
-    let prog = parse_source("fn main() -> nil { let entity = 1 return entity }");
-    match &prog.declarations[0] {
-        Decl::Fn(f) => {
-            assert_eq!(f.name, "main");
-            assert!(matches!(f.body.stmts[0], Stmt::Let(_)));
-        }
-        other => panic!("Expected function declaration, got {:?}", other),
-    }
+fn entity_keyword_cannot_create_an_unreferenceable_binding() {
+    let error = parse_source_err("fn main() -> nil { let entity = 1 return entity }");
+    assert!(error.message.contains("reserved keyword 'entity'"));
 }
 
 #[test]

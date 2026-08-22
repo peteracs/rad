@@ -34,6 +34,11 @@ fn check_expr_control_and_functions(&mut self, expr: &Expr) -> Ty {
                 }
             }
             Expr::QueryExpr(q, span) => {
+                let canonical_components = q
+                    .components
+                    .iter()
+                    .map(|(component, _)| self.resolve_canonical_name(component))
+                    .collect::<Vec<_>>();
                 for (comp, is_mut) in &q.components {
                     if *is_mut {
                         self.error(
@@ -42,7 +47,8 @@ fn check_expr_control_and_functions(&mut self, expr: &Expr) -> Ty {
                             Some("Use `for h in query { mut Health } { ... }`".to_string()),
                         );
                     }
-                    if let Some(ct) = self.components.get(comp) {
+                    let resolved = self.resolve_canonical_name(comp);
+                    if let Some(ct) = self.components.get(&resolved) {
                         if !ct.is_pub && is_cross_file(ct.file_id, span.file) {
                             self.error(
                                 span,
@@ -55,7 +61,8 @@ fn check_expr_control_and_functions(&mut self, expr: &Expr) -> Ty {
                     }
                 }
                 for sel in &q.select {
-                    if !q.components.iter().any(|(c, _)| c == sel) {
+                    let resolved = self.resolve_canonical_name(sel);
+                    if !canonical_components.contains(&resolved) {
                         self.error(
                             span,
                             format!("Selected component '{}' is not in the query set", sel),
@@ -65,10 +72,12 @@ fn check_expr_control_and_functions(&mut self, expr: &Expr) -> Ty {
                 }
                 if let Some(filter) = &q.filter {
                     self.push_scope();
-                    for (comp, _) in &q.components {
+                    for ((comp, _), resolved) in
+                        q.components.iter().zip(canonical_components.iter())
+                    {
                         self.define(
                             comp,
-                            Ty::Component(comp.clone()),
+                            Ty::Component(resolved.clone()),
                             false,
                             span.clone(),
                             false,
@@ -82,9 +91,15 @@ fn check_expr_control_and_functions(&mut self, expr: &Expr) -> Ty {
                 if q.select.is_empty() {
                     Ty::List(Box::new(Ty::EntityId))
                 } else if q.select.len() == 1 {
-                    Ty::List(Box::new(Ty::Component(q.select[0].clone())))
+                    Ty::List(Box::new(Ty::Component(
+                        self.resolve_canonical_name(&q.select[0]),
+                    )))
                 } else {
-                    let tys = q.select.iter().map(|s| Ty::Component(s.clone())).collect();
+                    let tys = q
+                        .select
+                        .iter()
+                        .map(|selected| Ty::Component(self.resolve_canonical_name(selected)))
+                        .collect();
                     Ty::List(Box::new(Ty::Tuple(tys)))
                 }
             }

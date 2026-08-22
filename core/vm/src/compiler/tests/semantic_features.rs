@@ -205,6 +205,31 @@ fn fork_wire_roundtrip_preserves_materialized_view_history_and_future_maintenanc
 }
 
 #[test]
+fn world_save_load_reinstalls_compiled_materialized_views() {
+    let output = run_source(
+        r#"
+            component Product { id: int = 0 }
+            component Inventory { available: int = 0 }
+            materialized view SellableProducts {
+                depends [Product, Inventory]
+                key Product.id
+                where Inventory.available > 0
+            }
+
+            let product = spawn(Product { id: 42 }, Inventory { available: 0 })
+            let saved = save_world()
+            load_world(saved)
+            assert(lookup(SellableProducts, 42) == None, "loaded exclusion is derived")
+            print(why_not_in_view(SellableProducts, product))
+            set(product, Inventory { available: 3 })
+            assert(lookup(SellableProducts, 42) == Some(product), "loaded view stays incremental")
+            "#,
+    );
+    assert_eq!(output.len(), 1, "unexpected output: {output:?}");
+    assert!(output[0].contains("Inventory.available > 0"), "{}", output[0]);
+}
+
+#[test]
 fn ordered_composite_keys_are_lexicographic_and_native_signed_order_is_numeric() {
     let output = run_source(
         r#"
@@ -400,6 +425,40 @@ fn stateful_models_are_deterministic_and_shrink_failures() {
     assert_eq!(success.len(), 1);
     assert!(success[0].error.is_none(), "{:?}", success[0]);
 
+    let event_observation = run_model(
+        r#"
+            component Pending {}
+            component Committed {}
+            event CommitObserved { subject: entity }
+            let subject = spawn(Pending {})
+            fn commit_once() -> nil {
+                if has(subject, Pending) {
+                    remove(subject, Pending)
+                    set(subject, Committed {})
+                    emit next CommitObserved { subject: subject }
+                    flush_events()
+                }
+            }
+            model EventTemporalObservation {
+                commands [commit_once]
+                invariant { return has(subject, Pending) != has(subject, Committed) }
+                temporal {
+                    eventually Committed,
+                    exactly_once CommitObserved,
+                }
+                runs 2
+                max_commands 4
+                seed 123
+            }
+            "#,
+    );
+    assert_eq!(event_observation.len(), 1);
+    assert!(
+        event_observation[0].error.is_none(),
+        "private model trials must observe their own event history: {:?}",
+        event_observation[0]
+    );
+
     let failure = run_model(
         r#"
             component Broken { count: int = 0 }
@@ -505,7 +564,7 @@ fn fused_kernel_work(rows: usize, budget: u64) -> Result<u64, String> {
     // test would then never be enforced and the test would pass vacuously.
     let compiled = crate::test_support::compile_checked_source(
         &source,
-        crate::parser::ParserOptions::default(),
+        crate::parser::ParserOptions,
         crate::checker::CheckerOptions::default(),
     )?;
     let mut vm = VM::new_with_seed(1);

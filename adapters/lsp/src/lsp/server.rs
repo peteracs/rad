@@ -116,7 +116,10 @@ impl LanguageServer for LspBackend {
         }]))
     }
 
-    #[allow(deprecated)]
+    #[expect(
+        deprecated,
+        reason = "lsp-types 0.94 requires the retired wire field in every DocumentSymbol literal"
+    )]
     async fn document_symbol(
         &self,
         params: DocumentSymbolParams,
@@ -216,9 +219,7 @@ impl LanguageServer for LspBackend {
             }
         }
 
-        let parser_options = ParserOptions {
-            compat_v0_5_dx: false,
-        };
+        let parser_options = ParserOptions;
         if let Ok(r) = load_program_with_overrides(&entry_path, parser_options, &overrides) {
             let semantic = editor_semantics(&r);
 
@@ -418,9 +419,7 @@ impl LanguageServer for LspBackend {
             }
         }
 
-        let parser_options = ParserOptions {
-            compat_v0_5_dx: false,
-        };
+        let parser_options = ParserOptions;
         if let Ok(r) = load_program_with_overrides(&entry_path, parser_options, &overrides) {
             if let Some(path) = system_ref_path_at(line_text, char_col) {
                 let q = simulate_syntax::system_ref_qualified_string(&path);
@@ -600,9 +599,7 @@ impl LanguageServer for LspBackend {
             }
         }
 
-        let parser_options = ParserOptions {
-            compat_v0_5_dx: false,
-        };
+        let parser_options = ParserOptions;
         let mut items = vec![];
 
         if let Ok(r) = load_program_with_overrides(&entry_path, parser_options, &overrides) {
@@ -657,7 +654,7 @@ impl LanguageServer for LspBackend {
                         }
                     }
                 } else {
-                    // Fallback: all fields
+                    // No component filter was supplied, so include all fields.
                     let mut seen = std::collections::HashSet::new();
                     for (_, comp) in semantic.components() {
                         for (fname, ftype) in &comp.fields {

@@ -844,7 +844,7 @@
     }
 
     #[test]
-    fn compat_shorthand_state_ref_resolves_to_zero_field_sum_variant() {
+    fn canonical_shorthand_state_ref_resolves_to_zero_field_sum_variant() {
         let program = Program {
             declarations: vec![
                 Decl::Type(TypeDeclNode {
@@ -896,14 +896,12 @@
 
         let mut checker = Checker::new_with_options(CheckerOptions {
             features: vec![],
-            compat_v0_5_dx: true,
-            warn_compat: true,
             strict_types: false,
         });
         let errors = checker.check(&program);
         assert!(
             errors.is_empty(),
-            "compat shorthand should type-check, got: {:?}",
+            "canonical shorthand should type-check, got: {:?}",
             errors
         );
     }

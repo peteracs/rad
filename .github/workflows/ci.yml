@@ -9,6 +9,9 @@ on:
 permissions:
   contents: read
 
+env:
+  CARGO_BUILD_JOBS: 1
+
 jobs:
   dependency-audit:
     runs-on: ubuntu-latest
@@ -61,6 +64,13 @@ jobs:
         run: cargo check --workspace --all-targets
       - name: cargo test
         run: cargo test -p rad-vm --verbose
+      - name: Compiler-owned language and host API coverage
+        run: |
+          cargo build -p rad-cli -j 1
+          python3 tooling/language_surface.py --check
+          python3 tooling/host_api_surface.py --check
+          python3 tooling/generate_language_coverage.py --rad target/debug/rad --check
+          python3 tooling/check_language_surface.py --rad target/debug/rad
       - name: Playground smoke (WASM compile_and_run)
         run: cargo test -p rad-vm compile_and_run_playground --verbose
       - name: Project-owned native math kernels
@@ -229,10 +239,44 @@ jobs:
           python-version: '3.12'
       - name: Documentation links resolve
         run: python tooling/scripts/check_doc_links.py
+      - name: Executable normative RAD examples
+        run: |
+          cargo build -p rad-cli -p rad-ffi-worker -j 1
+          python tooling/check_rad_doc_examples.py --rad target/debug/rad
+      - name: Rust API documentation
+        env:
+          RUSTDOCFLAGS: -D warnings
+        run: cargo doc --workspace --no-deps -j 1
       - name: Install mdBook
         run: cargo install mdbook --version 0.5.2 --locked
       - name: Build documentation
         run: mdbook build docs
+
+  sovereign-grid:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+        with:
+          toolchain: stable
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: '3.12'
+      - name: Build release runtime and isolated FFI worker
+        run: cargo build -p rad-cli -p rad-ffi-worker --release -j 1
+      - name: Full cumulative language acceptance
+        run: |
+          python tooling/accept_sovereign_grid.py \
+            --rad target/release/rad \
+            --benchmark-samples 30 \
+            --model-runs 10000
+      - name: Upload source-bound acceptance report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: sovereign-grid-acceptance
+          path: target/sovereign-grid-acceptance
 
   # The edge proxy sets its own `[workspace]`, so `cargo check --workspace` at
   # the repo root does not reach it. Gate it separately.

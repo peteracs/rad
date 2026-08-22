@@ -103,7 +103,7 @@ systems, phases, components, resources (including `transient resource`),
 structs, sum/native/opaque types, state machines, events, ownership policies,
 and materialized views. Type and schedule references inside the module are
 resolved in that module's canonical namespace: `Color::Red` still means the
-module's own `Color`, and `phase Frame [Tick]` still schedules its own `Tick`.
+module's own `Color`, and `phase Frame { Tick }` still schedules its own `Tick`.
 
 ```rad,ignore
 // types.rad
@@ -128,7 +128,7 @@ then schedule the phase through the alias:
 // simulation.rad
 pub resource Clock { frame: int = 0 }
 pub system Tick(clock: mut Clock) { clock.frame = clock.frame + 1 }
-pub phase Frame [Tick]
+pub phase Frame { Tick }
 
 // main.rad
 use "simulation.rad" as simulation

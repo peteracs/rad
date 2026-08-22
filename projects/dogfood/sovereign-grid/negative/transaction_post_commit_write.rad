@@ -1,0 +1,8 @@
+component Balance { value: int = 0 }
+transaction Capture(target: entity) {
+    requires has(target, Balance)
+    changes_only [Balance]
+    update(target, Balance) { value = 1 }
+    ensures has(target, Balance)
+    post_commit { update(target, Balance) { value = 2 } }
+}

@@ -155,7 +155,7 @@ impl VM {
                 if let Some(view_name) = args[0].as_str() {
                     if let Some(dependencies) = self.world.materialized_view_dependencies(view_name)
                     {
-                        for dependency in &dependencies {
+                        for dependency in dependencies {
                             self.sandbox_check_read(dependency)?;
                         }
                         let ids = self
@@ -199,8 +199,7 @@ impl VM {
         }
         let view_name = args[0]
             .as_str()
-            .ok_or_else(|| "visit_view() first argument must be a materialized view".to_string())?
-            .to_string();
+            .ok_or_else(|| "visit_view() first argument must be a materialized view".to_string())?;
         let callback = args[1];
         if callback.as_fn().is_none() {
             return Err(
@@ -210,29 +209,29 @@ impl VM {
         }
         let dependencies = self
             .world
-            .materialized_view_dependencies(&view_name)
+            .materialized_view_dependencies(view_name)
             .ok_or_else(|| format!("Unknown materialized view '{view_name}'"))?;
-        for dependency in &dependencies {
+        for dependency in dependencies {
             self.sandbox_check_read(dependency)?;
         }
         let stable_revision = self
             .world
-            .materialized_view_revision(&view_name)
+            .materialized_view_revision(view_name)
             .expect("view disappeared after dependency lookup");
         let mut current = self
             .world
-            .materialized_view_first_entity(&view_name)
+            .materialized_view_first_entity(view_name)
             .expect("view disappeared after dependency lookup");
         while let Some(entity) = current {
             let next = self
                 .world
-                .materialized_view_next_entity(&view_name, entity)
+                .materialized_view_next_entity(view_name, entity)
                 .expect("view disappeared during traversal");
             let argument = Value::from_entity_id(&mut self.gc, entity);
             self.call_named_unary(callback, argument)?;
             let revision = self
                 .world
-                .materialized_view_revision(&view_name)
+                .materialized_view_revision(view_name)
                 .expect("view disappeared during traversal");
             if revision != stable_revision {
                 return Err(format!(

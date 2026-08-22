@@ -25,7 +25,7 @@ system Physics(pos: mut Position, vel: Velocity) {
 }
 ```
 
-The signature is the contract. `Physics` declares that it reads `Velocity` and writes `Position`, so the blast radius of a change to it is written at the top of the block instead of discovered by grepping. That declaration is load-bearing: the compiler enforces it transitively, and the scheduler uses the same inferred access set to run non-conflicting systems in parallel (see [System scheduling](../reference/spec.md#72-system-scheduling)).
+The signature is the contract. `Physics` declares that it reads `Velocity` and writes `Position`, so the blast radius of a change to it is written at the top of the block instead of discovered by grepping. That declaration is load-bearing: the compiler enforces it transitively, and the scheduler uses the same inferred access set to run non-conflicting systems in parallel (see [System scheduling](../reference/spec.md#execution-systems)).
 
 A named parameter has two jobs: it contributes to the entity query or resource injection, and it grants authority. When authority must not affect iteration, add query-neutral permissions: `reads Type`, `writes Type`, `emits Event`, `io true`, or `async true`. The checker follows ordinary/imported helpers, closures, callbacks, transitions, resources, and synchronous handler chains; an undeclared effect or unbounded function value is a compile error with a concrete authority path. Each system's higher-order calls are specialized for their statically resolved callback arguments. Queued handlers are separate execution boundaries, while an explicit `flush_events()` brings their effects into the caller's synchronous bound. Use `rad effects`, `rad writers`, `rad readers`, and `rad path` to inspect the graph.
 
@@ -81,7 +81,7 @@ on Hit(e) {
 
 Adding a particle effect on hit? Add a handler. Removing the sound system? Remove a handler. Nothing else changes. The blast radius is zero.
 
-**In Rad:** `emit` and `on` are keywords. Events are declared at the top level and handlers are registered automatically. Event queues are **double-buffered**: `emit` appends to the *next* flush's queue, and `flush_events()` swaps the queues before it starts dispatching. An event emitted by a handler is therefore never delivered during the flush that is already running (see [Event ordering](../reference/spec.md#73-event-ordering)).
+**In Rad:** `emit` and `on` are keywords. Events are declared at the top level and handlers are registered automatically. Event queues are **double-buffered**: `emit` appends to the *next* flush's queue, and `flush_events()` swaps the queues before it starts dispatching. An event emitted by a handler is therefore never delivered during the flush that is already running (see [Event ordering](../reference/spec.md#execution-events)).
 
 Be precise about what that does and doesn't buy you.
 

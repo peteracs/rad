@@ -22,28 +22,30 @@ This log captures issues observed while running `tests/conformance/push_limits_e
 - **Workaround**:
   - Use `on e1 -> B on e2 -> C` inside the state arm.
 
-### BL-002: v0.5 DX rest-binding flag diagnostic mismatch
+### BL-002: Rest-pattern diagnostics
 
 - **Status**: Resolved
-- **File**: `tests/conformance/v05_dx_match_rest_requires_flag.rad`
+- **Files**: `tests/conformance/match_rest.rad` and
+  `tests/conformance/match_rest_unknown_binding.rad`
 - **Observed**:
-  - The expected `E2503` flag-gate diagnostic is not emitted.
-  - Parser/checker reports follow-on errors (`Unknown component type 'Some'`, etc.).
+  - Rest patterns and their semantic diagnostics were split across parser modes.
 - **Expected**:
-  - A direct diagnostic that `..` in match patterns requires `--compat-v0.5-dx`.
+  - `..` is canonical syntax and an unknown field reaches `E2504`.
 - **Resolution**:
-  - The default parser and checker options were updated to correctly disable `compat_v0_5_dx` by default, enforcing the opt-in requirement.
+  - Parser modes were removed. Positive execution and exact negative diagnostics
+    are permanent conformance fixtures.
 
-### BL-003: v0.5 zero-field shorthand flag-gate mismatch
+### BL-003: Zero-field shorthand semantics
 
 - **Status**: Resolved
-- **File**: `tests/conformance/v05_dx_zero_field_shorthand_requires_flag.rad`
+- **File**: `tests/conformance/sum_type_zero_field_shorthand.rad`
 - **Observed**:
-  - Test expects non-zero exit without flag, but execution succeeds.
+  - The same source could be accepted or rejected by checker configuration.
 - **Expected**:
-  - Consistent flag-gated behavior for zero-field shorthand.
+  - Zero-field shorthand is canonical in every compiler entry point.
 - **Resolution**:
-  - The checker's resolution for `Expr::StateRef` was updated to strictly gate zero-field sum variant shorthand behind the `--compat-v0.5-dx` flag, emitting `E2502` when the flag is missing.
+  - Configuration-dependent parsing and checking were removed. Braced syntax
+    explicitly selects a sum variant when a state-machine name is ambiguous.
 
 ## What passed
 

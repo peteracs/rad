@@ -541,13 +541,14 @@ mod tests {
         component Gold { amount: 50 }
         event Hit { amount }
         on Hit(e) {
+            let hero = require_entity("hero")
             let h = get(hero, Health) |> unwrap
             set(hero, Health { hp: h.hp - e.amount })
             if h.hp - e.amount < 80 {
                 set(hero, Gold { amount: 0 })   // <- the bug
             }
         }
-        let hero = spawn("hero", Health { hp: 100 }, Gold { amount: 50 })
+        spawn("hero", Health { hp: 100 }, Gold { amount: 50 })
         for _i in range(0, 4) {
             emit Hit { amount: 10 }
             flush_events()
@@ -555,8 +556,8 @@ mod tests {
     "#;
 
     fn record(src: &str) -> String {
-        let result = crate::test_support::compile_source(src, ParserOptions::default())
-            .expect("parse and compile");
+        let result =
+            crate::test_support::compile_source(src, ParserOptions).expect("parse and compile");
         let mut vm = VM::new();
         vm.suppress_output();
         vm.enable_recording(src);
@@ -656,7 +657,7 @@ mod tests {
             let mut replayer = TraceReplayer::parse(&trace, false).expect("parse");
             replayer.stop_at(k);
             let src = replayer.source().to_string();
-            let result = crate::test_support::compile_source(&src, ParserOptions::default())
+            let result = crate::test_support::compile_source(&src, ParserOptions)
                 .expect("parse and compile");
             let mut vm = VM::new();
             vm.suppress_output();

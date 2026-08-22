@@ -1,0 +1,38 @@
+use "../schema.rad"
+use "../owners/grid_owner.rad"
+use "../owners/grid_owner.rad" as owner
+use "../systems/control_loop.rad"
+use "../language/values.rad" as language
+use "../language/surface.rad" as syntax
+use "../scenarios/production.rad"
+
+test "isolated production workflow is atomic and explainable" {
+    language.exercise_values()
+    syntax.exercise_surface()
+    seed_grid(64)
+    let mission: entity = run_incident()
+    assert(has(mission, owner.CompletedMission), "transaction reached its terminal state")
+    assert(not has(mission, owner.ActiveMission), "materialized active membership was removed")
+    assert(contains(why_removed(mission, owner.ActiveMission), "CompleteMission"), "removal retained its cause")
+}
+
+test "scoped test capability can repair an owned fixture" writes owned [AssetCapacity] {
+    let asset: entity = owner.publish_asset(AssetId(u64(91001)), ZoneId(u16(7)), u16(3), 4)
+    let capacity: AssetCapacity = require(asset, AssetCapacity)
+    set(asset, AssetCapacity { available: capacity.available + 1, reserved: capacity.reserved })
+    assert(require(asset, AssetCapacity).available == 5, "test-only capability authorized the direct repair")
+    assert(name_of(asset) == "asset-u64(91001)", "native identity remains tagged in formatted names")
+}
+
+// This suite intentionally consumes the world left by the immediately
+// preceding test. A plain `test` here would be restored to the file fixture
+// and therefore could not observe the tagged native-id name.
+shared test "shared suite observes only explicitly retained fixture state" {
+    let asset: entity = require_entity("asset-u64(91001)")
+    assert(require(asset, AssetCapacity).available == 5, "explicit shared-world dependency is visible")
+}
+
+test "property generator preserves native-width identity" for raw in range(1, 33) {
+    let id: AssetId = AssetId(u64(raw))
+    assert(u64(id) == u64(raw), "opaque construction preserves every generated value")
+}

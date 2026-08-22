@@ -298,7 +298,7 @@ requires one exact settlement-region state at every control-flow join. Control
 flow cannot enter or leave a settlement region, nest `BeginSettlement`, reach
 an unmatched `EndSettlement`, or terminate while a settlement is active. The
 verified proof is cached on the immutable chunk; the unchecked loader exists
-only in VM tests. Mutable `ChunkBuilder` values never carry a proof. Verification
+only in VM tests. Mutable `Chunk` values never carry a proof. Verification
 consumes a builder and produces a private-content `SealedChunk`, so cloning a
 loaded artifact and returning to construction form discards the certificate and
 requires verification again. Public raw-builder ingress accepts immediate

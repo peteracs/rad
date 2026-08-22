@@ -18,7 +18,7 @@ test "decision stays pinned to its starting generation" {
     let started: u32 = res(ActivePluginGeneration).generation
     let output: RiskOutput = score_reference(request)
     decisions.activate_generation(u32(18), "riskbridge-model-v18")
-    decisions.CommitDecision(customer, request, output, started, u8(1), u64(5000))
+    decisions.CommitDecision(spawn(), customer, request, output, started, u8(1), u64(5000))
     let attempt: entity = decisions.attempt_by_transaction(request.transaction)
     assert(require(attempt, PluginGeneration).generation == u32(17), "in-flight decision remains v17")
     assert(res(ActivePluginGeneration).generation == u32(18), "future decisions observe v18")

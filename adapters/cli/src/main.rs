@@ -51,6 +51,10 @@ enum OperationalQuery {
 
 #[derive(Debug)]
 enum CliCommand {
+    Surface {
+        filepath: String,
+        json: bool,
+    },
     Authority {
         query: AuthorityQuery,
         filepath: String,
@@ -86,14 +90,15 @@ enum CliCommand {
     Run {
         filepath: String,
         skip_check: bool,
-        compat_v0_5_dx: bool,
         deny_warnings: bool,
-        warn_compat: bool,
         strict_types: bool,
         write_lock: bool,
         profile_copies: bool,
         serial_schedule: bool,
         features: Vec<String>,
+        relation_schema: Option<String>,
+        relation_module: String,
+        experimental_relations: bool,
         record: Option<String>,
         program_args: Vec<String>,
     },

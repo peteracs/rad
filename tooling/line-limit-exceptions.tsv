@@ -12,3 +12,6 @@ experiments/c-backend/src/checker.rad	Bootstrap checker phases share private ECS
 projects/moba/kit/treeline.rad	Frozen single-file whole-game parity fixture used unchanged across VM and C-backend conformance runs.
 examples/orianna_spell_runtime.rad	Standalone copy-and-run spell-runtime example is intentionally self-contained as one distributable teaching artifact.
 docs/rfcs/0002-candidate-constraints.md	Accepted normative RFC is an immutable review record; fragmenting it would degrade source review and archival links.
+docs/language-surface.json	Generated compiler-surface inventory is one source-digested machine artifact consumed atomically by coverage gates.
+docs/src/reference/generated/builtin-api.md	Generated complete builtin catalog is one runtime-owned API projection; the separate category index provides human navigation.
+projects/dogfood/sovereign-grid/coverage.toml	Generated one-row-per-surface acceptance manifest is verified atomically against syntax, API, docs, and executable evidence.

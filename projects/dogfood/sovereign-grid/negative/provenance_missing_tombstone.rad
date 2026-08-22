@@ -1,0 +1,4 @@
+component Published {}
+let item = spawn(Published {})
+let explanation = why_removed(item, Published)
+assert(contains(explanation, "removed"), "expected removal tombstone")

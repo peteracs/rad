@@ -2,6 +2,10 @@
 // phase-scoped emits, and the handler dispatch that drains them.
 
 impl VM {
+    pub(crate) fn captures_event_log(&self) -> bool {
+        !self.is_worker && (self.in_simulation_fork == 0 || self.capture_isolated_event_log)
+    }
+
     pub(crate) fn record_event_log(&mut self, entry: crate::vm::EventLogEntry) {
         self.event_log.push_back(entry);
         if self.event_log.len() > EVENT_LOG_CAP {
@@ -187,7 +191,7 @@ impl VM {
                 self.current_cause.clone(),
             )
         };
-        if self.in_simulation_fork == 0 {
+        if self.captures_event_log() {
             self.record_event_log(crate::vm::EventLogEntry {
                 tick: self.causality_frame,
                 event_name: event_name.clone(),

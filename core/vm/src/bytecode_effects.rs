@@ -111,18 +111,16 @@ fn opcode_effect(op: Op) -> OpcodeEffect {
         EndPostCommit => OpcodeEffect::EndPostCommit,
 
         Const | Pop | PopN | Dup | Add | Sub | Mul | Div | Mod | Neg | Eq | Neq | Lt | Gt | Lte
-        | Gte | Not | And | Or | GetGlobal | GetLocal | GetLocal2 | GetUpvalue | Jump
-        | JumpIfFalse | JumpBack | MakeList | MakeComp | GetField | SetField | GetIndex
-        | SetIndex | EcsGet | EcsReadField | EcsHas | EcsQuery | MakeState | MakeVariant
-        | MatchState | IsVariant | Pipe | Len | TypeOf | Break | Closure | MakeMap
-        | GetFieldSlot | SetFieldSlot | MakeCompSlot | QueryFilter | QueryProject | MakeTuple
-        | Unpack | GetIter | VecAdd | VecSub | VecMul | VecDiv | VecMod | VecNeg | VecNot
-        | VecEq | VecNeq | VecLt | VecGt | VecLte | VecGte | VecFilter | VecSelect | LoadColumn
-        | VecBroadcast | PopCheckErr | LogicalLoad | MaterializeAoS | ConcatN | BitAnd | BitOr
-        | BitXor | ListGetLocal | ListGetLL | EqJF | NeqJF | LtJF | LteJF | GtJF | GteJF
-        | EqConst | NeqConst | EqConstJF | NeqConstJF | ConstArith | Shl | Shr | BitNot => {
-            OpcodeEffect::Pure
-        }
+        | Gte | Not | GetGlobal | GetLocal | GetLocal2 | GetUpvalue | Jump | JumpIfFalse
+        | JumpBack | MakeList | MakeComp | GetField | SetField | GetIndex | SetIndex | EcsGet
+        | EcsReadField | EcsHas | EcsQuery | MakeState | MakeVariant | MatchState | IsVariant
+        | Len | TypeOf | Closure | MakeMap | GetFieldSlot | SetFieldSlot | MakeCompSlot
+        | QueryFilter | QueryProject | MakeTuple | Unpack | GetIter | VecAdd | VecSub | VecMul
+        | VecDiv | VecMod | VecNeg | VecNot | VecEq | VecNeq | VecLt | VecGt | VecLte | VecGte
+        | VecFilter | VecSelect | LoadColumn | VecBroadcast | PopCheckErr | LogicalLoad
+        | MaterializeAoS | ConcatN | BitAnd | BitOr | BitXor | ListGetLocal | ListGetLL | EqJF
+        | NeqJF | LtJF | LteJF | GtJF | GteJF | EqConst | NeqConst | EqConstJF | NeqConstJF
+        | ConstArith | Shl | Shr | BitNot => OpcodeEffect::Pure,
     }
 }
 
@@ -172,7 +170,12 @@ pub(crate) fn opcode_policy(boundary: EffectBoundary, op: Op) -> OpcodePolicy {
             ))
         }
 
-        (Transaction, TransactionalWorldMutation | TransactionProgress) => OpcodePolicy::Allow,
+        // A state-machine transition computes the next nominal state. It does
+        // not publish an event or mutate the world until the caller stages the
+        // returned value with `set`, so it belongs inside the atomic patch.
+        (Transaction, TransactionalWorldMutation | TransactionProgress | StateTransition) => {
+            OpcodePolicy::Allow
+        }
         (Transaction, FrameExit) => OpcodePolicy::CheckOwnerFrameExit,
         (Transaction, BeginTransaction) => {
             OpcodePolicy::Reject(BoundaryViolation::NestedTransaction)
@@ -184,9 +187,7 @@ pub(crate) fn opcode_policy(boundary: EffectBoundary, op: Op) -> OpcodePolicy {
             OpcodePolicy::Reject(BoundaryViolation::GlobalOrCapturedState)
         }
         (Transaction, AsyncTaskState) => OpcodePolicy::Reject(BoundaryViolation::AsyncBeforeCommit),
-        (Transaction, EventEmission | StateTransition) => {
-            OpcodePolicy::Reject(BoundaryViolation::EventBeforeCommit)
-        }
+        (Transaction, EventEmission) => OpcodePolicy::Reject(BoundaryViolation::EventBeforeCommit),
         (Transaction, SystemScheduling) => {
             OpcodePolicy::Reject(BoundaryViolation::ScheduleBeforeCommit)
         }
@@ -260,6 +261,7 @@ pub(crate) fn forbidden_builtin_effect(
                     | Builtin::Spawn
                     | Builtin::Remove
                     | Builtin::Despawn
+                    | Builtin::Transition
             ) {
                 return None;
             }
@@ -314,7 +316,15 @@ mod tests {
     #[test]
     fn builtin_profiles_share_one_effect_owner() {
         assert!(forbidden_builtin_effect(EffectBoundary::Transaction, Builtin::Set).is_none());
+        assert!(
+            forbidden_builtin_effect(EffectBoundary::Transaction, Builtin::Transition).is_none(),
+            "transition computes staged state and does not emit before commit"
+        );
         assert!(forbidden_builtin_effect(EffectBoundary::PostCommit, Builtin::Set).is_some());
+        assert!(
+            forbidden_builtin_effect(EffectBoundary::PostCommit, Builtin::Transition).is_some(),
+            "post_commit cannot manufacture a new authoritative state patch"
+        );
         assert!(
             forbidden_builtin_effect(EffectBoundary::Settlement, Builtin::InsertFact).is_none()
         );

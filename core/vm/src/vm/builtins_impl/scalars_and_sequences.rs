@@ -684,8 +684,8 @@ fn numeric_fold(
     }
 }
 
-/// `get_or(coll, key, default)` — map lookup or list index with a fallback
-/// instead of nil/bounds-error. The shape of every cooldown/stat table read.
+/// `get_or(coll, key, default)` — map lookup or list index with an explicit
+/// default instead of nil/bounds-error. The shape of cooldown/stat table reads.
 pub(crate) fn bi_get_or(_gc: &mut GcHeap, args: Vec<Value>) -> Result<Value, String> {
     if args.len() != 3 {
         return Err("get_or() requires 3 arguments (collection, key, default)".into());

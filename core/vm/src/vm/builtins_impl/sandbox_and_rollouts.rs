@@ -259,7 +259,7 @@ impl VM {
     fn compile_sandbox_source(source: &str) -> Result<crate::compiler::CompileResult, String> {
         let analyzed = crate::pipeline::analyze_source(
             source,
-            crate::parser::ParserOptions::default(),
+            crate::parser::ParserOptions,
             &std::collections::HashMap::new(),
             crate::checker::CheckerOptions::default(),
         );

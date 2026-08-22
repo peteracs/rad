@@ -11,7 +11,7 @@ mod escape_tests {
 
     /// Compile and run trusted host source, returning the live VM.
     fn host_vm(src: &str) -> VM {
-        let result = crate::test_support::compile_source(src, ParserOptions::default())
+        let result = crate::test_support::compile_source(src, ParserOptions)
             .expect("host parse and compile");
         let mut vm = VM::new();
         vm.suppress_output();
@@ -26,7 +26,7 @@ mod escape_tests {
     fn host_vm_checked(src: &str) -> VM {
         let result = crate::test_support::compile_checked_source(
             src,
-            ParserOptions::default(),
+            ParserOptions,
             crate::checker::CheckerOptions::default(),
         )
         .expect("host parse, check, and compile");

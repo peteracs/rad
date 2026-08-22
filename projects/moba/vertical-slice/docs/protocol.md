@@ -16,7 +16,7 @@ Single source of truth:
 
 | Side | File |
 |---|---|
-| RAD authority | `server/src/protocol/match_protocol.rad` |
+| RAD authority | `server/src/transport/match_protocol.rad` |
 | Browser client | `client/src/transport/matchProtocol.ts` |
 | Edge proxy | no grammar; forwards bytes only |
 

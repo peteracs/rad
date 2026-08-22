@@ -1,0 +1,60 @@
+component SurfaceCounter { value: int = 0 }
+resource SurfacePolicy { multiplier: int = 1 }
+
+system Increment(counter: mut SurfaceCounter) {
+    counter.value = counter.value + 1
+}
+
+fn main() -> nil {
+    let subject: entity = spawn("surface-counter", SurfaceCounter { value: 0 })
+    let base: world_fork = fork()
+    let start_clock: float = clock()
+
+    let one_tick: world_fork = simulate(base, [system::Increment], 1)
+    assert(unwrap(peek(one_tick, subject, SurfaceCounter)).value == 1, "peek simulated component")
+    assert(clock() >= start_clock, "logical clock is monotonic")
+    assert(fork_seed(base) >= 0, "fork_seed")
+
+    let with_policy: world_fork = fork_with(base, SurfacePolicy { multiplier: 3 })
+    assert(unwrap(peek_resource(with_policy, SurfacePolicy)).multiplier == 3, "peek_resource and fork_with")
+
+    let seeded: world_fork = simulate_seeded(base, [system::Increment], 2, 77)
+    assert(unwrap(peek(seeded, subject, SurfaceCounter)).value == 2, "simulate_seeded")
+    let parallel: list<world_fork> = simulate_par(base, [system::Increment], 3, 3, 101)
+    assert(len(parallel) == 3, "simulate_par")
+    for future in parallel {
+        assert(unwrap(peek(future, subject, SurfaceCounter)).value == 3, "parallel future result")
+    }
+    let many: list<world_fork> = simulate_many([base, base], [system::Increment], 2, 202)
+    assert(len(many) == 2, "simulate_many")
+
+    let changes: map<str, int> = diff(base, one_tick)
+    assert(len(changes) > 0, "diff")
+    assert_only_changed(base, one_tick, [SurfaceCounter])
+
+    let encoded: str = fork_to_bytes(one_tick)
+    let decoded: world_fork = unwrap(fork_from_bytes(encoded))
+    assert(world_digest(decoded) == world_digest(one_tick), "fork byte round trip")
+    let delta: str = fork_delta(base, one_tick)
+    let applied: world_fork = unwrap(fork_apply(base, delta))
+    assert(world_digest(applied) == world_digest(one_tick), "fork delta round trip")
+
+    let ours: world_fork = simulate(base, [system::Increment], 1)
+    let theirs: world_fork = fork_with(base, SurfacePolicy { multiplier: 9 })
+    let merged: world_fork = unwrap(merge_forks(base, ours, theirs))
+    assert(unwrap(peek(merged, subject, SurfaceCounter)).value == 1, "three-way merge component")
+    assert(unwrap(peek_resource(merged, SurfacePolicy)).multiplier == 9, "three-way merge resource")
+    let merged_explicit: world_fork = unwrap(merge_forks_with(base, ours, theirs, []))
+    assert(world_digest(merged_explicit) == world_digest(merged), "explicit empty resolutions")
+
+    let guest_source: str = read_file("projects/dogfood/sovereign-grid/builtins/sandbox_guest.rad")
+    let caps: str = f"""{ "read": [], "write": [], "fuel": 10000, "mem_bytes": 1048576 }"""
+    let sandboxed: world_fork = unwrap(sandbox_run(guest_source, base, caps, { "request": 42 }))
+    assert(world_digest(sandboxed) == world_digest(base), "sandbox cannot mutate without grants")
+    assert(sandbox_last_output() == { "request": 42 }, "sandbox output")
+    assert(sandbox_last_fuel() > 0, "sandbox fuel metering")
+
+    commit(one_tick)
+    assert(require(subject, SurfaceCounter).value == 1, "commit publishes fork atomically")
+    print("sovereign-grid: speculation persistence builtins complete")
+}

@@ -60,6 +60,16 @@ runner compares native, reference, and replay outcomes for one million
 adjudications and retains throughput, latency, memory, allocation, transaction,
 recording, and replay evidence under `artifacts/portfolio/`.
 
+The scale path has a bounded online window, not a million-row memory leak.
+`CommitDecision` writes into a fixed slot pool; after post-commit events flush,
+the owner-only `ArchiveDecision` transaction folds the transaction ID into
+`ArchivedDecisionReceipt` and removes every operational component before the
+slot is reused. Count and XOR receipt remain in the final world digest. Trace
+recording streams through zstd and faithful replay consumes one record at a
+time. The acceptance orchestrator fails any million-case mode above 512 MiB
+private memory. On the 2026-08-22 Windows release receipt, record/replay/reference
+peaked at 327,761,920 / 243,924,992 / 190,656,512 bytes respectively.
+
 Score: learnability 2, ownership clarity 2, error quality 2, observability 2,
 determinism 2, performance 2, testability 2, refactor safety 2, host safety 2,
 production realism 2 — **20/20**.

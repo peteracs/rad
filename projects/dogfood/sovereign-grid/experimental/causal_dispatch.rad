@@ -1,0 +1,54 @@
+// Experimental Causal Laws acceptance: independent from the stable workflow.
+
+component PlannedLoad { megawatts: int = 0 }
+component CapacityLimit { megawatts: int = 0 }
+
+intent LoadAdjustment {
+    key target: entity
+    source: str
+    megawatts: int
+}
+
+law ForecastDemand(target: entity, megawatts: int) {
+    propose LoadAdjustment {
+        target: target,
+        source: "forecast",
+        megawatts: megawatts,
+    }
+}
+
+law ReserveMargin(target: entity) {
+    propose LoadAdjustment {
+        target: target,
+        source: "reserve-margin",
+        megawatts: 5,
+    }
+}
+
+resolver ResolveLoad for LoadAdjustment(target, proposals) {
+    let current: PlannedLoad = require(target, PlannedLoad)
+    let adjustment: int = proposals
+        |> map(fn(proposal: any) -> int { return proposal.megawatts })
+        |> sum
+    next(target, PlannedLoad { megawatts: current.megawatts + adjustment })
+}
+
+constraint CapacityContract for PlannedLoad(subject, proposed)
+watches CapacityLimit
+{
+    require proposed.megawatts >= 0 else "grid.load.negative"
+    require proposed.megawatts <= candidate(subject, CapacityLimit).megawatts else "grid.capacity.exceeded"
+}
+
+entity causal_grid {
+    PlannedLoad { megawatts: 10 },
+    CapacityLimit { megawatts: 50 },
+}
+
+settle {
+    ForecastDemand(causal_grid, 20)
+    ReserveMargin(causal_grid)
+}
+
+assert(require(causal_grid, PlannedLoad).megawatts == 35, "settlement commits one valid candidate")
+print("sovereign-grid: causal settlement complete")

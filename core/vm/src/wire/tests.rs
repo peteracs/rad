@@ -60,6 +60,23 @@ mod tests {
         }
     }
 
+    #[test]
+    fn state_machine_value_roundtrips_canonically() {
+        let mut gc = GcHeap::new();
+        let value = Value::from_state(&mut gc, "MissionFlow".into(), "Reserved".into());
+        let mut encoded = String::new();
+        encode_value_into(&value, &mut encoded).unwrap();
+        assert_eq!(encoded, r#"{"q":["MissionFlow","Reserved"]}"#);
+
+        let json: serde_json::Value = serde_json::from_str(&encoded).unwrap();
+        let decoded = decode_value(&mut gc, &json).unwrap();
+        assert_eq!(decoded.as_state(), value.as_state());
+
+        let mut reencoded = String::new();
+        encode_value_into(&decoded, &mut reencoded).unwrap();
+        assert_eq!(reencoded, encoded);
+    }
+
     /// A4 BUG 04 (seq 51): f64::MAX used to be written as its 309-digit
     /// decimal expansion, which serde_json rejects on re-parse ("number out
     /// of range") — save_world() wrote a save that load_world() and

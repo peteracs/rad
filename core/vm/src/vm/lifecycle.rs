@@ -101,13 +101,13 @@ impl VM {
                 systems.insert(
                     sys.name,
                     SystemRuntimeInfo {
-                        params,
-                        resource_params,
+                        params: Arc::new(params),
+                        resource_params: Arc::new(resource_params),
                         chunk_id: sys.chunk_id,
-                        after: sys.after,
-                        before: sys.before,
+                        after: Arc::new(sys.after),
+                        before: Arc::new(sys.before),
                         serial_group: sys.serial_group,
-                        accum_resources,
+                        accum_resources: Arc::new(accum_resources),
                         instruction_budget: sys.instruction_budget,
                     },
                 );
@@ -274,11 +274,11 @@ impl VM {
         result
     }
 
-    /// Compatibility execution API. New embedders should prefer
-    /// [`Self::run_detailed`] so rejected settlements remain structured.
+    /// Convenience execution API that renders typed failures as messages.
+    /// Embedders needing stable codes use [`Self::run_detailed`].
     pub fn run(&mut self, chunk_id: usize) -> Result<(), String> {
         self.run_detailed(chunk_id)
-            .map_err(|failure| failure.render_compat())
+            .map_err(|failure| failure.render_message())
     }
 
     pub(crate) fn allocate_task_id(&mut self) -> u64 {

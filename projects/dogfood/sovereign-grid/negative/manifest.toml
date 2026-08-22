@@ -1,0 +1,200 @@
+format_version = 1
+
+[[case]]
+feature = "effects"
+file = "effects_hidden_write.rad"
+mode = "run"
+pattern = "writes \\[AuditRecord\\]"
+
+[[case]]
+feature = "effects"
+file = "effects_callback_io.rad"
+mode = "run"
+pattern = "performs IO"
+
+[[case]]
+feature = "effects"
+file = "effects_flush_handler.rad"
+mode = "run"
+pattern = "writes \\[AuditRecord\\]"
+
+[[case]]
+feature = "ownership"
+file = "ownership_direct_write.rad"
+mode = "run"
+pattern = "Ownership violation.*OwnedLedger"
+
+[[case]]
+feature = "ownership"
+file = "ownership_concealed_value.rad"
+mode = "run"
+pattern = "Ownership violation.*OwnedLedger"
+
+[[case]]
+feature = "ownership"
+file = "ownership_field_write.rad"
+mode = "run"
+pattern = "Ownership violation.*Profile\\.risk_limit"
+
+[[case]]
+feature = "transactions"
+file = "transaction_failed_ensure.rad"
+mode = "run"
+pattern = "failed postcondition ensures #1"
+
+[[case]]
+feature = "transactions"
+file = "transaction_hidden_change.rad"
+mode = "run"
+pattern = "writes outside changes_only \\[RiskState\\]"
+
+[[case]]
+feature = "transactions"
+file = "transaction_post_commit_write.rad"
+mode = "run"
+pattern = "post_commit Capture.*writes authoritative state \\[Balance\\]"
+
+[[case]]
+feature = "native_types"
+file = "native_wrong_nominal.rad"
+mode = "run"
+pattern = "expects MissionId, got AssetId"
+
+[[case]]
+feature = "native_types"
+file = "native_overflow.rad"
+mode = "run"
+pattern = "conversion overflow for u8"
+
+[[case]]
+feature = "native_types"
+file = "native_overlapping_flags.rad"
+mode = "run"
+pattern = "Overlapping mask"
+
+[[case]]
+feature = "materialized_views"
+file = "view_hidden_dependency.rad"
+mode = "run"
+pattern = "reads `Stock`.*absent from `depends`"
+
+[[case]]
+feature = "materialized_views"
+file = "view_manual_mutation.rad"
+mode = "run"
+pattern = "runtime-maintained and cannot be mutated directly"
+
+[[case]]
+feature = "materialized_views"
+file = "view_unknown_field.rad"
+mode = "run"
+pattern = "Unknown field.*Stock\\.missing"
+
+[[case]]
+feature = "ordered_indexes"
+file = "ordered_sort_scan.rad"
+mode = "run"
+pattern = "violates its no-full-scan contract"
+
+[[case]]
+feature = "ordered_indexes"
+file = "ordered_wrong_key_type.rad"
+mode = "run"
+pattern = "expects Priority, got Sequence"
+
+[[case]]
+feature = "ordered_indexes"
+file = "ordered_owner_bypass.rad"
+mode = "run"
+pattern = "Ownership violation.*QueuedItem"
+
+[[case]]
+feature = "cost_contracts"
+file = "cost_hidden_scan.rad"
+mode = "run"
+pattern = "violates its no-full-scan contract"
+
+[[case]]
+feature = "cost_contracts"
+file = "cost_hidden_allocation.rad"
+mode = "run"
+pattern = "violates its no-guest-allocation contract"
+
+[[case]]
+feature = "cost_contracts"
+file = "cost_budget.rad"
+mode = "run"
+pattern = "exceeded its @budget|Budget exhausted"
+
+[[case]]
+feature = "phases"
+file = "phase_nested_flush.rad"
+mode = "run"
+pattern = "flush_events\\(\\) is forbidden.*no_nested_flush"
+
+[[case]]
+feature = "phases"
+file = "phase_late_emit.rad"
+mode = "run"
+pattern = "phase.*Resolve.*already completed"
+
+[[case]]
+feature = "phases"
+file = "phase_duplicate_once.rad"
+mode = "run"
+pattern = "Exactly-once handler.*duplicate delivery"
+
+[[case]]
+feature = "provenance"
+file = "provenance_wrong_revision.rad"
+mode = "run"
+pattern = "unrelated field must not move view revision"
+
+[[case]]
+feature = "provenance"
+file = "provenance_missing_tombstone.rad"
+mode = "run"
+pattern = "expected removal tombstone"
+
+[[case]]
+feature = "provenance"
+file = "provenance_wrong_field_cause.rad"
+mode = "run"
+pattern = "expected field-level cause"
+
+[[case]]
+feature = "model_checking"
+file = "model_stale_completion.rad"
+mode = "model"
+pattern = "CurrentLeaseOwnsCompletion"
+
+[[case]]
+feature = "model_checking"
+file = "model_double_lease.rad"
+mode = "model"
+pattern = "AtMostOneLease"
+
+[[case]]
+feature = "model_checking"
+file = "model_terminal_requeue.rad"
+mode = "model"
+pattern = "TerminalNeverRequeues"
+
+[[case]]
+feature = "ffi"
+file = "ffi_wrong_nominal.rad"
+mode = "run"
+pattern = "expects MissionId, got AssetId"
+
+[[case]]
+feature = "ffi"
+file = "ffi_missing_extension.rad"
+mode = "run"
+pattern = "HostCallFailure|extension.*not found|failed to load"
+
+[[case]]
+feature = "ffi"
+file = "ffi_malformed_packet.rad"
+mode = "run"
+setup = "plugin"
+pattern = "DispatchPacket size mismatch"

@@ -9,36 +9,12 @@
     }
 
     fn run_source_result(src: &str) -> Result<Vec<String>, String> {
-        crate::test_support::run_source(src, ParserOptions::default())
-    }
-
-    fn run_source_result_with_compat(src: &str) -> Result<Vec<String>, String> {
-        crate::test_support::run_source(
-            src,
-            ParserOptions {
-                compat_v0_5_dx: true,
-            },
-        )
+        crate::test_support::run_source(src, ParserOptions)
     }
 
     #[test]
-    fn phase_declaration_accepts_bracket_and_brace_forms() {
-        // spec §3.5.1 and the changelog spell phases with brackets
-        // (`phase P [A, B]`, matching `schedule [...]`); the parser
-        // historically only accepted braces. Both must parse and behave
-        // identically.
-        let brackets = run_source(
-            r#"
-            component W { n: 0 }
-            resource T { a: 0 }
-            system A(w: W, t: mut T) { t.a = t.a + w.n }
-            spawn(W { n: 5 })
-            phase Front [A]
-            schedule [Front]
-            print(f"a={res(T).a}")
-            "#,
-        );
-        let braces = run_source(
+    fn phase_declaration_uses_only_the_canonical_brace_form() {
+        let output = run_source(
             r#"
             component W { n: 0 }
             resource T { a: 0 }
@@ -49,8 +25,20 @@
             print(f"a={res(T).a}")
             "#,
         );
-        assert_eq!(brackets, braces);
-        assert_eq!(brackets, vec!["a=5"]);
+        assert_eq!(output, vec!["a=5"]);
+
+        let parsed = crate::pipeline::parse_source(
+            "phase Front [A]",
+            ParserOptions,
+        );
+        assert!(
+            parsed
+                .parser_errors
+                .iter()
+                .any(|error| error.message.contains("Expected LBrace")),
+            "bracket phase declarations must be rejected: {:?}",
+            parsed.parser_errors
+        );
     }
 
     #[test]
@@ -738,7 +726,7 @@
             component W { n: 0 }
             resource T { a: 0 }
             system A(w: W, t: mut T) { t.a = t.a + w.n }
-            phase Front [A]
+            phase Front { A }
             spawn(W { n: 5 })
             advance()
             print(f"a={res(T).a}")

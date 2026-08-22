@@ -5,14 +5,14 @@ use super::SystemRuntimeInfo;
 fn read_write_sets(info: &SystemRuntimeInfo) -> (HashSet<String>, HashSet<String>) {
     let mut reads = HashSet::new();
     let mut writes = HashSet::new();
-    for (_param_name, is_mut, comp_type) in &info.params {
+    for (_param_name, is_mut, comp_type) in info.params.iter() {
         if *is_mut {
             writes.insert(comp_type.clone());
         } else {
             reads.insert(comp_type.clone());
         }
     }
-    for (_param_name, is_mut, comp_type) in &info.resource_params {
+    for (_param_name, is_mut, comp_type) in info.resource_params.iter() {
         // `accum` resources are tracked separately (info.accum_resources):
         // their writes commute with other accum-writers of the same
         // resource, so they must not count as plain writes here — but they
@@ -123,22 +123,27 @@ pub fn partition_parallel_batches(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Arc;
 
     fn sys(reads: &[&str], writes: &[&str]) -> SystemRuntimeInfo {
         SystemRuntimeInfo {
-            params: reads
-                .iter()
-                .map(|r| ("p".to_string(), false, r.to_string()))
-                .collect(),
-            resource_params: writes
-                .iter()
-                .map(|w| ("q".to_string(), true, w.to_string()))
-                .collect(),
+            params: Arc::new(
+                reads
+                    .iter()
+                    .map(|r| ("p".to_string(), false, r.to_string()))
+                    .collect(),
+            ),
+            resource_params: Arc::new(
+                writes
+                    .iter()
+                    .map(|w| ("q".to_string(), true, w.to_string()))
+                    .collect(),
+            ),
             chunk_id: 0,
-            after: Vec::new(),
-            before: Vec::new(),
+            after: Arc::new(Vec::new()),
+            before: Arc::new(Vec::new()),
             serial_group: None,
-            accum_resources: HashSet::new(),
+            accum_resources: Arc::new(HashSet::new()),
             instruction_budget: None,
         }
     }
@@ -207,13 +212,11 @@ mod tests {
     fn accum_writers_of_same_resource_share_a_batch() {
         let mut systems = HashMap::new();
         let mut a = sys(&[], &[]);
-        a.resource_params
-            .push(("t".to_string(), true, "T".to_string()));
-        a.accum_resources.insert("T".to_string());
+        Arc::make_mut(&mut a.resource_params).push(("t".to_string(), true, "T".to_string()));
+        Arc::make_mut(&mut a.accum_resources).insert("T".to_string());
         let mut b = sys(&[], &[]);
-        b.resource_params
-            .push(("t".to_string(), true, "T".to_string()));
-        b.accum_resources.insert("T".to_string());
+        Arc::make_mut(&mut b.resource_params).push(("t".to_string(), true, "T".to_string()));
+        Arc::make_mut(&mut b.accum_resources).insert("T".to_string());
         systems.insert("A".to_string(), a);
         systems.insert("B".to_string(), b);
         let ordered = vec!["A".to_string(), "B".to_string()];
@@ -225,9 +228,8 @@ mod tests {
     fn accum_writer_conflicts_with_plain_reader_of_same_resource() {
         let mut systems = HashMap::new();
         let mut a = sys(&[], &[]);
-        a.resource_params
-            .push(("t".to_string(), true, "T".to_string()));
-        a.accum_resources.insert("T".to_string());
+        Arc::make_mut(&mut a.resource_params).push(("t".to_string(), true, "T".to_string()));
+        Arc::make_mut(&mut a.accum_resources).insert("T".to_string());
         systems.insert("A".to_string(), a);
         // B reads T without accum: it must not observe an unfolded
         // intermediate, so it lands in a later batch.

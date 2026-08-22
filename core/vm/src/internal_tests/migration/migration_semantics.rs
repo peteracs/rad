@@ -1,5 +1,5 @@
 fn run_vm(src: &str) -> VM {
-    let result = crate::test_support::compile_source(src, crate::parser::ParserOptions::default())
+    let result = crate::test_support::compile_source(src, crate::parser::ParserOptions)
         .expect("parse and compile");
     let mut vm = VM::new();
     vm.suppress_output();
@@ -78,7 +78,7 @@ fn load_err(src: &str, json: &str) -> String {
 fn run_vm_checked(src: &str) -> VM {
     let result = crate::test_support::compile_checked_source(
         src,
-        crate::parser::ParserOptions::default(),
+        crate::parser::ParserOptions,
         crate::checker::CheckerOptions::default(),
     )
     .expect("parse, check, and compile");

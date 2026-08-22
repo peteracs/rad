@@ -1,0 +1,24 @@
+fn main() -> nil {
+    let extension: any = load_extension(
+        "target/sovereign-grid-plugin/grid-oracle.radext",
+    )
+    let probe: pure fn() -> str = extension["grid_generation"]
+    let score: pure fn(str) -> str = extension["score_dispatch"]
+
+    let generation: str = unwrap(host_try0(probe))
+    assert(generation == "grid-oracle-generation-1", "host_try0 generation pin")
+
+    let mut packet_bytes: list<int> = filled(40, 0)
+    packet_bytes[32] = 8
+    let encoded_input: str = json_stringify(packet_bytes)
+    let encoded_output: str = unwrap(host_try(score, encoded_input))
+    let output: list<int> = unwrap(json_parse(encoded_output))
+    let bytes: any = bytebuf_from_list(output)
+    let native_score: u32 = u32(bytebuf_get_u32_le(bytes, 0))
+    let generation_id: u32 = u32(bytebuf_get_u32_le(bytes, 4))
+    let reference_score: u32 = u32(10 + if bitset_has(bitset_set(bitset_new(), 3), 3) { 50 } else { 0 })
+    assert(native_score == reference_score, "native and RAD reference scores agree")
+    assert(generation_id == u32(1), "native response is generation pinned")
+
+    print("sovereign-grid: FFI native builtins complete")
+}

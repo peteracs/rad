@@ -16,6 +16,7 @@ impl VM {
             ));
         }
         self.enforce_region_builtin(builtin)?;
+        crate::builtins::validate_builtin_arity(builtin, args.len())?;
         self.meter_constraint_builtin(builtin, &args)?;
         if self.sandbox_caps.is_some() && !crate::sandbox::builtin_allowed_in_sandbox(builtin) {
             return Err(format!(

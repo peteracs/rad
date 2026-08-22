@@ -1,290 +1,231 @@
+<a id="expressions"></a>
 ## 5. Expressions
 
-### 5.1 Tuple Expression
+Expressions produce values. Unless a rule below says otherwise, operands are
+evaluated from left to right exactly once. The precedence table in
+[Lexical structure](#operators-and-precedence) determines grouping.
 
-```
-(expr1, expr2, ...)
-```
+<a id="expr-literals"></a>
+### 5.1 Literals and aggregate values
 
-Creates a fixed-size, ordered sequence of values. Tuples are distinct from lists: they have a fixed length known at compile time, and their type signature `(T1, T2, ...)` captures the exact type of each element.
-
-```
-let pair: (int, str) = (10, "hello")
-let empty: () = ()
-let single: (int,) = (5,)
-```
-
-### 5.2 Function Calls and Spread Operator
-
-Functions are called using parentheses `f(arg1, arg2)`.
-
-You can use the spread operator `..` to unpack a tuple into individual function arguments. The spread operator is **only supported for tuples**, not lists, because the compiler needs to know the exact number of arguments and their types at compile time.
-
-```
-fn add3(a: int, b: int, c: int) -> int { return a + b + c }
-
-let args = (1, 2, 3)
-let sum = add3(..args) // Equivalent to add3(1, 2, 3)
+```text
+42
+3.5
+true
+false
+nil
+"zone-a"
+[1, 2, 3]
+{"north": 1, "south": 2}
+(7, "ready")
 ```
 
-### 5.3 Pipeline
+List elements have one compatible element type. Map keys satisfy the map-key
+rules in the type system and values have one compatible value type. Parentheses
+with a comma form tuples; parentheses without a comma only group an expression.
 
-```
-<expr> |> <fn_or_call>
-```
+Formatted strings use `f"..."`. `${expression}` is the canonical interpolation
+form. Single-line formatted strings also accept `{expression}`. Triple-quoted
+formatted strings use `${expression}` exclusively, so ordinary braces remain
+literal. Formatting evaluates each interpolation once in source order.
 
-Passes the left expression as the first argument to the right function. Equivalent to `f(left, ...)` or `f(left)`.
+<a id="expr-names-access"></a>
+### 5.2 Names, fields, and indexes
 
-```
-[1, 2, 3] |> map(fn(x) { return x * 2 })
-// Equivalent to: map([1, 2, 3], fn(x) { return x * 2 })
-```
-
-**Precedence:** `|>` has the **lowest** operator precedence (level 1 in §1.2). Arithmetic, comparison, and logical operators all bind tighter than `|>`. This means expressions like `list |> reduce(0, fn(a, x) { return a + x }) / len(list)` parse the `/ len(list)` as part of the pipeline's right-hand side, **not** as a division applied to the pipeline result. To apply arithmetic to a pipeline's output, bind the pipeline result to a variable first:
-
-```
-let total = scores |> reduce(0, fn(a, x) { return a + x })
-let avg = total / len(scores)
-```
-
-Pipelines are restricted to **pure or readonly** computation (see §8): the right-hand side cannot call side-effecting builtins such as `set`, `spawn`, or use `emit`. User-defined callees must be known pure (`pure fn` or inferred pure) or `readonly fn` (performs only ECS reads). ECS read builtins (`get`, `has`, `entities`, `query_where`, `query_map`, `query_count`, `with_field`, `peek`, `lookup`) are classified as `readonly` and permitted in pipelines. Assignments to **outer** variables from code executed as part of the pipeline are also rejected by the static checker.
-
-**Field accessor shorthand:** `.field` parses as a one-argument projection closure. Chains are allowed.
-
-```rad
-let total = mods |> map(.flat) |> sum
-let hps = units |> map(.stats.hp)
+```text
+current
+packet.temperature
+rows[index]
+matrix[row][column]
+module.public_name
 ```
 
-### 5.4 Function Expression
+Names resolve lexically, then through the current canonical module graph.
+Fields require a declared record, component, resource, event, state, or sum
+shape. Indexing supports lists, maps, strings, byte buffers, and APIs whose
+declared type defines indexing. An invalid index or missing map key is a runtime
+error unless the API explicitly returns `Option` or `Result`.
 
-```
-fn(<param>, ...) { <body> }
-fn([<a>, <b>], <param>, ...) { <body> }
-```
+<a id="expr-operators"></a>
+### 5.3 Unary and binary operators
 
-Creates an anonymous function (closure). Captures the enclosing environment.
+RAD has three unary operations:
 
-**List destructuring in parameters:** Bracket syntax `fn([name, phase])` unpacks a list or tuple argument into named bindings. Multiple parameters can be destructured: `fn([a, b], [c, d])`. Plain and destructured parameters can be mixed: `fn(acc, [key, val])`. Underscore `_` may appear multiple times as a discard: `fn([_, mid, _])`. An optional type annotation can follow the brackets: `fn([a, b]: (int, str))`. The `mut` keyword before the brackets makes all destructured bindings mutable: `fn(mut [a, b]) { a = a * 10 }`. The checker infers element types from pipeline context (e.g., `list<(int, str)>` flowing into `map` gives `a: int, b: str`) and reports arity mismatches for tuples.
-
-Captured variables follow normal mutability rules:
-- Captured `let` bindings are read-only in the closure.
-- Captured `let mut` bindings are shared between the closure and outer scope, so reassignment inside the closure updates the outer value.
-
-### 5.5 Variant Check (`is`)
-
-```
-<expr> is <VariantName>
+```text
+-number
+not condition
+!condition
+~mask
 ```
 
-The `is` operator checks if a sum type or state machine instance is currently a specific variant or state. It evaluates to `true` or `false`.
+`not` and `!` are the same logical operation. Binary operators are:
 
-```
-let door = DoorState::Locked
-if door is Locked {
-    print("Locked")
-}
-
-let result = Result::Ok { value: 42 }
-let is_ok = result is Ok
-```
-
-The right-hand side must be an identifier corresponding to a valid variant or state for the type of the left-hand expression. The type checker statically verifies this.
-
-### 5.6 If Expression
-
-```
-if <cond> { <expr> } else { <expr> }
+```text
+* / %
++ -
+<< >>
+& ^ |
+< <= > >=
+== != is
+and or
+|>
 ```
 
-In expression position, `if` returns a value and requires an `else` branch. `else if` chains are allowed.
+Arithmetic is checked against the operand's numeric representation. `/` and
+`%` reject a zero divisor. Shifts reject an invalid count. Logical `and` and
+`or` short-circuit. `is` checks a state/sum variant without extracting fields.
+All binary levels associate left-to-right.
 
-```rad
-let tier = if hp < 25 { "danger" } else if hp < 60 { "hurt" } else { "ok" }
+At expression level `<<` is a shift. The statement parser recognizes a
+top-level `container << value` as collection append; nesting it in another
+expression retains shift semantics.
+
+<a id="expr-call"></a>
+### 5.4 Calls, system references, and spread arguments
+
+```text
+dispatch(asset, mission)
+module.dispatch(asset, mission)
+system::AdvanceGrid
+system::operations::AdvanceGrid
+sum_three(..(1, 2, 3))
 ```
 
-Statement-position `if` keeps the block-oriented behavior described in §4.
+Arguments are evaluated left-to-right. Arity, generic substitution, parameter
+types, callback purity, and inferred effects are checked before lowering.
+`..tuple_or_list` in argument position expands its elements in order. A
+qualified `system::` expression is a statically resolved system value; it is
+not a dynamically looked-up string.
 
-### 5.7 String interpolation
+<a id="expr-pipeline"></a>
+### 5.5 Pipelines
 
-RAD supports interpolation in both `f"..."` strings and regular strings:
-
-```
-let city = "Neo Arcadia"
-let pop = 1200
-let a = f"city={city}, pop={pop}"
-let b = "city=${city}, pop=${pop}"
-```
-
-For regular strings, interpolation uses `${...}`. `f"..."` continues to support both
-`{...}` and `${...}` forms.
-
-#### Format specifiers
-
-F-string interpolations support Python-style format specifiers after a colon:
-
-```
-f"{expr:spec}"
-f"${expr:spec}"
+```text
+records |> filter(fn(row) { return row.active }) |> len
+value |> clamp(0, 100)
+records |> fn(rows) { return len(rows) }
+records |> .priority
 ```
 
-The format spec follows the Python format mini-language: `[[fill]align][sign][#][0][width][.precision][type]`.
+`left |> function` calls `function(left)`. A call on the right inserts `left`
+as its first argument. A closure consumes `left` as its first parameter. A
+field projector maps a list to that field. Pipeline lowering preserves the
+same type, authority, callback, allocation, and error rules as the equivalent
+ordinary calls; it cannot conceal an effect.
 
-| Component | Values | Description |
-|---|---|---|
-| fill | any character | Padding character (default: space) |
-| align | `<` `>` `^` | Left, right, or center alignment. Numbers default to right (`>`), strings to left (`<`). |
-| sign | `+` `-` (space) | `+` shows sign for positive and negative; `-` shows sign only for negative (default); space adds a leading space for positive values. |
-| `#` | | Alternate form: adds `0b`, `0o`, `0x`, or `0X` prefix for binary, octal, and hex. |
-| `0` | | Zero-pad: fills with zeros between the sign/prefix and digits. |
-| width | integer | Minimum field width. |
-| .precision | integer | For floats: digits after decimal point. For strings: max characters (truncates). |
-| type | `d` `f` `e` `E` `b` `o` `x` `X` `s` `%` | `d` decimal, `f` fixed-point, `e`/`E` scientific, `b` binary, `o` octal, `x`/`X` hex, `s` string, `%` percentage. |
+<a id="expr-function"></a>
+### 5.6 Function expressions and capture
 
-Examples:
-
-```
-let pi = 3.14159
-print(f"{pi:.2f}")           // "3.14"
-print(f"{42:06d}")           // "000042"
-print(f"{255:#x}")           // "0xff"
-print(f"{'hi':>10}")         // "        hi"
-print(f"{42:+d}")            // "+42"
-print(f"{0.75:.1%}")         // "75.0%"
-print(f"{12345.6789:.2e}")   // "1.23e+04"
+```text
+fn(value: int) -> int { return value + 1 }
+fn(mut total: int) -> int { total = total + 1 return total }
+fn([index, value]: (int, int)) -> int { return index + value }
 ```
 
-Format specifiers are supported in both `f"..."` and `f"""..."""` f-strings.
-Regular string interpolation (`"${expr}"`) does not support format specifiers.
+Parameters may be annotated, mutable, or list-destructured. Return annotations
+are optional for private inferred closures and required where strict boundaries
+demand them. Closures capture lexical bindings. Mutable capture writes back to
+the captured binding. A recursive closure requires `let rec`; ordinary
+self-reference in an initializer is rejected. Capture and callback effects are
+included transitively in system authority and query-cost analysis.
 
-The `format_value(value, spec)` builtin provides the same functionality as a standalone function call (see section 6).
+<a id="expr-records"></a>
+### 5.7 Records, variants, states, and entities
 
-#### Triple-quoted f-strings
-
-`f"""..."""` is a multi-line f-string where **only `${expr}` triggers interpolation**.
-Bare `{` and `}` are literal text — no escaping needed. This is designed for
-generating code (C, JSON, etc.) where braces appear frequently.
-
-> **Common pitfall:** `{expr}` does NOT interpolate inside `f"""..."""`. Use `${expr}` instead.
-
-| Syntax        | `{x}` | `${x}` | Bare `{` / `}` |
-|---------------|--------|---------|-----------------|
-| `f"..."`      | interpolates | interpolates | must double (`{{`/`}}`) or escape (`\{`/`\}`) |
-| `f"""..."""`  | literal text | interpolates | literal text (no escaping needed) |
-
-```
-let n = 3
-let code = f"""
-    if (__nargs != ${n}) {
-        fprintf(stderr, "arity mismatch\n");
-        exit(1);
-    }
-"""
-```
-
-Inner double-quotes do not need escaping since the delimiter is `"""`.
-Use `\$` to produce a literal `$` when followed by `{`.
-
-### 5.8 Multi-line Strings
-
-RAD supports Zig-style line-based string literals. They are prefixed with `\\` and consume the rest of the line. Multiple consecutive `\\` lines are concatenated with newlines, ignoring any indentation before the `\\`.
-
-```
-let menu = \\Help Menu:
-           \\  - Option 1
-           \\  - Option 2
-```
-
-Quotes inside multi-line strings do not need to be escaped.
-
-### 5.9 Component Expression
-
-```
-<ComponentName> { <field>: <expr>, ... }
-```
-
-Creates a component value. Fields not specified use the defaults from the component declaration.
-
-Component updates may use spread-style base copying with `..base` as the final entry:
-
-```rad
-// Caller must allow Option propagation (e.g. `fn example() -> any`).
-let old = get(hero, Stats)?
-let next = Stats { hp: old.hp - 10, ..old }
-set(hero, next)
-```
-
-Rules:
-- `..base` can appear at most once.
-- `..base` must be the final entry in the literal.
-- Explicit fields always override fields copied from `base`.
-
-### 5.10 Entity Literal Expression
-
-```
-entity [ <name_expr> ] {
-    <Component> { <field>: <expr>, ... },
-    <expr>,
-    ...
+```text
+Position { x: 10, y: 20 }
+Position { x: 11, ..old_position }
+Decision::Review { reason: "high-value" }
+MissionState::Active
+entity "asset-17" {
+    Identity { id: AssetId(u64(17)) }
+    Position { x: 10, y: 20 }
 }
 ```
 
-Spawns a new entity, attaches the listed components, and returns the entity ID. This is the expression-level counterpart to the named `entity Name { ... }` declaration (§3.3). The type of the expression is `entity`.
+Component/resource/struct construction must initialize every required field
+exactly once. `..base` copies unspecified fields from a compatible value and
+may appear once. Sum variants and state references are nominal and qualified.
+An entity literal creates one entity with an optional unique name and the
+listed components; duplicate component types or names are errors.
 
-An optional **name expression** between `entity` and `{` assigns a name to the entity, making it retrievable via `get_entity()`. The name can be any expression evaluating to a string. If omitted, the entity is anonymous.
+<a id="expr-query"></a>
+### 5.8 Query expressions
 
-Each entry inside the braces is a **component entry**: either a component initializer (`Component { field: value }`) or an expression that evaluates to a component value. The parser uses lookahead to disambiguate: tokens matching `Ident {`, `Ident.`, or `Ident::` are parsed as component initializers; all other tokens begin an expression. This allows variables, function calls, and other expressions to supply components alongside traditional initializers. Entity literal expressions may be nested.
+```text
+query { Position, Velocity }
+query { mut Position, Velocity }
+query { Position } where not Destroyed
+query { Position, Health } where Health.current > 0
+query { Position, Health } select Position, Health
+```
 
-```rad
-// Anonymous
-let hero = entity {
-    Name { value: "Hero" },
-    Health { hp: 100, max: 100 }
+The query takes a stable entity-membership snapshot in ascending entity-ID
+order. Included components are required. A top-level `not Component` conjunct
+in `where` is lowered to an exclusion query, so that component must be absent.
+`mut` produces writeback-capable component bindings when the query is consumed
+by a loop. `where` is evaluated per row after component binding. `select`
+returns selected component values instead of entity IDs/row tuples.
+
+Query syntax never implies an index. Whole-population queries are `O(n)` and
+are visible to transitive cost contracts. Named materialized views and indexed
+builtins are the explicit bounded alternatives.
+
+<a id="expr-branching"></a>
+### 5.9 If and match expressions
+
+```text
+let label = if ready { "ready" } else { "waiting" }
+
+let value = match result {
+    Ok { value } => { value }
+    Err { error } => { panic(error) }
 }
-
-// Named (string literal)
-let e = entity "player" { Health { hp: 100 } }
-let found = get_entity("player")   // returns the same entity
-
-// Named (variable)
-fn load_file(path: str) -> entity {
-    return entity path { FilePath { path: path }, Unparsed {} }
-}
-
-// As a function argument:
-register_npc(entity f"npc_{id}" { Name { value: "Goblin" }, Health { hp: 30, max: 30 } })
-
-// Expression components (variables, function calls)
-let hp = Health { hp: 50, max: 50 }
-let mob = entity { Name { value: "Rat" }, hp, make_position(0.0, 0.0) }
 ```
 
-### 5.11 State Reference
+An `if` expression requires an `else`; all branches must produce compatible
+types. A match expression uses the same pattern, guard, ordering, binding, and
+exhaustiveness rules as a match statement, but every reachable arm must produce
+a compatible value.
 
+<a id="patterns"></a>
+### 5.10 Patterns
+
+Canonical source patterns are:
+
+```text
+_                                  // wildcard
+0                                  // primitive literal
+Decision::Allow {}                 // qualified variant
+Review { reason }                  // variant shorthand in known context
+Review { reason: message }         // explicit binding name
+has Position(component)            // component-presence pattern
 ```
-<MachineName>::<StateName>
+
+Variant fields support shorthand and `field: binding`; nested paths are
+destructured recursively. Guards use `when expression`, run only after the pattern matches, and
+may refer to its bindings. Arms are tested top-to-bottom. A guarded arm does not
+make later arms unreachable and cannot alone establish exhaustiveness.
+
+<a id="expr-async"></a>
+### 5.11 Async calls and await
+
+```text
+let pending: task<int> = async compute_score(input)
+let score: int = await pending
 ```
 
-Creates a state machine instance in the specified state.
+`async` must be followed by a call and returns `task<T>`. `await` consumes a
+task and yields its result or propagates its task failure. Async reachability is
+part of inferred authority; a system requires `async true` even when the call
+is hidden behind helpers or callbacks.
 
-### 5.12 Sum Type Variant Expression
+<a id="expr-try"></a>
+### 5.12 Try propagation
 
-```
-<TypeName>::<VariantName> { <field>: <expr>, ... }
-```
+Postfix `?` unwraps `Option<T>` or `Result<T, E>`. `None` or `Err` returns early
+from the current function, whose return type must admit the propagated value.
+The success payload becomes the expression result. The operator does not catch
+runtime panics or host failures that are not represented by the sum value.
 
-Builds a value of the given sum type. If `{ ... }` is empty, the variant must have no fields (or only defaults). This syntax is disambiguated from state references: a following `{` begins field values for the variant, not a state literal.
-
-In `--compat-v0.5-dx` mode, zero-field shorthand `TypeName::VariantName` is accepted for sum variants and may emit compatibility diagnostics when a name is also a state machine.
-
-### 5.13 Compatibility Flags
-
-The CLI supports compatibility and warning-policy flags for v0.5 DX rollout:
-
-- `--compat-v0.5-dx` enables v0.5 DX compatibility syntax and behavior.
-- `--warn-compat` enables compatibility warnings (default).
-- `--no-warn-compat` disables compatibility warnings.
-- `--deny-warnings` turns warnings into a non-zero process exit.
-- `--profile-copies` enables runtime diagnostics for hidden `Arc` deep clones. When a list mutation (push, set, extend) triggers `Arc::make_mut` on a shared backing buffer, a diagnostic is emitted to stderr with the source line number and element count. Use this to find unexpected O(n) copies in hot loops. See [Memory Model](memory-model.md).
-
----
+`Expr::Error` is a parser-recovery node and has no source spelling.

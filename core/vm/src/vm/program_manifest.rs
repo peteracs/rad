@@ -285,9 +285,8 @@ mod tests {
             fn attempt() { return 1 }
             fn alternate() { return 2 }
         "#;
-        let result =
-            crate::test_support::compile_source(source, crate::parser::ParserOptions::default())
-                .expect("parse and compile");
+        let result = crate::test_support::compile_source(source, crate::parser::ParserOptions)
+            .expect("parse and compile");
         left.load_compile_result(result);
 
         let original = left
@@ -397,13 +396,13 @@ mod tests {
         Arc::make_mut(&mut vm.systems).insert(
             "Move".into(),
             SystemRuntimeInfo {
-                params: vec![("position".into(), true, "Position".into())],
-                resource_params: Vec::new(),
+                params: Arc::new(vec![("position".into(), true, "Position".into())]),
+                resource_params: Arc::new(Vec::new()),
                 chunk_id: 5,
-                after: vec!["Input".into()],
-                before: vec!["Render".into()],
+                after: Arc::new(vec!["Input".into()]),
+                before: Arc::new(vec!["Render".into()]),
                 serial_group: Some(1),
-                accum_resources: HashSet::new(),
+                accum_resources: Arc::new(HashSet::new()),
                 instruction_budget: None,
             },
         );

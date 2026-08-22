@@ -1,0 +1,4 @@
+component Listing { id: int = 0 }
+materialized view VisibleListings { depends [Listing] }
+let listing = spawn(Listing { id: 1 })
+set(listing, VisibleListings {})

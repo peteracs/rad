@@ -256,7 +256,7 @@ pub(crate) fn bi_zip(gc: &mut GcHeap, args: Vec<Value>) -> Result<Value, String>
     let pairs: Vec<Value> = a_items
         .into_iter()
         .zip(b_items)
-        .map(|(x, y)| Value::list(gc, vec![x, y]))
+        .map(|(x, y)| Value::tuple(gc, vec![x, y]))
         .collect();
     Ok(Value::list(gc, pairs))
 }
@@ -278,7 +278,7 @@ pub(crate) fn bi_enumerate(gc: &mut GcHeap, args: Vec<Value>) -> Result<Value, S
     let mut pairs = Vec::with_capacity(indexed.len());
     for (i, v) in indexed {
         let idx = Value::from_int(gc, i as i64);
-        let pair = Value::list(gc, vec![idx, v]);
+        let pair = Value::tuple(gc, vec![idx, v]);
         pairs.push(pair);
     }
     Ok(Value::list(gc, pairs))

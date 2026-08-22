@@ -32,9 +32,6 @@ pub enum Op {
     Gte,
 
     Not,
-    // Reserved/deprecated opcodes kept for bytecode compatibility.
-    And, // do not emit: logical and compiles to short-circuit jumps
-    Or,  // do not emit: logical or compiles to short-circuit jumps
 
     DefGlobal,
     GetGlobal,
@@ -77,13 +74,10 @@ pub enum Op {
     RunSchedule,
     MatchState,
     IsVariant,
-    Pipe, // reserved/deprecated, do not emit: pipe compiles to Call directly
 
     Print,
     Len,
     TypeOf,
-
-    Break, // reserved/deprecated, do not emit: break compiles to Jump directly
 
     Closure,
     GetUpvalue,
@@ -156,7 +150,7 @@ pub enum Op {
 
     /// Bitwise int ops (`&`, `|`, `^`) — added for bitboard workloads
     /// (sudoku/chess-style candidate masks). Int-only; appended at the end
-    /// of the enum to preserve bytecode compatibility.
+    /// of the enum so the byte encoding remains stable within a build.
     BitAnd,
     BitOr,
     BitXor,
@@ -286,7 +280,7 @@ impl Op {
 /// executable verification certificate; cloning or editing it therefore
 /// cannot launder an earlier proof onto new bytes.
 #[derive(Clone, Debug)]
-pub struct ChunkBuilder {
+pub struct Chunk {
     pub(crate) code: Vec<u8>,
     pub(crate) constants: Vec<crate::value::Value>,
     pub(crate) lines: Vec<u32>,
@@ -296,19 +290,15 @@ pub struct ChunkBuilder {
     next_str_id: u32,
 }
 
-/// Backward-compatible source name for the mutable construction artifact.
-/// VM storage and execution use [`SealedChunk`], never `Chunk`.
-pub type Chunk = ChunkBuilder;
-
 /// Immutable executable bytecode and its inseparable structural proof.
 #[derive(Clone, Debug)]
 pub struct SealedChunk {
-    inner: std::sync::Arc<ChunkBuilder>,
+    inner: std::sync::Arc<Chunk>,
     proof: std::sync::Arc<crate::bytecode_verifier::VerifiedChunk>,
 }
 
 impl std::ops::Deref for SealedChunk {
-    type Target = ChunkBuilder;
+    type Target = Chunk;
 
     fn deref(&self) -> &Self::Target {
         &self.inner
@@ -318,7 +308,7 @@ impl std::ops::Deref for SealedChunk {
 impl SealedChunk {
     /// Return a mutable construction copy. The verification proof is
     /// deliberately discarded, so loading the result always reverifies it.
-    pub fn to_builder(&self) -> ChunkBuilder {
+    pub fn to_builder(&self) -> Chunk {
         (*self.inner).clone()
     }
 
@@ -344,7 +334,7 @@ impl SealedChunk {
     }
 
     #[cfg(test)]
-    pub(crate) fn from_unchecked_for_test(chunk: ChunkBuilder) -> Self {
+    pub(crate) fn from_unchecked_for_test(chunk: Chunk) -> Self {
         Self {
             inner: std::sync::Arc::new(chunk),
             proof: std::sync::Arc::new(crate::bytecode_verifier::VerifiedChunk {
@@ -354,9 +344,9 @@ impl SealedChunk {
     }
 }
 
-impl ChunkBuilder {
+impl Chunk {
     pub fn new(name: &str) -> Self {
-        ChunkBuilder {
+        Chunk {
             code: Vec::new(),
             constants: Vec::new(),
             lines: Vec::new(),

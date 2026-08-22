@@ -16,7 +16,7 @@ use crate::vm::VM;
 use std::time::Instant;
 
 fn compile(src: &str) -> crate::compiler::CompileResult {
-    crate::test_support::compile_source(src, ParserOptions::default()).expect("parse and compile")
+    crate::test_support::compile_source(src, ParserOptions).expect("parse and compile")
 }
 
 /// Run a compiled program, return (wall seconds, vm).

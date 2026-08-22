@@ -6,10 +6,10 @@ impl VM {
     /// handled in Rad — every other boundary (`fork_from_bytes`,
     /// `fork_apply`, `merge_forks`, `sandbox_run`, `json_parse`) returns a
     /// value (dogfood feature seq 69). This returns `Ok(entities_loaded)` or
-    /// `Err(message)`, so an app can fall back to a prior backup when today's
+    /// `Err(message)`, so an app can deliberately select a prior backup when today's
     /// save is corrupt. `load_world` builds a replacement world and swaps it
     /// in only on success, so a failed load leaves the live world untouched —
-    /// the property the fallback pattern depends on.
+    /// the property that recovery policy depends on.
     fn bi_try_load_world(&mut self, args: Vec<Value>) -> Result<Value, String> {
         match self.bi_load_world(args) {
             Ok(v) => Ok(self.make_result(true, v)),
@@ -472,6 +472,11 @@ impl VM {
             "load_world()",
             allocator,
         )?;
+        // Views are compiled program definitions, never caller-supplied wire
+        // authority. Reinstall those definitions from the currently running
+        // program and derive membership from the fully decoded authoritative
+        // rows before replacing the live world.
+        target.install_materialized_view_definitions_from(&self.world);
         self.world = target;
         for (entity, component, kind, summary) in writes {
             self.record_causal_write(entity, &component, kind, summary);

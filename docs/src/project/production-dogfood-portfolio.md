@@ -45,10 +45,13 @@ snapshots, documentation links, mdBook, release build, and WASM compilation.
 
 This is a release campaign, not a quick smoke test. RiskBridge alone executes
 one million adjudications in native benchmark, record, replay, and pure-reference
-modes, so a full run can take tens of minutes and retain several gigabytes on a
-development machine. Do not rerun the complete project merely to validate an
-acceptance-regex or report-format edit: execute the affected command directly,
-then reserve the complete matrix for one final clean source generation.
+modes, so a full run can take tens of minutes. Its online decision window and
+trace reader/writer are bounded; each million-case process has a 512 MiB private
+memory ratchet. The 2026-08-22 focused release receipt measured 327,761,920 bytes
+for recording, 243,924,992 for replay, and 190,656,512 for the pure reference.
+Do not rerun the complete project merely to validate an acceptance-regex or
+report-format edit: execute the affected command directly, then reserve the
+complete matrix for one final clean source generation.
 
 `-Project` and `-AllowDirty` exist for development diagnosis only. Such reports
 are explicitly `releaseEligible: false`; they cannot be presented as release

@@ -1,0 +1,50 @@
+fn main() -> nil {
+    let base_url: str = "http://127.0.0.1:18991"
+    assert(http_get(base_url + "/get") == "get-ok", "http_get")
+    assert(http_post(base_url + "/post", "plain") == "post:plain", "http_post")
+    assert(http_post_json(base_url + "/json", "{\"n\":7}") == "post:{\"n\":7}", "http_post_json")
+    let response: map<str, any> = http_request("GET", base_url + "/request", {}, "")
+    assert(response["status"] == 200 and response["body"] == "get-ok", "http_request")
+
+    let client: int = tcp_connect("127.0.0.1", 18992)
+    tcp_write(client, "client-echo")
+    assert(tcp_read(client, 64) == "client-echo", "tcp client echo")
+    tcp_close(client)
+
+    let listener: int = tcp_listen("127.0.0.1", 18994)
+    let accepted: int = tcp_accept(listener)
+    assert(tcp_read(accepted, 64) == "accept-one", "tcp_accept")
+    tcp_close(accepted)
+    let accepted_with_timeout: Option<int> = tcp_accept_timeout(listener, 2000)
+    let second: int = expect(accepted_with_timeout, "second loopback client")
+    assert(tcp_read(second, 64) == "accept-two", "tcp_accept_timeout")
+    tcp_close(second)
+    tcp_close(listener)
+
+    let datagram: int = udp_bind("127.0.0.1", 0)
+    assert(udp_send_to(datagram, "127.0.0.1", 18993, "text") == 4, "udp_send_to")
+    let (text_payload, text_host, text_port): (str, str, int) = udp_recv_from(datagram, 64)
+    assert(text_payload == "text" and text_host == "127.0.0.1" and text_port == 18993, "udp_recv_from")
+
+    udp_send_to(datagram, "127.0.0.1", 18993, "timed")
+    assert(is_some(udp_recv_from_timeout(datagram, 64, 2000)), "udp_recv_from_timeout")
+
+    assert(udp_send_to_bytes(datagram, "127.0.0.1", 18993, [0, 1, 255]) == 3, "udp_send_to_bytes")
+    let (byte_payload, _byte_host, _byte_port): (list<int>, str, int) = udp_recv_from_bytes(datagram, 64)
+    assert(byte_payload == [0, 1, 255], "udp_recv_from_bytes")
+
+    udp_send_to_bytes(datagram, "127.0.0.1", 18993, [4, 5])
+    assert(is_some(udp_recv_from_bytes_timeout(datagram, 64, 2000)), "udp_recv_from_bytes_timeout")
+
+    let byte_buffer: any = bytebuf_from_list([9, 8, 7])
+    assert(udp_send_bytebuf(datagram, "127.0.0.1", 18993, byte_buffer) == 3, "udp_send_bytebuf")
+    let (buffer_payload, _buffer_host, _buffer_port): (any, str, int) = udp_recv_bytebuf(datagram, 64)
+    assert(bytebuf_to_list(buffer_payload) == [9, 8, 7], "udp_recv_bytebuf")
+
+    udp_send_bytebuf(datagram, "127.0.0.1", 18993, bytebuf_from_list([6, 5]))
+    let timed_buffer: any = udp_recv_bytebuf_timeout(datagram, 64, 2000)
+    assert(is_some(timed_buffer), "udp_recv_bytebuf_timeout")
+    udp_close(datagram)
+
+    print("sovereign-grid: host network builtins complete")
+}

@@ -62,6 +62,35 @@ mod tests {
     }
 
     #[test]
+    fn restored_world_keeps_named_entity_snapshot_copy_on_write() {
+        let mut world = World::new();
+        let fixture = world.snapshot();
+        world.restore(fixture.clone());
+        world.spawn_entity(Some("test-only")).unwrap();
+
+        assert_eq!(fixture.get_entity_by_name("test-only"), None);
+        world.restore(fixture);
+        assert_eq!(world.get_entity_by_name("test-only"), None);
+    }
+
+    #[test]
+    fn named_snapshot_survives_shared_mutation_chain_before_restore() {
+        let mut world = World::new();
+        let fixture = world.snapshot();
+
+        world.restore(fixture.clone());
+        let entity = world.spawn_entity(Some("shared-probe")).unwrap();
+        world.set_entity_name(entity, Some("shared-probe-renamed"));
+        assert_eq!(world.get_entity_by_name("shared-probe-renamed"), Some(entity));
+
+        world.restore(fixture.clone());
+        assert_eq!(fixture.get_entity_by_name("shared-probe"), None);
+        assert_eq!(fixture.get_entity_by_name("shared-probe-renamed"), None);
+        assert_eq!(world.get_entity_by_name("shared-probe"), None);
+        assert_eq!(world.get_entity_by_name("shared-probe-renamed"), None);
+    }
+
+    #[test]
     fn spawn_empty_name_does_not_pollute_name_maps() {
         let mut w = World::new();
         w.spawn_entity(Some("")).unwrap();

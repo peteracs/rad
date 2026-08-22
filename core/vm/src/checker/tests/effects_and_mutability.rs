@@ -1,6 +1,31 @@
 
 
     #[test]
+    fn checker_and_runtime_share_flexible_builtin_call_shapes() {
+        let errors = check_src(
+            r#"
+            component A { value: int = 1 }
+            component B { value: int = 2 }
+
+            fn exercise() -> nil {
+                print()
+                print("a", "b")
+                let label = format("literal")
+                let target = spawn(A { value: 1 }, B { value: 2 })
+                let components = require_all(target, A, B)
+                let all_entities = entities(A, B)
+                let first = slice([1, 2], 1)
+                let numbers = range(0, 4, 2)
+                let live_digest = world_digest()
+                let fork_digest = world_digest(fork())
+                assert(len(components) == 2, label)
+            }
+            "#,
+        );
+        assert!(errors.is_empty(), "flexible builtin arity drifted: {errors:?}");
+    }
+
+    #[test]
     fn mutable_top_level_system_list_is_still_rejected() {
         // Only an immutable binding const-folds; a `let mut` could be
         // reassigned, so it must not qualify.
@@ -132,11 +157,10 @@
         );
     }
 
-    /// The "does not bind all fields" hint must not recommend `..` when `..`
-    /// is rejected in the current mode; it should spell out the discard form
-    /// that actually compiles.
+    /// The canonical rest pattern is the shortest valid repair for a partial
+    /// variant destructure, so the diagnostic recommends it directly.
     #[test]
-    fn partial_variant_binding_hint_is_usable_without_compat() {
+    fn partial_variant_binding_hint_recommends_canonical_rest_pattern() {
         let errors = check_src(
             "type Expr { ENum { num: 0.0 }  EBin { op: \"\", lhs: 0.0, rhs: 0.0 } }\n\
              fn kind(e: Expr) -> str {\n\
@@ -157,29 +181,20 @@
             errors
         );
         let hint = partial[0].hint.clone().unwrap_or_default();
-        assert!(
-            !hint.contains("Use `..` to ignore"),
-            "hint must not recommend `..` outside compat mode, got: {}",
-            hint
-        );
-        assert!(
-            hint.contains("lhs: _lhs") && hint.contains("rhs: _rhs") && hint.contains("op"),
-            "hint should spell out the working discard form, got: {}",
-            hint
-        );
+        assert!(hint.contains("Use `..` to ignore"), "got: {hint}");
     }
 
     /// Arity errors must print the signature — counting arguments without
     /// saying what they are sends people to the docs for information the
-    /// checker already had. Covers: curated builtin names, generated
-    /// fallback, and user functions with declared parameter names.
+    /// checker already had. Covers curated builtin names, generated catalog
+    /// entries, and user functions with declared parameter names.
     #[test]
     fn arity_errors_print_signatures() {
         // curated builtin: parameter NAMES, not just types
         let errors = check_src("let f = simulate(fork())");
         let e = errors
             .iter()
-            .find(|e| e.message.contains("'simulate' expects 3"))
+            .find(|e| e.message.contains("'simulate' expects exactly 3"))
             .expect("arity error");
         let hint = e.hint.as_deref().unwrap_or("");
         assert!(
@@ -192,7 +207,7 @@
         let errors = check_src("let j = json_stringify()");
         let e = errors
             .iter()
-            .find(|e| e.message.contains("'json_stringify' expects 1"))
+            .find(|e| e.message.contains("'json_stringify' expects exactly 1"))
             .expect("arity error");
         let hint = e.hint.as_deref().unwrap_or("");
         assert!(hint.contains("json_stringify("), "got hint: {}", hint);

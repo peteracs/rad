@@ -67,7 +67,7 @@ the authority resolves avatars by `PlayerControlled.player_id`.
 
 1. `server/src/main.rad` binds UDP and runs a fixed-tick loop.
 2. `server/src/transport/udp_match.rad` drains a bounded datagram budget.
-3. `server/src/protocol/match_protocol.rad` parses binary sync, move, cast, and
+3. `server/src/transport/match_protocol.rad` parses binary sync, move, cast, and
    disconnect packets.
 4. `server/src/server/input_queue.rad` validates and queues player-owned
    target-tick inputs in per-peer move/cast rings through shared duplicate,

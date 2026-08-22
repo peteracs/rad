@@ -10,6 +10,7 @@ mutate by accident.
 
 [Playground](https://peteracs.github.io/rad/) ·
 [Documentation](https://peteracs.github.io/rad/docs/) ·
+[Rust API](https://peteracs.github.io/rad/rustdoc/rad_vm/) ·
 [Examples](https://peteracs.github.io/rad/docs/examples/catalog.html) ·
 [Language spec](https://peteracs.github.io/rad/docs/reference/spec.html)
 
@@ -190,6 +191,7 @@ the repository, but 0.x releases do not carry a compatibility promise yet.
 Start with the [documentation](https://peteracs.github.io/rad/docs/), then see
 the [language guarantees](https://peteracs.github.io/rad/docs/reference/guarantees.html),
 [builtins](https://peteracs.github.io/rad/docs/reference/builtins.html),
+[enterprise DX semantics](https://peteracs.github.io/rad/docs/reference/enterprise-dx-v05.html),
 [examples](https://peteracs.github.io/rad/docs/examples/catalog.html), and
 [roadmap](https://peteracs.github.io/rad/docs/project/roadmap.html).
 

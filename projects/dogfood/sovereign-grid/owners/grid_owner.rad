@@ -1,0 +1,190 @@
+use "../schema.rad"
+
+pub component AssetIdentity owned {
+    indexed id: AssetId = AssetId(u64(0)),
+    ordered indexed dispatch_key: (u16, u64) = (u16(0), u64(0)),
+    zone: ZoneId = ZoneId(u16(0)),
+    flags: AssetFlags = AssetFlags(u16(0)),
+}
+
+pub component AssetCapacity owned {
+    available: int = 0,
+    reserved: int = 0,
+}
+
+pub component Mission owned {
+    indexed id: MissionId = MissionId(u64(0)),
+    ordered indexed urgency_key: (u16, u64) = (u16(0), u64(0)),
+    kind: MissionKind = MissionKind::Medical,
+    zone: ZoneId = ZoneId(u16(0)),
+    demand: int = 0,
+    flow: MissionFlow = MissionFlow::Queued,
+}
+
+pub component Assignment owned {
+    asset: entity = nil,
+    credits: Credits = Credits(i64(0)),
+}
+
+pub component AuditTrail owned {
+    revision: int = 0,
+    notes: list<str> = [],
+}
+
+pub component ActiveMission {}
+pub component AvailableAsset {}
+pub component CompletedMission {}
+
+pub resource GridLedger owned {
+    committed: int = 0,
+    credits: Credits = Credits(i64(0)),
+}
+
+pub transient resource DispatchScratch {
+    probes: int = 0,
+    last_asset: AssetId = AssetId(u64(0)),
+}
+
+pub materialized view DispatchableAssets {
+    depends [AssetIdentity, AssetCapacity, AvailableAsset]
+    key AssetIdentity.id
+}
+
+pub materialized view ActiveMissions {
+    depends [Mission, ActiveMission]
+    key Mission.id
+}
+
+pub fn publish_asset(id: AssetId, zone: ZoneId, priority: u16, capacity: int) -> entity
+writes owned [AssetIdentity, AssetCapacity]
+{
+    return spawn(
+        f"asset-{u64(id)}",
+        AssetIdentity {
+            id: id,
+            dispatch_key: (priority, u64(id)),
+            zone: zone,
+            flags: AssetFlags(u16(5)),
+        },
+        AssetCapacity { available: capacity, reserved: 0 },
+        AvailableAsset {},
+    )
+}
+
+pub fn submit_mission(id: MissionId, zone: ZoneId, urgency: u16, demand: int) -> entity
+writes owned [Mission, AuditTrail]
+{
+    let mission: entity = spawn(
+        f"mission-{u64(id)}",
+        Mission {
+            id: id,
+            urgency_key: (urgency, u64(id)),
+            kind: if urgency <= u16(1) { MissionKind::Medical } else { MissionKind::Power },
+            zone: zone,
+            demand: demand,
+            flow: MissionFlow::Queued,
+        },
+        AuditTrail { revision: 1, notes: ["submitted"] },
+    )
+    emit next MissionSubmitted { mission: mission, id: id }
+    return mission
+}
+
+pub transaction ReserveMission(mission: entity, asset: entity, payment: Credits)
+writes owned [Mission, AssetCapacity, Assignment, AuditTrail, GridLedger]
+{
+    requires has(mission, Mission)
+    requires has(asset, AssetCapacity)
+    requires require(mission, Mission).flow == MissionFlow::Queued
+    requires require(asset, AssetCapacity).available >= require(mission, Mission).demand
+    changes_only [Mission, AssetCapacity, Assignment, AuditTrail, GridLedger, ActiveMission, AvailableAsset]
+
+    let job: Mission = require(mission, Mission)
+    let capacity: AssetCapacity = require(asset, AssetCapacity)
+    let audit: AuditTrail = require(mission, AuditTrail)
+    let ledger: GridLedger = res(GridLedger)
+    set(mission, Mission { flow: transition(job.flow, "reserve") |> unwrap, ..job })
+    set(asset, AssetCapacity {
+        available: capacity.available - job.demand,
+        reserved: capacity.reserved + job.demand,
+    })
+    set(mission, Assignment { asset: asset, credits: payment })
+    set(mission, AuditTrail {
+        revision: audit.revision + 1,
+        notes: push(audit.notes, "reserved"),
+    })
+    set(mission, ActiveMission {})
+    if capacity.available == job.demand { remove(asset, AvailableAsset) }
+    set_resource(GridLedger, GridLedger {
+        committed: ledger.committed + 1,
+        credits: Credits(i64(ledger.credits) + i64(payment)),
+    })
+
+    ensures has(mission, Assignment)
+    ensures require(mission, Mission).flow == MissionFlow::Reserved
+    ensures res(GridLedger).committed > 0
+    post_commit { emit next MissionReserved { mission: mission, asset: asset } }
+}
+
+pub transaction CompleteMission(mission: entity)
+writes owned [Mission, AssetCapacity, Assignment, AuditTrail]
+{
+    requires has(mission, Assignment)
+    requires require(mission, Mission).flow == MissionFlow::Active
+    changes_only [Mission, AssetCapacity, AuditTrail, Assignment, ActiveMission, CompletedMission, AvailableAsset]
+
+    let job: Mission = require(mission, Mission)
+    let assignment: Assignment = require(mission, Assignment)
+    let capacity: AssetCapacity = require(assignment.asset, AssetCapacity)
+    let audit: AuditTrail = require(mission, AuditTrail)
+    set(mission, Mission { flow: transition(job.flow, "complete") |> unwrap, ..job })
+    set(assignment.asset, AssetCapacity {
+        available: capacity.available + job.demand,
+        reserved: capacity.reserved - job.demand,
+    })
+    set(assignment.asset, AvailableAsset {})
+    set(mission, AuditTrail {
+        revision: audit.revision + 1,
+        notes: push(audit.notes, "completed"),
+    })
+    remove(mission, ActiveMission)
+    set(mission, CompletedMission {})
+
+    ensures require(mission, Mission).flow == MissionFlow::Completed
+    ensures not has(mission, ActiveMission)
+    post_commit {
+        emit next MissionCompleted {
+            mission: mission,
+            asset: require(mission, Assignment).asset,
+        }
+    }
+}
+
+pub fn launch(mission: entity) -> nil writes owned [Mission, AuditTrail] {
+    let job: Mission = require(mission, Mission)
+    let audit: AuditTrail = require(mission, AuditTrail)
+    set(mission, Mission { flow: transition(job.flow, "launch") |> unwrap, ..job })
+    set(mission, AuditTrail {
+        revision: audit.revision + 1,
+        notes: push(audit.notes, "launched"),
+    })
+    emit phase(Commit) MissionLaunched {
+        mission: mission,
+        asset: require(mission, Assignment).asset,
+    }
+}
+
+pub readonly fn asset_by_id(id: AssetId) -> entity {
+    return lookup(AssetIdentity, "id", id) |> unwrap
+}
+
+pub readonly fn mission_by_id(id: MissionId) -> entity {
+    return lookup(Mission, "id", id) |> unwrap
+}
+
+migrate AuditTrail(old) {
+    return AuditTrail {
+        revision: get_or(old, "revision", 0),
+        notes: get_or(old, "notes", []),
+    }
+}

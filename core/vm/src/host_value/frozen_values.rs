@@ -539,7 +539,7 @@ impl VM {
 
     pub fn call_global(&mut self, name: &str, args: &[FrozenValue]) -> Result<FrozenValue, String> {
         self.call_global_detailed(name, args)
-            .map_err(|failure| failure.render_compat())
+            .map_err(|failure| failure.render_message())
     }
 
     /// Call a RAD function while preserving typed settlement rejection,
@@ -817,7 +817,7 @@ impl VM {
 
         // Clone every mutable heap root as one graph. This preserves sharing
         // and cycles inside the child while replacing every closure capture
-        // cell. Constant pools are included because a malformed or legacy
+        // cell. Constant pools are included because a malformed
         // pre-settlement path must not mutate a parent-owned constant alias.
         let roots = state.root_layout.roots.clone();
         let chunk_constant_counts = state.root_layout.chunk_constant_counts.clone();

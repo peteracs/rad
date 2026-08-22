@@ -30,6 +30,7 @@ fn ensure_generation_safe_decision() -> nil {
         let output: RiskOutput = model.score_reference(request)
         decisions.activate_generation(u32(18), "riskbridge-model-v18")
         decisions.CommitDecision(
+            spawn(),
             model_customer,
             request,
             output,

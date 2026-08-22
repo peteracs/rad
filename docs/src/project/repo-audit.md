@@ -36,18 +36,32 @@ Removed top-level shapes: `vm/`, `compiler/`, `simcore/`, `docs-site/`,
 
 ## Core
 
-For the 250-line review tracker covering every file under `core/vm/src`, see
-the [Core VM Source Audit](core-vm-source-audit.md).
+For the current audit contract, dated SRP snapshot, and live validation
+commands, see the [Core VM Source Audit](core-vm-source-audit.md). The
+machine-checked directory inventory is the [Folder Tree](folder_tree.md).
 
 | Path | Status | Notes |
 |---|---|---|
 | `core/vm/` | Active core | Rust library for syntax, checking, bytecode, VM, world state, replay, relations, and WASM bindings. |
+| `core/vm/src/ast/` | Active core | AST declarations, expressions, statements, canonical module identity, and declaration metadata. |
+| `core/vm/src/builtins/` | Active core | Builtin signatures, effects, and type schemes. |
+| `core/vm/src/causality/` | Active core | Provenance storage, explanation, and retention behavior. |
 | `core/vm/src/checker/` | Active core | Static analysis and type checking. |
 | `core/vm/src/compiler/` | Active core | Rust AST-to-bytecode compiler. |
+| `core/vm/src/ffi/` | Active core | ABI contracts, plugin generations, verification, containment, and host-call records. |
+| `core/vm/src/host_value/` | Active core | Owned host/VM value boundary. |
 | `core/vm/src/lexer/` | Active core | Lexer submodules. |
+| `core/vm/src/module_loader/` | Active core | Canonical module graph, aliases, lockfiles, and authenticated loading. |
 | `core/vm/src/parser/` | Active core | Parser submodules. |
 | `core/vm/src/relation/` | Active core | Relation front end, authoritative store, and derivation under one bounded context. |
+| `core/vm/src/replay/` | Active core | Deterministic trace encoding, identity, execution, and tests. |
+| `core/vm/src/sandbox/` | Active core | Capability isolation and speculative guest execution. |
+| `core/vm/src/types/` | Active core | Semantic input/product and type-system support. |
+| `core/vm/src/value/` | Active core | NaN-boxed representation, builtin identity, and value operations. |
 | `core/vm/src/vm/` | Active core | Bytecode VM internals and builtins. |
+| `core/vm/src/wasm/` | Active core | Browser runtime/session API and rendering bridge. |
+| `core/vm/src/wire/` | Active core | Canonical world/delta codec and validation. |
+| `core/vm/src/world/` | Active core | ECS storage, indexes, views, snapshots, and operations. |
 | `core/vm/src/internal_tests/` | Validation | Cross-module tests that require crate-private state. |
 | `core/vm/tests/` | Validation | Rust integration tests for the VM crate. |
 | `core/vm/benches/` | Validation | Criterion benchmarks tied to the VM crate. |
@@ -68,50 +82,29 @@ the [Core VM Source Audit](core-vm-source-audit.md).
 | `docs/src/getting-started/` | Active docs | Installation and first-use docs. |
 | `docs/src/guide/` | Active docs | Language guide. |
 | `docs/src/project/` | Active docs | Changelog, roadmap, repo map, audit, contributing, and RFC process. |
-| `docs/src/reference/` | Active docs | Spec, builtins, architecture, memory model, performance, and compatibility docs. |
+| `docs/src/reference/` | Active docs | Canonical spec, builtins, architecture, memory model, performance, and host API references. |
 | `docs/theme/` | Active docs | mdBook theme overrides. |
 | `docs/book/` | Generated | mdBook output; ignored. |
 
 ## Projects
 
+The [Folder Tree](folder_tree.md) is the exhaustive directory inventory. This
+table records the project-level boundaries that carry architecture or release
+status; it deliberately does not duplicate every dogfood subdirectory.
+
 | Path | Status | Notes |
 |---|---|---|
-| `projects/dogfood/` | Active project | Larger Rad applications used to pressure-test language features. |
-| `projects/dogfood/authority-effects/` | Active project | Transitive system-authority enforcement and inspection dogfood. |
-| `projects/dogfood/budget/` | Active project | Budget dogfood app. |
-| `projects/dogfood/causality/` | Active project | Provenance/why dogfood app. |
-| `projects/dogfood/deathsight/` | Active project | Browser/game dogfood source. |
-| `projects/moba/kit/` | Active project | MOBA simulation dogfood. |
-| `projects/moba/kit/gen/` | Active project | Checked-in generated Rad content used by the MOBA corpus. |
-| `projects/moba/kit/kit/` | Active project | Champion/ability kit modules. |
-| `projects/moba/kit/tools/` | Tooling | Generators for MOBA content. |
-| `projects/moba/vertical-slice/` | Active project | Networked client, RAD authority, edge proxy, and shared protocol. |
-| `projects/moba/vertical-slice/protocol/` | Active project | Canonical wire contract and generated-binding tool. |
-| `projects/dogfood/opsdesk/` | Active project | Operations desk dogfood app. |
-| `projects/dogfood/orianna_gui/` | Active project | Orianna browser arena source. |
-| `projects/dogfood/radgui/` | Active project | Generic GUI dogfood source. |
-| `projects/dogfood/radgui/targets/` | Active project | RADGUI app targets. |
-| `projects/dogfood/radsheet/` | Active project | Spreadsheet dogfood app. |
-| `projects/dogfood/radsheet/demo/` | Active project | Demo scripts/state fixtures; runtime state is ignored. |
-| `projects/dogfood/radsheet/incident/` | Active project | Incident reproduction source. |
-| `projects/dogfood/radtrack/` | Active project | Offline-first tracker dogfood app. |
-| `projects/dogfood/radtrack/demo/` | Active project | Demo fixtures; runtime state is ignored. |
-| `projects/dogfood/schema/` | Active project | Schema/migration dogfood app. |
-| `projects/dogfood/speculation/` | Active project | Fork/simulate dogfood app. |
-| `projects/dogfood/sudoku/` | Active project | Sudoku dogfood app. |
-| `projects/dogfood/sudoku/data/` | Active project | Sudoku data fixtures. |
-| `projects/dogfood/syncdesk/` | Active project | Sync/network dogfood app. |
-| `projects/dogfood/tactics/` | Active project | Tactics dogfood app. |
-| `projects/dogfood/tactics/bots/` | Active project | Tactics bot modules. |
-| `projects/dogfood/timetravel/` | Active project | Replay/time-travel dogfood app. |
-| `projects/dogfood/todo/` | Active project | Todo dogfood app. |
-| `projects/dogfood/worldmerge/` | Active project | Merge/conflict dogfood app. |
-| `projects/moba/vertical-slice/` | Active project | Networked MOBA dogfood stack: RAD authority server, Rust WebTransport edge proxy, and a browser client. |
+| `projects/dogfood/` | Active project | Forty-two production, research, regression, and teaching applications. See the folder tree for the complete list. |
+| [Production portfolio](production-dogfood-portfolio.md) | Validation | PagerGrid, FulfillOS, ClearPay, ForgeLink, MarketLens, BookCore, Dispatch60, MatchFlow, AccessLens, WorkPulse, and RiskBridge cumulatively accept the eleven production-boundary features. |
+| `projects/dogfood/native-math-kernels/` | Active project | Project-owned native acceleration and extension ABI dogfood. |
+| `projects/moba/kit/` | Active project | MOBA simulation corpus, generated content, kit modules, tools, and golden receipts. |
+| `projects/moba/simcore/` | Active project | Rust/native/WASM simulation core with golden tests. |
+| `projects/moba/vertical-slice/` | Active project | Networked MOBA stack: RAD authority, shared protocol, Rust WebTransport edge proxy, and browser client. |
+| `projects/moba/vertical-slice/protocol/` | Active project | Canonical wire contract and binding generator. |
 | `projects/moba/vertical-slice/client/` | Active project | Vite + TypeScript + Three.js client owning input, prediction, reconciliation, and rendering. |
-| `projects/moba/vertical-slice/client/src/netcode/` | Active project | Prediction, reconciliation, and ack/diagnostic logic. |
 | `projects/moba/vertical-slice/client/test/` | Validation | Node-based unit tests for the client netcode and transport modules. |
 | `projects/moba/vertical-slice/docs/` | Active docs | Stack-local overview, runbook, protocol ownership, and netcode notes. |
-| `projects/moba/vertical-slice/server/` | Active project | RAD authority server: simulation, packet grammar, validation, snapshots, and replay. |
+| `projects/moba/vertical-slice/server/` | Active project | RAD authority server: simulation, transport-owned packet grammar, validation, snapshots, and replay. |
 | `projects/moba/vertical-slice/server/src/test/` | Validation | `.rad` smoke suites run via `npm test`. |
 | `projects/moba/vertical-slice/edge-proxy/` | Active project | Rust WebTransport/HTTP3 terminator. Deliberately outside the root Cargo workspace so QUIC dependencies stay out of the main build. |
 | `projects/playground/` | Active project | Browser playground, hosts, demos, relay, and JS tests. |

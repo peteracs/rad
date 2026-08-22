@@ -265,16 +265,12 @@ mod tests {
 
     #[test]
     fn canonical_pipeline_preserves_semantic_configuration_through_compilation() {
-        let parsed = parse_source(
-            "component Root {} system Run(root: Root) {}",
-            ParserOptions::default(),
-        );
+        let parsed = parse_source("component Root {} system Run(root: Root) {}", ParserOptions);
         assert!(parsed.lexer_errors.is_empty());
         assert!(parsed.parser_errors.is_empty());
         let options = CheckerOptions {
             strict_types: true,
             features: vec!["causal_laws".to_string()],
-            ..CheckerOptions::default()
         };
         let analysis = analyze_program(&parsed.program, &HashMap::new(), options);
         assert!(analysis.errors().is_empty(), "{:?}", analysis.errors());
@@ -290,17 +286,14 @@ mod tests {
 
     #[test]
     fn parse_source_reports_lexical_and_parser_diagnostics_together() {
-        let parsed = parse_source("let x = §\ncomponent", ParserOptions::default());
+        let parsed = parse_source("let x = §\ncomponent", ParserOptions);
         assert!(!parsed.lexer_errors.is_empty());
         assert!(!parsed.parser_errors.is_empty());
     }
 
     #[test]
     fn unchecked_pipeline_is_explicit_and_preserves_feature_configuration() {
-        let parsed = parse_source(
-            "intent Ping { key target: entity }",
-            ParserOptions::default(),
-        );
+        let parsed = parse_source("intent Ping { key target: entity }", ParserOptions);
         assert!(parsed.lexer_errors.is_empty());
         assert!(parsed.parser_errors.is_empty());
         compile_unchecked_program(

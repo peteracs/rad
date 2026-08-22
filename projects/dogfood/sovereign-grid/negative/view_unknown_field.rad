@@ -1,0 +1,5 @@
+component Stock { available: int = 1 }
+materialized view BrokenView {
+    depends [Stock]
+    where Stock.missing > 0
+}

@@ -88,7 +88,7 @@ fn emit_compiler_reactor_stub_module_impl() -> Vec<u8> {
 
 #[cfg(not(all(feature = "native-wasm-phase3", not(target_arch = "wasm32"))))]
 fn emit_compiler_reactor_stub_module_impl() -> Vec<u8> {
-    emit_minimal_wasm_module()
+    emit_placeholder_wasm_module()
 }
 
 /// Phase 3 reactor stub: imports `env.vfs_read`, exports memory and `rad_*` entrypoints.
@@ -97,8 +97,8 @@ pub fn emit_compiler_reactor_stub_module() -> Vec<u8> {
     emit_compiler_reactor_stub_module_impl()
 }
 
-/// Backwards-compatible name: minimal valid v1 module (single empty export).
-pub fn emit_minimal_wasm_module() -> Vec<u8> {
+/// Minimal valid v1 placeholder module with one empty export.
+pub fn emit_placeholder_wasm_module() -> Vec<u8> {
     vec![
         0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x01, 0x04, 0x01, 0x60, 0x00, 0x00, 0x03,
         0x02, 0x01, 0x00, 0x07, 0x13, 0x01, 0x0f, 0x72, 0x61, 0x64, 0x5f, 0x70, 0x6c, 0x61, 0x63,

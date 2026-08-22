@@ -1,0 +1,74 @@
+// Sovereign Grid coordinates emergency power, autonomous couriers, and cargo.
+// This module is the shared wire and event vocabulary; mutation lives in owners/.
+
+pub opaque type AssetId = u64
+pub opaque type MissionId = u64
+pub opaque type ZoneId = u16
+pub opaque type Credits = i64
+
+pub enum MissionKind: u8 {
+    Medical = 1,
+    Power = 2,
+    Evacuation = 3,
+}
+
+pub bitflags AssetFlags: u16 {
+    Autonomous = 1,
+    Airborne = 2,
+    HazardRated = 4,
+    Priority = 8,
+}
+
+pub repr(C) struct DispatchPacket {
+    mission: MissionId,
+    asset: AssetId,
+    zone: ZoneId,
+    credits: Credits,
+    flags: AssetFlags,
+}
+
+pub repr(C) packed struct SensorPacket {
+    zone: ZoneId,
+    temperature: f32,
+    alarm: u8,
+}
+
+pub type Pair<T> = (T, T)
+pub type Tags = list<str>
+
+pub type DispatchOutcome {
+    Assigned { mission: MissionId, asset: AssetId }
+    Deferred { mission: MissionId, reason: str }
+    Rejected { mission: MissionId, code: int }
+}
+
+pub state MissionFlow {
+    Queued { on reserve -> Reserved }
+    Reserved {
+        on launch -> Active
+        on cancel -> Cancelled
+    }
+    Active {
+        on complete -> Completed
+        on fail -> Queued
+    }
+    Completed {}
+    Cancelled {}
+}
+
+pub struct GeoPoint {
+    x: float = 0.0,
+    y: float = 0.0,
+}
+
+pub event MissionSubmitted { mission: entity, id: MissionId }
+pub event MissionReserved { mission: entity, asset: entity }
+pub event MissionLaunched { mission: entity, asset: entity }
+pub event MissionCompleted { mission: entity, asset: entity }
+pub event AuditPublished { mission: entity, revision: int }
+pub event MaintenanceWindow { asset: entity }
+
+pub phase Intake {}
+pub phase Plan {}
+pub serial phase Commit {}
+pub phase Publish {}

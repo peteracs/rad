@@ -1,73 +1,83 @@
-# Phase 3: Stateful WASM compiler cutover
+# WASM and JavaScript API
+`wasm-bindgen` exports `RadRuntime` and `WasmChunk` on `wasm32`. The generated
+[host API surface](./generated/host-api-surface.md) lists every production
+method; changing a Rust export makes the documentation gate stale.
 
-## ABI
+## Availability and imports
 
-See [`core/vm/src/compiler_abi.rs`](../../../core/vm/src/compiler_abi.rs): packed `u64` pointer/length returns, `WasmDiagnosticRecord` blob layout, import `env.vfs_read`.
+Browser compilation rejects module `use` declarations because the
+single-source boundary has no filesystem loader. File, process, TCP, UDP, and
+dynamic-library builtins are unavailable. Browser hosts provide explicit,
+effect-declared imports and record nondeterministic results when replay is
+required.
 
-## Rust host
+Returned JSON strings are UTF-8 command data or tagged failure.
+`compile_and_run_result_json` returns `ok`, `settlement_rejected`,
+`runtime_error`, or `host_fault`; consumers switch on `kind` and reject unknown
+variants.
 
-- [`core/vm/src/wasm_binary_emit.rs`](../../../core/vm/src/wasm_binary_emit.rs): builds the reactor stub module with `wasm-encoder` when `native-wasm-phase3` is enabled.
-- [`core/vm/src/wasm_compiler_host.rs`](../../../core/vm/src/wasm_compiler_host.rs): wasmtime `Store`, `vfs_read` host import, guest exports `rad_init`, `rad_update_buffer`, `rad_check`, `rad_query_lsp`.
-- **`compiler_wasm_bytes_from_env()`** (same module): resolves WASM bytes for the guest — if **`RAD_COMPILER_WASM`** is set, read that file; otherwise use the in-tree stub from `wasm_binary_emit`.
-- **`VfsState`**: in-memory overlay (`files`), plus optional **`fallback_dir`**. The host’s `vfs_read` resolves a path in order: **overlay → `std::fs::read(path)` as absolute/relative → `fallback_dir.join(path)`**.
+## TypeScript declaration shape
 
-## Self-hosted Rad
+The wasm-bindgen package generates concrete declarations. Host adapters may
+depend on this structural subset:
 
-- Historical frozen helpers live under
-  [`experiments/c-backend/src/wasm_encode.rad`](../../../experiments/c-backend/src/wasm_encode.rad)
-  and [`experiments/c-backend/src/emit_wasm.rad`](../../../experiments/c-backend/src/emit_wasm.rad).
-  They are not the active WASM source of truth.
+```typescript
+export class RadRuntime {
+  constructor();
+  runtime_features(): string;
+  compile_and_run(source: string): string;
+  compile_and_run_result_json(source: string): string;
+  compile_only(source: string): string;
+  check_source(source: string): string;
+  reset(): void;
 
-The stateful reactor ABI is documented here and implemented on the Rust host
-side by `core/vm/src/wasm_compiler_host.rs` plus the current stub emitter in
-`core/vm/src/wasm_binary_emit.rs`. There is no separate source note file under
-`experiments/c-backend/`; that directory is frozen experimental code.
+  session_start(source: string): string;
+  session_emit(event: string, fieldsJson: string): void;
+  session_pump(): string;
+  session_delta(): string;
+  session_apply(delta: string): void;
+  session_state(): string;
+  session_load(state: string): void;
+  session_digest(): string;
+  session_checkpoint(): void;
+  session_undo(): boolean;
+  session_redo(): boolean;
+  session_why(entityName: string, component: string): string;
+  session_call(name: string, argsJson: string): string;
+  session_export_snapshot(): Uint8Array;
+  session_import_snapshot(snapshot: Uint8Array): void;
 
-## `rad build`
-
-```text
-rad build [--target wasm] <entry.rad> <out.wasm>
+  session_render_buffer_refresh(): void;
+  session_render_buffer_refresh_bounded(maxRecords: number, maxEntitiesScanned: number): void;
+  session_render_buffer_ptr(): number;
+  session_render_buffer_u32_len(): number;
+}
 ```
 
-- **Type-checks** the program (same module graph and checker defaults as a normal `rad` run; no VM execution).
-- **Writes** `<out.wasm>`:
-  - If **`RAD_COMPILER_WASM`** is set: copies bytes from that path (useful to install a prebuilt guest).
-  - Otherwise: writes the **Phase 3 reactor stub** from `emit_compiler_reactor_stub_module()`.
-- **`--target`** currently only supports **`wasm`**; it must appear **before** the two positional paths (not after the first file argument).
+Rust `Result<T, String>` exports throw JavaScript exceptions on `Err`; generated
+declarations present successful `T`. Callers use `try`/`catch`. `Vec<u8>`
+crosses as `Uint8Array`.
 
-## `rad lsp` (WASM diagnostics)
+## Streaming session
 
-Requires a native `rad` built with the **`native-wasm-phase3`** Cargo feature (default for in-tree `rad-vm`).
+`session_start` compiles once and retains one authority world. Emit/pump
+advances it; `session_delta` returns an authenticated delta and
+`session_apply` rejects wrong lineage/order. `session_digest` is the
+convergence receipt. State/snapshot imports validate fully before adoption.
+Checkpoint/undo/redo retain canonical snapshots.
 
-| Environment variable | Effect |
-|----------------------|--------|
-| **`RAD_WASM_PHASE3=1`** | Use the WASM reactor for **publishDiagnostics** (loads stub or file per table below). |
-| **`RAD_COMPILER_WASM`** | Path to a `compiler.wasm` guest; **also** turns on the WASM diagnostic path (even without `RAD_WASM_PHASE3`). |
-| **`RAD_VFS_ROOT`** | Optional workspace root: host sets `VfsState.fallback_dir` so `vfs_read` can load imports from disk when paths are not in the overlay. If unset, the LSP uses the active document’s parent directory as fallback. |
+## Render buffer ownership
 
-The LSP seeds the overlay with **all open file buffers** (by filesystem path) plus the document being checked. Hover, completion, go-to-definition, and formatting still use the **Rust** implementation unless extended separately. The **stub** guest returns **no** diagnostics until a real `compiler.wasm` implements checking inside `rad_check`.
+`runtime_features()` publishes the versioned presentation descriptor, field
+offsets, record/header lengths, limits, packet kinds, and features. Call
+`session_render_buffer_refresh_bounded`, then create a read-only `Uint32Array`
+view from WASM memory, pointer, and length. It is borrowed only until the next
+runtime call or memory growth. Validate descriptor, count, packet kind,
+sequence/base sequence, flags, booleans, enum IDs, and finite floats.
 
-## Cargo feature
+## Determinism and errors
 
-- **`native-wasm-phase3`**: enables wasmtime, stub emission, and the LSP/CLI integration above. Disable with `--no-default-features` if you need a slimmer `rad` without the Phase 3 host.
-
-## VM bytecode heaps (related)
-
-The Phase 3 **compiler** guest is separate from Rad **user** bytecode loaded in
-the browser or in `RadRuntime`. Internally, user chunks built with a scratch
-heap (for example `WasmChunk` in `core/vm/src/wasm.rs`) cross the explicitly
-unsafe owning-bundle boundary: the chunk is verified before execution and its
-constant storage is merged into the VM. This API is not exposed as a safe raw
-value path to Rust hosts. See the [architecture guide](architecture.md) for the
-VM memory model.
-
-## CLI ownership (`adapters/cli/src/main.rs`)
-
-The full CLI (including `fmt`, `lint`, `test`, `new`, `snapshot`, `play`, and
-**`build`**) is owned by the `rad-cli` adapter. Native Phase 3 diagnostics in
-`rad-lsp` propagate the matching `rad-vm/native-wasm-phase3` feature explicitly.
-
-## Cutover target
-
-The Rust parser/checker/AST in `core/vm` remain the source of truth until a
-future VM-owned compiler artifact can replace them for every command.
+Sessions initialize deterministic RNG state. Equal source and ordered inputs
+must converge to equal digest independent of host worker count. Wrong-version
+JSON, unknown descriptors, invalid limits, malformed deltas/snapshots, and
+stale render packets fail closed; no partial state is adopted.

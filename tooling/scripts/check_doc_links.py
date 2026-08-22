@@ -12,6 +12,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[2]
 LINK = re.compile(r"\[[^\]]*\]\(([^)]+)\)")
 HEADING = re.compile(r"^#{1,6}\s+(.*?)\s*$", re.MULTILINE)
+HTML_ANCHOR = re.compile(r"<a\s+(?:name|id)=[\"']([^\"']+)[\"']\s*></a>", re.IGNORECASE)
 INCLUDE = re.compile(r"\{\{#include\s+([^}\s]+)\}\}")
 
 
@@ -44,7 +45,7 @@ def anchors_of(path: Path) -> set:
         body = rendered_markdown(path)
     except (OSError, ValueError):
         return set()
-    return {slug(h) for h in HEADING.findall(body)}
+    return {slug(h) for h in HEADING.findall(body)} | set(HTML_ANCHOR.findall(body))
 
 
 def main() -> int:

@@ -215,3 +215,55 @@ fn native_constructors_are_bounded_pure_allocators_in_authority_graphs() {
     );
     assert!(errors.is_empty(), "{errors:?}");
 }
+
+#[test]
+fn aliased_module_query_resolves_its_local_component() {
+    use crate::lexer::Lexer;
+    use crate::parser::Parser;
+
+    let entry_program = Parser::new(Lexer::new("").tokenize().0).parse();
+    let module_source = r#"
+        pub component Cell { value: int = 0 }
+        pub system Probe() {}
+        pub fn selected() -> list<entity> {
+            let _future: world_fork = simulate(fork(), [system::Probe], 1)
+            return query { Cell } where Cell.value > 0
+        }
+    "#;
+    let module_program = Parser::new(Lexer::new(module_source).tokenize().0).parse();
+    let aliases = std::collections::HashMap::from([(
+        "surface".to_string(),
+        crate::ast::ModuleAlias::namespaced(
+            module_program.declarations,
+            "test:surface".to_string(),
+        ),
+    )]);
+    let mut checker = Checker::new();
+    checker.set_aliases(aliases);
+    let errors = checker.check(&entry_program);
+    assert!(errors.is_empty(), "got: {errors:?}");
+    assert!(
+        checker
+            .warnings()
+            .iter()
+            .all(|warning| !warning.message.contains("Probe")
+                || !warning.message.contains("never run")),
+        "aliased system reference was ignored: {:?}",
+        checker.warnings()
+    );
+}
+
+#[test]
+fn task_type_annotation_round_trips_async_result_type() {
+    let errors = check_src(
+        r#"
+        async fn produce() -> int { return 7 }
+        async fn consume() -> int {
+            let pending: task<int> = async produce()
+            let value: int = await pending
+            return value
+        }
+        "#,
+    );
+    assert!(errors.is_empty(), "got: {errors:?}");
+}

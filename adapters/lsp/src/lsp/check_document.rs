@@ -46,7 +46,7 @@ impl LspBackend {
             if use_wasm {
                 if let Ok(wasm_bytes) = rad_vm::wasm_compiler_host::compiler_wasm_bytes_from_env() {
                     let mut vfs = rad_vm::wasm_compiler_host::VfsState {
-                        fallback_dir: std::env::var("RAD_VFS_ROOT")
+                        filesystem_root: std::env::var("RAD_VFS_ROOT")
                             .ok()
                             .map(PathBuf::from)
                             .or_else(|| path.parent().map(PathBuf::from)),
@@ -110,9 +110,7 @@ impl LspBackend {
             }
         }
 
-        let parser_options = ParserOptions {
-            compat_v0_5_dx: false,
-        };
+        let parser_options = ParserOptions;
 
         let mut diagnostics = vec![];
 
@@ -130,7 +128,7 @@ impl LspBackend {
                             }
                         }
                     } else {
-                        is_this_file = true; // fallback
+                        is_this_file = true; // An absent file id identifies the current document.
                     }
 
                     if is_this_file {

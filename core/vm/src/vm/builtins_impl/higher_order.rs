@@ -163,7 +163,6 @@ impl VM {
     fn call_named_unary(&mut self, callee: Value, argument: Value) -> Result<Value, String> {
         let function = callee
             .as_fn()
-            .cloned()
             .ok_or_else(|| "allocation-free callback must be a named guest function".to_string())?;
         if function.arity != 1 {
             return Err(format!(
@@ -171,8 +170,9 @@ impl VM {
                 function.name, function.arity
             ));
         }
-        if function.chunk_id >= self.chunks.len() {
-            return Err(format!("Invalid function chunk {}", function.chunk_id));
+        let chunk_id = function.chunk_id;
+        if chunk_id >= self.chunks.len() {
+            return Err(format!("Invalid function chunk {chunk_id}"));
         }
         let saved_depth = self.frames.len();
         self.push(argument);
@@ -180,14 +180,14 @@ impl VM {
         let frame_id = self.allocate_frame_id();
         self.frames.push(CallFrame {
             frame_id,
-            chunk_id: function.chunk_id,
+            chunk_id,
             ip: 0,
             stack_base,
             captures: None,
             system_writeback: None,
         });
         self.run_frames(saved_depth)
-            .map_err(|failure| failure.render_compat())?;
+            .map_err(|failure| failure.render_message())?;
         self.pop()
     }
 

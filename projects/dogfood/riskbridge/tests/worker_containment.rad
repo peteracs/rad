@@ -39,7 +39,7 @@ test "a host failure is data and cannot partially commit a decision" {
     assert(len(entities(decisions.DecisionLedger)) == 0, "failed host call committed no ledger")
 
     let output = score_reference(request)
-    decisions.CommitDecision(customer, request, output, u32(17), u8(1), u64(1))
+    decisions.CommitDecision(spawn(), customer, request, output, u32(17), u8(1), u64(1))
     let attempt = decisions.attempt_by_transaction(request.transaction)
     assert(has(attempt, decisions.DecisionLedger), "the service processes the next decision")
 }

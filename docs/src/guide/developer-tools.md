@@ -119,10 +119,12 @@ behavior. See [C Backend Freeze](../project/c-backend-freeze.md).
 Any detailed C-backend status below is historical and not current maintenance
 guidance.
 
-Historical note: the self-hosted compiler (`experiments/c-backend/src/emit_c.rad`) was typechecked by the default Rust VM checker.
-All compiler sources (`emit_c.rad`, `parser.rad`, `checker.rad`) have been converted to use f-strings for improved readability. The C backend passes 14/15 benchmark stress tests (the remaining `test_diamond` — the compiler compiling itself — is a known performance limitation). We are incrementally rolling out `--strict-types` compliance across the compiler sources:
-- `lexer.rad` is fully strict-types clean.
-- `parser.rad`, `checker.rad`, and `emit_c.rad` are in progress.
+Historical note: the self-hosted compiler (`experiments/c-backend/src/emit_c.rad`)
+was typechecked by the default Rust VM checker. At its freeze point, the C
+backend passed 14/15 benchmark stress tests; `test_diamond` (the compiler
+compiling itself) remained a performance limitation. `lexer.rad` was strict
+clean, while `parser.rad`, `checker.rad`, and `emit_c.rad` had not completed
+that migration. No strictness rollout continues in the frozen experiment.
 
 The old entry points are opt-in only and require `RAD_RUN_FROZEN_C_BACKEND=1`:
 
@@ -236,7 +238,7 @@ rad lint --preset strict
 ```
 
 - Requires type annotations (`--strict-types`, though `pub` exports are always strictly typed and checked for private type leaks)
-- Treats warnings as errors (`--deny-warnings`) and enables compatibility warnings (`--warn-compat`; use `--no-warn-compat` to silence)
+- Treats warnings as errors (`--deny-warnings`)
 - Includes compile-time transitive system-authority enforcement
 - Limits functions to 80 lines
 - Limits files to 1000 lines

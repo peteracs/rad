@@ -619,24 +619,17 @@ fn parse_use(&mut self) -> Result<UseStmt, ParseError> {
         let span = self.span();
         self.advance(); // consume "phase" ident
         let name = self.expect_ident_text()?;
-        // spec §3.5.1, the changelog, and the guide all spell this with
-        // brackets (`phase P [A, B]`, matching `schedule [...]`), but the
-        // parser historically only accepted braces. Accept either delimiter
-        // and require the matching closer so both forms parse identically.
-        let (open, close) = if self.check(TokenType::LBracket) {
-            (TokenType::LBracket, TokenType::RBracket)
-        } else {
-            (TokenType::LBrace, TokenType::RBrace)
-        };
-        self.expect(open)?;
+        // A phase is a declaration body and therefore has one canonical
+        // brace-delimited form. Schedule invocation lists remain bracketed.
+        self.expect(TokenType::LBrace)?;
         let mut systems = Vec::new();
-        while !self.check(close) {
+        while !self.check(TokenType::RBrace) {
             systems.push(self.expect_ident_text()?);
             if self.check(TokenType::Comma) {
                 self.advance();
             }
         }
-        self.expect(close)?;
+        self.expect(TokenType::RBrace)?;
         Ok(PhaseDecl {
             id: self.next_id(),
             span,

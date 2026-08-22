@@ -1,0 +1,8 @@
+component Root {}
+component AuditRecord { revision: int = 0 }
+event Routed { target: entity }
+on Routed(evt) { set(evt.target, AuditRecord { revision: 1 }) }
+system Route(_root: Root, emits Routed) {
+    emit Routed { target: self }
+    flush_events()
+}

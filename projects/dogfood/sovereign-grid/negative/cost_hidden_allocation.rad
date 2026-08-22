@@ -1,0 +1,5 @@
+component Asset {}
+fn rebuild() -> list<entity> { return sort(entities(Asset)) }
+@frame
+@no_guest_allocation
+system Render(reads Asset) { let _assets = rebuild() }

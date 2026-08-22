@@ -1,6 +1,6 @@
 ### Causality queries: `why()` and `why_resource()`
 
-```rad
+```text
 print(why(hero, Gold))          // -> str: the causal chain of the value
 print(why_resource(Treasury))
 ```
@@ -77,7 +77,7 @@ timeline). See `projects/dogfood/timetravel/fixed.rad` and `main_v2.rad`.
 
 ### Schema migration: `migrate`, `save_world()`, `load_world()`
 
-```rad
+```text
 component Health { hp: 100, max_hp: 100 }       // v2 shape
 
 migrate Health(old) {                            // v1 saves had only `hp`
@@ -135,7 +135,7 @@ save's schema section. A migrate block that declares a second parameter,
 type as an int (`0` for saves written without one), turning generation
 detection from a shape sniff into a fact:
 
-```rad
+```text
 component Incident v3 { severity: 1, source: "" }
 
 migrate Incident(old, from_version) {
@@ -159,7 +159,7 @@ v1 → v2 story (added field, renamed fields, migrated resource) in 40 lines.
 
 ### Convergence receipts: `world_digest()`
 
-```rad
+```text
 // after applying the server's down-delta and committing:
 if world_digest() == rpc("DIGEST") { print("converged") }
 ```
@@ -198,7 +198,7 @@ receipt most. The protocol that stays honest:
    same schema, so equality means *logical* convergence — and a real
    divergence still reports MISMATCH truthfully.
 
-```rad
+```text
 // the upgraded server's CERTIFY handler:
 match fork_from_bytes(client_bytes) {
     Ok(theirs) => {
@@ -213,7 +213,7 @@ See `projects/dogfood/radtrack/demo/run_rolling_demo.ps1` for the live receipt.
 
 ### World merge: `merge_forks()`
 
-```rad
+```text
 let base = fork()
 // …branch A mutates the world… let ours = fork()
 // …commit(base), branch B mutates… let theirs = fork()
@@ -311,7 +311,7 @@ refusing. What counts as a resolution depends on the conflict:
 
 The sync policy lives in user code:
 
-```rad
+```text
 fn rank(s: str) -> int {
     if s == "closed" { return 3 }
     if s == "escalated" { return 2 }
@@ -346,7 +346,7 @@ match merge_forks(base, ours, theirs) {
 Name claims resolve the same way — two offline clients both minting `T-5`
 is one rename away from a clean merge:
 
-```rad
+```text
 match c {
     NameConflict { name, entities } => {
         // keep both: first claimant (ours) and second (theirs, remapped)

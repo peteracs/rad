@@ -204,8 +204,8 @@ same seeds).
   dangling event payload; auto-GC now pauses for the duration of any builtin
   dispatch, and a threshold-0 regression test pins the exact window.
 - `clock()` trapped on wasm32 (`SystemTime::now()` is unimplemented there) —
-  now `Date.now()`; `simulate_par` and parallel system batches fall back to
-  sequential on wasm32 instead of trapping in rayon's pool spawn.
+  now `Date.now()`; `simulate_par` and parallel system batches execute
+  sequentially on wasm32 instead of trapping in rayon's pool spawn.
 
 Stale gripes corrected from the last round table: `else if` chains and the
 module system (`use "path.rad"`, `pub`, aliases, lockfiles, even remote

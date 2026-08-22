@@ -1,6 +1,6 @@
 //! Exact allocator-call metering for benchmarked system bodies.
 //!
-//! `guest` metrics are semantic GC-object counts owned by [`crate::gc`].
+//! `guest` metrics are semantic GC-object counts owned by the VM garbage collector.
 //! This module separately counts native allocator calls made by the VM,
 //! direct GC backing allocations, and the RAD-managed portion of a native
 //! host-call boundary. Plugin-internal allocators are outside this process

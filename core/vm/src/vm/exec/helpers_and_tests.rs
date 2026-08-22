@@ -94,7 +94,7 @@ impl VM {
 #[cfg(test)]
 mod scheduling_tests {
     fn run_source(src: &str) -> Vec<String> {
-        crate::test_support::run_source(src, crate::parser::ParserOptions::default())
+        crate::test_support::run_source(src, crate::parser::ParserOptions)
             .expect("program should compile and run")
     }
 
@@ -104,7 +104,7 @@ mod scheduling_tests {
     fn run_source_checked(src: &str) -> Vec<String> {
         crate::test_support::run_checked_source(
             src,
-            crate::parser::ParserOptions::default(),
+            crate::parser::ParserOptions,
             crate::checker::CheckerOptions::default(),
         )
         .expect("program should check, compile, and run")
@@ -182,7 +182,7 @@ mod scheduling_tests {
     /// Like `run_source` but with the `--serial-schedule` lever engaged, so
     /// scheduled systems run one at a time in topological order.
     fn run_source_serial(src: &str) -> Vec<String> {
-        crate::test_support::run_source_serial(src, crate::parser::ParserOptions::default())
+        crate::test_support::run_source_serial(src, crate::parser::ParserOptions)
             .expect("program should compile and run serially")
     }
 
@@ -200,7 +200,7 @@ mod scheduling_tests {
             system Inc(n: mut N) { n = N { v: n.v + 1 } }
             system Count(c: mut C) { c.k = c.k + 1 }
             let e = spawn("e", N { v: 0 })
-            phase P [Inc, Count]
+            phase P { Inc, Count }
             schedule [P]
             print(f"{(get(e, N) |> unwrap).v},{res(C).k}")
         "#;
@@ -274,7 +274,7 @@ mod scheduling_tests {
             resource RB { b: 0 }
             system SA(w: W, r: mut RA) { r.a = r.a + w.n }
             system SB(w: W, r: mut RB) { r.b = r.b + w.n }
-            serial phase Line [SA, SB]
+            serial phase Line { SA, SB }
             spawn(W { n: 1 })
             spawn(W { n: 1 })
             schedule [Line]

@@ -430,7 +430,7 @@ system Strike(h: mut HP, d: accum Damage) {
 If you want ordering by declaration instead of by data analysis, three levers steer the scheduler directly — none of them affects explicit `simulate_par`/`simulate_many`:
 
 - `schedule serial [A, B, C]` — this one call runs its systems one at a time in topological order (no worker snapshots, no merge).
-- `serial phase Line [A, B]` — members of the phase never share a batch with each other, in any schedule that runs them.
+- `serial phase Line { A, B }` — members of the phase never share a batch with each other, in any schedule that runs them.
 - `rad run --serial-schedule` — the global flag: every schedule in the program runs serially, the one-command differential test against the parallel path.
 
 ### Resource vs component

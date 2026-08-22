@@ -1,0 +1,11 @@
+component Lease { token: int = 2 }
+component Completion { token: int = 0 }
+let job = spawn(Lease {})
+fn stale_complete() { set(job, Completion { token: 1 }) }
+model CurrentLeaseOwnsCompletion {
+    commands [stale_complete]
+    invariant { return not has(job, Completion) or require(job, Completion).token == require(job, Lease).token }
+    runs 1
+    max_commands 1
+    seed 1
+}

@@ -594,78 +594,26 @@ impl Checker {
             }
 
             let resolved_params: Vec<Ty> = inst_params.iter().map(|p| self.resolve_ty(p)).collect();
-            let is_variadic = name == "print"
-                || name == "eprint"
-                || name == "format"
-                || name == "entities"
-                || name == "spawn"
-                || name == "query_where"
-                || name == "query_map"
-                || name == "query_count";
-            let is_optional_args =
-                name == "range" || name == "sandbox_run" || name == "simulate_par";
-
-            if !is_variadic && !is_optional_args && resolved_params.len() != arg_tys.len() {
+            let builtin = crate::value::Builtin::from_name(name)
+                .expect("builtin type scheme must belong to the runtime catalog");
+            let call_shape = crate::builtins::builtin_call_shape(builtin);
+            if !call_shape.accepts(arg_tys.len()) {
                 let hint = self.signature_hint(name);
                 self.error(
                     _span,
                     format!(
                         "Function '{}' expects {} argument(s), got {}",
                         name,
-                        resolved_params.len(),
+                        call_shape.requirement(),
                         arg_tys.len()
                     ),
                     hint,
                 );
-            } else if is_variadic && arg_tys.len() < resolved_params.len() {
-                self.error(
-                    _span,
-                    format!(
-                        "Function '{}' expects at least {} argument(s), got {}",
-                        name,
-                        resolved_params.len(),
-                        arg_tys.len()
-                    ),
-                    None,
-                );
-            } else if is_optional_args {
-                // simulate_par's optional 6th argument is the resource-override list.
-                let min_args = if name == "sandbox_run" {
-                    3
-                } else if name == "simulate_par" {
-                    5
-                } else {
-                    1
-                };
-                if arg_tys.len() < min_args || arg_tys.len() > resolved_params.len() {
-                    self.error(
-                        _span,
-                        format!(
-                            "Function '{}' expects {} to {} argument(s), got {}",
-                            name,
-                            min_args,
-                            resolved_params.len(),
-                            arg_tys.len()
-                        ),
-                        None,
-                    );
-                } else {
-                    let check_len = resolved_params.len().min(arg_tys.len());
-                    self.validate_call_args(
-                        name,
-                        &resolved_params[..check_len],
-                        &arg_tys[..check_len],
-                        _span,
-                    );
-                }
             } else {
-                let check_len = if is_variadic {
-                    // For variadic functions, check up to the number of defined parameters
-                    // (e.g., format requires the first argument to be Str)
-                    resolved_params.len().min(arg_tys.len())
-                } else {
-                    resolved_params.len().min(arg_tys.len())
-                };
+                // Variadic builtins own their repeated-tail checks in their
+                // semantic specializer. The canonical fixed prefix (for
+                // example `format`'s template) remains checked here.
+                let check_len = resolved_params.len().min(arg_tys.len());
                 self.validate_call_args(
                     name,
                     &resolved_params[..check_len],
@@ -694,6 +642,11 @@ impl Checker {
                 }
             }
             Ty::List(inner) => self.resolve_unbound_vars(inner),
+            Ty::Tuple(items) | Ty::Union(items) => {
+                for item in items {
+                    self.resolve_unbound_vars(item);
+                }
+            }
             Ty::Map(key, val) => {
                 self.resolve_unbound_vars(key);
                 self.resolve_unbound_vars(val);

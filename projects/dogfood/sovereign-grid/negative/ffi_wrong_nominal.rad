@@ -1,0 +1,5 @@
+opaque type MissionId = u64
+opaque type AssetId = u64
+fn score_mission(_id: MissionId) {}
+let asset: AssetId = AssetId(u64(9))
+score_mission(asset)

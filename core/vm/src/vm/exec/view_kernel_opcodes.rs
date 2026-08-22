@@ -32,7 +32,7 @@ impl VM {
             .world
             .materialized_view_dependencies(&plan.view)
             .ok_or_else(|| format!("Unknown materialized view '{}'", plan.view))?;
-        for dependency in &dependencies {
+        for dependency in dependencies {
             self.sandbox_check_read(dependency)?;
         }
         for write in &plan.writes {

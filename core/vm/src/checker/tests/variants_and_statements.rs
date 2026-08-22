@@ -1,7 +1,7 @@
 
 
     #[test]
-    fn zero_field_variant_shorthand_requires_compat_flag() {
+    fn zero_field_variant_shorthand_is_canonical() {
         let program = Program {
             declarations: vec![
                 Decl::Type(TypeDeclNode {
@@ -35,18 +35,10 @@
 
         let mut checker = Checker::new_with_options(CheckerOptions {
             features: vec![],
-            compat_v0_5_dx: false,
-            warn_compat: false,
             strict_types: false,
         });
         let errors = checker.check(&program);
-        assert!(
-            errors
-                .iter()
-                .any(|e| e.message.contains("requires --compat-v0.5-dx")),
-            "zero-field variant shorthand should require compat flag, got: {:?}",
-            errors
-        );
+        assert!(errors.is_empty(), "canonical shorthand failed: {errors:?}");
     }
 
     #[test]
@@ -102,8 +94,6 @@
         };
         let mut checker = Checker::new_with_options(CheckerOptions {
             features: vec![],
-            compat_v0_5_dx: true,
-            warn_compat: false,
             strict_types: false,
         });
         let errors = checker.check(&program);
@@ -115,7 +105,7 @@
     }
 
     #[test]
-    fn e2501_ambiguous_ref_state_machine_and_sum_type() {
+    fn unbraced_ambiguous_ref_canonically_resolves_to_state_machine() {
         let program = Program {
             declarations: vec![
                 Decl::Type(TypeDeclNode {
@@ -156,15 +146,12 @@
         };
         let mut checker = Checker::new_with_options(CheckerOptions {
             features: vec![],
-            compat_v0_5_dx: true,
-            warn_compat: true,
             strict_types: false,
         });
         let errors = checker.check(&program);
         assert!(
-            errors.iter().any(|e| e.message.contains("E2501")),
-            "should emit E2501 for ambiguous Dual::Active, got: {:?}",
-            errors
+            errors.is_empty(),
+            "unbraced Dual::Active should resolve to the state-machine state: {errors:?}"
         );
     }
 
@@ -210,8 +197,6 @@
         };
         let mut checker = Checker::new_with_options(CheckerOptions {
             features: vec![],
-            compat_v0_5_dx: true,
-            warn_compat: true,
             strict_types: true,
         });
         let errors = checker.check(&program);
@@ -224,6 +209,57 @@
         assert!(errors.iter().any(|e| e
             .message
             .contains("function 'id' needs an explicit return type")));
+    }
+
+    #[test]
+    fn generic_alias_substitutes_type_parameters_inside_tuples_and_unions() {
+        let checked = crate::test_support::check_source_with(
+            r#"
+            type Pair<T> = (T, T)
+            type Present<T> = T | nil
+
+            fn main() -> nil {
+                let pair: Pair<int> = (3, 7)
+                let present: Present<str> = "ready"
+                assert(pair == (3, 7) and present == "ready", "generic aliases substitute")
+            }
+            "#,
+            crate::parser::ParserOptions,
+            CheckerOptions {
+                strict_types: true,
+                ..CheckerOptions::default()
+            },
+        );
+        assert!(
+            checked.errors.is_empty(),
+            "nested alias parameters must be substituted before assignment checks: {:?}",
+            checked.errors
+        );
+    }
+
+    #[test]
+    fn strict_enumerate_preserves_index_and_element_types() {
+        let checked = crate::test_support::check_source_with(
+            r#"
+            fn main() -> nil {
+                let source: list<int> = [3, 7]
+                let indexed_rows: list<(int, int)> = enumerate(source)
+                let values: list<int> = indexed_rows
+                    |> map(fn([index, value]: (int, int)) -> int { return value + index })
+                assert(values == [3, 8], "enumerate is typed")
+            }
+            "#,
+            crate::parser::ParserOptions,
+            CheckerOptions {
+                strict_types: true,
+                ..CheckerOptions::default()
+            },
+        );
+        assert!(
+            checked.errors.is_empty(),
+            "enumerate must not erase generic element types: {:?}",
+            checked.errors
+        );
     }
 
     #[test]
@@ -265,8 +301,6 @@
         };
         let mut checker = Checker::new_with_options(CheckerOptions {
             features: vec![],
-            compat_v0_5_dx: true,
-            warn_compat: true,
             strict_types: true, // strict types enabled
         });
         let errors = checker.check(&program);
@@ -946,4 +980,20 @@
             "where mirrors if conditions, got: {:?}",
             errors
         );
+    }
+    #[test]
+    fn entity_component_match_pattern_is_typed_and_exhaustive_with_wildcard() {
+        let errors = check_src(
+            r#"
+            component Health { hp: int = 0 }
+            fn main() -> nil {
+                let target: entity = entity { Health { hp: 9 } }
+                match target {
+                    has Health(health) => { assert(health.hp == 9, "typed binding") }
+                    _ => { assert(false, "component must be present") }
+                }
+            }
+            "#,
+        );
+        assert!(errors.is_empty(), "got: {errors:?}");
     }

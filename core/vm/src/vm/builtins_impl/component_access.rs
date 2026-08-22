@@ -365,9 +365,9 @@ impl VM {
         let eid = args[0]
             .as_entity_id()
             .ok_or_else(|| format!("has() expects entity, got {}", args[0].type_name()))?;
-        let ctype = Self::expect_component_type_name(&args[1], "has")?;
-        self.sandbox_check_read(&ctype)?;
-        Ok(Value::from_bool(self.world.has_component(eid, &ctype)))
+        let ctype = Self::component_type_name(&args[1], "has")?;
+        self.sandbox_check_read(ctype)?;
+        Ok(Value::from_bool(self.world.has_component(eid, ctype)))
     }
 
     fn bi_remove(&mut self, args: Vec<Value>) -> Result<Value, String> {

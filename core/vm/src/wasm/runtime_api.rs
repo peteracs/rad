@@ -13,7 +13,7 @@ impl RadRuntime {
     ) -> Result<(crate::ast::Program, crate::pipeline::SemanticAnalysis), String> {
         let analyzed = crate::pipeline::analyze_source(
             source,
-            crate::parser::ParserOptions::default(),
+            crate::parser::ParserOptions,
             &std::collections::HashMap::new(),
             Self::checker_options(),
         );

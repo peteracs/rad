@@ -1,0 +1,67 @@
+component BenchAsset {
+    indexed id: int = 0,
+}
+
+component TargetAsset {}
+
+materialized view TargetAssets {
+    depends [BenchAsset, TargetAsset]
+    key BenchAsset.id
+}
+
+let benchmark_arguments: list<str> = sys_args()
+let benchmark_mode: str = if len(benchmark_arguments) == 0 {
+    "indexed"
+} else {
+    benchmark_arguments[0]
+}
+let benchmark_repetitions: int = if len(benchmark_arguments) < 2 {
+    30
+} else {
+    int(benchmark_arguments[1])
+}
+
+@render
+@allow_full_scan(reason: "equivalent offline control used only by the 100x acceptance measurement")
+@budget(instructions: 2000000)
+system BaselineAssetLookup(reads BenchAsset, reads TargetAsset) {
+    let mut matched: bool = false
+    for asset in entities(BenchAsset) {
+        if has(asset, TargetAsset) { matched = true }
+    }
+    assert(matched, "offline scan returns the target asset")
+}
+
+fn verify_target(asset: entity) -> nil {
+    assert(has(asset, TargetAsset), "materialized view returns the target asset")
+}
+
+@frame
+@no_full_scan
+@no_guest_allocation
+@no_host_allocation
+@budget(instructions: 200)
+system IndexedAssetLookup(reads BenchAsset, reads TargetAsset) {
+    visit_view(TargetAssets, verify_target)
+}
+
+fn main() -> nil {
+    for id in range(0, 50000) {
+        if id == 49999 {
+            spawn(BenchAsset { id: id }, TargetAsset {})
+        } else {
+            spawn(BenchAsset { id: id })
+        }
+    }
+    assert(len(entities(BenchAsset)) == 50000, "benchmark setup publishes the exact production population")
+}
+
+pub fn bench_run() -> nil {
+    for _iteration in range(0, benchmark_repetitions) {
+        if benchmark_mode == "baseline" {
+            BaselineAssetLookup()
+        } else {
+            IndexedAssetLookup()
+        }
+    }
+}

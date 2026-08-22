@@ -170,6 +170,21 @@ impl Checker {
                     }
                 }
             }
+            Ty::EntityId => {
+                for case in &stmt.cases {
+                    if !matches!(case.pattern, Pattern::HasComponent { .. } | Pattern::Wildcard) {
+                        self.error(
+                            &case.span,
+                            "Entity matches only accept `has Component` and wildcard patterns"
+                                .to_string(),
+                            Some(
+                                "Use `has Component(binding) => ...` to test and bind an attached component"
+                                    .to_string(),
+                            ),
+                        );
+                    }
+                }
+            }
             Ty::Any | Ty::Str | Ty::Int | Ty::Float | Ty::Bool => {}
             other => {
                 self.error(
@@ -265,39 +280,13 @@ impl Checker {
                                 && !has_rest
                                 && bound_heads.len() < variant.fields.len()
                             {
-                                // `..` needs --compat-v0.5-dx, so only suggest
-                                // it when that mode is actually on. Otherwise
-                                // spell out the form that works today: bind
-                                // every field, giving the unwanted ones `_`
-                                // names so they read as discards and do not
-                                // trip the unused-variable warning.
-                                let hint = if self.options.compat_v0_5_dx {
-                                    "Use `..` to ignore remaining fields".to_string()
-                                } else {
-                                    let spelled = variant
-                                        .fields
-                                        .iter()
-                                        .map(|(n, _)| {
-                                            if bound_heads.iter().any(|b| *b == n) {
-                                                n.clone()
-                                            } else {
-                                                format!("{}: _{}", n, n)
-                                            }
-                                        })
-                                        .collect::<Vec<_>>()
-                                        .join(", ");
-                                    format!(
-                                        "Bind every field, using `field: _name` for the ones you do not need: {} {{ {} }}. (`..` requires --compat-v0.5-dx.)",
-                                        variant.name, spelled
-                                    )
-                                };
                                 self.error(
                                     &case.span,
                                     format!(
                                         "Pattern does not bind all fields of variant '{}'",
                                         variant.name
                                     ),
-                                    Some(hint),
+                                    Some("Use `..` to ignore remaining fields".to_string()),
                                 );
                             }
                             for binding in &case_bindings {
@@ -335,12 +324,48 @@ impl Checker {
                     );
                 }
             }
-            if let Pattern::HasComponent {
-                binding: Some(bind_name),
-                ..
-            } = &case.pattern
-            {
-                self.define(bind_name, Ty::Any, false, case.span.clone(), false, true);
+            if let Pattern::HasComponent { component, binding } = &case.pattern {
+                if subject_ty != Ty::EntityId && subject_ty != Ty::Any {
+                    self.error(
+                        &case.span,
+                        format!(
+                            "Component-presence pattern requires an entity subject, got {}",
+                            subject_ty
+                        ),
+                        None,
+                    );
+                }
+                let resolved = self.resolve_canonical_name(component);
+                if let Some(component_type) = self.components.get(&resolved) {
+                    if !component_type.is_pub
+                        && is_cross_file(component_type.file_id, case.span.file)
+                    {
+                        self.error(
+                            &case.span,
+                            format!("Component '{}' is private", component),
+                            Some(format!(
+                                "Add `pub` to the declaration of '{}'",
+                                component
+                            )),
+                        );
+                    }
+                } else {
+                    self.error(
+                        &case.span,
+                        format!("Unknown component '{}' in match pattern", component),
+                        None,
+                    );
+                }
+                if let Some(bind_name) = binding {
+                    self.define(
+                        bind_name,
+                        Ty::Component(resolved),
+                        false,
+                        case.span.clone(),
+                        false,
+                        true,
+                    );
+                }
             }
             if let Some(guard) = &case.guard {
                 let guard_ty = self.check_expr(guard);

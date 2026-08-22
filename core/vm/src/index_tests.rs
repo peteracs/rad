@@ -19,12 +19,12 @@ use crate::vm::VM;
 
 fn compile(src: &str) -> crate::compiler::CompileResult {
     // `indexed` declarations flow compiler-ward through the CHECKER's
-    // component table, with an AST-derived fallback for checker-less
+    // component table, with defensive AST-derived seeding for unchecked
     // compiles (see replay_carries_indexes_without_checker_pass below —
-    // the fallback's absence aborted `rad replay` of any indexed program).
+    // omitting that seed aborted `rad replay` of any indexed program).
     crate::test_support::compile_checked_source(
         src,
-        crate::parser::ParserOptions::default(),
+        crate::parser::ParserOptions,
         crate::checker::CheckerOptions::default(),
     )
     .expect("parse, check, and compile")
@@ -485,7 +485,7 @@ fn lookup_all_order_is_replay_deterministic() {
 /// `lookup`/`lookup_all` aborts mid-tape with "field is not indexed" —
 /// found by recording the tutorial's task board, whose `list` command is
 /// one `lookup_all` probe. The fix derives indexes from the AST in the
-/// compiler's checker-less fallback; this test replays exactly like main.rs.
+/// compiler's defensive unchecked seed; this test replays exactly like main.rs.
 #[test]
 fn replay_carries_indexes_without_checker_pass() {
     let src = format!(

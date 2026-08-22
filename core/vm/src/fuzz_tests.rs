@@ -5,7 +5,7 @@
 //!   - `fork_from_bytes`                        (full fork codec)
 //!   - `fork_apply`                             (delta codec, vs a real base)
 //!   - `load_world`                             (save codec, v2 + drifted schema)
-//!   - `decode_prov`                            (legacy and causal fan-in ledger wire)
+//!   - `decode_prov`                            (causal fan-in ledger wire)
 //!   - `merge_forks` (fed *decoded mutants*: forks that survived the codec
 //!     are piped into the merge engine)
 //!
@@ -58,7 +58,7 @@ fn iters() -> usize {
 }
 
 fn compile(src: &str) -> crate::compiler::CompileResult {
-    crate::test_support::compile_source(src, ParserOptions::default()).expect("parse and compile")
+    crate::test_support::compile_source(src, ParserOptions).expect("parse and compile")
 }
 
 fn fresh_vm(src: &str) -> VM {

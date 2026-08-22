@@ -448,10 +448,10 @@ impl World {
         )
     }
 
-    pub(crate) fn materialized_view_dependencies(&self, name: &str) -> Option<Vec<String>> {
+    pub(crate) fn materialized_view_dependencies(&self, name: &str) -> Option<&[String]> {
         self.materialized_views
             .get(name)
-            .map(|view| view.dependencies.clone())
+            .map(|view| view.dependencies.as_slice())
     }
 
     pub(crate) fn materialized_view_lookup(&self, name: &str, key: &Value) -> Option<Option<u32>> {

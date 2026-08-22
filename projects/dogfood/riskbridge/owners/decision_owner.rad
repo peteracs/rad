@@ -46,6 +46,15 @@ pub resource ActivePluginGeneration owned {
     plugin_digest: str = "riskbridge-model-v17",
 }
 
+// Production keeps a bounded online decision window. Completed attempts are
+// folded into this deterministic receipt before their operational rows are
+// retired; the count and checksum make archival part of replay identity
+// instead of a benchmark-only deletion shortcut.
+pub resource ArchivedDecisionReceipt owned {
+    decisions: int = 0,
+    transaction_xor: u64 = u64(0),
+}
+
 pub materialized view ManualReviewQueue {
     depends [TransactionAttempt, PolicyDecision, ManualReviewCase]
     key TransactionAttempt.transaction
@@ -56,6 +65,7 @@ pub fn register_customer(id: CustomerId) -> entity writes owned [CustomerRiskSta
 }
 
 pub transaction CommitDecision(
+    attempt: entity,
     customer: entity,
     request: RiskInput,
     output: RiskOutput,
@@ -67,18 +77,16 @@ pub transaction CommitDecision(
 {
     requires is_none(lookup(TransactionAttempt, "transaction", request.transaction))
     requires output.model_version == started_generation
-    changes_only [CustomerRiskState, TransactionAttempt, RiskSignal, ModelRequest, PluginGeneration, ModelScore, PolicyDecision, ManualReviewCase, DecisionLedger, IdempotencyRecord, HostCallRecord, "$entities", "$entity_identity"]
+    changes_only [CustomerRiskState, TransactionAttempt, RiskSignal, ModelRequest, PluginGeneration, ModelScore, PolicyDecision, ManualReviewCase, DecisionLedger, IdempotencyRecord, HostCallRecord]
 
-    let attempt: entity = spawn(
-        TransactionAttempt {
-            transaction: request.transaction,
-            submission_order: order,
-            customer: request.customer,
-            amount: request.amount,
-        },
-        RiskSignal { bits: request.signals },
-        ModelRequest { model: request.model },
-    )
+    set(attempt, TransactionAttempt {
+        transaction: request.transaction,
+        submission_order: order,
+        customer: request.customer,
+        amount: request.amount,
+    })
+    set(attempt, RiskSignal { bits: request.signals })
+    set(attempt, ModelRequest { model: request.model })
     let state: CustomerRiskState = require(customer, CustomerRiskState)
     set(customer, CustomerRiskState { customer: state.customer, decisions: state.decisions + 1 })
     set(attempt, PluginGeneration { generation: started_generation })
@@ -122,6 +130,32 @@ pub transaction CommitDecision(
             }
         }
     }
+}
+
+pub transaction ArchiveDecision(attempt: entity)
+    writes owned [ArchivedDecisionReceipt, TransactionAttempt, RiskSignal, ModelRequest, PluginGeneration, ModelScore, PolicyDecision, ManualReviewCase, DecisionLedger, IdempotencyRecord, HostCallRecord]
+{
+    requires has(attempt, TransactionAttempt)
+    requires require(attempt, DecisionLedger).committed
+    changes_only [ArchivedDecisionReceipt, TransactionAttempt, RiskSignal, ModelRequest, PluginGeneration, ModelScore, PolicyDecision, ManualReviewCase, DecisionLedger, IdempotencyRecord, HostCallRecord]
+
+    let transaction = require(attempt, DecisionLedger).transaction
+    update(ArchivedDecisionReceipt) {
+        decisions = res(ArchivedDecisionReceipt).decisions + 1,
+        transaction_xor = res(ArchivedDecisionReceipt).transaction_xor ^ u64(transaction),
+    }
+    remove(attempt, TransactionAttempt)
+    remove(attempt, RiskSignal)
+    remove(attempt, ModelRequest)
+    remove(attempt, PluginGeneration)
+    remove(attempt, ModelScore)
+    remove(attempt, PolicyDecision)
+    remove(attempt, ManualReviewCase)
+    remove(attempt, DecisionLedger)
+    remove(attempt, IdempotencyRecord)
+    remove(attempt, HostCallRecord)
+
+    ensures not has(attempt, TransactionAttempt)
 }
 
 pub readonly fn attempt_by_transaction(id: TransactionId) -> entity {

@@ -604,8 +604,52 @@ impl Checker {
             );
         }
         self.check_expr(&args[0]);
-        self.check_expr(&args[1]);
+        // A relation tuple is a schema-shaped positional record, not a
+        // homogeneous RAD collection. Mixed element types are expected and
+        // validated by the installed relation manifest, so the generic
+        // mixed-list warning does not apply at this argument position.
+        self.with_mixed_list_warning_suppressed(|checker| checker.check_expr(&args[1]));
         Some(Ty::Bool)
+    }
+
+    pub(super) fn check_fact_explanation_call(
+        &mut self,
+        read_kind: &str,
+        args: &[Expr],
+        span: &Span,
+    ) -> Option<Ty> {
+        if read_kind != "why_fact" {
+            return None;
+        }
+        if args.len() != 2 {
+            self.error(
+                span,
+                "`why_fact` expects (\"module::Relation\", [tuple values])".into(),
+                None,
+            );
+            for arg in args {
+                self.check_expr(arg);
+            }
+            return Some(Ty::Str);
+        }
+        match &args[0] {
+            Expr::StrLit(identity, _) if !identity.is_empty() && identity.contains("::") => {}
+            _ => self.error(
+                args[0].span(),
+                "`why_fact` requires a module-qualified relation string literal".into(),
+                Some("Use a sealed identity such as \"game::rules::Encumbered\"".into()),
+            ),
+        }
+        if !matches!(&args[1], Expr::ListLit(..)) {
+            self.error(
+                args[1].span(),
+                "`why_fact` requires a tuple list literal".into(),
+                Some("Tuple shape is validated against the installed relation manifest".into()),
+            );
+        }
+        self.check_expr(&args[0]);
+        self.with_mixed_list_warning_suppressed(|checker| checker.check_expr(&args[1]));
+        Some(Ty::Str)
     }
 
     pub(super) fn check_resolver_fact_write_call(
@@ -682,8 +726,12 @@ impl Checker {
                 );
             }
         }
-        for arg in args {
-            self.check_expr(arg);
+        for (index, arg) in args.iter().enumerate() {
+            if tuple_indexes.contains(&index) {
+                self.with_mixed_list_warning_suppressed(|checker| checker.check_expr(arg));
+            } else {
+                self.check_expr(arg);
+            }
         }
         Some(Ty::Nil)
     }

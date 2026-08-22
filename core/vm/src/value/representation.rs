@@ -891,7 +891,7 @@ impl Value {
         }
         match self.as_object() {
             Some(Object::BigInt(_)) => "int".to_string(),
-            Some(Object::NativeScalar(value)) => value.type_name.clone(),
+            Some(Object::NativeScalar(value)) => value.type_name.to_string(),
             Some(Object::NativeType(value)) => format!("type<{}>", value.name),
             Some(Object::Str(_)) => "str".to_string(),
             Some(Object::List(_)) => "list".to_string(),

@@ -6,39 +6,10 @@ fn parse_source(src: &str) -> Program {
     Parser::new(tokens).parse()
 }
 
-fn parse_source_with_compat(src: &str) -> Program {
-    let mut lexer = Lexer::new(src);
-    let tokens = lexer.tokenize().0;
-    let mut parser = Parser::new(tokens).with_options(ParserOptions {
-        compat_v0_5_dx: true,
-    });
-    parser.parse()
-}
-
 fn parse_source_err(src: &str) -> ParseError {
     let mut lexer = Lexer::new(src);
     let tokens = lexer.tokenize().0;
     let mut parser = Parser::new(tokens);
-    parser.parse();
-    parser.errors[0].clone()
-}
-
-fn parse_source_err_with_no_compat(src: &str) -> ParseError {
-    let mut lexer = Lexer::new(src);
-    let tokens = lexer.tokenize().0;
-    let mut parser = Parser::new(tokens).with_options(ParserOptions {
-        compat_v0_5_dx: false,
-    });
-    parser.parse();
-    parser.errors[0].clone()
-}
-
-fn parse_source_err_with_compat(src: &str) -> ParseError {
-    let mut lexer = Lexer::new(src);
-    let tokens = lexer.tokenize().0;
-    let mut parser = Parser::new(tokens).with_options(ParserOptions {
-        compat_v0_5_dx: true,
-    });
     parser.parse();
     parser.errors[0].clone()
 }
@@ -142,9 +113,9 @@ fn parse_schedule_serial_soft_keyword() {
 
 #[test]
 fn parse_serial_phase_decl() {
-    // dogfood feature seq 83: `serial phase P [A, B]` — and `serial` stays
+    // dogfood feature seq 83: `serial phase P { A, B }` — and `serial` stays
     // usable as a plain identifier.
-    let prog = parse_source("serial phase Line [Feed, Advance]\nlet serial = 1");
+    let prog = parse_source("serial phase Line { Feed, Advance }\nlet serial = 1");
     match &prog.declarations[0] {
         Decl::Phase(p) => {
             assert_eq!(p.name, "Line");
@@ -592,7 +563,7 @@ fn parse_let_else_ok_with_mut_and_annotation() {
 
 #[test]
 fn parse_match_with_nested_destructuring_and_guard() {
-    let prog = parse_source_with_compat(
+    let prog = parse_source(
         r#"
             match ev {
                 Alarm { meta: { code }, level: sev } when sev > 2 => { print(code) }
@@ -626,21 +597,8 @@ fn parse_match_with_nested_destructuring_and_guard() {
 }
 
 #[test]
-fn parse_match_rest_binding_requires_compat_flag() {
-    let err = parse_source_err_with_no_compat(
-        r#"
-            match x {
-                Some { value, .. } => { print(value) }
-                None => { print("none") }
-            }
-        "#,
-    );
-    assert!(err.message.contains("requires --compat-v0.5-dx"));
-}
-
-#[test]
-fn parse_match_rest_binding_with_compat_flag() {
-    let prog = parse_source_with_compat(
+fn parse_match_rest_binding_is_canonical() {
+    let prog = parse_source(
         r#"
             match x {
                 Some { value, .. } => { print(value) }
@@ -671,7 +629,7 @@ fn parse_match_rest_binding_with_compat_flag() {
 
 #[test]
 fn parse_match_rest_binding_must_be_last() {
-    let err = parse_source_err_with_compat(
+    let err = parse_source_err(
         r#"
             match x {
                 Some { .., value } => { print(value) }
@@ -684,7 +642,7 @@ fn parse_match_rest_binding_must_be_last() {
 
 #[test]
 fn parse_zero_field_variant_shorthand_stays_qualified_ref() {
-    let prog = parse_source_with_compat("let s = AccessSignal::MfaDisabled");
+    let prog = parse_source("let s = AccessSignal::MfaDisabled");
     match &prog.declarations[0] {
         Decl::Stmt(Stmt::Let(l)) => {
             assert!(matches!(

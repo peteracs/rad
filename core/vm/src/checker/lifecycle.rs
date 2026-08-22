@@ -485,6 +485,12 @@ impl Checker {
             Ty::Component(name) if mapping.contains_key(name) => mapping[name].clone(),
             Ty::Struct(name) if mapping.contains_key(name) => mapping[name].clone(),
             Ty::List(inner) => Ty::List(Box::new(self.substitute_type_params(inner, mapping))),
+            Ty::Tuple(items) => Ty::Tuple(
+                items
+                    .iter()
+                    .map(|item| self.substitute_type_params(item, mapping))
+                    .collect(),
+            ),
             Ty::Map(key, val) => Ty::Map(
                 Box::new(self.substitute_type_params(key, mapping)),
                 Box::new(self.substitute_type_params(val, mapping)),
@@ -502,6 +508,12 @@ impl Checker {
                 purity: *purity,
             },
             Ty::Task(inner) => Ty::Task(Box::new(self.substitute_type_params(inner, mapping))),
+            Ty::Union(items) => Ty::Union(
+                items
+                    .iter()
+                    .map(|item| self.substitute_type_params(item, mapping))
+                    .collect(),
+            ),
             Ty::App(name, args) => {
                 if args.is_empty() && mapping.contains_key(name) {
                     return mapping[name].clone();
@@ -600,11 +612,18 @@ impl Checker {
     /// `simulate(.., [system::S, ...], ..)` list literals.
     fn collect_definite_system_invocations(&self, program: &Program) -> HashSet<String> {
         let mut set = HashSet::new();
-        SystemInvocationCollector {
+        let mut collector = SystemInvocationCollector {
             checker: self,
             set: &mut set,
+            local_redirects: None,
+        };
+        collector.visit_program(program);
+        for binding in crate::ast::canonical_module_bindings(&self.alias_decls) {
+            collector.local_redirects = Some(binding.local_redirects());
+            for declaration in binding.declarations() {
+                collector.visit_decl(declaration);
+            }
         }
-        .visit_program(program);
         set
     }
 }
@@ -613,15 +632,26 @@ impl Checker {
 struct SystemInvocationCollector<'a> {
     checker: &'a Checker,
     set: &'a mut HashSet<String>,
+    local_redirects: Option<HashMap<String, String>>,
+}
+
+impl SystemInvocationCollector<'_> {
+    fn resolve(&self, name: &str) -> String {
+        self.local_redirects
+            .as_ref()
+            .and_then(|redirects| redirects.get(name))
+            .cloned()
+            .unwrap_or_else(|| self.checker.resolve_canonical_name(name))
+    }
 }
 
 impl AstVisitor for SystemInvocationCollector<'_> {
     fn visit_schedule_stmt(&mut self, stmt: &ScheduleStmt) {
         for sys in &stmt.systems {
-            let resolved_schedule_name = self.checker.resolve_canonical_name(sys);
+            let resolved_schedule_name = self.resolve(sys);
             if let Some(phase_systems) = self.checker.phases.get(&resolved_schedule_name) {
                 for ps in phase_systems {
-                    let resolved = self.checker.resolve_canonical_name(ps);
+                    let resolved = self.resolve(ps);
                     if self.checker.systems.contains_key(&resolved) {
                         self.set.insert(resolved);
                     }
@@ -647,7 +677,7 @@ impl AstVisitor for SystemInvocationCollector<'_> {
                         continue;
                     };
                     let q = simulate_syntax::system_ref_qualified_string(path);
-                    let resolved = self.checker.resolve_canonical_name(&q);
+                    let resolved = self.resolve(&q);
                     if self.checker.systems.contains_key(&resolved) {
                         self.set.insert(resolved);
                     }
@@ -655,7 +685,7 @@ impl AstVisitor for SystemInvocationCollector<'_> {
             }
         }
         if let Expr::Ident(callee_name, _) = callee {
-            let resolved = self.checker.resolve_canonical_name(callee_name);
+            let resolved = self.resolve(callee_name);
             if self.checker.systems.contains_key(&resolved) {
                 self.set.insert(resolved);
             }

@@ -19,7 +19,7 @@
 
 Structured observability output follows the current event trace when one exists:
 
-```rad
+```text
 on Damage {
     log("info", { "event": "Damage", "trace": trace_id() })
     metric("counter", "damage_events", 1, { "source": name_of(event.source) })
@@ -67,7 +67,7 @@ on Damage {
 UDP builtins operate on string, byte-list, or native `bytebuf` datagrams and
 explicit `(data, host, port)` receive tuples. Prefer `bytebuf` variants for
 compact binary game protocols and other high-frequency packet paths; use
-byte-list variants for compatibility and tests, and string variants for
+byte-list variants for explicit list interchange and tests, and string variants for
 diagnostics or simple text protocols.
 For browser clients, use a host WebTransport edge process that forwards
 WebTransport datagrams to a RAD UDP authority; see
@@ -89,7 +89,7 @@ WebTransport datagrams to a RAD UDP authority; see
 
 Use timeout receives in fixed-tick servers so simulation keeps advancing when no packets arrive:
 
-```rad
+```text
 let socket = udp_bind("127.0.0.1", 8788)
 match udp_recv_from_timeout(socket, 2048, 0) {
     Some(packet) => {
@@ -105,7 +105,7 @@ match udp_recv_from_timeout(socket, 2048, 0) {
 For binary protocols, keep decode/encode in a protocol module and make the
 transport loop pass opaque byte buffers through:
 
-```rad
+```text
 let socket = udp_bind("127.0.0.1", 8788)
 match udp_recv_bytebuf_timeout(socket, 1200, 0) {
     Some(packet) => {

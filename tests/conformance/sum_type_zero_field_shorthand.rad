@@ -1,5 +1,4 @@
 // backend: both
-// vm-args: --compat-v0.5-dx
 // Zero-field sum type variant shorthand (no braces on construction)
 
 type Status {

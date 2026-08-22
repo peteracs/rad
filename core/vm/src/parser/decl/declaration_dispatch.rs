@@ -205,7 +205,7 @@ impl Parser {
             }
             return Ok(Decl::Migration(self.parse_migration_decl()?));
         }
-        // Soft keywords: `serial phase P [ ... ]` — a phase whose member
+        // Soft keywords: `serial phase P { ... }` — a phase whose member
         // systems never share a parallel batch with each other (dogfood
         // feature seq 83). Only treated as a declaration when the full
         // `serial phase <Name>` shape is present, so `serial` stays usable

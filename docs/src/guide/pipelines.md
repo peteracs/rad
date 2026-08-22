@@ -35,8 +35,8 @@ Rad provides built-in functions designed for pipelines. All take the collection 
 | `pop_last` | `pop_last(list)` | Return the last element |
 | `drop_last` | `drop_last(list)` | Return only the remaining list |
 | `append` | `append(list, list)` | Concatenate two lists |
-| `zip` | `zip(list, list)` | Pair elements into `[[a, b], ...]` |
-| `enumerate` | `enumerate(list)` | Return `[[0, a], [1, b], ...]` index-element pairs |
+| `zip` | `zip(list<A>, list<B>)` | Pair elements into `list<(A, B)>` |
+| `enumerate` | `enumerate(list<A>)` | Return `list<(int, A)>` index-element pairs |
 | `find` | `find(list, fn)` | First element where `fn` returns truthy, or `None` |
 | `max_by` | `max_by(list, fn)` | Element with largest key from `fn`, or `None` |
 | `min_by` | `min_by(list, fn)` | Element with smallest key from `fn`, or `None` |

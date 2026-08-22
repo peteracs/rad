@@ -43,6 +43,7 @@ rad/
         - `core/relation/src/frontend/` - Bounded relation lexer, parser, checker, canonical form, limits, and tooling.
     - `core/vm/` - Primary Rust implementation of the RAD language and runtime.
       - `core/vm/benches/` - Criterion benchmarks for VM and world-state operations.
+      - `core/vm/examples/` - Opt-in allocator and hot-path profiling executables.
       - `core/vm/scripts/` - VM-specific documentation and benchmark helpers.
       - `core/vm/src/` - Language semantics, compilation, world state, execution, replay, relations, and WASM boundary.
         - `core/vm/src/ast/` - Canonical declarations, module identity, and AST metadata.
@@ -102,6 +103,7 @@ rad/
       - `docs/src/project/` - Governance, roadmap, changelog, audits, and repository maps.
       - `docs/src/reference/` - Normative language, runtime, performance, and architecture references.
         - `docs/src/reference/builtins_parts/` - Builtin reference sections included by the composition page.
+        - `docs/src/reference/generated/` - Compiler-generated syntax, builtin, and host API indexes.
         - `docs/src/reference/spec_parts/` - Language-specification sections included by the composition page.
       - `docs/src/rfcs/` - Generated-by-inclusion mdBook wrappers for canonical RFC bodies.
     - `docs/theme/` - mdBook CSS and theme behavior overrides.
@@ -181,6 +183,18 @@ rad/
         - `projects/dogfood/riskbridge/systems/` - Risk evaluation and decision systems.
         - `projects/dogfood/riskbridge/tests/` - Host, replay, and policy acceptance programs.
       - `projects/dogfood/semantic-authority/` - Compact transitive semantic-authority demonstration.
+      - `projects/dogfood/sovereign-grid/` - Cumulative production acceptance service covering the complete canonical language and API surface.
+        - `projects/dogfood/sovereign-grid/builtins/` - Executable coverage for every runtime builtin and host protocol.
+        - `projects/dogfood/sovereign-grid/experimental/` - Feature-gated causal-settlement and relation acceptance scenarios.
+        - `projects/dogfood/sovereign-grid/language/` - Executable lexical, type, pattern, declaration, statement, and expression coverage.
+        - `projects/dogfood/sovereign-grid/negative/` - Exact-diagnostic rejection fixtures for every major feature family.
+        - `projects/dogfood/sovereign-grid/owners/` - Sole authoritative grid lifecycle and transfer mutation boundary.
+        - `projects/dogfood/sovereign-grid/plugins/` - Independent native-extension packages used by ABI acceptance.
+          - `projects/dogfood/sovereign-grid/plugins/grid-oracle/` - Deterministic native scoring oracle and ABI descriptor.
+            - `projects/dogfood/sovereign-grid/plugins/grid-oracle/src/` - Native extension implementation.
+        - `projects/dogfood/sovereign-grid/scenarios/` - Production and scale workload construction.
+        - `projects/dogfood/sovereign-grid/systems/` - Scheduled phase, cost-contract, and event behavior.
+        - `projects/dogfood/sovereign-grid/tests/` - Isolated/shared tests and stateful temporal model acceptance.
       - `projects/dogfood/authority-effects/` - Transitive authority enforcement and graph-query dogfood.
       - `projects/dogfood/bastion/` - Sandbox capability and resource-exhaustion laboratory.
         - `projects/dogfood/bastion/bugs/` - Reproductions found by the bastion audit.

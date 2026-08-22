@@ -38,6 +38,32 @@ fn advance(target: entity) -> nil {
         vm.run(0).expect("run fused aliased callback");
     }
 
+    #[test]
+    fn aliased_component_presence_pattern_uses_canonical_component_identity() {
+        let dir = mk_temp_dir();
+        fs::write(
+            dir.join("owner.rad"),
+            r#"
+pub component Cell { value: int = 0 }
+pub fn run() -> nil {
+    let target: entity = entity { Cell { value: 9 } }
+    match target {
+        has Cell(cell) => { assert(cell.value == 9, "canonical component matched") }
+        _ => { assert(false, "component pattern fell through") }
+    }
+}
+"#,
+        )
+        .unwrap();
+        fs::write(
+            dir.join("main.rad"),
+            "use \"owner.rad\" as owner\nfn main() -> nil { owner.run() }\n",
+        )
+        .unwrap();
+
+        assert!(run_module_entry(&dir.join("main.rad")).is_empty());
+    }
+
     fn write_phase_module(path: &Path) {
         fs::write(
             path,
@@ -48,7 +74,7 @@ pub system Tick(counter: mut Counter) {
     counter.value = counter.value + 1
 }
 
-pub phase Frame [Tick]
+pub phase Frame { Tick }
 
 pub fn reset() -> nil {
     set_resource(Counter, Counter { value: 0 })
@@ -86,7 +112,7 @@ pub readonly fn count() -> int {
             concat!(
                 "pub system First() {}\n",
                 "pub system Second() {}\n",
-                "pub serial phase Frame [First, Second]\n",
+                "pub serial phase Frame { First, Second }\n",
             ),
         )
         .unwrap();
@@ -115,7 +141,7 @@ pub readonly fn count() -> int {
             concat!(
                 "pub component Score { value: int = 0 }\n",
                 "pub system Tick(score: mut Score) { score.value = score.value + 1 }\n",
-                "phase Frame [Tick]\n",
+                "phase Frame { Tick }\n",
                 "pub fn run_frame() -> nil { schedule [Frame] }\n",
             ),
         )
@@ -265,7 +291,7 @@ pub readonly fn count() -> int {
         let dir = mk_temp_dir();
         fs::write(
             dir.join("owner.rad"),
-            "pub phase Broken [MissingSystem]\n",
+            "pub phase Broken { MissingSystem }\n",
         )
         .unwrap();
         fs::write(
@@ -320,7 +346,7 @@ pub readonly fn count() -> int {
         let dir = mk_temp_dir();
         fs::write(
             dir.join("owner.rad"),
-            "pub system Tick() {}\nphase Internal [Tick]\n",
+            "pub system Tick() {}\nphase Internal { Tick }\n",
         )
         .unwrap();
         fs::write(
@@ -346,7 +372,7 @@ pub readonly fn count() -> int {
         let dir = mk_temp_dir();
         fs::write(
             dir.join("owner.rad"),
-            "system Hidden() {}\npub phase PublicFrame [Hidden]\n",
+            "system Hidden() {}\npub phase PublicFrame { Hidden }\n",
         )
         .unwrap();
         fs::write(

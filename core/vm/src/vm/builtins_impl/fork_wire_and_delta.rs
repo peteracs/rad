@@ -603,7 +603,8 @@ impl VM {
         // Changed resources travel as per-field patches when the base holds
         // the same layout: a 40-round battle journal must not re-ship its
         // whole log string because `round` ticked. Whole rows remain the
-        // fallback for resources the base lacks (or whose layout differs).
+        // whole-row representation for resources absent from the base or with
+        // a different layout.
         let mut patch_res: Vec<(&str, crate::value::ComponentData, Vec<usize>)> = Vec::new();
         let mut whole_res: Vec<&str> = Vec::new();
         for rname in &changed_res {

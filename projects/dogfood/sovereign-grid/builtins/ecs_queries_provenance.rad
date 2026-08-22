@@ -1,0 +1,104 @@
+// Executable acceptance for ECS/resource access, indexed queries,
+// materialized views, ordered traversal, event history, and provenance.
+
+component SurfaceRecord {
+    indexed key: int = 0,
+    ordered indexed score: int = 0,
+    note: str = "",
+}
+
+component SurfaceMember {}
+component SurfaceDisposable {}
+component SurfaceDuplicateKey {
+    indexed key: int = 0,
+}
+
+resource SurfaceConfig {
+    revision: int = 0,
+}
+
+materialized view PositiveSurfaceRecords {
+    depends [SurfaceRecord, SurfaceMember]
+    key SurfaceRecord.key
+    where SurfaceRecord.score > 0
+}
+
+event SurfaceObserved { subject: entity, score: int }
+
+on SurfaceObserved(_event) {}
+
+readonly fn score_is_positive(subject: entity) -> bool {
+    return require(subject, SurfaceRecord).score > 0
+}
+
+readonly fn read_score(subject: entity) -> int {
+    return require(subject, SurfaceRecord).score
+}
+
+pure fn field_positive(value: any) -> bool {
+    return value > 0
+}
+
+fn main() -> nil {
+    assert(len(sys_args()) >= 0, "sys_args")
+    let before: int = revision(PositiveSurfaceRecords)
+    let alpha: entity = spawn("surface-alpha", SurfaceRecord { key: 1, score: 10, note: "a" }, SurfaceMember {}, SurfaceDuplicateKey { key: 7 })
+    let beta: entity = spawn("surface-beta", SurfaceRecord { key: 2, score: 20, note: "b" }, SurfaceMember {}, SurfaceDuplicateKey { key: 7 })
+    let gamma: entity = spawn("surface-gamma", SurfaceRecord { key: 3, score: -1, note: "c" }, SurfaceMember {})
+
+    let optional_record: Option<SurfaceRecord> = get(alpha, SurfaceRecord)
+    assert(unwrap(optional_record).score == 10, "get")
+    let raw_score: any = read_field(alpha, SurfaceRecord, "score")
+    assert(raw_score == 10, "read_field")
+    assert(len(lookup_all(SurfaceDuplicateKey, "key", 7)) == 2, "lookup_all duplicate index")
+    write_field(alpha, SurfaceRecord, "note", "updated")
+    assert(require(alpha, SurfaceRecord).note == "updated", "write_field")
+    assert(get_entity("surface-alpha") == alpha, "get_entity")
+    assert(require_entity("surface-beta") == beta, "require_entity")
+    assert(name_of(alpha) == "surface-alpha" and id_of(alpha) >= 0, "entity identity")
+    assert(len(require_all(alpha, SurfaceRecord, SurfaceMember)) == 2, "require_all")
+
+    set_resource(SurfaceConfig, SurfaceConfig { revision: 7 })
+    let config: Option<SurfaceConfig> = get_resource(SurfaceConfig)
+    assert(unwrap(config).revision == 7, "get_resource")
+    assert(res(SurfaceConfig).revision == 7, "res")
+    assert(contains(why_resource(SurfaceConfig), "SurfaceConfig"), "resource provenance")
+
+    let positives: list<entity> = query_where(SurfaceRecord, SurfaceMember, score_is_positive)
+    assert(len(positives) == 2, "query_where")
+    assert(query_map(SurfaceRecord, SurfaceMember, read_score) == [10, 20, -1], "query_map")
+    assert(query_count(SurfaceRecord, SurfaceMember) == 3, "query_count")
+    let selected: list<entity> = with_field(entities(SurfaceRecord), "SurfaceRecord", "score", field_positive)
+    assert(len(selected) == 2, "with_field")
+
+    assert(revision(PositiveSurfaceRecords) == before + 2, "view admissions")
+    assert(len(changes_since(PositiveSurfaceRecords, before)) == 2, "changes_since")
+    assert(contains(why_in_view(PositiveSurfaceRecords, alpha), "is in PositiveSurfaceRecords"), "why_in_view")
+    let missing_explanation: str = why_missing(SurfaceRecord, 999)
+    assert(len(missing_explanation) > 0, "why_missing")
+    assert(contains(why_revision_changed(PositiveSurfaceRecords), "entered"), "why_revision_changed")
+    let stable_revision: int = revision(PositiveSurfaceRecords)
+    write_field(alpha, SurfaceRecord, "note", "still-member")
+    assert(revision(PositiveSurfaceRecords) == stable_revision, "nonpredicate field is stable")
+    assert(contains(why_revision_did_not_change(PositiveSurfaceRecords, stable_revision), "stayed"), "stable revision provenance")
+
+    assert(unwrap(first(SurfaceRecord, "score")) == gamma, "ordered first")
+    assert(unwrap(last(SurfaceRecord, "score")) == beta, "ordered last")
+    assert(unwrap(next(SurfaceRecord, "score", 10)) == beta, "ordered next")
+    assert(unwrap(previous(SurfaceRecord, "score", 20)) == alpha, "ordered previous")
+
+    emit next SurfaceObserved { subject: alpha, score: 10 }
+    flush_events()
+    flush_events()
+    assert(len(recent_events("SurfaceObserved", 4)) == 1, "recent_events")
+
+    let disposable: entity = spawn("surface-disposable", SurfaceDisposable {})
+    assert(despawn(disposable), "despawn")
+    assert(get_entity("surface-disposable") == nil, "despawn removes name publication")
+
+    log("sovereign-grid.ecs", { "records": 3 })
+    metric("sovereign_grid_records", "gauge", 3.0, { "fixture": "ecs" })
+    let root_trace: any = trace_id()
+    assert(root_trace == nil, "trace_id is absent outside a traced handler")
+    print("sovereign-grid: ECS query provenance builtins complete")
+}

@@ -1,0 +1,48 @@
+use "schema.rad"
+use "owners/grid_owner.rad" as owner
+use "systems/control_loop.rad"
+use "language/values.rad" as language
+use "language/surface.rad" as syntax
+use "scenarios/production.rad"
+
+fn main() -> nil {
+    language.exercise_values()
+    syntax.exercise_surface()
+    assert(size_of(DispatchPacket) == 40, "DispatchPacket ABI size")
+    assert(offset_of(DispatchPacket, "flags") == 32, "DispatchPacket flags offset")
+    assert(size_of(SensorPacket) == 7, "packed sensor layout")
+
+    seed_grid(1000)
+    let before: int = revision(owner.ActiveMissions)
+    let mission: entity = run_incident()
+    assert(has(mission, owner.CompletedMission), "mission reaches terminal state")
+    assert(revision(owner.ActiveMissions) > before, "view tracked admission and removal")
+    assert(len(entities(owner.ActiveMissions)) == 0, "completed mission leaves active view")
+    assert(is_some(lower_bound(owner.AssetIdentity, "dispatch_key", (u16(0), u64(0)))), "ordered lower bound")
+    assert(is_some(upper_bound(owner.AssetIdentity, "dispatch_key", (u16(0), u64(0)))), "ordered upper bound")
+    assert(len(range(owner.AssetIdentity, "dispatch_key", (u16(0), u64(0)), (u16(2), u64(1001)))) > 0, "ordered range")
+
+    BaselineAssetProbe()
+    schedule [ObservePriorityAsset, AccountActiveMissions]
+    emit MaintenanceWindow { asset: owner.asset_by_id(AssetId(u64(4))) } after 1
+    flush_events()
+    flush_events()
+
+    let digest: str = world_digest()
+    let saved: str = save_world()
+    assert(try_load_world(saved) is Ok, "snapshot validates")
+    load_world(saved)
+    assert(world_digest() == digest, "snapshot round trip is deterministic")
+    assert(schema_digest() != "", "schema digest is published")
+
+    print(format("sovereign-grid: world-digest {}", digest))
+    print(format(
+        "sovereign-grid: completed-event-order {}",
+        format_value(recent_events("MissionCompleted", 32), ""),
+    ))
+    print(why(mission, owner.CompletedMission))
+    print(why_field(mission, owner.AuditTrail, "revision"))
+    print(why_removed(mission, owner.ActiveMission))
+    print(why_not_in_view(owner.ActiveMissions, mission))
+    print("sovereign-grid: stable workflow complete")
+}

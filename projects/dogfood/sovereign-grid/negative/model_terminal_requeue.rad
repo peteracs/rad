@@ -1,0 +1,11 @@
+component Terminal {}
+component Queued {}
+let job = spawn(Terminal {})
+fn requeue_terminal() { set(job, Queued {}) }
+model TerminalNeverRequeues {
+    commands [requeue_terminal]
+    invariant { return not (has(job, Terminal) and has(job, Queued)) }
+    runs 1
+    max_commands 1
+    seed 3
+}

@@ -657,29 +657,12 @@ fn check_expr_access_and_construction(&mut self, expr: &Expr) -> Ty {
                 };
 
                 if let (true, Some(variant)) = (is_sm_state, variant_opt) {
-                    if self.options.compat_v0_5_dx {
-                        if variant.fields.is_empty() {
-                            if self.options.warn_compat {
-                                self.warning(
-                                    span,
-                                    format!("Warning[W2501]: '{}::{}' resolves to sum variant, but '{}' is also a state machine", machine, state, machine),
-                                    Some("Use explicit braces for sum variants or add context to disambiguate".to_string()),
-                                );
-                            }
-                            self.variant_shorthand
-                                .insert((machine.clone(), state.clone()));
-                            return instantiate_sum(st_opt.as_ref().unwrap());
-                        } else {
-                            self.error(
-                                span,
-                                format!("Error[E2501]: Ambiguous reference '{}::{}' — matches both sum variant and state machine state", machine, state),
-                                Some(format!("Use '{}::{} {{ ... }}' for the sum variant, or remove the sum type to use the state machine", machine, state)),
-                            );
-                            return Ty::State(machine.clone());
-                        }
-                    } else {
-                        return Ty::State(machine.clone());
-                    }
+                    // Canonical disambiguation is syntax-based: an unbraced
+                    // `Type::Member` denotes the state-machine state when the
+                    // same path also names a sum variant. `Type::Member {}` is
+                    // the explicit sum construction. There is no mode flag.
+                    let _ = variant;
+                    return Ty::State(machine.clone());
                 }
 
                 if is_sm_state {
@@ -710,12 +693,6 @@ fn check_expr_access_and_construction(&mut self, expr: &Expr) -> Ty {
                             span,
                             format!("Variant '{}::{}' has fields — use '{}::{} {{ ... }}' to construct it", machine, state, machine, state),
                             None,
-                        );
-                    } else if !self.options.compat_v0_5_dx {
-                        self.error(
-                            span,
-                            format!("Error[E2502]: Zero-field variant shorthand '{}::{}' requires --compat-v0.5-dx", machine, state),
-                            Some(format!("Use '{}::{} {{ }}' or pass --compat-v0.5-dx", machine, state)),
                         );
                     }
 

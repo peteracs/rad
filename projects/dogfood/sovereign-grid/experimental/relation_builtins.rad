@@ -1,0 +1,67 @@
+component SurfaceValue { value: int = 0 }
+
+intent SeedSurfaceFact {
+    key subject: entity,
+    value: int,
+}
+
+intent ChangeSurfaceFact {
+    key subject: entity,
+    value: int,
+}
+
+intent RemoveSurfaceFact {
+    key subject: entity,
+    value: int,
+}
+
+law Seed(subject: entity, value: int) {
+    propose SeedSurfaceFact { subject: subject, value: value }
+}
+
+law Change(subject: entity, value: int) {
+    propose ChangeSurfaceFact { subject: subject, value: value }
+}
+
+law Clear(subject: entity, value: int) {
+    propose RemoveSurfaceFact { subject: subject, value: value }
+}
+
+resolver SeedRelation for SeedSurfaceFact(subject, proposals) {
+    insert_fact("sovereign::surface::SurfaceFact", [subject, proposals[0].value])
+}
+
+resolver ChangeRelation for ChangeSurfaceFact(subject, proposals) {
+    let value: int = proposals[0].value
+    replace_fact_by(
+        "sovereign::surface::SurfaceFact",
+        "subject",
+        [subject],
+        [subject, value],
+    )
+    next(subject, SurfaceValue { value: value })
+}
+
+resolver RemoveRelation for RemoveSurfaceFact(subject, proposals) {
+    remove_fact("sovereign::surface::SurfaceFact", [subject, proposals[0].value])
+}
+
+constraint RelationCandidateContract for SurfaceValue(subject, proposed) {
+    require base_fact("sovereign::surface::SurfaceFact", [subject, 1])
+        else "relation.base.fact.missing"
+    require candidate_fact("sovereign::surface::SurfaceFact", [subject, proposed.value])
+        else "relation.candidate.fact.missing"
+}
+
+entity relation_subject { SurfaceValue { value: 1 } }
+
+settle { Seed(relation_subject, 1) }
+assert(contains(why_fact("sovereign::surface::SurfaceFact", [relation_subject, 1]), "SurfaceFact"), "why_fact insert")
+
+settle { Change(relation_subject, 2) }
+assert(require(relation_subject, SurfaceValue).value == 2, "candidate relation and component settle together")
+assert(contains(why_fact("sovereign::surface::SurfaceFact", [relation_subject, 2]), "SurfaceFact"), "why_fact replace")
+
+settle { Clear(relation_subject, 2) }
+assert(contains(why_fact("sovereign::surface::SurfaceFact", [relation_subject, 2]), "absent"), "why_fact removal")
+print("sovereign-grid: relation builtins complete")

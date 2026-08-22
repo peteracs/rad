@@ -1,0 +1,2 @@
+component OwnedLedger owned { total: int = 0 }
+fn bypass(target: entity) { set(target, OwnedLedger { total: 1 }) }

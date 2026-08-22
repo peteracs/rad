@@ -1,17 +1,14 @@
-# DX Updates (v0.5 Ergonomics)
+# DX Updates
 
-This page summarizes newer language and tooling behavior introduced around the v0.5 DX track. **Not everything here requires a compatibility flag** — many features (tuples, map helpers, `query` `select`, auto-`main`, etc.) are part of the normal VM. Features that *do* need the opt-in parser/checker mode are summarized in [v0.5 Compatibility Mode](../reference/compat-v05.md).
+This page summarizes current language and tooling ergonomics. All examples use
+RAD's single canonical grammar, including zero-field variant shorthand and
+`match` rest patterns.
 
 > **See also:** [Developer Tools](./developer-tools.md) for the full tooling guide — LSP, formatter, lint presets, and snapshot testing.
 
 ## CLI flags
 
-On `rad <file.rad>`, the bytecode VM defaults to **`--no-compat-v0.5-dx` semantics** (the `compat_v0_5_dx` flag starts `false` in `main.rs`). Turn on the v0.5 compatibility layer with:
-
-- **`--compat-v0.5-dx`**: Enable v0.5 DX parsing and checker rules (zero-field variant shorthand, `match` rest patterns where gated, etc. — see the compat reference).
-- **`--no-compat-v0.5-dx`**: Force the flag off (useful if a wrapper or script enabled it).
-
-Other common flags:
+Common checking and reproducibility flags:
 
 - `--strict-types`: Enable full type-coverage checks. In strict mode, Rad requires explicit annotations for:
   - `let` bindings
@@ -24,7 +21,7 @@ Other common flags:
 Example:
 
 ```
-rad app/main.rad --compat-v0.5-dx --strict-types --write-lock
+rad app/main.rad --strict-types --write-lock
 ```
 
 ## If-expressions
@@ -215,7 +212,7 @@ match ev {
     Alarm { meta: { code }, level: sev } when sev > 2 => {
         print(code)
     }
-    Alarm { .. } => { print("fallback") }
+    Alarm { .. } => { print("remaining alarm") }
 }
 ```
 
@@ -368,8 +365,8 @@ let shortest = ["hi", "hello", "greetings"] |> min_by(fn(s) { return len(s) })
 Group related systems into named phases for cleaner scheduling:
 
 ```
-phase Physics [Gravity, Collision, Movement]
-phase Rendering [ClearScreen, DrawSprites, DrawUI]
+phase Physics { Gravity, Collision, Movement }
+phase Rendering { ClearScreen, DrawSprites, DrawUI }
 
 schedule [Physics, Rendering]
 ```

@@ -1,0 +1,5 @@
+opaque type Priority = i64
+opaque type Sequence = i64
+fn seek(_priority: Priority) {}
+let sequence: Sequence = Sequence(i64(1))
+seek(sequence)

@@ -77,6 +77,7 @@ pub mod scaffold;
 pub mod settlement_reference;
 pub mod snapshot;
 pub mod source_bundle;
+pub mod surface_coverage;
 pub mod types;
 pub mod typescript;
 pub(crate) mod value;

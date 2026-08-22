@@ -121,7 +121,14 @@ impl NativeTypeFlavor {
     Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
 )]
 pub struct NativeScalarValue {
-    pub type_name: String,
+    /// Shared with the declaring [`NativeTypeDescriptor`].
+    ///
+    /// This was an owned `String`, so every stored value carried its own copy
+    /// of its type's name: a world holding a million `TransactionId`s held a
+    /// million copies of `"TransactionId"`. Measured at ~50 bytes per stored
+    /// value for a short name, and it grew byte-for-byte with the name.
+    /// Sharing the declaration's allocation makes the cost one per type.
+    pub type_name: std::sync::Arc<str>,
     pub repr: NativeScalarKind,
     pub flavor: NativeTypeFlavor,
     pub bits: u64,
@@ -129,7 +136,8 @@ pub struct NativeScalarValue {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NativeTypeDescriptor {
-    pub name: String,
+    /// The single owner of this type's name; values clone the `Arc`.
+    pub name: std::sync::Arc<str>,
     pub repr: NativeScalarKind,
     pub flavor: NativeTypeFlavor,
     pub members: Vec<(String, u64)>,
@@ -269,7 +277,7 @@ pub fn compute_native_layouts(
 impl NativeTypeDescriptor {
     pub fn scalar(repr: NativeScalarKind) -> Self {
         Self {
-            name: repr.to_string(),
+            name: repr.to_string().into(),
             repr,
             flavor: NativeTypeFlavor::Scalar,
             members: Vec::new(),
@@ -300,7 +308,7 @@ impl NativeTypeDescriptor {
 impl From<&crate::ast::NativeTypeDecl> for NativeTypeDescriptor {
     fn from(value: &crate::ast::NativeTypeDecl) -> Self {
         Self {
-            name: value.name.clone(),
+            name: value.name.as_str().into(),
             repr: value.repr,
             flavor: value.flavor,
             members: value.members.clone(),

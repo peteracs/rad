@@ -342,6 +342,17 @@ pub(crate) fn encode_value_into(v: &Value, out: &mut String) -> Result<(), Strin
         escape_json_into(out, s);
         return Ok(());
     }
+    if let Some(state) = v.as_state() {
+        // State instances are persistent nominal data: the machine and state
+        // names are sufficient to reconstruct the value against the program
+        // manifest. They contain no executable guard chunks themselves.
+        out.push_str("{\"q\":[");
+        escape_json_into(out, &state.machine);
+        out.push(',');
+        escape_json_into(out, &state.state);
+        out.push_str("]}");
+        return Ok(());
+    }
     if let Some(items) = v.as_list() {
         out.push('[');
         for (i, item) in items.iter().enumerate() {

@@ -1,0 +1,5 @@
+component Root {}
+fn invoke(callback: fn(entity) -> nil, target: entity) { callback(target) }
+system Route(_root: Root) {
+    invoke(fn(_target: entity) -> nil { print("undeclared host output") }, self)
+}

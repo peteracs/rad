@@ -10,14 +10,14 @@ fn causal_checker_options() -> CheckerOptions {
 }
 
 fn parse_causal_source(source: &str) -> crate::ast::Program {
-    crate::test_support::parse_program(source, crate::parser::ParserOptions::default())
+    crate::test_support::parse_program(source, crate::parser::ParserOptions)
         .expect("causal test source must parse")
 }
 
 fn check_causal_source(source: &str) -> Vec<crate::checker::TypeError> {
     crate::test_support::check_source_with(
         source,
-        crate::parser::ParserOptions::default(),
+        crate::parser::ParserOptions,
         causal_checker_options(),
     )
     .errors
@@ -692,7 +692,7 @@ fn attempt() {{ settle {{ Push(hero) }} }}
             .expect("bounded rejection encoding")
             .len()
             <= 1024,
-        "bounded fallback itself must fit the configured exact byte cap"
+        "bounded rejection marker must fit the configured exact byte cap"
     );
     assert_eq!(before, vm.observable_state_signature());
 }

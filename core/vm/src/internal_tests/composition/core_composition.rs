@@ -1,5 +1,5 @@
 fn compile(src: &str) -> crate::compiler::CompileResult {
-    crate::test_support::compile_source(src, crate::parser::ParserOptions::default())
+    crate::test_support::compile_source(src, crate::parser::ParserOptions)
         .expect("parse and compile")
 }
 

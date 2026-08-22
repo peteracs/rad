@@ -5,7 +5,7 @@ mod tests {
     use crate::vm::VM;
 
     fn record_run_raw(src: &str) -> (Result<(), String>, Vec<serde_json::Value>) {
-        let result = crate::test_support::compile_source(src, ParserOptions::default())
+        let result = crate::test_support::compile_source(src, ParserOptions)
             .expect("parse and compile");
         let mut vm = VM::new();
         vm.suppress_output();
@@ -217,7 +217,7 @@ mod tests {
     }
 
     fn compile_and_make_vm(src: &str) -> VM {
-        let result = crate::test_support::compile_source(src, ParserOptions::default())
+        let result = crate::test_support::compile_source(src, ParserOptions)
             .expect("parse and compile");
         let mut vm = VM::new();
         vm.suppress_output();
@@ -726,5 +726,49 @@ mod tests {
                 .collect::<Vec<_>>()
         };
         assert_eq!(run(0), run(1));
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn file_trace_streams_and_replays_one_hundred_thousand_io_records() {
+        let path = std::env::temp_dir().join(format!(
+            "rad-streaming-trace-{}-{}.radr",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("system clock after epoch")
+                .as_nanos()
+        ));
+        let _ = std::fs::remove_file(&path);
+        let mut recorder = TraceRecorder::new_file_with_features_and_layout(
+            "nil",
+            7,
+            &[],
+            &SourceLayout::default(),
+            &path,
+        )
+        .expect("file recorder");
+        let result = Ok(serde_json::json!({"t": "int", "v": "7"}));
+        for _ in 0..100_000 {
+            recorder.record_io("clock", "same-arguments".to_string(), &result);
+        }
+        recorder.record_end_with_outcome("unchanged", None);
+        let FinishedTrace::File(finished) = recorder.finish().expect("finish trace") else {
+            panic!("file recorder returned memory output");
+        };
+        assert_eq!(finished, path);
+
+        let mut replayer = TraceReplayer::parse_file(&path, false).expect("streaming parse");
+        assert_eq!(replayer.io_record_count(), 100_000);
+        for _ in 0..100_000 {
+            replayer
+                .next_io("clock", "same-arguments")
+                .expect("strict streamed record");
+        }
+        let report = replayer.report_with_outcome("unchanged", None);
+        assert_eq!(report.io_replayed, 100_000);
+        assert_eq!(report.leftover_io, 0);
+        assert_eq!(report.end_digest_match, Some(true));
+        std::fs::remove_file(path).expect("remove test trace");
     }
 }

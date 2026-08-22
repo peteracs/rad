@@ -81,11 +81,7 @@ pub(crate) fn semantic_program_fingerprint(
     for feature in features {
         update_segment(&mut hasher, feature.as_bytes());
     }
-    hasher.update(&[
-        u8::from(options.compat_v0_5_dx),
-        u8::from(options.warn_compat),
-        u8::from(options.strict_types),
-    ]);
+    hasher.update(&[u8::from(options.strict_types)]);
     *hasher.finalize().as_bytes()
 }
 

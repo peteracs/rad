@@ -110,7 +110,7 @@ pub(crate) struct SourceCheck {
 }
 
 pub(crate) fn check_source(source: &str) -> SourceCheck {
-    check_source_with(source, ParserOptions::default(), CheckerOptions::default())
+    check_source_with(source, ParserOptions, CheckerOptions::default())
 }
 
 pub(crate) fn check_source_with(

@@ -1,3 +1,45 @@
+fn run_surface_command(filepath: &str, json: bool) {
+    let loaded = match load_cli_program(filepath, ParserOptions) {
+        Ok(loaded) => loaded,
+        Err(error) => {
+            eprintln!("{error}");
+            process::exit(1);
+        }
+    };
+    if !loaded.errors.is_empty() {
+        eprintln!("{}", render_module_load_errors(loaded.errors.clone()));
+        process::exit(1);
+    }
+    let coverage = rad_vm::surface_coverage::LanguageSurfaceCoverage::loaded(
+        &loaded.program,
+        &loaded.aliases,
+        &loaded.source_map,
+    );
+    if !coverage.lexical_errors.is_empty() {
+        eprintln!(
+            "language-surface collection found lexical errors:\n{}",
+            serde_json::to_string_pretty(&coverage.lexical_errors)
+                .expect("lexical error map is serializable")
+        );
+        process::exit(1);
+    }
+    if json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&coverage)
+                .expect("language-surface report is serializable")
+        );
+    } else {
+        println!("Language surface: {filepath}");
+        println!("  source files: {}", coverage.source_files.len());
+        println!("  tokens: {}", coverage.tokens.len());
+        println!("  declarations: {}", coverage.declarations.len());
+        println!("  statements: {}", coverage.statements.len());
+        println!("  expressions: {}", coverage.expressions.len());
+        println!("  builtins called: {}", coverage.builtins.len());
+    }
+}
+
 fn run_relations_check_command(filepath: &str, module_id: String, experimental_relations: bool) {
     let source = match fs::File::open(filepath) {
         Ok(source) => source,
@@ -32,6 +74,44 @@ fn run_relations_check_command(filepath: &str, module_id: String, experimental_r
             process::exit(1);
         }
     }
+}
+
+fn load_runtime_relation_schema(
+    filepath: &str,
+    module_id: String,
+    experimental_relations: bool,
+) -> Result<rad_vm::relation::frontend::FrontendArtifacts, String> {
+    let source = fs::File::open(filepath)
+        .map_err(|error| format!("Error reading relation schema {filepath}: {error}"))?;
+    let options = rad_vm::relation::frontend::FrontendOptions {
+        enabled: experimental_relations,
+        module_id,
+        ..rad_vm::relation::frontend::FrontendOptions::default()
+    };
+    let artifacts = rad_vm::relation::frontend::compile_reader(source, &options).map_err(
+        |diagnostics| {
+            diagnostics
+                .into_iter()
+                .map(|diagnostic| {
+                    format!(
+                        "{filepath}:{}:{} [{}] {}",
+                        diagnostic.line,
+                        diagnostic.column,
+                        diagnostic.code.as_str(),
+                        diagnostic.message
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join("\n")
+        },
+    )?;
+    if !artifacts.operations.is_empty() {
+        return Err(format!(
+            "Relation schema {filepath} contains {} operation(s); --relation-schema accepts declarations and derivation rules only",
+            artifacts.operations.len()
+        ));
+    }
+    Ok(artifacts)
 }
 
 fn collect_rad_files(filepaths: Vec<String>) -> Vec<String> {

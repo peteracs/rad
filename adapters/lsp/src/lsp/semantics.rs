@@ -15,8 +15,6 @@
 fn editor_checker_options() -> CheckerOptions {
     CheckerOptions {
         features: vec!["causal_laws".to_string()],
-        compat_v0_5_dx: false,
-        warn_compat: true,
         strict_types: false,
     }
 }

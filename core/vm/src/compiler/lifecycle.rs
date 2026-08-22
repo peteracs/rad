@@ -171,6 +171,11 @@ impl Compiler {
         )
     }
 
+    pub(crate) fn add_canonical_name_constant(&mut self, name: &str) -> u16 {
+        let resolved = self.resolve_canonical_name(name);
+        self.add_constant_gc(|gc| Value::from_string(gc, resolved))
+    }
+
     pub(crate) fn resolve_alias_member(&self, alias: &str, member: &str) -> Option<String> {
         self.module_aliases
             .get(alias)
@@ -428,7 +433,6 @@ impl Compiler {
             let mut checker =
                 crate::checker::Checker::new_with_options(crate::checker::CheckerOptions {
                     features: self.features.clone(),
-                    warn_compat: false,
                     ..crate::checker::CheckerOptions::default()
                 });
             checker.set_aliases(self.alias_decls.clone());

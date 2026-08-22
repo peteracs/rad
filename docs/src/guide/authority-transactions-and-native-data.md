@@ -258,8 +258,7 @@ why_not_in_view(SellableProducts, product)
 
 Views do not infer arbitrary host-side dependencies. Every authoritative source
 fact must be a component/resource dependency. Replace reader-side scans and
-caches with a view, then remove cache revision code rather than retaining a
-repair fallback.
+caches with a view, then remove the reader-side cache and its revision code.
 
 MarketLens maintains one million catalog products and 50,000 source updates
 without a steady-state full-catalog rebuild.

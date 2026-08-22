@@ -331,7 +331,7 @@ fn build_merge_scenario(seed: u64) -> String {
 fn compile(src: &str) -> crate::compiler::CompileResult {
     crate::test_support::compile_checked_source(
         src,
-        crate::parser::ParserOptions::default(),
+        crate::parser::ParserOptions,
         crate::checker::CheckerOptions::default(),
     )
     .expect("parse, check, and compile")

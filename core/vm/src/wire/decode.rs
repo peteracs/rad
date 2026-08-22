@@ -362,6 +362,21 @@ pub(crate) fn decode_value(gc: &mut dyn Allocator, j: &serde_json::Value) -> Res
                     decode_u32(body, "wire codec: entity id")?,
                 )),
                 "n" => Ok(Value::from_native_scalar(gc, decode_native_scalar(body)?)),
+                "q" => {
+                    let parts = body
+                        .as_array()
+                        .filter(|parts| parts.len() == 2)
+                        .ok_or_else(|| bad("state"))?;
+                    let machine = parts[0]
+                        .as_str()
+                        .ok_or_else(|| bad("state machine"))?
+                        .to_string();
+                    let state = parts[1]
+                        .as_str()
+                        .ok_or_else(|| bad("state name"))?
+                        .to_string();
+                    Ok(Value::from_state(gc, machine, state))
+                }
                 "t" => {
                     let items = body.as_array().ok_or_else(|| bad("tuple"))?;
                     let mut out = Vec::with_capacity(items.len());
@@ -462,7 +477,7 @@ fn decode_native_scalar(
         .as_u64()
         .ok_or_else(|| "wire codec: malformed native bits".to_string())?;
     Ok(crate::native_types::NativeScalarValue {
-        type_name,
+        type_name: type_name.into(),
         repr,
         flavor,
         bits,

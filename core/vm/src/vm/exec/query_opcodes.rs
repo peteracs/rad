@@ -29,8 +29,8 @@ impl VM {
         }
         without_types.reverse();
 
-        // A `query { A } without { B }` reveals which entities have A and lack
-        // B, so both sides are reads and both honor the read ACL. No-op unless
+        // `query { A } where not B` reveals which entities have A and lack B,
+        // so both sides are reads and both honor the read ACL. No-op unless
         // the grant carries an explicit `"read"` allowlist.
         if self.sandbox_caps.is_some() {
             for ctype in with_types.iter().chain(without_types.iter()) {

@@ -35,8 +35,8 @@ pub fn compiler_wasm_bytes_from_env() -> Result<Vec<u8>, String> {
 #[derive(Default, Clone)]
 pub struct VfsState {
     pub files: HashMap<String, Vec<u8>>,
-    /// When set, unresolved paths try `join(path)` after overlay and absolute `read(path)` fail.
-    pub fallback_dir: Option<PathBuf>,
+    /// Filesystem root for relative paths absent from the in-memory overlay.
+    pub filesystem_root: Option<PathBuf>,
 }
 
 impl VfsState {
@@ -74,7 +74,7 @@ fn vfs_read_impl(mut caller: Caller<'_, HostCtx>, path_ptr: u32, path_len: u32) 
             if let Ok(b) = std::fs::read(&path) {
                 return b;
             }
-            if let Some(dir) = &g.fallback_dir {
+            if let Some(dir) = &g.filesystem_root {
                 if let Ok(b) = std::fs::read(dir.join(&path)) {
                     return b;
                 }

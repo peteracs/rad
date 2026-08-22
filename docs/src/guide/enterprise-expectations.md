@@ -74,9 +74,11 @@ The `rad lint` tool provides presets that enforce architectural patterns:
 - **Declarative Code**: The linter warns when imperative loops are used solely to build collections, suggesting pipeline equivalents.
 - **Enforced System Authority**: Every compile and lint preset checks the complete synchronous system effect bound. Named parameters plus `reads`, `writes`, `emits`, `io`, and `async` entries bound helpers, imports, closures, callbacks, resources, transitions, and synchronous handler chains; the parallel scheduler consumes each system's call-site-specialized view of that same graph.
 
-## 13) Compatibility Features Are Flag-Gated
+## 13) Source Syntax Is Canonical
 
-Some syntax/ergonomic behaviors are controlled by compatibility flags (for example `--compat-v0.5-dx`). Keep CI flags explicit to avoid environment drift.
+RAD accepts one source grammar. CI should use `--strict-types` and
+`--deny-warnings`; it must not depend on parser modes that change the meaning
+of a source file.
 
 ## 14) Historical C Backend String Interning
 

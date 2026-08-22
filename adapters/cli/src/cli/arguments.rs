@@ -28,7 +28,7 @@ fn usage(program: &str) -> String {
     format!(
         "Rad v{} — Bytecode Compiler & Virtual Machine
 
-Usage: {program} <file.rad> [--no-check] [--compat-v0.5-dx|--no-compat-v0.5-dx] [--experimental-laws] [--deny-warnings] [--warn-compat|--no-warn-compat] [--strict-types] [--write-lock] [--profile-copies] [--serial-schedule] [--record <trace.radr>] [-- <program args>]
+Usage: {program} <file.rad> [--no-check] [--experimental-laws] [--relation-schema <relations.rad> --relation-module <id> --experimental-relations] [--deny-warnings] [--strict-types] [--write-lock] [--profile-copies] [--serial-schedule] [--record <trace.radr>] [-- <program args>]
        {program} run [run options] [-- <program args>]   (entry from ./rad.toml)
        {program} relations check <file.rad> --experimental-relations [--module <id>]
        {program} new <name> [--template <template>]
@@ -40,6 +40,7 @@ Usage: {program} <file.rad> [--no-check] [--compat-v0.5-dx|--no-compat-v0.5-dx] 
        {program} replay <trace.radr> [--to-frame <n>] [--serve] [--with <fixed.rad>] [--force]
        {program} fmt [--check] [file.rad...]
        {program} lint [--preset=strict] [file.rad...]
+       {program} surface <file.rad> [--json]
        {program} effects <callable> [--json] [--file <file.rad>]
        {program} writers <component|resource> [--json] [--file <file.rad>]
        {program} readers <component|resource> [--json] [--file <file.rad>]
@@ -209,6 +210,28 @@ fn parse_cli_args(args: &[String]) -> Result<CliCommand, String> {
         }
         return Ok(CliCommand::ShrinkModel {
             artifact: args[2].clone(),
+        });
+    }
+
+    if args.get(1).map(String::as_str) == Some("surface") {
+        let mut filepath = None;
+        let mut json = false;
+        for argument in args.iter().skip(2) {
+            if argument == "--json" {
+                json = true;
+            } else if argument.starts_with('-') {
+                return Err(format!("Unknown option for surface: {argument}"));
+            } else if filepath.replace(argument.clone()).is_some() {
+                return Err(format!(
+                    "Expected: {program} surface <file.rad> [--json]"
+                ));
+            }
+        }
+        return Ok(CliCommand::Surface {
+            filepath: filepath.ok_or_else(|| {
+                format!("Expected: {program} surface <file.rad> [--json]")
+            })?,
+            json,
         });
     }
 
@@ -781,15 +804,16 @@ fn parse_cli_args(args: &[String]) -> Result<CliCommand, String> {
     }
 
     let mut skip_check = false;
-    let mut compat_v0_5_dx = false;
     let mut deny_warnings = false;
-    let mut warn_compat = true;
     let mut strict_types = false;
     let mut write_lock = false;
     let mut profile_copies = false;
     let mut serial_schedule = false;
     let mut want_version = false;
     let mut features = Vec::new();
+    let mut relation_schema: Option<String> = None;
+    let mut relation_module = "main".to_string();
+    let mut experimental_relations = false;
     let mut record: Option<String> = None;
     let mut positional: Vec<&str> = Vec::new();
     let mut program_args: Vec<String> = Vec::new();
@@ -803,16 +827,13 @@ fn parse_cli_args(args: &[String]) -> Result<CliCommand, String> {
                 break;
             }
             "--no-check" => skip_check = true,
-            "--compat-v0.5-dx" => compat_v0_5_dx = true,
-            "--no-compat-v0.5-dx" => compat_v0_5_dx = false,
             "--deny-warnings" => deny_warnings = true,
-            "--warn-compat" => warn_compat = true,
-            "--no-warn-compat" => warn_compat = false,
             "--strict-types" => strict_types = true,
             "--write-lock" => write_lock = true,
             "--profile-copies" => profile_copies = true,
             "--serial-schedule" => serial_schedule = true,
             "--experimental-laws" => features.push("causal_laws".to_string()),
+            "--experimental-relations" => experimental_relations = true,
             "--version" => want_version = true,
             "--feature" => {
                 if let Some(f) = it.next() {
@@ -833,6 +854,23 @@ fn parse_cli_args(args: &[String]) -> Result<CliCommand, String> {
                         usage(program)
                     ));
                 }
+            }
+            "--relation-schema" => {
+                relation_schema = Some(
+                    it.next()
+                        .ok_or_else(|| {
+                            format!("Missing argument for --relation-schema\n\n{}", usage(program))
+                        })?
+                        .clone(),
+                );
+            }
+            "--relation-module" => {
+                relation_module = it
+                    .next()
+                    .ok_or_else(|| {
+                        format!("Missing argument for --relation-module\n\n{}", usage(program))
+                    })?
+                    .clone();
             }
             _ if arg.starts_with("--record=") => {
                 record = Some(arg["--record=".len()..].to_string());
@@ -859,18 +897,25 @@ fn parse_cli_args(args: &[String]) -> Result<CliCommand, String> {
             usage(program)
         ));
     }
+    if skip_check && record.is_some() {
+        return Err(format!(
+            "--no-check cannot be combined with --record: replay requires the checked semantic product\n\n{}",
+            usage(program)
+        ));
+    }
 
     Ok(CliCommand::Run {
         filepath: positional[0].to_string(),
         skip_check,
-        compat_v0_5_dx,
         deny_warnings,
-        warn_compat,
         strict_types,
         write_lock,
         profile_copies,
         serial_schedule,
         features,
+        relation_schema,
+        relation_module,
+        experimental_relations,
         record,
         program_args,
     })

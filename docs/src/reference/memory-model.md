@@ -36,7 +36,7 @@ By unboxing 48-bit integers, the vast majority of integer arithmetic in Rad requ
 
 When you assign a list to a new variable or pass it to a function, it is a cheap pointer copy. When you `push` a new value, builtins return a new list value; the runtime avoids full deep copies of unrelated elements when the backing buffer can be updated in place.
 
-```rad
+```text
 let mut a = [1, 2, 3]
 let b = a
 a = push(a, 4)
@@ -57,7 +57,7 @@ Components are the core data type in Rad. They have **value semantics** from the
 
 When `fork()` creates a world snapshot, it performs `Arc::clone` on each column’s `Arc<ValueColumn>` and on world maps — **O(A)** shallow refcount bumps (A = archetype column `Arc`s), not a per-entity data copy. Actual **SoA data** cloning is deferred to the first mutation of a still-shared column via `Arc::make_mut()`. That path may clone an entire `ValueColumn`, which runs an **O(E)** scan over the entities in that column to `retain_persistent()` on heap-backed field values (strings, nested objects); **primitive-only columns** mostly hit a cheap bitwise `is_persistent_object` check with no atomic work. Untouched columns stay shared. This keeps fork nearly instant for typical worlds (~7µs at 10,000 entities), while the retain cost is paid only when a shared column is written.
 
-```rad
+```text
 component Position { x: 0.0, y: 0.0 }
 component Velocity { dx: 0.0, dy: 0.0 }
 
@@ -81,6 +81,7 @@ Rad now uses a four-layer model:
 Important implications:
 
 - `Value` stays NaN-boxed and `Copy`; inline ints/floats/bools avoid refcount traffic. Heap strings use **`Arc<str>`** inside `Object::Str`, so copying a string across the ECS “air gap” (e.g. `get` / `peek` deep-copying into the backup GC heap) is **O(1)** per string (Arc bump), not an O(n) byte copy.
+- Fixed-width and opaque native scalar values store their type name as **`Arc<str>`**. Values constructed through a checked native type descriptor clone the descriptor's handle, so that path does not copy `"TransactionId"` (or another nominal name) into every scalar. Decode and external construction boundaries rebuild an `Arc` from their payload unless a descriptor is available; `Arc<str>` makes sharing possible but is not a global string interner.
 - ECS data is no longer part of the tracing collector root set.
 - Worst-case tracing work is bounded by live closure/capture graphs plus bytecode chunk constants, not by world size.
 
@@ -98,7 +99,7 @@ For bulk cleanup (like unloading a level) or temporary entities (like particles)
 
 The `let unique` keyword provides an opt-in single-ownership guarantee at compile time. The checker ensures a `unique` binding is never aliased — it cannot be assigned to another variable, passed as a function argument, or captured by a closure. This means the runtime can guarantee that `Arc::make_mut` on a unique list will **never** trigger a deep clone, because the backing `Arc` always has a reference count of 1.
 
-```rad
+```text
 let unique mut xs = [1, 2, 3]
 xs << 4       // guaranteed in-place: Arc refcount is always 1
 xs << 5       // no clone, no allocation — just Vec::push
@@ -122,7 +123,7 @@ This helps identify performance bottlenecks where an unintended alias causes a f
 
 Rad's `let` bindings are immutable. 
 
-```rad
+```text
 let data = [1, 2, 3]
 // data[0] = 99  // ERROR: cannot mutate immutable binding
 
@@ -132,7 +133,7 @@ data2[0] = 99  // OK
 
 **Pipeline immutability:** Pipeline operations (`map`, `filter`, `reduce`) always return **new** lists. The fused pipeline path avoids allocating intermediate Rad lists between stages; list elements are still held in contiguous storage.
 
-```rad
+```text
 let original = [1, 2, 3, 4, 5]
 let doubled = original |> map(fn(x) { return x * 2 })
 // original is still [1, 2, 3, 4, 5]

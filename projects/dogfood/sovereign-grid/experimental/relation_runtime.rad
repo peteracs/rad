@@ -1,0 +1,2 @@
+relation SurfaceFact(subject: entity on delete cascade, value: int)
+    unique subject

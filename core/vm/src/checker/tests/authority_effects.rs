@@ -651,7 +651,7 @@
             system Tick(score: mut Score) {
                 score.value = score.value + 1
             }
-            phase Frame [Tick]
+            phase Frame { Tick }
 
             fn mission_frame() -> nil {
                 schedule [Frame]

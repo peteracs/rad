@@ -1,0 +1,2 @@
+component QueuedItem owned { ordered indexed priority: int = 0 }
+fn bypass(target: entity) { update(target, QueuedItem) { priority = 7 } }

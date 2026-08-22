@@ -165,7 +165,7 @@ fn json_to_map_key(karr: &[serde_json::Value]) -> Result<MapKey, String> {
             type_name: payload["ty"]
                 .as_str()
                 .ok_or_else(|| "trace codec: malformed native map key type".to_string())?
-                .to_string(),
+                .into(),
             repr: crate::native_types::NativeScalarKind::parse(
                 payload["repr"]
                     .as_str()
@@ -330,7 +330,7 @@ pub(crate) fn decode_value(gc: &mut GcHeap, j: &serde_json::Value) -> Result<Val
                 type_name: j["ty"]
                     .as_str()
                     .ok_or_else(|| bad("native"))?
-                    .to_string(),
+                    .into(),
                 repr: crate::native_types::NativeScalarKind::parse(repr_name)
                     .ok_or_else(|| bad("native"))?,
                 flavor: crate::native_types::NativeTypeFlavor::parse(flavor_name)
@@ -468,8 +468,20 @@ pub(crate) fn decode_value(gc: &mut GcHeap, j: &serde_json::Value) -> Result<Val
 // Recorder.
 // ---------------------------------------------------------------------------
 
+enum TraceSink {
+    Memory(Vec<String>),
+    #[cfg(not(target_arch = "wasm32"))]
+    File(Box<FileTraceSink>),
+}
+
+pub enum FinishedTrace {
+    Memory(String),
+    #[cfg(not(target_arch = "wasm32"))]
+    File(std::path::PathBuf),
+}
+
 pub struct TraceRecorder {
-    lines: Vec<String>,
+    sink: TraceSink,
     /// Frames completed so far; the current frame index for new io records.
     frame: u64,
     /// Sequence number within the current frame.
@@ -491,11 +503,39 @@ impl TraceRecorder {
         features: &[String],
         source_layout: &SourceLayout,
     ) -> Self {
+        let header = Self::header(source, seed, features, source_layout);
+        Self {
+            sink: TraceSink::Memory(vec![header]),
+            frame: 0,
+            seq: 0,
+        }
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn new_file_with_features_and_layout(
+        source: &str,
+        seed: u64,
+        features: &[String],
+        source_layout: &SourceLayout,
+        output_path: &std::path::Path,
+    ) -> Result<Self, String> {
+        let features = canonical_features(features);
+        let header = Self::header(source, seed, &features, source_layout);
+        let mut sink = FileTraceSink::create(output_path)?;
+        sink.write_line(&header);
+        Ok(Self {
+            sink: TraceSink::File(Box::new(sink)),
+            frame: 0,
+            seq: 0,
+        })
+    }
+
+    fn header(source: &str, seed: u64, features: &[String], source_layout: &SourceLayout) -> String {
         let features = canonical_features(features);
         let source_layout_hash = source_layout
             .digest(source)
             .expect("recording source layout must describe its source");
-        let header = serde_json::json!({
+        serde_json::json!({
             "t": "header",
             "version": TRACE_VERSION,
             "source": source,
@@ -506,11 +546,15 @@ impl TraceRecorder {
             "source_layout": source_layout,
             "source_layout_hash": source_layout_hash,
             "seed": seed,
-        });
-        Self {
-            lines: vec![header.to_string()],
-            frame: 0,
-            seq: 0,
+        })
+        .to_string()
+    }
+
+    fn push_line(&mut self, line: String) {
+        match &mut self.sink {
+            TraceSink::Memory(lines) => lines.push(line),
+            #[cfg(not(target_arch = "wasm32"))]
+            TraceSink::File(sink) => sink.write_line(&line),
         }
     }
 
@@ -531,7 +575,7 @@ impl TraceRecorder {
             Ok(r) => obj["r"] = r.clone(),
             Err(e) => obj["e"] = serde_json::Value::String(e.clone()),
         }
-        self.lines.push(obj.to_string());
+        self.push_line(obj.to_string());
         self.seq += 1;
     }
 
@@ -542,7 +586,7 @@ impl TraceRecorder {
         if fuel_remaining != u64::MAX {
             obj["fuel"] = serde_json::Value::from(fuel_remaining);
         }
-        self.lines.push(obj.to_string());
+        self.push_line(obj.to_string());
         self.frame += 1;
         self.seq = 0;
     }
@@ -550,8 +594,7 @@ impl TraceRecorder {
     /// Final record: the world content digest at exit (or crash) point.
     /// Replay verifies its own world against this for an end-to-end check.
     pub fn record_end(&mut self, world_digest: &str) {
-        self.lines
-            .push(serde_json::json!({"t": "end", "world": world_digest}).to_string());
+        self.push_line(serde_json::json!({"t": "end", "world": world_digest}).to_string());
     }
 
     /// Record both the final world and whether execution returned normally.
@@ -562,15 +605,34 @@ impl TraceRecorder {
             Some(message) => serde_json::json!({"error": message}),
             None => serde_json::json!({"ok": true}),
         };
-        self.lines.push(
+        self.push_line(
             serde_json::json!({"t": "end", "world": world_digest, "outcome": outcome}).to_string(),
         );
     }
 
     pub fn to_jsonl(&self) -> String {
-        let mut out = self.lines.join("\n");
+        let lines = match &self.sink {
+            TraceSink::Memory(lines) => lines,
+            #[cfg(not(target_arch = "wasm32"))]
+            TraceSink::File(_) => {
+                panic!("file-backed traces must be finalized with finish()");
+            }
+        };
+        let mut out = lines.join("\n");
         out.push('\n');
         out
+    }
+
+    pub fn finish(self) -> Result<FinishedTrace, String> {
+        match self.sink {
+            TraceSink::Memory(lines) => {
+                let mut output = lines.join("\n");
+                output.push('\n');
+                Ok(FinishedTrace::Memory(output))
+            }
+            #[cfg(not(target_arch = "wasm32"))]
+            TraceSink::File(sink) => (*sink).finish().map(FinishedTrace::File),
+        }
     }
 }
 
@@ -591,6 +653,19 @@ pub struct IoRecord {
     /// `Ok(tagged value)` for successful io, `Err(message)` for io that
     /// failed in the recorded run (replay reproduces the failure).
     pub result: Result<serde_json::Value, String>,
+}
+
+fn parse_io_record(value: &serde_json::Value) -> Result<IoRecord, String> {
+    Ok(IoRecord {
+        frame: value["f"].as_u64().ok_or("io record missing frame")?,
+        seq: value["s"].as_u64().unwrap_or(0),
+        builtin: value["b"].as_str().unwrap_or_default().to_string(),
+        args_digest: value["a"].as_str().unwrap_or_default().to_string(),
+        result: match value.get("e") {
+            Some(error) => Err(error.as_str().unwrap_or_default().to_string()),
+            None => Ok(value["r"].clone()),
+        },
+    })
 }
 
 pub struct ReplayReport {
@@ -644,6 +719,9 @@ pub struct TraceReplayer {
     features: Vec<String>,
     seed: u64,
     records: Vec<IoRecord>,
+    total_io_records: usize,
+    #[cfg(not(target_arch = "wasm32"))]
+    strict_stream: Option<StrictTraceStream>,
     /// First record index of each frame — the frame-indexed cursor that
     /// `goto_frame` seeking (Phase 3) repositions instead of re-firing io.
     frame_starts: std::collections::BTreeMap<u64, usize>,
@@ -670,7 +748,7 @@ pub struct TraceReplayer {
 impl std::fmt::Debug for TraceReplayer {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("TraceReplayer")
-            .field("records", &self.records.len())
+            .field("records", &self.total_io_records)
             .field("cursor", &self.cursor)
             .field("current_frame", &self.current_frame)
             .field("timeline_len", &self.timeline.len())

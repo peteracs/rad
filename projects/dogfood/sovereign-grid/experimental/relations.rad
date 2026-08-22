@@ -1,0 +1,49 @@
+// module: sovereign::grid
+// RFC-0003 production-shaped relation surface. Checked separately from the
+// stable program because relation syntax is intentionally feature-gated.
+
+relation Assigned(operator: entity on delete restrict, asset: entity on delete cascade)
+    unique asset
+    unique operator, asset as operator_asset
+
+relation AssetLoad(asset: entity on delete cascade, megawatts: int)
+    unique asset
+
+relation OperatorLimit(operator: entity on delete restrict, megawatts: int)
+    unique operator
+
+relation GridLinked(left: entity, right: entity)
+    symmetric
+    on delete cascade
+
+derive AssignedLoad(operator, asset, megawatts)
+    when Assigned(operator, asset)
+    and AssetLoad(asset, megawatts)
+
+derive TotalAssignedLoad(operator, sum(megawatts))
+    when Assigned(operator, asset)
+    and AssetLoad(asset, megawatts)
+
+derive AssignedAssetCount(operator, count())
+    when Assigned(operator, asset)
+
+derive MinimumAssetLoad(operator, min(megawatts))
+    when Assigned(operator, asset)
+    and AssetLoad(asset, megawatts)
+
+derive MaximumAssetLoad(operator, max(megawatts))
+    when Assigned(operator, asset)
+    and AssetLoad(asset, megawatts)
+
+derive OverCapacity(operator)
+    when TotalAssignedLoad(operator, total)
+    and OperatorLimit(operator, limit)
+    and total > limit
+
+Insert(Assigned, (operator_alpha, asset_solar))
+Insert(AssetLoad, (asset_solar, 40))
+Insert(OperatorLimit, (operator_alpha, 100))
+Insert(GridLinked, (asset_solar, asset_storage))
+ReplaceBy(Assigned, asset, asset_solar, (operator_beta, asset_solar))
+ReplaceBy(Assigned, operator_asset, (operator_beta, asset_solar), (operator_alpha, asset_solar))
+Remove(GridLinked, (asset_solar, asset_storage))

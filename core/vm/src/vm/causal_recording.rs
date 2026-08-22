@@ -13,8 +13,8 @@ impl VM {
     }
 
     /// Bound retained causal history for long-running embedded VMs.
-    /// Settlement proposal fan-in uses the same retention policy as legacy
-    /// writes and event ancestry.
+    /// Settlement proposal fan-in, writes, and event ancestry share this
+    /// retention policy.
     pub fn set_causality_retention_cap(&mut self, cap: usize) {
         self.ledger.set_retention_cap(cap);
     }
@@ -501,19 +501,6 @@ impl VM {
         let chunk = chunk.verify_and_seal()?;
         self.gc.merge(chunk_gc);
         Ok(self.load_chunk(chunk))
-    }
-
-    /// Compatibility spelling for [`Self::load_verified_chunk_with_gc`].
-    /// # Safety
-    ///
-    /// See [`Self::load_verified_chunk_with_gc`].
-    pub unsafe fn load_chunk_with_gc(
-        &mut self,
-        chunk: Chunk,
-        chunk_gc: GcHeap,
-    ) -> Result<usize, crate::VerificationError> {
-        // SAFETY: forwarded contract is identical to this function's.
-        unsafe { self.load_verified_chunk_with_gc(chunk, chunk_gc) }
     }
 
     /// Runtime-defense tests deliberately bypass the host verifier. This is

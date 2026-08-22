@@ -60,7 +60,8 @@ match s {
 }
 ```
 
-However, if you open braces to destructure a variant, you must bind all of its fields exhaustively (or use the `..` rest operator in v0.5 compat mode to ignore the remaining fields).
+If you open braces to destructure a variant, bind every field or use the
+canonical `..` rest pattern to ignore the remaining fields.
 
 When `match` is used as an expression (e.g., `let x = match s { ... }`), all match arms must return the same type. Any match arms appearing after an unconditional wildcard (`_`) are flagged as unreachable errors.
 
@@ -142,6 +143,7 @@ type Option {
 let x = Option::None { }
 ```
 
-In [v0.5 compatibility mode](../reference/compat-v05.md), the shorthand `Option::None` (without braces) is accepted.
+The canonical shorthand `Option::None` (without braces) constructs the same
+zero-field variant.
 
 For the built-in `Option` and `Result` types specifically, the language provides a special tuple/unit shorthand. You can write `Some(x)`, `None()`, `None`, `Ok(x)`, and `Err(x)` instead of the verbose braced syntax.

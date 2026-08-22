@@ -1,0 +1,4 @@
+component Root {}
+component AuditRecord { revision: int = 0 }
+fn hidden_audit(target: entity) { set(target, AuditRecord { revision: 1 }) }
+system Route(_root: Root) { hidden_audit(self) }

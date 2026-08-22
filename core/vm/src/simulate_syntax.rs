@@ -83,7 +83,7 @@ fn is_string_only_schedule_element(expr: &Expr) -> bool {
 pub enum SystemsListForm<'a> {
     /// `[system::A, …]` — the only accepted static shape for `simulate`.
     StaticSchedule(&'a [Expr]),
-    /// `["A", …]` — legacy; rejected (phase C).
+    /// `["A", …]` — removed string-only shape; rejected.
     StringLiteralSchedule(&'a [Expr]),
     /// Both strings and `system::…` in the same list.
     MixedLiteralSchedule(&'a [Expr]),
@@ -185,7 +185,7 @@ mod tests {
     }
 
     #[test]
-    fn string_only_schedule_is_legacy_variant() {
+    fn string_only_schedule_is_removed_variant() {
         let e = Expr::ListLit(
             vec![
                 Expr::StrLit("A".to_string(), sp()),

@@ -5,7 +5,7 @@ mod simulate_par_tests {
     use crate::vm::VM;
 
     fn run_host(src: &str) -> Vec<String> {
-        let result = crate::test_support::compile_source(src, ParserOptions::default())
+        let result = crate::test_support::compile_source(src, ParserOptions)
             .expect("parse and compile");
         let mut vm = VM::new();
         vm.suppress_output();
@@ -239,7 +239,7 @@ mod blast_radius_tests {
     use crate::vm::VM;
 
     fn run_host(src: &str) -> Result<Vec<String>, String> {
-        let result = crate::test_support::compile_source(src, ParserOptions::default())
+        let result = crate::test_support::compile_source(src, ParserOptions)
             .expect("parse and compile");
         let mut vm = VM::new();
         vm.suppress_output();

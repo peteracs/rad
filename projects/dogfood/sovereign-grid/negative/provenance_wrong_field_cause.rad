@@ -1,0 +1,5 @@
+component Position { x: int = 0, y: int = 0 }
+let item = spawn(Position {})
+write_field(item, Position, "x", 7)
+let explanation = why_field(item, Position, "y")
+assert(contains(explanation, "write_field"), "expected field-level cause")

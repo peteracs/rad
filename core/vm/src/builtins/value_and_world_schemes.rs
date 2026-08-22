@@ -1,22 +1,5 @@
 
 
-pub fn is_builtin(name: &str) -> bool {
-    Builtin::from_name(name).is_some() || name == "emit"
-}
-
-pub struct BuiltinSig {
-    pub type_params: Vec<String>,
-    pub params: Vec<Ty>,
-    pub ret: Ty,
-    pub is_pure: bool,
-}
-
-impl BuiltinSig {
-    pub fn effects(&self, name: &str) -> EffectSet {
-        builtin_effect(name)
-    }
-}
-
 pub fn builtin_effect(name: &str) -> EffectSet {
     match name {
         // rand_* joined this arm for table parity (they are IO in
@@ -78,17 +61,26 @@ pub fn builtin_effect(name: &str) -> EffectSet {
             EffectSet::single(Effect::ReadECS)
         }
         "assert_trace" => EffectSet::single(Effect::ReadECS),
-        "emit" | "transition" | "flush_events" => EffectSet::single(Effect::Event),
+        "emit" | "flush_events" => EffectSet::single(Effect::Event),
+        "transition" => EffectSet::from_vec(&[Effect::ECS, Effect::Event]),
         _ => EffectSet::pure(),
     }
 }
 
 /// Human signature for an arity/argument error hint. Curated entries carry
 /// the parameter *names* (names teach, types only describe) for the builtins
-/// people actually stumble on; everything else falls back to a signature
-/// generated from [`builtin_type_scheme`], which cannot rot.
+/// people actually stumble on; every remaining entry is generated directly
+/// from [`builtin_type_scheme`], so there is no second signature table.
 pub fn builtin_signature_help(name: &str) -> Option<String> {
     let curated = match name {
+        "print" => "print(values: variadic<any>) -> nil",
+        "eprint" => "eprint(values: variadic<any>) -> nil",
+        "format" => "format(template: str, values: variadic<any>) -> str",
+        "entities" => "entities(components: variadic<ComponentType>) -> list<entity>",
+        "query_where" => "query_where(components: variadic<ComponentType>, predicate: readonly fn(entity) -> bool) -> list<entity>",
+        "query_map" => "query_map(components: variadic<ComponentType>, mapper: readonly fn(entity) -> T) -> list<T>",
+        "query_count" => "query_count(components: variadic<ComponentType>) -> int",
+        "require_all" => "require_all(entity, components: variadic<ComponentType>) -> list<any>",
         "simulate" => "simulate(fork, systems, ticks) -> world_fork",
         "simulate_par" => {
             "simulate_par(fork, systems, ticks, n_futures, seed, with?: list<resource>) -> list<world_fork>"
@@ -103,12 +95,14 @@ pub fn builtin_signature_help(name: &str) -> Option<String> {
         }
         "fork_delta" => "fork_delta(base, fork) -> str",
         "fork_apply" => "fork_apply(base, delta) -> Result<world_fork, str>",
-        "slice" => "slice(list_or_str, start, end) -> list_or_str",
-        "range" => "range(start, end) -> list<int>",
+        "slice" => "slice(list_or_str, start, end?: int) -> list_or_str",
+        "range" => "range(stop) | range(start, stop) | range(start, stop, step) -> list<int> | range(component, field, lower, upper) -> list<entity>",
+        "input" => "input(prompt?: any) -> str",
+        "world_digest" => "world_digest(fork?: world_fork) -> str",
         "map" => "map(list, fn(item)) -> list",
         "filter" => "filter(list, fn(item) -> bool) -> list",
         "reduce" => "reduce(list, init, fn(acc, item)) -> value",
-        "spawn" => "spawn(name?, Component { .. }, ...) -> entity",
+        "spawn" => "spawn(arguments: variadic<str | Component>) -> entity",
         "get" => "get(entity, Component) -> Option<Component>",
         "peek" => "peek(fork, entity, Component) -> Option<Component>",
         "require" => "require(entity, Component) -> Component (runtime error if missing)",
@@ -299,7 +293,8 @@ fn builtin_type_scheme_values(name: &str) -> Option<BuiltinSig> {
         "trace_id" => BuiltinSig {
             type_params: vec![],
             params: vec![],
-            ret: Ty::Int,
+            // Outside an event/trace context there is no active trace.
+            ret: Ty::Union(vec![Ty::Int, Ty::Nil]),
             is_pure: true,
         },
         "flush_events" => BuiltinSig {
@@ -534,7 +529,7 @@ fn builtin_type_scheme_values(name: &str) -> Option<BuiltinSig> {
         "zip" => BuiltinSig {
             type_params: tp_ab(),
             params: vec![Ty::List(Box::new(a())), Ty::List(Box::new(b()))],
-            ret: Ty::List(Box::new(Ty::List(Box::new(Ty::Any)))),
+            ret: Ty::List(Box::new(Ty::Tuple(vec![a(), b()]))),
             is_pure: true,
         },
         "flat_map" => BuiltinSig {
@@ -553,7 +548,7 @@ fn builtin_type_scheme_values(name: &str) -> Option<BuiltinSig> {
         "enumerate" => BuiltinSig {
             type_params: tp_a(),
             params: vec![Ty::List(Box::new(a()))],
-            ret: Ty::List(Box::new(Ty::List(Box::new(Ty::Any)))),
+            ret: Ty::List(Box::new(Ty::Tuple(vec![Ty::Int, a()]))),
             is_pure: true,
         },
         "find" => BuiltinSig {

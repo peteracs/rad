@@ -70,6 +70,41 @@
     }
 
     #[test]
+    fn transaction_allows_state_transition_inside_atomic_patch() {
+        let (errors, report) = authority_src(
+            r#"
+            state Flow {
+                Ready { on start -> Running }
+                Running {}
+            }
+            component Job { flow: Flow = Flow::Ready }
+
+            transaction Start(target: entity) {
+                requires has(target, Job)
+                changes_only [Job]
+                let job = require(target, Job)
+                set(target, Job {
+                    flow: transition(job.flow, "start") |> unwrap,
+                })
+                ensures require(target, Job).flow == Flow::Running
+            }
+            "#,
+        );
+        assert!(
+            !errors
+                .iter()
+                .any(|error| error.message.contains("violates its atomic effect boundary")),
+            "a state transition is part of the staged patch, not an external emit: {errors:?}"
+        );
+        let transaction = report
+            .callables
+            .values()
+            .find(|callable| callable.kind == crate::types::AuthorityCallableKind::Transaction)
+            .expect("transaction authority root");
+        assert_eq!(transaction.transitive.emits, vec!["$transition"]);
+    }
+
+    #[test]
     fn post_commit_effects_are_excluded_from_atomic_body_but_reported_to_callers() {
         let (errors, report) = authority_src(
             r#"

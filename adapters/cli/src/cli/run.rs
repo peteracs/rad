@@ -21,6 +21,11 @@ fn main() {
         return;
     }
 
+    if let CliCommand::Surface { filepath, json } = command {
+        run_surface_command(&filepath, json);
+        return;
+    }
+
     if let CliCommand::Authority {
         query,
         filepath,
@@ -145,9 +150,7 @@ fn main() {
             let (issues, _) = rad_vm::linter::lint_source(&source, &preset);
             let file_issues = issues.len();
 
-            let parser_options = ParserOptions {
-                compat_v0_5_dx: false,
-            };
+            let parser_options = ParserOptions;
             let mut vm_issues = Vec::new();
             let mut ast_issues = Vec::new();
 
@@ -159,8 +162,6 @@ fn main() {
                     &r.program,
                     &r.aliases,
                     CheckerOptions {
-                        compat_v0_5_dx: false,
-                        warn_compat: preset_data.vm_flags.contains(&"--warn-compat"),
                         strict_types: preset_data.vm_flags.contains(&"--strict-types"),
                         features: vec![],
                     },
@@ -246,9 +247,7 @@ fn main() {
     {
         let loaded = match load_cli_program(
             &input_rad,
-            ParserOptions {
-                compat_v0_5_dx: false,
-            },
+            ParserOptions,
         ) {
             Ok(loaded) => loaded,
             Err(errors) => {
@@ -260,8 +259,6 @@ fn main() {
             &loaded,
             &input_rad,
             CheckerOptions {
-                compat_v0_5_dx: false,
-                warn_compat: false,
                 strict_types: true,
                 features,
             },
@@ -347,7 +344,7 @@ fn main() {
         output_wasm,
     } = command
     {
-        let loaded = match load_cli_program(&input_rad, ParserOptions::default()) {
+        let loaded = match load_cli_program(&input_rad, ParserOptions) {
             Ok(loaded) => loaded,
             Err(errors) => {
                 eprintln!("{errors}");
@@ -391,20 +388,33 @@ fn main() {
         with_source,
     } = command
     {
-        let trace_bytes = match fs::read(&trace_path) {
-            Ok(t) => t,
-            Err(e) => {
-                eprintln!("Error reading trace {}: {}", trace_path, e);
-                process::exit(1);
-            }
+        let stream_trace = with_source.is_none() && !serve && {
+            let mut prefix = [0u8; 18];
+            std::fs::File::open(&trace_path)
+                .and_then(|mut file| std::io::Read::read_exact(&mut file, &mut prefix))
+                .is_ok()
+                && &prefix == b"RADPACKZ:RADTRACE "
         };
-        // Normalize RADPACK tapes (binary or text envelope) to raw JSONL
-        // before any consumer sees them; vintage raw tapes pass through.
-        let trace_text = match rad_vm::radpack::open_file(&trace_bytes) {
-            Ok(t) => t,
-            Err(e) => {
-                eprintln!("Error unpacking trace {}: {}", trace_path, e);
-                process::exit(1);
+        let trace_text = if stream_trace {
+            String::new()
+        } else {
+            let trace_bytes = match fs::read(&trace_path) {
+                Ok(t) => t,
+                Err(e) => {
+                    eprintln!("Error reading trace {}: {}", trace_path, e);
+                    process::exit(1);
+                }
+            };
+            // Interactive time travel, retroactive replay, model artifacts,
+            // and embedding-oriented raw traces intentionally materialize the
+            // complete document. Ordinary canonical files use bounded
+            // `TraceReplayer::parse_file` below.
+            match rad_vm::radpack::open_file(&trace_bytes) {
+                Ok(t) => t,
+                Err(e) => {
+                    eprintln!("Error unpacking trace {}: {}", trace_path, e);
+                    process::exit(1);
+                }
             }
         };
 
@@ -524,7 +534,11 @@ fn main() {
             }
             return;
         }
-        let mut replayer = match rad_vm::replay::TraceReplayer::parse(&trace_text, force) {
+        let mut replayer = match if stream_trace {
+            rad_vm::replay::TraceReplayer::parse_file(std::path::Path::new(&trace_path), force)
+        } else {
+            rad_vm::replay::TraceReplayer::parse(&trace_text, force)
+        } {
             Ok(r) => r,
             Err(e) => {
                 eprintln!("Error: {}", e);
@@ -646,7 +660,7 @@ fn main() {
         vm.suppress_output();
 
         if let Some(filepath) = host_file {
-            let loaded = match load_cli_program(&filepath, ParserOptions::default()) {
+            let loaded = match load_cli_program(&filepath, ParserOptions) {
                 Ok(loaded) => loaded,
                 Err(errors) => {
                     eprintln!("{errors}");
@@ -712,14 +726,15 @@ fn main() {
     let CliCommand::Run {
         filepath,
         skip_check,
-        compat_v0_5_dx,
         deny_warnings,
-        warn_compat,
         strict_types,
         write_lock,
         profile_copies,
         serial_schedule,
         features,
+        relation_schema,
+        relation_module,
+        experimental_relations,
         record,
         program_args,
     } = command
@@ -727,7 +742,25 @@ fn main() {
         unreachable!();
     };
 
-    let parser_options = ParserOptions { compat_v0_5_dx };
+    let parser_options = ParserOptions;
+    let relation_artifacts = match relation_schema.as_deref() {
+        Some(schema) => match load_runtime_relation_schema(
+            schema,
+            relation_module,
+            experimental_relations,
+        ) {
+            Ok(artifacts) => Some(artifacts),
+            Err(error) => {
+                eprintln!("{error}");
+                process::exit(1);
+            }
+        },
+        None if experimental_relations => {
+            eprintln!("--experimental-relations requires --relation-schema <relations.rad>");
+            process::exit(1);
+        }
+        None => None,
+    };
     let loaded = match load_cli_program(&filepath, parser_options) {
         Ok(loaded) => loaded,
         Err(errors) => {
@@ -775,8 +808,6 @@ fn main() {
             &loaded,
             &filepath,
             CheckerOptions {
-                compat_v0_5_dx,
-                warn_compat,
                 strict_types,
                 features: features.clone(),
             },
@@ -847,34 +878,43 @@ fn main() {
     vm.sys_args = program_args;
     vm.set_profile_copies(profile_copies);
     vm.set_serial_schedule(serial_schedule);
-    if record.is_some() {
+    if let Some(trace_path) = &record {
         // Hash the merged source (module graph included): a trace must only
         // replay against the exact program that produced it.
-        vm.enable_recording_with_source_layout(
+        if let Err(error) = vm.enable_recording_to_file(
             &loaded.merged_source,
             &features,
             &loaded.source_layout,
-        );
+            std::path::Path::new(trace_path),
+        ) {
+            eprintln!("Cannot start trace recording at {trace_path}: {error}");
+            process::exit(1);
+        }
     }
     vm.load_compile_result(compile_result);
+    if let Some(artifacts) = &relation_artifacts {
+        if let Err(error) = vm.install_relation_frontend(artifacts) {
+            eprintln!("Cannot install relation schema: {error}");
+            process::exit(1);
+        }
+    }
 
     let run_result = vm.run(0);
 
     // Write the trace even when the run failed: a trace of the crash is the
     // entire point of a time-travel debugger.
     if let Some(trace_path) = &record {
-        if let Some(trace) =
-            vm.take_trace_with_outcome(run_result.as_ref().err().map(String::as_str))
-        {
-            // RADPACK (D1): tapes are highly repetitive JSONL — pack them
-            // with the raw-binary file envelope (no base64 tax; a tape is a
-            // file, not a line-protocol payload). `rad replay` opens packed
-            // and raw vintage tapes alike.
-            let packed = rad_vm::radpack::seal_file("RADTRACE", &trace);
-            if let Err(e) = std::fs::write(trace_path, packed) {
-                eprintln!("Warning: failed to write trace to {}: {}", trace_path, e);
-            } else {
-                eprintln!("Recorded trace: {}", trace_path);
+        match vm.finish_recording_with_outcome(run_result.as_ref().err().map(String::as_str)) {
+            Ok(Some(rad_vm::replay::FinishedTrace::File(path))) => {
+                eprintln!("Recorded trace: {}", path.display());
+            }
+            Ok(Some(rad_vm::replay::FinishedTrace::Memory(_))) => {
+                unreachable!("CLI recording always uses the file-backed trace sink")
+            }
+            Ok(None) => unreachable!("CLI enabled recording before execution"),
+            Err(error) => {
+                eprintln!("Failed to finish trace {trace_path}: {error}");
+                process::exit(1);
             }
         }
     }

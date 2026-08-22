@@ -382,7 +382,7 @@ fn normalize_spacing(line: &str) -> String {
     lexer.preserve_comments = true;
     let (tokens, errors) = lexer.tokenize();
     if !errors.is_empty() {
-        return line.to_string(); // fallback on lex error
+        return line.to_string(); // Preserve source that cannot be tokenized.
     }
 
     let mut out = String::new();

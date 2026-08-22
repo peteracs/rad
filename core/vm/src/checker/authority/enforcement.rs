@@ -208,8 +208,21 @@ impl Checker {
             .filter(|name| !writes_all && !allowed.contains(name.as_str()))
             .cloned()
             .collect::<Vec<_>>();
+        // `transition()` computes a state value and records a synthetic
+        // lifecycle effect; it does not enqueue an externally observable
+        // event. Transactions must be able to stage that value alongside
+        // their component patch. Ordinary event emissions remain forbidden
+        // until `post_commit`, and post-commit transitions remain forbidden
+        // because they cannot be folded back into the adopted patch.
+        let denied_emits = inferred
+            .transitive
+            .emits
+            .iter()
+            .filter(|event| event.as_str() != STATE_TRANSITION)
+            .cloned()
+            .collect::<Vec<_>>();
         if denied_writes.is_empty()
-            && inferred.transitive.emits.is_empty()
+            && denied_emits.is_empty()
             && !inferred.transitive.io
             && !inferred.transitive.async_effect
             && !inferred.transitive.unknown
@@ -224,11 +237,8 @@ impl Checker {
                 denied_writes.join(", ")
             ));
         }
-        if !inferred.transitive.emits.is_empty() {
-            violations.push(format!(
-                "emits before commit [{}]",
-                inferred.transitive.emits.join(", ")
-            ));
+        if !denied_emits.is_empty() {
+            violations.push(format!("emits before commit [{}]", denied_emits.join(", ")));
         }
         if inferred.transitive.io {
             violations.push("performs IO before commit".to_string());
@@ -244,9 +254,12 @@ impl Checker {
             .first()
             .and_then(|name| effect_path(report, &node.seed.name, name, true))
             .or_else(|| {
-                (!inferred.transitive.emits.is_empty()).then(|| {
+                (!denied_emits.is_empty()).then(|| {
                     effect_path_matching(report, &node.seed.name, |effects| {
-                        !effects.emits.is_empty()
+                        effects
+                            .emits
+                            .iter()
+                            .any(|event| event.as_str() != STATE_TRANSITION)
                     })
                 })?
             })

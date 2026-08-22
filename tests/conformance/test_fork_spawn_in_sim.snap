@@ -1,5 +1,7 @@
 ---
 source: tests\conformance\test_fork_spawn_in_sim.rad
-exit_code: 0
+exit_code: 1
 ---
-PASS: spawn in simulation
+
+---stderr---
+Error: System 'SpawnChild' exceeds its declared authority: writes [$entities]

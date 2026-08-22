@@ -1,0 +1,10 @@
+component LeaseCount { value: int = 0 }
+let job = spawn(LeaseCount {})
+fn lease_twice() { update(job, LeaseCount) { value = value + 2 } }
+model AtMostOneLease {
+    commands [lease_twice]
+    invariant { return require(job, LeaseCount).value <= 1 }
+    runs 1
+    max_commands 1
+    seed 2
+}

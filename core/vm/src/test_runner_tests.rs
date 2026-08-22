@@ -12,8 +12,8 @@ use crate::test_runner::run_tests;
 use crate::vm::VM;
 
 fn run_vm(src: &str) -> VM {
-    let result = crate::test_support::compile_source(src, ParserOptions::default())
-        .expect("parse and compile");
+    let result =
+        crate::test_support::compile_source(src, ParserOptions).expect("parse and compile");
     let mut vm = VM::new();
     vm.suppress_output();
     vm.load_compile_result(result);
@@ -242,5 +242,36 @@ fn shared_tests_observe_the_previous_test_world() {
     assert_eq!(outcomes.len(), 2);
     for outcome in &outcomes {
         assert!(outcome.error.is_none(), "{:?}", outcome.error);
+    }
+}
+
+#[test]
+fn isolation_restores_named_entity_indexes_after_a_shared_chain() {
+    let mut vm = run_vm(
+        r#"
+        component Marker { tag: int = 0 }
+
+        test producer { spawn("shared-probe", Marker { tag: 1 }) }
+        shared test consumer {
+            let probe = require_entity("shared-probe")
+            set(probe, Marker { tag: 2 })
+        }
+        shared test chain {
+            assert_eq(require(require_entity("shared-probe"), Marker).tag, 2)
+        }
+        test isolated_again {
+            assert_eq(len(entities(Marker)), 0)
+            assert(get_entity("shared-probe") == nil, "named fixture index leaked")
+        }
+        "#,
+    );
+    let outcomes = run_tests(&mut vm);
+    for outcome in &outcomes {
+        assert!(
+            outcome.error.is_none(),
+            "{} failed: {:?}",
+            outcome.name,
+            outcome.error
+        );
     }
 }

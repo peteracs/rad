@@ -854,14 +854,6 @@ impl Parser {
     ) -> Result<(), ParseError> {
         while !self.check(TokenType::RBrace) {
             if self.check(TokenType::DotDot) {
-                if !self.compat_v0_5_dx_enabled() {
-                    return Err(ParseError {
-                        message: "Error[E2503]: Match rest binding '..' requires --compat-v0.5-dx"
-                            .to_string(),
-                        line: self.peek().line,
-                        col: self.peek().col,
-                    });
-                }
                 if *has_rest {
                     return Err(ParseError {
                         message: "Error[E2503]: Match rest binding '..' can appear at most once"
