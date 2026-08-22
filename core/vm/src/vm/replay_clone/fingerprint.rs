@@ -484,7 +484,6 @@ impl GraphFingerprinter {
         self.finish_pending()
     }
 
-    #[cfg(test)]
     fn finish_world(mut self, snapshot: &WorldSnapshot) -> Result<String, FingerprintError> {
         self.digest
             .update(b"rad-operational-world-fingerprint/v2\0");
@@ -565,7 +564,6 @@ pub(crate) fn fingerprint_roots_with_limits(
 
 /// Canonical identity of the complete execution-relevant world snapshot.
 /// This deliberately differs from the renderer/content digest.
-#[cfg(test)]
 pub(crate) fn fingerprint_world_snapshot(
     snapshot: &WorldSnapshot,
 ) -> Result<String, FingerprintError> {

@@ -60,9 +60,16 @@ impl VM {
                 self.run_system_by_name(&batch[0])?;
             } else {
                 let snapshot = self.world.snapshot();
+                let native_plan = self.prepare_nested_native_simulation(
+                    "schedule_batch",
+                    std::slice::from_ref(&snapshot),
+                    &batch,
+                    &[self.causality_frame, self.rng_state],
+                    batch.len(),
+                )?;
                 let shared = self.shared_state();
 
-                let run_one = |name: &String| {
+                let run_one = |(lane, name): (usize, &String)| {
                     WORKER_VM.with(|cell| {
                         let mut opt = cell.borrow_mut();
                         if opt.is_none() {
@@ -70,6 +77,7 @@ impl VM {
                         }
                         let worker = opt.as_mut().unwrap();
                         worker.sync_from_shared(&shared);
+                        worker.nested_native_tape = native_plan.tape_for_lane(lane);
                         worker.world.restore(snapshot.clone());
                         // Determinism (spec §7.2): pooled worker VMs are
                         // reused across tasks by whatever rayon thread picks
@@ -81,25 +89,41 @@ impl VM {
                         worker.next_trace_id = 1;
                         worker.rng_state = shared.rng_state;
 
-                        worker.run_system_by_name(name)?;
-                        let cmds = std::mem::take(&mut worker.command_buffer);
-                        let evts = std::mem::take(&mut worker.events_next);
-                        let system_metrics = worker.system_metrics.take().unwrap_or_default();
-                        Ok(crate::vm::WorkerResult {
-                            cmds,
-                            evts,
-                            system_metrics,
-                        })
+                        let execution = (|| {
+                            worker.run_system_by_name(name)?;
+                            let cmds = std::mem::take(&mut worker.command_buffer);
+                            let evts = std::mem::take(&mut worker.events_next);
+                            let system_metrics = worker.system_metrics.take().unwrap_or_default();
+                            Ok(crate::vm::WorkerResult {
+                                cmds,
+                                evts,
+                                system_metrics,
+                            })
+                        })();
+                        let native_calls = worker.finish_worker_native_tape();
+                        (execution, native_calls)
                     })
                 };
                 // wasm32 has no threads: rayon's pool creation would trap, so
                 // the batch runs sequentially (same worker-VM isolation).
                 #[cfg(target_arch = "wasm32")]
-                let results: Vec<Result<crate::vm::WorkerResult, String>> =
-                    batch.iter().map(run_one).collect();
+                let results: Vec<crate::vm::nested_native_replay::NestedNativeResult<_>> =
+                    batch.iter().enumerate().map(run_one).collect();
                 #[cfg(not(target_arch = "wasm32"))]
-                let results: Vec<Result<crate::vm::WorkerResult, String>> =
-                    batch.par_iter().map(run_one).collect();
+                let results: Vec<crate::vm::nested_native_replay::NestedNativeResult<_>> =
+                    batch.par_iter().enumerate().map(run_one).collect();
+
+                if native_plan.active() {
+                    let native_lanes = results
+                        .iter()
+                        .map(|(_, calls)| calls.clone())
+                        .collect::<Result<Vec<_>, _>>()?;
+                    self.finish_nested_native(native_plan, &native_lanes)?;
+                }
+                let results = results
+                    .into_iter()
+                    .map(|(execution, _)| execution)
+                    .collect::<Vec<_>>();
 
                 // Carry the originating system name so merged writes and
                 // events keep their causal attribution on the main VM.

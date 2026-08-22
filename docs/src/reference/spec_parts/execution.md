@@ -111,6 +111,12 @@ silently invoking live external state. A successful replay consumes the exact
 record, reproduces ordered externally visible events, and ends at the same
 world digest. Extra, missing, or mismatched records are errors.
 
+Native calls reached through speculative simulations, parallel scheduler
+batches, and model-check trials are grouped by deterministic logical lane, not
+physical worker completion order. Each nested boundary binds the complete
+starting operational world and invocation parameters. Replay consumes every
+lane exactly and never executes the live extension.
+
 <a id="execution-async"></a>
 ### 7.7 Tasks and async execution
 

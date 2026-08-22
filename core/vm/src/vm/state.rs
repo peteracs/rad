@@ -220,6 +220,10 @@ pub struct VM {
     /// Replay mode: when set, replay-managed builtins consume the trace
     /// instead of executing — a replay never re-fires io.
     pub(crate) replayer: Option<crate::replay::TraceReplayer>,
+    /// Per-logical-lane native call tape used by parallel speculative workers.
+    /// It is never shared between threads; the parent trace stores completed
+    /// lanes in canonical index order.
+    pub(crate) nested_native_tape: Option<crate::replay::NestedNativeTape>,
     /// True only in the discarded child used for failed-attempt replay.
     /// Native/FFI and irreversible host effects are disabled there even
     /// before the replayed request reaches its settlement.

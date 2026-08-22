@@ -1,163 +1,4 @@
-fn abi_type_name<'a>(value: &'a Value, caller: &str) -> Result<&'a str, String> {
-    if let Some(name) = value.as_str() {
-        return Ok(name);
-    }
-    if let Some(component) = value.as_component() {
-        return Ok(&component.type_name);
-    }
-    Err(format!(
-        "{caller} expects a repr(C) type name or value, got {}",
-        value.type_name()
-    ))
-}
-
 impl VM {
-
-    fn bi_bytebuf_get_u32_or_i32_le(
-        &mut self,
-        args: Vec<Value>,
-        signed: bool,
-        fn_name: &str,
-    ) -> Result<Value, String> {
-        if args.len() != 2 {
-            return Err(format!(
-                "{} expects 2 arguments, got {}",
-                fn_name,
-                args.len()
-            ));
-        }
-        let bytes = args[0]
-            .as_bytebuf()
-            .ok_or_else(|| format!("{} expects a bytebuf", fn_name))?;
-        let offset = bytebuf_index_arg(&args[1], &format!("{} offset", fn_name))?;
-        let value = bytebuf_read_u32_le(bytes, offset, fn_name)?;
-        let result = if signed {
-            i64::from(value as i32)
-        } else {
-            i64::from(value)
-        };
-        Ok(Value::from_int(&mut self.gc, result))
-    }
-
-    fn bi_bytebuf_to_list(&mut self, args: Vec<Value>) -> Result<Value, String> {
-        if args.len() != 1 {
-            return Err(format!(
-                "bytebuf_to_list() expects 1 argument, got {}",
-                args.len()
-            ));
-        }
-        let bytes = args[0]
-            .as_bytebuf()
-            .ok_or_else(|| "bytebuf_to_list() expects a bytebuf".to_string())?;
-        let mut values = Vec::with_capacity(bytes.len());
-        for byte in bytes {
-            values.push(Value::from_int(&mut self.gc, i64::from(*byte)));
-        }
-        Ok(Value::list(&mut self.gc, values))
-    }
-
-    fn bi_bytebuf_from_list(&mut self, args: Vec<Value>) -> Result<Value, String> {
-        if args.len() != 1 {
-            return Err(format!(
-                "bytebuf_from_list() expects 1 argument, got {}",
-                args.len()
-            ));
-        }
-        let bytes = bytes_from_list_arg(&args[0], "bytebuf_from_list()")?;
-        Ok(Value::bytebuf(&mut self.gc, bytes))
-    }
-
-    fn bi_size_of(&mut self, args: Vec<Value>) -> Result<Value, String> {
-        if args.len() != 1 {
-            return Err(format!("size_of() expects 1 argument, got {}", args.len()));
-        }
-        let size = if let Some(native) = args[0].as_native_type() {
-            native.repr.byte_width()
-        } else {
-            let name = abi_type_name(&args[0], "size_of()")?;
-            self.native_layouts
-                .get(name)
-                .ok_or_else(|| format!("size_of(): {name} has no repr(C) layout"))?
-                .size
-        };
-        Ok(Value::from_int(&mut self.gc, size as i64))
-    }
-
-    fn bi_offset_of(&mut self, args: Vec<Value>) -> Result<Value, String> {
-        if args.len() != 2 {
-            return Err(format!("offset_of() expects 2 arguments, got {}", args.len()));
-        }
-        let name = abi_type_name(&args[0], "offset_of()")?;
-        let field = args[1]
-            .as_str()
-            .ok_or_else(|| "offset_of() field must be a string".to_string())?;
-        let layout = self
-            .native_layouts
-            .get(name)
-            .ok_or_else(|| format!("offset_of(): {name} has no repr(C) layout"))?;
-        let offset = layout
-            .fields
-            .iter()
-            .find_map(|candidate| (candidate.name == field).then_some(candidate.offset))
-            .ok_or_else(|| format!("offset_of(): {name} has no field {field}"))?;
-        Ok(Value::from_int(&mut self.gc, offset as i64))
-    }
-
-    fn bi_decode_native(
-        &mut self,
-        args: Vec<Value>,
-        little_endian: bool,
-    ) -> Result<Value, String> {
-        if args.len() != 3 {
-            return Err(format!(
-                "decode_{}() expects 3 arguments, got {}",
-                if little_endian { "le" } else { "be" },
-                args.len()
-            ));
-        }
-        let bytes = args[0]
-            .as_bytebuf()
-            .ok_or_else(|| "native decoding expects a bytebuf".to_string())?;
-        let offset = args[1]
-            .as_int()
-            .and_then(|value| usize::try_from(value).ok())
-            .ok_or_else(|| "native decoding offset must be a non-negative integer".to_string())?;
-        let descriptor = args[2]
-            .as_native_type()
-            .cloned()
-            .ok_or_else(|| "native decoding requires a native type as its third argument".to_string())?;
-        let end = offset
-            .checked_add(descriptor.repr.byte_width())
-            .ok_or_else(|| "native decoding offset overflow".to_string())?;
-        let lane = bytes.get(offset..end).ok_or_else(|| {
-            format!(
-                "native decoding range {offset}..{end} exceeds bytebuf length {}",
-                bytes.len()
-            )
-        })?;
-        let value = crate::native_types::decode_native_scalar(&descriptor, lane, little_endian)?;
-        Ok(Value::from_native_scalar(&mut self.gc, value))
-    }
-
-    fn bi_encode_native(
-        &mut self,
-        args: Vec<Value>,
-        little_endian: bool,
-    ) -> Result<Value, String> {
-        if args.len() != 1 {
-            return Err(format!(
-                "encode_{}() expects 1 argument, got {}",
-                if little_endian { "le" } else { "be" },
-                args.len()
-            ));
-        }
-        let value = args[0]
-            .as_native_scalar()
-            .ok_or_else(|| "native encoding requires a fixed-width native value".to_string())?;
-        let bytes = crate::native_types::encode_native_scalar(value, little_endian);
-        Ok(Value::bytebuf(&mut self.gc, bytes))
-    }
-
     fn bi_fork(&mut self, args: Vec<Value>) -> Result<Value, String> {
         if !args.is_empty() {
             return Err(format!("fork() takes no arguments, got {}", args.len()));
@@ -936,9 +777,18 @@ impl VM {
             }
         }
 
+        let lane_count = n_forks as usize;
+        let native_plan = self.prepare_nested_native_simulation(
+            "simulate_par",
+            std::slice::from_ref(&fork_snap),
+            &system_names,
+            &[ticks as u64, n_forks as u64, seed],
+            lane_count,
+        )?;
         let shared = self.shared_state();
         let run_fork = |i: u64| {
             super::exec::with_worker_vm(&shared, |worker| {
+                worker.nested_native_tape = native_plan.tape_for_lane(i as usize);
                 // Pending events are part of the forked state: each
                 // worker timeline starts with the same in-flight queue.
                 worker.restore_events_from(&fork_snap);
@@ -973,22 +823,31 @@ impl VM {
                 worker.emit_ids_next.clear();
                 // pooled workers must not carry timers into the next call
                 worker.delayed_events.clear();
-                sim_result.map(|_| snap)
+                let native_calls = worker.finish_worker_native_tape();
+                (sim_result.map(|_| snap), native_calls)
             })
         };
         // wasm32 has no threads: the futures run sequentially on the same
         // pooled worker VM — identical results (each fork is seeded), no rayon.
         #[cfg(target_arch = "wasm32")]
-        let snapshots: Vec<Result<crate::world::WorldSnapshot, String>> =
+        let snapshots: Vec<crate::vm::nested_native_replay::NestedNativeResult<_>> =
             (0..n_forks as u64).map(run_fork).collect();
         #[cfg(not(target_arch = "wasm32"))]
-        let snapshots: Vec<Result<crate::world::WorldSnapshot, String>> = {
+        let snapshots: Vec<crate::vm::nested_native_replay::NestedNativeResult<_>> = {
             use rayon::prelude::*;
             (0..n_forks as u64).into_par_iter().map(run_fork).collect()
         };
 
+        if native_plan.active() {
+            let native_lanes = snapshots
+                .iter()
+                .map(|(_, calls)| calls.clone())
+                .collect::<Result<Vec<_>, _>>()?;
+            self.finish_nested_native(native_plan, &native_lanes)?;
+        }
+
         let mut forks = Vec::with_capacity(snapshots.len());
-        for (i, snap) in snapshots.into_iter().enumerate() {
+        for (i, (snap, _)) in snapshots.into_iter().enumerate() {
             let mut snap = snap.map_err(|e| format!("simulate_par() fork {}: {}", i, e))?;
             // `fork_seed()` answers "which rng seed produced this rollout" —
             // hand that to `simulate_seeded` to reproduce it in isolation.

@@ -123,11 +123,27 @@ impl VM {
             native.name
         );
         let digest = crate::replay::args_digest(&args)?;
-        if (self.replayer.is_some() || self.recorder.is_some()) && !native.replayable {
+        if (self.replayer.is_some()
+            || self.recorder.is_some()
+            || self.nested_native_tape.is_some())
+            && !native.replayable
+        {
             return Err(format!(
                 "native function {}() declares replayable=false and cannot cross a record/replay boundary",
                 native.name
             ));
+        }
+        if let Some(tape) = self.nested_native_tape.as_mut() {
+            if let Some(recorded) = tape.replay_result(&boundary, &digest)? {
+                let result = match recorded {
+                    Ok(value) => crate::replay::decode_value(&mut self.gc, &value),
+                    Err(error) => Err(error),
+                };
+                if let Ok(value) = &result {
+                    self.remember_native_cause(native, &digest, value);
+                }
+                return result;
+            }
         }
         if let Some(replayer) = self.replayer.as_mut() {
             let record = replayer.next_io(&boundary, &digest)?;
@@ -144,7 +160,7 @@ impl VM {
         let result = crate::allocation_meter::host_boundary(|| {
             crate::ffi::invoke_native(native, &args, &mut self.gc)
         });
-        if self.recorder.is_some() {
+        if self.recorder.is_some() || self.nested_native_tape.is_some() {
             let encoded = match &result {
                 Ok(value) => crate::replay::encode_value(value).map_err(|error| {
                     format!(
@@ -153,12 +169,22 @@ impl VM {
                     )
                 })?,
                 Err(error) => {
+                    if let Some(tape) = self.nested_native_tape.as_mut() {
+                        tape.record_result(
+                            boundary.clone(),
+                            digest.clone(),
+                            Err(error.clone()),
+                        );
+                    }
                     if let Some(recorder) = self.recorder.as_mut() {
                         recorder.record_io(&boundary, digest, &Err(error.clone()));
                     }
                     return result;
                 }
             };
+            if let Some(tape) = self.nested_native_tape.as_mut() {
+                tape.record_result(boundary.clone(), digest.clone(), Ok(encoded.clone()));
+            }
             if let Some(recorder) = self.recorder.as_mut() {
                 recorder.record_io(&boundary, digest.clone(), &Ok(encoded));
             }

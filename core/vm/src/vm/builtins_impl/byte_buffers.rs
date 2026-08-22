@@ -154,4 +154,58 @@ impl VM {
     fn bi_bytebuf_get_i32_le(&mut self, args: Vec<Value>) -> Result<Value, String> {
         self.bi_bytebuf_get_u32_or_i32_le(args, true, "bytebuf_get_i32_le()")
     }
+
+    fn bi_bytebuf_get_u32_or_i32_le(
+        &mut self,
+        args: Vec<Value>,
+        signed: bool,
+        fn_name: &str,
+    ) -> Result<Value, String> {
+        if args.len() != 2 {
+            return Err(format!(
+                "{} expects 2 arguments, got {}",
+                fn_name,
+                args.len()
+            ));
+        }
+        let bytes = args[0]
+            .as_bytebuf()
+            .ok_or_else(|| format!("{} expects a bytebuf", fn_name))?;
+        let offset = bytebuf_index_arg(&args[1], &format!("{} offset", fn_name))?;
+        let value = bytebuf_read_u32_le(bytes, offset, fn_name)?;
+        let result = if signed {
+            i64::from(value as i32)
+        } else {
+            i64::from(value)
+        };
+        Ok(Value::from_int(&mut self.gc, result))
+    }
+
+    fn bi_bytebuf_to_list(&mut self, args: Vec<Value>) -> Result<Value, String> {
+        if args.len() != 1 {
+            return Err(format!(
+                "bytebuf_to_list() expects 1 argument, got {}",
+                args.len()
+            ));
+        }
+        let bytes = args[0]
+            .as_bytebuf()
+            .ok_or_else(|| "bytebuf_to_list() expects a bytebuf".to_string())?;
+        let mut values = Vec::with_capacity(bytes.len());
+        for byte in bytes {
+            values.push(Value::from_int(&mut self.gc, i64::from(*byte)));
+        }
+        Ok(Value::list(&mut self.gc, values))
+    }
+
+    fn bi_bytebuf_from_list(&mut self, args: Vec<Value>) -> Result<Value, String> {
+        if args.len() != 1 {
+            return Err(format!(
+                "bytebuf_from_list() expects 1 argument, got {}",
+                args.len()
+            ));
+        }
+        let bytes = bytes_from_list_arg(&args[0], "bytebuf_from_list()")?;
+        Ok(Value::bytebuf(&mut self.gc, bytes))
+    }
 }

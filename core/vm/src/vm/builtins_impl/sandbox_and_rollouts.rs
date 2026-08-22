@@ -51,10 +51,18 @@ impl VM {
             }
         }
 
+        let native_plan = self.prepare_nested_native_simulation(
+            "simulate_many",
+            &bases,
+            &system_names,
+            &[ticks as u64, seed],
+            bases.len(),
+        )?;
         let shared = self.shared_state();
         let bases_ref = &bases;
         let run_fork = |i: usize| {
             super::exec::with_worker_vm(&shared, |worker| {
+                worker.nested_native_tape = native_plan.tape_for_lane(i);
                 let base = bases_ref[i].clone();
                 worker.restore_events_from(&base);
                 worker.get_world_mut().restore(base);
@@ -83,20 +91,29 @@ impl VM {
                 worker.emit_ids_current.clear();
                 worker.emit_ids_next.clear();
                 worker.delayed_events.clear();
-                sim_result.map(|_| snap)
+                let native_calls = worker.finish_worker_native_tape();
+                (sim_result.map(|_| snap), native_calls)
             })
         };
         #[cfg(target_arch = "wasm32")]
-        let snapshots: Vec<Result<crate::world::WorldSnapshot, String>> =
+        let snapshots: Vec<crate::vm::nested_native_replay::NestedNativeResult<_>> =
             (0..bases.len()).map(run_fork).collect();
         #[cfg(not(target_arch = "wasm32"))]
-        let snapshots: Vec<Result<crate::world::WorldSnapshot, String>> = {
+        let snapshots: Vec<crate::vm::nested_native_replay::NestedNativeResult<_>> = {
             use rayon::prelude::*;
             (0..bases.len()).into_par_iter().map(run_fork).collect()
         };
 
+        if native_plan.active() {
+            let native_lanes = snapshots
+                .iter()
+                .map(|(_, calls)| calls.clone())
+                .collect::<Result<Vec<_>, _>>()?;
+            self.finish_nested_native(native_plan, &native_lanes)?;
+        }
+
         let mut forks = Vec::with_capacity(snapshots.len());
-        for (i, snap) in snapshots.into_iter().enumerate() {
+        for (i, (snap, _)) in snapshots.into_iter().enumerate() {
             let mut snap = snap.map_err(|e| format!("simulate_many() fork {}: {}", i, e))?;
             snap.rollout_seed = Some(crate::sandbox::fork_seed(seed, i as u64));
             forks.push(Value::world_fork(&mut self.gc, std::sync::Arc::new(snap)));
@@ -174,6 +191,14 @@ impl VM {
             }
         }
 
+        let native_plan = self.prepare_nested_native_simulation(
+            "simulate_seeded",
+            std::slice::from_ref(&fork_snap),
+            &system_names,
+            &[ticks as u64, raw_seed],
+            1,
+        )?;
+        let worker_native_plan = native_plan.clone();
         let shared = self.shared_state();
         // Run the one rollout on a rayon POOL thread, never the caller (a
         // one-item par_iter would execute on the calling thread): the pooled
@@ -183,6 +208,7 @@ impl VM {
         // destructor tears the whole VM down.
         let run_rollout = move || {
             super::exec::with_worker_vm(&shared, |worker| {
+                worker.nested_native_tape = worker_native_plan.tape_for_lane(0);
                 worker.restore_events_from(&fork_snap);
                 worker.get_world_mut().restore(fork_snap.clone());
                 // The seed is used AS GIVEN — that is the whole point.
@@ -211,7 +237,8 @@ impl VM {
                 worker.emit_ids_current.clear();
                 worker.emit_ids_next.clear();
                 worker.delayed_events.clear();
-                sim_result.map(|_| snap)
+                let native_calls = worker.finish_worker_native_tape();
+                (sim_result.map(|_| snap), native_calls)
             })
         };
         // wasm32 has no threads: run on the (only) thread, like simulate_par.
@@ -226,6 +253,11 @@ impl VM {
             rx.recv()
                 .map_err(|_| "simulate_seeded(): rollout worker disappeared".to_string())?
         };
+        let (snap, native_calls) = snap;
+        if native_plan.active() {
+            let native_lanes = vec![native_calls?];
+            self.finish_nested_native(native_plan, &native_lanes)?;
+        }
         let mut snap = snap.map_err(|e| format!("simulate_seeded(): {}", e))?;
         snap.rollout_seed = Some(raw_seed);
         Ok(Value::world_fork(&mut self.gc, std::sync::Arc::new(snap)))

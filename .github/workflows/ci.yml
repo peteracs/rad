@@ -86,6 +86,10 @@ jobs:
             echo "Problem-specific mathematics belongs in project extensions, not core/." >&2
             exit 1
           fi
+      - name: Prepare mathematical dogfood artifact directories
+        run: |
+          mkdir -p projects/dogfood/frankl-search/out
+          mkdir -p projects/dogfood/collatz-lab/out
       - name: Frankl computational-mathematics dogfood
         run: |
           python3 -m pip install --requirement projects/dogfood/frankl-search/requirements.txt

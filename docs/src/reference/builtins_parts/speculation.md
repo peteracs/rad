@@ -299,7 +299,16 @@ boundary —
 (deterministic outputs), and *recordable* io inside `simulate()`/sandboxes cannot exist:
 effectful builtins (`read_file`, `http_get`, clocks, …) are statically banned in
 simulation schedules and capability-denied in sandboxes, so no value crossing the
-determinism boundary originates there. The one thing that *can* still reach the terminal
+determinism boundary originates there. Deterministic replayable native extensions are a
+separate boundary: calls made by `simulate_par`, `simulate_many`, `simulate_seeded`,
+parallel scheduler batches, and model-check trials are recorded in one ordered tape per
+logical lane. The parent trace stores those lane tapes in logical-index order, independent
+of worker scheduling. Replay checks the operation, complete starting-world fingerprint,
+lane count, call identity, and argument digest before returning recorded results; it never
+invokes the live extension. Missing, extra, reordered, or cross-lane calls fail as replay
+divergence.
+
+The one thing that *can* still reach the terminal
 from inside `simulate()` is a **ghost effect** — `debug_trace()` writes to stderr but is
 treated as pure by the typechecker (see §8 of `guarantees.md`). Ghost output is diagnostic
 only: it is never recorded, carries no state, and may be elided under `--release`, so it
@@ -341,7 +350,8 @@ Three protection layers, all loud:
 1. **Integrity** — embedded sources, module identities, resolved import edges, and language
    features are authenticated; a tampered trace is refused (override with `--force`).
 2. **Divergence detection** — every replayed io call is checked against the trace (builtin
-   name, argument digest, frame coordinate). A mismatch halts with
+   name, argument digest, frame coordinate); nested native calls additionally bind their
+   logical lane and complete nested-operation boundary. A mismatch halts with
    `replay divergence at frame N, record #K: …` instead of debugging a timeline that never
    happened.
 3. **End-to-end verification** — after replay, both the world content digest and terminal

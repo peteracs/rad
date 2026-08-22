@@ -14,6 +14,7 @@ mod transaction;
 pub(crate) use transaction::{PendingTransactionWrite, PostCommitContext, TransactionContext};
 #[cfg(not(target_arch = "wasm32"))]
 mod io_pool;
+mod nested_native_replay;
 mod parallel;
 mod program_manifest;
 pub use program_manifest::CompiledProgramManifest;

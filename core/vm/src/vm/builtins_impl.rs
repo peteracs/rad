@@ -21,6 +21,7 @@ include!("builtins_impl/component_access.rs");
 include!("builtins_impl/entity_lifecycle.rs");
 include!("builtins_impl/world_queries.rs");
 include!("builtins_impl/byte_buffers.rs");
+include!("builtins_impl/native_layout.rs");
 include!("builtins_impl/forks_and_simulation.rs");
 include!("builtins_impl/sandbox_and_rollouts.rs");
 include!("builtins_impl/fork_wire_and_delta.rs");

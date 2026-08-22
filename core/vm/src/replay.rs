@@ -43,4 +43,5 @@ pub const TRACE_VERSION: u64 = 1;
 include!("replay/file_stream.rs");
 include!("replay/codec_and_identity.rs");
 include!("replay/replayer.rs");
+include!("replay/nested_native.rs");
 include!("replay/tests.rs");

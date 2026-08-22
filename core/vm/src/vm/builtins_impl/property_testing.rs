@@ -318,7 +318,7 @@ impl VM {
     }
 
     fn run_model_trial(
-        &self,
+        &mut self,
         base: &crate::world::WorldSnapshot,
         commands: &[Value],
         invariants: &[Value],
@@ -326,7 +326,9 @@ impl VM {
         trace: &[ModelTraceStep],
         seed: u64,
     ) -> Result<(), String> {
+        let native_plan = self.prepare_nested_native_model_trial(base, trace, seed)?;
         let mut worker = VM::from_shared_state(self.shared_state());
+        worker.nested_native_tape = native_plan.tape_for_lane(0);
         worker.indexed_decl = Arc::clone(&self.indexed_decl);
         worker.ordered_decl = Arc::clone(&self.ordered_decl);
         worker.migrations = self.migrations.clone();
@@ -354,47 +356,8 @@ impl VM {
         let mut previous_membership = std::collections::HashMap::new();
         let mut prior_event_count = 0usize;
 
-        Self::model_invariants_hold(&mut worker, invariants, "in the initial state")?;
-        Self::model_sample(
-            &worker,
-            &observation_names,
-            &mut prior_event_count,
-            &mut signals,
-            &mut occurrences,
-            &mut previous_membership,
-        );
-        for (step_index, step) in trace.iter().enumerate() {
-            if step.flush_before {
-                worker.bi_flush_events(Vec::new()).map_err(|error| {
-                    format!("flush before step {} ({}) failed: {error}", step_index + 1, step.label)
-                })?;
-                Self::model_invariants_hold(
-                    &mut worker,
-                    invariants,
-                    &format!("after the flush before step {}", step_index + 1),
-                )?;
-            }
-            let command = commands.get(step.command).ok_or_else(|| {
-                format!("trace selects missing command index {}", step.command)
-            })?;
-            worker.call_value(command, Vec::new()).map_err(|error| {
-                format!("command '{}' failed at step {}: {error}", step.label, step_index + 1)
-            })?;
-            Self::model_invariants_hold(
-                &mut worker,
-                invariants,
-                &format!("after command '{}' at step {}", step.label, step_index + 1),
-            )?;
-            if step.flush_after {
-                worker.bi_flush_events(Vec::new()).map_err(|error| {
-                    format!("flush after step {} ({}) failed: {error}", step_index + 1, step.label)
-                })?;
-                Self::model_invariants_hold(
-                    &mut worker,
-                    invariants,
-                    &format!("after the flush following step {}", step_index + 1),
-                )?;
-            }
+        let execution = (|| {
+            Self::model_invariants_hold(&mut worker, invariants, "in the initial state")?;
             Self::model_sample(
                 &worker,
                 &observation_names,
@@ -403,8 +366,66 @@ impl VM {
                 &mut occurrences,
                 &mut previous_membership,
             );
+            for (step_index, step) in trace.iter().enumerate() {
+                if step.flush_before {
+                    worker.bi_flush_events(Vec::new()).map_err(|error| {
+                        format!(
+                            "flush before step {} ({}) failed: {error}",
+                            step_index + 1,
+                            step.label
+                        )
+                    })?;
+                    Self::model_invariants_hold(
+                        &mut worker,
+                        invariants,
+                        &format!("after the flush before step {}", step_index + 1),
+                    )?;
+                }
+                let command = commands.get(step.command).ok_or_else(|| {
+                    format!("trace selects missing command index {}", step.command)
+                })?;
+                worker.call_value(command, Vec::new()).map_err(|error| {
+                    format!(
+                        "command '{}' failed at step {}: {error}",
+                        step.label,
+                        step_index + 1
+                    )
+                })?;
+                Self::model_invariants_hold(
+                    &mut worker,
+                    invariants,
+                    &format!("after command '{}' at step {}", step.label, step_index + 1),
+                )?;
+                if step.flush_after {
+                    worker.bi_flush_events(Vec::new()).map_err(|error| {
+                        format!(
+                            "flush after step {} ({}) failed: {error}",
+                            step_index + 1,
+                            step.label
+                        )
+                    })?;
+                    Self::model_invariants_hold(
+                        &mut worker,
+                        invariants,
+                        &format!("after the flush following step {}", step_index + 1),
+                    )?;
+                }
+                Self::model_sample(
+                    &worker,
+                    &observation_names,
+                    &mut prior_event_count,
+                    &mut signals,
+                    &mut occurrences,
+                    &mut previous_membership,
+                );
+            }
+            Self::model_temporal_holds(temporal, &signals, &occurrences)
+        })();
+        let native_calls = worker.finish_worker_native_tape()?;
+        if native_plan.active() {
+            self.finish_nested_native(native_plan, &[native_calls])?;
         }
-        Self::model_temporal_holds(temporal, &signals, &occurrences)
+        execution
     }
 
     /// Stable property identity used by the shrinker. A smaller trace is a
@@ -449,7 +470,7 @@ impl VM {
     }
 
     fn shrink_model_trace(
-        &self,
+        &mut self,
         base: &crate::world::WorldSnapshot,
         commands: &[Value],
         invariants: &[Value],

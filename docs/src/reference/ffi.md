@@ -51,6 +51,11 @@ output bytes/digest, effect class, and outcome. Replay consumes the record and
 never invokes the live plugin. Missing, extra, reordered, or mismatched records
 fail closed. Host provenance nests into the caller's causal chain.
 
+Calls originating in speculative simulations, parallel system batches, and
+model-check trials use nested logical-lane tapes. Their canonical order is the
+lane index rather than host thread completion order, so replay remains
+worker-count independent while still rejecting cross-lane or reordered calls.
+
 ## Verification
 
 ```bash
