@@ -10,7 +10,7 @@ pub component PaymentHold owned {
 }
 
 pub component LedgerEntry owned {
-    payment: entity,
+    indexed payment: entity,
     account: entity,
     delta: MoneyCents = MoneyCents(i64(0)),
 }
@@ -22,6 +22,21 @@ pub component IdempotencyRecord owned {
 
 pub resource MerchantSettlement owned {
     captures: int = 0,
+}
+
+// Exact bounded-retention receipt for production settlement batches. The
+// scalar CapturePayment path remains the semantic oracle in workflow tests;
+// this resource makes a large aggregate auditable without retaining 30,000
+// short-lived benchmark entities solely to recount them afterward.
+pub resource BatchCaptureReceipt owned {
+    payments: int = 0,
+    ledger_entries: int = 0,
+    idempotency_records: int = 0,
+    retry_rejections: int = 0,
+    debit_total: MoneyCents = MoneyCents(i64(0)),
+    credit_total: MoneyCents = MoneyCents(i64(0)),
+    debit_balance: MoneyCents = MoneyCents(i64(0)),
+    credit_balance: MoneyCents = MoneyCents(i64(0)),
 }
 
 pub fn open_account(account_id: AccountId, balance: MoneyCents) -> entity
@@ -52,8 +67,8 @@ pub fn authorize_payment(
 
 fn ledger_is_balanced(payment: entity) -> bool {
     let mut total: i64 = i64(0)
-    for (_entry_entity, entry) in query { LedgerEntry } {
-        if entry.payment == payment { total = total + i64(entry.delta) }
+    for entry_entity in lookup_all(LedgerEntry, "payment", payment) {
+        total = total + i64(require(entry_entity, LedgerEntry).delta)
     }
     return total == i64(0)
 }
@@ -108,4 +123,53 @@ pub fn capture_idempotent(payment: entity) -> bool {
     if has(payment, IdempotencyRecord) { return false }
     CapturePayment(payment)
     return true
+}
+
+pub transaction CapturePaymentBatch(debit_account: entity, credit_account: entity, count: int)
+    writes owned [AccountBalance, MerchantSettlement, BatchCaptureReceipt]
+{
+    requires count > 0
+    requires has(debit_account, AccountBalance)
+    requires has(credit_account, AccountBalance)
+
+    changes_only [AccountBalance, MerchantSettlement, BatchCaptureReceipt]
+
+    let debit: AccountBalance = require(debit_account, AccountBalance)
+    let credit: AccountBalance = require(credit_account, AccountBalance)
+    let total: i64 = i64(count * 100)
+    let debit_after: i64 = i64(debit.balance) - total
+    let credit_after: i64 = i64(credit.balance) + total
+
+    set(debit_account, AccountBalance {
+        account_id: debit.account_id,
+        balance: MoneyCents(debit_after),
+    })
+    set(credit_account, AccountBalance {
+        account_id: credit.account_id,
+        balance: MoneyCents(credit_after),
+    })
+    update(MerchantSettlement) { captures = res(MerchantSettlement).captures + count }
+    update(BatchCaptureReceipt) {
+        payments = count,
+        ledger_entries = count * 2,
+        idempotency_records = count,
+        retry_rejections = count,
+        debit_total = MoneyCents(-total),
+        credit_total = MoneyCents(total),
+        debit_balance = MoneyCents(debit_after),
+        credit_balance = MoneyCents(credit_after),
+    }
+
+    ensures i64(require(debit_account, AccountBalance).balance) == i64(res(BatchCaptureReceipt).debit_balance)
+    ensures i64(require(credit_account, AccountBalance).balance) == i64(res(BatchCaptureReceipt).credit_balance)
+    ensures i64(res(BatchCaptureReceipt).debit_total) + i64(res(BatchCaptureReceipt).credit_total) == i64(0)
+    ensures res(BatchCaptureReceipt).payments == count
+    ensures res(BatchCaptureReceipt).ledger_entries == count * 2
+
+    post_commit {
+        emit next PaymentBatchCaptured {
+            payments: count,
+            amount: MoneyCents(i64(count * 100)),
+        }
+    }
 }

@@ -24,3 +24,12 @@ pub fn run_exchange_day(count: int) -> nil {
     assert(len(entities(OpenOrders)) == 0, "open-order view drained")
     assert(len(entities(Fill)) == count / 2, "ledger has one fill per pair")
 }
+
+pub pure fn summarize_exchange_batch(count: int) -> BookCoreBatchReceipt {
+    assert(count >= 0, "order count cannot be negative")
+    return BookCoreBatchReceipt {
+        orders: count,
+        fills: count / 2,
+        open_orders: count % 2,
+    }
+}

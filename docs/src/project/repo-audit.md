@@ -42,17 +42,15 @@ machine-checked directory inventory is the [Folder Tree](folder_tree.md).
 
 | Path | Status | Notes |
 |---|---|---|
-| `core/vm/` | Active core | Rust library for syntax, checking, bytecode, VM, world state, replay, relations, and WASM bindings. |
-| `core/vm/src/ast/` | Active core | AST declarations, expressions, statements, canonical module identity, and declaration metadata. |
+| `core/syntax/` | Active core | Independently compiled lexer, parser, AST, source bundle, and source-level native/view declarations. |
+| `core/vm/` | Active core | Rust library for checking, bytecode, VM, world state, replay, relation runtime, and WASM bindings. |
 | `core/vm/src/builtins/` | Active core | Builtin signatures, effects, and type schemes. |
 | `core/vm/src/causality/` | Active core | Provenance storage, explanation, and retention behavior. |
 | `core/vm/src/checker/` | Active core | Static analysis and type checking. |
 | `core/vm/src/compiler/` | Active core | Rust AST-to-bytecode compiler. |
 | `core/vm/src/ffi/` | Active core | ABI contracts, plugin generations, verification, containment, and host-call records. |
 | `core/vm/src/host_value/` | Active core | Owned host/VM value boundary. |
-| `core/vm/src/lexer/` | Active core | Lexer submodules. |
 | `core/vm/src/module_loader/` | Active core | Canonical module graph, aliases, lockfiles, and authenticated loading. |
-| `core/vm/src/parser/` | Active core | Parser submodules. |
 | `core/vm/src/relation/` | Active core | Relation front end, authoritative store, and derivation under one bounded context. |
 | `core/vm/src/replay/` | Active core | Deterministic trace encoding, identity, execution, and tests. |
 | `core/vm/src/sandbox/` | Active core | Capability isolation and speculative guest execution. |

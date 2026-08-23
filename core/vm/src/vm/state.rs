@@ -9,6 +9,7 @@ pub enum EcsCommand {
     SetResource(String, crate::value::ComponentData),
     SpawnEntity(Option<String>, Vec<crate::value::ComponentData>, u32), // The u32 is the local ID assigned by the worker
     RemoveComponent(u32, String),
+    RemoveComponents(u32, Vec<String>),
     DespawnEntity(u32),
 }
 
@@ -27,7 +28,9 @@ impl EcsCommand {
                     Value::release_component_data(c);
                 }
             }
-            EcsCommand::RemoveComponent(..) | EcsCommand::DespawnEntity(..) => {}
+            EcsCommand::RemoveComponent(..)
+            | EcsCommand::RemoveComponents(..)
+            | EcsCommand::DespawnEntity(..) => {}
         }
     }
 }
@@ -113,6 +116,7 @@ pub struct VM {
     pub(crate) system_metrics: Option<BTreeMap<String, SystemExecutionMetrics>>,
     pub(crate) model_check_config: ModelCheckConfig,
     pub(crate) model_check_reports: Vec<ModelCheckReport>,
+    pub(crate) model_access_trace: Option<std::cell::RefCell<ModelAccessTrace>>,
     pub(crate) metered_instruction_count: u64,
     /// Live timeline tracing (RADSCOPE): capture a CoW world snapshot at
     /// every main-timeline frame boundary into `timeline`, capped so a

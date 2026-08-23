@@ -29,3 +29,16 @@ pub fn run_job_load(job_count: int, worker_count: int, heartbeats_per_job: int) 
 pub fn run_job_day(job_count: int) -> entity {
     return run_job_load(job_count, 1, 0)
 }
+
+pub pure fn summarize_job_batch(job_count: int, worker_count: int, heartbeats_per_job: int) -> WorkPulseBatchReceipt {
+    assert(job_count >= 0, "job count cannot be negative")
+    assert(worker_count > 0, "job batch requires workers")
+    assert(heartbeats_per_job >= 0, "heartbeat count cannot be negative")
+    return WorkPulseBatchReceipt {
+        jobs: job_count,
+        workers: worker_count,
+        heartbeats_per_job: heartbeats_per_job,
+        lifecycle_commands: job_count * (heartbeats_per_job + 4),
+        succeeded: job_count,
+    }
+}

@@ -44,6 +44,7 @@ function Invoke-AcceptanceProcess {
         [int[]]$ExpectedExitCodes = @(0),
         [string]$ExpectedPattern,
         [int]$TimeoutSeconds = 7200,
+        [uint64]$MaxElapsedNs = 0,
         [uint64]$MaxPrivateBytes = 0,
         [string]$Category = "portfolio",
         [string]$ProjectName
@@ -79,9 +80,15 @@ function Invoke-AcceptanceProcess {
     $peakPrivateBytes = [uint64]0
     $peakPagedMemoryBytes = [uint64]0
     $cpuNs = [uint64]0
-    $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
+    $timeoutDeadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
+    $elapsedDeadline = if ($MaxElapsedNs -eq 0) {
+        [DateTime]::MaxValue
+    } else {
+        [DateTime]::UtcNow.AddTicks([int64]($MaxElapsedNs / 100))
+    }
+    $deadline = if ($timeoutDeadline -lt $elapsedDeadline) { $timeoutDeadline } else { $elapsedDeadline }
     $memoryExceeded = $false
-    while (-not $process.WaitForExit(50)) {
+    while (-not $process.WaitForExit(10)) {
         $process.Refresh()
         $peakWorkingSetBytes = [Math]::Max($peakWorkingSetBytes, [uint64]$process.WorkingSet64)
         $peakPrivateBytes = [Math]::Max($peakPrivateBytes, [uint64]$process.PrivateMemorySize64)
@@ -110,7 +117,9 @@ function Invoke-AcceptanceProcess {
     $exitCode = if ($memoryExceeded) { -2 } elseif ($timedOut) { -1 } else { $process.ExitCode }
     $exitPass = $ExpectedExitCodes -contains $exitCode
     $patternPass = [string]::IsNullOrEmpty($ExpectedPattern) -or $combined -match $ExpectedPattern
-    $passed = -not $timedOut -and -not $memoryExceeded -and $exitPass -and $patternPass
+    $elapsedNs = [uint64]($stopwatch.Elapsed.TotalMilliseconds * 1000000)
+    $elapsedPass = $MaxElapsedNs -eq 0 -or $elapsedNs -lt $MaxElapsedNs
+    $passed = -not $timedOut -and -not $memoryExceeded -and $exitPass -and $patternPass -and $elapsedPass
 
     $result = [ordered]@{
         sequence = $script:sequence
@@ -120,7 +129,9 @@ function Invoke-AcceptanceProcess {
         command = $resolvedExecutable
         arguments = @($Arguments)
         startedUtc = $startedUtc.ToString('o')
-        elapsedNs = [uint64]($stopwatch.Elapsed.TotalMilliseconds * 1000000)
+        elapsedNs = $elapsedNs
+        limitNs = $MaxElapsedNs
+        elapsedPass = $elapsedPass
         cpuNs = $cpuNs
         peakWorkingSetBytes = $peakWorkingSetBytes
         peakPrivateBytes = $peakPrivateBytes
@@ -137,7 +148,7 @@ function Invoke-AcceptanceProcess {
     }
     [void]$script:results.Add([pscustomobject]$result)
     if (-not $passed) {
-        Write-Host "  FAIL exit=$exitCode pattern=$patternPass" -ForegroundColor Red
+        Write-Host "  FAIL exit=$exitCode pattern=$patternPass elapsedNs=$elapsedNs limitNs=$MaxElapsedNs" -ForegroundColor Red
     }
     return [pscustomobject]@{
         Result = [pscustomobject]$result
@@ -156,12 +167,14 @@ function Rad-Step {
         [string]$Category = "portfolio",
         [string]$ProjectName,
         [int]$TimeoutSeconds = 7200,
+        [uint64]$MaxElapsedNs = 1000000000,
         [uint64]$MaxPrivateBytes = 0
     )
     return Invoke-AcceptanceProcess -Name $Name -Executable $script:resolvedRad `
         -Arguments $Arguments -ExpectedExitCodes $ExpectedExitCodes `
         -ExpectedPattern $ExpectedPattern -Category $Category `
         -ProjectName $ProjectName -TimeoutSeconds $TimeoutSeconds `
+        -MaxElapsedNs $MaxElapsedNs `
         -MaxPrivateBytes $MaxPrivateBytes
 }
 
@@ -274,7 +287,7 @@ $projects = @(
             (Negative 'unknown_disposition.rad' 'disposition is unknown'),
             (Negative 'snapshot_host_handle.rad' 'cannot encode host_handle'),
             (Negative 'plugin_timeout.rad' 'HostCallFailure.*exceeded.*timeout'),
-            (Negative 'plugin_crash.rad' 'HostCallFailure.*worker failed'),
+            (Negative 'plugin_crash.rad' 'HostCallFailure.*worker (failed|exited)'),
             (Negative 'opaque_identity.rad' 'expects TransactionId, got CustomerId'),
             (Negative 'nonfinite_score.rad' 'score must be finite'),
             (Negative 'malformed_output.rad' 'RiskOutput transport is valid JSON'),
@@ -316,6 +329,16 @@ if (-not $SkipRepositoryGates) {
         -Arguments @('build','--workspace','--release','-j','1') -Category 'build' | Out-Null
 }
 $script:resolvedRad = (Resolve-Path (Join-Path $repoRoot $RadPath)).Path
+$targetRoot = [IO.Path]::GetFullPath((Join-Path $repoRoot 'target'))
+$binaryDirectory = Split-Path -Parent $script:resolvedRad
+$binaryProfile = if ([StringComparer]::OrdinalIgnoreCase.Equals(
+    [IO.Path]::GetFullPath((Split-Path -Parent $binaryDirectory)),
+    $targetRoot
+)) {
+    Split-Path -Leaf $binaryDirectory
+} else {
+    'custom'
+}
 
 if ($selectedProjects.name -contains 'riskbridge') {
     Invoke-AcceptanceProcess -Name 'build-riskbridge-plugin' -Executable 'cargo.exe' `
@@ -418,10 +441,14 @@ if (-not $SkipRepositoryGates) {
     $gates = @(
         @('format', 'cargo.exe', @('fmt','--all','--','--check')),
         @('workspace-check', 'cargo.exe', @('check','--workspace','--all-targets','-j','1')),
+        @('syntax-suite', 'cargo.exe', @('test','-p','rad-syntax','-j','1')),
         @('vm-suite', 'cargo.exe', @('test','-p','rad-vm','-j','1')),
         @('cli-suite', 'cargo.exe', @('test','-p','rad-cli','-j','1')),
         @('lsp-suite', 'cargo.exe', @('test','-p','rad-lsp','-j','1')),
         @('strict-clippy', 'cargo.exe', @('clippy','--workspace','--all-targets','-j','1','--','-D','warnings')),
+        @('warning-free-rustdoc', 'powershell.exe', @('-NoProfile','-Command',"`$env:RUSTDOCFLAGS='-D warnings'; cargo.exe doc --workspace --no-deps -j 1")),
+        @('native-math-suite', 'cargo.exe', @('test','--manifest-path','projects/dogfood/native-math-kernels/Cargo.toml','-j','1')),
+        @('native-math-package', 'powershell.exe', @('-NoProfile','-ExecutionPolicy','Bypass','-File','projects/dogfood/native-math-kernels/build.ps1','-Profile','release')),
         @('architecture-tests', 'python.exe', @('-m','unittest','tooling.test_check_architecture','tooling.test_check_line_limits')),
         @('architecture-gate', 'python.exe', @('tooling/check_architecture.py')),
         @('line-limit-gate', 'python.exe', @('tooling/check_line_limits.py')),
@@ -429,9 +456,13 @@ if (-not $SkipRepositoryGates) {
         @('feature-snapshots', $script:resolvedRad, @('snapshot','tests/features')),
         @('causal-law-snapshots', $script:resolvedRad, @('snapshot','--experimental-laws','tests/fixtures/causal-laws')),
         @('candidate-constraint-snapshots', $script:resolvedRad, @('snapshot','--experimental-laws','tests/fixtures/causal-constraints')),
+        @('language-surface', 'python.exe', @('tooling/check_language_surface.py','--rad',$script:resolvedRad)),
+        @('host-api-surface', 'python.exe', @('tooling/host_api_surface.py','--check')),
+        @('documentation-examples', 'python.exe', @('tooling/check_rad_doc_examples.py','--rad',$script:resolvedRad)),
         @('documentation-links', 'python.exe', @('tooling/scripts/check_doc_links.py')),
         @('documentation-build', 'mdbook.exe', @('build','docs')),
-        @('wasm-check', 'cargo.exe', @('check','-p','rad-vm','--lib','--target','wasm32-unknown-unknown','-j','1'))
+        @('wasm-check', 'cargo.exe', @('rustc','-p','rad-vm','--lib','--target','wasm32-unknown-unknown','-j','1','--','-D','warnings')),
+        @('diff-check', 'git.exe', @('diff','--check'))
     )
     foreach ($gate in $gates) {
         Invoke-AcceptanceProcess -Name $gate[0] -Executable $gate[1] -Arguments $gate[2] -Category 'repository-gate' -TimeoutSeconds 14400 | Out-Null
@@ -439,12 +470,18 @@ if (-not $SkipRepositoryGates) {
 }
 
 $binaryHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $script:resolvedRad).Hash.ToLowerInvariant()
+$workerBinary = Join-Path (Split-Path -Parent $script:resolvedRad) 'rad-ffi-worker.exe'
+if (-not (Test-Path -LiteralPath $workerBinary)) {
+    throw "Missing release FFI worker: $workerBinary"
+}
+$workerBinaryHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $workerBinary).Hash.ToLowerInvariant()
 $lockHash = (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $repoRoot 'Cargo.lock')).Hash.ToLowerInvariant()
 $rustcVersion = (& rustc.exe -vV) -join "`n"
 $allPassed = @($script:results | Where-Object { -not $_.passed }).Count -eq 0
 $report = [ordered]@{
     kind = 'rad_portfolio_acceptance_v1'
-    releaseEligible = (-not $dirty) -and (-not $SkipRepositoryGates) -and $selectedProjects.Count -eq 11
+    releaseEligible = (-not $dirty) -and (-not $SkipRepositoryGates) -and `
+        $selectedProjects.Count -eq 11 -and $binaryProfile -eq 'release'
     passed = $allPassed
     generatedUtc = [DateTime]::UtcNow.ToString('o')
     source = [ordered]@{
@@ -456,7 +493,9 @@ $report = [ordered]@{
     binary = [ordered]@{
         path = Get-RepoRelativePath $script:resolvedRad
         sha256 = $binaryHash
-        buildProfile = 'release'
+        buildProfile = $binaryProfile
+        ffiWorkerPath = Get-RepoRelativePath $workerBinary
+        ffiWorkerSha256 = $workerBinaryHash
     }
     toolchain = $rustcVersion
     machine = [ordered]@{

@@ -35,6 +35,20 @@ restart, snapshot restore, duplicate delivery, and stale completion. Its
 temporal declarations exercise `always`, `eventually`, `until`,
 `exactly_once`, `never_after`, and bounded `eventually_within`.
 
+Snapshot requests are generated alongside valid and stale commands. A wire
+snapshot/restore is executed only while the job is `Running`, where lease and
+attempt state are simultaneously live; queued and terminal requests are
+intentional stale no-ops. The model engine still executes exactly 2,000,000
+generated commands. It records invariant dependencies at the state-access
+boundary and rechecks after every intersecting or unbounded write, while
+provably disjoint worker-heartbeat/scheduler writes reuse the prior result.
+The 2026-08-23 optimized diagnostic campaign completed all 10,000 histories in
+643.7–765.2 ms wall across seven independent processes (684.3 ms median), with
+the accepted portfolio run at 743.9 ms. Generated command labels and temporal
+observation names are shared campaign metadata; replay labels are materialized
+only for a failing artifact, so successful campaigns do not allocate two
+million short-lived strings.
+
 The ten files in `negative/` are mutation proofs. Each deliberately breaks one
 lease, terminal-state, retry, restart, idempotency, race, dead-letter, or
 post-commit rule. They are run through `rad model-check`, not as ordinary

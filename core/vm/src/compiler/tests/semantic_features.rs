@@ -163,6 +163,38 @@ fn field_writes_refresh_only_exact_view_key_and_predicate_dependencies() {
 }
 
 #[test]
+fn component_bundle_spawn_refreshes_each_dependent_view_once() {
+    let source = r#"
+            component Product { id: int = 0 }
+            component Inventory { available: int = 0 }
+
+            materialized view SellableProducts {
+                depends [Product, Inventory]
+                key Product.id
+                where Inventory.available > 0
+            }
+
+            let product = spawn(Product { id: 42 }, Inventory { available: 3 })
+            assert(lookup(SellableProducts, 42) == Some(product), "complete spawn shape admitted")
+        "#;
+
+    let mut lexer = Lexer::new(source);
+    let tokens = lexer.tokenize().0;
+    let program = Parser::new(tokens).parse();
+    let result = Compiler::new().compile(&program).unwrap();
+    let mut vm = VM::new();
+    vm.load_compile_result(result);
+    vm.run(0).unwrap();
+
+    assert_eq!(
+        vm.get_world()
+            .materialized_view_evaluation_count("SellableProducts"),
+        Some(1),
+        "an atomic spawn never exposes or evaluates partial component shapes"
+    );
+}
+
+#[test]
 fn fork_wire_roundtrip_preserves_materialized_view_history_and_future_maintenance() {
     let output = run_source(
         r#"
@@ -509,6 +541,27 @@ fn stateful_models_are_deterministic_and_shrink_failures() {
     assert!(preserved.contains("command 'fail_before_observation' failed"));
     assert!(preserved.contains("shrinking 8 generated command(s) to 1"));
     assert!(!preserved.contains("to 0"), "{preserved}");
+
+    let global_failure = run_model(
+        r#"
+            let mut observed = 0
+            fn mutate_global() -> nil { observed = 1 }
+            model GlobalDependency {
+                commands [mutate_global]
+                invariant { return observed == 0 }
+                runs 2
+                max_commands 2
+                seed 19
+            }
+        "#,
+    )[0]
+        .error
+        .clone()
+        .expect("mutable global writes must invalidate model invariants");
+    assert!(
+        global_failure.contains("invariant 1 was false"),
+        "{global_failure}"
+    );
 }
 
 #[test]

@@ -73,3 +73,5 @@ include!("affine_parity/residue_lanes.rs");
 include!("affine_parity/sparse_support.rs");
 include!("affine_parity/natural_tails.rs");
 include!("affine_parity/cycles.rs");
+#[cfg(test)]
+include!("affine_parity/sparse_support_tests.rs");

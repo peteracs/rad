@@ -71,6 +71,7 @@ define_builtins! {
     GetEntity => "get_entity",
     RequireEntity => "require_entity",
     Remove => "remove",
+    RemoveMany => "remove_many",
     Despawn => "despawn",
     Entities => "entities",
     VisitView => "visit_view",

@@ -147,6 +147,7 @@ impl VM {
             Builtin::GetEntity => self.bi_get_entity(args),
             Builtin::RequireEntity => self.bi_require_entity(args),
             Builtin::Remove => self.bi_remove(args),
+            Builtin::RemoveMany => self.bi_remove_many(args),
             Builtin::Despawn => self.bi_despawn(args),
             Builtin::Entities => self.bi_entities(args),
             Builtin::VisitView => self.bi_visit_view(args),

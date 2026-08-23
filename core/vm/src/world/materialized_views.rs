@@ -2,6 +2,11 @@
 // membership queries, and the negative explanations behind them.
 
 impl World {
+    #[inline]
+    pub(crate) fn has_materialized_views(&self) -> bool {
+        !self.materialized_views.is_empty()
+    }
+
     pub(crate) fn install_materialized_view(
         &mut self,
         name: String,
@@ -235,11 +240,29 @@ impl World {
     }
 
     pub(crate) fn refresh_materialized_views_for(&mut self, component: &str, entity: u32) {
-        let names = self
-            .view_dependents
-            .get(component)
-            .cloned()
-            .unwrap_or_default();
+        self.refresh_materialized_views_for_components(std::iter::once(component), entity);
+    }
+
+    /// Re-evaluate each affected view once after one atomic component bundle.
+    ///
+    /// A spawn or transaction can publish several dependencies of the same
+    /// view together. Refreshing after every component both exposed impossible
+    /// intermediate membership and multiplied predicate work by the bundle
+    /// width. Resolve the reverse dependency union first, then evaluate the
+    /// final entity shape exactly once per view.
+    pub(crate) fn refresh_materialized_views_for_components<'a>(
+        &mut self,
+        components: impl IntoIterator<Item = &'a str>,
+        entity: u32,
+    ) {
+        let mut names = Vec::new();
+        for component in components {
+            if let Some(dependents) = self.view_dependents.get(component) {
+                names.extend(dependents.iter().cloned());
+            }
+        }
+        names.sort_unstable();
+        names.dedup();
         for name in names {
             self.refresh_materialized_view(&name, entity);
         }

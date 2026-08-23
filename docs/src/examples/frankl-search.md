@@ -35,7 +35,8 @@ This result is exhaustive for four elements.
 
 `search.rad` explores exact union closures of bounded generator bases. Its hot
 loops live in the project-owned `native-math-kernels` extension and cross
-RAD's generic `load_extension()` boundary through four typed adapters:
+RAD's generic `load_extension(path, timeout_ms)` boundary through four typed
+adapters:
 
 ```rad
 lattice_closure(generators)

@@ -14,9 +14,17 @@ case "$(uname -s)" in
     extension=librad_dogfood_math_kernels.dylib
     suffix=dylib
     ;;
-  *)
+  MINGW*|MSYS*|CYGWIN*)
+    extension=rad_dogfood_math_kernels.dll
+    suffix=dll
+    ;;
+  Linux*)
     extension=librad_dogfood_math_kernels.so
     suffix=so
+    ;;
+  *)
+    echo "unsupported host for native math kernel packaging: $(uname -s)" >&2
+    exit 2
     ;;
 esac
 mkdir -p "$project_dir/out"

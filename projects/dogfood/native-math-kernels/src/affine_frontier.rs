@@ -7,12 +7,18 @@
 //! integers.
 
 use num_bigint::BigUint;
+use rayon::prelude::*;
+use smallvec::SmallVec;
 use std::cmp::Ordering;
 
 const MAX_FRONTIER_DEPTH: u32 = 16_384;
 const MAX_FRONTIER_SUPPORT: u32 = 128;
 const MAX_BEAM_PER_SUPPORT: usize = 100_000;
 const MAX_REPORTED_RECORDS: usize = 4_096;
+const ZERO_BLOCK_BITS: usize = 16;
+const ZERO_BLOCK_CARDINALITY: usize = 1 << ZERO_BLOCK_BITS;
+
+type Positions = SmallVec<[u16; 16]>;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum FrontierObjective {
@@ -38,13 +44,19 @@ impl FrontierObjective {
 
 #[derive(Clone, Debug)]
 struct FrontierNode {
-    residue: BigUint,
-    coefficient: BigUint,
-    denominator: BigUint,
+    positions: Positions,
     probe: BigUint,
-    input_ones: u32,
     odd_steps: u32,
+    zero_death_depth: u32,
     rank_runway: u32,
+    rank_mix: u64,
+}
+
+#[derive(Clone, Debug)]
+struct ZeroBlock {
+    odd_steps: u8,
+    odd_prefix: [u8; ZERO_BLOCK_BITS],
+    offset: BigUint,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -107,84 +119,217 @@ fn validate_inputs(
     Ok(())
 }
 
+fn positions_value(positions: &[u16]) -> BigUint {
+    let mut value = BigUint::from(0u8);
+    for position in positions {
+        value |= BigUint::from(1u8) << usize::from(*position);
+    }
+    value
+}
+
+fn compare_positions(left: &[u16], right: &[u16]) -> Ordering {
+    left.iter().rev().cmp(right.iter().rev())
+}
+
+fn build_zero_blocks(multiplier: u64, addend: u64) -> Vec<ZeroBlock> {
+    let multiplier_big = BigUint::from(multiplier);
+    let addend_big = BigUint::from(addend);
+    let mut multiplier_powers = Vec::with_capacity(ZERO_BLOCK_BITS + 1);
+    let mut multiplier_power = BigUint::from(1u8);
+    for _ in 0..=ZERO_BLOCK_BITS {
+        multiplier_powers.push(multiplier_power.clone());
+        multiplier_power *= &multiplier_big;
+    }
+    (0..ZERO_BLOCK_CARDINALITY)
+        .map(|residue| {
+            let residue_big = BigUint::from(residue);
+            let mut value = residue_big.clone();
+            let mut odd_steps = 0u8;
+            let mut odd_prefix = [0u8; ZERO_BLOCK_BITS];
+            for prefix in &mut odd_prefix {
+                if value.bit(0) {
+                    value = value * &multiplier_big + &addend_big;
+                    odd_steps += 1;
+                }
+                value >>= 1usize;
+                *prefix = odd_steps;
+            }
+            let offset = (value << ZERO_BLOCK_BITS)
+                - &multiplier_powers[usize::from(odd_steps)] * residue_big;
+            ZeroBlock {
+                odd_steps,
+                odd_prefix,
+                offset,
+            }
+        })
+        .collect()
+}
+
+fn shared_zero_blocks(multiplier: u64, addend: u64) -> std::sync::Arc<Vec<ZeroBlock>> {
+    type Cache = std::collections::HashMap<(u64, u64), std::sync::Arc<Vec<ZeroBlock>>>;
+    static CACHE: std::sync::OnceLock<std::sync::Mutex<Cache>> = std::sync::OnceLock::new();
+    let mut cache = CACHE
+        .get_or_init(|| std::sync::Mutex::new(Cache::new()))
+        .lock()
+        .expect("zero-block cache lock was poisoned");
+    std::sync::Arc::clone(
+        cache
+            .entry((multiplier, addend))
+            .or_insert_with(|| std::sync::Arc::new(build_zero_blocks(multiplier, addend))),
+    )
+}
+
 fn step(
     node: &FrontierNode,
     extension_bit: u32,
+    parent_depth: u32,
     multiplier: &BigUint,
     addend: &BigUint,
+    multiplier_powers: &[BigUint],
 ) -> FrontierNode {
-    let residue = if extension_bit == 0 {
-        node.residue.clone()
-    } else {
-        &node.residue + &node.denominator
-    };
+    let coefficient = &multiplier_powers[node.odd_steps as usize];
+    let mut positions = node.positions.clone();
     let source = if extension_bit == 0 {
         node.probe.clone()
     } else {
-        &node.probe + &node.coefficient
+        positions.push(parent_depth as u16);
+        &node.probe + coefficient
     };
-    let denominator = &node.denominator << 1usize;
     if !source.bit(0) {
         return FrontierNode {
-            residue,
-            coefficient: node.coefficient.clone(),
-            denominator,
+            positions,
             probe: source >> 1usize,
-            input_ones: node.input_ones + extension_bit,
             odd_steps: node.odd_steps,
+            zero_death_depth: node.zero_death_depth,
             rank_runway: 0,
+            rank_mix: node.rank_mix,
         };
     }
     FrontierNode {
-        residue,
-        coefficient: &node.coefficient * multiplier,
-        denominator,
+        positions,
         probe: (source * multiplier + addend) >> 1usize,
-        input_ones: node.input_ones + extension_bit,
         odd_steps: node.odd_steps + 1,
-        rank_runway: 0,
-    }
-}
-
-fn zero_runway(node: &FrontierNode, multiplier: &BigUint, addend: &BigUint, limit: u32) -> u32 {
-    let mut probe = node.probe.clone();
-    let mut coefficient = node.coefficient.clone();
-    let mut denominator = node.denominator.clone();
-    let mut survived = 0;
-    while survived < limit {
-        denominator <<= 1usize;
-        if probe.bit(0) {
-            probe = (probe * multiplier + addend) >> 1usize;
-            coefficient *= multiplier;
+        zero_death_depth: if extension_bit == 0 {
+            node.zero_death_depth
         } else {
-            probe >>= 1usize;
-        }
-        if coefficient < denominator {
-            break;
-        }
-        survived += 1;
+            0
+        },
+        rank_runway: 0,
+        rank_mix: node.rank_mix,
     }
-    survived
 }
 
-fn mixed_key(node: &FrontierNode, seed: u64) -> u64 {
-    let mut hasher = blake3::Hasher::new();
-    hasher.update(b"rad-affine-frontier-mix/v1\0");
-    hasher.update(&seed.to_le_bytes());
-    hasher.update(&node.residue.to_bytes_le());
-    hasher.update(&node.probe.to_bytes_le());
-    hasher.update(&node.input_ones.to_le_bytes());
-    let digest = hasher.finalize();
-    let mut prefix = [0u8; 8];
-    prefix.copy_from_slice(&digest.as_bytes()[..8]);
-    u64::from_le_bytes(prefix)
+fn zero_death_depth(
+    node: &FrontierNode,
+    multiplier: &BigUint,
+    addend: &BigUint,
+    multiplier_powers: &[BigUint],
+    blocks: &[ZeroBlock],
+    start_depth: u32,
+    max_depth: u32,
+) -> u32 {
+    let mut probe = node.probe.clone();
+    let mut odd_steps = node.odd_steps;
+    let mut current_depth = start_depth;
+    while max_depth - current_depth >= ZERO_BLOCK_BITS as u32 {
+        let residue =
+            probe.iter_u32_digits().next().unwrap_or(0) as usize & (ZERO_BLOCK_CARDINALITY - 1);
+        let block = &blocks[residue];
+        for (index, prefix_odd_steps) in block.odd_prefix.iter().enumerate() {
+            let depth = current_depth + index as u32 + 1;
+            let coefficient_bits =
+                multiplier_powers[odd_steps as usize + usize::from(*prefix_odd_steps)].bits();
+            if coefficient_bits <= u64::from(depth) {
+                return depth;
+            }
+        }
+        probe = (probe * &multiplier_powers[usize::from(block.odd_steps)] + &block.offset)
+            >> ZERO_BLOCK_BITS;
+        odd_steps += u32::from(block.odd_steps);
+        current_depth += ZERO_BLOCK_BITS as u32;
+    }
+    while current_depth < max_depth {
+        let numerator = if probe.bit(0) {
+            odd_steps += 1;
+            probe * multiplier + addend
+        } else {
+            probe
+        };
+        let remaining = u64::from(max_depth - current_depth);
+        let jump = numerator
+            .trailing_zeros()
+            .unwrap_or(remaining)
+            .min(remaining);
+        let coefficient_bits = multiplier_powers[odd_steps as usize].bits();
+        let contraction_depth = u64::from(current_depth) + jump;
+        if coefficient_bits <= contraction_depth {
+            return u32::try_from(coefficient_bits.max(u64::from(current_depth) + 1))
+                .unwrap_or(max_depth);
+        }
+        probe = numerator >> jump as usize;
+        current_depth += u32::try_from(jump).unwrap_or(max_depth - current_depth);
+    }
+    max_depth + 1
+}
+
+fn ranked_runway(node: &FrontierNode, depth: u32, remaining_depth: u32) -> u32 {
+    node.zero_death_depth
+        .saturating_sub(depth + 1)
+        .min(remaining_depth)
+}
+
+fn retain_zero_runway_beam(
+    bucket: &mut Vec<FrontierNode>,
+    beam: usize,
+    depth: u32,
+    max_depth: u32,
+    multiplier: &BigUint,
+    addend: &BigUint,
+    multiplier_powers: &[BigUint],
+    blocks: &[ZeroBlock],
+) {
+    for candidate in bucket.iter_mut() {
+        if candidate.zero_death_depth == 0 {
+            candidate.zero_death_depth = zero_death_depth(
+                candidate,
+                multiplier,
+                addend,
+                multiplier_powers,
+                blocks,
+                depth,
+                max_depth,
+            );
+            candidate.rank_runway = ranked_runway(&candidate, depth, (max_depth - depth).min(512));
+        }
+    }
+    if bucket.len() > beam {
+        bucket.select_nth_unstable_by(beam, |left, right| {
+            compare_nodes(left, right, FrontierObjective::ZeroRunway, 0)
+        });
+        bucket.truncate(beam);
+    }
+}
+
+fn mix64(mut value: u64) -> u64 {
+    value = (value ^ (value >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+    value = (value ^ (value >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+    value ^ (value >> 31)
+}
+
+fn mixed_root(seed: u64) -> u64 {
+    mix64(seed ^ 0x7261_642d_6672_6f6e)
+}
+
+fn mixed_child(parent_key: u64, parent_depth: u32, extension_bit: u32) -> u64 {
+    let decision = (u64::from(parent_depth) << 1) | u64::from(extension_bit);
+    mix64(parent_key ^ decision.wrapping_mul(0x9e37_79b9_7f4a_7c15))
 }
 
 fn compare_nodes(
     left: &FrontierNode,
     right: &FrontierNode,
     objective: FrontierObjective,
-    seed: u64,
+    _seed: u64,
 ) -> Ordering {
     let primary = match objective {
         FrontierObjective::ZeroRunway => right.rank_runway.cmp(&left.rank_runway),
@@ -194,22 +339,12 @@ fn compare_nodes(
             .bits()
             .cmp(&right.probe.bits())
             .then_with(|| left.probe.cmp(&right.probe)),
-        FrontierObjective::DeterministicMix => mixed_key(left, seed).cmp(&mixed_key(right, seed)),
+        FrontierObjective::DeterministicMix => left.rank_mix.cmp(&right.rank_mix),
     };
     primary
         .then_with(|| right.odd_steps.cmp(&left.odd_steps))
         .then_with(|| left.probe.bits().cmp(&right.probe.bits()))
-        .then_with(|| left.residue.cmp(&right.residue))
-}
-
-fn one_positions(value: &BigUint) -> Vec<u32> {
-    let mut positions = Vec::new();
-    for bit in 0..value.bits() {
-        if value.bit(bit) {
-            positions.push(bit as u32);
-        }
-    }
-    positions
+        .then_with(|| compare_positions(&left.positions, &right.positions))
 }
 
 fn record_for(
@@ -217,17 +352,33 @@ fn record_for(
     depth: u32,
     multiplier: &BigUint,
     addend: &BigUint,
+    multiplier_powers: &[BigUint],
+    blocks: &[ZeroBlock],
     remaining_depth: u32,
 ) -> FrontierRecord {
+    let residue = positions_value(&node.positions);
+    let death_depth = if node.zero_death_depth == 0 {
+        zero_death_depth(
+            node,
+            multiplier,
+            addend,
+            multiplier_powers,
+            blocks,
+            depth,
+            depth + remaining_depth,
+        )
+    } else {
+        node.zero_death_depth
+    };
     FrontierRecord {
         depth,
-        minimum_input_ones: node.input_ones,
-        witness: node.residue.to_string(),
-        one_positions: one_positions(&node.residue),
+        minimum_input_ones: node.positions.len() as u32,
+        witness: residue.to_string(),
+        one_positions: node.positions.iter().copied().map(u32::from).collect(),
         odd_steps: node.odd_steps,
-        coefficient_bits: node.coefficient.bits(),
+        coefficient_bits: multiplier_powers[node.odd_steps as usize].bits(),
         probe_bits: node.probe.bits(),
-        zero_runway: zero_runway(node, multiplier, addend, remaining_depth),
+        zero_runway: death_depth.saturating_sub(depth + 1).min(remaining_depth),
     }
 }
 
@@ -255,14 +406,20 @@ pub(crate) fn affine_frontier_profile(
     let objective = FrontierObjective::parse(objective_name)?;
     let multiplier_big = BigUint::from(multiplier);
     let addend_big = BigUint::from(addend);
+    let mut multiplier_powers = Vec::with_capacity(max_depth as usize + 1);
+    let mut multiplier_power = BigUint::from(1u8);
+    for _ in 0..=max_depth {
+        multiplier_powers.push(multiplier_power.clone());
+        multiplier_power *= &multiplier_big;
+    }
+    let blocks = shared_zero_blocks(multiplier, addend);
     let mut frontier = vec![FrontierNode {
-        residue: BigUint::from(0u8),
-        coefficient: BigUint::from(1u8),
-        denominator: BigUint::from(1u8),
+        positions: Positions::new(),
         probe: BigUint::from(0u8),
-        input_ones: 0,
         odd_steps: 0,
+        zero_death_depth: 1,
         rank_runway: 0,
+        rank_mix: mixed_root(seed),
     }];
     let mut records = Vec::new();
     let mut prior_minimum = None;
@@ -277,31 +434,55 @@ pub(crate) fn affine_frontier_profile(
             .collect::<Vec<_>>();
         for parent in &frontier {
             for extension_bit in 0..=1 {
-                if parent.input_ones + extension_bit > max_input_ones {
+                if parent.positions.len() as u32 + extension_bit > max_input_ones {
                     continue;
                 }
-                let mut child = step(parent, extension_bit, &multiplier_big, &addend_big);
+                let mut child = step(
+                    parent,
+                    extension_bit,
+                    depth - 1,
+                    &multiplier_big,
+                    &addend_big,
+                    &multiplier_powers,
+                );
                 expanded_nodes = expanded_nodes
                     .checked_add(1)
                     .ok_or_else(|| "affine frontier expansion count overflow".to_string())?;
-                if child.coefficient >= child.denominator {
+                if multiplier_powers[child.odd_steps as usize].bits() > u64::from(depth) {
                     if matches!(objective, FrontierObjective::ZeroRunway) {
-                        child.rank_runway = zero_runway(
-                            &child,
-                            &multiplier_big,
-                            &addend_big,
-                            (max_depth - depth).min(512),
-                        );
+                        child.rank_runway = if extension_bit == 0 {
+                            ranked_runway(&child, depth, (max_depth - depth).min(512))
+                        } else {
+                            (max_depth - depth).min(512)
+                        };
+                    } else if matches!(objective, FrontierObjective::DeterministicMix) {
+                        child.rank_mix = mixed_child(parent.rank_mix, depth - 1, extension_bit);
                     }
-                    buckets[child.input_ones as usize].push(child);
+                    buckets[child.positions.len()].push(child);
                 }
             }
         }
 
         let remaining_depth = max_depth - depth;
+        if matches!(objective, FrontierObjective::ZeroRunway) {
+            buckets.par_iter_mut().for_each(|bucket| {
+                retain_zero_runway_beam(
+                    bucket,
+                    beam_per_support,
+                    depth,
+                    max_depth,
+                    &multiplier_big,
+                    &addend_big,
+                    &multiplier_powers,
+                    blocks.as_slice(),
+                );
+            });
+        }
         frontier.clear();
         for bucket in &mut buckets {
-            if bucket.len() > beam_per_support {
+            if !matches!(objective, FrontierObjective::ZeroRunway)
+                && bucket.len() > beam_per_support
+            {
                 bucket.select_nth_unstable_by(beam_per_support, |left, right| {
                     compare_nodes(left, right, objective, seed)
                 });
@@ -311,7 +492,7 @@ pub(crate) fn affine_frontier_profile(
                 .iter()
                 .min_by(|left, right| compare_nodes(left, right, objective, seed))
             {
-                deepest_retained[best.input_ones as usize] = Some((depth, best.clone()));
+                deepest_retained[best.positions.len()] = Some((depth, best.clone()));
             }
             frontier.append(bucket);
         }
@@ -322,20 +503,22 @@ pub(crate) fn affine_frontier_profile(
         peak_frontier = peak_frontier.max(frontier.len());
         let minimum = frontier
             .iter()
-            .map(|node| node.input_ones)
+            .map(|node| node.positions.len() as u32)
             .min()
             .ok_or_else(|| "affine frontier lost its minimum support".to_string())?;
         if prior_minimum != Some(minimum) && records.len() < MAX_REPORTED_RECORDS {
             let witness = frontier
                 .iter()
-                .filter(|node| node.input_ones == minimum)
-                .min_by(|left, right| left.residue.cmp(&right.residue))
+                .filter(|node| node.positions.len() as u32 == minimum)
+                .min_by(|left, right| compare_positions(&left.positions, &right.positions))
                 .ok_or_else(|| "affine frontier lost its record witness".to_string())?;
             records.push(record_for(
                 witness,
                 depth,
                 &multiplier_big,
                 &addend_big,
+                &multiplier_powers,
+                blocks.as_slice(),
                 remaining_depth,
             ));
             prior_minimum = Some(minimum);
@@ -343,14 +526,16 @@ pub(crate) fn affine_frontier_profile(
     }
 
     let terminal = frontier.iter().min_by(|left, right| {
-        left.input_ones
-            .cmp(&right.input_ones)
-            .then_with(|| left.residue.cmp(&right.residue))
+        left.positions
+            .len()
+            .cmp(&right.positions.len())
+            .then_with(|| compare_positions(&left.positions, &right.positions))
     });
-    let terminal_minimum_input_ones = terminal.map(|node| node.input_ones);
-    let terminal_witness = terminal.map(|node| node.residue.to_string());
-    let terminal_one_positions =
-        terminal.map_or_else(Vec::new, |node| one_positions(&node.residue));
+    let terminal_minimum_input_ones = terminal.map(|node| node.positions.len() as u32);
+    let terminal_witness = terminal.map(|node| positions_value(&node.positions).to_string());
+    let terminal_one_positions = terminal.map_or_else(Vec::new, |node| {
+        node.positions.iter().copied().map(u32::from).collect()
+    });
     let deepest_retained_by_support = deepest_retained
         .into_iter()
         .flatten()
@@ -360,6 +545,8 @@ pub(crate) fn affine_frontier_profile(
                 depth,
                 &multiplier_big,
                 &addend_big,
+                &multiplier_powers,
+                blocks.as_slice(),
                 max_depth - depth,
             )
         })
@@ -414,15 +601,70 @@ pub(crate) fn affine_frontier_profile(
 mod tests {
     use super::*;
 
+    fn scalar_zero_death_depth(
+        node: &FrontierNode,
+        multiplier: &BigUint,
+        addend: &BigUint,
+        multiplier_powers: &[BigUint],
+        start_depth: u32,
+        max_depth: u32,
+    ) -> u32 {
+        let mut probe = node.probe.clone();
+        let mut odd_steps = node.odd_steps;
+        for current_depth in start_depth..max_depth {
+            if probe.bit(0) {
+                probe = probe * multiplier + addend;
+                odd_steps += 1;
+            }
+            probe >>= 1usize;
+            let depth = current_depth + 1;
+            if multiplier_powers[odd_steps as usize].bits() <= u64::from(depth) {
+                return depth;
+            }
+        }
+        max_depth + 1
+    }
+
+    #[test]
+    fn zero_block_transform_matches_scalar_execution() {
+        let multiplier = BigUint::from(3u8);
+        let addend = BigUint::from(1u8);
+        let mut powers = vec![BigUint::from(1u8)];
+        for _ in 0..=256 {
+            powers.push(powers.last().unwrap() * &multiplier);
+        }
+        let blocks = shared_zero_blocks(3, 1);
+        for probe in 0u32..1_024 {
+            let node = FrontierNode {
+                positions: Positions::new(),
+                probe: BigUint::from(probe),
+                odd_steps: 80,
+                zero_death_depth: 0,
+                rank_runway: 0,
+                rank_mix: 0,
+            };
+            assert_eq!(
+                zero_death_depth(
+                    &node,
+                    &multiplier,
+                    &addend,
+                    &powers,
+                    blocks.as_slice(),
+                    100,
+                    228,
+                ),
+                scalar_zero_death_depth(&node, &multiplier, &addend, &powers, 100, 228),
+                "probe={probe}",
+            );
+        }
+    }
+
     #[test]
     fn frontier_finds_only_exact_noncontracting_witnesses() {
         let profile = affine_frontier_profile(3, 1, 128, 8, 256, "zero_runway", 7).unwrap();
         assert_eq!(profile.reached_depth, 128);
-        let witness =
-            BigUint::parse_bytes(profile.terminal_witness.as_ref().unwrap().as_bytes(), 10)
-                .unwrap();
         assert_eq!(
-            one_positions(&witness).len() as u32,
+            profile.terminal_one_positions.len() as u32,
             profile.terminal_minimum_input_ones.unwrap()
         );
         assert!(profile.records.windows(2).all(|pair| {
@@ -430,29 +672,41 @@ mod tests {
         }));
         let multiplier = BigUint::from(3u8);
         let addend = BigUint::from(1u8);
+        let mut multiplier_powers = vec![BigUint::from(1u8)];
+        for _ in 0..128 {
+            multiplier_powers.push(multiplier_powers.last().unwrap() * &multiplier);
+        }
         for record in &profile.deepest_retained_by_support {
             let residue = BigUint::parse_bytes(record.witness.as_bytes(), 10).unwrap();
             let mut node = FrontierNode {
-                residue: BigUint::from(0u8),
-                coefficient: BigUint::from(1u8),
-                denominator: BigUint::from(1u8),
+                positions: Positions::new(),
                 probe: BigUint::from(0u8),
-                input_ones: 0,
                 odd_steps: 0,
+                zero_death_depth: 1,
                 rank_runway: 0,
+                rank_mix: 0,
             };
             for bit in 0..record.depth {
                 node = step(
                     &node,
                     u32::from(residue.bit(u64::from(bit))),
+                    bit,
                     &multiplier,
                     &addend,
+                    &multiplier_powers,
                 );
-                assert!(node.coefficient >= node.denominator);
+                assert!(multiplier_powers[node.odd_steps as usize].bits() > u64::from(bit + 1));
             }
-            assert_eq!(node.input_ones, record.minimum_input_ones);
+            assert_eq!(node.positions.len() as u32, record.minimum_input_ones);
             assert_eq!(node.odd_steps, record.odd_steps);
-            assert_eq!(one_positions(&residue), record.one_positions);
+            assert_eq!(
+                node.positions
+                    .iter()
+                    .copied()
+                    .map(u32::from)
+                    .collect::<Vec<_>>(),
+                record.one_positions
+            );
         }
     }
 
@@ -468,5 +722,35 @@ mod tests {
             let right = affine_frontier_profile(3, 1, 64, 7, 64, objective, 11).unwrap();
             assert_eq!(left, right);
         }
+    }
+
+    #[test]
+    fn production_zero_runway_reconstructs_every_known_boundary() {
+        let profile = affine_frontier_profile(3, 1, 1_024, 14, 256, "zero_runway", 0).unwrap();
+        assert_eq!(profile.reached_depth, 1_024);
+        assert_eq!(profile.records.len(), 12);
+        assert!(profile.terminal_minimum_input_ones.unwrap() >= 11);
+    }
+
+    #[test]
+    fn production_portfolio_preserves_all_six_exact_lanes() {
+        let plans = [
+            ("zero_runway", 0),
+            ("odd_headroom", 0),
+            ("small_probe", 0),
+            ("deterministic_mix", 3),
+            ("deterministic_mix", 17),
+            ("deterministic_mix", 101),
+        ];
+        let profiles = plans
+            .par_iter()
+            .map(|(objective, seed)| {
+                affine_frontier_profile(3, 1, 1_024, 14, 256, objective, *seed).unwrap()
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(profiles.len(), plans.len());
+        assert_eq!(profiles[0].reached_depth, 1_024);
+        assert!(profiles.iter().all(|profile| profile.reached_depth > 0));
+        assert!(profiles.iter().all(|profile| profile.records.len() >= 11));
     }
 }

@@ -1,1 +1,1 @@
-let _extension: any = load_extension("target/sovereign-grid-plugin/missing.radext")
+let _extension: any = load_extension("target/sovereign-grid-plugin/missing.radext", 100)

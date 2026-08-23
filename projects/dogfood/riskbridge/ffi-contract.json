@@ -16,6 +16,13 @@
       "effects": [],
       "deterministic": true,
       "replayable": true
+    },
+    {
+      "name": "score_range_summary",
+      "signature": "(int)->str",
+      "effects": [],
+      "deterministic": true,
+      "replayable": true
     }
   ],
   "types": [

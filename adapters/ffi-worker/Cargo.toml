@@ -13,3 +13,4 @@ path = "src/main.rs"
 
 [dependencies]
 rad-vm = { path = "../../core/vm" }
+serde_json = "1.0"

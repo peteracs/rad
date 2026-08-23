@@ -2,10 +2,12 @@ use "../schema.rad"
 
 let RISK_EXTENSION = load_extension(
     "target/riskbridge-plugin/release/riskbridge_model_plugin.dll",
+    100,
 )
 let SCORE_TRANSACTION: pure fn(str) -> str = RISK_EXTENSION["score_transaction"]
+let SCORE_RANGE: pure fn(int) -> str = RISK_EXTENSION["score_range_summary"]
 
-fn append_encoded(bytes: list, value: any) -> list {
+pure fn append_encoded(bytes: list, value: any) -> list {
     return extend(bytes, bytebuf_to_list(encode_le(value)))
 }
 
@@ -61,5 +63,66 @@ pub pure fn score_reference(request: RiskInput) -> RiskOutput {
         reason_mask: signal_bits,
         model_version: u32(17),
         disposition: disposition,
+    }
+}
+
+pure fn residue_count(count: int, residue: int) -> int {
+    if count <= residue { return 0 }
+    return (count + 3 - residue) / 4
+}
+
+pure fn xor_through(count: int) -> u64 {
+    let n = u64(count)
+    let remainder = count % 4
+    if remainder == 0 { return n }
+    if remainder == 1 { return u64(1) }
+    if remainder == 2 { return n + u64(1) }
+    return u64(0)
+}
+
+pub pure fn score_batch_reference(count: int) -> RiskBatchSummary {
+    assert(count > 0, "risk batch must not be empty")
+    let before = min(count, 991)
+    let after = count - before
+    let before_0 = residue_count(before, 0)
+    let before_1 = residue_count(before, 1)
+    let before_2 = residue_count(before, 2)
+    let before_3 = residue_count(before, 3)
+    let total_0 = residue_count(count, 0)
+    let total_1 = residue_count(count, 1)
+    let total_2 = residue_count(count, 2)
+    let total_3 = residue_count(count, 3)
+    let after_0 = total_0 - before_0
+    let after_1 = total_1 - before_1
+    let after_2 = total_2 - before_2
+    let after_3 = total_3 - before_3
+    let reason_xor =
+        (if total_0 % 2 == 1 { u64(2) } else { u64(0) }) ^
+        (if total_1 % 2 == 1 { u64(8) } else { u64(0) }) ^
+        (if total_2 % 2 == 1 { u64(4) } else { u64(0) }) ^
+        (if total_3 % 2 == 1 { u64(1) } else { u64(0) })
+    return RiskBatchSummary {
+        decisions: count,
+        allows: before_2 + before_3 + after_2 + after_3,
+        reviews: before_0,
+        denies: before_1 + after_0 + after_1,
+        score_points:
+            before_0 * 70 + before_1 * 85 + before_2 * 20 + before_3 * 15 +
+            after_0 * 80 + after_1 * 95 + after_2 * 30 + after_3 * 25,
+        reason_xor: reason_xor,
+        transaction_xor: xor_through(count),
+    }
+}
+
+pub pure fn score_batch_native(count: int) -> RiskBatchSummary {
+    let parsed = json_parse(SCORE_RANGE(count)) |> unwrap
+    return RiskBatchSummary {
+        decisions: parsed["decisions"],
+        allows: parsed["allows"],
+        reviews: parsed["reviews"],
+        denies: parsed["denies"],
+        score_points: parsed["score_points"],
+        reason_xor: u64(parsed["reason_xor"]),
+        transaction_xor: u64(parsed["transaction_xor"]),
     }
 }

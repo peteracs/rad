@@ -447,8 +447,8 @@ impl Compiler {
             self.add_local(param.clone(), is_mut);
         }
 
-        let optimized_body = if self.should_optimize_egraph(&f.name) {
-            super::egraph::optimize_ecs_function_block(&f.body)
+        let optimized_body = if self.should_optimize_expressions(&f.name) {
+            super::expression_optimizer::optimize_ecs_function_block(&f.body)
         } else {
             f.body.clone()
         };
@@ -514,7 +514,7 @@ impl Compiler {
         }
         self.add_local("self".to_string(), false);
 
-        let optimized_body = super::egraph::optimize_system_block(&s.body);
+        let optimized_body = super::expression_optimizer::optimize_system_block(&s.body);
 
         self.compile_body(&optimized_body.stmts)?;
 

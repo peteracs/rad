@@ -26,6 +26,113 @@ mod tests {
     }
 
     #[test]
+    fn cyclic_pair_lane_batch_matches_generic_profiles() {
+        let width = 5;
+        let representatives = bitmask_rotation_representatives(width)
+            .unwrap()
+            .into_iter()
+            .filter(|representative| *representative != 0 && *representative != (1 << width) - 1)
+            .collect::<Vec<_>>();
+        let mut expected = CyclicPairLaneProfile {
+            symmetry_classes: 0,
+            evaluated: 0,
+            equality_families: 0,
+            diagonal_equality_families: 0,
+            off_diagonal_equality_families: 0,
+            full_cube_families: 0,
+            equality_non_full_families: 0,
+            positive_families: 0,
+            negative_families: 0,
+            separating_families: 0,
+            best_generators: Vec::new(),
+            best_frequencies: Vec::new(),
+            best_members: 0,
+            best_max_frequency: 0,
+            best_margin: i64::MAX,
+            best_signature: 0,
+        };
+        for (left_index, left) in representatives.iter().enumerate() {
+            let left_orbit = bitmask_rotation_orbit(*left, width).unwrap();
+            for (right_index, right) in representatives.iter().enumerate().skip(left_index) {
+                let mut generators = left_orbit.clone();
+                generators.extend(bitmask_rotation_orbit(*right, width).unwrap());
+                let (members, frequencies, separating, signature) =
+                    or_closure_stats(&generators, width).unwrap();
+                let maximum = *frequencies.iter().max().unwrap();
+                let margin = maximum * 2 - members;
+                expected.evaluated += 1;
+                expected.separating_families += i64::from(separating);
+                match margin.cmp(&0) {
+                    std::cmp::Ordering::Less => expected.negative_families += 1,
+                    std::cmp::Ordering::Equal => {
+                        expected.equality_families += 1;
+                        if left_index == right_index {
+                            expected.diagonal_equality_families += 1;
+                        } else {
+                            expected.off_diagonal_equality_families += 1;
+                        }
+                        if members == 1 << width {
+                            expected.full_cube_families += 1;
+                        } else {
+                            expected.equality_non_full_families += 1;
+                        }
+                    }
+                    std::cmp::Ordering::Greater => expected.positive_families += 1,
+                }
+                let better = separating
+                    && (expected.best_members == 0
+                        || maximum * expected.best_members
+                            < expected.best_max_frequency * members
+                        || (maximum * expected.best_members
+                            == expected.best_max_frequency * members
+                            && members > expected.best_members));
+                if better {
+                    expected.best_generators = generators;
+                    expected.best_frequencies = frequencies;
+                    expected.best_members = members;
+                    expected.best_max_frequency = maximum;
+                    expected.best_margin = margin;
+                    expected.best_signature = signature;
+                }
+            }
+        }
+
+        let actual = cyclic_pair_profiles(&representatives, width, 1, 1)
+            .unwrap()
+            .remove(0);
+        assert!(actual.symmetry_classes > 0);
+        expected.symmetry_classes = actual.symmetry_classes;
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn cyclic_pair_width_thirteen_receipt_is_exact() {
+        let width = 13;
+        let representatives = bitmask_rotation_representatives(width)
+            .unwrap()
+            .into_iter()
+            .filter(|representative| *representative != 0 && *representative != (1 << width) - 1)
+            .collect::<Vec<_>>();
+        let profile = cyclic_pair_profiles(&representatives, width, 1, 51)
+            .unwrap()
+            .remove(0);
+        assert_eq!(representatives.len(), 630);
+        assert_eq!(profile.symmetry_classes, 17_363);
+        assert_eq!(profile.evaluated, 198_765);
+        assert_eq!(profile.equality_families, 630);
+        assert_eq!(profile.diagonal_equality_families, 1);
+        assert_eq!(profile.off_diagonal_equality_families, 629);
+        assert_eq!(profile.full_cube_families, 630);
+        assert_eq!(profile.equality_non_full_families, 0);
+        assert_eq!(profile.positive_families, 198_135);
+        assert_eq!(profile.negative_families, 0);
+        assert_eq!(profile.separating_families, 198_765);
+        assert_eq!(profile.best_members, 8192);
+        assert_eq!(profile.best_max_frequency, 4096);
+        assert_eq!(profile.best_margin, 0);
+    }
+
+    #[test]
     fn closure_deduplicates_generators_and_uses_sparse_masks() {
         let family = or_closure(&[1 << 40, 3, 3]).unwrap();
         assert_eq!(family, vec![0, 3, 1 << 40, (1 << 40) | 3]);

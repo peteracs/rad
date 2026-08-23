@@ -95,6 +95,9 @@ fn main() -> nil {
     let disposable: entity = spawn("surface-disposable", SurfaceDisposable {})
     assert(despawn(disposable), "despawn")
     assert(get_entity("surface-disposable") == nil, "despawn removes name publication")
+    let removed_count: int = remove_many(beta, [SurfaceMember, SurfaceDuplicateKey])
+    assert(removed_count == 2, "remove_many removes one atomic component bundle")
+    assert(not has(beta, SurfaceMember) and not has(beta, SurfaceDuplicateKey), "remove_many publishes no partial membership")
 
     log("sovereign-grid.ecs", { "records": 3 })
     metric("sovereign_grid_records", "gauge", 3.0, { "fixture": "ecs" })

@@ -2,6 +2,64 @@
 // the async spawn/await pair with its recorded IO payloads.
 
 impl VM {
+    /// Enter a plain function whose identity was already resolved by the
+    /// caller. `GetGlobal; Call` uses this after its dispatch fusion, while
+    /// the ordinary dynamic Call path retains all closure/native cases.
+    pub(crate) fn exec_resolved_fn_call(
+        &mut self,
+        chunk_id: usize,
+        expected_arity: u8,
+        argc: u8,
+    ) -> Result<(), String> {
+        if expected_arity != argc {
+            return Err(format!(
+                "Arity mismatch: expected {}, got {}",
+                expected_arity, argc
+            ));
+        }
+        if chunk_id >= self.chunks.len() {
+            return Err(format!("Invalid function chunk {chunk_id}"));
+        }
+        if self.frames.len() >= MAX_CALL_DEPTH {
+            return Err(format!(
+                "Stack overflow: exceeded {} call frames",
+                MAX_CALL_DEPTH
+            ));
+        }
+        let argc = usize::from(argc);
+        if self.stack.len() < argc {
+            return Err("Stack underflow in resolved function call".to_string());
+        }
+        let stack_base = self.stack.len() - argc;
+        let frame_id = self.allocate_frame_id();
+        self.frames.push(CallFrame {
+            frame_id,
+            chunk_id,
+            ip: 0,
+            stack_base,
+            captures: None,
+            system_writeback: None,
+        });
+        Ok(())
+    }
+
+
+    pub(crate) fn exec_call_builtin(&mut self) -> Result<(), String> {
+        let builtin_index = self.read_u16()? as usize;
+        let argc = self.read_byte()? as usize;
+        let builtin = Builtin::ALL
+            .get(builtin_index)
+            .copied()
+            .ok_or_else(|| format!("Invalid builtin index {builtin_index}"))?;
+        if self.stack.len() < argc {
+            return Err("Stack underflow in CallBuiltin".to_string());
+        }
+        let first_argument = self.stack.len() - argc;
+        let args = self.stack.split_off(first_argument);
+        let result = self.call_builtin(builtin, args)?;
+        self.push(result);
+        Ok(())
+    }
 
     pub(crate) fn exec_call(&mut self) -> Result<(), String> {
         let argc = self.read_byte()?;
@@ -11,34 +69,11 @@ impl VM {
         }
         let callee = self.stack[self.stack.len() - 1];
         if let Some(fv) = callee.as_fn() {
-            if fv.arity != argc {
-                return Err(format!(
-                    "Arity mismatch: expected {}, got {}",
-                    fv.arity, argc
-                ));
-            }
-            if fv.chunk_id >= self.chunks.len() {
-                return Err(format!("Invalid function chunk {}", fv.chunk_id));
-            }
-            if self.frames.len() >= MAX_CALL_DEPTH {
-                return Err(format!(
-                    "Stack overflow: exceeded {} call frames",
-                    MAX_CALL_DEPTH
-                ));
-            }
             let chunk_id = fv.chunk_id;
+            let expected_arity = fv.arity;
             let slen = self.stack.len();
             self.stack.remove(slen - 1);
-            let stack_base = self.stack.len() - argc_us;
-            let frame_id = self.allocate_frame_id();
-            self.frames.push(CallFrame {
-                frame_id,
-                chunk_id,
-                ip: 0,
-                stack_base,
-                captures: None,
-                system_writeback: None,
-            });
+            self.exec_resolved_fn_call(chunk_id, expected_arity, argc)?;
         } else if let Some(cv) = callee.as_closure() {
             if cv.arity != argc {
                 return Err(format!(

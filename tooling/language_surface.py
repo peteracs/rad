@@ -19,12 +19,12 @@ ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / "docs" / "language-surface.json"
 MARKDOWN_OUTPUT = ROOT / "docs/src/reference/generated/language-surface.md"
 OWNERS = {
-    "tokens": ROOT / "core/vm/src/lexer/engine.rs",
-    "keywords": ROOT / "core/vm/src/lexer/decl.rs",
-    "declarations": ROOT / "core/vm/src/ast/modules.rs",
-    "statements": ROOT / "core/vm/src/ast/statements.rs",
-    "expressions": ROOT / "core/vm/src/ast/expressions.rs",
-    "contracts": ROOT / "core/vm/src/parser/decl/declaration_dispatch.rs",
+    "tokens": ROOT / "core/syntax/src/lexer/engine.rs",
+    "keywords": ROOT / "core/syntax/src/lexer/decl.rs",
+    "declarations": ROOT / "core/syntax/src/ast/modules.rs",
+    "statements": ROOT / "core/syntax/src/ast/statements.rs",
+    "expressions": ROOT / "core/syntax/src/ast/expressions.rs",
+    "contracts": ROOT / "core/syntax/src/parser/decl/declaration_dispatch.rs",
     "builtins": ROOT / "core/vm/src/value/builtin_catalog.rs",
 }
 
@@ -188,7 +188,7 @@ def markdown_surface(surface: dict[str, object]) -> str:
         out.append(names(title, surface[key]))
     out.append("## Builtin API names\n\n")
     out.append(
-        "The 256 names below come from the one runtime catalog. Signatures and operational semantics are in the "
+        f"The {len(surface['builtins'])} names below come from the one runtime catalog. Signatures and operational semantics are in the "
         "[complete builtin API catalog](builtin-api.md); this generated list makes omissions machine-detectable.\n\n"
     )
     out.append("| Name | Runtime variant |\n|---|---|\n")

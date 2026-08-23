@@ -1,6 +1,23 @@
 // Recording provenance for authoritative writes, and serialising the causal
 // ledger for inspection, wire transport, and replay.
 
+pub(crate) enum CausalWriteInput {
+    Summary(crate::causality::WriteSummary),
+    Text(String),
+}
+
+impl From<crate::causality::WriteSummary> for CausalWriteInput {
+    fn from(value: crate::causality::WriteSummary) -> Self {
+        Self::Summary(value)
+    }
+}
+
+impl From<String> for CausalWriteInput {
+    fn from(value: String) -> Self {
+        Self::Text(value)
+    }
+}
+
 impl VM {
     fn take_mutation_cause(&mut self) -> crate::causality::Cause {
         self.pending_host_cause
@@ -33,7 +50,7 @@ impl VM {
         entity: Option<u32>,
         component: &str,
         kind: crate::causality::WriteKind,
-        value: String,
+        value: impl Into<CausalWriteInput>,
     ) {
         let entity_name = entity.and_then(|id| self.world.entity_name(id));
         self.record_causal_write_named(entity, entity_name, component, kind, value);
@@ -45,9 +62,12 @@ impl VM {
         entity_name: Option<String>,
         component: &str,
         kind: crate::causality::WriteKind,
-        value: String,
+        value: impl Into<CausalWriteInput>,
     ) {
-        let fields = match kind {
+        let summary = match value.into() {
+            CausalWriteInput::Summary(summary) => summary,
+            CausalWriteInput::Text(value) => {
+                let fields = match kind {
             crate::causality::WriteKind::Set | crate::causality::WriteKind::Spawn => entity
                 .and_then(|entity| self.world.get_component(entity, component))
                 .map(|data| Self::component_field_summaries(&data))
@@ -58,7 +78,10 @@ impl VM {
                 .map(|data| Self::component_field_summaries(&data))
                 .unwrap_or_default(),
             crate::causality::WriteKind::Despawn | crate::causality::WriteKind::Remove => {
-                Vec::new()
+                crate::causality::FieldSummaries::new()
+            }
+                };
+                crate::causality::WriteSummary::full(value, fields)
             }
         };
         if let Some(transaction) = &mut self.transaction {
@@ -66,9 +89,8 @@ impl VM {
                 entity,
                 entity_name,
                 component: component.to_string(),
-                value,
                 kind,
-                fields,
+                summary,
                 view_refresh: crate::vm::transaction::MaterializedViewRefresh::Component,
             });
             return;
@@ -86,10 +108,61 @@ impl VM {
                 entity,
                 entity_name,
                 component,
-                crate::causality::WriteSummary::text_fields(value, fields),
+                summary,
                 kind,
                 cause,
             ));
+    }
+
+    /// Publish the provenance and view effects of one atomic spawn bundle.
+    /// Component rows are already installed when this is called, so every
+    /// materialized view observes the complete entity shape. Each affected
+    /// view is evaluated once even when it depends on several spawned
+    /// components.
+    pub(crate) fn record_causal_spawn_writes(
+        &mut self,
+        entity: u32,
+        writes: Vec<(String, crate::causality::WriteSummary)>,
+    ) {
+        let entity_name = self.world.entity_name(entity);
+        if let Some(transaction) = &mut self.transaction {
+            transaction
+                .pending_writes
+                .extend(writes.into_iter().map(|(component, summary)| {
+                    PendingTransactionWrite {
+                        entity: Some(entity),
+                        entity_name: entity_name.clone(),
+                        component,
+                        kind: crate::causality::WriteKind::Spawn,
+                        summary,
+                        view_refresh:
+                            crate::vm::transaction::MaterializedViewRefresh::Component,
+                    }
+                }));
+            return;
+        }
+
+        self.world.refresh_materialized_views_for_components(
+            writes.iter().map(|(component, _)| component.as_str()),
+            entity,
+        );
+        if self.in_simulation_fork > 0 || self.is_worker {
+            return;
+        }
+
+        let cause = self.take_mutation_cause();
+        for (component, summary) in writes {
+            self.ledger
+                .record_write(crate::causality::WriteRecord::local(
+                    self.causality_frame,
+                    Some(entity),
+                    entity_name.clone(),
+                    component,
+                    summary,
+                    crate::causality::WriteKind::Spawn,
+                    cause.clone(),
+                ));
+        }
     }
 
     /// Record one exact field mutation without formatting the untouched
@@ -129,9 +202,8 @@ impl VM {
                 entity: Some(entity),
                 entity_name,
                 component: component.to_string(),
-                value,
                 kind: crate::causality::WriteKind::Set,
-                fields,
+                summary: crate::causality::WriteSummary::text_fields(value, fields),
                 view_refresh: crate::vm::transaction::MaterializedViewRefresh::Field(
                     field.to_string(),
                 ),
@@ -162,29 +234,54 @@ impl VM {
     }
 
     /// Bounded display summary of a component's fields, for ledger records.
-    pub(crate) fn component_summary(data: &crate::value::ComponentData) -> String {
-        let mut s = String::from("{ ");
-        for (i, (k, v)) in data.layout.iter().zip(data.values.iter()).enumerate() {
-            if i > 0 {
-                s.push_str(", ");
+    pub(crate) fn component_summary(
+        data: &crate::value::ComponentData,
+    ) -> crate::causality::WriteSummary {
+        struct ComponentBody<'a>(&'a crate::value::ComponentData);
+        impl std::fmt::Display for ComponentBody<'_> {
+            fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                formatter.write_str("{ ")?;
+                for (index, (field, value)) in self
+                    .0
+                    .layout
+                    .iter()
+                    .zip(self.0.values.iter())
+                    .enumerate()
+                {
+                    if index > 0 {
+                        formatter.write_str(", ")?;
+                    }
+                    write!(formatter, "{field}: {value}")?;
+                }
+                formatter.write_str(" }")
             }
-            s.push_str(k);
-            s.push_str(": ");
-            s.push_str(&v.to_string());
         }
-        s.push_str(" }");
-        crate::causality::summarize(&s)
-    }
 
-    fn component_field_summaries(data: &crate::value::ComponentData) -> Vec<(String, String)> {
-        data.layout
+        let fields = data
+            .layout
             .iter()
             .zip(data.values.iter())
             .map(|(field, value)| {
                 (
-                    field.clone(),
-                    crate::causality::summarize(&value.to_string()),
+                    field.as_str().into(),
+                    crate::causality::CausalScalar::from_value(value),
                 )
+            })
+            .collect();
+        crate::causality::WriteSummary::full(
+            crate::causality::CausalText::summary(ComponentBody(data)),
+            fields,
+        )
+    }
+
+    fn component_field_summaries(
+        data: &crate::value::ComponentData,
+    ) -> crate::causality::FieldSummaries {
+        data.layout
+            .iter()
+            .zip(data.values.iter())
+            .map(|(field, value)| {
+                (field.as_str().into(), crate::causality::CausalScalar::from_value(value))
             })
             .collect()
     }

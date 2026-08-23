@@ -1,70 +1,5 @@
 fn run_ffi_verify_command(plugin: &str, contract: Option<&str>, json: bool) {
-    if std::env::var_os("RAD_FFI_VERIFY_CHILD").is_none() {
-        let executable = match std::env::current_exe() {
-            Ok(executable) => executable,
-            Err(error) => {
-                eprintln!("FFI verification failed: cannot locate verifier executable: {error}");
-                process::exit(1);
-            }
-        };
-        let mut command = std::process::Command::new(executable);
-        command.args(["ffi", "verify", plugin]);
-        if let Some(contract) = contract {
-            command.args(["--contract", contract]);
-        }
-        if json {
-            command.arg("--json");
-        }
-        let mut child = match command
-            .env("RAD_FFI_VERIFY_CHILD", "1")
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped())
-            .spawn()
-        {
-            Ok(child) => child,
-            Err(error) => {
-                eprintln!("FFI verification failed: cannot start isolated verifier: {error}");
-                process::exit(1);
-            }
-        };
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
-        loop {
-            match child.try_wait() {
-                Ok(Some(_)) => break,
-                Ok(None) if std::time::Instant::now() < deadline => {
-                    std::thread::sleep(std::time::Duration::from_millis(10));
-                }
-                Ok(None) => {
-                    let _ = child.kill();
-                    let _ = child.wait();
-                    eprintln!(
-                        "FFI verification failed: plugin exceeded the isolated 10-second verification timeout"
-                    );
-                    process::exit(1);
-                }
-                Err(error) => {
-                    let _ = child.kill();
-                    eprintln!("FFI verification failed: verifier process error: {error}");
-                    process::exit(1);
-                }
-            }
-        }
-        let output = child
-            .wait_with_output()
-            .expect("completed isolated verifier output remains readable");
-        print!("{}", String::from_utf8_lossy(&output.stdout));
-        eprint!("{}", String::from_utf8_lossy(&output.stderr));
-        if !output.status.success() {
-            eprintln!(
-                "FFI verification failed safely in isolated process ({})",
-                output.status
-            );
-            process::exit(1);
-        }
-        return;
-    }
-
-    let report = match rad_vm::ffi::verify_plugin(plugin) {
+    let report = match verify_in_isolated_worker(plugin) {
         Ok(report) => report,
         Err(error) => {
             eprintln!("FFI verification failed: {error}");
@@ -136,4 +71,53 @@ fn run_ffi_verify_command(plugin: &str, contract: Option<&str>, json: bool) {
         "Replay support: {}",
         if report.replay_support { "PASS" } else { "FAIL" }
     );
+}
+
+fn verify_in_isolated_worker(
+    plugin: &str,
+) -> Result<rad_vm::ffi::NativeVerificationReport, String> {
+    let executable = rad_vm::ffi::native_worker_executable()?;
+    let mut child = std::process::Command::new(&executable)
+        .args(["--verify", plugin])
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .map_err(|error| {
+            format!(
+                "cannot start isolated verifier '{}': {error}",
+                executable.display()
+            )
+        })?;
+    let deadline = std::time::Instant::now() + std::time::Duration::from_millis(700);
+    loop {
+        match child.try_wait() {
+            Ok(Some(_)) => break,
+            Ok(None) if std::time::Instant::now() < deadline => {
+                std::thread::sleep(std::time::Duration::from_millis(2));
+            }
+            Ok(None) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err("plugin exceeded the isolated 700 ms verification timeout".into());
+            }
+            Err(error) => {
+                let _ = child.kill();
+                return Err(format!("isolated verifier process error: {error}"));
+            }
+        }
+    }
+    let output = child
+        .wait_with_output()
+        .map_err(|error| format!("cannot read isolated verifier output: {error}"))?;
+    if !output.status.success() {
+        let detail = String::from_utf8_lossy(&output.stderr);
+        return Err(format!(
+            "{} (isolated verifier {})",
+            detail.trim(),
+            output.status
+        ));
+    }
+    serde_json::from_slice(&output.stdout)
+        .map_err(|error| format!("isolated verifier returned malformed JSON: {error}"))
 }

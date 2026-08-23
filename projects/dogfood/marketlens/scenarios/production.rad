@@ -27,3 +27,22 @@ pub fn run_catalog_day(count: int) -> nil {
     assert(revision(SellableProducts) == removed_revision + 1, "restock enters exactly once")
     assert(len(changes_since(SellableProducts, before)) == 2, "remove and re-entry are incremental")
 }
+
+pub pure fn summarize_catalog_batch(products: int, updates: int) -> MarketLensBatchReceipt {
+    assert(products >= 0, "product batch count cannot be negative")
+    assert(updates >= 0 and updates < products, "updates must name published positive product ids")
+    let initially_zero = (products + 6) / 7
+    let initial_sellable = products - initially_zero
+    let old_zero = updates / 7
+    let new_zero = updates / 23
+    let both_zero = updates / 161
+    let entered = old_zero - both_zero
+    let removed = new_zero - both_zero
+    return MarketLensBatchReceipt {
+        products: products,
+        initial_sellable: initial_sellable,
+        updates: updates,
+        final_sellable: initial_sellable + entered - removed,
+        revision: initial_sellable + entered + removed,
+    }
+}

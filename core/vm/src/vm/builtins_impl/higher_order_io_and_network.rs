@@ -2,8 +2,8 @@
 
 impl VM {
     fn bi_load_extension(&mut self, args: Vec<Value>) -> Result<Value, String> {
-        if args.is_empty() {
-            return Err("load_extension() requires 1 argument (path)".into());
+        if args.len() != 2 {
+            return Err("load_extension() requires 2 arguments (path, timeout_ms)".into());
         }
         let path_val = &args[0];
         let path = path_val.as_str().ok_or_else(|| {
@@ -12,10 +12,23 @@ impl VM {
                 path_val.type_name()
             )
         })?;
+        let timeout_ms = args[1].as_int().ok_or_else(|| {
+            format!(
+                "load_extension() timeout_ms expects int, got {}",
+                args[1].type_name()
+            )
+        })?;
+        if !(1..=crate::ffi::MAX_NATIVE_WORKER_CALL_TIMEOUT_MS as i64).contains(&timeout_ms) {
+            return Err(format!(
+                "load_extension() timeout_ms must be between 1 and {}",
+                crate::ffi::MAX_NATIVE_WORKER_CALL_TIMEOUT_MS
+            ));
+        }
+        let call_timeout = std::time::Duration::from_millis(timeout_ms as u64);
 
         #[cfg(target_arch = "wasm32")]
         {
-            let _ = path;
+            let _ = (path, call_timeout);
             return Err("Plugins are not supported on wasm32".to_string());
         }
 
@@ -42,7 +55,7 @@ impl VM {
             }
 
             let (functions, lib, manifest) =
-                match crate::ffi::load_plugin_isolated(path) {
+                match crate::ffi::load_plugin_isolated(path, call_timeout) {
                     Ok(loaded) => loaded,
                     Err(error) => {
                         if let Some(recorder) = self.recorder.as_mut() {

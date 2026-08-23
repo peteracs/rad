@@ -5,6 +5,10 @@ use "../scenarios/production.rad"
 test "routes are deterministic and callback-specific" {
     seed_alerts(100)
     schedule [RouteCritical, RouteRoutine]
+    let receipt = summarize_alert_batch(100)
+    assert(receipt.alerts == len(entities(Incident)), "batch receipt matches scalar incidents")
+    assert(receipt.critical == len(entities(EscalationState)), "batch receipt matches scalar critical routes")
+    assert(receipt.routine == len(entities(NotificationState)), "batch receipt matches scalar routine routes")
     assert(len(entities(EscalationState)) == 10, "critical policy count")
     assert(len(entities(NotificationState)) == 90, "routine policy count")
     let incident: entity = require_entity("incident_10")

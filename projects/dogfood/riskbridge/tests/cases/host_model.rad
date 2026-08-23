@@ -1,10 +1,12 @@
-use "../schema.rad"
-use "../owners/decision_owner.rad"
-use "../owners/decision_owner.rad" as decisions
-use "../host/risk_model.rad" as model
-use "../negative/fixture_adapter.rad"
+use "../../schema.rad"
+use "../../owners/decision_owner.rad"
+use "../../owners/decision_owner.rad" as decisions
+use "../../host/risk_model.rad" as model
+use "../../negative/fixture_adapter.rad"
 
 let model_customer: entity = decisions.register_customer(CustomerId(u64(8800)))
+let MALFORMED_EXTENSION = load_extension("target/riskbridge-fixtures/containment.dll", 100)
+let MALFORMED_SCORE: pure fn(str) -> str = MALFORMED_EXTENSION["malformed_score"]
 component DecisionObserved {}
 
 fn model_request() -> RiskInput {
@@ -19,8 +21,10 @@ fn model_request() -> RiskInput {
     }
 }
 
-fn decode_fixture(path: str) -> RiskOutput {
-    return model.decode_risk_output(fixture_score(path))
+fn decode_malformed_fixture() -> RiskOutput {
+    return model.decode_risk_output(
+        MALFORMED_SCORE(json_stringify(model.encode_risk_input(fixture_request())))
+    )
 }
 
 fn ensure_generation_safe_decision() -> nil {
@@ -30,7 +34,6 @@ fn ensure_generation_safe_decision() -> nil {
         let output: RiskOutput = model.score_reference(request)
         decisions.activate_generation(u32(18), "riskbridge-model-v18")
         decisions.CommitDecision(
-            spawn(),
             model_customer,
             request,
             output,
@@ -49,7 +52,7 @@ fn ensure_generation_safe_decision() -> nil {
 
 fn malformed_host_response() -> nil {
     let before: int = len(entities(decisions.TransactionAttempt))
-    match host_try(decode_fixture, "target/riskbridge-fixtures/malformed_output.dll") {
+    match host_try0(decode_malformed_fixture) {
         Err(message) => {
             assert(contains(message, "valid JSON"), "malformed response remains typed")
         }

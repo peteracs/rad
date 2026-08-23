@@ -1,6 +1,7 @@
 fn main() -> nil {
     let extension: any = load_extension(
         "target/sovereign-grid-plugin/grid-oracle.radext",
+        100,
     )
     let probe: pure fn() -> str = extension["grid_generation"]
     let score: pure fn(str) -> str = extension["score_dispatch"]

@@ -1,5 +1,13 @@
 pub opaque type ProductId = u64
 
+pub resource MarketLensBatchReceipt {
+    products: int = 0,
+    initial_sellable: int = 0,
+    updates: int = 0,
+    final_sellable: int = 0,
+    revision: int = 0,
+}
+
 pub event CatalogMembershipChanged {
     product: entity,
     sellable: bool,

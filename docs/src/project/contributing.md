@@ -109,9 +109,9 @@ Every feature must preserve Rust VM runtime behavior and language semantics. Fol
 
 ### The compiler-pipeline checklist (Rust)
 
-1. **`core/vm/src/lexer.rs`** — Add new tokens if needed
-2. **`core/vm/src/ast.rs`** — Add/modify AST nodes
-3. **`core/vm/src/parser/`** — Parse the new syntax into AST
+1. **`core/syntax/src/lexer.rs`** — Add new tokens if needed
+2. **`core/syntax/src/ast.rs`** — Add/modify AST nodes
+3. **`core/syntax/src/parser/`** — Parse the new syntax into AST
 4. **`core/vm/src/checker/`** — Add type checking / static analysis
 5. **`core/vm/src/compiler/`** — Emit bytecode for the feature
 6. **`core/vm/src/vm/`** — Handle runtime behavior when needed

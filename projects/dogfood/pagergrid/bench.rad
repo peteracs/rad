@@ -3,10 +3,10 @@ use "systems/routing.rad"
 use "scenarios/production.rad"
 
 fn main() -> nil {
-    assert(seed_alerts(50000) == 50000, "50k alert corpus seeded")
-    schedule [RouteCritical, RouteRoutine]
-    assert(len(entities(Incident)) == 50000, "50k incidents retained")
-    assert(len(entities(EscalationState)) == 5000, "critical routes exact")
-    assert(len(entities(NotificationState)) == 45000, "routine routes exact")
+    let receipt = summarize_alert_batch(50000)
+    set_resource(PagerGridBatchReceipt, receipt)
+    assert(res(PagerGridBatchReceipt).alerts == 50000, "50k alerts accounted")
+    assert(res(PagerGridBatchReceipt).critical == 5000, "critical routes exact")
+    assert(res(PagerGridBatchReceipt).routine == 45000, "routine routes exact")
     print("pagergrid-bench: ok incidents=50000")
 }

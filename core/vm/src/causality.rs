@@ -245,6 +245,46 @@ impl WriteSummary {
             Self::Field(field) => std::slice::from_ref(field),
         }
     }
+
+    /// Restrict a write summary to the fields that actually cross a
+    /// field-granular transport boundary.
+    ///
+    /// A delta must not serialize a whole-row provenance summary beside a
+    /// surgical state patch: doing so leaks unchanged values and makes wire
+    /// cost proportional to the row rather than the divergence. The caller
+    /// owns record selection; this method makes the retained record's display
+    /// value and exact field summaries obey the same selector.
+    pub fn project_fields(&mut self, mut keep: impl FnMut(&str) -> bool) {
+        let fields: FieldSummaries = self
+            .fields()
+            .iter()
+            .filter(|(field, _)| keep(field.as_str()))
+            .cloned()
+            .collect();
+
+        *self = match fields.as_slice() {
+            [field] => Self::Field(field.clone()),
+            _ => {
+                struct ProjectedFields<'a>(&'a [(CausalText, CausalScalar)]);
+
+                impl std::fmt::Display for ProjectedFields<'_> {
+                    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                        formatter.write_str("{ ")?;
+                        for (index, (field, value)) in self.0.iter().enumerate() {
+                            if index > 0 {
+                                formatter.write_str(", ")?;
+                            }
+                            write!(formatter, "{field}: {value}")?;
+                        }
+                        formatter.write_str(" }")
+                    }
+                }
+
+                let value = CausalText::summary(ProjectedFields(fields.as_slice()));
+                Self::Full { value, fields }
+            }
+        };
+    }
 }
 
 impl std::fmt::Display for WriteSummary {

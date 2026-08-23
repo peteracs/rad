@@ -1,11 +1,23 @@
 mod temporal_tests {
     use super::*;
 
-    fn signals(entries: &[(&str, &[bool])]) -> std::collections::HashMap<String, Vec<bool>> {
-        entries
+    fn signals(
+        temporal: &[ModelTemporal],
+        entries: &[(&str, &[bool])],
+    ) -> (ModelObservationPlan, Vec<Vec<bool>>, Vec<usize>) {
+        let plan = ModelObservationPlan::new(temporal);
+        let values = plan
+            .names
             .iter()
-            .map(|(name, values)| ((*name).to_string(), values.to_vec()))
-            .collect()
+            .map(|name| {
+                entries
+                    .iter()
+                    .find_map(|(entry, values)| (*entry == name).then(|| values.to_vec()))
+                    .unwrap_or_default()
+            })
+            .collect();
+        let occurrences = vec![0; plan.names.len()];
+        (plan, values, occurrences)
     }
 
     #[test]
@@ -14,11 +26,11 @@ mod temporal_tests {
             "Running".to_string(),
             "Succeeded".to_string(),
         )];
-        let values = signals(&[
+        let (plan, values, occurrences) = signals(&temporal, &[
             ("Running", &[true, false, false, true]),
             ("Succeeded", &[false, false, true, true]),
         ]);
-        let error = VM::model_temporal_holds(&temporal, &values, &Default::default())
+        let error = VM::model_temporal_holds(&temporal, &plan, &values, &occurrences)
             .expect_err("Running reappeared after Succeeded");
         assert!(error.contains("never_after"), "{error}");
     }
@@ -30,18 +42,19 @@ mod temporal_tests {
             "Cancelled".to_string(),
             2,
         )];
-        let passing = signals(&[
+        let (passing_plan, passing, passing_occurrences) = signals(&temporal, &[
             ("CancelRequested", &[true, false, false]),
             ("Cancelled", &[false, false, true]),
         ]);
-        VM::model_temporal_holds(&temporal, &passing, &Default::default())
+        VM::model_temporal_holds(&temporal, &passing_plan, &passing, &passing_occurrences)
             .expect("consequence at the inclusive bound passes");
 
-        let failing = signals(&[
+        let (failing_plan, failing, failing_occurrences) = signals(&temporal, &[
             ("CancelRequested", &[true, false, false, false]),
             ("Cancelled", &[false, false, false, true]),
         ]);
-        let error = VM::model_temporal_holds(&temporal, &failing, &Default::default())
+        let error =
+            VM::model_temporal_holds(&temporal, &failing_plan, &failing, &failing_occurrences)
             .expect_err("consequence beyond the bound fails");
         assert!(error.contains("eventually_within"), "{error}");
     }

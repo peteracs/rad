@@ -411,4 +411,53 @@ impl VM {
             Ok(Value::from_bool(removed))
         }
     }
+
+    fn bi_remove_many(&mut self, args: Vec<Value>) -> Result<Value, String> {
+        if args.len() != 2 {
+            return Err("remove_many() requires an entity and a component-type list".into());
+        }
+        let eid = args[0]
+            .as_entity_id()
+            .ok_or_else(|| format!("remove_many() expects entity, got {}", args[0].type_name()))?;
+        let values = args[1]
+            .as_list()
+            .ok_or_else(|| "remove_many() second argument must be a list of component types".to_string())?;
+        let mut ctypes = Vec::with_capacity(values.len());
+        for value in values.iter() {
+            let ctype = Self::expect_component_type_name(value, "remove_many")?;
+            if ctypes.iter().any(|existing| existing == &ctype) {
+                return Err(format!(
+                    "remove_many() component list contains duplicate '{}'",
+                    ctype
+                ));
+            }
+            self.sandbox_check_write(&ctype)?;
+            self.transaction_check_write(&ctype)?;
+            ctypes.push(ctype);
+        }
+        if ctypes.is_empty() {
+            return Err("remove_many() requires at least one component type".into());
+        }
+        for ctype in &ctypes {
+            self.transaction_journal_component(eid, ctype);
+        }
+
+        if self.is_worker {
+            self.command_buffer
+                .push(crate::vm::EcsCommand::RemoveComponents(eid, ctypes.clone()));
+            if self.transaction.is_none() {
+                return Ok(Value::from_int(&mut self.gc, ctypes.len() as i64));
+            }
+        }
+        let removed = self.world.remove_components(eid, &ctypes);
+        for ctype in &removed {
+            self.record_causal_write(
+                Some(eid),
+                ctype,
+                crate::causality::WriteKind::Remove,
+                String::new(),
+            );
+        }
+        Ok(Value::from_int(&mut self.gc, removed.len() as i64))
+    }
 }

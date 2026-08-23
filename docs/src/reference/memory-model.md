@@ -151,7 +151,7 @@ let doubled = original |> map(fn(x) { return x * 2 })
 | `set_resource(Type, value)` | $O(F)$ | Deep-copy fields into persistent resource storage |
 | `fork()` (snapshot) | $O(A)$ | A = shallow `Arc` refcount bumps on column handles/maps; no per-entity column clone |
 | `peek(fork, entity, Component)` | $O(F)$ | Same air-gap deep-copy as `get` into the GC heap (safe if the entity is despawned later) |
-| `commit(fork)` | $O(1)$ | Pointer swap of Arc-wrapped maps and column refs |
+| `commit(fork)` | $O(1)$ | Swap Arc-wrapped world maps/columns and the fork's pending-event queue into the live program state |
 | First mutation after `fork()` | $O(E)$ | For a shared column, `Arc::make_mut` may clone the whole `ValueColumn` (E = rows); primitive-heavy columns stay cheap |
 | String literal / new string | $O(n)$ | Allocate + copy into `Arc<str>` (or `String` before boxing) |
 | String across ECS read (air gap) | $O(1)$ | New GC `Object` shell + `Arc::clone` of existing `Arc<str>` (no byte copy) |

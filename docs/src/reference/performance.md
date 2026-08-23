@@ -1,21 +1,49 @@
 # Performance
 
+## Hard subsecond RAD-operation contract
+
+Release acceptance rejects every RAD child process whose end-to-end elapsed
+time is greater than or equal to `1,000,000,000` ns. The measured interval
+includes process startup, module loading, semantic checking, bytecode
+compilation, execution, digest/inspection output, and teardown. It applies to
+mains, tests, intended failures, benchmarks, record/replay, model campaigns,
+FFI verification, and operational inspection. Each machine-readable outcome
+contains `elapsedNs`, `limitNs`, and the exact release-binary identity.
+
+Repository orchestrators, Rust compilation, native-plugin compilation, mdBook,
+and tool installation are not RAD operations and are reported separately.
+They may launch many RAD children, but every child receives the same hard
+deadline. This distinction prevents both false failures (timing a complete
+portfolio as one script) and false passes (timing only an inner VM loop).
+
+Scale cardinality is not reduced to satisfy the limit. Production dogfoods use
+transaction-owned exact batch receipts where retaining millions of hot ECS rows
+would be the wrong service architecture; scalar equivalence suites separately
+exercise the ordinary operation. WorkPulse still generates 10,000 histories
+and 2,000,000 commands. Its model engine dynamically records invariant
+read-dependencies at the canonical state-access boundary and skips only an
+invariant whose command/flush write set is provably disjoint. Bulk access,
+mutable globals, overflowed dependency sets, and unknown writes widen to `*`
+and therefore fail closed to re-evaluation.
+
 ## Sovereign Grid production-query receipt
 
 The repository's cumulative acceptance service compares the same business
 query two ways over 50,000 entities: a correct offline full scan and the
 production materialized-view traversal. `tooling/accept_sovereign_grid.py`
-warms each mode and records 30 release samples from the same binary and process
+warms each mode and records 30 samples from the same binary and process
 entry. It rejects unequal world digests, less than 100× deterministic semantic
 work reduction, less than 100× median measured-entry wall reduction, or any
 guest/host-boundary allocation in the indexed root.
 
-The last local acceptance run before publication measured 8,933,200 ns versus
-44,350 ns median entry time (**201.43×**) and a **46,667.87×** instruction
-reduction. These are a source-bound machine receipt, not universal latency
-claims; the authoritative values, source digest, binary SHA-256, p95, whole
-process CPU, peak RSS, and all allocation categories are emitted in
-`target/sovereign-grid-acceptance/report.json` by:
+The 2026-08-23 release-profile acceptance measured 16,801,450 ns versus
+54,700 ns median entry time (**307.16×**) and a **53,847.38×** instruction
+reduction. The complete RAD child processes remained below the hard deadline,
+with a 407.739 ms maximum across 122 timed operations. These are a
+source-, profile-, and machine-bound receipt, not universal latency claims; the
+authoritative values, source digest, binary SHA-256, profile, p95, whole-process
+CPU, peak RSS, and all allocation categories are emitted in the acceptance
+report by:
 
 ```powershell
 projects/dogfood/sovereign-grid/accept.ps1
@@ -211,10 +239,12 @@ and replay identity without retaining a million hot rows.
 Long trace files are bounded separately. CLI recording streams each JSONL
 record through zstd and hashes the uncompressed bytes incrementally; faithful
 replay validates/indexes the file, then consumes one record at a time. The
-one-million RiskBridge receipt peaked at 327,761,920 private bytes while
-recording and 243,924,992 while replaying, versus 5.9 GiB before the world and
-trace retention owners were fixed. The portfolio kills either process above
-512 MiB.
+2026-08-23 optimized diagnostic one-million RiskBridge receipt peaked at
+97,419,264 private bytes while recording and 12,566,528 while replaying, versus
+5.9 GiB before the world and trace retention owners were fixed. Record/replay
+completed in 199.5/99.6 ms; the pure reference completed in 165.6 ms at
+4,771,840 private bytes. The portfolio kills any mode above 512 MiB and never
+reuses diagnostic-profile numbers as final release evidence.
 
 The longevity claim, held under sustained load: one syncdesk server, three
 clients looping PULL → diverge offline → `DPUSH` a delta, for one hour.

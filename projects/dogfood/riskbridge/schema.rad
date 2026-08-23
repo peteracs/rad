@@ -33,6 +33,16 @@ pub repr(C) struct RiskOutput {
     disposition: u8,
 }
 
+pub struct RiskBatchSummary {
+    decisions: int = 0,
+    allows: int = 0,
+    reviews: int = 0,
+    denies: int = 0,
+    score_points: int = 0,
+    reason_xor: u64 = u64(0),
+    transaction_xor: u64 = u64(0),
+}
+
 pub event DecisionCommitted {
     attempt: entity,
     disposition: u8,
@@ -40,3 +50,4 @@ pub event DecisionCommitted {
 }
 
 pub event ManualReviewQueued { attempt: entity }
+pub event DecisionBatchCommitted { decisions: int, reviews: int }

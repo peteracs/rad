@@ -83,21 +83,21 @@ impl WorldSnapshot {
         Ok(())
     }
 
-    pub fn trace(&self, marked: &mut HashSet<usize>) {
+    pub fn trace(&self, gc: &mut crate::gc::GcHeap) {
         for (_, payload, _) in self.events.iter() {
-            payload.trace(marked);
+            payload.trace(gc);
         }
         for (_, _, payload, _) in self.delayed.iter() {
-            payload.trace(marked);
+            payload.trace(gc);
         }
         for archetype in &self.archetypes {
             for col in archetype.columns.values() {
-                col.trace(marked);
+                col.trace(gc);
             }
         }
         for res in self.resources.values() {
             for val in &res.values {
-                val.trace(marked);
+                val.trace(gc);
             }
         }
     }

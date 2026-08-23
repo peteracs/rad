@@ -268,6 +268,11 @@ pub enum Op {
     /// Execute a checker-proved, allocation-free materialized-view data
     /// kernel. Operand: u16 index in the immutable compiled kernel table.
     RunViewKernel,
+
+    /// Statically resolved builtin invocation. Operands are the canonical
+    /// builtin id (u16) and argument count (u8); only arguments are on the
+    /// stack. Dynamic/first-class calls continue to use `Call`.
+    CallBuiltin,
 }
 
 impl Op {
@@ -316,6 +321,17 @@ impl SealedChunk {
         self.proof.instruction_count
     }
 
+    pub(crate) fn transaction_spec(
+        &self,
+        offset: usize,
+    ) -> Option<&crate::bytecode_verifier::VerifiedTransactionSpec> {
+        self.proof
+            .transactions
+            .binary_search_by_key(&offset, |spec| spec.offset)
+            .ok()
+            .map(|index| &self.proof.transactions[index])
+    }
+
     /// Rebuild this immutable artifact with graph-cloned constants. Attempt
     /// replay uses this to ensure the child owns every heap object reachable
     /// from its constant pools; structural verification is repeated because
@@ -339,6 +355,7 @@ impl SealedChunk {
             inner: std::sync::Arc::new(chunk),
             proof: std::sync::Arc::new(crate::bytecode_verifier::VerifiedChunk {
                 instruction_count: 0,
+                transactions: Vec::new(),
             }),
         }
     }

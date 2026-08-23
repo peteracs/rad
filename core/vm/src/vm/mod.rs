@@ -280,6 +280,98 @@ pub struct ModelCheckReport {
     pub p95_history_ns: u64,
 }
 
+/// Dynamic dependency evidence for one stateful-model operation.
+///
+/// The ordinary sandbox checks already form the single authoritative path for
+/// component/resource access. Model checking temporarily records those names
+/// there so an invariant whose dependencies were untouched need not be
+/// interpreted again. `*` is the fail-closed identity for bulk or otherwise
+/// unbounded access.
+#[derive(Clone, Copy, Default)]
+pub(crate) struct ModelAccessSet {
+    identities: [u64; 32],
+    len: u8,
+    wildcard: bool,
+}
+
+impl ModelAccessSet {
+    #[inline]
+    pub(crate) fn clear(&mut self) {
+        // `len` makes old hashes unreachable. Clearing the full fixed array
+        // here turned every model command into hundreds of bytes of memset;
+        // resetting the logical extent is exact and constant-time.
+        self.len = 0;
+        self.wildcard = false;
+    }
+
+    pub(crate) fn insert(&mut self, identity: &str) {
+        use std::hash::{Hash, Hasher};
+        if identity == "*" {
+            self.wildcard = true;
+            return;
+        }
+        let mut hasher = rustc_hash::FxHasher::default();
+        identity.hash(&mut hasher);
+        let hash = hasher.finish();
+        let occupied = usize::from(self.len);
+        if self.identities[..occupied].contains(&hash) {
+            return;
+        }
+        if occupied == self.identities.len() {
+            // Overflow broadens the dependency to all state. It can cost an
+            // optimization, but can never skip a required invariant check.
+            self.wildcard = true;
+            return;
+        }
+        self.identities[occupied] = hash;
+        self.len += 1;
+    }
+
+    pub(crate) fn extend(&mut self, other: &Self) {
+        if other.wildcard {
+            self.wildcard = true;
+        }
+        for hash in &other.identities[..usize::from(other.len)] {
+            let occupied = usize::from(self.len);
+            if self.identities[..occupied].contains(hash) {
+                continue;
+            }
+            if occupied == self.identities.len() {
+                self.wildcard = true;
+                return;
+            }
+            self.identities[occupied] = *hash;
+            self.len += 1;
+        }
+    }
+
+    pub(crate) fn intersects(&self, other: &Self) -> bool {
+        self.wildcard
+            || other.wildcard
+            || self.identities[..usize::from(self.len)]
+                .iter()
+                .any(|hash| other.identities[..usize::from(other.len)].contains(hash))
+    }
+
+    pub(crate) fn is_empty(&self) -> bool {
+        !self.wildcard && self.len == 0
+    }
+}
+
+#[derive(Clone, Copy, Default)]
+pub(crate) struct ModelAccessTrace {
+    pub(crate) reads: ModelAccessSet,
+    pub(crate) writes: ModelAccessSet,
+}
+
+impl ModelAccessTrace {
+    #[inline]
+    pub(crate) fn clear(&mut self) {
+        self.reads.clear();
+        self.writes.clear();
+    }
+}
+
 pub struct CallFrame {
     pub(crate) frame_id: u64,
     pub(crate) chunk_id: usize,

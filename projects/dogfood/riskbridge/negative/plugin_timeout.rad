@@ -1,3 +1,3 @@
 use "fixture_adapter.rad"
 
-let _output = fixture_probe("target/riskbridge-fixtures/timeout.dll")
+let _output = fixture_named_probe("target/riskbridge-fixtures/containment.dll", "timeout_probe")

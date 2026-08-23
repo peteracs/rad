@@ -1,12 +1,22 @@
 use std::cell::UnsafeCell;
-use std::collections::HashSet;
-
 // Floor for the collection trigger. Programs whose live set stays tiny
 // (most: the ECS world lives in the persistent store, not this heap) would
 // otherwise collect every few KB of transient garbage now that the VM
 // polls `should_collect` at back-edges — measured as a 3-6x slowdown on
 // payload-heavy loops (wire encode benches) with an 8 KB floor.
-const INITIAL_THRESHOLD: usize = 256 * 1024;
+// One collection walks every VM root and every tracked allocation. At 256 KiB
+// the ClearPay transaction workload spent 14.1% of its CPU collecting short-
+// lived component expressions; doubling the nursery removes half those full
+// walks while increasing the maximum pre-collection transient heap by only
+// 256 KiB. This remains a small-memory policy, not an unbounded throughput
+// trade: the post-collection threshold still tracks the measured live set.
+const INITIAL_THRESHOLD: usize = 512 * 1024;
+// A long-running allocation-heavy loop with a tiny live set must not perform
+// a full root/allocation walk every 512 KiB forever. Grow the nursery after a
+// successful collection, but cap the transient allowance at 8 MiB so the VM
+// keeps a strict, small memory envelope instead of trading unbounded memory
+// for throughput.
+const MAX_TRANSIENT_THRESHOLD: usize = 8 * 1024 * 1024;
 const GC_GROW_FACTOR: usize = 2;
 
 /// A mutable capture cell for closures.
@@ -55,9 +65,10 @@ impl CaptureCell {
 /// the **sole owner** of all heap objects; `Value::Clone` is a plain bit-copy
 /// and `Value::Drop` is a no-op.
 ///
-/// During collection the VM builds a `HashSet<usize>` of all reachable
-/// payload addresses, then the GC sweeps (drops + deallocates) every
-/// tracked object whose address is absent from that set.
+/// Reachability is stored as one bit in each intrusive allocation header.
+/// Earlier versions built a hash set of payload addresses on every cycle;
+/// that spent double-digit runtime in pointer hashing and temporarily
+/// allocated a second data structure proportional to the heap.
 pub struct GcHeap {
     head: *mut GcEntry,
     tail: *mut GcEntry,
@@ -75,6 +86,7 @@ struct GcEntry {
     allocation_layout: std::alloc::Layout,
     payload_layout: std::alloc::Layout,
     accounted_size: usize,
+    marked: bool,
 }
 
 unsafe fn drop_typed<T>(ptr: *mut u8) {
@@ -138,6 +150,7 @@ impl GcHeap {
                 allocation_layout,
                 payload_layout,
                 accounted_size: allocation_layout.size().saturating_add(retained_bytes),
+                marked: false,
             });
             if self.tail.is_null() {
                 self.head = entry;
@@ -166,13 +179,33 @@ impl GcHeap {
         self.next_gc = bytes;
     }
 
-    /// Sweep every object whose address is **not** in `reachable`.
+    /// Mark one allocation reached through a typed payload pointer.
+    ///
+    /// Returns `true` only on the first visit in the current collection, so
+    /// callers can traverse cyclic object graphs without a side hash table.
+    ///
+    /// # Safety
+    /// `ptr` must be a live payload allocated by this or a merged `GcHeap`.
+    #[inline(always)]
+    pub(crate) unsafe fn mark<T>(&mut self, ptr: *mut T) -> bool {
+        let (_, payload_offset) = std::alloc::Layout::new::<GcEntry>()
+            .extend(std::alloc::Layout::new::<T>())
+            .expect("GC mark layout overflow");
+        let entry = unsafe { ptr.cast::<u8>().sub(payload_offset).cast::<GcEntry>() };
+        debug_assert_eq!(unsafe { (*entry).ptr }, ptr.cast::<u8>());
+        if unsafe { (*entry).marked } {
+            return false;
+        }
+        unsafe { (*entry).marked = true };
+        true
+    }
+
+    /// Sweep every unmarked object and clear survivor marks for the next pass.
     ///
     /// # Safety
     /// All pointers in the intrusive list must be valid (only this method
     /// frees them).
-    /// `reachable` must contain payload-pointer addresses from `Value::trace`.
-    pub unsafe fn sweep(&mut self, reachable: &HashSet<usize>) -> usize {
+    pub unsafe fn sweep(&mut self) -> usize {
         let mut swept = 0usize;
         let mut bytes_freed = 0usize;
 
@@ -180,7 +213,8 @@ impl GcHeap {
         let mut current = self.head;
         while !current.is_null() {
             let next = unsafe { (*current).next };
-            if reachable.contains(&(unsafe { (*current).ptr } as usize)) {
+            if unsafe { (*current).marked } {
+                unsafe { (*current).marked = false };
                 previous = current;
             } else {
                 if previous.is_null() {
@@ -207,7 +241,15 @@ impl GcHeap {
         }
 
         self.bytes_allocated = self.bytes_allocated.saturating_sub(bytes_freed);
-        self.next_gc = (self.bytes_allocated * GC_GROW_FACTOR).max(INITIAL_THRESHOLD);
+        let nursery_floor = self
+            .next_gc
+            .saturating_mul(GC_GROW_FACTOR)
+            .min(MAX_TRANSIENT_THRESHOLD);
+        self.next_gc = self
+            .bytes_allocated
+            .saturating_mul(GC_GROW_FACTOR)
+            .max(nursery_floor)
+            .max(INITIAL_THRESHOLD);
         swept
     }
 
@@ -349,5 +391,74 @@ impl Drop for GcHeap {
         self.head = std::ptr::null_mut();
         self.tail = std::ptr::null_mut();
         self.object_count = 0;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{GcHeap, INITIAL_THRESHOLD, MAX_TRANSIENT_THRESHOLD};
+
+    #[repr(align(64))]
+    struct AlignedPayload([u8; 3]);
+
+    #[test]
+    fn intrusive_mark_survives_once_and_is_cleared_by_sweep() {
+        let mut heap = GcHeap::new();
+        let payload = heap.alloc(AlignedPayload([1, 2, 3]));
+        assert_eq!(heap.object_count(), 1);
+        assert!(unsafe { heap.mark(payload) });
+        assert!(
+            !unsafe { heap.mark(payload) },
+            "cycles stop at the first mark"
+        );
+        assert_eq!(unsafe { heap.sweep() }, 0);
+        assert_eq!(unsafe { (*payload).0 }, [1, 2, 3]);
+
+        assert!(
+            unsafe { heap.mark(payload) },
+            "sweep clears survivor marks for the next epoch"
+        );
+        assert_eq!(unsafe { heap.sweep() }, 0);
+        assert_eq!(unsafe { heap.sweep() }, 1);
+        assert_eq!(heap.object_count(), 0);
+    }
+
+    #[test]
+    fn merged_heap_headers_remain_markable_at_their_original_addresses() {
+        let mut destination = GcHeap::new();
+        let mut source = GcHeap::new();
+        let payload = source.alloc(String::from("merged"));
+        destination.merge(source);
+
+        assert!(unsafe { destination.mark(payload) });
+        assert_eq!(unsafe { destination.sweep() }, 0);
+        assert_eq!(unsafe { &*payload }, "merged");
+        assert_eq!(unsafe { destination.sweep() }, 1);
+    }
+
+    #[test]
+    fn empty_live_set_doubles_the_nursery_until_the_bounded_cap() {
+        let mut heap = GcHeap::new();
+        assert_eq!(heap.next_gc, INITIAL_THRESHOLD);
+
+        let mut expected = INITIAL_THRESHOLD;
+        while expected < MAX_TRANSIENT_THRESHOLD {
+            assert_eq!(unsafe { heap.sweep() }, 0);
+            expected = expected.saturating_mul(2).min(MAX_TRANSIENT_THRESHOLD);
+            assert_eq!(heap.next_gc, expected);
+        }
+
+        assert_eq!(unsafe { heap.sweep() }, 0);
+        assert_eq!(heap.next_gc, MAX_TRANSIENT_THRESHOLD);
+    }
+
+    #[test]
+    fn live_set_headroom_can_exceed_the_transient_nursery_cap() {
+        let mut heap = GcHeap::new();
+        heap.bytes_allocated = MAX_TRANSIENT_THRESHOLD;
+        heap.next_gc = MAX_TRANSIENT_THRESHOLD;
+
+        assert_eq!(unsafe { heap.sweep() }, 0);
+        assert_eq!(heap.next_gc, MAX_TRANSIENT_THRESHOLD * 2);
     }
 }

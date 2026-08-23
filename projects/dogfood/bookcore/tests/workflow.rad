@@ -5,7 +5,9 @@ use "../scenarios/production.rad"
 
 test "price-time priority drains a crossing book" {
     run_exchange_day(1000)
-    assert(len(entities(Fill)) == 500, "fills exact")
+    let receipt = summarize_exchange_batch(1000)
+    assert(receipt.fills == len(entities(Fill)), "batch fold matches scalar fills")
+    assert(receipt.open_orders == len(entities(OpenOrders)), "batch fold matches scalar open book")
 }
 
 test "matching continues across bounded atomic batches" {

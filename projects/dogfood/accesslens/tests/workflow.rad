@@ -5,6 +5,9 @@ use "../scenarios/production.rad"
 
 test "revocation remains explainable after wire restoration" {
     let alice = run_access_incident(100)
+    let receipt = summarize_access_batch(100, 1)
+    assert(receipt.deployers == len(entities(ProductionDeployers)), "batch fold matches scalar policy view")
+    verify_wire_provenance(alice)
     assert(not has(alice, Entitlement), "entitlement remains absent")
     assert(contains(why_removed(alice, Entitlement), "RevokeProductionAccess"), "transaction cause survives")
 }

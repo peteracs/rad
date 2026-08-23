@@ -2,7 +2,7 @@
 // and probing happen against a detached GC arena; no RAD world is available to
 // mutate during verification.
 
-#[derive(Clone, Debug, serde::Serialize)]
+#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 pub struct NativeVerificationReport {
     pub plugin: String,
     pub extension_id: String,
@@ -20,7 +20,7 @@ pub struct NativeVerificationReport {
     pub replay_support: bool,
 }
 
-#[derive(Clone, Debug, serde::Serialize)]
+#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 pub struct NativeVerificationExport {
     pub name: String,
     pub signature: String,

@@ -673,7 +673,7 @@ lookup(any, str, any) -> Option<entity>
 ```
 
 - Category: `ecs-resources`
-- Arity: `exactly 3` argument(s)
+- Arity: `2 to 3` argument(s)
 - Effects: `readonly`
 - Purity: `effectful or readonly`
 - Errors: ordinary absence is Option::None or nil; invalid arity/type/capability is a runtime error
@@ -782,8 +782,8 @@ has(entity, any) -> bool
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/tests/grid_model.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/tests/grid_model.rad)
-- Verification command: `rad test projects/dogfood/sovereign-grid/tests`
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
+- Verification command: `rad projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad --strict-types --deny-warnings`
 
 <a id="spawn"></a>
 ## `spawn`
@@ -880,6 +880,30 @@ remove(entity, any) -> bool
 - Settlement: `denied: ecs effect`
 - Executable evidence: [projects/dogfood/sovereign-grid/tests/grid_model.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/tests/grid_model.rad)
 - Verification command: `rad test projects/dogfood/sovereign-grid/tests`
+
+<a id="remove_many"></a>
+## `remove_many`
+
+```text
+remove_many(entity, list<any>) -> int
+```
+
+- Category: `ecs-resources`
+- Arity: `exactly 2` argument(s)
+- Effects: `ecs`
+- Purity: `effectful or readonly`
+- Errors: invalid arity, type, range, capability, platform, or runtime state is a runtime error
+- Determinism: deterministic for equal RAD state and arguments
+- Complexity: `no stronger asymptotic guarantee than the documented input/output size`
+- Allocation: not statically guaranteed allocation-free
+- Native: `available`
+- WASM: `available`
+- Sandbox: `capability-checked`
+- Transaction body: `allowed`
+- Post-commit: `denied: ecs`
+- Settlement: `denied: ecs effect`
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
+- Verification command: `rad projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad --strict-types --deny-warnings`
 
 <a id="despawn"></a>
 ## `despawn`
@@ -1010,7 +1034,7 @@ transition(any, str) -> Result<any, str>
 
 - Category: `ecs-resources`
 - Arity: `exactly 2` argument(s)
-- Effects: `event`
+- Effects: `ecs+event`
 - Purity: `effectful or readonly`
 - Errors: recoverable domain failure is Result::Err; invalid arity/type/capability is a runtime error
 - Determinism: deterministic for equal RAD state and arguments
@@ -1020,8 +1044,8 @@ transition(any, str) -> Result<any, str>
 - WASM: `available`
 - Sandbox: `capability-checked`
 - Transaction body: `allowed`
-- Post-commit: `allowed`
-- Settlement: `denied: event effect`
+- Post-commit: `denied: ecs+event`
+- Settlement: `denied: ecs+event effect`
 - Executable evidence: [projects/dogfood/sovereign-grid/main.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/main.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/main.rad --strict-types --deny-warnings`
 
@@ -2317,11 +2341,11 @@ map_or(any, B, fn(A) -> B) -> B
 ## `load_extension`
 
 ```text
-load_extension(str) -> any
+load_extension(str, int) -> any
 ```
 
 - Category: `ffi`
-- Arity: `exactly 1` argument(s)
+- Arity: `exactly 2` argument(s)
 - Effects: `io`
 - Purity: `effectful or readonly`
 - Errors: invalid arity, type, range, capability, platform, or runtime state is a runtime error

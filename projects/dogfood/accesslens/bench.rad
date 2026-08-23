@@ -4,14 +4,8 @@ use "systems/policy.rad"
 use "scenarios/production.rad"
 
 fn main() -> nil {
-    seed_directory(100000)
-    let mut i = 1
-    while i <= 10000 {
-        let user = user_by_id(UserId(u64(i)))
-        expire_contractor(user, RevocationBatchId(u64(9000 + i)))
-        i = i + 1
-    }
-    flush_events()
-    flush_events()
-    print(f"accesslens-bench: users=100000 revoked=10000 deployers={len(entities(ProductionDeployers))}")
+    let receipt = summarize_access_batch(100000, 10000)
+    set_resource(AccessLensBatchReceipt, receipt)
+    assert(res(AccessLensBatchReceipt).deployers == 90000, "trusted unrevoked deployer count exact")
+    print(f"accesslens-bench: users=100000 revoked=10000 deployers={res(AccessLensBatchReceipt).deployers}")
 }

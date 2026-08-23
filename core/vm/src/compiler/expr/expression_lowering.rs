@@ -149,10 +149,7 @@ impl Compiler {
             Expr::Call(..) | Expr::Await(..) | Expr::Try(..) | Expr::AsyncCall(..) => self.compile_call_expr(expr)?,
             Expr::Field(obj, field, span) => {
                 if let Expr::Ident(alias_name, _) = obj.as_ref() {
-                    let is_local = self.resolve_local(alias_name).is_some() || {
-                        let fn_idx = self.functions.len() - 1;
-                        fn_idx > 0 && self.resolve_upvalue(fn_idx, alias_name).is_some()
-                    };
+                    let is_local = self.has_lexical_binding(alias_name);
                     let is_global = self.global_slots.contains_key(alias_name);
                     if !is_local && !is_global && self.module_aliases.contains_key(alias_name) {
                         if let Some(mangled) = self.resolve_alias_member(alias_name, field) {

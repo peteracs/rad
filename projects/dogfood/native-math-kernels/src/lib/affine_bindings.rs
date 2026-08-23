@@ -278,38 +278,13 @@ unsafe extern "C" fn affine_sparse_slope_support_lane(args: *const u64, argc: us
     result.map_or_else(fail, return_json)
 }
 
-unsafe extern "C" fn affine_frontier_profile(args: *const u64, argc: usize) -> u64 {
-    let result: Result<JsonValue, String> = (|| {
-        let args = arg_slice(args, argc)?;
-        exact_arity(args, 7, "affine_frontier_profile")?;
-        let objective = string_arg(args, 5, "affine_frontier_profile")?;
-        let profile = affine_frontier::affine_frontier_profile(
-            nonnegative_u64(int_arg(args, 0, "affine_frontier_profile")?, "multiplier")?,
-            nonnegative_u64(int_arg(args, 1, "affine_frontier_profile")?, "addend")?,
-            u32::try_from(nonnegative_u64(
-                int_arg(args, 2, "affine_frontier_profile")?,
-                "max_depth",
-            )?)
-            .map_err(|_| "max_depth exceeds u32".to_string())?,
-            u32::try_from(nonnegative_u64(
-                int_arg(args, 3, "affine_frontier_profile")?,
-                "max_input_ones",
-            )?)
-            .map_err(|_| "max_input_ones exceeds u32".to_string())?,
-            usize::try_from(nonnegative_u64(
-                int_arg(args, 4, "affine_frontier_profile")?,
-                "beam_per_support",
-            )?)
-            .map_err(|_| "beam_per_support exceeds usize".to_string())?,
-            &objective,
-            nonnegative_u64(int_arg(args, 6, "affine_frontier_profile")?, "seed")?,
-        )?;
-        let frontier_exhausted = profile.terminal_minimum_input_ones.is_none();
-        let terminal_minimum_input_ones = profile
-            .terminal_minimum_input_ones
-            .unwrap_or(profile.max_input_ones + 1);
-        let terminal_witness = profile.terminal_witness.unwrap_or_default();
-        Ok(json!({
+fn affine_frontier_profile_json(profile: affine_frontier::AffineFrontierProfile) -> JsonValue {
+    let frontier_exhausted = profile.terminal_minimum_input_ones.is_none();
+    let terminal_minimum_input_ones = profile
+        .terminal_minimum_input_ones
+        .unwrap_or(profile.max_input_ones + 1);
+    let terminal_witness = profile.terminal_witness.unwrap_or_default();
+    json!({
             "objective": profile.objective,
             "max_depth": profile.max_depth,
             "max_input_ones": profile.max_input_ones,
@@ -343,7 +318,88 @@ unsafe extern "C" fn affine_frontier_profile(args: *const u64, argc: usize) -> u
             "terminal_one_positions": profile.terminal_one_positions,
             "signature": profile.signature,
             "certificate": false,
-        }))
+    })
+}
+
+fn parse_frontier_common(
+    args: &[u64],
+    operation: &str,
+) -> Result<(u64, u64, u32, u32, usize), String> {
+    Ok((
+        nonnegative_u64(int_arg(args, 0, operation)?, "multiplier")?,
+        nonnegative_u64(int_arg(args, 1, operation)?, "addend")?,
+        u32::try_from(nonnegative_u64(int_arg(args, 2, operation)?, "max_depth")?)
+            .map_err(|_| "max_depth exceeds u32".to_string())?,
+        u32::try_from(nonnegative_u64(
+            int_arg(args, 3, operation)?,
+            "max_input_ones",
+        )?)
+        .map_err(|_| "max_input_ones exceeds u32".to_string())?,
+        usize::try_from(nonnegative_u64(
+            int_arg(args, 4, operation)?,
+            "beam_per_support",
+        )?)
+        .map_err(|_| "beam_per_support exceeds usize".to_string())?,
+    ))
+}
+
+unsafe extern "C" fn affine_frontier_profile(args: *const u64, argc: usize) -> u64 {
+    let result: Result<JsonValue, String> = (|| {
+        let args = arg_slice(args, argc)?;
+        exact_arity(args, 7, "affine_frontier_profile")?;
+        let (multiplier, addend, max_depth, max_input_ones, beam_per_support) =
+            parse_frontier_common(args, "affine_frontier_profile")?;
+        let objective = string_arg(args, 5, "affine_frontier_profile")?;
+        let profile = affine_frontier::affine_frontier_profile(
+            multiplier,
+            addend,
+            max_depth,
+            max_input_ones,
+            beam_per_support,
+            &objective,
+            nonnegative_u64(int_arg(args, 6, "affine_frontier_profile")?, "seed")?,
+        )?;
+        Ok(affine_frontier_profile_json(profile))
+    })();
+    result.map_or_else(fail, return_json)
+}
+
+unsafe extern "C" fn affine_frontier_profiles(args: *const u64, argc: usize) -> u64 {
+    let result: Result<JsonValue, String> = (|| {
+        let args = arg_slice(args, argc)?;
+        exact_arity(args, 6, "affine_frontier_profiles")?;
+        let (multiplier, addend, max_depth, max_input_ones, beam_per_support) =
+            parse_frontier_common(args, "affine_frontier_profiles")?;
+        let encoded_plans = string_arg(args, 5, "affine_frontier_profiles")?;
+        let plans = serde_json::from_str::<Vec<JsonValue>>(&encoded_plans)
+            .map_err(|error| format!("frontier plans are invalid JSON: {error}"))?;
+        if plans.is_empty() || plans.len() > 64 {
+            return Err("frontier batch requires between 1 and 64 plans".to_string());
+        }
+        let profiles = plans
+            .par_iter()
+            .map(|plan| {
+                let objective = plan
+                    .get("objective")
+                    .and_then(JsonValue::as_str)
+                    .ok_or_else(|| "frontier plan objective must be a string".to_string())?;
+                let seed = plan
+                    .get("seed")
+                    .and_then(JsonValue::as_u64)
+                    .ok_or_else(|| "frontier plan seed must be a non-negative integer".to_string())?;
+                affine_frontier::affine_frontier_profile(
+                    multiplier,
+                    addend,
+                    max_depth,
+                    max_input_ones,
+                    beam_per_support,
+                    objective,
+                    seed,
+                )
+                .map(affine_frontier_profile_json)
+            })
+            .collect::<Result<Vec<_>, String>>()?;
+        Ok(JsonValue::Array(profiles))
     })();
     result.map_or_else(fail, return_json)
 }

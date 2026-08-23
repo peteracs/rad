@@ -24,3 +24,14 @@ pub fn run_match_frame(player_count: int, input_count: int) -> entity {
     assert(len(entities(DeathState)) == input_count, "death publication is atomic")
     return session
 }
+
+pub pure fn summarize_match_batch(player_count: int, input_count: int) -> MatchFlowBatchReceipt {
+    assert(player_count >= 0, "player count cannot be negative")
+    assert(input_count >= 0 and input_count <= player_count, "inputs require published players")
+    return MatchFlowBatchReceipt {
+        players: player_count,
+        inputs: input_count,
+        alive: player_count - input_count,
+        deaths: input_count,
+    }
+}

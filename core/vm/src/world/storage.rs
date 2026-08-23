@@ -337,10 +337,10 @@ impl SoAColumn {
     }
 
     /// Trace all values in this column for GC reachability.
-    pub(crate) fn trace(&self, marked: &mut HashSet<usize>) {
+    pub(crate) fn trace(&self, gc: &mut crate::gc::GcHeap) {
         for col in &self.fields {
             for val in col.as_slice() {
-                val.trace(marked);
+                val.trace(gc);
             }
         }
     }

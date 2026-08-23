@@ -1,6 +1,6 @@
 use "fixture_adapter.rad"
 
 component NativeSession { handle: any }
-let handle: any = fixture_raw("target/riskbridge-fixtures/host_handle.dll")
+let handle: any = fixture_named_raw("target/riskbridge-fixtures/containment.dll", "host_handle_score")
 let _session = spawn(NativeSession { handle: handle })
 let _wire = fork_to_bytes(fork())

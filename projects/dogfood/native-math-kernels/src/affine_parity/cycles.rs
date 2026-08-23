@@ -22,6 +22,7 @@ fn pow_u128(base: u128, exponent: u32) -> Result<u128, String> {
     })
 }
 
+#[cfg(test)]
 fn evaluate_cycle_word(
     multiplier: u128,
     addend: u128,
@@ -87,6 +88,151 @@ fn visit_compositions(
     Ok(())
 }
 
+fn empty_cycle_profile() -> CycleProfile {
+    CycleProfile {
+        words_tested: 0,
+        positive_denominators: 0,
+        divisible_candidates: 0,
+        exact_cycle_words: 0,
+        nonunit_cycle_words: 0,
+        unit_cycle_words: 0,
+        first_nonunit_start: 0,
+        first_nonunit_valuations: Vec::new(),
+        closest_q: 0,
+        closest_divisions: 0,
+        closest_gap: u128::MAX,
+        signature: 0,
+    }
+}
+
+fn composition_count(total: u32, slots: u32) -> Result<u64, String> {
+    let choose = slots - 1;
+    let population = total - 1;
+    let choose = choose.min(population - choose);
+    let mut count = 1u128;
+    for offset in 0..choose {
+        count = count
+            .checked_mul(u128::from(population - offset))
+            .map(|value| value / u128::from(offset + 1))
+            .ok_or_else(|| "affine cycle composition count overflow".to_string())?;
+    }
+    u64::try_from(count).map_err(|_| "affine cycle word count exceeds u64".to_string())
+}
+
+fn evaluate_cycle_numerator(
+    multiplier: u128,
+    addend: u128,
+    word: &[u32],
+) -> Result<u128, String> {
+    let mut numerator = 0u128;
+    let mut prefix = 0u32;
+    for valuation in word {
+        numerator = numerator
+            .checked_mul(multiplier)
+            .and_then(|value| {
+                addend
+                    .checked_mul(1u128 << prefix)
+                    .and_then(|term| value.checked_add(term))
+            })
+            .ok_or_else(|| "affine cycle numerator overflow".to_string())?;
+        prefix += valuation;
+    }
+    Ok(numerator)
+}
+
+type CycleWitness = (u32, u32, Vec<u32>);
+
+struct CycleTaskResult {
+    profile: CycleProfile,
+    cycle_starts: BTreeMap<u128, CycleWitness>,
+}
+
+fn evaluate_cycle_task(
+    multiplier: u128,
+    addend: u128,
+    q: u32,
+    total: u32,
+) -> Result<CycleTaskResult, String> {
+    let mut profile = empty_cycle_profile();
+    profile.words_tested = composition_count(total, q)?;
+    let multiplier_power = pow_u128(multiplier, q)?;
+    let two_power = 1u128 << total;
+    if two_power <= multiplier_power {
+        return Ok(CycleTaskResult {
+            profile,
+            cycle_starts: BTreeMap::new(),
+        });
+    }
+
+    profile.positive_denominators = profile.words_tested;
+    let denominator = two_power - multiplier_power;
+    if q > 1 {
+        profile.closest_gap = denominator;
+        profile.closest_q = q;
+        profile.closest_divisions = total;
+    }
+    let mut cycle_starts = BTreeMap::new();
+    let mut word = Vec::with_capacity(q as usize);
+    visit_compositions(total, q as usize, &mut word, &mut |valuations| {
+        let numerator = evaluate_cycle_numerator(multiplier, addend, valuations)?;
+        if numerator % denominator != 0 {
+            return Ok(());
+        }
+        profile.divisible_candidates += 1;
+        let start = numerator / denominator;
+        if !verify_cycle(multiplier, addend, start, valuations) {
+            return Ok(());
+        }
+        profile.exact_cycle_words += 1;
+        cycle_starts
+            .entry(start)
+            .or_insert_with(|| (q, total, valuations.to_vec()));
+        if start == 1 {
+            profile.unit_cycle_words += 1;
+        } else {
+            profile.nonunit_cycle_words += 1;
+        }
+        Ok(())
+    })?;
+    Ok(CycleTaskResult {
+        profile,
+        cycle_starts,
+    })
+}
+
+fn merge_cycle_task(target: &mut CycleTaskResult, source: CycleTaskResult) {
+    target.profile.words_tested += source.profile.words_tested;
+    target.profile.positive_denominators += source.profile.positive_denominators;
+    target.profile.divisible_candidates += source.profile.divisible_candidates;
+    target.profile.exact_cycle_words += source.profile.exact_cycle_words;
+    target.profile.nonunit_cycle_words += source.profile.nonunit_cycle_words;
+    target.profile.unit_cycle_words += source.profile.unit_cycle_words;
+    let source_closest = (
+        source.profile.closest_gap,
+        source.profile.closest_q,
+        source.profile.closest_divisions,
+    );
+    let target_closest = (
+        target.profile.closest_gap,
+        target.profile.closest_q,
+        target.profile.closest_divisions,
+    );
+    if source_closest < target_closest {
+        target.profile.closest_gap = source.profile.closest_gap;
+        target.profile.closest_q = source.profile.closest_q;
+        target.profile.closest_divisions = source.profile.closest_divisions;
+    }
+    for (start, witness) in source.cycle_starts {
+        let entry = target
+            .cycle_starts
+            .entry(start)
+            .or_insert_with(|| witness.clone());
+        if witness < *entry {
+            *entry = witness;
+        }
+    }
+}
+
 /// Exhaust valuation words for positive cycles of the accelerated odd-only
 /// affine map. A word `(a_0,...,a_{q-1})` can close only at
 ///
@@ -118,63 +264,64 @@ pub(crate) fn affine_cycle_profile(
     let multiplier = multiplier as u128;
     let addend = addend as u128;
 
-    let mut profile = CycleProfile {
-        words_tested: 0,
-        positive_denominators: 0,
-        divisible_candidates: 0,
-        exact_cycle_words: 0,
-        nonunit_cycle_words: 0,
-        unit_cycle_words: 0,
-        first_nonunit_start: 0,
-        first_nonunit_valuations: Vec::new(),
-        closest_q: 0,
-        closest_divisions: 0,
-        closest_gap: u128::MAX,
-        signature: 0,
-    };
-    let mut cycle_starts = BTreeMap::<u128, Vec<u32>>::new();
-
+    let mut tasks = Vec::new();
     for q in 1..=max_odd_steps.min(max_total_divisions) {
         for total in q..=max_total_divisions {
-            let mut word = Vec::with_capacity(q as usize);
-            visit_compositions(total, q as usize, &mut word, &mut |valuations| {
-                profile.words_tested += 1;
-                let (numerator, two_power, multiplier_power) =
-                    evaluate_cycle_word(multiplier, addend, valuations)?;
-                if two_power <= multiplier_power {
-                    return Ok(());
-                }
-                profile.positive_denominators += 1;
-                let denominator = two_power - multiplier_power;
-                if q > 1 && denominator < profile.closest_gap {
-                    profile.closest_gap = denominator;
-                    profile.closest_q = q;
-                    profile.closest_divisions = total;
-                }
-                if numerator % denominator != 0 {
-                    return Ok(());
-                }
-                profile.divisible_candidates += 1;
-                let start = numerator / denominator;
-                if !verify_cycle(multiplier, addend, start, valuations) {
-                    return Ok(());
-                }
-                profile.exact_cycle_words += 1;
-                cycle_starts
-                    .entry(start)
-                    .or_insert_with(|| valuations.to_vec());
-                if start == 1 {
-                    profile.unit_cycle_words += 1;
-                } else {
-                    profile.nonunit_cycle_words += 1;
-                    if profile.first_nonunit_start == 0 || start < profile.first_nonunit_start {
-                        profile.first_nonunit_start = start;
-                        profile.first_nonunit_valuations = valuations.to_vec();
-                    }
-                }
-                Ok(())
-            })?;
+            tasks.push((q, total));
         }
+    }
+
+    let worker_count = std::thread::available_parallelism()
+        .map_or(1, usize::from)
+        .min(16)
+        .min(tasks.len());
+    let next_task = std::sync::atomic::AtomicUsize::new(0);
+    let worker_results = std::thread::scope(|scope| {
+        let handles = (0..worker_count)
+            .map(|_| {
+                let tasks = &tasks;
+                let next_task = &next_task;
+                scope.spawn(move || {
+                    let mut local = CycleTaskResult {
+                        profile: empty_cycle_profile(),
+                        cycle_starts: BTreeMap::new(),
+                    };
+                    loop {
+                        let index = next_task.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                        let Some((q, total)) = tasks.get(index).copied() else {
+                            break;
+                        };
+                        let task = evaluate_cycle_task(multiplier, addend, q, total)?;
+                        merge_cycle_task(&mut local, task);
+                    }
+                    Ok::<_, String>(local)
+                })
+            })
+            .collect::<Vec<_>>();
+        handles
+            .into_iter()
+            .map(|handle| {
+                handle
+                    .join()
+                    .map_err(|_| "affine cycle worker panicked".to_string())?
+            })
+            .collect::<Result<Vec<_>, String>>()
+    })?;
+    let mut combined = CycleTaskResult {
+        profile: empty_cycle_profile(),
+        cycle_starts: BTreeMap::new(),
+    };
+    for worker in worker_results {
+        merge_cycle_task(&mut combined, worker);
+    }
+    let mut profile = combined.profile;
+    let cycle_starts = combined.cycle_starts;
+    if let Some((start, (_, _, valuations))) = cycle_starts
+        .iter()
+        .find(|(start, _)| **start != 1)
+    {
+        profile.first_nonunit_start = *start;
+        profile.first_nonunit_valuations = valuations.clone();
     }
     if profile.closest_gap == u128::MAX {
         profile.closest_gap = 0;
@@ -186,7 +333,7 @@ pub(crate) fn affine_cycle_profile(
     hasher.update(&addend.to_le_bytes());
     hasher.update(&max_odd_steps.to_le_bytes());
     hasher.update(&max_total_divisions.to_le_bytes());
-    for (start, word) in cycle_starts {
+    for (start, (_, _, word)) in cycle_starts {
         hasher.update(&start.to_le_bytes());
         for valuation in word {
             hasher.update(&valuation.to_le_bytes());
@@ -685,6 +832,37 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "production-scale native budget receipt"]
+    fn natural_tail_depth_28_budget_receipt() {
+        let started = std::time::Instant::now();
+        let profiles = natural_tail_lane_profiles(3, 1, 28, 71, 64, 512).unwrap();
+        let elapsed = started.elapsed();
+        assert_eq!(
+            profiles
+                .iter()
+                .map(|profile| profile.survivor_classes)
+                .sum::<u64>(),
+            3_524_586
+        );
+        assert_eq!(
+            profiles
+                .iter()
+                .map(|profile| profile.unresolved)
+                .sum::<u64>(),
+            0
+        );
+        let tail_steps = profiles
+            .iter()
+            .flat_map(|profile| profile.descent_histogram.iter().enumerate())
+            .map(|(step, count)| (step.saturating_sub(28) as u64) * count)
+            .sum::<u64>();
+        eprintln!(
+            "natural-tail-depth-28 elapsed_ns={} survivors=3524586 tail_steps={tail_steps}",
+            elapsed.as_nanos(),
+        );
+    }
+
+    #[test]
     fn verified_bound_prunes_a_known_small_parameterized_instance() {
         let profile = residue_lane_profile(3, 1, 12, 20, 0, 1).unwrap();
         assert_eq!(profile.classes, 4096);
@@ -710,6 +888,21 @@ mod tests {
         assert!(profile.exact_cycle_words >= 1);
         assert_eq!(profile.nonunit_cycle_words, 0);
         assert_eq!(profile.exact_cycle_words, profile.unit_cycle_words);
+    }
+
+    #[test]
+    fn production_cycle_receipt_is_exact() {
+        let profile = affine_cycle_profile(3, 1, 10, 24).unwrap();
+        assert_eq!(profile.words_tested, 4_540_385);
+        assert_eq!(profile.positive_denominators, 4_534_427);
+        assert_eq!(profile.divisible_candidates, 10);
+        assert_eq!(profile.exact_cycle_words, 10);
+        assert_eq!(profile.unit_cycle_words, 10);
+        assert_eq!(profile.nonunit_cycle_words, 0);
+        assert_eq!(profile.closest_q, 3);
+        assert_eq!(profile.closest_divisions, 5);
+        assert_eq!(profile.closest_gap, 5);
+        assert_eq!(profile.signature, 2_717_298_742_185_285_471);
     }
 
     #[test]

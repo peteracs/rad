@@ -13,29 +13,28 @@ on ManualReviewQueued(_event) {
     update(DecisionAudit) { reviews = res(DecisionAudit).reviews + 1 }
 }
 
-pub fn adjudicate_native(customer: entity, request: RiskInput, order: u64) -> entity {
-    return adjudicate_native_into(spawn(), customer, request, order)
+on DecisionBatchCommitted(evt) {
+    update(DecisionAudit) {
+        committed = res(DecisionAudit).committed + evt.decisions,
+        reviews = res(DecisionAudit).reviews + evt.reviews,
+    }
 }
 
-pub fn adjudicate_native_into(attempt: entity, customer: entity, request: RiskInput, order: u64) -> entity {
+pub fn adjudicate_native(customer: entity, request: RiskInput, order: u64) -> entity {
     let generation: u32 = res(ActivePluginGeneration).generation
     let output: RiskOutput = model.score_native(request)
     // The fallible host boundary runs before the first authoritative write.
     // A crash, timeout, malformed response, or host error therefore cannot
     // publish a partial attempt outside CommitDecision's atomic patch.
-    decisions.CommitDecision(attempt, customer, request, output, generation, u8(0), order)
-    return attempt
+    decisions.CommitDecision(customer, request, output, generation, u8(0), order)
+    return decisions.attempt_by_transaction(request.transaction)
 }
 
 pub fn adjudicate_reference(customer: entity, request: RiskInput, order: u64) -> entity {
-    return adjudicate_reference_into(spawn(), customer, request, order)
-}
-
-pub fn adjudicate_reference_into(attempt: entity, customer: entity, request: RiskInput, order: u64) -> entity {
     let generation: u32 = res(ActivePluginGeneration).generation
     let output: RiskOutput = model.score_reference(request)
-    decisions.CommitDecision(attempt, customer, request, output, generation, u8(1), order)
-    return attempt
+    decisions.CommitDecision(customer, request, output, generation, u8(1), order)
+    return decisions.attempt_by_transaction(request.transaction)
 }
 
 fn inspect_review(_attempt: entity) -> nil {}

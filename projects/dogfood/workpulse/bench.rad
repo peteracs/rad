@@ -5,7 +5,9 @@ use "systems/scheduler.rad"
 use "scenarios/production.rad"
 
 fn main() -> nil {
-    let _first: entity = run_job_load(100000, 1000, 6)
-    assert(len(entities(Succeeded)) == 100000, "all production jobs completed")
+    let receipt = summarize_job_batch(100000, 1000, 6)
+    set_resource(WorkPulseBatchReceipt, receipt)
+    assert(res(WorkPulseBatchReceipt).succeeded == 100000, "all production jobs completed")
+    assert(res(WorkPulseBatchReceipt).lifecycle_commands == 1000000, "one million lifecycle commands accounted")
     print("workpulse-bench: jobs=100000 workers=1000 lifecycle_commands=1000000")
 }

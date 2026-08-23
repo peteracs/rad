@@ -229,17 +229,18 @@ impl VM {
                                 if real_eid != local_eid {
                                     eid_map.insert(local_eid, real_eid);
                                 }
-                                for c in comps {
-                                    let cname = c.type_name.clone();
-                                    let summary = Self::component_summary(&c);
-                                    let _ = self.get_world_mut().add_component_owned(real_eid, c);
-                                    self.record_causal_write(
-                                        Some(real_eid),
-                                        &cname,
-                                        crate::causality::WriteKind::Spawn,
-                                        summary,
-                                    );
-                                }
+                                let summaries = comps
+                                    .iter()
+                                    .map(|component| {
+                                        (
+                                            component.type_name.clone(),
+                                            Self::component_summary(component),
+                                        )
+                                    })
+                                    .collect::<Vec<_>>();
+                                self.get_world_mut()
+                                    .install_spawn_components_owned(real_eid, comps)?;
+                                self.record_causal_spawn_writes(real_eid, summaries);
                             }
                             crate::vm::EcsCommand::RemoveComponent(eid, ctype) => {
                                 let real_eid = eid_map.get(&eid).copied().unwrap_or(eid);
@@ -250,6 +251,20 @@ impl VM {
                                     crate::causality::WriteKind::Remove,
                                     String::new(),
                                 );
+                            }
+                            crate::vm::EcsCommand::RemoveComponents(eid, ctypes) => {
+                                let real_eid = eid_map.get(&eid).copied().unwrap_or(eid);
+                                let removed = self
+                                    .get_world_mut()
+                                    .remove_components(real_eid, &ctypes);
+                                for ctype in removed {
+                                    self.record_causal_write(
+                                        Some(real_eid),
+                                        &ctype,
+                                        crate::causality::WriteKind::Remove,
+                                        String::new(),
+                                    );
+                                }
                             }
                             crate::vm::EcsCommand::DespawnEntity(eid) => {
                                 let real_eid = eid_map.get(&eid).copied().unwrap_or(eid);

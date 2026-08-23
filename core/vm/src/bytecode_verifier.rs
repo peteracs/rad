@@ -7,6 +7,7 @@
 use crate::opcode::{Chunk, Op};
 use std::collections::{HashMap, VecDeque};
 use std::fmt;
+use std::sync::Arc;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct VerificationError {
@@ -71,6 +72,17 @@ struct Instruction {
 #[derive(Clone, Debug)]
 pub(crate) struct VerifiedChunk {
     pub(crate) instruction_count: usize,
+    /// Immutable transaction declarations indexed by their BeginTransaction
+    /// byte offset. Building these from constant-pool strings belongs at the
+    /// bytecode trust boundary, not on every execution of a hot transaction.
+    pub(crate) transactions: Vec<VerifiedTransactionSpec>,
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct VerifiedTransactionSpec {
+    pub(crate) offset: usize,
+    pub(crate) name: Arc<str>,
+    pub(crate) changes_only: Arc<[String]>,
 }
 
 fn read_u16(chunk: &Chunk, at: usize, instruction: usize) -> Result<u16, VerificationError> {
@@ -150,7 +162,7 @@ fn fixed_operand_bytes(op: Op) -> Option<usize> {
         | EmitPhase
         | RunViewKernel => Some(2),
 
-        CheckTransaction => Some(3),
+        CheckTransaction | CallBuiltin => Some(3),
 
         GetLocal2 | EqConstJF | NeqConstJF | IncLocal | ListGetLL | MakeComp | MakeCompSlot
         | InitResource | MakeState | MatchState | EcsReadField | EcsWriteField => Some(4),
@@ -299,6 +311,16 @@ fn decode_instruction(chunk: &Chunk, offset: usize) -> Result<Instruction, Verif
             ));
         }
     }
+    if op == Op::CallBuiltin {
+        let builtin = read_u16(chunk, operands, offset)? as usize;
+        if builtin >= crate::value::Builtin::ALL.len() {
+            return Err(VerificationError::at(
+                chunk,
+                offset,
+                format!("invalid CallBuiltin builtin index {builtin}"),
+            ));
+        }
+    }
 
     let absolute = |at: usize| read_u16(chunk, at, offset).map(|v| v as usize);
     let mut branches = Vec::new();
@@ -426,6 +448,7 @@ pub(crate) fn verify_chunk(chunk: &Chunk) -> Result<VerifiedChunk, VerificationE
     }
     boundaries[chunk.code.len()] = true;
 
+    let mut transactions = Vec::new();
     for instruction in &instructions {
         for index in constant_indices(chunk, instruction)? {
             if index >= chunk.constants.len() {
@@ -451,27 +474,40 @@ pub(crate) fn verify_chunk(chunk: &Chunk) -> Result<VerifiedChunk, VerificationE
                     ));
                 }
                 let name = read_u16(chunk, instruction.offset + 1, instruction.offset)? as usize;
-                if chunk.constants[name].as_str().is_none() {
+                let Some(name) = chunk.constants[name].as_str() else {
                     return Err(VerificationError::at(
                         chunk,
                         instruction.offset,
                         "BeginTransaction name constant must be a string",
                     ));
-                }
+                };
+                let mut changes_only = Vec::with_capacity(count);
                 for authority in 0..count {
                     let index = read_u16(
                         chunk,
                         instruction.offset + 5 + authority * 2,
                         instruction.offset,
                     )? as usize;
-                    if chunk.constants[index].as_str().is_none() {
+                    let Some(authority) = chunk.constants[index].as_str() else {
                         return Err(VerificationError::at(
                             chunk,
                             instruction.offset,
                             "BeginTransaction changes_only constants must be strings",
                         ));
-                    }
+                    };
+                    changes_only.push(authority.to_owned());
                 }
+                // Host-supplied bytecode is not required to preserve the
+                // source compiler's canonical operand order. Canonicalize at
+                // the trust boundary so binary search remains valid without
+                // weakening the runtime changes_only firewall.
+                changes_only.sort_unstable();
+                changes_only.dedup();
+                transactions.push(VerifiedTransactionSpec {
+                    offset: instruction.offset,
+                    name: Arc::from(name),
+                    changes_only: Arc::from(changes_only),
+                });
             }
             Op::CheckTransaction => {
                 let phase = chunk.code[instruction.offset + 1];
@@ -695,6 +731,7 @@ pub(crate) fn verify_chunk(chunk: &Chunk) -> Result<VerifiedChunk, VerificationE
 
     Ok(VerifiedChunk {
         instruction_count: instructions.len(),
+        transactions,
     })
 }
 
@@ -711,6 +748,19 @@ mod tests {
             }
         }
         chunk
+    }
+
+    #[test]
+    fn direct_builtin_call_rejects_unknown_catalog_identity() {
+        let chunk = chunk(
+            "invalid_builtin",
+            &[(Op::CallBuiltin, &[0xff, 0xff, 0]), (Op::Halt, &[])],
+        );
+        let error = verify_chunk(&chunk).expect_err("unknown builtin identity must not load");
+        assert!(
+            error.message.contains("invalid CallBuiltin builtin index"),
+            "{error}"
+        );
     }
 
     #[test]

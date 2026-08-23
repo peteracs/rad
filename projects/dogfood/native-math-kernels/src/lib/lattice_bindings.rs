@@ -28,6 +28,23 @@ unsafe extern "C" fn lattice_profile(args: *const u64, argc: usize) -> u64 {
     result.map_or_else(fail, return_json)
 }
 
+unsafe extern "C" fn cyclic_pair_profiles(args: *const u64, argc: usize) -> u64 {
+    let result: Result<JsonValue, String> = (|| {
+        let args = arg_slice(args, argc)?;
+        exact_arity(args, 4, "cyclic_pair_profiles")?;
+        let representatives = integer_list(args, "cyclic_pair_profiles")?;
+        let profiles = boolean_lattice::cyclic_pair_profiles(
+            &representatives,
+            int_arg(args, 1, "cyclic_pair_profiles")?,
+            int_arg(args, 2, "cyclic_pair_profiles")?,
+            int_arg(args, 3, "cyclic_pair_profiles")?,
+        )?;
+        serde_json::to_value(profiles)
+            .map_err(|error| format!("cyclic_pair_profiles encoding failed: {error}"))
+    })();
+    result.map_or_else(fail, return_json)
+}
+
 unsafe extern "C" fn lattice_frequencies(args: *const u64, argc: usize) -> u64 {
     let result: Result<JsonValue, String> = (|| {
         let args = arg_slice(args, argc)?;

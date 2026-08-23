@@ -38,6 +38,10 @@ pub fn run_access_incident(user_count: int) -> entity {
     assert(contains(why_removed(alice, Entitlement), "RevokeProductionAccess"), "tombstone retains the transaction cause")
     assert(contains(why_missing(Entitlement, UserId(u64(1))), "RevokeProductionAccess"), "missing indexed value retains the cause")
 
+    return alice
+}
+
+pub fn verify_wire_provenance(alice: entity) -> nil {
     let explanation_before_wire = why_removed(alice, Entitlement)
     let digest_before_wire = world_digest()
     let restored = fork_from_bytes(fork_to_bytes(fork())) |> unwrap
@@ -46,5 +50,16 @@ pub fn run_access_incident(user_count: int) -> entity {
     assert(contains(why_removed(alice, Entitlement), "RevokeProductionAccess"), "wire restoration preserves provenance")
     assert(contains(why_removed(alice, Entitlement), "wire"), "restored provenance discloses its origin")
     assert(explanation_before_wire != "", "pre-wire explanation was observable")
-    return alice
+}
+
+pub pure fn summarize_access_batch(users: int, revoked: int) -> AccessLensBatchReceipt {
+    assert(users > 0, "directory batch requires Alice")
+    assert(revoked >= 0 and revoked <= users, "revocations must belong to the directory")
+    let initially_eligible = users - 1
+    let revoked_eligible = if revoked == 0 { 0 } else { revoked - 1 }
+    return AccessLensBatchReceipt {
+        users: users,
+        revoked: revoked,
+        deployers: initially_eligible - revoked_eligible,
+    }
 }

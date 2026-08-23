@@ -854,6 +854,21 @@ impl Value {
         Self::deep_copy_component_data(data, &mut PersistentStore);
     }
 
+    /// Clone a component payload that already belongs to the persistent store.
+    ///
+    /// `ComponentData` derives `Clone`, but `Value` is a tagged, copyable word;
+    /// cloning it does not increment persistent-object reference counts.  Use
+    /// this helper whenever two owners (for example a transaction worker's
+    /// local world and its deferred command buffer) must retain the same
+    /// already-persisted payload.
+    pub(crate) fn clone_persistent_component_data(data: &ComponentData) -> ComponentData {
+        let cloned = data.clone();
+        for value in &cloned.values {
+            unsafe { value.retain_persistent() };
+        }
+        cloned
+    }
+
     /// Release persistent references held by a component payload.
     pub(crate) fn release_component_data(data: &ComponentData) {
         for v in &data.values {
@@ -861,13 +876,13 @@ impl Value {
         }
     }
 
-    /// Trace this value for GC.  If it is a heap object, insert its pointer
-    /// into `marked` and recursively trace any values it contains.
-    pub(crate) fn trace(&self, marked: &mut HashSet<usize>) {
+    /// Trace this value for GC. If it is a VM-heap object, mark its intrusive
+    /// allocation header and recursively trace it on the first visit.
+    pub(crate) fn trace(&self, gc: &mut crate::gc::GcHeap) {
         if let Some(ptr) = self.object_ptr() {
-            if marked.insert(ptr) {
+            if unsafe { gc.mark(ptr as *mut Object) } {
                 if let Some(obj) = self.as_object() {
-                    obj.trace(marked);
+                    obj.trace(gc);
                 }
             }
         }

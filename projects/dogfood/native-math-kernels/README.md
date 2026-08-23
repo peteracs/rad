@@ -2,7 +2,7 @@
 
 This project-local native extension accelerates tight finite-mathematics loops
 used by the Frankl and Collatz dogfoods. It deliberately uses RAD's generic
-`load_extension()` ABI: none of these algorithms are VM opcodes, builtins, or
+`load_extension(path, timeout_ms)` ABI: none of these algorithms are VM opcodes, builtins, or
 language semantics.
 
 Build it before running either project:

@@ -14,7 +14,6 @@ const MAX_DEPTH: u32 = 2048;
 const MAX_SUPPORT: u32 = 64;
 const MAX_LOCAL_ANCHORS: u64 = 350_000_000;
 const MAX_LANE_COUNT: u32 = 256;
-const LANE_SPLIT_WEIGHT: u32 = 6;
 const PARALLEL_SPLIT_WEIGHT: u32 = 7;
 
 type Positions = SmallVec<[u16; 16]>;
@@ -443,7 +442,7 @@ pub(crate) fn lane_summary(
     if lane_index >= lane_count {
         return Err("affine sparse-slope lane index must be below lane count".into());
     }
-    let split_weight = max_support.min(LANE_SPLIT_WEIGHT);
+    let split_weight = max_support.min(crate::AFFINE_SPARSE_LANE_SPLIT_WEIGHT);
     let mut trunk = Search::new(multiplier, addend, max_depth, max_support);
     let mut seeds = Vec::new();
     trunk.collect(root(), 0, split_weight as usize, &mut seeds)?;

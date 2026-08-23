@@ -42,6 +42,20 @@ Application calls execute in an isolated worker. Crash, timeout, malformed
 output, protocol error, or worker exit becomes a typed host failure. An
 enclosing transaction rolls back and later requests remain processable.
 
+Load-time ABI/determinism verification and application calls have separate
+budgets. The native boundary allows at most 700 ms for cold worker
+startup/verification. `load_extension(path, timeout_ms)` requires the caller to
+choose each application call's deadline from 1 through 900 ms; there is no
+one-argument fallback. During startup the
+parent reads the framed response concurrently with process-status monitoring,
+so an extension that crashes in its determinism probe reports worker exit or
+transport failure as soon as either is visible instead of borrowing the hang timeout.
+After a call-side socket timeout, an already-faulting Windows child receives a
+bounded 20 ms status-publication grace period; a live child is then killed,
+reaped, and reported as timeout. These are containment ceilings, not latency
+promises for arbitrary third-party code; portfolio operations additionally
+must satisfy the end-to-end one-second RAD-process gate.
+
 The loader seals/hashes the image. Every call pins extension, digest, ABI, and
 generation. Reload creates a new generation; an in-flight transaction finishes
 against its starting generation.
@@ -63,5 +77,10 @@ rad ffi verify plugin.dll --contract expected.json --json
 ```
 
 This checks descriptor/layout/export/effect contracts and declared determinism.
-Loading a library is not an ABI pass. Sovereign Grid and RiskBridge exercise
-positive, malformed, crash, timeout, generation, transaction, and replay paths.
+The CLI delegates verification to the same small isolated `rad-ffi-worker`
+used for calls; it never recursively launches another full `rad` process and
+does not retain a compatibility verifier. The verification child has a 700 ms
+ceiling, while the complete CLI operation remains subject to the one-second
+portfolio deadline. Loading a library is not an ABI pass. Sovereign Grid and
+RiskBridge exercise positive, malformed, crash, timeout, generation,
+transaction, and replay paths.

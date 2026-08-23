@@ -36,6 +36,12 @@ leaves the authoritative world untouched. A decision pins one plugin
 generation from call through commit. Replay consumes recorded host outputs and
 does not invoke the live plugin.
 
+Cold startup/verification and calls are independently bounded at 700 ms and
+100 ms. The parent monitors process exit concurrently with the startup frame;
+a crashing probe is reported as worker failure/exit, a live hang as timeout, and
+both children are killed/reaped. The complete negative-fixture process must
+also remain below the portfolio's one-second end-to-end limit.
+
 The boundary is not an operating-system security sandbox. A plugin is a native
 program with the worker process's OS permissions. RAD verifies declared effects
 and determinism behavior, contains process crashes/timeouts, and records calls;
@@ -67,8 +73,10 @@ the owner-only `ArchiveDecision` transaction folds the transaction ID into
 slot is reused. Count and XOR receipt remain in the final world digest. Trace
 recording streams through zstd and faithful replay consumes one record at a
 time. The acceptance orchestrator fails any million-case mode above 512 MiB
-private memory. On the 2026-08-22 Windows release receipt, record/replay/reference
-peaked at 327,761,920 / 243,924,992 / 190,656,512 bytes respectively.
+private memory. On the 2026-08-23 Windows optimized diagnostic receipt,
+record/replay/reference completed in 199.5 / 99.6 / 165.6 ms and peaked at
+97,419,264 / 12,566,528 / 4,771,840 private bytes respectively. Release claims
+are remeasured from the final `target/release` binary.
 
 Score: learnability 2, ownership clarity 2, error quality 2, observability 2,
 determinism 2, performance 2, testability 2, refactor safety 2, host safety 2,

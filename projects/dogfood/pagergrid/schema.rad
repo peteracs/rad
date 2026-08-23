@@ -35,6 +35,12 @@ pub component RoutineRoute { enabled: bool = true }
 pub component EscalationState { armed: bool = false }
 pub component NotificationState { queued: bool = false }
 
+pub resource PagerGridBatchReceipt {
+    alerts: int = 0,
+    critical: int = 0,
+    routine: int = 0,
+}
+
 pub event ResponderPaged {
     incident: entity,
     responder: entity,

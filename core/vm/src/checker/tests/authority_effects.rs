@@ -501,7 +501,7 @@
         let (errors, report) = authority_src(
             r#"
             component Marker {}
-            let MODULE = load_extension("missing-test-module")
+            let MODULE = load_extension("missing-test-module", 100)
             let EXTERNAL: pure fn(int) -> int = MODULE["external"]
 
             system UseExternal(marker: Marker) {
@@ -526,7 +526,7 @@
         let (errors, report) = authority_src(
             r#"
             component Marker {}
-            let MODULE = load_extension("missing-test-module")
+            let MODULE = load_extension("missing-test-module", 100)
             let EXTERNAL: fn(int) -> int = MODULE["external"]
 
             fn invoke_external() -> int {

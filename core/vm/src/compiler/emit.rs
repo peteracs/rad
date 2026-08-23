@@ -206,6 +206,20 @@ impl Compiler {
         None
     }
 
+    /// Test whether `name` is owned by the current lexical function chain
+    /// without changing the closure's capture layout.
+    ///
+    /// `resolve_upvalue` is a lowering operation: on success it appends capture
+    /// descriptors and marks parent locals as captured. Calling it merely to
+    /// decide whether a builtin/module optimization is legal makes observation
+    /// order alter upvalue indexes. All optimization guards must use this pure
+    /// query and leave capture creation to identifier lowering.
+    pub(crate) fn has_lexical_binding(&self, name: &str) -> bool {
+        let fn_idx = self.functions.len() - 1;
+        self.resolve_local(name).is_some()
+            || (fn_idx > 0 && self.resolve_captured_mutability(fn_idx, name).is_some())
+    }
+
     pub(crate) fn add_local(&mut self, name: String, mutable: bool) {
         let depth = self.current().scope_depth;
         self.current().locals.push(Local {

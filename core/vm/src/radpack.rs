@@ -31,8 +31,10 @@ use std::borrow::Cow;
 pub const PACK_THRESHOLD: usize = 4096;
 
 /// DEFLATE level (0-10), fixed within this format domain so encoding remains
-/// deterministic.
-const LEVEL: u8 = 10;
+/// deterministic. Level 1 is deliberate: RADPACK is a live snapshot/replay
+/// transport, not archival storage. The previous level 10 spent more CPU in
+/// compression than the complete 10,000-entity state transition it wrapped.
+const LEVEL: u8 = 1;
 
 /// Inflate ceiling — network input must not be a decompression bomb.
 const MAX_BODY: usize = 1 << 28; // 256 MiB

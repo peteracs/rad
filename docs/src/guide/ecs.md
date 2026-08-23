@@ -641,7 +641,7 @@ if hero_preview.hp > 0 {
 | `fork()` | Snapshot the ECS world. Uses copy-on-write (`Arc` refcount bumps) — O(A) cost regardless of entity count. |
 | `simulate(fork, systems, ticks)` | Run named systems on the fork for N ticks. IO and `commit()` are statically forbidden; emitted event handler chains must also be simulation-safe. |
 | `peek(fork, entity, Component)` | Read a component from the fork without committing. Returns `Option`. Values are deep-copied across the air gap (strings O(1) via `Arc<str>`). |
-| `commit(fork)` | Replace the live world with the fork. **Clears all pending events.** |
+| `commit(fork)` | Atomically replace the live program state with the fork's world **and pending-event queue**, exactly as captured. |
 
 ### Events inside simulations
 

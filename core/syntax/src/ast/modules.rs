@@ -271,7 +271,8 @@ impl Decl {
     /// each semantic pass. Keeping the exhaustive rename beside
     /// [`Self::namespace_name`] gives every pass one complete operation and
     /// makes a new named declaration a compile-time decision.
-    pub(crate) fn with_namespace_name(&self, replacement: &str) -> Self {
+    #[doc(hidden)]
+    pub fn with_namespace_name(&self, replacement: &str) -> Self {
         let mut declaration = self.clone();
         match &mut declaration {
             Decl::Component(value) | Decl::Struct(value) => {

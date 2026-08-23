@@ -1,6 +1,7 @@
 use super::*;
 use crate::value::ComponentData;
 use std::collections::BTreeSet;
+use std::sync::Arc;
 
 fn transaction_causes(
     current: &crate::causality::Cause,
@@ -22,9 +23,8 @@ pub(crate) struct PendingTransactionWrite {
     pub(crate) entity: Option<u32>,
     pub(crate) entity_name: Option<String>,
     pub(crate) component: String,
-    pub(crate) value: String,
     pub(crate) kind: crate::causality::WriteKind,
-    pub(crate) fields: Vec<(String, String)>,
+    pub(crate) summary: crate::causality::WriteSummary,
     pub(crate) view_refresh: MaterializedViewRefresh,
 }
 
@@ -34,7 +34,7 @@ pub(crate) enum MaterializedViewRefresh {
 }
 
 pub(crate) struct TransactionContext {
-    pub(crate) name: String,
+    pub(crate) name: Arc<str>,
     pub(crate) owner_frame_id: u64,
     pub(crate) owner_chunk_id: usize,
     pub(crate) begin_ip: usize,
@@ -43,7 +43,7 @@ pub(crate) struct TransactionContext {
     /// Dynamic cause active before the one-shot host result was consumed.
     /// This is what execution must restore after commit or rollback.
     pub(crate) restore_cause: crate::causality::Cause,
-    pub(crate) changes_only: BTreeSet<String>,
+    pub(crate) changes_only: Arc<[String]>,
     pub(crate) pending_writes: Vec<PendingTransactionWrite>,
     pub(crate) command_buffer_len: usize,
     undo: Vec<TransactionUndo>,
@@ -228,8 +228,8 @@ impl VM {
 
     pub(crate) fn begin_transaction(
         &mut self,
-        name: String,
-        changes_only: BTreeSet<String>,
+        name: Arc<str>,
+        changes_only: Arc<[String]>,
     ) -> Result<(), String> {
         if self.transaction.is_some() || self.post_commit.is_some() {
             return Err("nested transactions are not allowed".to_string());
@@ -246,7 +246,7 @@ impl VM {
         let (effect_parent, restore_cause) =
             transaction_causes(&self.current_cause, self.pending_host_cause.take());
         self.current_cause = crate::causality::Cause::Transaction {
-            name: name.clone().into(),
+            name: name.as_ref().into(),
             parent: Box::new(effect_parent.clone()),
         };
         self.transaction = Some(TransactionContext {
@@ -298,7 +298,15 @@ impl VM {
         let Some(context) = self.transaction.as_ref() else {
             return Ok(());
         };
-        if context.changes_only.contains("*") || context.changes_only.contains(authority) {
+        if context
+            .changes_only
+            .first()
+            .is_some_and(|candidate| candidate == "*")
+            || context
+                .changes_only
+                .binary_search_by(|candidate| candidate.as_str().cmp(authority))
+                .is_ok()
+        {
             return Ok(());
         }
         Err(format!(
@@ -559,38 +567,54 @@ impl VM {
             return Err(message);
         }
         let cause = crate::causality::Cause::Transaction {
-            name: context.name.into(),
+            name: context.name.as_ref().into(),
             parent: Box::new(context.effect_parent.clone()),
         };
-        let touched_components = context
-            .pending_writes
-            .iter()
-            .filter_map(|write| match (write.entity, &write.view_refresh) {
-                (Some(entity), MaterializedViewRefresh::Component) => {
-                    Some((entity, write.component.clone()))
-                }
-                _ => None,
-            })
-            .collect::<BTreeSet<_>>();
-        let touched_fields = context
-            .pending_writes
-            .iter()
-            .filter_map(|write| match (write.entity, &write.view_refresh) {
-                (Some(entity), MaterializedViewRefresh::Field(field))
-                    if !touched_components.contains(&(entity, write.component.clone())) =>
-                {
-                    Some((entity, write.component.clone(), field.clone()))
-                }
-                _ => None,
-            })
-            .collect::<BTreeSet<_>>();
-        for (entity, component) in touched_components {
-            self.world
-                .refresh_materialized_views_for(&component, entity);
-        }
-        for (entity, component, field) in touched_fields {
-            self.world
-                .refresh_materialized_views_for_field(&component, &field, entity);
+        // Most transactional services do not declare a materialized view.
+        // Building two ordered de-duplication sets and a grouping map for
+        // every commit was then pure overhead (and several allocations) even
+        // though the refresh routines had no possible consumer. Preserve the
+        // exact grouped refresh path when at least one view is installed.
+        if self.world.has_materialized_views() {
+            let touched_components = context
+                .pending_writes
+                .iter()
+                .filter_map(|write| match (write.entity, &write.view_refresh) {
+                    (Some(entity), MaterializedViewRefresh::Component) => {
+                        Some((entity, write.component.clone()))
+                    }
+                    _ => None,
+                })
+                .collect::<BTreeSet<_>>();
+            let touched_fields = context
+                .pending_writes
+                .iter()
+                .filter_map(|write| match (write.entity, &write.view_refresh) {
+                    (Some(entity), MaterializedViewRefresh::Field(field))
+                        if !touched_components.contains(&(entity, write.component.clone())) =>
+                    {
+                        Some((entity, write.component.clone(), field.clone()))
+                    }
+                    _ => None,
+                })
+                .collect::<BTreeSet<_>>();
+            let mut touched_component_groups = BTreeMap::<u32, Vec<String>>::new();
+            for (entity, component) in &touched_components {
+                touched_component_groups
+                    .entry(*entity)
+                    .or_default()
+                    .push(component.clone());
+            }
+            for (entity, components) in touched_component_groups {
+                self.world.refresh_materialized_views_for_components(
+                    components.iter().map(String::as_str),
+                    entity,
+                );
+            }
+            for (entity, component, field) in touched_fields {
+                self.world
+                    .refresh_materialized_views_for_field(&component, &field, entity);
+            }
         }
         for write in context.pending_writes {
             self.ledger
@@ -599,7 +623,7 @@ impl VM {
                     write.entity,
                     write.entity_name,
                     write.component,
-                    crate::causality::WriteSummary::text_fields(write.value, write.fields),
+                    write.summary,
                     write.kind,
                     cause.clone(),
                 ));

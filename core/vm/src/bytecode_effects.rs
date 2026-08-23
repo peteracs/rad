@@ -97,7 +97,7 @@ fn opcode_effect(op: Op) -> OpcodeEffect {
         | ByteBufSetI32LeInplace
         | IterNext => OpcodeEffect::InteriorMutation,
 
-        Call => OpcodeEffect::DynamicCall,
+        Call | CallBuiltin => OpcodeEffect::DynamicCall,
         Return | Try => OpcodeEffect::FrameExit,
         BeginSettlement
         | EndSettlement
@@ -260,6 +260,7 @@ pub(crate) fn forbidden_builtin_effect(
                     | Builtin::SetResource
                     | Builtin::Spawn
                     | Builtin::Remove
+                    | Builtin::RemoveMany
                     | Builtin::Despawn
                     | Builtin::Transition
             ) {

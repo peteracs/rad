@@ -12,7 +12,7 @@ impl Compiler {
             .collect()
     }
 
-    pub(crate) fn should_optimize_egraph(&self, fn_name: &str) -> bool {
+    pub(crate) fn should_optimize_expressions(&self, fn_name: &str) -> bool {
         let Some(output) = &self.checker_output else {
             return false;
         };

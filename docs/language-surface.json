@@ -1,40 +1,40 @@
 {
   "formatVersion": 1,
-  "ownerDigest": "fd12b940fc74a7c4e2a97bd1fc29c7074296d31d502e6a77a235a166b8b2f4f1",
+  "ownerDigest": "1c170b4eb7c0d98a4a2b172561491c5e97dd43e2df471d0842cbc16709c3f4c5",
   "sources": [
     {
       "role": "builtins",
       "path": "core/vm/src/value/builtin_catalog.rs",
-      "sha256": "5367958132f6c2234acc4b8ff03247fafa39986c68e1cca50b2a7ad0b472b51f"
+      "sha256": "607acb121066f745eac6244c5cf0ccaefc0dfd15e1755ade58717518bc02f082"
     },
     {
       "role": "contracts",
-      "path": "core/vm/src/parser/decl/declaration_dispatch.rs",
+      "path": "core/syntax/src/parser/decl/declaration_dispatch.rs",
       "sha256": "f07c3dafb481e1d47e0f6207b9f000b07085d88cb6279830c7c54203d1545083"
     },
     {
       "role": "declarations",
-      "path": "core/vm/src/ast/modules.rs",
-      "sha256": "7e23f6b41528fc213685748462512dca016af16fcc5823f4f2745cc780dc3fe4"
+      "path": "core/syntax/src/ast/modules.rs",
+      "sha256": "2d1211a39550d241bbe7d125a14dcfa65ebce701f694f1c94738cfe1a1fe4134"
     },
     {
       "role": "expressions",
-      "path": "core/vm/src/ast/expressions.rs",
+      "path": "core/syntax/src/ast/expressions.rs",
       "sha256": "4288133aebee5f531d63e6cf1dbfb63777a4dbbef1c5456d47fe9f0bc740d1f5"
     },
     {
       "role": "keywords",
-      "path": "core/vm/src/lexer/decl.rs",
+      "path": "core/syntax/src/lexer/decl.rs",
       "sha256": "09cf308ad7621c80f570a1e8ffd5168e6067baa77519021b1d306c08daec840a"
     },
     {
       "role": "statements",
-      "path": "core/vm/src/ast/statements.rs",
+      "path": "core/syntax/src/ast/statements.rs",
       "sha256": "b2ae4a162376aea38217ec909fb1ca617eec14acbfb50ee0ecf108c01d4e4b86"
     },
     {
       "role": "tokens",
-      "path": "core/vm/src/lexer/engine.rs",
+      "path": "core/syntax/src/lexer/engine.rs",
       "sha256": "87e267766a23af2a9374a4cae8c50ded40b64c52acd952dd66ae4e26fc82c1d4"
     }
   ],
@@ -573,6 +573,10 @@
     {
       "variant": "Remove",
       "name": "remove"
+    },
+    {
+      "variant": "RemoveMany",
+      "name": "remove_many"
     },
     {
       "variant": "Despawn",

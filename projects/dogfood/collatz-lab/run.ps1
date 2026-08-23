@@ -26,6 +26,9 @@ try {
     & "projects/dogfood/native-math-kernels/build.ps1"
     if ($LASTEXITCODE -ne 0) { throw "Native math kernel build failed" }
 
+    cargo build --manifest-path "projects/dogfood/collatz-lab/verifier/Cargo.toml" --release -j 1
+    if ($LASTEXITCODE -ne 0) { throw "Independent natural-tail verifier build failed" }
+
     & $Rad "projects/dogfood/collatz-lab/main.rad" "--experimental-laws" "--record" $Trace
     if ($LASTEXITCODE -ne 0) { throw "Collatz RAD run failed" }
 

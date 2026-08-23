@@ -1,11 +1,8 @@
-// backend: both
 component Counter { n: 0 }
 
 event Ping {}
 
-entity counter_e {
-    Counter { n: 0 }
-}
+let counter_e = spawn(Counter { n: 0 })
 
 on Ping(_e) {
     let c = unwrap(get(counter_e, Counter))
@@ -22,4 +19,4 @@ fn main() -> nil {
     let c = unwrap(get(counter_e, Counter))
     print(c.n)
 }
-// expect: 0
+// expect: 1

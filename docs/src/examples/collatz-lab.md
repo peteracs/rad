@@ -41,7 +41,7 @@ the verified `2^71` floor, the complete residue subtree is impossible for a
 least counterexample. The project-owned `affine_residue_profile()` extension
 exploits this proof: it expands only unproved nodes and counts all descendants
 of a pruned node algebraically. RAD itself supplies only the generic
-`load_extension()` boundary.
+`load_extension(path, timeout_ms)` boundary.
 
 The depth-26 certificate is:
 
@@ -55,11 +55,10 @@ The depth-26 certificate is:
 
 This replaced per-start interpreted tracing with a domain-general affine
 parity kernel and whole-subtree pruning. On the Windows development host, one
-debug-CLI study completed in about 0.9 seconds; the parallel residue kernel
-itself took roughly 1–2 ms and the exact 4.54-million-word cycle kernel about
-0.28 seconds. Parsing, constraints, provenance, and certificate generation
-make up the remainder. These are development observations, not portable
-benchmark guarantees.
+release-CLI study completed in 316.8 ms and its independent certificate
+verifier completed in 520.6 ms. Parsing, constraints, provenance, and
+certificate generation make up most of the RAD process. These are 2026-08-23
+development observations, not portable benchmark guarantees.
 
 ## Why the survivors look dangerous
 
@@ -151,20 +150,28 @@ or it crosses the coefficient boundary paradoxically and never descends.
 
 Seven scales (`8, 12, 16, 20, 24, 26, 28`) are settled through typed intents,
 one resolver, Candidate Constraints, forward/reverse producer order, event
-ancestry, `why()`, and record/replay. `verify_natural_tail.py` rebuilds all
-reported counts and tail records using Python big integers without importing
-RAD or the extension.
+ancestry, `why()`, and record/replay. The standalone `verifier/` executable
+rebuilds all reported counts and tail records with an independent compiled
+tree traversal without importing RAD or the extension; the Python entry point
+validates the certificate envelope and secondary diagnostics.
 
-Dogfooding also found a semantic-payload cost outside the arithmetic loop.
-The first version transported 1,024-slot histograms through every fork,
-proposal, resolution, and provenance record. Since the exact latest stop is
-395, the checked horizon is now 512; an unresolved tail still rejects the
-candidate. On the development host that reduced the complete seven-scale RAD
-run from roughly 4.3 seconds to about 1.8 seconds. This is a local measurement,
-not a portable benchmark guarantee. The separate Python verifier was also
-changed from one breadth-first frontier (about 85 seconds and high peak memory)
-to 64 streaming low-bit lanes scheduled over a bounded process pool (about 32
-seconds on the same host).
+Dogfooding also found both semantic-payload and scheduling costs outside the
+arithmetic loop. The first version transported 1,024-slot histograms through
+every fork, proposal, resolution, and provenance record. Since the exact latest
+stop is 395, the checked horizon is now 512; an unresolved tail still rejects
+the candidate. The native kernel now schedules deterministic prefix tasks
+dynamically, reduces worker-local lane profiles in canonical order, and never
+materializes the final survivor frontier. On the 16-logical-core Windows
+development host, the unchanged depth-28 kernel processes 3,524,586 survivors
+and 59,245,588 tail steps in 64.4 ms. The complete seven-scale RAD process
+finishes in 579.3 ms, with 93.3 ms in native calls. These are 2026-08-23
+diagnostic-profile measurements, not portable latency guarantees; release
+acceptance enforces the one-second process ceiling separately.
+
+The independent Python verifier was changed from one breadth-first frontier
+(about 85 seconds and high peak memory) to 64 streaming low-bit lanes scheduled
+over a bounded process pool (about 32 seconds on the same host). It is separate
+proof tooling, not a RAD child operation.
 
 ## Bounded binary support: excluding an infinite class
 
@@ -231,10 +238,13 @@ Python verifier checks every prefix with big integers. This proves a new lower
 bound for the support-eleven slope boundary; it does not prove the matching
 upper bound because a beam may discard a deeper state.
 
-The experiment also dogfooded performance honestly: replacing six serial
-speculative simulations with `simulate_many()` reduced the depth-1,024 run
-from about 28.6 seconds to 13.9 seconds on the development host without
-changing the causal result.
+The experiment also dogfoods performance without weakening the mathematics.
+The six exact objectives now cross one generic native batch boundary, seed six
+forked worlds, and are independently audited through `simulate_many()`. On the
+2026-08-23 development host, the full depth-1,024 run completed below 0.85
+seconds with the same witnesses and causal result. The earlier serial and
+first-generation parallel implementations took about 28.6 and 13.9 seconds;
+those numbers are historical baselines, not current acceptance performance.
 
 The first exhaustive support-eleven closure attempt exceeded a ten-minute
 development run. The project now exposes deterministic, mergeable exact
@@ -255,6 +265,11 @@ compression reduced the first repeated breadth-first run from about 123.5
 seconds to about 13.5 seconds. `verify_support_pressure.py` is independent of
 RAD and the extension: it exhaustively agrees through support seven/depth 365
 and checks every reported terminal witness through support ten.
+
+The support-ten traversal is a standalone exhaustive research receipt, not an
+operation in the subsecond release-acceptance matrices. It remains an explicit
+performance backlog; its support, depth, and result are not lowered or embedded
+to manufacture a passing timing.
 
 The Candidate Constraint also checks two observed theory invariants: every new
 record bit occurs before the preceding budget's death deadline, and
@@ -291,7 +306,7 @@ this finite box exists to exercise and certify the causal pipeline.
 ## RAD execution model
 
 ```text
-project-owned affine extension via load_extension()
+project-owned affine extension via load_extension(path, timeout_ms)
         ↓
 eight fork_with() low-bit universes
         ↓

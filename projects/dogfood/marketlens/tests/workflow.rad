@@ -8,6 +8,21 @@ test "catalog projections track source facts atomically" {
     assert(lookup(SellableProducts, ProductId(u64(1))) == Some(catalog_item), "restocked product visible")
 }
 
+test "batch catalog fold is equivalent to scalar view maintenance" {
+    let products = 200
+    let updates = 50
+    seed_catalog(products)
+    let initial = len(entities(SellableProducts))
+    for product_id in range(1, updates + 1) {
+        let item: entity = lookup(Product, "product_id", ProductId(u64(product_id))) |> unwrap
+        SetInventory(item, if product_id % 23 == 0 { 0 } else { 8 })
+    }
+    let receipt = summarize_catalog_batch(products, updates)
+    assert(receipt.initial_sellable == initial, "batch fold matches scalar initial membership")
+    assert(receipt.final_sellable == len(entities(SellableProducts)), "batch fold matches scalar final membership")
+    assert(receipt.revision == revision(SellableProducts), "batch fold matches scalar dependency revision")
+}
+
 test "compliance and seller facts remove membership" {
     let catalog_item = publish_product(ProductId(u64(9001)), 10, 500)
     SetComplianceBlocked(catalog_item, true)

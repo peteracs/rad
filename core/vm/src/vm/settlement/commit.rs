@@ -278,7 +278,7 @@ impl VM {
                         Some(write.entity),
                         entity_name,
                         write.component.type_name.as_str(),
-                        crate::causality::WriteSummary::full(summary, smallvec::SmallVec::new()),
+                        summary,
                         crate::causality::WriteKind::Set,
                         context.origin.clone(),
                     )

@@ -159,7 +159,7 @@ fn builtin_type_scheme_host(name: &str) -> Option<BuiltinSig> {
         },
         "load_extension" => BuiltinSig {
             type_params: vec![],
-            params: vec![Ty::Str],
+            params: vec![Ty::Str, Ty::Int],
             ret: Ty::Any,
             is_pure: false,
         },

@@ -1,5 +1,5 @@
 use "fixture_adapter.rad"
 
 let _output = decode_risk_output(
-    fixture_score("target/riskbridge-fixtures/unknown_reason_flags.dll"),
+    fixture_named_score("target/riskbridge-fixtures/containment.dll", "unknown_reason_score"),
 )

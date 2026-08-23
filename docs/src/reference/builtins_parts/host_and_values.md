@@ -125,10 +125,12 @@ match udp_recv_bytebuf_timeout(socket, 1200, 0) {
 
 | Function | Description |
 |---|---|
-| `load_extension(path)` | Native-only plugin bridge. Loads a dynamic library and returns a map of exported native functions; unsupported in WASM. |
+| `load_extension(path, timeout_ms)` | Native-only plugin bridge. Loads an isolated extension worker and returns a map of exported native functions. `timeout_ms` is required, must be from 1 through 900, and bounds every application call; unsupported in WASM. |
 | `gc_collect()` | Run the VM backup cycle collector and return the number of swept objects. This does not manage ECS world storage, which is handled by `Arc` reference counts. |
 
-`load_extension()` is the generic boundary for project-owned acceleration.
+`load_extension(path, timeout_ms)` is the generic boundary for project-owned
+acceleration. There is no implicit or one-argument timeout form: every caller
+chooses an explicit application-call deadline from 1 through 900 milliseconds.
 Domain algorithms do not become VM builtins: an extension registers named
 scalar functions, and a project adapter may exchange canonical JSON when it
 needs structured inputs or outputs. Values constructed through the extension

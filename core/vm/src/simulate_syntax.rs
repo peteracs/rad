@@ -17,6 +17,8 @@
 use crate::ast::Expr;
 use crate::value::Builtin;
 
+pub use rad_syntax::simulate_syntax::system_ref_qualified_string;
+
 /// Index of the `systems` argument in `simulate(fork, systems, ticks)`.
 pub const SYSTEMS_ARG_INDEX: usize = 1;
 
@@ -59,15 +61,6 @@ pub fn is_expr_call(callee: &Expr, args: &[Expr]) -> bool {
 /// Build the qualified name used by the checker and compiler's internal
 /// canonical-name resolution: the first segment may be a module alias;
 /// further segments join with `.` (e.g. `a::b::c` → `a.b.c`).
-#[inline]
-pub fn system_ref_qualified_string(path: &[String]) -> String {
-    match path.len() {
-        0 => String::new(),
-        1 => path[0].clone(),
-        _ => format!("{}.{}", path[0], path[1..].join(".")),
-    }
-}
-
 #[inline]
 pub fn is_typed_schedule_element(expr: &Expr) -> bool {
     matches!(expr, Expr::SystemRef(_, _))

@@ -41,12 +41,20 @@ rad/
     - `core/relation/` - Independently compiled authoritative RFC-0003 relation frontend.
       - `core/relation/src/` - Relation crate composition root.
         - `core/relation/src/frontend/` - Bounded relation lexer, parser, checker, canonical form, limits, and tooling.
+    - `core/syntax/` - Independently compiled canonical RAD source frontend.
+      - `core/syntax/src/` - Frontend composition root, shared source structures, and native scalar syntax.
+      - `core/syntax/src/ast/` - Declarations, expressions, statements, canonical module identity, and declaration metadata.
+      - `core/syntax/src/lexer/` - Declaration, expression, and statement tokenization plus lexer regressions.
+      - `core/syntax/src/parser/` - Syntax parsing, recovery, types, causal extensions, and parser regressions.
+        - `core/syntax/src/parser/decl/` - Data, callable, transaction, and declaration-dispatch parsing.
+        - `core/syntax/src/parser/expr/` - Operators, postfix forms, and primary-expression parsing.
+        - `core/syntax/src/parser/tests/` - Focused core-syntax and string/type parser regressions.
     - `core/vm/` - Primary Rust implementation of the RAD language and runtime.
       - `core/vm/benches/` - Criterion benchmarks for VM and world-state operations.
       - `core/vm/examples/` - Opt-in allocator and hot-path profiling executables.
       - `core/vm/scripts/` - VM-specific documentation and benchmark helpers.
       - `core/vm/src/` - Language semantics, compilation, world state, execution, replay, relations, and WASM boundary.
-        - `core/vm/src/ast/` - Canonical declarations, module identity, and AST metadata.
+        - `core/vm/src/bin/` - Internal diagnostic executables for phase-level runtime profiling.
         - `core/vm/src/builtins/` - Builtin signatures grouped by value, world, host, and simulation roles.
         - `core/vm/src/causality/` - Settlement provenance model and explanation rendering.
         - `core/vm/src/checker/` - Static semantics, effects, scopes, diagnostics, and type checking.
@@ -66,15 +74,10 @@ rad/
           - `core/vm/src/internal_tests/causal_laws/` - Settlement, resource-limit, provenance, and wire tests requiring private VM state.
           - `core/vm/src/internal_tests/composition/` - World, causality, allocator, and fork-delta composition tests.
           - `core/vm/src/internal_tests/migration/` - Allocator transport, persistence identity, and migration semantics tests.
-        - `core/vm/src/lexer/` - Declaration, expression, and statement tokenization.
         - `core/vm/src/linter/` - Lint engine and lint-specific tests.
         - `core/vm/src/merge/` - Three-way world merge engine and conflict tests.
         - `core/vm/src/module_loader/` - Module resolution, aliases, lockfiles, and loader tests.
           - `core/vm/src/module_loader/tests/` - Canonical module-identity, phase, semantic-analysis, and runtime-metadata integration tests.
-        - `core/vm/src/parser/` - Syntax parser, recovery, types, and causal extensions.
-          - `core/vm/src/parser/decl/` - Callable, data, and dispatch declaration parsing.
-          - `core/vm/src/parser/expr/` - Operator, postfix, and primary expression parsing.
-          - `core/vm/src/parser/tests/` - Core syntax, strings, and type parser regressions.
         - `core/vm/src/relation/` - First-class relation bounded context.
           - `core/vm/src/relation/derivation/` - Full and indexed derived-fact evaluation, proofs, limits, and explanations.
           - `core/vm/src/relation/runtime/` - Authoritative relation store, candidates, manifests, encoding, and profiles.
@@ -182,6 +185,7 @@ rad/
         - `projects/dogfood/riskbridge/scenarios/` - Production-shaped adjudication workloads.
         - `projects/dogfood/riskbridge/systems/` - Risk evaluation and decision systems.
         - `projects/dogfood/riskbridge/tests/` - Host, replay, and policy acceptance programs.
+          - `projects/dogfood/riskbridge/tests/cases/` - Focused workflow and containment cases composed by the project test root.
       - `projects/dogfood/semantic-authority/` - Compact transitive semantic-authority demonstration.
       - `projects/dogfood/sovereign-grid/` - Cumulative production acceptance service covering the complete canonical language and API surface.
         - `projects/dogfood/sovereign-grid/builtins/` - Executable coverage for every runtime builtin and host protocol.
@@ -207,6 +211,8 @@ rad/
       - `projects/dogfood/causality/` - Provenance and `why()` explanation example.
       - `projects/dogfood/causal-laws/` - RFC-0001 proposal, resolver, and settlement example.
       - `projects/dogfood/collatz-lab/` - Exact structural Collatz search, certificates, and independent verifiers.
+        - `projects/dogfood/collatz-lab/verifier/` - Standalone Rust verifier crate with no RAD runtime or native-extension dependency.
+          - `projects/dogfood/collatz-lab/verifier/src/` - Independent certificate traversal and verification implementation.
       - `projects/dogfood/deathsight/` - Terminal/browser dungeon simulation with speculative oracle play.
       - `projects/dogfood/foundry/` - ECS scheduling and mutation-boundary stress application.
         - `projects/dogfood/foundry/bugs/` - Minimal scheduler and mutation regressions.
@@ -324,7 +330,8 @@ rad/
 ## Placement rule
 
 ```text
-language/runtime authority  -> core/vm/
+source-language authority   -> core/syntax/
+semantic/runtime authority  -> core/vm/
 host integration            -> adapters/
 application/domain code     -> projects/
 non-authoritative research  -> experiments/

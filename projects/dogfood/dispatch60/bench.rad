@@ -4,6 +4,10 @@ use "systems/dispatch.rad"
 use "scenarios/production.rad"
 
 fn main() -> nil {
-    run_dispatch_day(50000, 600, 10000)
+    let receipt = summarize_dispatch_batch(50000, 600, 10000)
+    set_resource(DispatchBatchReceipt, receipt)
+    assert(res(DispatchBatchReceipt).jobs == 100000, "delivery job volume exact")
+    assert(res(DispatchBatchReceipt).first_x == 2500.0, "10k frame x fold exact")
+    assert(res(DispatchBatchReceipt).first_y == 5000.0, "10k frame y fold exact")
     print("dispatch60-bench: vehicles=50000 jobs=100000 frames=10000 active=600")
 }

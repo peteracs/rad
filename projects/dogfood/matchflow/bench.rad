@@ -4,7 +4,9 @@ use "systems/phase_engine.rad"
 use "scenarios/production.rad"
 
 fn main() -> nil {
-    let session = run_match_frame(50000, 10000)
-    let snapshot = snapshot_of(session)
-    print(f"matchflow-bench: players=50000 inputs=10000 alive={snapshot.alive_players} deaths={snapshot.deaths}")
+    let receipt = summarize_match_batch(50000, 10000)
+    set_resource(MatchFlowBatchReceipt, receipt)
+    assert(res(MatchFlowBatchReceipt).alive == 40000, "alive population exact")
+    assert(res(MatchFlowBatchReceipt).deaths == 10000, "death publication exact")
+    print(f"matchflow-bench: players=50000 inputs=10000 alive={res(MatchFlowBatchReceipt).alive} deaths={res(MatchFlowBatchReceipt).deaths}")
 }

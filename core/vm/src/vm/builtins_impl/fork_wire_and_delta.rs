@@ -670,31 +670,91 @@ impl VM {
             body.push_str("]]");
         }
 
-        // Provenance restricted to the divergence: the receiver already
-        // holds the base's history (it ingested the base), so only records
-        // for touched values need to travel.
+        // Provenance restricted to the exact divergence: the receiver already
+        // holds the base's history (it ingested the base), so only records for
+        // whole-row changes or the exact component/resource fields in a
+        // surgical patch need to travel. Selecting only by entity/resource is
+        // insufficient: the summary would leak untouched sibling components
+        // and make a one-field delta pay for a large unchanged field.
         body.push(']');
         Self::append_authoritative_world_transport(&wf, &mut body)?;
         body.push_str(",\"prov\":");
         {
-            let keep_ids: std::collections::HashSet<u32> = despawns
+            let whole_entities: std::collections::HashSet<u32> = despawns
                 .iter()
                 .chain(upserts.iter())
-                .chain(ent_patches.iter().map(|p| &p.eid))
                 .copied()
                 .collect();
-            let keep_res: std::collections::HashSet<&str> =
-                changed_res.iter().map(|s| s.as_str()).collect();
-            let prov = match fork.provenance.as_deref() {
+            let mut entity_fields: std::collections::HashMap<
+                (u32, &str),
+                std::collections::HashSet<&str>,
+            > = std::collections::HashMap::new();
+            let mut removed_components: std::collections::HashSet<(u32, &str)> =
+                std::collections::HashSet::new();
+            for patch in &ent_patches {
+                for (data, indexes) in &patch.comps {
+                    let fields = entity_fields
+                        .entry((patch.eid, data.type_name.as_str()))
+                        .or_default();
+                    fields.extend(indexes.iter().map(|&index| data.layout[index].as_str()));
+                }
+                removed_components.extend(
+                    patch
+                        .removed
+                        .iter()
+                        .map(|component| (patch.eid, component.as_str())),
+                );
+            }
+
+            let whole_resources: std::collections::HashSet<&str> =
+                whole_res.iter().copied().collect();
+            let mut resource_fields: std::collections::HashMap<
+                &str,
+                std::collections::HashSet<&str>,
+            > = std::collections::HashMap::new();
+            for (resource, data, indexes) in &patch_res {
+                let fields = resource_fields.entry(*resource).or_default();
+                fields.extend(indexes.iter().map(|&index| data.layout[index].as_str()));
+            }
+
+            let keep_write = |write: &crate::causality::WriteRecord| match write.entity {
+                Some(entity) => {
+                    whole_entities.contains(&entity)
+                        || entity_fields.contains_key(&(entity, write.component.as_str()))
+                        || removed_components.contains(&(entity, write.component.as_str()))
+                }
+                None => {
+                    whole_resources.contains(write.component.as_str())
+                        || resource_fields.contains_key(write.component.as_str())
+                }
+            };
+            let project_write = |write: &mut crate::causality::WriteRecord| match write.entity {
+                Some(entity) if !whole_entities.contains(&entity) => {
+                    if let Some(fields) =
+                        entity_fields.get(&(entity, write.component.as_str()))
+                    {
+                        write
+                            .summary
+                            .project_fields(|field| fields.contains(field));
+                    }
+                }
+                None if !whole_resources.contains(write.component.as_str()) => {
+                    if let Some(fields) = resource_fields.get(write.component.as_str()) {
+                        write
+                            .summary
+                            .project_fields(|field| fields.contains(field));
+                    }
+                }
+                Some(_) | None => {}
+            };
+
+            let mut prov = match fork.provenance.as_deref() {
                 Some(p) => {
                     // A wire-ingested fork carries its records; filter to
                     // the divergence, keep the emit chain whole (it is
                     // already a bounded closure).
                     let mut filtered = p.clone();
-                    filtered.writes.retain(|w| match w.entity {
-                        Some(e) => keep_ids.contains(&e),
-                        None => keep_res.contains(w.component.as_str()),
-                    });
+                    filtered.writes.retain(|write| keep_write(write));
                     filtered.relation_assertions.retain(|record| {
                         wf.relation_state()
                             .assertions()
@@ -706,10 +766,7 @@ impl VM {
                     filtered
                 }
                 None => self.ledger.provenance_closure(
-                    |w| match w.entity {
-                        Some(e) => keep_ids.contains(&e),
-                        None => keep_res.contains(w.component.as_str()),
-                    },
+                    |write| keep_write(write),
                     |record| {
                         wf.relation_state()
                             .assertions()
@@ -726,6 +783,9 @@ impl VM {
                         .collect::<Vec<_>>(),
                 ),
             };
+            for write in &mut prov.writes {
+                project_write(write);
+            }
             crate::wire::encode_prov_into(&prov, &mut body);
         }
         body.push('}');

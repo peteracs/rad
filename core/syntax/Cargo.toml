@@ -1,0 +1,11 @@
+[package]
+name = "rad-syntax"
+version = "0.5.0"
+edition = "2021"
+description = "Canonical RAD source syntax, lexer, AST, and parser"
+license = "MIT"
+repository = "https://github.com/peteracs/rad"
+
+[dependencies]
+blake3 = "1.8.4"
+serde = { version = "1.0", features = ["derive"] }

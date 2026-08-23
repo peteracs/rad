@@ -10,6 +10,11 @@ impl VM {
             Result::Err(error.into())
         }
         match op {
+            Op::CallBuiltin => {
+                self.charge_fuel()?;
+                self.maybe_gc();
+                self.exec_call_builtin()?;
+            }
             Op::Call => {
                 self.charge_fuel()?;
                 self.maybe_gc();
@@ -685,15 +690,21 @@ impl VM {
                 self.require_constraint(condition, code, line)?;
             }
             Op::BeginTransaction => {
-                let name_idx = self.read_u16()? as usize;
-                let name = helpers::constant_string(self.current_chunk(), name_idx)?;
+                let offset = self.current_frame().ip.saturating_sub(1);
+                let chunk_id = self.current_frame().chunk_id;
+                let _name_idx = self.read_u16()? as usize;
                 let count = self.read_u16()? as usize;
-                let mut changes_only = std::collections::BTreeSet::new();
                 for _ in 0..count {
-                    let target_idx = self.read_u16()? as usize;
-                    changes_only
-                        .insert(helpers::constant_string(self.current_chunk(), target_idx)?);
+                    let _target_idx = self.read_u16()? as usize;
                 }
+                let spec = self.chunks[chunk_id]
+                    .transaction_spec(offset)
+                    .ok_or_else(|| {
+                        "Internal VM error: sealed BeginTransaction has no verified contract"
+                            .to_string()
+                    })?;
+                let name = std::sync::Arc::clone(&spec.name);
+                let changes_only = std::sync::Arc::clone(&spec.changes_only);
                 self.begin_transaction(name, changes_only)?;
             }
             Op::CheckTransaction => {

@@ -55,6 +55,16 @@ pub resource ArchivedDecisionReceipt owned {
     transaction_xor: u64 = u64(0),
 }
 
+pub resource BatchDecisionReceipt owned {
+    decisions: int = 0,
+    allows: int = 0,
+    reviews: int = 0,
+    denies: int = 0,
+    score_points: int = 0,
+    reason_xor: u64 = u64(0),
+    transaction_xor: u64 = u64(0),
+}
+
 pub materialized view ManualReviewQueue {
     depends [TransactionAttempt, PolicyDecision, ManualReviewCase]
     key TransactionAttempt.transaction
@@ -65,7 +75,6 @@ pub fn register_customer(id: CustomerId) -> entity writes owned [CustomerRiskSta
 }
 
 pub transaction CommitDecision(
-    attempt: entity,
     customer: entity,
     request: RiskInput,
     output: RiskOutput,
@@ -77,42 +86,47 @@ pub transaction CommitDecision(
 {
     requires is_none(lookup(TransactionAttempt, "transaction", request.transaction))
     requires output.model_version == started_generation
-    changes_only [CustomerRiskState, TransactionAttempt, RiskSignal, ModelRequest, PluginGeneration, ModelScore, PolicyDecision, ManualReviewCase, DecisionLedger, IdempotencyRecord, HostCallRecord]
+    changes_only ["$entities", "$entity_identity", CustomerRiskState, TransactionAttempt, RiskSignal, ModelRequest, PluginGeneration, ModelScore, PolicyDecision, ManualReviewCase, DecisionLedger, IdempotencyRecord, HostCallRecord]
 
-    set(attempt, TransactionAttempt {
-        transaction: request.transaction,
-        submission_order: order,
-        customer: request.customer,
-        amount: request.amount,
-    })
-    set(attempt, RiskSignal { bits: request.signals })
-    set(attempt, ModelRequest { model: request.model })
     let state: CustomerRiskState = require(customer, CustomerRiskState)
     set(customer, CustomerRiskState { customer: state.customer, decisions: state.decisions + 1 })
-    set(attempt, PluginGeneration { generation: started_generation })
-    set(attempt, ModelScore { score: output.score, reason_mask: output.reason_mask })
-    set(attempt, PolicyDecision {
-        disposition: output.disposition,
-        model_version: output.model_version,
-        source: source,
-    })
+    // Publish the stable decision shape in one archetype transition. The
+    // transaction owns the spawn, so failed contracts still roll the entity,
+    // indexes, and allocator generation back atomically.
+    let attempt = spawn(
+        TransactionAttempt {
+            transaction: request.transaction,
+            submission_order: order,
+            customer: request.customer,
+            amount: request.amount,
+        },
+        RiskSignal { bits: request.signals },
+        ModelRequest { model: request.model },
+        PluginGeneration { generation: started_generation },
+        ModelScore { score: output.score, reason_mask: output.reason_mask },
+        PolicyDecision {
+            disposition: output.disposition,
+            model_version: output.model_version,
+            source: source,
+        },
+        DecisionLedger {
+            transaction: request.transaction,
+            model_version: output.model_version,
+            committed: true,
+        },
+        IdempotencyRecord { transaction: request.transaction },
+        HostCallRecord {
+            model: request.model,
+            generation: started_generation,
+            effect_class: u8(0),
+            outcome: u8(0),
+        },
+    )
     if output.disposition == u8(1) {
         set(attempt, ManualReviewCase {
             urgency: (u64(request.transaction), u64(request.transaction)),
         })
     }
-    set(attempt, DecisionLedger {
-        transaction: request.transaction,
-        model_version: output.model_version,
-        committed: true,
-    })
-    set(attempt, IdempotencyRecord { transaction: request.transaction })
-    set(attempt, HostCallRecord {
-        model: request.model,
-        generation: started_generation,
-        effect_class: u8(0),
-        outcome: u8(0),
-    })
 
     ensures is_some(lookup(TransactionAttempt, "transaction", request.transaction))
     ensures has(lookup(TransactionAttempt, "transaction", request.transaction) |> unwrap, PolicyDecision)
@@ -140,22 +154,62 @@ pub transaction ArchiveDecision(attempt: entity)
     changes_only [ArchivedDecisionReceipt, TransactionAttempt, RiskSignal, ModelRequest, PluginGeneration, ModelScore, PolicyDecision, ManualReviewCase, DecisionLedger, IdempotencyRecord, HostCallRecord]
 
     let transaction = require(attempt, DecisionLedger).transaction
+    let had_review = has(attempt, ManualReviewCase)
     update(ArchivedDecisionReceipt) {
         decisions = res(ArchivedDecisionReceipt).decisions + 1,
         transaction_xor = res(ArchivedDecisionReceipt).transaction_xor ^ u64(transaction),
     }
-    remove(attempt, TransactionAttempt)
-    remove(attempt, RiskSignal)
-    remove(attempt, ModelRequest)
-    remove(attempt, PluginGeneration)
-    remove(attempt, ModelScore)
-    remove(attempt, PolicyDecision)
-    remove(attempt, ManualReviewCase)
-    remove(attempt, DecisionLedger)
-    remove(attempt, IdempotencyRecord)
-    remove(attempt, HostCallRecord)
+    let removed = remove_many(attempt, [
+        TransactionAttempt,
+        RiskSignal,
+        ModelRequest,
+        PluginGeneration,
+        ModelScore,
+        PolicyDecision,
+        ManualReviewCase,
+        DecisionLedger,
+        IdempotencyRecord,
+        HostCallRecord,
+    ])
+    assert(removed == if had_review { 10 } else { 9 }, "the archived shape is complete")
 
     ensures not has(attempt, TransactionAttempt)
+}
+
+pub transaction CommitDecisionBatch(customer: entity, summary: RiskBatchSummary)
+    writes owned [CustomerRiskState, ArchivedDecisionReceipt, BatchDecisionReceipt]
+{
+    requires summary.decisions > 0
+    requires summary.allows + summary.reviews + summary.denies == summary.decisions
+    changes_only [CustomerRiskState, ArchivedDecisionReceipt, BatchDecisionReceipt]
+
+    let state = require(customer, CustomerRiskState)
+    set(customer, CustomerRiskState {
+        customer: state.customer,
+        decisions: state.decisions + summary.decisions,
+    })
+    update(ArchivedDecisionReceipt) {
+        decisions = res(ArchivedDecisionReceipt).decisions + summary.decisions,
+        transaction_xor = res(ArchivedDecisionReceipt).transaction_xor ^ summary.transaction_xor,
+    }
+    update(BatchDecisionReceipt) {
+        decisions = res(BatchDecisionReceipt).decisions + summary.decisions,
+        allows = res(BatchDecisionReceipt).allows + summary.allows,
+        reviews = res(BatchDecisionReceipt).reviews + summary.reviews,
+        denies = res(BatchDecisionReceipt).denies + summary.denies,
+        score_points = res(BatchDecisionReceipt).score_points + summary.score_points,
+        reason_xor = res(BatchDecisionReceipt).reason_xor ^ summary.reason_xor,
+        transaction_xor = res(BatchDecisionReceipt).transaction_xor ^ summary.transaction_xor,
+    }
+
+    ensures res(BatchDecisionReceipt).decisions >= summary.decisions
+    ensures res(ArchivedDecisionReceipt).decisions >= summary.decisions
+    post_commit {
+        emit next DecisionBatchCommitted {
+            decisions: summary.decisions,
+            reviews: summary.reviews,
+        }
+    }
 }
 
 pub readonly fn attempt_by_transaction(id: TransactionId) -> entity {

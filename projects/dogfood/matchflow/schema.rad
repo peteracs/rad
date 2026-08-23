@@ -2,6 +2,13 @@ pub opaque type MatchId = u64
 pub opaque type PlayerId = u64
 pub opaque type FrameNumber = u64
 
+pub resource MatchFlowBatchReceipt {
+    players: int = 0,
+    inputs: int = 0,
+    alive: int = 0,
+    deaths: int = 0,
+}
+
 pub event PlayerInput {
     match_entity: entity,
     player: entity,

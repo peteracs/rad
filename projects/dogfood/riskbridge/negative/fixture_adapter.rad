@@ -14,31 +14,57 @@ pub fn fixture_request() -> RiskInput {
 }
 
 pub fn fixture_score(path: str) -> str {
-    let extension = load_extension(path)
+    let extension = load_extension(path, 100)
     let score: pure fn(str) -> str = extension["score_transaction"]
     return score(json_stringify(encode_risk_input(fixture_request())))
 }
 
 pub fn fixture_score_result(path: str) -> Result<str, str> {
-    let extension = load_extension(path)
+    let extension = load_extension(path, 100)
     let score: pure fn(str) -> str = extension["score_transaction"]
     return host_try(score, json_stringify(encode_risk_input(fixture_request())))
 }
 
 pub fn fixture_raw(path: str) -> any {
-    let extension = load_extension(path)
+    let extension = load_extension(path, 100)
     let score: any = extension["score_transaction"]
     return score(json_stringify(encode_risk_input(fixture_request())))
 }
 
 pub fn fixture_probe(path: str) -> any {
-    let extension = load_extension(path)
+    let extension = load_extension(path, 100)
     let probe: any = extension["risk_determinism_probe"]
     return probe()
 }
 
 pub fn fixture_probe_result(path: str) -> Result<str, str> {
-    let extension = load_extension(path)
+    let extension = load_extension(path, 100)
     let probe: pure fn() -> str = extension["risk_determinism_probe"]
     return host_try0(probe)
+}
+
+pub fn fixture_named_probe_result(path: str, export: str) -> Result<str, str> {
+    let extension = load_extension(path, 100)
+    let probe: pure fn() -> str = extension[export]
+    return host_try0(probe)
+}
+
+pub fn fixture_named_score_result(path: str, export: str) -> Result<str, str> {
+    let extension = load_extension(path, 100)
+    let score: pure fn(str) -> str = extension[export]
+    return host_try(score, json_stringify(encode_risk_input(fixture_request())))
+}
+
+pub fn fixture_named_probe(path: str, export: str) -> str {
+    return fixture_named_probe_result(path, export) |> unwrap
+}
+
+pub fn fixture_named_score(path: str, export: str) -> str {
+    return fixture_named_score_result(path, export) |> unwrap
+}
+
+pub fn fixture_named_raw(path: str, export: str) -> any {
+    let extension = load_extension(path, 100)
+    let score: any = extension[export]
+    return score(json_stringify(encode_risk_input(fixture_request())))
 }

@@ -185,11 +185,13 @@ impl VM {
             let v = self.pop()?;
             let type_name = v.type_name().to_string();
             if let Some(state) = v.as_state() {
-                comps.push(ComponentData {
+                let mut data = ComponentData {
                     type_name: state.machine.clone(),
                     layout: std::sync::Arc::new(vec!["state".to_string()]),
                     values: vec![Value::from_string(&mut self.gc, state.state.clone())],
-                });
+                };
+                Value::persist_component_data(&mut data);
+                comps.push(data);
             } else {
                 let mut data = v.into_component().ok_or_else(|| {
                     format!("EcsSpawn expected component or state, got {}", type_name)
@@ -241,40 +243,50 @@ impl VM {
             self.transaction_record_spawn(eid, checkpoint);
         }
         if self.is_worker {
-            let mut comps_clone = Vec::with_capacity(comps.len());
-            for c in comps.iter().rev() {
-                comps_clone.push(c.clone());
-            }
-            self.command_buffer.push(EcsCommand::SpawnEntity(
-                name_opt.map(|s| s.to_string()),
-                comps_clone,
-                eid,
-            ));
+            let components = comps.into_iter().rev().collect::<Vec<_>>();
             if self.transaction.is_some() {
-                for component in comps.into_iter().rev() {
-                    let cname = component.type_name.clone();
-                    let summary = Self::component_summary(&component);
-                    let _ = self.get_world_mut().add_component(eid, component);
-                    self.record_causal_write(
-                        Some(eid),
-                        &cname,
-                        crate::causality::WriteKind::Spawn,
-                        summary,
-                    );
-                }
+                let buffered = components
+                    .iter()
+                    .map(Value::clone_persistent_component_data)
+                    .collect();
+                self.command_buffer.push(EcsCommand::SpawnEntity(
+                    name_opt.map(str::to_string),
+                    buffered,
+                    eid,
+                ));
+                let summaries = components
+                    .iter()
+                    .map(|component| {
+                        (
+                            component.type_name.clone(),
+                            Self::component_summary(component),
+                        )
+                    })
+                    .collect::<Vec<_>>();
+                self.get_world_mut()
+                    .install_spawn_components_owned(eid, components)?;
+                self.record_causal_spawn_writes(eid, summaries);
+            } else {
+                self.command_buffer.push(EcsCommand::SpawnEntity(
+                    name_opt.map(str::to_string),
+                    components,
+                    eid,
+                ));
             }
         } else {
-            for c in comps.into_iter().rev() {
-                let cname = c.type_name.clone();
-                let summary = Self::component_summary(&c);
-                let _ = self.get_world_mut().add_component(eid, c);
-                self.record_causal_write(
-                    Some(eid),
-                    &cname,
-                    crate::causality::WriteKind::Spawn,
-                    summary,
-                );
-            }
+            let components = comps.into_iter().rev().collect::<Vec<_>>();
+            let summaries = components
+                .iter()
+                .map(|component| {
+                    (
+                        component.type_name.clone(),
+                        Self::component_summary(component),
+                    )
+                })
+                .collect::<Vec<_>>();
+            self.get_world_mut()
+                .install_spawn_components_owned(eid, components)?;
+            self.record_causal_spawn_writes(eid, summaries);
         }
         let __v = Value::from_entity_id(&mut self.gc, eid);
         self.push(__v);

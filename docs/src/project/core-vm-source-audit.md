@@ -17,39 +17,26 @@ The live sources of truth are now:
 
 ## Current snapshot
 
-Snapshot captured from the working tree on **2026-08-22**. These numbers are a
+Snapshot captured from the working tree on **2026-08-23**. These numbers are a
 dated receipt, not values that future edits should treat as live constants.
 
-| Scope | Rust files | Lines | File-local 250-line chunks |
-|---|---:|---:|---:|
-| root files | 65 | 17,759 | 111 |
-| `ast/` | 5 | 1,423 | 8 |
-| `builtins/` | 3 | 2,076 | 9 |
-| `causality/` | 7 | 1,832 | 11 |
-| `checker/` | 52 | 25,752 | 130 |
-| `compiler/` | 38 | 13,287 | 73 |
-| `constraint_types/` | 2 | 1,009 | 5 |
-| `ffi/` | 7 | 2,303 | 13 |
-| `host_value/` | 2 | 1,227 | 6 |
-| `internal_tests/` | 11 | 5,169 | 27 |
-| `lexer/` | 7 | 2,902 | 15 |
-| `linter/` | 2 | 847 | 4 |
-| `merge/` | 2 | 1,273 | 7 |
-| `module_loader/` | 4 | 2,491 | 11 |
-| `parser/` | 15 | 6,328 | 33 |
-| `relation/` | 16 | 5,113 | 28 |
-| `replay/` | 3 | 1,804 | 8 |
-| `sandbox/` | 3 | 1,534 | 7 |
-| `types/` | 6 | 1,872 | 10 |
-| `value/` | 5 | 2,332 | 12 |
-| `vm/` | 69 | 28,148 | 148 |
-| `wasm/` | 4 | 2,127 | 10 |
-| `wire/` | 3 | 1,154 | 6 |
-| `world/` | 12 | 4,621 | 24 |
-| **Total** | **343** | **134,383** | **716** |
+| Scope | Rust files | Lines | Responsibility |
+|---|---:|---:|---|
+| `core/syntax/src` | 35 | 11,454 | Lexer, parser, AST, source-bundle identity, and source-level native/view declarations |
+| `core/vm/src` | 326 | 126,886 | Checking, lowering, runtime, world state, replay, provenance, FFI, and WASM |
 
-At capture time the largest Rust source was 999 lines, so no source exceeded
-the repository's 1,000-line gate.
+The syntax extraction moved 199 frontend tests into an independently compiled
+artifact. A clean no-default-feature VM test compile fell from about 131 to 95
+seconds, while observed rustc private memory fell from about 1,448 to 1,316 MiB.
+`cargo llvm-lines` showed 1,998,464 LLVM lines across 58,909 items and no generic
+copy hotspot among the largest functions, so the boundary addresses compiler
+arena breadth rather than masking a monomorphization leak with profile flags.
+
+The model-checker implementation is split into property generators, temporal
+observation, and campaign execution. The interpreter separates fuel/memory/
+sandbox guards from frame dispatch. The live line-limit gate passes with no new
+exception; exact justified exceptions remain limited to generated, frozen, or
+indivisible artifacts listed in `tooling/line-limit-exceptions.tsv`.
 
 ## Audit contract
 
@@ -66,10 +53,11 @@ When a source audit changes behavior or structure:
 5. Run the architecture, line-limit, formatting, test, and documentation gates.
 
 ```powershell
-rg.exe --files core/vm/src -g "*.rs"
+rg.exe --files core/syntax/src core/vm/src -g "*.rs"
 python tooling/check_architecture.py
 python tooling/check_line_limits.py
 cargo fmt --all -- --check
+cargo test -p rad-syntax
 cargo test -p rad-vm --no-default-features
 python tooling/scripts/check_doc_links.py
 mdbook build docs

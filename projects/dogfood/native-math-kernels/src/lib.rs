@@ -12,6 +12,12 @@ mod column_quotient;
 mod sparse_slope;
 mod zeta_cover;
 
+// Public lane receipts must remain stable across the independent production
+// and differential-oracle implementations. Monolithic searches may choose a
+// different internal split without changing externally assigned lane work.
+const AFFINE_SPARSE_LANE_SPLIT_WEIGHT: u32 = 6;
+
+use rayon::prelude::*;
 use serde_json::{json, Value as JsonValue};
 use std::ffi::{c_char, c_void, CString};
 use std::sync::OnceLock;

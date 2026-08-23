@@ -4,6 +4,7 @@ members = [
     "adapters/ffi-worker",
     "adapters/lsp",
     "core/relation",
+    "core/syntax",
     "core/vm",
     "projects/moba/simcore",
 ]
@@ -46,6 +47,20 @@ opt-level = 3
 # monolithic LLVM unit for RAD, Wasmtime, and the native adapters. Full LTO
 # exhausted developer and CI machines as the compiler/runtime grew.
 lto = "thin"
+
+# Runtime optimization work needs an optimized executable after each small
+# VM edit, but ThinLTO re-optimizes the complete dependency graph again while
+# linking the CLI adapter. This profile keeps release code generation and
+# disables only cross-crate LTO; measurements made with it are diagnostic.
+# Release claims and acceptance artifacts always use `[profile.release]`.
+[profile.runtime-bench]
+inherits = "release"
+lto = false
+codegen-units = 16
+# This profile exists only for repeated local VM hot-path measurement. Keep
+# optimized code while reusing unchanged codegen units between edits; final
+# release evidence still comes from the non-incremental ThinLTO profile above.
+incremental = true
 
 [profile.wasm-size]
 inherits = "release"

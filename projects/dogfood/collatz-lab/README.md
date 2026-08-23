@@ -20,6 +20,7 @@ The program attacks the two exhaustive possibilities:
 ```powershell
 cargo build --release -p rad-cli
 projects/dogfood/native-math-kernels/build.ps1
+cargo build --manifest-path projects/dogfood/collatz-lab/verifier/Cargo.toml --release -j 1
 target/release/rad.exe projects/dogfood/collatz-lab/main.rad `
   --experimental-laws `
   --record projects/dogfood/collatz-lab/out/run.radr
@@ -71,7 +72,8 @@ Or use `run.ps1` after building the release binary.
 - `fork_with()` creates eight disjoint low-bit universes without touching the
   live world.
 - `simulate_many()` evaluates those universes concurrently.
-- A project-owned native extension loaded through generic `load_extension()`
+- A project-owned native extension loaded through generic
+  `load_extension(path, timeout_ms)`
   expands only still-dangerous residue nodes. A certified descent prunes its
   entire descendant subtree; no Collatz operation exists in the VM.
 - Nine typed proposals (eight lanes plus the cycle box) feed one resolver.
@@ -83,13 +85,10 @@ Or use `run.ps1` after building the release binary.
 - CLI record/replay checks deterministic execution.
 - `verify_certificate.py` recomputes the mathematics without importing RAD.
 
-On the Windows development host, the debug CLI completed one full RAD study
-in about 0.9 seconds. Inside that run the parallel residue kernel took roughly
-1–2 ms and the exact 4.54-million-word cycle kernel roughly 0.28 seconds. The
-independent Python verifiers are intentionally much slower: they re-enumerate the
-complete residue cube and cycle box with Python big integers instead of
-trusting RAD's pruning kernel. These are development measurements, not a
-portable benchmark claim.
+On the Windows development host, the release CLI completed one full RAD study
+in 316.8 ms. The independently implemented Python verifier completed in
+520.6 ms while recomputing the complete residue and cycle evidence. These are
+2026-08-23 development measurements, not portable benchmark claims.
 
 ## Natural tails and the actual remaining gap
 
@@ -119,21 +118,31 @@ is not assumed globally. It is Terras's coefficient-stopping-time conjecture,
 verified here only for the finite certified set. This exposes the precise
 infinite obstruction: a counterexample must keep an infinite parity meander,
 or exhibit a genuinely paradoxical coefficient contraction whose additive
-remainder still prevents descent. `verify_natural_tail.py` independently
-rebuilds the prefix tree and every finite tail with Python big integers.
+remainder still prevents descent. `verify_natural_tail.py` invokes the separate
+`verifier/` executable, which independently rebuilds the prefix tree and every
+finite tail without importing the RAD VM or its native extension.
 
 The depth-28 run originally carried 1,024-slot outcome histograms through
 every fork, proposal, resolver, and causal record. The exact record stopped at
 395, so the constrained horizon is now 512: any unresolved tail still aborts
-the settlement. On the Windows development host this reduced the complete
-seven-scale RAD run from roughly 4.3 seconds to about 1.8 seconds, with about
-0.8 seconds in the generic arithmetic kernel. The independent streaming
-Python verifier remains intentionally slower because it rederives the entire
-certificate using a separate implementation. Its first breadth-first version
-took about 85 seconds at depth 28 and retained a large frontier. The checked-in
-verifier now streams 64 independent low-bit lanes through a bounded worker
-pool; on the same host it completed in about 32 seconds with stable per-worker
-memory.
+the settlement. The current kernel splits the residue tree into deterministic
+prefix tasks, dynamically distributes them over the available CPUs, accumulates
+worker-local lane profiles, and merges those profiles in canonical order. It
+does not materialize the final survivor frontier. On the 16-logical-core
+Windows development host, the unchanged depth-28 kernel processes 3,524,586
+survivors and 59,245,588 tail steps in 64.4 ms; the complete seven-scale RAD
+process finishes in 579.3 ms, with 93.3 ms in the seven native calls. Both are
+2026-08-23 diagnostic-profile measurements, not portable latency guarantees;
+release acceptance independently enforces the one-second process ceiling and
+the shared native-math adapter requires an explicit 850 ms per-call deadline.
+
+The independent verifier remains separate proof code rather than a RAD runtime
+operation. Its Rust source is in `verifier/src/main.rs`; it uses an independent
+tree traversal and record reduction, shares no runtime or extension code, and
+is built as a standalone executable. The Python entry point validates the
+certificate envelope and secondary diagnostics around that exact recomputation.
+The executable took 147.1 ms and the complete wrapper 259.7 ms on the same host.
+Missing verifier binaries are hard errors; there is no fallback verifier.
 
 ## Support pressure: an infinite-class exclusion
 
@@ -196,6 +205,11 @@ A separate Python implementation exhaustively agrees through support
 seven/depth 365 and checks the terminal boundary of every reported witness
 through support ten.
 
+This standalone exhaustive research receipt is deliberately outside the
+subsecond release-acceptance matrices. It remains a named performance backlog;
+the project does not lower its support or depth, embed its result, or relabel it
+as a subsecond operation.
+
 The exact observations also satisfy two candidate invariants checked inside
 the settlement: the next renewal bit always arrives before the preceding
 budget's death depth, and `H(w) < 2^(w+3)` for every computed `0 <= w <= 10`.
@@ -212,7 +226,8 @@ descent. The current extremal frontier is therefore the pure irrational-slope
 meander branch, not a paradoxical additive-remainder branch. This simplifies
 the next proof obligation, although the standalone deep slope audit is slower
 (about 210 seconds) because it preserves coefficient/denominator big integers
-through every exhausted leaf.
+through every exhausted leaf. That deep slope audit is also standalone research
+work rather than a subsecond portfolio operation.
 
 The same program constructs the greedy minimal-odd boundary meander and
 inverts it back to input bits. Its depth-61 2-adic shadow is
@@ -257,9 +272,12 @@ globally deepest witness at each support.
 `verify_frontier.py` imports neither RAD nor the native extension. It checks
 all emitted witnesses with Python big integers, including support, every
 prefix coefficient inequality, the step-945 boundary, and eventual convergence.
-Moving the six candidates from serial `simulate()` calls to `simulate_many()`
-reduced the depth-1,024 portfolio from about 28.6 seconds to 13.9 seconds on
-the development host with identical semantic output.
+The six exact candidates now cross one native batch boundary, seed six forked
+worlds, and remain independently audited through `simulate_many()`. The full
+depth-1,024 run completed below 0.85 seconds on the 2026-08-23 development host
+with identical witnesses and causal output. The earlier serial and
+first-generation parallel implementations took about 28.6 and 13.9 seconds;
+they are retained only as historical baselines.
 
 The exhaustive support-eleven upper-bound attempt did not finish inside a
 ten-minute development run. Dogfooding therefore added

@@ -166,6 +166,15 @@ fn execute_test_command(test_dir: &str) {
         return;
     }
 
+    // A directory is a suite of isolated programs. Run those programs in
+    // bounded child processes so native faults, global allocators, and host
+    // handles remain isolated while independent files no longer serialize
+    // one another. A single file stays in-process to avoid recursive spawn.
+    if test_files.len() > 1 {
+        execute_test_files_parallel(&test_files);
+        return;
+    }
+
     let mut tests_passed = 0usize;
     let mut tests_failed = 0usize;
     let mut files_errored = 0usize;

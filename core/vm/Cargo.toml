@@ -11,6 +11,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 rad-relation = { path = "../relation" }
+rad-syntax = { path = "../syntax" }
 hex = "0.4"
 rpds = "1.2.1"
 sha2 = "0.10"
@@ -29,7 +30,6 @@ smallvec = "1.15.1"
 # iterates them sorts first, so digests stay hasher-independent.
 rustc-hash = "2.1"
 blake3 = "1.8.4"
-egg = "0.11.0"
 # RADPACK transport envelope: pure-Rust DEFLATE + base64 (wasm-safe).
 miniz_oxide = "0.8"
 base64 = "0.22"

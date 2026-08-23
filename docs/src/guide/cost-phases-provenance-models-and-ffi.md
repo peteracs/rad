@@ -195,6 +195,14 @@ that fails after a successful host result still rolls back its authoritative
 patch. Host handles cannot enter snapshots. Replay consumes the recorded host
 result and must have no leftover or live host calls.
 
+Worker startup/verification and calls do not share one permissive timeout.
+Startup is bounded at 700 ms and monitors child status concurrently with the
+framed handshake. `load_extension(path, timeout_ms)` requires an explicit
+per-call deadline from 1 through 900 ms; this guide's RiskBridge project chooses
+100 ms. A crash is distinguished from a
+live hang, every failed child is killed/reaped, and the complete RAD operation
+must still finish below the portfolio's one-second process deadline.
+
 ### Trust boundary and non-guarantees
 
 Native machine code is not statically proven pure. RAD verifies declarations,

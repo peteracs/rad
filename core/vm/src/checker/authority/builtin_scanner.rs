@@ -59,6 +59,7 @@ impl Scanner<'_> {
             "range" if args.len() == 4 => self.read_arg(args, 0),
             "peek_resource" => self.read_arg(args, 1),
             "set" | "remove" => self.write_arg(args, 1),
+            "remove_many" => self.write_list_arg(args, 1),
             "write_field" => self.record_direct_field_access(args, true),
             "set_resource" => self.write_arg(args, 0),
             "fork_with" => self.write_arg(args, 1),
@@ -335,6 +336,22 @@ impl Scanner<'_> {
         }
     }
 
+    fn write_list_arg(&mut self, args: &[&Expr], index: usize) {
+        let Some(Expr::ListLit(items, _)) = args.get(index).copied() else {
+            self.direct.writes.insert(WHOLE_WORLD.to_string());
+            self.direct.unknown = true;
+            return;
+        };
+        for item in items {
+            if let Some(name) = self.resolver.data_expr(item, &self.seed.redirects) {
+                self.direct.writes.insert(name);
+            } else {
+                self.direct.writes.insert(WHOLE_WORLD.to_string());
+                self.direct.unknown = true;
+            }
+        }
+    }
+
     fn record_fact(&mut self, args: &[&Expr], write: bool) {
         let name = match args.first() {
             Some(Expr::StrLit(name, _)) => format!("fact::{name}"),
@@ -508,6 +525,7 @@ fn builtin_has_exact_state_authority(name: &str) -> bool {
             | "set"
             | "write_field"
             | "remove"
+            | "remove_many"
             | "set_resource"
             | "fork_with"
             | "spawn"

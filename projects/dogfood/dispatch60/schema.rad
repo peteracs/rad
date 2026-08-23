@@ -1,5 +1,14 @@
 pub opaque type VehicleId = u64
 pub opaque type JobId = u64
+
+pub resource DispatchBatchReceipt {
+    vehicles: int = 0,
+    jobs: int = 0,
+    active: int = 0,
+    frames: int = 0,
+    first_x: float = 0.0,
+    first_y: float = 0.0,
+}
 pub opaque type ZoneId = u16
 
 pub component DeliveryJob {

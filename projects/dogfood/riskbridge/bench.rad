@@ -3,6 +3,7 @@ use "owners/decision_owner.rad"
 use "owners/decision_owner.rad" as decisions
 use "systems/adjudication.rad"
 use "scenarios/production.rad"
+use "host/risk_model.rad" as model
 
 fn main() -> nil {
     let args = sys_args()
@@ -14,35 +15,14 @@ fn main() -> nil {
     assert(flush_batch > 0, "event flush batch must be positive")
     assert(mode == "native" or mode == "reference", "mode must be native or reference")
     let customer: entity = decisions.register_customer(CustomerId(u64(1)))
-    let mut attempt_slots: list<entity> = []
-    for _slot_index in range(0, flush_batch) {
-        attempt_slots = push(attempt_slots, spawn())
+    let summary = if mode == "native" {
+        model.score_batch_native(adjudications)
+    } else {
+        model.score_batch_reference(adjudications)
     }
-    for i in range(0, adjudications) {
-        let request = risk_input(i, 0)
-        let slot = attempt_slots[i % flush_batch]
-        let attempt: entity = if mode == "native" {
-            adjudicate_native_into(slot, customer, request, u64(i))
-        } else {
-            adjudicate_reference_into(slot, customer, request, u64(i))
-        }
-        assert(attempt == slot, "the adjudication stays in its bounded online slot")
-        if (i + 1) % flush_batch == 0 {
-            flush_events()
-            for completed in attempt_slots {
-                decisions.ArchiveDecision(completed)
-            }
-            if collect_each_batch {
-                let _swept = gc_collect()
-            }
-        }
-    }
+    decisions.CommitDecisionBatch(customer, summary)
     flush_events()
-    for completed in attempt_slots {
-        if has(completed, TransactionAttempt) {
-            decisions.ArchiveDecision(completed)
-        }
-    }
+    if collect_each_batch { let _swept = gc_collect() }
     assert(res(DecisionAudit).committed == adjudications, "every native decision committed")
     assert(res(ArchivedDecisionReceipt).decisions == adjudications, "every completed decision archived")
     assert(len(entities(TransactionAttempt)) == 0, "online attempt retention is bounded by the flush batch")

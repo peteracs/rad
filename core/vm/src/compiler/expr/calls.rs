@@ -6,9 +6,7 @@ impl Compiler {
         match expr {
             Expr::Call(callee, args, span) => {
                 if let Expr::Ident(name, _) = callee.as_ref() {
-                    let fn_idx = self.functions.len() - 1;
-                    let is_shadowed = self.resolve_local(name).is_some()
-                        || (fn_idx > 0 && self.resolve_upvalue(fn_idx, name).is_some());
+                    let is_shadowed = self.has_lexical_binding(name);
                     if !is_shadowed
                         && name == "visit_view"
                         && self.try_compile_view_kernel(args, span)?
@@ -107,10 +105,7 @@ impl Compiler {
                 if self.release && args.len() == 1 {
                     let mut is_debug_trace = false;
                     if let Expr::Ident(name, _) = callee.as_ref() {
-                        let is_local = self.resolve_local(name).is_some() || {
-                            let fn_idx = self.functions.len() - 1;
-                            fn_idx > 0 && self.resolve_upvalue(fn_idx, name).is_some()
-                        };
+                        let is_local = self.has_lexical_binding(name);
                         if !is_local {
                             if let Some(builtin) = Builtin::ALL.iter().find(|b| b.name() == name) {
                                 if matches!(builtin, Builtin::DebugTrace) {
@@ -160,6 +155,20 @@ impl Compiler {
                     }
                 }
                 let mut total_args = 0;
+                let direct_builtin = if let Expr::Ident(name, _) = callee.as_ref() {
+                    // Builtins begin life in the global slot table, but any
+                    // user declaration with the same spelling owns normal
+                    // lexical resolution. `predeclare_decl_metadata` records
+                    // all top-level bindings before hoisted function bodies
+                    // compile, so this remains source-order independent.
+                    let is_shadowed = self.has_lexical_binding(name)
+                        || self.global_mutability.contains_key(name);
+                    (!is_shadowed)
+                        .then(|| Builtin::from_name(name))
+                        .flatten()
+                } else {
+                    None
+                };
                 for arg in args {
                     if let Expr::Spread(inner, s_span) = arg {
                         self.compile_expr(inner)?;
@@ -171,9 +180,15 @@ impl Compiler {
                         total_args += 1;
                     }
                 }
-                self.compile_expr(callee)?;
-                self.emit_op(Op::Call, span.line);
-                self.emit_byte(total_args as u8, span.line);
+                if let Some(builtin) = direct_builtin {
+                    self.emit_op(Op::CallBuiltin, span.line);
+                    self.emit_u16(builtin as u16, span.line);
+                    self.emit_byte(total_args as u8, span.line);
+                } else {
+                    self.compile_expr(callee)?;
+                    self.emit_op(Op::Call, span.line);
+                    self.emit_byte(total_args as u8, span.line);
+                }
             }
             Expr::Await(inner, _) => {
                 self.compile_expr(inner)?;

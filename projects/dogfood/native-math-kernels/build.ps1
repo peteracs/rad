@@ -17,17 +17,17 @@ if (($IsWindows -or $env:OS -eq "Windows_NT") -and
 }
 if ($LASTEXITCODE -ne 0) { throw "native math kernel build failed" }
 
-$extension = if ($IsWindows -or $env:OS -eq "Windows_NT") {
-    "rad_dogfood_math_kernels.dll"
+$platform = if ($IsWindows -or $env:OS -eq "Windows_NT") {
+    [pscustomobject]@{ Artifact = "rad_dogfood_math_kernels.dll"; Suffix = "dll" }
 } elseif ($IsMacOS) {
-    "librad_dogfood_math_kernels.dylib"
+    [pscustomobject]@{ Artifact = "librad_dogfood_math_kernels.dylib"; Suffix = "dylib" }
 } else {
-    "librad_dogfood_math_kernels.so"
+    [pscustomobject]@{ Artifact = "librad_dogfood_math_kernels.so"; Suffix = "so" }
 }
-$source = Join-Path $project "target/$Profile/$extension"
+$source = Join-Path $project "target/$Profile/$($platform.Artifact)"
 $output = Join-Path $project "out"
 New-Item -ItemType Directory -Force -Path $output | Out-Null
 $installed = Join-Path $output "rad_dogfood_math_kernels"
 Copy-Item -LiteralPath $source -Destination $installed -Force
-Copy-Item -LiteralPath $source -Destination "$installed.dll" -Force
+Copy-Item -LiteralPath $source -Destination "$installed.$($platform.Suffix)" -Force
 Write-Host $installed

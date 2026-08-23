@@ -1,8 +1,8 @@
-use "../negative/fixture_adapter.rad"
-use "../owners/decision_owner.rad" as decisions
+use "../../negative/fixture_adapter.rad"
+use "../../owners/decision_owner.rad" as decisions
 
 test "a crashed plugin does not corrupt the world or another generation" {
-    match fixture_probe_result("target/riskbridge-fixtures/crash.dll") {
+    match fixture_named_probe_result("target/riskbridge-fixtures/containment.dll", "crash_probe") {
         Err(message) => {
             assert(contains(message, "HostCallFailure"), "crash is a typed host failure")
         }
@@ -14,7 +14,7 @@ test "a crashed plugin does not corrupt the world or another generation" {
 }
 
 test "a timed out plugin does not corrupt the world or another generation" {
-    match fixture_probe_result("target/riskbridge-fixtures/timeout.dll") {
+    match fixture_named_probe_result("target/riskbridge-fixtures/containment.dll", "timeout_probe") {
         Err(message) => {
             assert(contains(message, "native-call timeout"), "timeout is a typed host failure")
         }
@@ -28,7 +28,7 @@ test "a timed out plugin does not corrupt the world or another generation" {
 test "a host failure is data and cannot partially commit a decision" {
     let request = fixture_request()
     let customer = decisions.register_customer(request.customer)
-    match fixture_score_result("target/riskbridge-fixtures/host_failure.dll") {
+    match fixture_named_score_result("target/riskbridge-fixtures/containment.dll", "failed_score") {
         Err(message) => {
             assert(contains(message, "typed fixture host failure"), "native error is retained")
         }
@@ -39,7 +39,7 @@ test "a host failure is data and cannot partially commit a decision" {
     assert(len(entities(decisions.DecisionLedger)) == 0, "failed host call committed no ledger")
 
     let output = score_reference(request)
-    decisions.CommitDecision(spawn(), customer, request, output, u32(17), u8(1), u64(1))
+    decisions.CommitDecision(customer, request, output, u32(17), u8(1), u64(1))
     let attempt = decisions.attempt_by_transaction(request.transaction)
     assert(has(attempt, decisions.DecisionLedger), "the service processes the next decision")
 }

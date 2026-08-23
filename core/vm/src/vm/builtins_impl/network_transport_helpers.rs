@@ -27,7 +27,19 @@ fn tcp_accept_nonblocking_loop(
     let deadline = poll_deadline(timeout_ms, "tcp_accept_timeout()")?;
     loop {
         match listener.accept() {
-            Ok((stream, _addr)) => return Ok(Some(stream)),
+            Ok((stream, _addr)) => {
+                // Windows may propagate the listener's nonblocking state to
+                // an accepted socket. The timeout belongs to the accept
+                // operation only; returning that socket as an ordinary RAD
+                // stream must restore the blocking `tcp_read` contract.
+                stream.set_nonblocking(false).map_err(|error| {
+                    format!(
+                        "tcp_accept_timeout() failed to restore accepted stream blocking mode: {}",
+                        error
+                    )
+                })?;
+                return Ok(Some(stream));
+            }
             Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
                 if !sleep_until_next_poll(deadline) {
                     return Ok(None);
@@ -269,4 +281,36 @@ fn bytebuf_read_u32_le(bytes: &[u8], offset: usize, fn_name: &str) -> Result<u32
         | (u32::from(bytes[offset + 1]) << 8)
         | (u32::from(bytes[offset + 2]) << 16)
         | (u32::from(bytes[offset + 3]) << 24))
+}
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod tests {
+    use super::tcp_accept_with_timeout;
+    use std::io::{Read, Write};
+    use std::net::{TcpListener, TcpStream};
+    use std::time::Duration;
+
+    #[test]
+    fn timed_accept_returns_a_blocking_stream() {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind loopback listener");
+        let address = listener.local_addr().expect("listener address");
+        let sender = std::thread::spawn(move || {
+            let mut stream = TcpStream::connect(address).expect("connect loopback client");
+            std::thread::sleep(Duration::from_millis(20));
+            stream.write_all(b"ready").expect("write delayed payload");
+        });
+
+        let mut accepted = tcp_accept_with_timeout(&listener, 200)
+            .expect("timed accept succeeds")
+            .expect("client arrives before deadline");
+        accepted
+            .set_read_timeout(Some(Duration::from_millis(200)))
+            .expect("bound the regression test");
+        let mut payload = [0_u8; 5];
+        accepted
+            .read_exact(&mut payload)
+            .expect("accepted stream blocks until the delayed payload");
+        sender.join().expect("sender remains healthy");
+        assert_eq!(&payload, b"ready");
+    }
 }

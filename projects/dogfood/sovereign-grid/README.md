@@ -4,7 +4,7 @@ Sovereign Grid is RAD's cumulative production acceptance service. It dispatches
 energy-grid missions across owned state, atomic lifecycle transactions,
 incremental views, ordered indexes, explicit phases, provenance, deterministic
 replay, stateful models, relations, and a native scoring extension. It is also
-the executable denominator for every canonical syntax rule and all 256 runtime
+the executable denominator for every canonical syntax rule and all 257 runtime
 builtins.
 
 This project is accepted by evidence, not by `main.rad` merely exiting zero.
@@ -55,6 +55,10 @@ It executes stable and experimental workflows, all intended failures, the
 2, 4, and logical-CPU workers, operational inspection, and a 30-sample release
 benchmark. Its source-bound JSON report is written under
 `target/sovereign-grid-acceptance/`.
+Every RAD child has a strict end-to-end deadline below one second; aggregate
+Python, native-build, Rust-build, and documentation orchestrators are reported
+separately. The report records the actual Cargo profile inferred from the
+binary path, so a `runtime-bench` diagnosis cannot be mislabeled as release.
 
 ## Architecture
 

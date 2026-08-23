@@ -79,18 +79,17 @@ impl VM {
         &self.world
     }
 
-    /// Walk only closure/stack roots and sweep unreachable GC allocations.
+    /// Walk VM-heap roots and sweep unreachable GC allocations.
     ///
-    /// This backup collector intentionally skips ECS world state, timeline, and
-    /// event logs. Persistent ECS data is not managed by `GcHeap`.
+    /// ECS component/resource payloads live in the persistent store and do
+    /// not need tracing. VM-owned roots include stacks, globals, queued and
+    /// recorded events, tasks, settlement payloads, closures, and constants.
     pub fn collect_cycles(&mut self) -> usize {
-        let mut marked = HashSet::new();
-
         for val in &self.stack {
-            val.trace(&mut marked);
+            val.trace(&mut self.gc);
         }
         for val in &self.globals {
-            val.trace(&mut marked);
+            val.trace(&mut self.gc);
         }
         // In-flight event payloads are live state (latent-bug fix found
         // during the #7 composition pass: queued payloads were not roots).
@@ -100,17 +99,16 @@ impl VM {
             .chain(self.events_next.iter())
             .chain(self.events_processing.iter())
         {
-            payload.trace(&mut marked);
+            payload.trace(&mut self.gc);
         }
         for (_, _, payload, _) in &self.delayed_events {
-            payload.trace(&mut marked);
+            payload.trace(&mut self.gc);
         }
         for frame in &self.frames {
             if let Some(captures) = &frame.captures {
                 for &cell in captures.as_ref() {
-                    let ptr = cell as usize;
-                    if marked.insert(ptr) {
-                        unsafe { (*cell).get().trace(&mut marked) };
+                    if unsafe { self.gc.mark(cell) } {
+                        unsafe { (*cell).get().trace(&mut self.gc) };
                     }
                 }
             }
@@ -119,37 +117,37 @@ impl VM {
         // are reachable from rad code, so they are roots too.
         for task in self.tasks.values() {
             if let TaskStatus::Completed(val) = &task.status {
-                val.trace(&mut marked);
+                val.trace(&mut self.gc);
             }
         }
         for entry in &self.event_log {
-            entry.payload.trace(&mut marked);
+            entry.payload.trace(&mut self.gc);
         }
         if let Some(settlement) = &self.settlement {
             for proposal in &settlement.proposals {
-                proposal.payload.trace(&mut marked);
+                proposal.payload.trace(&mut self.gc);
             }
             for patch in &settlement.patches {
                 for write in &patch.writes {
                     for value in &write.component.values {
-                        value.trace(&mut marked);
+                        value.trace(&mut self.gc);
                     }
                 }
             }
             if let Some(active) = &settlement.active {
                 for write in &active.writes {
                     for value in &write.component.values {
-                        value.trace(&mut marked);
+                        value.trace(&mut self.gc);
                     }
                 }
             }
         }
         for chunk in self.chunks.iter() {
             for val in &chunk.constants {
-                val.trace(&mut marked);
+                val.trace(&mut self.gc);
             }
         }
-        unsafe { self.gc.sweep(&marked) }
+        unsafe { self.gc.sweep() }
     }
 
     #[inline]
@@ -244,6 +242,7 @@ impl VM {
             system_metrics: shared.collect_system_metrics.then(BTreeMap::new),
             model_check_config: ModelCheckConfig::default(),
             model_check_reports: Vec::new(),
+            model_access_trace: None,
             metered_instruction_count: 0,
             trace_timeline: false,
             trace_patch: None,
@@ -423,6 +422,7 @@ impl VM {
             system_metrics: None,
             model_check_config: ModelCheckConfig::default(),
             model_check_reports: Vec::new(),
+            model_access_trace: None,
             metered_instruction_count: 0,
             trace_timeline: false,
             trace_patch: None,

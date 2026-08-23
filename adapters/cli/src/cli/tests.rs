@@ -909,4 +909,15 @@ mod tests {
         let host = assess_allocation_contracts(Some(&host_contracts), false, &host_metric);
         assert!(!host.host_pass);
     }
+
+    #[test]
+    fn parallel_test_summary_retains_all_failure_categories() {
+        assert_eq!(
+            parse_test_summary(
+                "7 passed, 2 failed, 9 total (3 file(s) with no tests) (4 file(s) failed to run)"
+            ),
+            Some((7, 2, 4, 3))
+        );
+        assert_eq!(parse_test_summary("not a test summary"), None);
+    }
 }

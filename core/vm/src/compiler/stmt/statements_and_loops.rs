@@ -513,7 +513,7 @@ impl Compiler {
         }
         if self.resolve_local(name).is_none() {
             let fn_idx = self.functions.len() - 1;
-            if fn_idx > 0 && self.resolve_upvalue(fn_idx, name).is_some() {
+            if fn_idx > 0 && self.has_lexical_binding(name) {
                 if matches!(self.resolve_captured_mutability(fn_idx, name), Some(false)) {
                     return Err(CompileError {
                         message: format!(

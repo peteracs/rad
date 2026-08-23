@@ -185,7 +185,7 @@ fn builtin_api_category(builtin: Builtin) -> &'static str {
         SizeOf | OffsetOf | DecodeLe | DecodeBe | EncodeLe | EncodeBe => "native-layout",
 
         Get | ReadField | Lookup | LookupAll | Set | WriteField | Has | Spawn | GetEntity
-        | RequireEntity | Remove | Despawn | Entities | VisitView | GetResource | SetResource
+        | RequireEntity | Remove | RemoveMany | Despawn | Entities | VisitView | GetResource | SetResource
         | Transition | Require | RequireAll | NameOf | IdOf | QueryWhere | QueryMap
         | QueryCount | WithField | Res => "ecs-resources",
 

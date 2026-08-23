@@ -132,18 +132,19 @@ To run the native VM:
 ```bash
 git clone https://github.com/peteracs/rad.git
 cd rad
-cargo run --release -p rad-cli -- examples/demo.rad
+cargo build --release -p rad-cli -p rad-ffi-worker -j 1
+target/release/rad examples/demo.rad
 ```
 
 Then try the features that motivated the language:
 
 ```bash
-cargo run --release -p rad-cli -- projects/dogfood/causality/main.rad
-cargo run --release -p rad-cli -- projects/dogfood/speculation/blast_radius.rad
-cargo run --release -p rad-cli -- projects/dogfood/worldmerge/main.rad
-cargo run --release -p rad-cli -- projects/dogfood/authority-effects/main.rad
-cargo run --release -p rad-cli -- projects/dogfood/workpulse/main.rad
-cargo run --release -p rad-cli -- projects/dogfood/riskbridge/main.rad
+target/release/rad projects/dogfood/causality/main.rad
+target/release/rad projects/dogfood/speculation/blast_radius.rad
+target/release/rad projects/dogfood/worldmerge/main.rad
+target/release/rad projects/dogfood/authority-effects/main.rad
+target/release/rad projects/dogfood/workpulse/main.rad
+target/release/rad projects/dogfood/riskbridge/main.rad
 ```
 
 ## A small language with a serious runtime

@@ -63,7 +63,9 @@ jobs:
       - name: cargo check
         run: cargo check --workspace --all-targets
       - name: cargo test
-        run: cargo test -p rad-vm --verbose
+        run: |
+          cargo test -p rad-syntax --verbose
+          cargo test -p rad-vm --verbose
       - name: Compiler-owned language and host API coverage
         run: |
           # Native FFI syntax/API evidence is part of the mandatory surface.
@@ -103,6 +105,8 @@ jobs:
           python3 projects/dogfood/frankl-search/verify_structure.py projects/dogfood/frankl-search/out/cyclic-universes.json --quick
       - name: Collatz structural dogfood
         run: |
+          python3 -m pip install --requirement projects/dogfood/collatz-lab/requirements.txt
+          cargo build --manifest-path projects/dogfood/collatz-lab/verifier/Cargo.toml --release -j 1
           cargo run -p rad-cli --bin rad -- projects/dogfood/collatz-lab/main.rad --experimental-laws --record projects/dogfood/collatz-lab/out/ci.radr
           target/debug/rad replay projects/dogfood/collatz-lab/out/ci.radr
           python3 projects/dogfood/collatz-lab/verify_certificate.py projects/dogfood/collatz-lab/out/certificate.json --report projects/dogfood/collatz-lab/out/ci-verification.json

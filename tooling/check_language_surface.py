@@ -84,13 +84,33 @@ def markdown_has_anchor(path: Path, anchor: str) -> bool:
     return False
 
 
+RAD_LIMIT_NS = 1_000_000_000
+
+
 def run_checked(argv: list[str]) -> subprocess.CompletedProcess[str]:
     return subprocess.run(argv, cwd=ROOT, text=True, capture_output=True)
 
 
+def run_rad_checked(argv: list[str]) -> tuple[subprocess.CompletedProcess[str], int]:
+    started = time.perf_counter_ns()
+    completed = subprocess.run(
+        argv,
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        timeout=RAD_LIMIT_NS / 1_000_000_000,
+    )
+    elapsed_ns = time.perf_counter_ns() - started
+    if elapsed_ns >= RAD_LIMIT_NS:
+        raise RuntimeError(
+            f"RAD operation exceeded hard limit: elapsedNs={elapsed_ns} limitNs={RAD_LIMIT_NS}"
+        )
+    return completed, elapsed_ns
+
+
 def run_manifest_command(
     rad: Path, command: dict[str, object]
-) -> tuple[subprocess.CompletedProcess[str], str]:
+) -> tuple[subprocess.CompletedProcess[str], str, int]:
     setup = command.get("setup")
     if setup:
         setup_argv = [str(value) for value in setup]
@@ -98,7 +118,7 @@ def run_manifest_command(
             raise RuntimeError("Rust setup commands must pin a single compiler job")
         prepared = run_checked(setup_argv)
         if prepared.returncode:
-            return prepared, "setup"
+            return prepared, "setup", 0
 
     harness = command.get("harness")
     process: subprocess.Popen[str] | None = None
@@ -131,13 +151,20 @@ def run_manifest_command(
             raise RuntimeError(f"protocol harness did not become ready:\n{output}")
 
     try:
+        started = time.perf_counter_ns()
         completed = subprocess.run(
             [str(rad)] + [str(value) for value in command.get("args", [])],
             cwd=ROOT,
             text=True,
             input=command.get("stdin"),
             capture_output=True,
+            timeout=RAD_LIMIT_NS / 1_000_000_000,
         )
+        elapsed_ns = time.perf_counter_ns() - started
+        if elapsed_ns >= RAD_LIMIT_NS:
+            raise RuntimeError(
+                f"RAD operation exceeded hard limit: elapsedNs={elapsed_ns} limitNs={RAD_LIMIT_NS}"
+            )
     finally:
         if process is not None:
             stop.write_text("stop\n", encoding="utf-8")
@@ -148,7 +175,7 @@ def run_manifest_command(
                 process.wait(timeout=2.0)
             ready.unlink(missing_ok=True)
             stop.unlink(missing_ok=True)
-    return completed, "run"
+    return completed, "run", elapsed_ns
 
 
 def main() -> int:
@@ -157,6 +184,7 @@ def main() -> int:
     args = parser.parse_args()
     rad = args.rad.resolve()
     failures: list[str] = []
+    rad_timings: list[dict[str, object]] = []
 
     generated = run_checked(
         [sys.executable, str(ROOT / "tooling/language_surface.py"), "--check"]
@@ -246,7 +274,17 @@ def main() -> int:
             failures.append(f"row {identifier} has invalid stability {row['stability']!r}")
 
         if source not in reports:
-            completed = run_checked([str(rad), "surface", source, "--json"])
+            try:
+                completed, elapsed_ns = run_rad_checked(
+                    [str(rad), "surface", source, "--json"]
+                )
+                rad_timings.append(
+                    {"name": f"surface:{source}", "elapsedNs": elapsed_ns, "limitNs": RAD_LIMIT_NS}
+                )
+            except (OSError, RuntimeError, subprocess.TimeoutExpired) as error:
+                failures.append(f"rad surface could not run for {source}: {error}")
+                reports[source] = {}
+                continue
             if completed.returncode:
                 failures.append(
                     f"rad surface failed for {source}:\n{completed.stdout}{completed.stderr}"
@@ -279,7 +317,17 @@ def main() -> int:
             failures.append(f"builtin evidence missing: {name} -> {source}")
             continue
         if source not in reports:
-            completed = run_checked([str(rad), "surface", source, "--json"])
+            try:
+                completed, elapsed_ns = run_rad_checked(
+                    [str(rad), "surface", source, "--json"]
+                )
+                rad_timings.append(
+                    {"name": f"surface:{source}", "elapsedNs": elapsed_ns, "limitNs": RAD_LIMIT_NS}
+                )
+            except (OSError, RuntimeError, subprocess.TimeoutExpired) as error:
+                failures.append(f"rad surface could not run for builtin evidence {source}: {error}")
+                reports[source] = {}
+                continue
             if completed.returncode:
                 failures.append(
                     f"rad surface failed for builtin evidence {source}:\n"
@@ -358,7 +406,15 @@ def main() -> int:
     for command in commands:
         argv = [str(rad)] + command.get("args", [])
         try:
-            completed, stage = run_manifest_command(rad, command)
+            completed, stage, elapsed_ns = run_manifest_command(rad, command)
+            if stage == "run":
+                rad_timings.append(
+                    {
+                        "name": str(command.get("name", argv)),
+                        "elapsedNs": elapsed_ns,
+                        "limitNs": RAD_LIMIT_NS,
+                    }
+                )
         except (OSError, RuntimeError, subprocess.TimeoutExpired) as error:
             failures.append(f"command {command.get('name', argv)!r} could not run: {error}")
             continue
@@ -380,6 +436,24 @@ def main() -> int:
         for failure in failures:
             print(f"- {failure}")
         return 1
+    timing_path = ROOT / "target/language-surface-subsecond.json"
+    timing_path.parent.mkdir(parents=True, exist_ok=True)
+    timing_path.write_text(
+        json.dumps(
+            {
+                "formatVersion": 1,
+                "limitNs": RAD_LIMIT_NS,
+                "operations": rad_timings,
+                "maximumElapsedNs": max(
+                    (int(entry["elapsedNs"]) for entry in rad_timings), default=0
+                ),
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
     print(
         "language surface gate: PASS - "
         f"{len(rows)} executable syntax rows, {len(exclusions)} internal exclusions, "

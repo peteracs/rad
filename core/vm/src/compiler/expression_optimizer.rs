@@ -1,98 +1,10 @@
-use egg::{Extractor, Id, RecExpr, Rewrite, Runner, Symbol};
+//! Deterministic, linear-time expression simplification.
+//!
+//! The pass is intentionally closed over a side-effect-free AST subset. It
+//! never saturates a search graph and never drops evaluation of calls, async
+//! work, queries, allocations, or other potentially effectful expressions.
 
 use crate::ast::*;
-
-egg::define_language! {
-    pub enum RadIr {
-        Num(i64),
-        Bool(bool),
-        Symbol(Symbol),
-        FieldName(Symbol),
-        "nil" = Nil,
-        "+" = Add([Id; 2]),
-        "-" = Sub([Id; 2]),
-        "*" = Mul([Id; 2]),
-        "/" = Div([Id; 2]),
-        "%" = Mod([Id; 2]),
-        "neg" = Neg(Id),
-        "not" = Not(Id),
-        "==" = Eq([Id; 2]),
-        "!=" = Neq([Id; 2]),
-        "<" = Lt([Id; 2]),
-        "<=" = Lte([Id; 2]),
-        ">" = Gt([Id; 2]),
-        ">=" = Gte([Id; 2]),
-        "&&" = And([Id; 2]),
-        "||" = Or([Id; 2]),
-        "logical_load" = LogicalLoad([Id; 2]),
-        "logical_store" = LogicalStore([Id; 2]),
-    }
-}
-
-#[derive(Debug, Clone, Copy, Default)]
-struct RadCost;
-
-impl egg::CostFunction<RadIr> for RadCost {
-    type Cost = usize;
-
-    fn cost<C>(&mut self, enode: &RadIr, mut costs: C) -> Self::Cost
-    where
-        C: FnMut(Id) -> Self::Cost,
-    {
-        let base = match enode {
-            RadIr::Num(_)
-            | RadIr::Bool(_)
-            | RadIr::Symbol(_)
-            | RadIr::FieldName(_)
-            | RadIr::Nil => 1,
-            RadIr::Neg(_)
-            | RadIr::Not(_)
-            | RadIr::Add(_)
-            | RadIr::Sub(_)
-            | RadIr::Mul(_)
-            | RadIr::Div(_)
-            | RadIr::Mod(_)
-            | RadIr::Eq(_)
-            | RadIr::Neq(_)
-            | RadIr::Lt(_)
-            | RadIr::Lte(_)
-            | RadIr::Gt(_)
-            | RadIr::Gte(_)
-            | RadIr::And(_)
-            | RadIr::Or(_) => 1,
-            RadIr::LogicalLoad(_) => 2,
-            RadIr::LogicalStore(_) => 3,
-        };
-
-        let children_cost = match enode {
-            RadIr::Num(_)
-            | RadIr::Bool(_)
-            | RadIr::Symbol(_)
-            | RadIr::FieldName(_)
-            | RadIr::Nil => 0,
-            RadIr::Neg(a) | RadIr::Not(a) => costs(*a),
-            RadIr::Add([a, b])
-            | RadIr::Sub([a, b])
-            | RadIr::Mul([a, b])
-            | RadIr::Div([a, b])
-            | RadIr::Mod([a, b])
-            | RadIr::Eq([a, b])
-            | RadIr::Neq([a, b])
-            | RadIr::Lt([a, b])
-            | RadIr::Lte([a, b])
-            | RadIr::Gt([a, b])
-            | RadIr::Gte([a, b])
-            | RadIr::And([a, b])
-            | RadIr::Or([a, b])
-            | RadIr::LogicalLoad([a, b])
-            | RadIr::LogicalStore([a, b]) => costs(*a) + costs(*b),
-        };
-
-        base + children_cost
-    }
-}
-
-const EGRAPH_ITER_LIMIT: usize = 8;
 
 pub(crate) fn optimize_system_block(block: &Block) -> Block {
     optimize_block(block)
@@ -103,23 +15,10 @@ pub(crate) fn optimize_ecs_function_block(block: &Block) -> Block {
 }
 
 pub(crate) fn optimize_block(block: &Block) -> Block {
-    // `egg` measures saturation with `quanta`, whose x86 clock detection uses
-    // inline `cpuid` assembly. Miri cannot interpret inline assembly. Keeping
-    // the source block is semantics-preserving and lets the soundness suite
-    // exercise compilation plus the typed host boundary under Miri rather
-    // than excluding those tests.
-    #[cfg(miri)]
-    {
-        block.clone()
-    }
-
-    #[cfg(not(miri))]
-    {
-        Block {
-            id: block.id,
-            span: block.span.clone(),
-            stmts: block.stmts.iter().map(optimize_stmt).collect(),
-        }
+    Block {
+        id: block.id,
+        span: block.span.clone(),
+        stmts: block.stmts.iter().map(optimize_stmt).collect(),
     }
 }
 
@@ -271,23 +170,11 @@ fn optimize_stmt(stmt: &Stmt) -> Stmt {
 }
 
 fn optimize_assign_stmt(assign: &AssignStmt) -> AssignStmt {
-    let target = optimize_expr(&assign.target);
-    let value = optimize_expr(&assign.value);
-
-    if let Some((target, value)) = optimize_store_stmt(&target, &value, &assign.span) {
-        AssignStmt {
-            id: assign.id,
-            span: assign.span.clone(),
-            target,
-            value,
-        }
-    } else {
-        AssignStmt {
-            id: assign.id,
-            span: assign.span.clone(),
-            target,
-            value,
-        }
+    AssignStmt {
+        id: assign.id,
+        span: assign.span.clone(),
+        target: optimize_expr(&assign.target),
+        value: optimize_expr(&assign.value),
     }
 }
 
@@ -476,234 +363,197 @@ pub(crate) fn optimize_expr(expr: &Expr) -> Expr {
 }
 
 fn optimize_value_expr(expr: &Expr) -> Option<Expr> {
-    let mut rec = RecExpr::default();
-    let _root = lower_value_expr(expr, &mut rec)?;
-    let best = saturate(rec)?;
-    raise_value_expr(&best, best.root(), expr.span())
-}
-
-fn optimize_store_stmt(target: &Expr, value: &Expr, span: &Span) -> Option<(Expr, Expr)> {
-    let mut rec = RecExpr::default();
-    let _target_root = lower_location_expr(target, &mut rec)?;
-    let _value_root = lower_value_expr(value, &mut rec)?;
-    let _store_root = rec.add(RadIr::LogicalStore([_target_root, _value_root]));
-    let best = saturate(rec)?;
-    raise_store_expr(&best, best.root(), span)
-}
-
-fn saturate(rec: RecExpr<RadIr>) -> Option<RecExpr<RadIr>> {
-    let runner = Runner::default()
-        .with_expr(&rec)
-        .with_iter_limit(EGRAPH_ITER_LIMIT)
-        .run(&rewrites());
-    let root = runner.roots[0];
-    let extractor = Extractor::new(&runner.egraph, RadCost);
-    let (_, best) = extractor.find_best(root);
-    Some(best)
-}
-
-fn rewrites() -> Vec<Rewrite<RadIr, ()>> {
-    let mut rules = Vec::new();
-    rules.extend(egg::rewrite!("add-comm"; "(+ ?a ?b)" <=> "(+ ?b ?a)"));
-    rules.extend(egg::rewrite!("mul-comm"; "(* ?a ?b)" <=> "(* ?b ?a)"));
-    rules.extend(egg::rewrite!("and-comm"; "(&& ?a ?b)" <=> "(&& ?b ?a)"));
-    rules.extend(egg::rewrite!("or-comm"; "(|| ?a ?b)" <=> "(|| ?b ?a)"));
-    rules.extend(egg::rewrite!("eq-comm"; "(== ?a ?b)" <=> "(== ?b ?a)"));
-    rules.push(egg::rewrite!("add-assoc-l"; "(+ ?a (+ ?b ?c))" => "(+ (+ ?a ?b) ?c)"));
-    rules.push(egg::rewrite!("add-assoc-r"; "(+ (+ ?a ?b) ?c)" => "(+ ?a (+ ?b ?c))"));
-    rules.push(egg::rewrite!("mul-assoc-l"; "(* ?a (* ?b ?c))" => "(* (* ?a ?b) ?c)"));
-    rules.push(egg::rewrite!("mul-assoc-r"; "(* (* ?a ?b) ?c)" => "(* ?a (* ?b ?c))"));
-    rules.push(egg::rewrite!("add-zero"; "(+ ?a 0)" => "?a"));
-    rules.push(egg::rewrite!("add-zero-comm"; "(+ 0 ?a)" => "?a"));
-    rules.push(egg::rewrite!("mul-one"; "(* ?a 1)" => "?a"));
-    rules.push(egg::rewrite!("mul-one-comm"; "(* 1 ?a)" => "?a"));
-    rules.push(egg::rewrite!("mul-zero"; "(* ?a 0)" => "0"));
-    rules.push(egg::rewrite!("mul-zero-comm"; "(* 0 ?a)" => "0"));
-    rules.push(egg::rewrite!("sub-zero"; "(- ?a 0)" => "?a"));
-    rules.push(egg::rewrite!("sub-self"; "(- ?a ?a)" => "0"));
-    rules.push(egg::rewrite!("div-one"; "(/ ?a 1)" => "?a"));
-    rules.push(egg::rewrite!("neg-neg"; "(neg (neg ?a))" => "?a"));
-    rules.push(egg::rewrite!("not-not"; "(not (not ?a))" => "?a"));
-    rules.push(egg::rewrite!("and-true"; "(&& true ?a)" => "?a"));
-    rules.push(egg::rewrite!("and-true-comm"; "(&& ?a true)" => "?a"));
-    rules.push(egg::rewrite!("and-false"; "(&& false ?a)" => "false"));
-    rules.push(egg::rewrite!("and-false-comm"; "(&& ?a false)" => "false"));
-    rules.push(egg::rewrite!("or-false"; "(|| false ?a)" => "?a"));
-    rules.push(egg::rewrite!("or-false-comm"; "(|| ?a false)" => "?a"));
-    rules.push(egg::rewrite!("or-true"; "(|| true ?a)" => "true"));
-    rules.push(egg::rewrite!("or-true-comm"; "(|| ?a true)" => "true"));
-    rules.push(egg::rewrite!("dup-add"; "(+ ?a ?a)" => "(* 2 ?a)"));
-    rules.push(egg::rewrite!("factor-common"; "(+ (* ?a ?b) (* ?a ?c))" => "(* ?a (+ ?b ?c))"));
-    rules
-}
-
-fn lower_value_expr(expr: &Expr, out: &mut RecExpr<RadIr>) -> Option<Id> {
+    let span = expr.span().clone();
     match expr {
-        Expr::IntLit(value, _) => Some(out.add(RadIr::Num(*value))),
-        Expr::FloatLit(_, _) => None,
-        Expr::BoolLit(value, _) => Some(out.add(RadIr::Bool(*value))),
-        Expr::NilLit(_) => Some(out.add(RadIr::Nil)),
-        Expr::StrLit(_, _) => None,
-        Expr::Ident(name, _) => Some(out.add(RadIr::Symbol(name.clone().into()))),
-        Expr::Unary(op, inner, _) => {
-            let inner = lower_value_expr(inner, out)?;
-            let node = match op {
-                UnaryOp::Neg => RadIr::Neg(inner),
-                UnaryOp::Not => RadIr::Not(inner),
-                // opaque to algebraic rewrites, like the binary bit ops
-                UnaryOp::BitNot => return None,
+        Expr::Unary(UnaryOp::Neg, inner, _)
+            if matches!(inner.as_ref(), Expr::Unary(UnaryOp::Neg, _, _)) =>
+        {
+            let Expr::Unary(_, nested, _) = inner.as_ref() else {
+                unreachable!()
             };
-            Some(out.add(node))
+            Some((**nested).clone())
         }
+        Expr::Unary(UnaryOp::Not, inner, _)
+            if matches!(inner.as_ref(), Expr::Unary(UnaryOp::Not, _, _)) =>
+        {
+            let Expr::Unary(_, nested, _) = inner.as_ref() else {
+                unreachable!()
+            };
+            Some((**nested).clone())
+        }
+        Expr::Binary(left, BinOp::Add, right, _) if is_int(left, 0) => Some((**right).clone()),
+        Expr::Binary(left, BinOp::Add, right, _) if is_int(right, 0) => Some((**left).clone()),
+        Expr::Binary(left, BinOp::Add, right, _) if same_rewrite_value(left, right) => {
+            Some(binary_expr(
+                Expr::IntLit(2, span.clone()),
+                BinOp::Mul,
+                (**left).clone(),
+                span,
+            ))
+        }
+        Expr::Binary(left, BinOp::Add, right, _) => factor_common(left, right, &span),
+        Expr::Binary(left, BinOp::Mul, right, _) if is_int(left, 1) => Some((**right).clone()),
+        Expr::Binary(left, BinOp::Mul, right, _) if is_int(right, 1) => Some((**left).clone()),
+        Expr::Binary(left, BinOp::Mul, right, _) if is_int(left, 0) && rewrite_safe(right) => {
+            Some(Expr::IntLit(0, span))
+        }
+        Expr::Binary(left, BinOp::Mul, right, _) if is_int(right, 0) && rewrite_safe(left) => {
+            Some(Expr::IntLit(0, span))
+        }
+        Expr::Binary(left, BinOp::Sub, right, _) if is_int(right, 0) => Some((**left).clone()),
+        Expr::Binary(left, BinOp::Sub, right, _) if same_rewrite_value(left, right) => {
+            Some(Expr::IntLit(0, span))
+        }
+        Expr::Binary(left, BinOp::Div, right, _) if is_int(right, 1) => Some((**left).clone()),
+        Expr::Binary(left, BinOp::And, right, _) if is_bool(left, true) => Some((**right).clone()),
+        Expr::Binary(left, BinOp::And, right, _) if is_bool(right, true) => Some((**left).clone()),
+        Expr::Binary(left, BinOp::And, _, _) if is_bool(left, false) => {
+            Some(Expr::BoolLit(false, span))
+        }
+        Expr::Binary(left, BinOp::And, right, _) if is_bool(right, false) && rewrite_safe(left) => {
+            Some(Expr::BoolLit(false, span))
+        }
+        Expr::Binary(left, BinOp::Or, right, _) if is_bool(left, false) => Some((**right).clone()),
+        Expr::Binary(left, BinOp::Or, right, _) if is_bool(right, false) => Some((**left).clone()),
+        Expr::Binary(left, BinOp::Or, _, _) if is_bool(left, true) => {
+            Some(Expr::BoolLit(true, span))
+        }
+        Expr::Binary(left, BinOp::Or, right, _) if is_bool(right, true) && rewrite_safe(left) => {
+            Some(Expr::BoolLit(true, span))
+        }
+        _ => None,
+    }
+}
+
+fn is_int(expr: &Expr, expected: i64) -> bool {
+    matches!(expr, Expr::IntLit(value, _) if *value == expected)
+}
+
+fn is_bool(expr: &Expr, expected: bool) -> bool {
+    matches!(expr, Expr::BoolLit(value, _) if *value == expected)
+}
+
+/// Whether eliminating or coalescing evaluation of this expression is safe.
+///
+/// This deliberately matches the old optimizer's closed algebraic subset.
+/// Calls, allocations, async work, queries, and all other effectful or
+/// potentially effectful expressions remain opaque.
+fn rewrite_safe(expr: &Expr) -> bool {
+    match expr {
+        Expr::IntLit(_, _) | Expr::BoolLit(_, _) | Expr::NilLit(_) | Expr::Ident(_, _) => true,
+        Expr::Unary(UnaryOp::Neg | UnaryOp::Not, inner, _) => rewrite_safe(inner),
+        Expr::Unary(UnaryOp::BitNot, _, _) => false,
         Expr::Binary(left, op, right, _) => {
-            let left = lower_value_expr(left, out)?;
-            let right = lower_value_expr(right, out)?;
-            let node = match op {
-                BinOp::Add => RadIr::Add([left, right]),
-                BinOp::Sub => RadIr::Sub([left, right]),
-                BinOp::Mul => RadIr::Mul([left, right]),
-                BinOp::Div => RadIr::Div([left, right]),
-                BinOp::Mod => RadIr::Mod([left, right]),
-                BinOp::Eq => RadIr::Eq([left, right]),
-                BinOp::Ne => RadIr::Neq([left, right]),
-                BinOp::Lt => RadIr::Lt([left, right]),
-                BinOp::Le => RadIr::Lte([left, right]),
-                BinOp::Gt => RadIr::Gt([left, right]),
-                BinOp::Ge => RadIr::Gte([left, right]),
-                BinOp::And => RadIr::And([left, right]),
-                BinOp::Or => RadIr::Or([left, right]),
-                // Bitwise ops are opaque to the e-graph (no rewrite rules
-                // would fire on them anyway); they fall back to direct
-                // bytecode emission, which is already a single opcode.
-                BinOp::Is
-                | BinOp::BitAnd
-                | BinOp::BitOr
-                | BinOp::BitXor
-                | BinOp::Shl
-                | BinOp::Shr => return None,
-            };
-            Some(out.add(node))
+            matches!(
+                op,
+                BinOp::Add
+                    | BinOp::Sub
+                    | BinOp::Mul
+                    | BinOp::Div
+                    | BinOp::Mod
+                    | BinOp::Eq
+                    | BinOp::Ne
+                    | BinOp::Lt
+                    | BinOp::Le
+                    | BinOp::Gt
+                    | BinOp::Ge
+                    | BinOp::And
+                    | BinOp::Or
+            ) && rewrite_safe(left)
+                && rewrite_safe(right)
         }
-        Expr::Field(inner, field, _) => {
-            let inner = lower_value_expr(inner, out)?;
-            let field = out.add(RadIr::FieldName(field.clone().into()));
-            Some(out.add(RadIr::LogicalLoad([inner, field])))
-        }
-        Expr::Index(inner, index, _) => {
-            let inner = lower_value_expr(inner, out)?;
-            let index = lower_value_expr(index, out)?;
-            Some(out.add(RadIr::LogicalLoad([inner, index])))
-        }
-        _ => None,
+        Expr::Field(inner, _, _) => rewrite_safe(inner),
+        Expr::Index(inner, index, _) => rewrite_safe(inner) && rewrite_safe(index),
+        _ => false,
     }
 }
 
-fn lower_location_expr(expr: &Expr, out: &mut RecExpr<RadIr>) -> Option<Id> {
-    match expr {
-        Expr::Ident(name, _) => Some(out.add(RadIr::Symbol(name.clone().into()))),
-        Expr::Field(inner, field, _) => {
-            let inner = lower_location_expr(inner, out)?;
-            let field = out.add(RadIr::FieldName(field.clone().into()));
-            Some(out.add(RadIr::LogicalLoad([inner, field])))
+fn same_rewrite_value(left: &Expr, right: &Expr) -> bool {
+    if !rewrite_safe(left) || !rewrite_safe(right) {
+        return false;
+    }
+    match (left, right) {
+        (Expr::IntLit(a, _), Expr::IntLit(b, _)) => a == b,
+        (Expr::BoolLit(a, _), Expr::BoolLit(b, _)) => a == b,
+        (Expr::NilLit(_), Expr::NilLit(_)) => true,
+        (Expr::Ident(a, _), Expr::Ident(b, _)) => a == b,
+        (Expr::Unary(a_op, a, _), Expr::Unary(b_op, b, _)) => {
+            a_op == b_op && same_rewrite_value(a, b)
         }
-        Expr::Index(inner, index, _) => {
-            let inner = lower_location_expr(inner, out)?;
-            let index = lower_value_expr(index, out)?;
-            Some(out.add(RadIr::LogicalLoad([inner, index])))
+        (Expr::Binary(a_left, a_op, a_right, _), Expr::Binary(b_left, b_op, b_right, _)) => {
+            a_op == b_op
+                && same_rewrite_value(a_left, b_left)
+                && same_rewrite_value(a_right, b_right)
         }
-        _ => None,
+        (Expr::Field(a, a_field, _), Expr::Field(b, b_field, _)) => {
+            a_field == b_field && same_rewrite_value(a, b)
+        }
+        (Expr::Index(a_value, a_index, _), Expr::Index(b_value, b_index, _)) => {
+            same_rewrite_value(a_value, b_value) && same_rewrite_value(a_index, b_index)
+        }
+        _ => false,
     }
 }
 
-fn raise_value_expr(expr: &RecExpr<RadIr>, id: Id, span: &Span) -> Option<Expr> {
-    match &expr[id] {
-        RadIr::Num(value) => Some(Expr::IntLit(*value, span.clone())),
-        RadIr::Bool(value) => Some(Expr::BoolLit(*value, span.clone())),
-        RadIr::Nil => Some(Expr::NilLit(span.clone())),
-        RadIr::Symbol(name) => Some(Expr::Ident(name.to_string(), span.clone())),
-        RadIr::FieldName(name) => Some(Expr::Ident(name.to_string(), span.clone())),
-        RadIr::Neg(inner) => Some(Expr::Unary(
-            UnaryOp::Neg,
-            Box::new(raise_value_expr(expr, *inner, span)?),
-            span.clone(),
-        )),
-        RadIr::Not(inner) => Some(Expr::Unary(
-            UnaryOp::Not,
-            Box::new(raise_value_expr(expr, *inner, span)?),
-            span.clone(),
-        )),
-        RadIr::Add([a, b]) => Some(binary(expr, *a, *b, BinOp::Add, span)?),
-        RadIr::Sub([a, b]) => Some(binary(expr, *a, *b, BinOp::Sub, span)?),
-        RadIr::Mul([a, b]) => Some(binary(expr, *a, *b, BinOp::Mul, span)?),
-        RadIr::Div([a, b]) => Some(binary(expr, *a, *b, BinOp::Div, span)?),
-        RadIr::Mod([a, b]) => Some(binary(expr, *a, *b, BinOp::Mod, span)?),
-        RadIr::Eq([a, b]) => Some(binary(expr, *a, *b, BinOp::Eq, span)?),
-        RadIr::Neq([a, b]) => Some(binary(expr, *a, *b, BinOp::Ne, span)?),
-        RadIr::Lt([a, b]) => Some(binary(expr, *a, *b, BinOp::Lt, span)?),
-        RadIr::Lte([a, b]) => Some(binary(expr, *a, *b, BinOp::Le, span)?),
-        RadIr::Gt([a, b]) => Some(binary(expr, *a, *b, BinOp::Gt, span)?),
-        RadIr::Gte([a, b]) => Some(binary(expr, *a, *b, BinOp::Ge, span)?),
-        RadIr::And([a, b]) => Some(binary(expr, *a, *b, BinOp::And, span)?),
-        RadIr::Or([a, b]) => Some(binary(expr, *a, *b, BinOp::Or, span)?),
-        RadIr::LogicalLoad([loc, sel]) => {
-            let location = raise_location_expr(expr, *loc, span)?;
-            match &expr[*sel] {
-                RadIr::FieldName(field) => Some(Expr::Field(
-                    Box::new(location),
-                    field.to_string(),
-                    span.clone(),
-                )),
-                _ => Some(Expr::Index(
-                    Box::new(location),
-                    Box::new(raise_value_expr(expr, *sel, span)?),
-                    span.clone(),
-                )),
-            }
-        }
-        RadIr::LogicalStore(_) => None,
+fn factor_common(left: &Expr, right: &Expr, span: &Span) -> Option<Expr> {
+    let Expr::Binary(left_a, BinOp::Mul, left_b, _) = left else {
+        return None;
+    };
+    let Expr::Binary(right_a, BinOp::Mul, right_b, _) = right else {
+        return None;
+    };
+    if ![
+        left_a.as_ref(),
+        left_b.as_ref(),
+        right_a.as_ref(),
+        right_b.as_ref(),
+    ]
+    .into_iter()
+    .all(rewrite_safe)
+    {
+        return None;
     }
-}
 
-fn raise_location_expr(expr: &RecExpr<RadIr>, id: Id, span: &Span) -> Option<Expr> {
-    match &expr[id] {
-        RadIr::Symbol(name) => Some(Expr::Ident(name.to_string(), span.clone())),
-        RadIr::FieldName(name) => Some(Expr::Ident(name.to_string(), span.clone())),
-        RadIr::LogicalLoad([loc, sel]) => {
-            let location = raise_location_expr(expr, *loc, span)?;
-            match &expr[*sel] {
-                RadIr::FieldName(field) => Some(Expr::Field(
-                    Box::new(location),
-                    field.to_string(),
-                    span.clone(),
-                )),
-                _ => Some(Expr::Index(
-                    Box::new(location),
-                    Box::new(raise_value_expr(expr, *sel, span)?),
-                    span.clone(),
-                )),
-            }
-        }
-        _ => None,
-    }
-}
-
-fn raise_store_expr(expr: &RecExpr<RadIr>, id: Id, span: &Span) -> Option<(Expr, Expr)> {
-    match &expr[id] {
-        RadIr::LogicalStore([loc, val]) => Some((
-            raise_location_expr(expr, *loc, span)?,
-            raise_value_expr(expr, *val, span)?,
-        )),
-        _ => None,
-    }
-}
-
-fn binary(expr: &RecExpr<RadIr>, left: Id, right: Id, op: BinOp, span: &Span) -> Option<Expr> {
-    Some(Expr::Binary(
-        Box::new(raise_value_expr(expr, left, span)?),
-        op,
-        Box::new(raise_value_expr(expr, right, span)?),
+    let candidates = [
+        (
+            left_a.as_ref(),
+            left_b.as_ref(),
+            right_a.as_ref(),
+            right_b.as_ref(),
+        ),
+        (
+            left_a.as_ref(),
+            left_b.as_ref(),
+            right_b.as_ref(),
+            right_a.as_ref(),
+        ),
+        (
+            left_b.as_ref(),
+            left_a.as_ref(),
+            right_a.as_ref(),
+            right_b.as_ref(),
+        ),
+        (
+            left_b.as_ref(),
+            left_a.as_ref(),
+            right_b.as_ref(),
+            right_a.as_ref(),
+        ),
+    ];
+    let (common, left_remainder, _, right_remainder) = candidates
+        .into_iter()
+        .find(|(left_common, _, right_common, _)| same_rewrite_value(left_common, right_common))?;
+    let sum = binary_expr(
+        left_remainder.clone(),
+        BinOp::Add,
+        right_remainder.clone(),
         span.clone(),
-    ))
+    );
+    Some(binary_expr(common.clone(), BinOp::Mul, sum, span.clone()))
+}
+
+fn binary_expr(left: Expr, op: BinOp, right: Expr, span: Span) -> Expr {
+    Expr::Binary(Box::new(left), op, Box::new(right), span)
 }
 
 #[cfg(test)]
@@ -794,5 +644,42 @@ mod tests {
             Expr::Ident(name, _) => assert_eq!(name, "x"),
             other => panic!("expected simplified value, got {:?}", other),
         }
+    }
+
+    #[test]
+    fn never_drops_effectful_operands() {
+        let call = Expr::Call(Box::new(ident("observe")), Vec::new(), span());
+        let expr = Expr::Binary(
+            Box::new(call),
+            BinOp::Mul,
+            Box::new(Expr::IntLit(0, span())),
+            span(),
+        );
+
+        assert!(matches!(
+            optimize_expr(&expr),
+            Expr::Binary(_, BinOp::Mul, _, _)
+        ));
+    }
+
+    #[test]
+    fn factors_a_shared_pure_term() {
+        let product = |left: &str, right: &str| {
+            Expr::Binary(
+                Box::new(ident(left)),
+                BinOp::Mul,
+                Box::new(ident(right)),
+                span(),
+            )
+        };
+        let expr = Expr::Binary(
+            Box::new(product("rate", "base")),
+            BinOp::Add,
+            Box::new(product("bonus", "rate")),
+            span(),
+        );
+
+        let optimized = optimize_expr(&expr);
+        assert!(matches!(optimized, Expr::Binary(_, BinOp::Mul, _, _)));
     }
 }

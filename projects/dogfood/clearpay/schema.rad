@@ -18,8 +18,17 @@ pub event PaymentCaptured {
     amount: MoneyCents,
 }
 
+pub event PaymentBatchCaptured {
+    payments: int,
+    amount: MoneyCents,
+}
+
 pub resource CaptureAudit { committed: int = 0 }
 
 on PaymentCaptured(_event) {
     update(CaptureAudit) { committed = res(CaptureAudit).committed + 1 }
+}
+
+on PaymentBatchCaptured(evt) {
+    update(CaptureAudit) { committed = res(CaptureAudit).committed + evt.payments }
 }

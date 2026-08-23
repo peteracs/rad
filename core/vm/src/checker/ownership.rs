@@ -190,6 +190,19 @@ impl AstVisitor for WriteCollector<'_> {
                         self.whole(type_name, span, "remove");
                     }
                 }
+                "remove_many" => {
+                    if let Some(Expr::ListLit(types, _)) = args.get(1) {
+                        for type_expr in types {
+                            if let Expr::Ident(type_name, _) | Expr::StrLit(type_name, _) =
+                                type_expr
+                            {
+                                self.whole(type_name, span, "remove_many");
+                            }
+                        }
+                    } else {
+                        self.despawns.push(span.clone());
+                    }
+                }
                 "set_resource" => {
                     if let Some(type_expr) = args.first() {
                         match type_expr {

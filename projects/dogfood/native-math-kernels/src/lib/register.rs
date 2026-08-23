@@ -92,6 +92,12 @@ pub unsafe extern "C" fn rad_extension_init(api: *const RadPluginApi) {
 
     register(api, "lattice_closure_json", lattice_closure, 1);
     register(api, "lattice_profile_json", lattice_profile, 2);
+    register(
+        api,
+        "cyclic_pair_profiles_json",
+        cyclic_pair_profiles,
+        4,
+    );
     register(api, "lattice_frequencies_json", lattice_frequencies, 2);
     register(
         api,
@@ -209,6 +215,12 @@ pub unsafe extern "C" fn rad_extension_init(api: *const RadPluginApi) {
         "affine_frontier_profile_json",
         affine_frontier_profile,
         7,
+    );
+    register(
+        api,
+        "affine_frontier_profiles_json",
+        affine_frontier_profiles,
+        6,
     );
     register(api, "affine_cycle_profile_json", affine_cycle_profile, 4);
     register(api, "zeta_cover_lane_json", zeta_cover_lane, 3);

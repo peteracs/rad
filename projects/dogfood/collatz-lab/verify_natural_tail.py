@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Independent verifier for the natural-tail affine certificate.
+"""Validate a natural-tail certificate with an independent native verifier.
 
-This script imports neither RAD nor its native extension.  It builds the
-survivor prefix tree with Python integers, then continues every surviving
-residue with zero high input bits and checks the reported stopping records.
+The verifier executable shares no RAD VM or extension code.  This Python
+entry point checks the certificate envelope and diagnostics around its exact,
+parallel recomputation.  A missing executable is an error: there is no slower
+or less independent fallback implementation.
 """
 
 from __future__ import annotations
@@ -13,8 +14,8 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import subprocess
 from typing import Any
-from concurrent.futures import ProcessPoolExecutor
 
 
 SCHEMA = "rad.affine-natural-tail-certificate.v1"
@@ -29,207 +30,52 @@ def require(condition: bool, message: str) -> None:
         raise VerificationError(message)
 
 
-def step_node(
-    node: tuple[int, int, int, int, int, int], extension: int
-) -> tuple[int, int, int, int, int, int]:
-    """Extend (residue, coefficient, offset, denominator, probe, peak)."""
-
-    residue, coefficient, offset, denominator, probe, peak = node
-    residue += extension * denominator
-    source = probe + extension * coefficient
-    if source & 1:
-        next_probe = (3 * source + 1) // 2
-        return (
-            residue,
-            3 * coefficient,
-            3 * offset + denominator,
-            2 * denominator,
-            next_probe,
-            max(peak, next_probe),
-        )
-    next_probe = source // 2
-    return residue, coefficient, offset, 2 * denominator, next_probe, max(peak, next_probe)
-
-
-def is_prunable(node: tuple[int, int, int, int, int, int], bound: int) -> bool:
-    _, coefficient, offset, denominator, _, _ = node
-    return coefficient < denominator and offset // (denominator - coefficient) < bound
-
-
-def prefer_record(current_step: int, current_residue: int, step: int, residue: int) -> bool:
-    return step > current_step or (step == current_step and residue < current_residue)
-
-
-def empty_tail_report(depth: int, max_steps: int) -> dict[str, Any]:
-    return {
-        "depth": depth,
-        "survivor_classes": 0,
-        "coefficient_stops": 0,
-        "descents": 0,
-        "unresolved": 0,
-        "max_coefficient_stop_step": 0,
-        "max_coefficient_stop_residue": 0,
-        "max_descent_step": 0,
-        "max_descent_residue": 0,
-        "max_additive_delay": 0,
-        "max_peak": 0,
-        "max_peak_residue": 0,
-        "coefficient_stop_histogram": [0] * (max_steps + 1),
-        "descent_histogram": [0] * (max_steps + 1),
-    }
-
-
-def add_natural_tail(
-    report: dict[str, Any],
-    node: tuple[int, int, int, int, int, int],
-    max_steps: int,
-) -> None:
-    residue, coefficient, _offset, denominator, value, prefix_peak = node
-    depth = report["depth"]
-    require(residue > 0, "zero cannot survive the least-counterexample sieve")
-    report["survivor_classes"] += 1
-    peak = max(residue, prefix_peak)
-    coefficient_stop = depth if coefficient < denominator else None
-    descent = depth if value < residue else None
-    for step in range(depth + 1, max_steps + 1):
-        denominator *= 2
-        if value & 1:
-            value = (3 * value + 1) // 2
-            coefficient *= 3
-        else:
-            value //= 2
-        peak = max(peak, value)
-        if coefficient_stop is None and coefficient < denominator:
-            coefficient_stop = step
-        if descent is None and value < residue:
-            descent = step
-        if coefficient_stop is not None and descent is not None:
-            break
-
-    if coefficient_stop is not None:
-        report["coefficient_stops"] += 1
-        report["coefficient_stop_histogram"][coefficient_stop] += 1
-        if prefer_record(
-            report["max_coefficient_stop_step"],
-            report["max_coefficient_stop_residue"],
-            coefficient_stop,
-            residue,
-        ):
-            report["max_coefficient_stop_step"] = coefficient_stop
-            report["max_coefficient_stop_residue"] = residue
-    if descent is not None:
-        report["descents"] += 1
-        report["descent_histogram"][descent] += 1
-        if prefer_record(
-            report["max_descent_step"],
-            report["max_descent_residue"],
-            descent,
-            residue,
-        ):
-            report["max_descent_step"] = descent
-            report["max_descent_residue"] = residue
-    if coefficient_stop is None or descent is None:
-        report["unresolved"] += 1
-    else:
-        delay = descent - coefficient_stop
-        if prefer_record(
-            report["max_additive_delay"], 0, delay, residue
-        ):
-            report["max_additive_delay"] = delay
-    if peak > report["max_peak"] or (
-        peak == report["max_peak"] and residue < report["max_peak_residue"]
-    ):
-        report["max_peak"] = peak
-        report["max_peak_residue"] = residue
-
-
-def exact_lane(
-    depths: list[int],
-    verified_power: int,
-    max_steps: int,
-    lane_index: int,
-    lane_count: int,
-) -> list[dict[str, Any]]:
-    requested = set(depths)
-    reports = {depth: empty_tail_report(depth, max_steps) for depth in depths}
-    bound = 1 << verified_power
-    maximum_depth = max(depths)
-    lane_bits = lane_count.bit_length() - 1
-    node = (0, 1, 0, 1, 0, 0)
-    for bit_index in range(lane_bits):
-        node = step_node(node, (lane_index >> bit_index) & 1)
-        if is_prunable(node, bound):
-            return [reports[depth] for depth in depths]
-    stack = [(lane_bits, node)]
-    while stack:
-        depth, node = stack.pop()
-        if depth in requested:
-            add_natural_tail(reports[depth], node, max_steps)
-        if depth == maximum_depth:
-            continue
-        for extension in (1, 0):
-            child = step_node(node, extension)
-            if not is_prunable(child, bound):
-                stack.append((depth + 1, child))
-    return [reports[depth] for depth in depths]
-
-
-def merge_tail_report(target: dict[str, Any], source: dict[str, Any]) -> None:
-    for field in ("survivor_classes", "coefficient_stops", "descents", "unresolved"):
-        target[field] += source[field]
-    for target_histogram, source_histogram in (
-        (target["coefficient_stop_histogram"], source["coefficient_stop_histogram"]),
-        (target["descent_histogram"], source["descent_histogram"]),
-    ):
-        for index, count in enumerate(source_histogram):
-            target_histogram[index] += count
-    if prefer_record(
-        target["max_coefficient_stop_step"],
-        target["max_coefficient_stop_residue"],
-        source["max_coefficient_stop_step"],
-        source["max_coefficient_stop_residue"],
-    ):
-        target["max_coefficient_stop_step"] = source["max_coefficient_stop_step"]
-        target["max_coefficient_stop_residue"] = source["max_coefficient_stop_residue"]
-    if prefer_record(
-        target["max_descent_step"],
-        target["max_descent_residue"],
-        source["max_descent_step"],
-        source["max_descent_residue"],
-    ):
-        target["max_descent_step"] = source["max_descent_step"]
-        target["max_descent_residue"] = source["max_descent_residue"]
-    target["max_additive_delay"] = max(
-        target["max_additive_delay"], source["max_additive_delay"]
-    )
-    if source["max_peak"] > target["max_peak"] or (
-        source["max_peak"] == target["max_peak"]
-        and source["max_peak_residue"] < target["max_peak_residue"]
-    ):
-        target["max_peak"] = source["max_peak"]
-        target["max_peak_residue"] = source["max_peak_residue"]
-
-
 def exact_scales(
     depths: list[int], verified_power: int, max_steps: int
 ) -> list[dict[str, Any]]:
-    lane_count = 64 if min(depths) >= 6 else 1 << min(depths)
-    workers = min(lane_count, os.cpu_count() or 1)
-    arguments = [
-        (depths, verified_power, max_steps, lane_index, lane_count)
-        for lane_index in range(lane_count)
+    require(max(depths) <= 32, "natural-tail depth exceeds the uint64 verifier domain")
+    require(max_steps <= 2048, "natural-tail horizon exceeds the verifier domain")
+    executable_name = (
+        "collatz-natural-tail-verifier.exe"
+        if os.name == "nt"
+        else "collatz-natural-tail-verifier"
+    )
+    executable = Path(__file__).parent / "verifier" / "target" / "release" / executable_name
+    require(
+        executable.is_file(),
+        "independent verifier is not built; run `cargo build --manifest-path "
+        "projects/dogfood/collatz-lab/verifier/Cargo.toml --release -j 1`",
+    )
+    command = [
+        str(executable),
+        ",".join(str(depth) for depth in depths),
+        str(verified_power),
+        str(max_steps),
     ]
-    with ProcessPoolExecutor(max_workers=workers) as executor:
-        lane_reports = list(executor.map(_exact_lane_star, arguments))
-    merged = [empty_tail_report(depth, max_steps) for depth in depths]
-    for reports in lane_reports:
-        for target, source in zip(merged, reports, strict=True):
-            merge_tail_report(target, source)
-    return merged
-
-
-def _exact_lane_star(arguments: tuple[list[int], int, int, int, int]) -> list[dict[str, Any]]:
-    return exact_lane(*arguments)
+    try:
+        completed = subprocess.run(
+            command,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=0.75,
+        )
+    except subprocess.TimeoutExpired as error:
+        raise VerificationError("independent verifier exceeded its 750 ms budget") from error
+    require(
+        completed.returncode == 0,
+        "independent verifier failed: " + completed.stderr.strip(),
+    )
+    try:
+        reports = json.loads(completed.stdout)
+    except json.JSONDecodeError as error:
+        raise VerificationError("independent verifier returned malformed JSON") from error
+    require(isinstance(reports, list), "independent verifier returned a non-list report")
+    require(
+        [report.get("depth") for report in reports] == depths,
+        "independent verifier returned the wrong depth sequence",
+    )
+    return reports
 
 
 def critical_path_profile(depth: int) -> tuple[int, int]:

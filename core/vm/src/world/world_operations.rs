@@ -1,13 +1,13 @@
 impl World {
-    pub fn trace(&self, marked: &mut HashSet<usize>) {
+    pub fn trace(&self, gc: &mut crate::gc::GcHeap) {
         for archetype in &self.archetypes {
             for col in archetype.columns.values() {
-                col.trace(marked);
+                col.trace(gc);
             }
         }
         for res in self.resources.values() {
             for val in &res.values {
-                val.trace(marked);
+                val.trace(gc);
             }
         }
     }
@@ -153,6 +153,76 @@ impl World {
         components: Vec<ComponentData>,
     ) -> Result<(), EntityAllocationError> {
         self.insert_entity_components_storage(eid, name, components)
+    }
+
+    /// Install every component of a freshly spawned entity in one archetype
+    /// transition. Values are already persistent and ownership transfers to
+    /// the world.
+    ///
+    /// The old spawn path inserted an empty row and then called
+    /// `add_component_owned` once per component. A k-component spawn therefore
+    /// moved the growing row through k archetypes and copied all prior fields
+    /// at every step. Apart from being quadratic, that briefly published every
+    /// partial shape to transaction view maintenance. Keeping identity
+    /// allocation separate from shape installation preserves generation/name
+    /// semantics while making the initial shape atomic and O(k).
+    pub(crate) fn install_spawn_components_owned(
+        &mut self,
+        eid: u32,
+        components: Vec<ComponentData>,
+    ) -> Result<(), String> {
+        if components.is_empty() {
+            return Ok(());
+        }
+        let old_aid = *self
+            .entity_archetype
+            .get(&eid)
+            .ok_or_else(|| format!("spawn component installation missing entity {eid}"))?;
+        if !self.archetypes[old_aid as usize].type_set.is_empty() {
+            return Err(format!(
+                "spawn component installation requires an empty entity, but entity {eid} already has components"
+            ));
+        }
+
+        let mut by_tid = HashMap::with_capacity(components.len());
+        for data in components {
+            let tid = self.type_id(&data.type_name);
+            if let Some(displaced) = by_tid.insert(tid, data) {
+                Value::release_component_data(&displaced);
+            }
+        }
+        let type_set = by_tid.keys().copied().collect::<Vec<_>>();
+        let new_aid = self.get_or_create_archetype(type_set);
+        if self.archetypes[new_aid as usize]
+            .entity_row
+            .contains_key(&eid)
+        {
+            for component in by_tid.values() {
+                Value::release_component_data(component);
+            }
+            return Err(format!(
+                "spawn component installation found duplicate entity {eid} in target archetype"
+            ));
+        }
+
+        let indexed_types = by_tid
+            .values()
+            .filter(|data| self.indexed_fields.contains_key(&data.type_name))
+            .map(|data| data.type_name.clone())
+            .collect::<Vec<_>>();
+        self.archetypes[old_aid as usize]
+            .remove_entity(eid)
+            .ok_or_else(|| format!("spawn component installation lost empty row for entity {eid}"))?;
+        self.archetypes[new_aid as usize]
+            .push_entity(eid, by_tid)
+            .map_err(|error| error.to_string())?;
+        Arc::make_mut(&mut self.entity_archetype).insert(eid, new_aid);
+        for component in indexed_types {
+            if let Some(data) = self.get_component(eid, &component) {
+                self.add_component_indices(eid, &data);
+            }
+        }
+        Ok(())
     }
 
     /// Reverse one transactional despawn. `components` already own persistent
@@ -494,6 +564,69 @@ impl World {
         }
         Arc::make_mut(&mut self.entity_archetype).insert(eid, new_aid);
         true
+    }
+
+    /// Remove an explicit component set with one archetype transition.
+    ///
+    /// This is the exact-authority bulk counterpart of repeated `remove`.
+    /// It preserves per-component index and storage lifecycles while avoiding
+    /// the O(k) shape migrations (and O(k^2) column copying) caused by moving
+    /// the same entity once per removed component.
+    pub(crate) fn remove_components(&mut self, eid: u32, ctypes: &[String]) -> Vec<String> {
+        let Some(&old_aid) = self.entity_archetype.get(&eid) else {
+            return Vec::new();
+        };
+        let old_type_set = self.archetypes[old_aid as usize].type_set.clone();
+        let mut removals = Vec::with_capacity(ctypes.len());
+        for ctype in ctypes {
+            let Some(tid) = self.type_id_lookup(ctype) else {
+                continue;
+            };
+            if old_type_set.contains(&tid)
+                && !removals
+                    .iter()
+                    .any(|(existing, _): &(TypeId, String)| *existing == tid)
+            {
+                removals.push((tid, ctype.clone()));
+            }
+        }
+        if removals.is_empty() {
+            return Vec::new();
+        }
+
+        let new_type_set = old_type_set
+            .into_iter()
+            .filter(|tid| !removals.iter().any(|(removed, _)| removed == tid))
+            .collect::<Vec<_>>();
+        let new_aid = self.get_or_create_archetype(new_type_set);
+        if self.archetypes[new_aid as usize]
+            .entity_row
+            .contains_key(&eid)
+        {
+            return Vec::new();
+        }
+
+        for (_, ctype) in &removals {
+            if let Some(old_component) = self.get_component(eid, ctype) {
+                self.remove_component_indices(eid, &old_component);
+            }
+        }
+        let mut components = self.archetypes[old_aid as usize]
+            .remove_entity(eid)
+            .unwrap_or_default();
+        for (tid, _) in &removals {
+            if let Some(component) = components.remove(tid) {
+                Value::release_component_data(&component);
+            }
+        }
+        if self.archetypes[new_aid as usize]
+            .push_entity(eid, components)
+            .is_err()
+        {
+            return Vec::new();
+        }
+        Arc::make_mut(&mut self.entity_archetype).insert(eid, new_aid);
+        removals.into_iter().map(|(_, name)| name).collect()
     }
 
     pub(crate) fn destroy_entity_storage(&mut self, eid: u32) -> bool {

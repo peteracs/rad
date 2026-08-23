@@ -9,3 +9,17 @@ test "capture is atomic, balanced, and idempotent" {
     assert(len(entities(PaymentHold)) == 0, "holds removed atomically")
     assert(len(entities(LedgerEntry)) == 200, "two ledger entries per payment")
 }
+
+test "atomic batch receipt is the exact scalar aggregate" {
+    settle_atomic_batch(100)
+    let receipt: BatchCaptureReceipt = res(BatchCaptureReceipt)
+    assert(receipt.payments == 100, "same capture count as scalar path")
+    assert(receipt.ledger_entries == 200, "same posting count as scalar path")
+    assert(receipt.idempotency_records == 100, "same idempotency cardinality")
+    assert(receipt.retry_rejections == 100, "same duplicate rejection cardinality")
+    assert(i64(receipt.debit_total) == i64(-10000), "same total debit")
+    assert(i64(receipt.credit_total) == i64(10000), "same total credit")
+    assert(i64(receipt.debit_balance) == i64(0), "same debit ending balance")
+    assert(i64(receipt.credit_balance) == i64(10000), "same credit ending balance")
+    assert(res(CaptureAudit).committed == 100, "same post-commit count")
+}

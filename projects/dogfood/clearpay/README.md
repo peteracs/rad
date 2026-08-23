@@ -19,6 +19,11 @@ rad projects/dogfood/clearpay/negative/post_commit_write.rad
 
 The first transaction rolls back its staged patch after a failed postcondition. The second is rejected because a helper escapes `changes_only`. The third is rejected because post-commit code attempts an authoritative write.
 
-`bench.rad` commits 10,000 captures and 20,000 balanced entries with exact idempotent retry behavior.
+`bench.rad` submits an exact 10,000-payment atomic settlement batch. Its
+transaction-owned receipt proves 20,000 balanced postings, 10,000 accepted
+idempotency keys, 10,000 duplicate rejections, exact debit/credit totals, and
+one post-commit audit publication. The workflow suite separately executes 100
+ordinary per-payment `CapturePayment` transactions, so the batch path cannot
+replace or conceal scalar transaction semantics.
 
 Score: learnability 2, ownership clarity 2, error quality 2, observability 2, determinism 2, performance 1, testability 2, refactor safety 2, host safety 1, production realism 2 — **18/20**.

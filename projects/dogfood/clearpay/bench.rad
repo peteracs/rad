@@ -4,8 +4,14 @@ use "systems/settlement.rad"
 use "scenarios/production.rad"
 
 fn main() -> nil {
-    run_payment_day(10000)
-    assert(len(entities(CapturedPayment)) == 10000, "10k captures")
-    assert(len(entities(LedgerEntry)) == 20000, "20k balanced entries")
+    settle_atomic_batch(10000)
+    let receipt: BatchCaptureReceipt = res(BatchCaptureReceipt)
+    assert(receipt.payments == 10000, "10k captures")
+    assert(receipt.ledger_entries == 20000, "20k balanced entries")
+    assert(receipt.idempotency_records == 10000, "one idempotency record per capture")
+    assert(receipt.retry_rejections == 10000, "every duplicate delivery is rejected")
+    assert(i64(receipt.debit_total) + i64(receipt.credit_total) == i64(0), "batch ledger balances")
+    assert(res(MerchantSettlement).captures == 10000, "settlement count is exact")
+    assert(res(CaptureAudit).committed == 10000, "post-commit delivery is exact")
     print("clearpay-bench: ok payments=10000")
 }

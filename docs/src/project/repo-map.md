@@ -9,15 +9,18 @@ dependency rules behind that tree.
 
 ```text
 projects ─────┐
-adapters ─────┼──> core/vm
+adapters ─────┼──> core/vm ──> core/syntax
 tests ────────┘
 
 core/vm ──X──> adapters
 core/vm ──X──> projects
+core/syntax ──X──> core/vm
 ```
 
-`core/vm` is the authoritative language/runtime library. Adapters translate
-that library into a process, protocol, editor, browser, or GPU environment.
+`core/syntax` owns the independently compiled source-language frontend;
+`core/vm` owns semantic checking, bytecode, and runtime behavior and publicly
+re-exports the syntax product used by embedders. Adapters translate those
+libraries into a process, protocol, editor, browser, or GPU environment.
 Projects consume the language and may own specialized acceleration. Tests
 verify the public contract. Experiments are non-authoritative.
 
@@ -29,7 +32,8 @@ adapters from becoming modules of the VM library.
 
 | Path | Owner and responsibility |
 |---|---|
-| `core/vm/` | RAD syntax, checking, bytecode, world model, execution, replay, persistence, WASM runtime boundary, and public Rust API. |
+| `core/syntax/` | Canonical RAD tokens, parser, AST, source bundles, and source-level native/view declarations. It has no dependency on VM semantics or execution. |
+| `core/vm/` | Checking, bytecode, world model, execution, replay, persistence, WASM runtime boundary, syntax-product facade, and public Rust API. |
 | `adapters/` | Host-facing composition that depends on the VM: CLI, LSP, and WebGPU materialization. |
 | `projects/` | Applications, dogfood, tutorials, playgrounds, and project-owned acceleration. |
 | `experiments/` | Frozen or exploratory implementations that are not language authority. |
@@ -43,9 +47,9 @@ adapters from becoming modules of the VM library.
 Generated output belongs in ignored build directories such as `target/`,
 `dist/`, or `demo-dist/`, never beside authoritative source.
 
-## Core VM bounded contexts
+## Core language bounded contexts
 
-The familiar compilation flow remains inside the core:
+The familiar compilation flow is split at one sealed syntax product:
 
 ```text
 source -> lexer -> parser -> AST -> checker -> compiler -> bytecode -> VM
@@ -53,8 +57,9 @@ source -> lexer -> parser -> AST -> checker -> compiler -> bytecode -> VM
 
 | Path | Responsibility |
 |---|---|
-| `core/vm/src/lexer.rs`, `lexer/` | Tokenization, strings, and lexer-local tests. |
-| `core/vm/src/parser.rs`, `parser/` | Syntax and declaration/expression parsing. |
+| `core/syntax/src/lexer.rs`, `lexer/` | Tokenization, strings, and lexer-local tests. |
+| `core/syntax/src/parser.rs`, `parser/` | Syntax and declaration/expression parsing. |
+| `core/syntax/src/ast.rs`, `ast/` | Source AST and canonical module/declaration metadata. |
 | `core/vm/src/checker/` | Name/type/effect/lifecycle validation. |
 | `core/vm/src/checker/authority.rs`, `checker/authority/` | Canonical callable authority graph, transitive inference, reverse indexes, and system-bound enforcement. |
 | `core/vm/src/compiler/` | Checked AST to verified bytecode and runtime metadata. |

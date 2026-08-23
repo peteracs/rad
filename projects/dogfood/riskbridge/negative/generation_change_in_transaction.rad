@@ -6,6 +6,7 @@ transaction ReloadDuringDecision(target: entity) {
     changes_only [DecisionState]
     let _new_generation = load_extension(
         "target/riskbridge-plugin/release/riskbridge_model_plugin.dll",
+        100,
     )
     set(target, DecisionState { committed: true })
     ensures require(target, DecisionState).committed

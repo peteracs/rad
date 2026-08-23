@@ -167,5 +167,6 @@ include!("cli/model_commands.rs");
 include!("cli/ffi_commands.rs");
 include!("cli/source_commands.rs");
 include!("cli/run.rs");
+include!("cli/test_parallel.rs");
 include!("cli/commands_and_diagnostics.rs");
 include!("cli/tests.rs");

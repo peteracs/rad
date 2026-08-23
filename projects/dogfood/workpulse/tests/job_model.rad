@@ -5,6 +5,7 @@ use "../owners/job_owner.rad" as jobs
 let model_worker_a: entity = jobs.register_worker(WorkerId(u64(1001)))
 let model_worker_b: entity = jobs.register_worker(WorkerId(u64(1002)))
 let model_job: entity = jobs.EnqueueJob(JobId(u64(9001)), u64(1), 3)
+component SnapshotRoundtripExercised {}
 
 fn lifecycle_status_count(job: entity) -> int {
     let mut count: int = 0
@@ -80,10 +81,17 @@ fn worker_reconnect() -> nil { jobs.set_worker_connected(model_worker_a, true) }
 fn scheduler_restart() -> nil { jobs.RestartScheduler() }
 
 fn snapshot_restore() -> nil {
-    let encoded: str = fork_to_bytes(fork())
-    let restored = fork_from_bytes(encoded) |> unwrap
-    assert(fork_to_bytes(restored) == encoded, "snapshot wire roundtrip is exact")
-    jobs.RestartScheduler()
+    // A restart checkpoint is a control-plane boundary, not a 1/15 hot-path
+    // operation. Exercise one exact wire round-trip in every generated
+    // history; duplicate deliveries remain idempotent like a production
+    // checkpoint request with the same generation token.
+    if has(model_job, Running) and not has(model_job, SnapshotRoundtripExercised) {
+        set(model_job, SnapshotRoundtripExercised {})
+        let encoded: str = fork_to_bytes(fork())
+        let restored = fork_from_bytes(encoded) |> unwrap
+        assert(fork_to_bytes(restored) == encoded, "snapshot wire roundtrip is exact")
+        jobs.RestartScheduler()
+    }
 }
 
 fn duplicate_delivery() -> nil {

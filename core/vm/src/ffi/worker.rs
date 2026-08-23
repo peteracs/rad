@@ -4,7 +4,13 @@
 // memory, and retained function values keep their exact worker generation.
 
 #[cfg(not(target_arch = "wasm32"))]
-const NATIVE_WORKER_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+// A native generation is an online request boundary, not a batch job. Keep
+// startup tolerant of cold process creation. The caller grants each generation
+// an explicit call deadline, bounded by this hard ceiling so native work can
+// never turn a RAD operation into an unbounded batch job.
+const NATIVE_WORKER_STARTUP_TIMEOUT: std::time::Duration =
+    std::time::Duration::from_millis(700);
+pub const MAX_NATIVE_WORKER_CALL_TIMEOUT_MS: u64 = 900;
 #[cfg(not(target_arch = "wasm32"))]
 const MAX_WORKER_MESSAGE_BYTES: usize = 64 * 1024 * 1024;
 
@@ -40,6 +46,7 @@ struct NativeWorkerState {
 #[cfg(not(target_arch = "wasm32"))]
 pub struct NativeWorkerHandle {
     plugin: String,
+    call_timeout: std::time::Duration,
     state: std::sync::Mutex<NativeWorkerState>,
 }
 
@@ -70,11 +77,23 @@ impl NativeWorkerHandle {
                 args: encoded_args,
             },
         ) {
-            return Err(mark_worker_failed(&mut state, &self.plugin, error));
+            return Err(mark_worker_failed(
+                &mut state,
+                &self.plugin,
+                self.call_timeout,
+                error,
+            ));
         }
         let response = match read_worker_message::<NativeWorkerResponse>(&mut state.stream) {
             Ok(response) => response,
-            Err(error) => return Err(mark_worker_failed(&mut state, &self.plugin, error)),
+            Err(error) => {
+                return Err(mark_worker_failed(
+                    &mut state,
+                    &self.plugin,
+                    self.call_timeout,
+                    error,
+                ))
+            }
         };
         match response {
             NativeWorkerResponse::Call { result: Ok(value) } => {
@@ -91,6 +110,7 @@ impl NativeWorkerHandle {
             NativeWorkerResponse::Ready { .. } => Err(mark_worker_failed(
                 &mut state,
                 &self.plugin,
+                self.call_timeout,
                 "worker returned an unexpected ready response".to_string(),
             )),
         }
@@ -115,18 +135,38 @@ impl Drop for NativeWorkerHandle {
 fn mark_worker_failed(
     state: &mut NativeWorkerState,
     plugin: &str,
+    call_timeout: std::time::Duration,
     detail: String,
 ) -> String {
-    let status = state.child.try_wait().ok().flatten();
+    let mut status = state.child.try_wait().ok().flatten();
+    if status.is_none() && (detail.contains("timed out") || detail.contains("would block")) {
+        // On Windows a faulted process can close neither side of the loopback
+        // stream before the granted read deadline, while its exit status becomes
+        // visible a few scheduler ticks later. Give only an already-dying
+        // process a tiny grace window; a live hang is still killed and reported
+        // as timeout after the same tightly bounded containment operation.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_millis(20);
+        while std::time::Instant::now() < deadline {
+            status = state.child.try_wait().ok().flatten();
+            if status.is_some() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+    }
     let _ = state.child.kill();
     let _ = state.child.wait();
-    let failure = if detail.contains("timed out") || detail.contains("would block") {
+    // A crashed worker often surfaces at the socket as a timeout before
+    // Windows publishes EOF. Prefer the process's terminal status whenever it
+    // is already observable so a crash and a live-but-hung plugin remain two
+    // distinct typed failures.
+    let failure = if let Some(status) = status {
+        format!("HostCallFailure: plugin '{plugin}' worker exited with {status}: {detail}")
+    } else if detail.contains("timed out") || detail.contains("would block") {
         format!(
             "HostCallFailure: plugin '{plugin}' exceeded the {} ms native-call timeout",
-            NATIVE_WORKER_TIMEOUT.as_millis()
+            call_timeout.as_millis()
         )
-    } else if let Some(status) = status {
-        format!("HostCallFailure: plugin '{plugin}' worker exited with {status}: {detail}")
     } else {
         format!("HostCallFailure: plugin '{plugin}' worker failed: {detail}")
     };
@@ -189,7 +229,7 @@ fn worker_io_error(operation: &str, error: std::io::Error) -> String {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-fn worker_executable() -> Result<PathBuf, String> {
+pub fn native_worker_executable() -> Result<PathBuf, String> {
     if let Some(configured) = std::env::var_os("RAD_FFI_WORKER_EXECUTABLE") {
         let configured = PathBuf::from(configured);
         if configured.is_file() {
@@ -236,8 +276,18 @@ fn worker_token(path: &str) -> String {
 /// Start one isolated worker and bind every export to that exact process and
 /// content-addressed generation.
 #[cfg(not(target_arch = "wasm32"))]
-pub fn load_plugin_isolated(path: &str) -> Result<LoadedPlugin<LoadedNativeLibrary>, String> {
-    let executable = worker_executable()?;
+pub fn load_plugin_isolated(
+    path: &str,
+    call_timeout: std::time::Duration,
+) -> Result<LoadedPlugin<LoadedNativeLibrary>, String> {
+    if call_timeout.is_zero()
+        || call_timeout > std::time::Duration::from_millis(MAX_NATIVE_WORKER_CALL_TIMEOUT_MS)
+    {
+        return Err(format!(
+            "native-call timeout must be between 1 and {MAX_NATIVE_WORKER_CALL_TIMEOUT_MS} ms"
+        ));
+    }
+    let executable = native_worker_executable()?;
     let listener = std::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
         .map_err(|error| format!("cannot bind native-worker channel: {error}"))?;
     listener
@@ -278,12 +328,12 @@ pub fn load_plugin_isolated(path: &str) -> Result<LoadedPlugin<LoadedNativeLibra
                         "native worker exited before handshake with {status}"
                     ));
                 }
-                if started.elapsed() >= NATIVE_WORKER_TIMEOUT {
+                if started.elapsed() >= NATIVE_WORKER_STARTUP_TIMEOUT {
                     let _ = child.kill();
                     let _ = child.wait();
                     return Err(format!(
                         "native worker exceeded the {} ms startup timeout",
-                        NATIVE_WORKER_TIMEOUT.as_millis()
+                        NATIVE_WORKER_STARTUP_TIMEOUT.as_millis()
                     ));
                 }
                 std::thread::sleep(std::time::Duration::from_millis(2));
@@ -299,8 +349,8 @@ pub fn load_plugin_isolated(path: &str) -> Result<LoadedPlugin<LoadedNativeLibra
         .set_nonblocking(false)
         .map_err(|error| format!("cannot make native-worker channel blocking: {error}"))?;
     stream
-        .set_read_timeout(Some(NATIVE_WORKER_TIMEOUT))
-        .and_then(|_| stream.set_write_timeout(Some(NATIVE_WORKER_TIMEOUT)))
+        .set_read_timeout(Some(NATIVE_WORKER_STARTUP_TIMEOUT))
+        .and_then(|_| stream.set_write_timeout(Some(NATIVE_WORKER_STARTUP_TIMEOUT)))
         .map_err(|error| format!("cannot configure native-worker timeout: {error}"))?;
     write_worker_message(
         &mut stream,
@@ -308,17 +358,63 @@ pub fn load_plugin_isolated(path: &str) -> Result<LoadedPlugin<LoadedNativeLibra
             token: token.clone(),
         },
     )?;
-    let response = read_worker_message::<NativeWorkerResponse>(&mut stream).map_err(|error| {
+    // Verification runs inside the worker before Ready. A plugin can crash or
+    // hang in its determinism probe, so one blocking socket timeout both hid
+    // process exit and charged a crash the full hang budget. Read the framed
+    // response on a helper thread while the owner polls the child status. The
+    // stream clone preserves framing across partial TCP reads; killing or
+    // exiting the child closes it and releases the reader.
+    let mut response_stream = stream
+        .try_clone()
+        .map_err(|error| format!("cannot clone native-worker channel: {error}"))?;
+    let (response_tx, response_rx) = std::sync::mpsc::sync_channel(1);
+    let response_thread = std::thread::spawn(move || {
+        let _ = response_tx.send(read_worker_message::<NativeWorkerResponse>(
+            &mut response_stream,
+        ));
+    });
+    let response = loop {
+        match response_rx.recv_timeout(std::time::Duration::from_millis(5)) {
+            Ok(response) => break response,
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
+                break Err("native-worker response reader stopped".to_string());
+            }
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
+        }
+        if let Some(status) = child
+            .try_wait()
+            .map_err(|error| format!("cannot inspect native worker: {error}"))?
+        {
+            let _ = stream.shutdown(std::net::Shutdown::Both);
+            let _ = response_thread.join();
+            return Err(format!(
+                "HostCallFailure: plugin '{path}' worker exited during isolated load with {status}"
+            ));
+        }
+        if started.elapsed() >= NATIVE_WORKER_STARTUP_TIMEOUT {
+            let _ = child.kill();
+            let _ = stream.shutdown(std::net::Shutdown::Both);
+            let _ = child.wait();
+            let _ = response_thread.join();
+            return Err(format!(
+                "HostCallFailure: plugin '{path}' exceeded the {} ms load timeout",
+                NATIVE_WORKER_STARTUP_TIMEOUT.as_millis()
+            ));
+        }
+    };
+    let _ = response_thread.join();
+    let response = response.map_err(|error| {
+        let status = child.try_wait().ok().flatten();
         let _ = child.kill();
         let _ = child.wait();
-        if error.contains("timed out") || error.contains("would block") {
-            format!(
-                "HostCallFailure: plugin '{path}' exceeded the {} ms load timeout",
-                NATIVE_WORKER_TIMEOUT.as_millis()
-            )
-        } else {
-            format!("HostCallFailure: plugin '{path}' failed during isolated load: {error}")
-        }
+        status.map_or_else(
+            || format!("HostCallFailure: plugin '{path}' failed during isolated load: {error}"),
+            |status| {
+                format!(
+                    "HostCallFailure: plugin '{path}' worker exited during isolated load with {status}: {error}"
+                )
+            },
+        )
     })?;
     let encoded = match response {
         NativeWorkerResponse::Ready { plugin } => plugin,
@@ -327,8 +423,13 @@ pub fn load_plugin_isolated(path: &str) -> Result<LoadedPlugin<LoadedNativeLibra
             return Err("native worker returned a call result during handshake".to_string())
         }
     };
+    stream
+        .set_read_timeout(Some(call_timeout))
+        .and_then(|_| stream.set_write_timeout(Some(call_timeout)))
+        .map_err(|error| format!("cannot configure native-worker call timeout: {error}"))?;
     let handle = std::sync::Arc::new(NativeWorkerHandle {
         plugin: path.to_string(),
+        call_timeout,
         state: std::sync::Mutex::new(NativeWorkerState {
             child,
             stream,
@@ -355,7 +456,11 @@ pub fn run_plugin_worker(connect: &str, plugin: &str, token: &str) -> Result<(),
         // An idle generation is healthy. Only the owning VM times an active
         // request; the worker waits indefinitely for its next command.
         .set_read_timeout(None)
-        .and_then(|_| stream.set_write_timeout(Some(NATIVE_WORKER_TIMEOUT)))
+        .and_then(|_| {
+            stream.set_write_timeout(Some(std::time::Duration::from_millis(
+                MAX_NATIVE_WORKER_CALL_TIMEOUT_MS,
+            )))
+        })
         .map_err(|error| format!("native worker cannot configure channel: {error}"))?;
     match read_worker_message::<NativeWorkerRequest>(&mut stream)? {
         NativeWorkerRequest::Hello { token: supplied } if supplied == token => {}
@@ -408,7 +513,7 @@ pub fn run_plugin_worker(connect: &str, plugin: &str, token: &str) -> Result<(),
                 // All call values have been reduced to pointer-free JSON. The
                 // worker retains no guest roots between requests.
                 unsafe {
-                    gc.sweep(&std::collections::HashSet::new());
+                    gc.sweep();
                 }
             }
             NativeWorkerRequest::Shutdown => return Ok(()),
@@ -425,6 +530,9 @@ pub fn run_plugin_worker(connect: &str, plugin: &str, token: &str) -> Result<(),
 }
 
 #[cfg(target_arch = "wasm32")]
-pub fn load_plugin_isolated(_path: &str) -> Result<LoadedPlugin<()>, String> {
+pub fn load_plugin_isolated(
+    _path: &str,
+    _call_timeout: std::time::Duration,
+) -> Result<LoadedPlugin<()>, String> {
     Err("native extensions are not supported on wasm32".to_string())
 }

@@ -202,6 +202,38 @@
     }
 
     #[test]
+    fn direct_builtins_use_verified_call_opcode_without_breaking_shadowed_calls() {
+        let source = r#"
+            let find = fn(value) { return value + 1 }
+            fn positive(value) { return abs(value) }
+            fn main() -> nil {
+                let len = fn(_value) { return 7 }
+                print(positive(-3) + len([]) + find(4))
+            }
+        "#;
+        let tokens = Lexer::new(source).tokenize().0;
+        let program = Parser::new(tokens).parse();
+        let result = Compiler::new().compile(&program).expect("program compiles");
+        let main = result
+            .chunks
+            .iter()
+            .find(|chunk| chunk.name == "main")
+            .expect("main chunk");
+        assert!(
+            result
+                .chunks
+                .iter()
+                .any(|chunk| chunk.code.contains(&(crate::opcode::Op::CallBuiltin as u8))),
+            "unshadowed abs should use CallBuiltin"
+        );
+        assert!(
+            main.code.contains(&(crate::opcode::Op::Call as u8)),
+            "shadowed len closure must remain a dynamic call"
+        );
+        assert_eq!(run_source(source), vec!["15"]);
+    }
+
+    #[test]
     fn compile_arithmetic() {
         let output = run_source("print(2 + 3 * 4)");
         assert_eq!(output, vec!["14"]);

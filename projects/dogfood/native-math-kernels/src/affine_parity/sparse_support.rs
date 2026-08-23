@@ -100,48 +100,6 @@ fn sparse_step(
     }
 }
 
-fn sparse_slope_step(
-    node: SparseSupportNode,
-    extension_bit: u32,
-    depth: u32,
-    multiplier_powers: &[BigUint],
-    multiplier: &BigUint,
-    addend: &BigUint,
-) -> SparseSupportNode {
-    let coefficient = &multiplier_powers[node.odd_steps as usize];
-    let denominator = BigUint::from(1u8) << depth as usize;
-    let residue = if extension_bit == 0 {
-        node.residue
-    } else {
-        node.residue + &denominator
-    };
-    let source = if extension_bit == 0 {
-        node.probe
-    } else {
-        node.probe + coefficient
-    };
-    if !source.bit(0) {
-        return SparseSupportNode {
-            residue,
-            coefficient: BigUint::from(0u8),
-            offset: BigUint::from(0u8),
-            denominator: BigUint::from(0u8),
-            probe: source >> 1usize,
-            input_ones: node.input_ones + extension_bit,
-            odd_steps: node.odd_steps,
-        };
-    }
-    SparseSupportNode {
-        residue,
-        coefficient: BigUint::from(0u8),
-        offset: BigUint::from(0u8),
-        denominator: BigUint::from(0u8),
-        probe: (source * multiplier + addend) >> 1usize,
-        input_ones: node.input_ones + extension_bit,
-        odd_steps: node.odd_steps + 1,
-    }
-}
-
 fn sparse_prunable(node: &SparseSupportNode, verified_bound: &BigUint) -> bool {
     node.coefficient < node.denominator
         && node.offset < verified_bound * (&node.denominator - &node.coefficient)
@@ -327,14 +285,79 @@ pub(crate) struct SparseSupportLaneSummary {
     pub signature: u64,
 }
 
+type SupportPositions = smallvec::SmallVec<[u16; 16]>;
+
+#[derive(Clone)]
+struct CompactSupportNode {
+    positions: SupportPositions,
+    residue: BigUint,
+    probe: BigUint,
+    odd_steps: u32,
+    // `offset + verified_bound * coefficient`. This is the only affine
+    // magnitude needed by the least-counterexample pruning rule.
+    descent_envelope: BigUint,
+}
+
+fn support_positions_less(left: &[u16], right: &[u16]) -> bool {
+    left.iter().rev().cmp(right.iter().rev()).is_lt()
+}
+
+fn support_positions_value(positions: &[u16]) -> BigUint {
+    let mut value = BigUint::from(0u8);
+    for position in positions {
+        value |= BigUint::from(1u8) << usize::from(*position);
+    }
+    value
+}
+
+#[cfg(test)]
+fn value_less_than_positions(value: &BigUint, positions: &[u16]) -> bool {
+    let position_bits = positions.last().map_or(0, |position| u64::from(*position) + 1);
+    match value.bits().cmp(&position_bits) {
+        std::cmp::Ordering::Less => return true,
+        std::cmp::Ordering::Greater => return false,
+        std::cmp::Ordering::Equal => {}
+    }
+    let mut digits = value.iter_u32_digits();
+    for digit_index in (0..digits.len()).rev() {
+        let actual = digits.next_back().unwrap_or(0);
+        let mut expected = 0u32;
+        for position in positions {
+            if usize::from(*position) / 32 == digit_index {
+                expected |= 1 << (position % 32);
+            }
+        }
+        match actual.cmp(&expected) {
+            std::cmp::Ordering::Less => return true,
+            std::cmp::Ordering::Greater => return false,
+            std::cmp::Ordering::Equal => {}
+        }
+    }
+    false
+}
+
+fn compact_support_root(verified_power: u32, prune_mode: SparsePruneMode) -> CompactSupportNode {
+    CompactSupportNode {
+        positions: SupportPositions::new(),
+        residue: BigUint::from(0u8),
+        probe: BigUint::from(0u8),
+        odd_steps: 0,
+        descent_envelope: if matches!(prune_mode, SparsePruneMode::DescentThreshold) {
+            BigUint::from(1u8) << verified_power as usize
+        } else {
+            BigUint::from(0u8)
+        },
+    }
+}
+
 struct SparseSupportSearch {
     multiplier: BigUint,
     addend: BigUint,
-    verified_bound: BigUint,
+    verified_power: u32,
     max_depth: u32,
     max_input_ones: u32,
     deepest_survival_by_weight: Vec<u32>,
-    deepest_witness_by_weight: Vec<BigUint>,
+    deepest_witness_by_weight: Vec<SupportPositions>,
     anchors_by_weight: Vec<u64>,
     expanded_nodes: u64,
     prune_mode: SparsePruneMode,
@@ -368,11 +391,11 @@ impl SparseSupportSearch {
         Self {
             multiplier,
             addend: BigUint::from(addend),
-            verified_bound: BigUint::from(1u8) << verified_power as usize,
+            verified_power,
             max_depth,
             max_input_ones,
             deepest_survival_by_weight: vec![0; max_input_ones as usize + 1],
-            deepest_witness_by_weight: vec![BigUint::from(0u8); max_input_ones as usize + 1],
+            deepest_witness_by_weight: vec![SupportPositions::new(); max_input_ones as usize + 1],
             anchors_by_weight: vec![0; max_input_ones as usize + 1],
             expanded_nodes: 0,
             prune_mode,
@@ -380,9 +403,13 @@ impl SparseSupportSearch {
         }
     }
 
-    fn prunable(&self, node: &SparseSupportNode, depth: u32) -> bool {
+    fn prunable(&self, node: &CompactSupportNode, depth: u32) -> bool {
         match self.prune_mode {
-            SparsePruneMode::DescentThreshold => sparse_prunable(node, &self.verified_bound),
+            SparsePruneMode::DescentThreshold => {
+                self.multiplier_powers[node.odd_steps as usize].bits() <= u64::from(depth)
+                    && node.descent_envelope.bits()
+                        <= u64::from(depth) + u64::from(self.verified_power)
+            }
             SparsePruneMode::PrefixSlope => {
                 self.multiplier_powers[node.odd_steps as usize].bits() <= u64::from(depth)
             }
@@ -391,23 +418,29 @@ impl SparseSupportSearch {
 
     fn step(
         &self,
-        node: SparseSupportNode,
+        mut node: CompactSupportNode,
         extension_bit: u32,
         parent_depth: u32,
-    ) -> SparseSupportNode {
-        match self.prune_mode {
-            SparsePruneMode::DescentThreshold => {
-                sparse_step(node, extension_bit, &self.multiplier, &self.addend)
+    ) -> CompactSupportNode {
+        let coefficient = &self.multiplier_powers[node.odd_steps as usize];
+        let source = if extension_bit == 0 {
+            node.probe
+        } else {
+            node.positions.push(parent_depth as u16);
+            node.residue += BigUint::from(1u8) << parent_depth as usize;
+            node.probe + coefficient
+        };
+        if source.bit(0) {
+            node.probe = (source * &self.multiplier + &self.addend) >> 1usize;
+            node.odd_steps += 1;
+            if matches!(self.prune_mode, SparsePruneMode::DescentThreshold) {
+                node.descent_envelope = node.descent_envelope * &self.multiplier
+                    + (&self.addend << parent_depth as usize);
             }
-            SparsePruneMode::PrefixSlope => sparse_slope_step(
-                node,
-                extension_bit,
-                parent_depth,
-                &self.multiplier_powers,
-                &self.multiplier,
-                &self.addend,
-            ),
+        } else {
+            node.probe = source >> 1usize;
         }
+        node
     }
 
     fn total_anchors(&self) -> u64 {
@@ -426,17 +459,17 @@ impl SparseSupportSearch {
         Ok(())
     }
 
-    fn record(&mut self, node: &SparseSupportNode, depth: u32) {
-        self.record_residue(node.input_ones as usize, &node.residue, depth);
+    fn record(&mut self, node: &CompactSupportNode, depth: u32) {
+        self.record_positions(node.positions.len(), &node.positions, depth);
     }
 
-    fn record_residue(&mut self, weight: usize, residue: &BigUint, depth: u32) {
+    fn record_positions(&mut self, weight: usize, positions: &[u16], depth: u32) {
         if depth > self.deepest_survival_by_weight[weight]
             || (depth == self.deepest_survival_by_weight[weight]
-                && residue < &self.deepest_witness_by_weight[weight])
+                && support_positions_less(positions, &self.deepest_witness_by_weight[weight]))
         {
             self.deepest_survival_by_weight[weight] = depth;
-            self.deepest_witness_by_weight[weight] = residue.clone();
+            self.deepest_witness_by_weight[weight] = SupportPositions::from_slice(positions);
         }
     }
 
@@ -447,22 +480,23 @@ impl SparseSupportSearch {
     /// optimization for high support budgets.
     fn explore_exhausted_leaf(
         &mut self,
-        anchor: SparseSupportNode,
+        anchor: CompactSupportNode,
         depth: u32,
     ) -> Result<(), String> {
         if matches!(self.prune_mode, SparsePruneMode::PrefixSlope) {
             return self.explore_exhausted_slope_leaf(anchor, depth);
         }
+        let positions = anchor.positions;
         let residue = anchor.residue;
-        if residue < self.verified_bound {
+        if residue.bits() <= u64::from(self.verified_power) {
             return Ok(());
         }
         let mut value = anchor.probe;
         if value < residue {
             return Ok(());
         }
-        let weight = anchor.input_ones as usize;
-        self.record_residue(weight, &residue, depth);
+        let weight = positions.len();
+        self.record_positions(weight, &positions, depth);
         let mut current_depth = depth;
         while current_depth < self.max_depth {
             let numerator = if value.bit(0) {
@@ -487,27 +521,28 @@ impl SparseSupportSearch {
                 }
                 self.charge_expansions(low)?;
                 let last_survival = current_depth + low as u32 - 1;
-                self.record_residue(weight, &residue, last_survival);
+                self.record_positions(weight, &positions, last_survival);
                 break;
             }
             self.charge_expansions(jump)?;
             current_depth += jump as u32;
             value = shifted;
-            self.record_residue(weight, &residue, current_depth);
+            self.record_positions(weight, &positions, current_depth);
         }
         Ok(())
     }
 
     fn explore_exhausted_slope_leaf(
         &mut self,
-        anchor: SparseSupportNode,
+        anchor: CompactSupportNode,
         depth: u32,
     ) -> Result<(), String> {
-        let residue = anchor.residue;
-        let weight = anchor.input_ones as usize;
+        let positions = anchor.positions;
+        let _residue = anchor.residue;
+        let weight = positions.len();
         let mut value = anchor.probe;
         let mut odd_steps = anchor.odd_steps;
-        self.record_residue(weight, &residue, depth);
+        self.record_positions(weight, &positions, depth);
         let mut current_depth = depth;
         while current_depth < self.max_depth {
             let odd = value.bit(0);
@@ -535,19 +570,19 @@ impl SparseSupportSearch {
                     }
                 }
                 self.charge_expansions(low)?;
-                self.record_residue(weight, &residue, current_depth + low as u32 - 1);
+                self.record_positions(weight, &positions, current_depth + low as u32 - 1);
                 break;
             }
             self.charge_expansions(jump)?;
             current_depth += jump as u32;
             value = &numerator >> jump as usize;
-            self.record_residue(weight, &residue, current_depth);
+            self.record_positions(weight, &positions, current_depth);
         }
         Ok(())
     }
 
-    fn explore_anchor(&mut self, anchor: SparseSupportNode, depth: u32) -> Result<(), String> {
-        let weight = anchor.input_ones as usize;
+    fn explore_anchor(&mut self, anchor: CompactSupportNode, depth: u32) -> Result<(), String> {
+        let weight = anchor.positions.len();
         self.anchors_by_weight[weight] = self.anchors_by_weight[weight]
             .checked_add(1)
             .ok_or_else(|| "affine sparse-support anchor count overflow".to_string())?;
@@ -556,13 +591,13 @@ impl SparseSupportSearch {
                 "affine sparse-support search exceeds {MAX_SPARSE_ANCHORS} anchors"
             ));
         }
-        if anchor.input_ones == self.max_input_ones {
+        if anchor.positions.len() == self.max_input_ones as usize {
             return self.explore_exhausted_leaf(anchor, depth);
         }
         self.record(&anchor, depth);
         let mut zero_parent = anchor;
         for next_depth in (depth + 1)..=self.max_depth {
-            if zero_parent.input_ones < self.max_input_ones {
+            if zero_parent.positions.len() < self.max_input_ones as usize {
                 let one_child = self.step(zero_parent.clone(), 1, next_depth - 1);
                 self.charge_expansion()?;
                 if !self.prunable(&one_child, next_depth) {
@@ -582,16 +617,16 @@ impl SparseSupportSearch {
 
     fn collect_split_anchors(
         &mut self,
-        anchor: SparseSupportNode,
+        anchor: CompactSupportNode,
         depth: u32,
         split_weight: u32,
-        seeds: &mut Vec<(SparseSupportNode, u32)>,
+        seeds: &mut Vec<(CompactSupportNode, u32)>,
     ) -> Result<(), String> {
-        if anchor.input_ones == split_weight {
+        if anchor.positions.len() == split_weight as usize {
             seeds.push((anchor, depth));
             return Ok(());
         }
-        let weight = anchor.input_ones as usize;
+        let weight = anchor.positions.len();
         self.anchors_by_weight[weight] = self.anchors_by_weight[weight]
             .checked_add(1)
             .ok_or_else(|| "affine sparse-support anchor count overflow".to_string())?;
@@ -626,8 +661,10 @@ impl SparseSupportSearch {
             let other_depth = other.deepest_survival_by_weight[weight];
             if other_depth > self.deepest_survival_by_weight[weight]
                 || (other_depth == self.deepest_survival_by_weight[weight]
-                    && other.deepest_witness_by_weight[weight]
-                        < self.deepest_witness_by_weight[weight])
+                    && support_positions_less(
+                        &other.deepest_witness_by_weight[weight],
+                        &self.deepest_witness_by_weight[weight],
+                    ))
             {
                 self.deepest_survival_by_weight[weight] = other_depth;
                 self.deepest_witness_by_weight[weight] =
@@ -695,16 +732,8 @@ pub(crate) fn sparse_slope_support_lane_summary(
     if lane_index >= lane_count {
         return Err("affine sparse-support lane index must be below lane count".into());
     }
-    let root = SparseSupportNode {
-        residue: BigUint::from(0u8),
-        coefficient: BigUint::from(1u8),
-        offset: BigUint::from(0u8),
-        denominator: BigUint::from(1u8),
-        probe: BigUint::from(0u8),
-        input_ones: 0,
-        odd_steps: 0,
-    };
-    let split_weight = max_input_ones.min(6);
+    let root = compact_support_root(0, SparsePruneMode::PrefixSlope);
+    let split_weight = max_input_ones.min(crate::AFFINE_SPARSE_LANE_SPLIT_WEIGHT);
     let mut trunk = SparseSupportSearch::new(
         multiplier,
         addend,
@@ -743,20 +772,12 @@ pub(crate) fn sparse_slope_support_lane_summary(
     let deepest_witness_by_weight = lane
         .deepest_witness_by_weight
         .iter()
-        .map(ToString::to_string)
+        .map(|positions| support_positions_value(positions).to_string())
         .collect::<Vec<_>>();
     let deepest_witness_one_positions_by_weight = lane
         .deepest_witness_by_weight
         .iter()
-        .map(|value| {
-            let mut positions = Vec::new();
-            for bit in 0..value.bits() {
-                if value.bit(bit) {
-                    positions.push(bit as u32);
-                }
-            }
-            positions
-        })
+        .map(|positions| positions.iter().copied().map(u32::from).collect())
         .collect::<Vec<_>>();
 
     let mut hasher = blake3::Hasher::new();
@@ -817,15 +838,7 @@ fn sparse_support_summary_with_mode(
         verified_power,
         max_input_ones,
     )?;
-    let root = SparseSupportNode {
-        residue: BigUint::from(0u8),
-        coefficient: BigUint::from(1u8),
-        offset: BigUint::from(0u8),
-        denominator: BigUint::from(1u8),
-        probe: BigUint::from(0u8),
-        input_ones: 0,
-        odd_steps: 0,
-    };
+    let root = compact_support_root(verified_power, prune_mode);
     let mut search = SparseSupportSearch::new(
         multiplier,
         addend,
@@ -834,7 +847,7 @@ fn sparse_support_summary_with_mode(
         max_input_ones,
         prune_mode,
     );
-    let split_weight = max_input_ones.min(6);
+    let split_weight = max_input_ones.min(7);
     if split_weight == max_input_ones {
         search.explore_anchor(root, 0)?;
     } else {
@@ -843,14 +856,12 @@ fn sparse_support_summary_with_mode(
         let worker_count = std::thread::available_parallelism()
             .map_or(1, usize::from)
             .min(seeds.len().max(1));
-        let mut buckets = (0..worker_count).map(|_| Vec::new()).collect::<Vec<_>>();
-        for (index, seed) in seeds.into_iter().enumerate() {
-            buckets[index % worker_count].push(seed);
-        }
+        let cursor = std::sync::atomic::AtomicUsize::new(0);
         let workers = std::thread::scope(|scope| {
-            let handles = buckets
-                .into_iter()
-                .map(|bucket| {
+            let handles = (0..worker_count)
+                .map(|_| {
+                    let seeds = &seeds;
+                    let cursor = &cursor;
                     scope.spawn(move || {
                         let mut local = SparseSupportSearch::new(
                             multiplier,
@@ -860,8 +871,12 @@ fn sparse_support_summary_with_mode(
                             max_input_ones,
                             prune_mode,
                         );
-                        for (seed, depth) in bucket {
-                            local.explore_anchor(seed, depth)?;
+                        loop {
+                            let index = cursor.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                            let Some((seed, depth)) = seeds.get(index) else {
+                                break;
+                            };
+                            local.explore_anchor(seed.clone(), *depth)?;
                         }
                         Ok::<_, String>(local)
                     })
@@ -898,17 +913,12 @@ fn sparse_support_summary_with_mode(
     let deepest_witness_one_positions_by_weight = search
         .deepest_witness_by_weight
         .iter()
-        .map(|value| {
-            (0..value.bits())
-                .filter(|position| value.bit(*position))
-                .map(|position| position as u32)
-                .collect::<Vec<_>>()
-        })
+        .map(|positions| positions.iter().copied().map(u32::from).collect::<Vec<_>>())
         .collect::<Vec<_>>();
     let deepest_witness_by_weight = search
         .deepest_witness_by_weight
         .iter()
-        .map(|value| value.to_string())
+        .map(|positions| support_positions_value(positions).to_string())
         .collect::<Vec<_>>();
     let mut hasher = blake3::Hasher::new();
     hasher.update(b"rad-affine-sparse-support-summary/v1\0");

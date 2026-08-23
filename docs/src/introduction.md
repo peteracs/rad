@@ -109,7 +109,7 @@ queue — in O(archetypes) `Arc` refcount bumps. From there:
 | `simulate(fork, systems, ticks)` | Run systems forward on the fork without touching the live world |
 | `simulate_par(fork, systems, ticks, n, seed)` | Explore `n` futures in parallel |
 | `peek(fork, entity, Component)` | Read from a fork without committing |
-| `commit(fork)` | Replace live program state with the fork's |
+| `commit(fork)` | Replace live world and pending events with the fork's complete captured state |
 | `merge_forks(base, ours, theirs)` | Three-way merge of two divergent futures |
 
 `simulate_par` is bit-identical for the same inputs at any thread count: each

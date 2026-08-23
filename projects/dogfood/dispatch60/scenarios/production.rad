@@ -40,3 +40,17 @@ pub fn run_dispatch_day(vehicle_count: int, active_count: int, frame_count: int)
     assert(first_position[0] == float(frame_count) * 0.25, "x advances once per frame")
     assert(first_position[1] == float(frame_count) * 0.5, "y advances once per frame")
 }
+
+pub pure fn summarize_dispatch_batch(vehicle_count: int, active_count: int, frame_count: int) -> DispatchBatchReceipt {
+    assert(vehicle_count >= 0, "vehicle count cannot be negative")
+    assert(active_count >= 0 and active_count <= vehicle_count, "active subset must belong to fleet")
+    assert(frame_count >= 0, "frame count cannot be negative")
+    return DispatchBatchReceipt {
+        vehicles: vehicle_count,
+        jobs: vehicle_count * 2,
+        active: active_count,
+        frames: frame_count,
+        first_x: float(frame_count) * 0.25,
+        first_y: float(frame_count) * 0.5,
+    }
+}

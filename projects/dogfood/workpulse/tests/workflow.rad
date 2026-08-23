@@ -42,3 +42,17 @@ test "scheduler restart preserves authoritative lifecycle state" {
     assert(require(job, Attempt).count == attempts, "restart preserves attempt count")
     assert(res(SchedulerState).restart_count == 1, "restart is explicit state")
 }
+
+test "batch lifecycle fold is equivalent to scalar orchestration" {
+    let jobs_count = 50
+    let workers_count = 5
+    let heartbeats_per_job = 2
+    run_job_load(jobs_count, workers_count, heartbeats_per_job)
+    let receipt = summarize_job_batch(jobs_count, workers_count, heartbeats_per_job)
+    assert(receipt.jobs == len(entities(JobIdentity)), "batch fold matches scalar job population")
+    assert(receipt.workers == len(entities(WorkerIdentity)), "batch fold matches scalar worker population")
+    assert(receipt.succeeded == len(entities(Succeeded)), "batch fold matches scalar terminal population")
+    assert(receipt.lifecycle_commands == jobs_count * (heartbeats_per_job + 4), "batch command accounting matches scalar loop shape")
+    assert(res(SchedulerAudit).leases == jobs_count, "scalar lease publication is exact")
+    assert(res(SchedulerAudit).completions == jobs_count, "scalar completion publication is exact")
+}

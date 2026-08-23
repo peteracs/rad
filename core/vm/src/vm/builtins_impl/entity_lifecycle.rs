@@ -56,53 +56,52 @@ impl VM {
         }
         let start_idx = if name.is_some() { 1 } else { 0 };
 
-        if self.is_worker {
-            let mut comps = Vec::new();
-            for arg in args.iter().skip(start_idx) {
-                if let Some(c) = arg.as_component() {
-                    let mut data = c.clone();
-                    Value::persist_component_data(&mut data);
-                    comps.push(data);
-                }
+        let mut components = Vec::with_capacity(args.len().saturating_sub(start_idx));
+        for arg in args.iter().skip(start_idx) {
+            if let Some(component) = arg.as_component() {
+                let mut data = component.clone();
+                Value::persist_component_data(&mut data);
+                components.push(data);
             }
-            self.command_buffer
-                .push(crate::vm::EcsCommand::SpawnEntity(name, comps, eid));
+        }
+
+        if self.is_worker {
             if self.transaction.is_some() {
-                let buffered = match self.command_buffer.last() {
-                    Some(crate::vm::EcsCommand::SpawnEntity(_, components, _)) => {
-                        components.clone()
-                    }
-                    _ => unreachable!("spawn command was just appended"),
-                };
-                for data in buffered {
-                    let cname = data.type_name.clone();
-                    let summary = Self::component_summary(&data);
-                    let _ = self.world.add_component_owned(eid, data);
-                    self.record_causal_write(
-                        Some(eid),
-                        &cname,
-                        crate::causality::WriteKind::Spawn,
-                        summary,
-                    );
-                }
+                let buffered = components
+                    .iter()
+                    .map(Value::clone_persistent_component_data)
+                    .collect();
+                self.command_buffer
+                    .push(crate::vm::EcsCommand::SpawnEntity(name, buffered, eid));
+                let summaries = components
+                    .iter()
+                    .map(|component| {
+                        (
+                            component.type_name.clone(),
+                            Self::component_summary(component),
+                        )
+                    })
+                    .collect::<Vec<_>>();
+                self.world
+                    .install_spawn_components_owned(eid, components)?;
+                self.record_causal_spawn_writes(eid, summaries);
+            } else {
+                self.command_buffer
+                    .push(crate::vm::EcsCommand::SpawnEntity(name, components, eid));
             }
         } else {
-            for arg in args.into_iter().skip(start_idx) {
-                if let Some(c) = arg.as_component() {
-                    let data = c.clone();
-                    let cname = data.type_name.clone();
-                    let summary = Self::component_summary(&data);
-                    // add_component persists; pre-persisting here would
-                    // abandon a copy per spawned component.
-                    let _ = self.world.add_component(eid, data);
-                    self.record_causal_write(
-                        Some(eid),
-                        &cname,
-                        crate::causality::WriteKind::Spawn,
-                        summary,
-                    );
-                }
-            }
+            let summaries = components
+                .iter()
+                .map(|component| {
+                    (
+                        component.type_name.clone(),
+                        Self::component_summary(component),
+                    )
+                })
+                .collect::<Vec<_>>();
+            self.world
+                .install_spawn_components_owned(eid, components)?;
+            self.record_causal_spawn_writes(eid, summaries);
         }
         Ok(Value::from_entity_id(&mut self.gc, eid))
     }

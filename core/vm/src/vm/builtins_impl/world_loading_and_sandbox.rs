@@ -313,8 +313,12 @@ impl VM {
         let mut plans: std::collections::HashMap<String, Plan> = std::collections::HashMap::new();
 
         let mut target = self.load_world_replacement_target();
-        let mut writes: Vec<(Option<u32>, String, crate::causality::WriteKind, String)> =
-            Vec::new();
+        let mut writes: Vec<(
+            Option<u32>,
+            String,
+            crate::causality::WriteKind,
+            crate::causality::WriteSummary,
+        )> = Vec::new();
         let mut loaded = 0i64;
         let mut seen_names: std::collections::HashSet<String> = std::collections::HashSet::new();
         for ent in body["entities"].as_array().into_iter().flatten() {

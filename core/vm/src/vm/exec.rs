@@ -35,6 +35,7 @@ pub(crate) fn with_worker_vm<R>(
 }
 
 // Lexical sections preserve one private semantic namespace.
+include!("exec/execution_guards.rs");
 include!("exec/frame_loop.rs");
 include!("exec/core_opcodes.rs");
 include!("exec/collection_opcodes.rs");

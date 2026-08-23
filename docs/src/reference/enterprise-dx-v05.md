@@ -217,7 +217,7 @@ Add tests for:
 
 Target file:
 
-- `core/vm/src/parser/tests.rs`
+- `core/syntax/src/parser/tests.rs`
 
 ## 8.2 Checker tests
 

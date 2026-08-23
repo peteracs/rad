@@ -172,7 +172,11 @@ on Hit(e) {
 let future = simulate(fork(), [system::PredictAttack], 1)
 ```
 
-When `commit(fork)` replaces the live world, **all pending events in the main timeline are discarded**, since they reference pre-commit state that no longer exists.
+`commit(fork)` replaces the complete live program state atomically: the ECS
+world and the fork's pending-event queue, including causal identifiers. Events
+that were pending only on the replaced live timeline disappear because they are
+not part of the committed fork; events captured by or emitted inside the fork
+survive and are delivered from the committed queue.
 
 Global `resource` singletons are included in the forked world snapshot alongside entity-component data. Simulated systems can read and mutate resources within the fork without affecting the main world until `commit`.
 

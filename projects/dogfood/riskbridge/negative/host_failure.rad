@@ -1,3 +1,3 @@
 use "fixture_adapter.rad"
 
-let _output = fixture_score("target/riskbridge-fixtures/host_failure.dll")
+let _output = fixture_named_score("target/riskbridge-fixtures/containment.dll", "failed_score")

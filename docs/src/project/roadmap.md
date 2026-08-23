@@ -1,6 +1,6 @@
 # Rad Language Roadmap
 
-> Last verified against the source tree: 2026-08-22
+> Last verified against the source tree: 2026-08-23
 >
 > Rad is pre-release. “Shipped” means implemented in the Rust VM/CLI and
 > covered by repository tests and dogfood; it is not a 1.0 stability promise.

@@ -14,6 +14,7 @@ const MAX_TRANSFORM_WIDTH: usize = 20;
 // Keep the finite-lattice model, deletion transition, and exchange search as
 // distinct responsibilities while sharing the private mask primitives above.
 include!("boolean_lattice/lattice.rs");
+include!("boolean_lattice/cyclic_pairs.rs");
 include!("boolean_lattice/deletion.rs");
 include!("boolean_lattice/exchange.rs");
 include!("boolean_lattice/tests.rs");

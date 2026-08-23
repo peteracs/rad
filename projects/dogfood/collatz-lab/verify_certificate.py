@@ -11,9 +11,11 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-from collections import Counter
+import math
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
+
+import numpy as np
 
 
 SCHEMA = "rad.collatz-structural-certificate.v1"
@@ -36,8 +38,13 @@ def trailing_zeros(value: int) -> int:
 def residue_tree(depth: int, verified_power: int) -> dict[str, Any]:
     """Expand only residue cylinders not already certified by descent."""
 
-    # residue, coefficient, offset, denominator, T^depth(residue), odd_steps
-    frontier = [(0, 1, 0, 1, 0, 0)]
+    maximum_u64 = np.iinfo(np.uint64).max
+    residue = np.array([0], dtype=np.uint64)
+    coefficient = np.array([1], dtype=np.uint64)
+    offset = np.array([0], dtype=np.uint64)
+    denominator = np.array([1], dtype=np.uint64)
+    probe = np.array([0], dtype=np.uint64)
+    odd_steps = np.array([0], dtype=np.uint8)
     verified_bound = 1 << verified_power
     pruned_classes = 0
     residue_sum = 0
@@ -45,55 +52,67 @@ def residue_tree(depth: int, verified_power: int) -> dict[str, Any]:
     prune_histogram = [0] * (depth + 1)
 
     for next_depth in range(1, depth + 1):
-        next_frontier = []
-        for residue, coefficient, offset, denominator, probe, odd_steps in frontier:
-            for extension in (0, 1):
-                child_residue = residue + extension * denominator
-                source = probe + extension * coefficient
-                child_coefficient = coefficient
-                child_offset = offset
-                child_odd_steps = odd_steps
-                if source & 1:
-                    child_probe = (3 * source + 1) // 2
-                    child_coefficient *= 3
-                    child_offset = 3 * offset + denominator
-                    child_odd_steps += 1
-                else:
-                    child_probe = source // 2
-                child_denominator = denominator * 2
-                expanded_nodes += 1
+        if np.any(residue > maximum_u64 - denominator):
+            raise VerificationError("residue expansion exceeds uint64")
+        if np.any(probe > maximum_u64 - coefficient):
+            raise VerificationError("trajectory probe exceeds uint64")
+        child_residue = np.concatenate((residue, residue + denominator))
+        source = np.concatenate((probe, probe + coefficient))
+        child_coefficient = np.concatenate((coefficient, coefficient))
+        child_offset = np.concatenate((offset, offset))
+        child_odd_steps = np.concatenate((odd_steps, odd_steps))
+        child_denominator = np.concatenate((denominator, denominator))
+        odd = source & 1 == 1
+        if np.any(child_coefficient[odd] > maximum_u64 // 3):
+            raise VerificationError("affine coefficient exceeds uint64")
+        if np.any(child_offset[odd] > (maximum_u64 - child_denominator[odd]) // 3):
+            raise VerificationError("affine offset exceeds uint64")
+        if np.any(child_denominator > maximum_u64 // 2):
+            raise VerificationError("residue denominator exceeds uint64")
+        source[odd] = (3 * source[odd] + 1) // 2
+        source[~odd] //= 2
+        child_coefficient[odd] *= 3
+        child_offset[odd] = 3 * child_offset[odd] + child_denominator[odd]
+        child_odd_steps[odd] += 1
+        child_denominator *= 2
+        expanded_nodes += len(source)
 
-                prunable = False
-                if child_coefficient < child_denominator:
-                    threshold = child_offset // (child_denominator - child_coefficient)
-                    prunable = threshold < verified_bound
-                if prunable:
-                    represented = 1 << (depth - next_depth)
-                    pruned_classes += represented
-                    residue_sum += (
-                        represented * child_residue
-                        + (1 << next_depth) * represented * (represented - 1) // 2
-                    )
-                    prune_histogram[next_depth] += represented
-                else:
-                    next_frontier.append(
-                        (
-                            child_residue,
-                            child_coefficient,
-                            child_offset,
-                            child_denominator,
-                            child_probe,
-                            child_odd_steps,
-                        )
-                    )
-        frontier = next_frontier
+        contracting_mask = child_coefficient < child_denominator
+        if verified_power >= 64:
+            prunable = contracting_mask
+        else:
+            prunable = np.zeros(len(source), dtype=np.bool_)
+            prunable[contracting_mask] = (
+                child_offset[contracting_mask]
+                // (child_denominator[contracting_mask] - child_coefficient[contracting_mask])
+                < verified_bound
+            )
+        pruned_count = int(np.count_nonzero(prunable))
+        represented = 1 << (depth - next_depth)
+        pruned_classes += pruned_count * represented
+        residue_sum += represented * int(child_residue[prunable].sum(dtype=np.uint64))
+        residue_sum += (
+            pruned_count
+            * (1 << next_depth)
+            * represented
+            * (represented - 1)
+            // 2
+        )
+        prune_histogram[next_depth] += pruned_count * represented
+        retained = ~prunable
+        residue = child_residue[retained]
+        coefficient = child_coefficient[retained]
+        offset = child_offset[retained]
+        denominator = child_denominator[retained]
+        probe = source[retained]
+        odd_steps = child_odd_steps[retained]
 
-    survivor_histogram = Counter(node[5] for node in frontier)
-    survivors = len(frontier)
-    residue_sum += sum(node[0] for node in frontier)
-    contracting = sum(node[1] < node[3] for node in frontier)
-    max_odd_steps = max(node[5] for node in frontier)
-    max_odd_residue = min(node[0] for node in frontier if node[5] == max_odd_steps)
+    survivor_histogram = np.bincount(odd_steps, minlength=depth + 1)
+    survivors = len(residue)
+    residue_sum += int(residue.sum(dtype=np.uint64))
+    contracting = int(np.count_nonzero(coefficient < denominator))
+    max_odd_steps = int(odd_steps.max())
+    max_odd_residue = int(residue[odd_steps == max_odd_steps].min())
     return {
         "classes": 1 << depth,
         "residue_sum": residue_sum,
@@ -103,18 +122,10 @@ def residue_tree(depth: int, verified_power: int) -> dict[str, Any]:
         "noncontracting_survivors": survivors - contracting,
         "expanded_nodes": expanded_nodes,
         "prune_histogram": prune_histogram,
-        "survivor_odd_histogram": [survivor_histogram[i] for i in range(depth + 1)],
+        "survivor_odd_histogram": [int(count) for count in survivor_histogram],
         "max_odd_steps": max_odd_steps,
         "max_odd_residue": max_odd_residue,
     }
-
-
-def compositions(total: int, slots: int, prefix: tuple[int, ...] = ()) -> Iterator[tuple[int, ...]]:
-    if slots == 1:
-        yield prefix + (total,)
-        return
-    for value in range(1, total - slots + 2):
-        yield from compositions(total - value, slots - 1, prefix + (value,))
 
 
 def cycle_word(word: tuple[int, ...]) -> tuple[bool, bool, int]:
@@ -139,6 +150,48 @@ def cycle_word(word: tuple[int, ...]) -> tuple[bool, bool, int]:
     return True, value == start, start
 
 
+def divisible_cycle_words(q: int, total: int, denominator: int) -> list[tuple[int, ...]]:
+    """Recover every composition whose cycle numerator is divisible.
+
+    Prefix sums satisfy ``N[j+1] = 3*N[j] + 2**prefix[j]``.  Reversing that
+    recurrence prunes on divisibility by three at every level.  The maximum
+    possible numerator gives a rigorous finite start bound, so this is an
+    exact audit of the same composition box without visiting millions of
+    numerators that cannot be divisible.
+    """
+
+    maximum_numerator = sum(
+        3 ** (q - 1 - index) * 2 ** (total - (q - index))
+        for index in range(q)
+    )
+    words: list[tuple[int, ...]] = []
+    reverse_prefixes: list[int] = []
+
+    def recover(stage: int, numerator: int, upper_prefix: int) -> None:
+        if stage < 0:
+            if numerator == 0:
+                prefixes = list(reversed(reverse_prefixes)) + [total]
+                words.append(
+                    tuple(
+                        prefixes[index + 1] - prefixes[index]
+                        for index in range(q)
+                    )
+                )
+            return
+        candidates = (0,) if stage == 0 else range(stage, upper_prefix)
+        for prefix in candidates:
+            remainder = numerator - (1 << prefix)
+            if remainder < 0 or remainder % 3:
+                continue
+            reverse_prefixes.append(prefix)
+            recover(stage - 1, remainder // 3, prefix)
+            reverse_prefixes.pop()
+
+    for start in range(1, maximum_numerator // denominator + 1):
+        recover(q - 1, denominator * start, total)
+    return words
+
+
 def cycle_box(max_odd_steps: int, max_total_divisions: int) -> dict[str, int]:
     words = positive = divisible = exact = nontrivial = trivial = 0
     closest_gap: int | None = None
@@ -146,30 +199,25 @@ def cycle_box(max_odd_steps: int, max_total_divisions: int) -> dict[str, int]:
     for q in range(1, min(max_odd_steps, max_total_divisions) + 1):
         for total in range(q, max_total_divisions + 1):
             gap = (1 << total) - 3**q
-            for word in compositions(total, q):
-                words += 1
-                denominator_positive, closes, start = cycle_word(word)
-                if denominator_positive:
-                    positive += 1
-                    if q > 1 and (closest_gap is None or gap < closest_gap):
-                        closest_gap = gap
-                        closest_q = q
-                        closest_divisions = total
-                if denominator_positive:
-                    # Recompute divisibility without relying on closes.
-                    numerator = 0
-                    prefix = 0
-                    for valuation in word:
-                        numerator = 3 * numerator + (1 << prefix)
-                        prefix += valuation
-                    if numerator % ((1 << prefix) - 3**q) == 0:
-                        divisible += 1
-                if closes:
-                    exact += 1
-                    if start == 1:
-                        trivial += 1
-                    else:
-                        nontrivial += 1
+            task_words = math.comb(total - 1, q - 1)
+            words += task_words
+            if gap > 0:
+                positive += task_words
+                if q > 1 and (closest_gap is None or gap < closest_gap):
+                    closest_gap = gap
+                    closest_q = q
+                    closest_divisions = total
+                candidates = divisible_cycle_words(q, total, gap)
+                divisible += len(candidates)
+                for word in candidates:
+                    denominator_positive, closes, start = cycle_word(word)
+                    require(denominator_positive, "recovered a nonpositive cycle word")
+                    if closes:
+                        exact += 1
+                        if start == 1:
+                            trivial += 1
+                        else:
+                            nontrivial += 1
     return {
         "cycle_words": words,
         "positive_cycle_denominators": positive,

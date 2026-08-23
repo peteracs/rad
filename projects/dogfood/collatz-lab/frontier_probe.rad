@@ -114,22 +114,17 @@ entity frontier_judge {
     FrontierSynthesis {}
 }
 
-system ExploreFrontier(
-    plan: FrontierPlan,
-    result: mut FrontierResult,
-) {
-    let profile = affine_frontier_profile(
-        3,
-        1,
-        plan.depth,
-        plan.support,
-        plan.beam,
-        plan.objective,
-        plan.seed,
-    )
-    result = FrontierResult {
-        objective: plan.objective,
-        seed: plan.seed,
+system AuditFrontier(plan: FrontierPlan, result: FrontierResult) {
+    assert(result.objective == plan.objective, "frontier objective crossed a batch lane")
+    assert(result.seed == plan.seed, "frontier seed crossed a batch lane")
+    assert(result.reached_depth > 0 and result.reached_depth <= plan.depth, "frontier lane depth is invalid")
+    assert(result.terminal_support <= plan.support + 1, "frontier lane exceeded its support budget")
+}
+
+pure fn frontier_result(profile: map<str, any>, objective: str, seed: int) -> FrontierResult {
+    return FrontierResult {
+        objective: objective,
+        seed: seed,
         reached_depth: profile["reached_depth"],
         terminal_support: profile["terminal_minimum_input_ones"],
         terminal_witness: profile["terminal_witness"],
@@ -178,28 +173,37 @@ fn explore_portfolio(depth: int, support: int, beam: int) -> any {
         "small_probe",
         "deterministic_mix",
     ]
-    let root = fork()
-    let mut candidates = []
-    let mut labels = []
+    let mut plans = []
     for objective in objectives {
         let seeds = if objective == "deterministic_mix" { [3, 17, 101] } else { [0] }
         for seed in seeds {
-            commit(root)
-            let subject = spawn(FrontierPlan {
-                objective: objective,
-                seed: seed,
-                depth: depth,
-                support: support,
-                beam: beam,
-                }, FrontierResult {})
-            candidates = push(candidates, fork())
-            labels = push(labels, (objective, seed, subject))
+            plans = push(plans, { "objective": objective, "seed": seed })
         }
+    }
+    let profiles = affine_frontier_profiles(3, 1, depth, support, beam, plans)
+    assert(len(profiles) == len(plans), "native frontier batch changed lane cardinality")
+
+    let root = fork()
+    let mut candidates = []
+    let mut labels = []
+    for index in range(len(plans)) {
+        let objective = plans[index]["objective"]
+        let seed = plans[index]["seed"]
+        commit(root)
+        let subject = spawn(FrontierPlan {
+            objective: objective,
+            seed: seed,
+            depth: depth,
+            support: support,
+            beam: beam,
+            }, frontier_result(profiles[index], objective, seed))
+        candidates = push(candidates, fork())
+        labels = push(labels, (objective, seed, subject))
     }
     commit(root)
     let isolated = world_digest() == world_digest(root)
     return (
-        simulate_many(candidates, [system::ExploreFrontier], 1, 1937),
+        simulate_many(candidates, [system::AuditFrontier], 1, 1937),
         labels,
         isolated,
     )

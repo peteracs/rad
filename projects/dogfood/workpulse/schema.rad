@@ -2,6 +2,14 @@ pub opaque type JobId = u64
 pub opaque type WorkerId = u64
 pub opaque type LeaseToken = u64
 
+pub resource WorkPulseBatchReceipt {
+    jobs: int = 0,
+    workers: int = 0,
+    heartbeats_per_job: int = 0,
+    lifecycle_commands: int = 0,
+    succeeded: int = 0,
+}
+
 pub event JobLeased {
     job: entity,
     worker: entity,

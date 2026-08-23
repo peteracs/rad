@@ -35,6 +35,8 @@ include!("builtins_impl/map_collections.rs");
 include!("builtins_impl/text.rs");
 include!("builtins_impl/formatting.rs");
 include!("builtins_impl/bitsets.rs");
+include!("builtins_impl/property_generators.rs");
+include!("builtins_impl/model_temporal.rs");
 include!("builtins_impl/property_testing.rs");
 include!("builtins_impl/network_transport_helpers.rs");
 include!("builtins_impl/higher_order_io_and_network.rs");

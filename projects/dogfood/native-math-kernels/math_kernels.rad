@@ -3,7 +3,10 @@
 // The VM provides only the generic load_extension/json bridge. Algorithms,
 // limits, names, and output schemas remain owned by this dogfood project.
 
-let MATH_KERNELS = load_extension("projects/dogfood/native-math-kernels/out/rad_dogfood_math_kernels")
+let MATH_KERNELS = load_extension(
+    "projects/dogfood/native-math-kernels/out/rad_dogfood_math_kernels",
+    850,
+)
 
 // A loaded extension is intentionally `any` until its adapter declares a
 // callable contract.  These symbols are deterministic, allocation-bounded
@@ -11,6 +14,7 @@ let MATH_KERNELS = load_extension("projects/dogfood/native-math-kernels/out/rad_
 // pure function values before any worker or causal code can call them.
 let LATTICE_CLOSURE_JSON: pure fn(str) -> str = MATH_KERNELS["lattice_closure_json"]
 let LATTICE_PROFILE_JSON: pure fn(str, int) -> str = MATH_KERNELS["lattice_profile_json"]
+let CYCLIC_PAIR_PROFILES_JSON: pure fn(str, int, int, int) -> str = MATH_KERNELS["cyclic_pair_profiles_json"]
 let LATTICE_FREQUENCIES_JSON: pure fn(str, int) -> str = MATH_KERNELS["lattice_frequencies_json"]
 let BITMASK_ROTATION_ORBIT_JSON: pure fn(int, int) -> str = MATH_KERNELS["bitmask_rotation_orbit_json"]
 let BITMASK_ROTATION_REPRESENTATIVES_JSON: pure fn(int) -> str = MATH_KERNELS["bitmask_rotation_representatives_json"]
@@ -34,6 +38,7 @@ let AFFINE_SPARSE_SUPPORT_SUMMARY_JSON: pure fn(int, int, int, int, int) -> str 
 let AFFINE_SPARSE_SLOPE_SUPPORT_SUMMARY_JSON: pure fn(int, int, int, int) -> str = MATH_KERNELS["affine_sparse_slope_support_summary_json"]
 let AFFINE_SPARSE_SLOPE_SUPPORT_LANE_JSON: pure fn(int, int, int, int, int, int) -> str = MATH_KERNELS["affine_sparse_slope_support_lane_json"]
 let AFFINE_FRONTIER_PROFILE_JSON: pure fn(int, int, int, int, int, str, int) -> str = MATH_KERNELS["affine_frontier_profile_json"]
+let AFFINE_FRONTIER_PROFILES_JSON: pure fn(int, int, int, int, int, str) -> str = MATH_KERNELS["affine_frontier_profiles_json"]
 let AFFINE_CYCLE_PROFILE_JSON: pure fn(int, int, int, int) -> str = MATH_KERNELS["affine_cycle_profile_json"]
 let ZETA_COVER_LANE_JSON: pure fn(str, int, int) -> str = MATH_KERNELS["zeta_cover_lane_json"]
 let ZETA_PREPARE_COVER_JSON: pure fn(str) -> str = MATH_KERNELS["zeta_prepare_cover_json"]
@@ -63,6 +68,21 @@ pub pure fn lattice_closure(members: list<int>) -> list<int> {
 pub pure fn lattice_profile(members: list<int>, width: int) -> map<str, any> {
     let encoded = LATTICE_PROFILE_JSON(json_stringify(members), width)
     return decode_kernel_result(encoded, "lattice_profile")
+}
+
+pub pure fn cyclic_pair_profiles(
+    representatives: list<int>,
+    width: int,
+    lane_count: int,
+    minimum_members: int,
+) -> list<map<str, any>> {
+    let encoded = CYCLIC_PAIR_PROFILES_JSON(
+        json_stringify(representatives),
+        width,
+        lane_count,
+        minimum_members,
+    )
+    return decode_kernel_result(encoded, "cyclic_pair_profiles")
 }
 
 pub pure fn lattice_frequencies(members: list<int>, width: int) -> list<int> {
@@ -390,6 +410,28 @@ pub pure fn affine_frontier_profile(
         seed,
     )
     return decode_kernel_result(encoded, "affine_frontier_profile")
+}
+
+// Execute an immutable portfolio in one host call. The native implementation
+// evaluates every exact plan in parallel and preserves input order in the
+// returned list, avoiding serialization through one isolated worker handle.
+pub pure fn affine_frontier_profiles(
+    multiplier: int,
+    addend: int,
+    max_depth: int,
+    max_input_ones: int,
+    beam_per_support: int,
+    plans: list,
+) -> list {
+    let encoded = AFFINE_FRONTIER_PROFILES_JSON(
+        multiplier,
+        addend,
+        max_depth,
+        max_input_ones,
+        beam_per_support,
+        json_stringify(plans),
+    )
+    return decode_kernel_result(encoded, "affine_frontier_profiles")
 }
 
 pub pure fn affine_cycle_summary(

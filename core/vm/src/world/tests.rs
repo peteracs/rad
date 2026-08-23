@@ -62,6 +62,42 @@ mod tests {
     }
 
     #[test]
+    fn spawned_component_bundle_installs_one_shape_and_publishes_indexes() {
+        let mut world = World::new();
+        world.set_indexed_fields(std::collections::HashMap::from([(
+            "Identity".to_string(),
+            std::collections::HashSet::from(["id".to_string()]),
+        )]));
+        let entity = world.spawn_entity(Some("bundled")).unwrap();
+        world
+            .install_spawn_components_owned(
+                entity,
+                vec![
+                    ComponentData {
+                        type_name: "Identity".to_string(),
+                        layout: std::sync::Arc::new(vec!["id".to_string()]),
+                        values: vec![Value::int(41)],
+                    },
+                    comp("Ready"),
+                ],
+            )
+            .unwrap();
+
+        assert!(world.has_component(entity, "Identity"));
+        assert!(world.has_component(entity, "Ready"));
+        assert_eq!(world.get_entity_by_name("bundled"), Some(entity));
+        assert_eq!(
+            world.index_lookup("Identity", "id", Value::int(41)),
+            Some(entity)
+        );
+        assert_eq!(
+            world.archetypes.len(),
+            2,
+            "empty and final shapes exist; no partial component shape was created"
+        );
+    }
+
+    #[test]
     fn restored_world_keeps_named_entity_snapshot_copy_on_write() {
         let mut world = World::new();
         let fixture = world.snapshot();
@@ -238,6 +274,30 @@ mod tests {
         w.remove_component(e, "Pos");
         assert!(!w.has_component(e, "Pos"));
         assert!(w.query(&["Pos".to_string()], &[]).is_empty());
+    }
+
+    #[test]
+    fn remove_component_bundle_moves_the_entity_once() {
+        let mut w = World::new();
+        let e = w.spawn_entity(None).unwrap();
+        w.install_spawn_components_owned(
+            e,
+            vec![comp("Pos"), comp("Vel"), comp("Health"), comp("Identity")],
+        )
+        .unwrap();
+        let source_archetype = w.entity_archetype[&e];
+
+        let removed = w.remove_components(
+            e,
+            &["Pos".to_string(), "Vel".to_string(), "Health".to_string()],
+        );
+
+        assert_eq!(removed, vec!["Pos", "Vel", "Health"]);
+        assert_ne!(w.entity_archetype[&e], source_archetype);
+        assert!(!w.has_component(e, "Pos"));
+        assert!(!w.has_component(e, "Vel"));
+        assert!(!w.has_component(e, "Health"));
+        assert!(w.has_component(e, "Identity"));
     }
 
     #[test]

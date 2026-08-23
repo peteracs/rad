@@ -25,7 +25,7 @@ FORBIDDEN_DIRECTORY_NAMES = {
 RFC_SOURCE = Path("docs/rfcs")
 RFC_WRAPPERS = Path("docs/src/rfcs")
 FOLDER_TREE = Path("docs/src/project/folder_tree.md")
-AUTHORITATIVE_CORE_PREFIXES = ("core/relation/", "core/vm/")
+AUTHORITATIVE_CORE_PREFIXES = ("core/relation/", "core/syntax/", "core/vm/")
 
 
 def repository_files(root: Path) -> list[PurePosixPath]:

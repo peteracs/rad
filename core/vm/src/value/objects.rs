@@ -259,54 +259,52 @@ impl Object {
         }
     }
 
-    pub fn trace(&self, marked: &mut HashSet<usize>) {
+    pub fn trace(&self, gc: &mut crate::gc::GcHeap) {
         match self {
             Object::List(list) => {
                 for val in list.iter() {
-                    val.trace(marked);
+                    val.trace(gc);
                 }
             }
             Object::Tuple(items) => {
                 for val in items {
-                    val.trace(marked);
+                    val.trace(gc);
                 }
             }
             Object::Map(map) => {
                 for val in map.values() {
-                    val.trace(marked);
+                    val.trace(gc);
                 }
             }
             Object::MapIter(map, _, _) => {
                 for val in map.values() {
-                    val.trace(marked);
+                    val.trace(gc);
                 }
             }
             Object::Component(comp) => {
                 for val in &comp.values {
-                    val.trace(marked);
+                    val.trace(gc);
                 }
             }
             Object::Closure(closure) => {
                 for &cell_ptr in &closure.captures {
-                    let ptr = cell_ptr as usize;
-                    if marked.insert(ptr) {
-                        unsafe { (*cell_ptr).get().trace(marked) };
+                    if unsafe { gc.mark(cell_ptr) } {
+                        unsafe { (*cell_ptr).get().trace(gc) };
                     }
                 }
             }
             Object::Cell(cell) => {
-                let ptr = *cell as usize;
-                if marked.insert(ptr) {
-                    unsafe { (**cell).get().trace(marked) };
+                if unsafe { gc.mark(*cell) } {
+                    unsafe { (**cell).get().trace(gc) };
                 }
             }
             Object::SumType(sum) => {
                 for val in sum.fields.values() {
-                    val.trace(marked);
+                    val.trace(gc);
                 }
             }
             Object::WorldFork(snap) => {
-                snap.trace(marked);
+                snap.trace(gc);
             }
             _ => {}
         }

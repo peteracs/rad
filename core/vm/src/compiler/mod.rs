@@ -1,10 +1,10 @@
 mod causal;
 mod decl;
 mod declaration_metadata;
-mod egraph;
 mod emit;
 mod escape;
 mod expr;
+mod expression_optimizer;
 mod layout_analysis;
 mod materialization;
 mod pipeline;

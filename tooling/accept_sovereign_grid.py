@@ -29,6 +29,13 @@ def digest_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def cargo_profile(path: Path) -> str:
+    target = (ROOT / "target").resolve()
+    if path.parent.parent == target:
+        return path.parent.name
+    return "custom"
+
+
 def source_digest() -> str:
     digest = hashlib.sha256()
     roots = [PROJECT, ROOT / "tooling", ROOT / "docs/src/reference"]
@@ -123,6 +130,8 @@ class Outcome:
     pattern: str | None
     pattern_matched: bool
     elapsed_ns: int
+    limit_ns: int
+    elapsed_pass: bool
     cpu_ns: int
     peak_rss_bytes: int
     stdout: str
@@ -146,6 +155,7 @@ class Runner:
         pattern: str | None = None,
         env: dict[str, str] | None = None,
         timeout: int = 7200,
+        limit_ns: int = 1_000_000_000,
     ) -> Outcome:
         argv = [str(item) for item in command]
         safe = re.sub(r"[^A-Za-z0-9_.-]+", "-", name).strip("-")
@@ -163,7 +173,10 @@ class Runner:
                 stderr=stderr,
                 env={**os.environ, **(env or {})},
             )
-            deadline = time.monotonic() + timeout
+            deadline = time.monotonic() + min(
+                float(timeout),
+                limit_ns / 1_000_000_000 if limit_ns else float(timeout),
+            )
             while process.poll() is None:
                 rss, cpu = process_metrics(process)
                 peak_rss = max(peak_rss, rss)
@@ -178,11 +191,17 @@ class Runner:
             peak_rss = max(peak_rss, rss)
             cpu_ns = max(cpu_ns, cpu)
         elapsed = time.perf_counter_ns() - started
+        elapsed_pass = limit_ns == 0 or elapsed < limit_ns
         stdout_text = stdout_path.read_text(encoding="utf-8", errors="replace")
         stderr_text = stderr_path.read_text(encoding="utf-8", errors="replace")
         combined = stdout_text + "\n" + stderr_text
         pattern_matched = pattern is None or re.search(pattern, combined, re.I | re.S) is not None
-        passed = not timed_out and process.returncode in expected_exit and pattern_matched
+        passed = (
+            not timed_out
+            and process.returncode in expected_exit
+            and pattern_matched
+            and elapsed_pass
+        )
         outcome = Outcome(
             name=name,
             command=argv,
@@ -191,6 +210,8 @@ class Runner:
             pattern=pattern,
             pattern_matched=pattern_matched,
             elapsed_ns=elapsed,
+            limit_ns=limit_ns,
+            elapsed_pass=elapsed_pass,
             cpu_ns=cpu_ns,
             peak_rss_bytes=peak_rss,
             stdout=stdout_path.relative_to(ROOT).as_posix(),
@@ -198,7 +219,11 @@ class Runner:
             passed=passed,
         )
         self.outcomes.append(outcome)
-        print(f"{'PASS' if passed else 'FAIL'} {name}", flush=True)
+        print(
+            f"{'PASS' if passed else 'FAIL'} {name} "
+            f"elapsedNs={elapsed} limitNs={limit_ns}",
+            flush=True,
+        )
         if not passed:
             print(combined[-2000:], flush=True)
         return outcome
@@ -255,7 +280,11 @@ def run_negatives(runner: Runner, rad: Path) -> None:
         counts[case["feature"]] = counts.get(case["feature"], 0) + 1
         source = PROJECT / "negative" / case["file"]
         if case.get("setup") == "plugin":
-            runner.run("build-grid-oracle-for-negative", [sys.executable, ROOT / "tooling/build_sovereign_grid_plugin.py"])
+            runner.run(
+                "build-grid-oracle-for-negative",
+                [sys.executable, ROOT / "tooling/build_sovereign_grid_plugin.py"],
+                limit_ns=0,
+            )
         if case["mode"] == "model":
             command = [
                 rad,
@@ -438,15 +467,23 @@ def main() -> int:
     output.mkdir(parents=True, exist_ok=True)
     runner = Runner(output)
 
-    runner.run("language-surface", [sys.executable, ROOT / "tooling/check_language_surface.py", "--rad", rad])
-    runner.run("normative-doc-examples", [sys.executable, ROOT / "tooling/check_rad_doc_examples.py", "--rad", rad])
-    runner.run("host-api-surface", [sys.executable, ROOT / "tooling/host_api_surface.py", "--check"])
+    # These are repository orchestrators, not RAD invocations. The language
+    # and documentation gates enforce and record the one-second deadline on
+    # every child RAD process they own; timing the aggregate Python process as
+    # one guest run would punish complete coverage for launching more checks.
+    runner.run("language-surface", [sys.executable, ROOT / "tooling/check_language_surface.py", "--rad", rad], limit_ns=0)
+    runner.run("normative-doc-examples", [sys.executable, ROOT / "tooling/check_rad_doc_examples.py", "--rad", rad], limit_ns=0)
+    runner.run("host-api-surface", [sys.executable, ROOT / "tooling/host_api_surface.py", "--check"], limit_ns=0)
     runner.run("stable-main", [rad, PROJECT / "main.rad", "--strict-types", "--deny-warnings"], pattern="sovereign-grid: stable workflow complete")
     runner.run("workflow-tests", [rad, "test", PROJECT / "tests"], pattern="Results: 10 passed, 0 failed")
     runner.run("causal-settlement", [rad, PROJECT / "experimental/causal_dispatch.rad", "--experimental-laws", "--strict-types", "--deny-warnings"], pattern="causal settlement complete")
     runner.run("relation-schema", [rad, "relations", "check", PROJECT / "experimental/relations.rad", "--experimental-relations", "--module", "sovereign::grid"])
     runner.run("relation-builtins", [rad, PROJECT / "experimental/relation_builtins.rad", "--experimental-laws", "--relation-schema", PROJECT / "experimental/relation_runtime.rad", "--relation-module", "sovereign::surface", "--experimental-relations", "--strict-types", "--deny-warnings"], pattern="relation builtins complete")
-    runner.run("build-grid-oracle", [sys.executable, ROOT / "tooling/build_sovereign_grid_plugin.py"])
+    runner.run(
+        "build-grid-oracle",
+        [sys.executable, ROOT / "tooling/build_sovereign_grid_plugin.py"],
+        limit_ns=0,
+    )
     runner.run("ffi-verify", [rad, "ffi", "verify", ROOT / "target/sovereign-grid-plugin/grid-oracle.radext", "--json"], pattern='"layout_agreement"\\s*:\\s*true')
     runner.run("ffi-native-reference", [rad, PROJECT / "builtins/ffi_native.rad", "--strict-types", "--deny-warnings"], pattern="FFI native builtins complete")
     run_ffi_recorded_replay(runner, rad)
@@ -466,13 +503,22 @@ def main() -> int:
     ):
         runner.run(f"inspection-{name}", [rad, *command])
     benchmark_report = benchmark(runner, rad, args.benchmark_samples)
+    worker = rad.with_name("rad-ffi-worker.exe" if os.name == "nt" else "rad-ffi-worker")
+    if not worker.is_file():
+        raise RuntimeError(f"missing release FFI worker: {worker}")
 
     report = {
         "kind": "rad_sovereign_grid_acceptance_v1",
         "passed": all(outcome.passed for outcome in runner.outcomes),
         "generatedUtc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "sourceDigest": source_digest(),
-        "binary": {"path": rad.relative_to(ROOT).as_posix(), "sha256": digest_file(rad), "profile": "release"},
+        "binary": {
+            "path": rad.relative_to(ROOT).as_posix(),
+            "sha256": digest_file(rad),
+            "ffiWorkerPath": worker.relative_to(ROOT).as_posix(),
+            "ffiWorkerSha256": digest_file(worker),
+            "profile": cargo_profile(rad),
+        },
         "toolchain": subprocess.check_output(["rustc", "-vV"], cwd=ROOT, text=True),
         "machine": {"platform": platform.platform(), "processors": os.cpu_count()},
         "replay": replay,

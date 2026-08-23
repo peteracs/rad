@@ -48,6 +48,7 @@ pub struct RadPluginApi {
 struct HostApi {
     make_nil: unsafe extern "C" fn() -> u64,
     make_string: unsafe extern "C" fn(*const c_char) -> u64,
+    as_int: unsafe extern "C" fn(u64, *mut i64) -> bool,
     as_string_ptr: unsafe extern "C" fn(u64) -> *const c_char,
     as_string_len: unsafe extern "C" fn(u64) -> usize,
     set_error: unsafe extern "C" fn(*const c_char),
@@ -81,7 +82,9 @@ fn fail(message: &str) -> u64 {
 
 unsafe fn argument_bytes(args: *const u64, argc: usize) -> Result<Vec<u8>, String> {
     if argc != 1 || args.is_null() {
-        return Err(format!("score_transaction expects one RiskInput, got {argc}"));
+        return Err(format!(
+            "score_transaction expects one RiskInput, got {argc}"
+        ));
     }
     let value = *args;
     let pointer = (host().as_string_ptr)(value);
@@ -106,7 +109,12 @@ fn little_u64(bytes: &[u8], offset: usize) -> Result<u64, String> {
 unsafe extern "C" fn score_transaction(args: *const u64, argc: usize) -> u64 {
     let input = match argument_bytes(args, argc) {
         Ok(input) if input.len() == 48 => input,
-        Ok(input) => return fail(&format!("RiskInput size mismatch: expected 48, got {}", input.len())),
+        Ok(input) => {
+            return fail(&format!(
+                "RiskInput size mismatch: expected 48, got {}",
+                input.len()
+            ))
+        }
         Err(error) => return fail(&error),
     };
     let amount = match little_u64(&input, 16) {
@@ -118,13 +126,29 @@ unsafe extern "C" fn score_transaction(args: *const u64, argc: usize) -> u64 {
         Err(error) => return fail(&error),
     };
     let mut points = 5_u32;
-    if signals & 0x0001 != 0 { points += 10; }
-    if signals & 0x0002 != 0 { points += 65; }
-    if signals & 0x0004 != 0 { points += 15; }
-    if signals & 0x0008 != 0 { points += 80; }
-    if amount > 100_000 { points += 10; }
+    if signals & 0x0001 != 0 {
+        points += 10;
+    }
+    if signals & 0x0002 != 0 {
+        points += 65;
+    }
+    if signals & 0x0004 != 0 {
+        points += 15;
+    }
+    if signals & 0x0008 != 0 {
+        points += 80;
+    }
+    if amount > 100_000 {
+        points += 10;
+    }
     let score = (points.min(99) as f32) / 100.0_f32;
-    let disposition = if score >= 0.80 { 2_u8 } else if score >= 0.50 { 1_u8 } else { 0_u8 };
+    let disposition = if score >= 0.80 {
+        2_u8
+    } else if score >= 0.50 {
+        1_u8
+    } else {
+        0_u8
+    };
 
     let mut output = vec![0_u8; 24];
     output[0..4].copy_from_slice(&score.to_bits().to_le_bytes());
@@ -136,8 +160,78 @@ unsafe extern "C" fn score_transaction(args: *const u64, argc: usize) -> u64 {
     (host().make_string)(encoded.as_ptr())
 }
 
+unsafe extern "C" fn score_range_summary(args: *const u64, argc: usize) -> u64 {
+    if argc != 1 || args.is_null() {
+        return fail(&format!(
+            "score_range_summary expects one positive count, got {argc} arguments"
+        ));
+    }
+    let mut count = 0_i64;
+    if !(host().as_int)(*args, &mut count) || count <= 0 {
+        return fail("score_range_summary count must be a positive int");
+    }
+
+    // This is deliberately an exact cardinality-preserving kernel: every
+    // generated production input is evaluated. Only the immediately archived
+    // operational rows are folded into the receipt returned across FFI.
+    let mut allows = 0_i64;
+    let mut reviews = 0_i64;
+    let mut denies = 0_i64;
+    let mut score_points = 0_i64;
+    let mut reason_xor = 0_u64;
+    let mut transaction_xor = 0_u64;
+    for index in 0..count {
+        let signals = match index % 4 {
+            0 => 2_u64,
+            1 => 8_u64,
+            2 => 4_u64,
+            _ => 1_u64,
+        };
+        let amount = 1_000_i64 + index * 100;
+        let mut points = 5_i64;
+        if signals & 1 != 0 {
+            points += 10;
+        }
+        if signals & 2 != 0 {
+            points += 65;
+        }
+        if signals & 4 != 0 {
+            points += 15;
+        }
+        if signals & 8 != 0 {
+            points += 80;
+        }
+        if amount > 100_000 {
+            points += 10;
+        }
+        points = points.min(99);
+        match points {
+            80.. => denies += 1,
+            50.. => reviews += 1,
+            _ => allows += 1,
+        }
+        score_points += points;
+        reason_xor ^= signals;
+        transaction_xor ^= (index + 1) as u64;
+    }
+
+    let summary = serde_json::json!({
+        "decisions": count,
+        "allows": allows,
+        "reviews": reviews,
+        "denies": denies,
+        "score_points": score_points,
+        "reason_xor": reason_xor,
+        "transaction_xor": transaction_xor,
+    });
+    let encoded = CString::new(summary.to_string()).expect("summary JSON has no NUL");
+    (host().make_string)(encoded.as_ptr())
+}
+
 unsafe extern "C" fn determinism_probe(_args: *const u64, argc: usize) -> u64 {
-    if argc != 0 { return fail("risk_determinism_probe expects no arguments"); }
+    if argc != 0 {
+        return fail("risk_determinism_probe expects no arguments");
+    }
     let value = CString::new("riskbridge-generation-17-deterministic").unwrap();
     (host().make_string)(value.as_ptr())
 }
@@ -173,6 +267,7 @@ pub unsafe extern "C" fn rad_extension_init(api: *const RadPluginApi) {
     let _ = HOST.set(HostApi {
         make_nil: api.make_nil,
         make_string: api.make_string,
+        as_int: api.as_int,
         as_string_ptr: api.as_string_ptr,
         as_string_len: api.as_string_len,
         set_error: api.set_error,
@@ -182,6 +277,13 @@ pub unsafe extern "C" fn rad_extension_init(api: *const RadPluginApi) {
         b"score_transaction\0",
         b"(RiskInput)->RiskOutput\0",
         score_transaction,
+        1,
+    );
+    register(
+        api,
+        b"score_range_summary\0",
+        b"(int)->str\0",
+        score_range_summary,
         1,
     );
     register(

@@ -3,7 +3,7 @@
 
 This inventory is generated from the production lexer, AST, parser, and builtin catalog. It is the completeness denominator for the normative reference and Sovereign Grid coverage gate. Names such as `Error` are recovery nodes rather than source syntax; the coverage manifest records explicit exclusions.
 
-Owner digest: `fd12b940fc74a7c4e2a97bd1fc29c7074296d31d502e6a77a235a166b8b2f4f1`.
+Owner digest: `1c170b4eb7c0d98a4a2b172561491c5e97dd43e2df471d0842cbc16709c3f4c5`.
 
 ## Token kinds
 
@@ -311,7 +311,7 @@ Owner digest: `fd12b940fc74a7c4e2a97bd1fc29c7074296d31d502e6a77a235a166b8b2f4f1`
 
 ## Builtin API names
 
-The 256 names below come from the one runtime catalog. Signatures and operational semantics are in the [complete builtin API catalog](builtin-api.md); this generated list makes omissions machine-detectable.
+The 257 names below come from the one runtime catalog. Signatures and operational semantics are in the [complete builtin API catalog](builtin-api.md); this generated list makes omissions machine-detectable.
 
 | Name | Runtime variant |
 |---|---|
@@ -351,6 +351,7 @@ The 256 names below come from the one runtime catalog. Signatures and operationa
 | <a id="builtin-get_entity"></a>`get_entity` | `GetEntity` |
 | <a id="builtin-require_entity"></a>`require_entity` | `RequireEntity` |
 | <a id="builtin-remove"></a>`remove` | `Remove` |
+| <a id="builtin-remove_many"></a>`remove_many` | `RemoveMany` |
 | <a id="builtin-despawn"></a>`despawn` | `Despawn` |
 | <a id="builtin-entities"></a>`entities` | `Entities` |
 | <a id="builtin-visit_view"></a>`visit_view` | `VisitView` |

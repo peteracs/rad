@@ -1,0 +1,5 @@
+---
+source: tests\conformance\commit_preserves_captured_events.rad
+exit_code: 0
+---
+1

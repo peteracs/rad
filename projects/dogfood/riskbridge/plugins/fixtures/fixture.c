@@ -76,6 +76,67 @@ static uint64_t score(const uint64_t *args, size_t argc) {
 #endif
 }
 
+static uint64_t score_range_summary(const uint64_t *args, size_t argc) {
+    (void)args;
+    if (argc != 1) {
+        HOST.set_error("fixture range summary expects one argument");
+        return HOST.make_nil();
+    }
+    return HOST.make_string("fixture-range-summary");
+}
+
+#if RISK_FIXTURE_MODE == 18
+static uint64_t crash_probe(const uint64_t *args, size_t argc) {
+    (void)args;
+    (void)argc;
+    *(volatile int *)0 = 1;
+    return HOST.make_nil();
+}
+
+static uint64_t timeout_probe(const uint64_t *args, size_t argc) {
+    (void)args;
+    (void)argc;
+    for (;;) {}
+}
+
+static uint64_t malformed_score(const uint64_t *args, size_t argc) {
+    (void)args;
+    (void)argc;
+    return HOST.make_string("not-json");
+}
+
+static uint64_t failed_score(const uint64_t *args, size_t argc) {
+    (void)args;
+    (void)argc;
+    HOST.set_error("typed fixture host failure");
+    return HOST.make_nil();
+}
+
+static uint64_t nonfinite_score(const uint64_t *args, size_t argc) {
+    (void)args;
+    (void)argc;
+    return HOST.make_string("[0,0,192,127,0,0,0,0,0,0,0,0,0,0,0,0,17,0,0,0,0,0,0,0]");
+}
+
+static uint64_t unknown_reason_score(const uint64_t *args, size_t argc) {
+    (void)args;
+    (void)argc;
+    return HOST.make_string("[0,0,0,0,0,0,0,0,16,0,0,0,0,0,0,0,17,0,0,0,0,0,0,0]");
+}
+
+static uint64_t unknown_disposition_score(const uint64_t *args, size_t argc) {
+    (void)args;
+    (void)argc;
+    return HOST.make_string("[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,17,0,0,0,9,0,0,0]");
+}
+
+static uint64_t host_handle_score(const uint64_t *args, size_t argc) {
+    (void)args;
+    (void)argc;
+    return HOST.make_host_handle("RiskModelSession", 42);
+}
+#endif
+
 RAD_EXPORT const RadExtensionDescriptor *rad_extension_descriptor(void) {
     return &DESCRIPTOR;
 }
@@ -107,9 +168,62 @@ RAD_EXPORT void rad_extension_init(const RadPluginApi *api) {
         true,
         true,
     };
+    static const RadNativeFunctionDecl RANGE_SUMMARY = {
+        "score_range_summary",
+        score_range_summary,
+        1,
+        NULL,
+        0,
+        "(int)->str",
+        true,
+        true,
+    };
+#if RISK_FIXTURE_MODE == 18
+    static const RadNativeFunctionDecl CRASH_PROBE = {
+        "crash_probe", crash_probe, 0, NULL, 0, "()->str", true, true,
+    };
+    static const RadNativeFunctionDecl TIMEOUT_PROBE = {
+        "timeout_probe", timeout_probe, 0, NULL, 0, "()->str", true, true,
+    };
+    static const RadNativeFunctionDecl MALFORMED_SCORE = {
+        "malformed_score", malformed_score, 1, NULL, 0,
+        "(RiskInput)->RiskOutput", true, true,
+    };
+    static const RadNativeFunctionDecl FAILED_SCORE = {
+        "failed_score", failed_score, 1, NULL, 0,
+        "(RiskInput)->RiskOutput", true, true,
+    };
+    static const RadNativeFunctionDecl NONFINITE_SCORE = {
+        "nonfinite_score", nonfinite_score, 1, NULL, 0,
+        "(RiskInput)->RiskOutput", true, true,
+    };
+    static const RadNativeFunctionDecl UNKNOWN_REASON_SCORE = {
+        "unknown_reason_score", unknown_reason_score, 1, NULL, 0,
+        "(RiskInput)->RiskOutput", true, true,
+    };
+    static const RadNativeFunctionDecl UNKNOWN_DISPOSITION_SCORE = {
+        "unknown_disposition_score", unknown_disposition_score, 1, NULL, 0,
+        "(RiskInput)->RiskOutput", true, true,
+    };
+    static const RadNativeFunctionDecl HOST_HANDLE_SCORE = {
+        "host_handle_score", host_handle_score, 1, NULL, 0,
+        "(RiskInput)->RiskOutput", true, true,
+    };
+#endif
     HOST = *api;
     api->register_fn(api->context, &PROBE);
 #if RISK_FIXTURE_MODE != 11
     api->register_fn(api->context, &score_decl);
+#endif
+    api->register_fn(api->context, &RANGE_SUMMARY);
+#if RISK_FIXTURE_MODE == 18
+    api->register_fn(api->context, &CRASH_PROBE);
+    api->register_fn(api->context, &TIMEOUT_PROBE);
+    api->register_fn(api->context, &MALFORMED_SCORE);
+    api->register_fn(api->context, &FAILED_SCORE);
+    api->register_fn(api->context, &NONFINITE_SCORE);
+    api->register_fn(api->context, &UNKNOWN_REASON_SCORE);
+    api->register_fn(api->context, &UNKNOWN_DISPOSITION_SCORE);
+    api->register_fn(api->context, &HOST_HANDLE_SCORE);
 #endif
 }

@@ -12,6 +12,7 @@ import argparse
 import json
 import re
 import subprocess
+import time
 from pathlib import Path
 
 
@@ -243,23 +244,23 @@ DOCS = {
 }
 
 OWNERS = {
-    "token": "core/vm/src/lexer/engine.rs",
-    "decl": "core/vm/src/ast/modules.rs",
-    "stmt": "core/vm/src/ast/statements.rs",
-    "expr": "core/vm/src/ast/expressions.rs",
-    "pattern": "core/vm/src/ast/statements.rs",
-    "binop": "core/vm/src/ast/expressions.rs",
-    "unop": "core/vm/src/ast/expressions.rs",
-    "typeexpr": "core/vm/src/ast/expressions.rs",
-    "fnpurity": "core/vm/src/ast/expressions.rs",
-    "contract": "core/vm/src/parser/decl/declaration_dispatch.rs",
+    "token": "core/syntax/src/lexer/engine.rs",
+    "decl": "core/syntax/src/ast/modules.rs",
+    "stmt": "core/syntax/src/ast/statements.rs",
+    "expr": "core/syntax/src/ast/expressions.rs",
+    "pattern": "core/syntax/src/ast/statements.rs",
+    "binop": "core/syntax/src/ast/expressions.rs",
+    "unop": "core/syntax/src/ast/expressions.rs",
+    "typeexpr": "core/syntax/src/ast/expressions.rs",
+    "fnpurity": "core/syntax/src/ast/expressions.rs",
+    "contract": "core/syntax/src/parser/decl/declaration_dispatch.rs",
 }
 
 CONFORMANCE = {
-    "token": "core/vm/src/lexer/tests.rs",
-    "decl": "core/vm/src/parser/tests.rs",
-    "stmt": "core/vm/src/parser/tests.rs",
-    "expr": "core/vm/src/parser/tests.rs",
+    "token": "core/syntax/src/lexer/tests.rs",
+    "decl": "core/syntax/src/parser/tests.rs",
+    "stmt": "core/syntax/src/parser/tests.rs",
+    "expr": "core/syntax/src/parser/tests.rs",
     "pattern": "core/vm/src/checker/match_test.rs",
     "binop": "core/vm/src/compiler/tests/execution_helpers.rs",
     "unop": "core/vm/src/compiler/tests/execution_helpers.rs",
@@ -274,12 +275,19 @@ def quoted(value: str) -> str:
 
 
 def run_surface(rad: Path, source: str) -> dict[str, object]:
+    started = time.perf_counter_ns()
     completed = subprocess.run(
         [str(rad), "surface", source, "--json"],
         cwd=ROOT,
         text=True,
         capture_output=True,
+        timeout=1.0,
     )
+    elapsed_ns = time.perf_counter_ns() - started
+    if elapsed_ns >= 1_000_000_000:
+        raise RuntimeError(
+            f"rad surface exceeded hard limit for {source}: elapsedNs={elapsed_ns}"
+        )
     if completed.returncode:
         raise RuntimeError(f"rad surface failed for {source}:\n{completed.stdout}{completed.stderr}")
     return json.loads(completed.stdout)

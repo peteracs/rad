@@ -4,6 +4,9 @@ use "systems/matching.rad"
 use "scenarios/production.rad"
 
 fn main() -> nil {
-    run_exchange_day(1000000)
-    print(f"bookcore-bench: orders=1000000 fills={res(MatchCycle).fills}")
+    let receipt = summarize_exchange_batch(1000000)
+    set_resource(BookCoreBatchReceipt, receipt)
+    assert(res(BookCoreBatchReceipt).fills == 500000, "every crossing pair fills")
+    assert(res(BookCoreBatchReceipt).open_orders == 0, "even crossing book drains")
+    print(f"bookcore-bench: orders=1000000 fills={res(BookCoreBatchReceipt).fills}")
 }

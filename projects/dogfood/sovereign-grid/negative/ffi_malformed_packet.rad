@@ -1,5 +1,5 @@
 fn main() -> nil {
-    let extension: any = load_extension("target/sovereign-grid-plugin/grid-oracle.radext")
+    let extension: any = load_extension("target/sovereign-grid-plugin/grid-oracle.radext", 100)
     let score: pure fn(str) -> str = extension["score_dispatch"]
     let _output: str = unwrap(host_try(score, "[1,2,3]"))
 }

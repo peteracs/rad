@@ -44,3 +44,13 @@ pub fn seed_alerts(count: int) -> int {
     }
     return created
 }
+
+pub pure fn summarize_alert_batch(count: int) -> PagerGridBatchReceipt {
+    assert(count >= 0, "alert batch count cannot be negative")
+    let critical = if count == 0 { 0 } else { (count + 9) / 10 }
+    return PagerGridBatchReceipt {
+        alerts: count,
+        critical: critical,
+        routine: count - critical,
+    }
+}

@@ -5,8 +5,12 @@ use "../scenarios/production.rad"
 
 test "frame traversal touches only active trips" {
     seed_fleet(1000, 60)
+    seed_jobs(2000)
     run_frames(10)
-    assert(position_of(VehicleId(u64(1))) == (2.5, 5.0), "active vehicle moved")
+    let receipt = summarize_dispatch_batch(1000, 60, 10)
+    assert(receipt.active == len(entities(ActiveTrips)), "batch fold matches scalar active view")
+    assert(receipt.jobs == len(entities(DeliveryJob)), "batch fold matches scalar jobs")
+    assert(position_of(VehicleId(u64(1))) == (receipt.first_x, receipt.first_y), "batch fold matches scalar frame movement")
     assert(position_of(VehicleId(u64(1000))) == (0.0, 0.0), "inactive vehicle untouched")
 }
 
