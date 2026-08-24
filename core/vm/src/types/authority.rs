@@ -171,6 +171,14 @@ impl AuthorityReport {
         if let Some(found) = self.callables.get(requested) {
             return Ok(found);
         }
+        let exact_display = self
+            .callables
+            .values()
+            .filter(|item| item.display_name == requested)
+            .collect::<Vec<_>>();
+        if let [only] = exact_display.as_slice() {
+            return Ok(*only);
+        }
         let mut matches = self.matching_callables(requested);
         matches.sort_by(|a, b| a.display_name.cmp(&b.display_name));
         let visible = matches
@@ -335,6 +343,14 @@ impl AuthorityReport {
     }
 
     fn matching_callables(&self, requested: &str) -> Vec<&CallableAuthority> {
+        let exact_display = self
+            .callables
+            .values()
+            .filter(|item| item.display_name == requested)
+            .collect::<Vec<_>>();
+        if !exact_display.is_empty() {
+            return exact_display;
+        }
         let requested_member = requested.rsplit('.').next().unwrap_or(requested);
         self.callables
             .values()
@@ -348,6 +364,64 @@ impl AuthorityReport {
                     || item.name.rsplit("__").next() == Some(requested_member)
             })
             .collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn callable(name: &str, display_name: &str, kind: AuthorityCallableKind) -> CallableAuthority {
+        CallableAuthority {
+            name: name.to_string(),
+            display_name: display_name.to_string(),
+            kind,
+            direct: AuthorityEffects::default(),
+            synchronous: AuthorityEffects::default(),
+            transitive: AuthorityEffects::default(),
+            contracts: AuthorityContracts::default(),
+            calls: Vec::new(),
+            deferred_calls: Vec::new(),
+            line: 1,
+            col: 1,
+        }
+    }
+
+    #[test]
+    fn exact_display_name_selects_structural_callable_from_ambiguous_family() {
+        let owner = "local:owners/entity_owner.rad.PublishRemoteEntity";
+        let mut report = AuthorityReport::default();
+        report.callables.insert(
+            "function-key".to_string(),
+            callable("function-key", owner, AuthorityCallableKind::Function),
+        );
+        report.callables.insert(
+            "transaction-key".to_string(),
+            callable(
+                "transaction-key",
+                &format!("transaction {owner}"),
+                AuthorityCallableKind::Transaction,
+            ),
+        );
+        report.callables.insert(
+            "post-commit-key".to_string(),
+            callable(
+                "post-commit-key",
+                &format!("post_commit {owner}"),
+                AuthorityCallableKind::PostCommit,
+            ),
+        );
+
+        assert_eq!(report.resolve(owner).unwrap().kind, AuthorityCallableKind::Function);
+        assert_eq!(
+            report.resolve(&format!("transaction {owner}")).unwrap().kind,
+            AuthorityCallableKind::Transaction
+        );
+        assert_eq!(
+            report.resolve(&format!("post_commit {owner}")).unwrap().kind,
+            AuthorityCallableKind::PostCommit
+        );
+        assert!(report.resolve("world.PublishRemoteEntity").unwrap_err().contains("ambiguous"));
     }
 }
 

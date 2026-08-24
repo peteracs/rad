@@ -13,6 +13,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 CLI = ROOT / "adapters/cli/src/cli/arguments.rs"
 WASM_RUNTIME = ROOT / "core/vm/src/wasm/runtime_api.rs"
+WASM_BINARY = ROOT / "core/vm/src/wasm/binary_host.rs"
 WASM_CHUNK = ROOT / "core/vm/src/wasm/rendering_and_tests.rs"
 OUTPUT = ROOT / "docs/host-api-surface.json"
 MARKDOWN = ROOT / "docs/src/reference/generated/host-api-surface.md"
@@ -51,7 +52,7 @@ def public_functions(source: str) -> list[str]:
 
 
 def build() -> dict[str, object]:
-    owners = [CLI, WASM_RUNTIME, WASM_CHUNK]
+    owners = [CLI, WASM_RUNTIME, WASM_BINARY, WASM_CHUNK]
     digest = hashlib.sha256()
     owner_rows = []
     for path in owners:
@@ -72,6 +73,7 @@ def build() -> dict[str, object]:
         },
         "wasm": {
             "runtimeMethods": public_functions(text(WASM_RUNTIME)),
+            "binaryMethods": public_functions(text(WASM_BINARY)),
             "chunkMethods": public_functions(text(WASM_CHUNK)),
         },
     }
@@ -94,6 +96,10 @@ def render(surface: dict[str, object]) -> str:
     out.extend(
         f"| `{name}` | `core/vm/src/wasm/runtime_api.rs` |\n"
         for name in wasm["runtimeMethods"]
+    )
+    out.extend(
+        f"| `{name}` | `core/vm/src/wasm/binary_host.rs` |\n"
+        for name in wasm["binaryMethods"]
     )
     out.append("\n## `WasmChunk` browser methods\n\n| Method | Source |\n|---|---|\n")
     out.extend(
@@ -123,7 +129,7 @@ def main() -> int:
             "host API surface current: "
             f"{len(surface['cli']['usages'])} command forms, "
             f"{len(surface['cli']['options'])} options, "
-            f"{len(surface['wasm']['runtimeMethods'])} runtime methods"
+            f"{len(surface['wasm']['runtimeMethods']) + len(surface['wasm']['binaryMethods'])} runtime methods"
         )
         return 0
     OUTPUT.write_text(encoded, encoding="utf-8", newline="\n")

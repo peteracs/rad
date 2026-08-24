@@ -192,6 +192,9 @@ pub enum Ty {
     Event(String),
     EntityId,
     BitSet,
+    /// Contiguous mutable bytes. Unlike `list<int>`, one byte occupies one
+    /// byte in the backing allocation and crosses WASM as `Uint8Array`.
+    ByteBuf,
     WorldFork,
     /// Compile-time reference to a declared `system` (see `Expr::SystemRef`).
     SystemRef,
@@ -442,6 +445,7 @@ impl fmt::Display for Ty {
             Ty::Event(name) => write!(f, "event<{}>", name),
             Ty::EntityId => write!(f, "entity"),
             Ty::BitSet => write!(f, "bitset"),
+            Ty::ByteBuf => write!(f, "bytebuf"),
             Ty::WorldFork => write!(f, "world_fork"),
             Ty::SystemRef => write!(f, "system"),
             Ty::Fn {

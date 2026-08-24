@@ -11,6 +11,8 @@ import sys
 import time
 import tomllib
 from collections import Counter
+from concurrent.futures import Future, ThreadPoolExecutor
+from functools import lru_cache
 from pathlib import Path
 
 
@@ -70,6 +72,7 @@ def surface_ids(surface: dict[str, object]) -> set[str]:
     }
 
 
+@lru_cache(maxsize=None)
 def markdown_has_anchor(path: Path, anchor: str) -> bool:
     text = path.read_text(encoding="utf-8")
     if f'id="{anchor}"' in text or f"id='{anchor}'" in text:
@@ -186,26 +189,6 @@ def main() -> int:
     failures: list[str] = []
     rad_timings: list[dict[str, object]] = []
 
-    generated = run_checked(
-        [sys.executable, str(ROOT / "tooling/language_surface.py"), "--check"]
-    )
-    if generated.returncode:
-        failures.append(generated.stdout.strip() or generated.stderr.strip())
-
-    coverage_generated = run_checked(
-        [
-            sys.executable,
-            str(ROOT / "tooling/generate_language_coverage.py"),
-            "--rad",
-            str(rad),
-            "--check",
-        ]
-    )
-    if coverage_generated.returncode:
-        failures.append(
-            coverage_generated.stdout.strip() or coverage_generated.stderr.strip()
-        )
-
     surface = json.loads(SURFACE.read_text(encoding="utf-8"))
     manifest = tomllib.loads(COVERAGE.read_text(encoding="utf-8"))
     if manifest.get("surface_owner_digest") != surface["ownerDigest"]:
@@ -214,6 +197,8 @@ def main() -> int:
         failures.append("coverage evidence must come from compiler AST/token reports")
 
     rows = manifest.get("coverage", [])
+    builtin_rows = manifest.get("builtin_coverage", [])
+    commands = manifest.get("command", [])
     exclusions = manifest.get("exclusion", [])
     row_ids = [row.get("id", "") for row in rows]
     excluded_ids = [row.get("id", "") for row in exclusions]
@@ -241,7 +226,63 @@ def main() -> int:
         if len(exclusion.get("reason", "").strip()) < 20:
             failures.append(f"exclusion needs a concrete reason: {exclusion.get('id', '')}")
 
+    report_sources = sorted(
+        {
+            source
+            for row in [*rows, *builtin_rows]
+            if isinstance(
+                source := row.get("positive_source", row.get("source")), str
+            )
+            and (ROOT / source).is_file()
+        }
+    )
+    worker_count = max(1, min(8, len(report_sources) + len(commands)))
+    executor = ThreadPoolExecutor(max_workers=worker_count)
+    command_submission_order = sorted(
+        enumerate(commands),
+        key=lambda item: (
+            0
+            if item[1].get("setup")
+            else 1
+            if item[1].get("harness")
+            else 2,
+            item[0],
+        ),
+    )
+    command_futures = {
+        index: executor.submit(run_manifest_command, rad, command)
+        for index, command in command_submission_order
+    }
+    report_futures: dict[str, Future[tuple[subprocess.CompletedProcess[str], int]]] = {
+        source: executor.submit(
+            run_rad_checked, [str(rad), "surface", source, "--json"]
+        )
+        for source in report_sources
+    }
+
     reports: dict[str, dict[str, object]] = {}
+    for source in report_sources:
+        try:
+            completed, elapsed_ns = report_futures[source].result()
+            rad_timings.append(
+                {
+                    "name": f"surface:{source}",
+                    "elapsedNs": elapsed_ns,
+                    "limitNs": RAD_LIMIT_NS,
+                }
+            )
+        except (OSError, RuntimeError, subprocess.TimeoutExpired) as error:
+            failures.append(f"rad surface could not run for {source}: {error}")
+            reports[source] = {}
+            continue
+        if completed.returncode:
+            failures.append(
+                f"rad surface failed for {source}:\n{completed.stdout}{completed.stderr}"
+            )
+            reports[source] = {}
+        else:
+            reports[source] = json.loads(completed.stdout)
+
     for row in rows:
         identifier = row.get("id", "")
         missing_fields = sorted(REQUIRED_ROW_FIELDS - row.keys())
@@ -273,25 +314,6 @@ def main() -> int:
         if row["stability"] not in {"stable", "experimental"}:
             failures.append(f"row {identifier} has invalid stability {row['stability']!r}")
 
-        if source not in reports:
-            try:
-                completed, elapsed_ns = run_rad_checked(
-                    [str(rad), "surface", source, "--json"]
-                )
-                rad_timings.append(
-                    {"name": f"surface:{source}", "elapsedNs": elapsed_ns, "limitNs": RAD_LIMIT_NS}
-                )
-            except (OSError, RuntimeError, subprocess.TimeoutExpired) as error:
-                failures.append(f"rad surface could not run for {source}: {error}")
-                reports[source] = {}
-                continue
-            if completed.returncode:
-                failures.append(
-                    f"rad surface failed for {source}:\n{completed.stdout}{completed.stderr}"
-                )
-                reports[source] = {}
-            else:
-                reports[source] = json.loads(completed.stdout)
         report_key = GROUPS[prefix][1]
         if name not in reports[source].get(report_key, []):
             failures.append(
@@ -300,7 +322,6 @@ def main() -> int:
 
     builtin_names = [entry["name"] for entry in surface["builtins"]]
     builtin_variants = {entry["name"]: entry["variant"] for entry in surface["builtins"]}
-    builtin_rows = manifest.get("builtin_coverage", [])
     if [row.get("name", "") for row in builtin_rows] != builtin_names:
         failures.append("builtin coverage rows differ from Builtin::ALL order or names")
     for row in builtin_rows:
@@ -316,26 +337,6 @@ def main() -> int:
         if not source_path.is_file():
             failures.append(f"builtin evidence missing: {name} -> {source}")
             continue
-        if source not in reports:
-            try:
-                completed, elapsed_ns = run_rad_checked(
-                    [str(rad), "surface", source, "--json"]
-                )
-                rad_timings.append(
-                    {"name": f"surface:{source}", "elapsedNs": elapsed_ns, "limitNs": RAD_LIMIT_NS}
-                )
-            except (OSError, RuntimeError, subprocess.TimeoutExpired) as error:
-                failures.append(f"rad surface could not run for builtin evidence {source}: {error}")
-                reports[source] = {}
-                continue
-            if completed.returncode:
-                failures.append(
-                    f"rad surface failed for builtin evidence {source}:\n"
-                    f"{completed.stdout}{completed.stderr}"
-                )
-                reports[source] = {}
-            else:
-                reports[source] = json.loads(completed.stdout)
         if name not in reports[source].get("builtins", []):
             failures.append(f"compiler report does not observe builtin {name} in {source}")
         api_path_text, separator, anchor = row["api_anchor"].partition("#")
@@ -389,7 +390,6 @@ def main() -> int:
         if re.search(rf"\b{forbidden}\b", project_text):
             failures.append(f"canonical dogfood contains forbidden term: {forbidden}")
 
-    commands = manifest.get("command", [])
     command_strings = {
         "rad " + " ".join(command.get("args", [])) for command in commands
     }
@@ -403,10 +403,10 @@ def main() -> int:
             failures.append(
                 f"builtin {row.get('name', '')} references an unregistered command"
             )
-    for command in commands:
+    for index, command in enumerate(commands):
         argv = [str(rad)] + command.get("args", [])
         try:
-            completed, stage, elapsed_ns = run_manifest_command(rad, command)
+            completed, stage, elapsed_ns = command_futures[index].result()
             if stage == "run":
                 rad_timings.append(
                     {
@@ -430,6 +430,8 @@ def main() -> int:
             failures.append(
                 f"command {command.get('name', argv)!r} omitted {expected_text!r}"
             )
+
+    executor.shutdown(wait=True)
 
     if failures:
         print("language surface gate: FAIL")

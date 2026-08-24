@@ -46,6 +46,46 @@ print(f32(0.1))
     }
 
     #[test]
+    fn native_and_opaque_integer_values_convert_back_to_int_with_range_checks() {
+        let output = run_source(
+            r#"
+opaque type WireGid = u32
+opaque type Sequence = u64
+enum GoalSeekMode: u8 {
+    Idle = 0,
+    GoalSeek = 1,
+    RemoteSourceGlide = 2,
+}
+print(int(u8(255)))
+print(int(i32(-7)))
+print(int(WireGid(u32(4294967295))))
+print(int(Sequence(u64(77))))
+print(int(GoalSeekMode::RemoteSourceGlide))
+print(float(f32(1.25)))
+assert(is_none(try_int(u64(9223372036854775807) + u64(1))), "overflow is fallible")
+assert((try_float(f32(2.5)) |> unwrap) == 2.5, "native float is fallible-convertible")
+"#,
+        );
+        assert_eq!(
+            output,
+            vec![
+                "255",
+                "-7",
+                "4294967295",
+                "77",
+                "2",
+                "1.25",
+            ]
+        );
+
+        let error = run_source_result(
+            "let too_large = u64(9223372036854775807) + u64(1)\nprint(int(too_large))",
+        )
+        .unwrap_err();
+        assert!(error.contains("out of i64 range"), "{error}");
+    }
+
+    #[test]
     fn one_nominal_id_cannot_be_rewrapped_as_another_without_unwrapping() {
         let error = run_source_result(
             r#"

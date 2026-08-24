@@ -41,6 +41,12 @@ The Orianna ability lab uses the primary VM path:
    `session_render_delta()`, `session_checkpoint()`, `session_undo()`,
    `session_redo()`, and `session_why()`.
 
+This static playground intentionally exercises the structured single-source
+boundary. It is not the production multi-module deployment contract. New
+browser applications build a canonical package with `rad build --target
+browser-package` and start it with `session_start_package()`; they do not
+reimplement import resolution or concatenate source in the browser.
+
 The lab does not run through `experiments/c-backend/`, and it does not call
 `projects/moba/simcore/`. `projects/moba/simcore/` is the separate compiled MOBA damage kernel
 used by the broader MOBA dogfood path and golden corpus; `experiments/c-backend/` is

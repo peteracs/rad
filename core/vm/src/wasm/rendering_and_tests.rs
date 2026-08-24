@@ -594,6 +594,151 @@ on ClearNotes(e) {
         assert_eq!(rt.session_pump().unwrap(), "carol added note 1");
     }
 
+    #[test]
+    fn session_binary_event_is_bounded_typed_and_session_safe() {
+        const SOURCE: &str = r#"
+resource PacketState { count: int = 0, first: int = 0 }
+event NetworkFrame { payload: bytebuf }
+event WrongField { payload: str }
+event TwoFields { payload: bytebuf, sequence: int }
+
+on NetworkFrame(evt) {
+    set_resource(PacketState, PacketState {
+        count: bytebuf_len(evt.payload),
+        first: bytebuf_get(evt.payload, 0),
+    })
+}
+"#;
+        let mut runtime = RadRuntime::new();
+        runtime.session_start(SOURCE).unwrap();
+        let initial = runtime.session_digest().unwrap();
+
+        assert!(runtime.session_emit_binary("Missing", &[1]).is_err());
+        assert!(runtime.session_emit_binary("WrongField", &[1]).is_err());
+        assert!(runtime.session_emit_binary("TwoFields", &[1]).is_err());
+        assert!(runtime
+            .session_emit_binary("NetworkFrame", &vec![0; MAX_BINARY_EVENT_BYTES + 1])
+            .is_err());
+        assert_eq!(runtime.session_digest().unwrap(), initial);
+
+        runtime
+            .session_emit_binary("NetworkFrame", &[0x2a, 0x7f, 0x80])
+            .unwrap();
+        runtime.session_pump().unwrap();
+        let snapshot = runtime.get_world_snapshot();
+        assert!(snapshot.contains("\"count\":3"), "{snapshot}");
+        assert!(snapshot.contains("\"first\":42"), "{snapshot}");
+    }
+
+    #[test]
+    fn bytebuf_is_a_static_type_not_any() {
+        let analyzed = crate::pipeline::analyze_source(
+            "fn main() -> nil { let packet: bytebuf = 3 }",
+            crate::parser::ParserOptions,
+            &std::collections::HashMap::new(),
+            crate::checker::CheckerOptions::default(),
+        );
+        assert!(
+            analyzed
+                .semantic()
+                .errors()
+                .iter()
+                .any(|error| error.message.contains("bytebuf") && error.message.contains("int")),
+            "errors: {:?}",
+            analyzed.semantic().errors()
+        );
+    }
+
+    #[test]
+    fn binary_publications_are_bounded_ordered_transient_and_lossless() {
+        const SOURCE: &str = r#"
+let first: bytebuf = bytebuf_from_list([1, 2])
+let second: bytebuf = bytebuf_from_list([128, 255, 0])
+publish_bytes("network/outbox", first)
+publish_bytes("network/outbox", second)
+"#;
+        let mut runtime = RadRuntime::new();
+        runtime.session_start(SOURCE).unwrap();
+        let digest = runtime.session_digest().unwrap();
+
+        let too_small = runtime.session_drain_binary("network/outbox", 1, 13);
+        assert!(
+            too_small
+                .unwrap_err()
+                .contains("cannot fit the next 2-byte record")
+        );
+        assert_eq!(runtime.session_digest().unwrap(), digest);
+
+        let first = runtime
+            .session_drain_binary("network/outbox", 1, 64)
+            .unwrap();
+        assert_eq!(first, b"RBS1\x01\0\0\0\x02\0\0\0\x01\x02");
+        assert_eq!(runtime.session_digest().unwrap(), digest);
+
+        let second = runtime
+            .session_drain_binary("network/outbox", 8, 64)
+            .unwrap();
+        assert_eq!(
+            second,
+            b"RBS1\x01\0\0\0\x03\0\0\0\x80\xff\x00"
+        );
+        assert_eq!(
+            runtime
+                .session_drain_binary("network/outbox", 8, 64)
+                .unwrap(),
+            b"RBS1\0\0\0\0"
+        );
+    }
+
+    #[test]
+    fn binary_publication_is_post_commit_only_inside_transactions() {
+        const POST_COMMIT: &str = r#"
+component Marker { value: int = 0 }
+transaction PublishAfterCommit(target: entity) {
+    requires has(target, Marker)
+    changes_only [Marker]
+    set(target, Marker { value: 1 })
+    ensures require(target, Marker).value == 1
+    post_commit {
+        publish_bytes("presentation", bytebuf_from_list([7, 9]))
+    }
+}
+let target = spawn(Marker {})
+PublishAfterCommit(target)
+"#;
+        let mut runtime = RadRuntime::new();
+        runtime.session_start(POST_COMMIT).unwrap();
+        assert_eq!(
+            runtime.session_drain_binary("presentation", 1, 64).unwrap(),
+            b"RBS1\x01\0\0\0\x02\0\0\0\x07\x09"
+        );
+
+        const PRE_COMMIT: &str = r#"
+component Marker { value: int = 0 }
+transaction Invalid(target: entity) {
+    requires has(target, Marker)
+    changes_only [Marker]
+    publish_bytes("presentation", bytebuf_from_list([1]))
+    set(target, Marker { value: 1 })
+    ensures true
+}
+let target = spawn(Marker {})
+Invalid(target)
+"#;
+        let mut invalid = RadRuntime::new();
+        let error = invalid.session_start(PRE_COMMIT).unwrap_err();
+        assert!(
+            error.contains("performs IO before commit"),
+            "{error}"
+        );
+        assert_eq!(
+            invalid
+                .session_drain_binary("presentation", 1, 64)
+                .unwrap(),
+            b"RBS1\0\0\0\0"
+        );
+    }
+
     /// The D4 PASS shape, natively provable: three tabs (one authority, two
     /// replicas) start the same source; the authority's edits stream as one
     /// fork_delta per flush; replicas apply in order; world_digest agrees on

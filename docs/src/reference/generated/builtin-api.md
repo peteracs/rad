@@ -3183,7 +3183,7 @@ udp_recv_from_bytes_timeout(int, int, int) -> Option<(list<int>, str, int)>
 ## `udp_recv_bytebuf`
 
 ```text
-udp_recv_bytebuf(int, int) -> (any, str, int)
+udp_recv_bytebuf(int, int) -> (bytebuf, str, int)
 ```
 
 - Category: `host-io-network`
@@ -3207,7 +3207,7 @@ udp_recv_bytebuf(int, int) -> (any, str, int)
 ## `udp_recv_bytebuf_timeout`
 
 ```text
-udp_recv_bytebuf_timeout(int, int, int) -> Option<(any, str, int)>
+udp_recv_bytebuf_timeout(int, int, int) -> Option<(bytebuf, str, int)>
 ```
 
 - Category: `host-io-network`
@@ -3279,7 +3279,7 @@ udp_send_to_bytes(int, str, int, list<int>) -> int
 ## `udp_send_bytebuf`
 
 ```text
-udp_send_bytebuf(int, str, int, any) -> int
+udp_send_bytebuf(int, str, int, bytebuf) -> int
 ```
 
 - Category: `host-io-network`
@@ -3759,7 +3759,7 @@ buffer_to_str(any) -> str
 ## `bytebuf_new`
 
 ```text
-bytebuf_new(int) -> any
+bytebuf_new(int) -> bytebuf
 ```
 
 - Category: `buffers-bitsets`
@@ -3783,7 +3783,7 @@ bytebuf_new(int) -> any
 ## `bytebuf_len`
 
 ```text
-bytebuf_len(any) -> int
+bytebuf_len(bytebuf) -> int
 ```
 
 - Category: `buffers-bitsets`
@@ -3807,7 +3807,7 @@ bytebuf_len(any) -> int
 ## `bytebuf_get`
 
 ```text
-bytebuf_get(any, int) -> int
+bytebuf_get(bytebuf, int) -> int
 ```
 
 - Category: `buffers-bitsets`
@@ -3831,7 +3831,7 @@ bytebuf_get(any, int) -> int
 ## `bytebuf_set_u8`
 
 ```text
-bytebuf_set_u8(any, int, int) -> any
+bytebuf_set_u8(bytebuf, int, int) -> bytebuf
 ```
 
 - Category: `buffers-bitsets`
@@ -3855,7 +3855,7 @@ bytebuf_set_u8(any, int, int) -> any
 ## `bytebuf_set_u32_le`
 
 ```text
-bytebuf_set_u32_le(any, int, int) -> any
+bytebuf_set_u32_le(bytebuf, int, int) -> bytebuf
 ```
 
 - Category: `buffers-bitsets`
@@ -3879,7 +3879,7 @@ bytebuf_set_u32_le(any, int, int) -> any
 ## `bytebuf_set_i32_le`
 
 ```text
-bytebuf_set_i32_le(any, int, int) -> any
+bytebuf_set_i32_le(bytebuf, int, int) -> bytebuf
 ```
 
 - Category: `buffers-bitsets`
@@ -3903,7 +3903,7 @@ bytebuf_set_i32_le(any, int, int) -> any
 ## `bytebuf_get_u32_le`
 
 ```text
-bytebuf_get_u32_le(any, int) -> int
+bytebuf_get_u32_le(bytebuf, int) -> int
 ```
 
 - Category: `buffers-bitsets`
@@ -3927,7 +3927,7 @@ bytebuf_get_u32_le(any, int) -> int
 ## `bytebuf_get_i32_le`
 
 ```text
-bytebuf_get_i32_le(any, int) -> int
+bytebuf_get_i32_le(bytebuf, int) -> int
 ```
 
 - Category: `buffers-bitsets`
@@ -3951,7 +3951,7 @@ bytebuf_get_i32_le(any, int) -> int
 ## `bytebuf_to_list`
 
 ```text
-bytebuf_to_list(any) -> list<int>
+bytebuf_to_list(bytebuf) -> list<int>
 ```
 
 - Category: `buffers-bitsets`
@@ -3975,7 +3975,7 @@ bytebuf_to_list(any) -> list<int>
 ## `bytebuf_from_list`
 
 ```text
-bytebuf_from_list(list<int>) -> any
+bytebuf_from_list(list<int>) -> bytebuf
 ```
 
 - Category: `buffers-bitsets`
@@ -3992,6 +3992,30 @@ bytebuf_from_list(list<int>) -> any
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
+
+<a id="publish_bytes"></a>
+## `publish_bytes`
+
+```text
+publish_bytes(str, bytebuf) -> nil
+```
+
+- Category: `host-publications`
+- Arity: `exactly 2` argument(s)
+- Effects: `io`
+- Purity: `effectful or readonly`
+- Errors: invalid arity, type, range, capability, platform, or runtime state is a runtime error
+- Determinism: deterministic for equal RAD state and arguments
+- Complexity: `no stronger asymptotic guarantee than the documented input/output size`
+- Allocation: not statically guaranteed allocation-free
+- Native: `available`
+- WASM: `available`
+- Sandbox: `denied`
+- Transaction body: `denied: io`
+- Post-commit: `allowed`
+- Settlement: `denied: io effect`
 - Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 

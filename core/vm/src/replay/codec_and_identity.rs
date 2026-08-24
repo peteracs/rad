@@ -67,6 +67,7 @@ pub(crate) fn is_observational_attempt_effect(b: Builtin) -> bool {
                 | Log
                 | Metric
                 | SleepMs
+                | PublishBytes
                 | SandboxRun
                 | LoadExtension
         )

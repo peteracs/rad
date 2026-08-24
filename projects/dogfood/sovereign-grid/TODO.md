@@ -8,7 +8,7 @@ The original implementation order is closed:
 - [x] Transactional state transitions retain atomic `$transition` semantics.
 - [x] Generic type aliases substitute recursively under strict checking.
 - [x] The generated inventory covers 203 source forms, six internal forms, and
-  all 257 builtins.
+  all 258 builtins.
 - [x] The stable production workflow executes every canonical syntax row.
 - [x] Experimental causal settlements and relations, model checking, and FFI
   execute under their exact feature boundaries.

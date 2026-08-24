@@ -36,13 +36,13 @@ fn main() -> nil {
     udp_send_to_bytes(datagram, "127.0.0.1", 18993, [4, 5])
     assert(is_some(udp_recv_from_bytes_timeout(datagram, 64, 2000)), "udp_recv_from_bytes_timeout")
 
-    let byte_buffer: any = bytebuf_from_list([9, 8, 7])
+    let byte_buffer: bytebuf = bytebuf_from_list([9, 8, 7])
     assert(udp_send_bytebuf(datagram, "127.0.0.1", 18993, byte_buffer) == 3, "udp_send_bytebuf")
-    let (buffer_payload, _buffer_host, _buffer_port): (any, str, int) = udp_recv_bytebuf(datagram, 64)
+    let (buffer_payload, _buffer_host, _buffer_port): (bytebuf, str, int) = udp_recv_bytebuf(datagram, 64)
     assert(bytebuf_to_list(buffer_payload) == [9, 8, 7], "udp_recv_bytebuf")
 
     udp_send_bytebuf(datagram, "127.0.0.1", 18993, bytebuf_from_list([6, 5]))
-    let timed_buffer: any = udp_recv_bytebuf_timeout(datagram, 64, 2000)
+    let timed_buffer: Option<(bytebuf, str, int)> = udp_recv_bytebuf_timeout(datagram, 64, 2000)
     assert(is_some(timed_buffer), "udp_recv_bytebuf_timeout")
     udp_close(datagram)
 

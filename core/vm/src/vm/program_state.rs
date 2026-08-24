@@ -233,6 +233,7 @@ impl VM {
             events_next: Vec::new(),
             events_processing: Vec::new(),
             delayed_events: Vec::new(),
+            binary_publications: BinaryPublications::default(),
             print_buffer: Vec::new(),
             eprint_buffer: Vec::new(),
             suppress_output: shared.suppress_output,
@@ -357,6 +358,7 @@ impl VM {
         self.frames.clear();
         self.events_next.clear();
         self.emit_ids_next.clear();
+        self.binary_publications.clear();
         for cmd in &self.command_buffer {
             cmd.release_payload();
         }
@@ -413,6 +415,7 @@ impl VM {
             events_next: Vec::new(),
             events_processing: Vec::new(),
             delayed_events: Vec::new(),
+            binary_publications: BinaryPublications::default(),
             print_buffer: Vec::new(),
             eprint_buffer: Vec::new(),
             suppress_output: false,

@@ -1,11 +1,11 @@
 {
   "formatVersion": 1,
-  "ownerDigest": "1c170b4eb7c0d98a4a2b172561491c5e97dd43e2df471d0842cbc16709c3f4c5",
+  "ownerDigest": "8f3ffa740bc74310345cd6f4456d284009b6dddc7a87e35b89ec7f291e6703bb",
   "sources": [
     {
       "role": "builtins",
       "path": "core/vm/src/value/builtin_catalog.rs",
-      "sha256": "607acb121066f745eac6244c5cf0ccaefc0dfd15e1755ade58717518bc02f082"
+      "sha256": "01f86090cd8ab560f9b605a1c1959f891240005c9147f6152b9028437aa3f3b8"
     },
     {
       "role": "contracts",
@@ -1089,6 +1089,10 @@
     {
       "variant": "ByteBufFromList",
       "name": "bytebuf_from_list"
+    },
+    {
+      "variant": "PublishBytes",
+      "name": "publish_bytes"
     },
     {
       "variant": "SizeOf",

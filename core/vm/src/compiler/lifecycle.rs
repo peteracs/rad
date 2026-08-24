@@ -88,6 +88,7 @@ impl Compiler {
             for_iter_kinds: HashMap::new(),
             checker_components: HashMap::new(),
             checker_resources: HashMap::new(),
+            checker_events: HashMap::new(),
             checker_sum_types: HashMap::new(),
             type_redirects: HashMap::new(),
             native_types: HashMap::new(),
@@ -211,6 +212,7 @@ impl Compiler {
         self.for_iter_kinds = output.for_iter_kinds.clone();
         self.checker_components = output.components.clone();
         self.checker_resources = output.resources.clone();
+        self.checker_events = output.events.clone();
         for (name, rs) in &self.checker_resources {
             self.checker_components.insert(
                 name.clone(),
@@ -586,6 +588,9 @@ impl Compiler {
                 name.clone(),
                 ct.indexed_fields.iter().cloned().collect::<Vec<String>>(),
             );
+        }
+        for (name, event) in &self.checker_events {
+            component_field_types.insert(name.clone(), event.fields.clone());
         }
         component_layouts.extend(declaration_metadata.component_layouts);
         indexed_component_fields.extend(declaration_metadata.indexed_component_fields);

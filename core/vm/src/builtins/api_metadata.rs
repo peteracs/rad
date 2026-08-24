@@ -182,6 +182,8 @@ fn builtin_api_category(builtin: Builtin) -> &'static str {
         | ByteBufSetU32Le | ByteBufSetI32Le | ByteBufGetU32Le | ByteBufGetI32Le
         | ByteBufToList | ByteBufFromList => "buffers-bitsets",
 
+        PublishBytes => "host-publications",
+
         SizeOf | OffsetOf | DecodeLe | DecodeBe | EncodeLe | EncodeBe => "native-layout",
 
         Get | ReadField | Lookup | LookupAll | Set | WriteField | Has | Spawn | GetEntity

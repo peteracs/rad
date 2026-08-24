@@ -200,6 +200,7 @@ define_builtins! {
     ByteBufGetI32Le => "bytebuf_get_i32_le",
     ByteBufToList => "bytebuf_to_list",
     ByteBufFromList => "bytebuf_from_list",
+    PublishBytes => "publish_bytes",
     SizeOf => "size_of",
     OffsetOf => "offset_of",
     DecodeLe => "decode_le",

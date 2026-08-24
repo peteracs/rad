@@ -209,6 +209,7 @@ impl RadRuntime {
             "presentation": presentation::descriptor_json(),
             "features": [
                 "streaming-session",
+                "binary-session-io-v1",
                 "render-delta",
                 "render-buffer-v3",
                 "session-state",
@@ -592,6 +593,7 @@ impl RadRuntime {
             .ok_or("session_load: Ok without value")?;
         self.vm
             .call_builtin(crate::value::Builtin::Commit, vec![fork])?;
+        self.vm.clear_binary_publications();
         self.session_base = Some(self.current_fork()?);
         self.session_cursor = self.vm.print_buffer.len();
         self.begin_presentation_stream(stream_id);
@@ -793,6 +795,7 @@ impl RadRuntime {
 
     pub fn session_import_snapshot(&mut self, snapshot: &[u8]) -> Result<(), String> {
         self.vm.import_snapshot(snapshot)?;
+        self.vm.clear_binary_publications();
         self.session_base = Some(std::sync::Arc::new(self.vm.world_snapshot()));
         self.render_base = None;
         self.undo_stack.clear();

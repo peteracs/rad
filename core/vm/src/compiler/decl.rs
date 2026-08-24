@@ -95,7 +95,17 @@ impl Compiler {
             }
             Decl::NativeType(native) => {
                 let resolved = self.resolve_canonical_name(&native.name);
-                self.global_mutability.entry(resolved).or_insert(false);
+                self.global_mutability
+                    .entry(resolved.clone())
+                    .or_insert(false);
+                // Alias function bodies are hoisted before entry-module
+                // first-pass declarations are emitted. They must still lower
+                // `NativeEnum::Member` as a native scalar, not fall through to
+                // a state reference merely because the descriptor's global
+                // bytecode has not run yet.
+                let mut descriptor = crate::native_types::NativeTypeDescriptor::from(native);
+                descriptor.name = resolved.as_str().into();
+                self.native_types.entry(resolved).or_insert(descriptor);
             }
             Decl::MaterializedView(view) => {
                 let resolved = self.resolve_canonical_name(&view.name);

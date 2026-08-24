@@ -22,8 +22,8 @@ use crate::checker::TypeError;
 use crate::gc::GcHeap;
 use crate::opcode::{Chunk, Op};
 use crate::types::{
-    AuthorityReport, CheckerOutput, ComponentType, Effect, EffectSet, ForIterKind, ResourceType,
-    SumTypeDef,
+    AuthorityReport, CheckerOutput, ComponentType, Effect, EffectSet, EventType, ForIterKind,
+    ResourceType, SumTypeDef,
 };
 use crate::value::{Builtin, FnValue, Value};
 

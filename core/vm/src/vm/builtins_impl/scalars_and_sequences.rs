@@ -33,51 +33,6 @@ pub(crate) fn bi_str(gc: &mut GcHeap, args: Vec<Value>) -> Result<Value, String>
     Ok(Value::from_string(gc, args[0].print_display()))
 }
 
-pub(crate) fn bi_int(gc: &mut GcHeap, args: Vec<Value>) -> Result<Value, String> {
-    if args.is_empty() {
-        return Err("int() requires 1 argument".into());
-    }
-    if let Some(n) = args[0].as_int() {
-        Ok(Value::from_int(gc, n))
-    } else if let Some(x) = args[0].as_float() {
-        if x.is_nan() {
-            return Err("Cannot convert NaN to int".into());
-        }
-        if x.is_infinite() || x > i64::MAX as f64 || x < i64::MIN as f64 {
-            return Err(format!(
-                "Cannot convert {} to int: value out of i64 range",
-                x
-            ));
-        }
-        Ok(Value::from_int(gc, x as i64))
-    } else if let Some(s) = args[0].as_str() {
-        s.parse::<i64>()
-            .map(|n| Value::from_int(gc, n))
-            .map_err(|_| format!("Cannot convert '{}' to int", s))
-    } else if let Some(b) = args[0].as_bool() {
-        Ok(Value::from_int(gc, if b { 1 } else { 0 }))
-    } else {
-        Err(format!("Cannot convert {} to int", args[0].type_name()))
-    }
-}
-
-pub(crate) fn bi_float(_gc: &mut GcHeap, args: Vec<Value>) -> Result<Value, String> {
-    if args.is_empty() {
-        return Err("float() requires 1 argument".into());
-    }
-    if let Some(x) = args[0].as_float() {
-        Ok(Value::from_float(x))
-    } else if let Some(n) = args[0].as_int() {
-        Ok(Value::from_float(n as f64))
-    } else if let Some(s) = args[0].as_str() {
-        s.parse::<f64>()
-            .map(Value::from_float)
-            .map_err(|_| format!("Cannot convert '{}' to float", s))
-    } else {
-        Err(format!("Cannot convert {} to float", args[0].type_name()))
-    }
-}
-
 pub(crate) fn bi_int_div(gc: &mut GcHeap, args: Vec<Value>) -> Result<Value, String> {
     if args.len() != 2 {
         return Err("int_div() requires exactly 2 arguments".into());
@@ -913,40 +868,6 @@ pub(crate) fn bi_drop_first(gc: &mut GcHeap, mut args: Vec<Value>) -> Result<Val
     } else {
         Err(format!("drop_first() expects list or string, got {}", got))
     }
-}
-
-pub(crate) fn bi_try_int(gc: &mut GcHeap, args: Vec<Value>) -> Result<Value, String> {
-    if args.is_empty() {
-        return Err("try_int() requires 1 argument".into());
-    }
-    let result = if let Some(value) = args[0].as_int() {
-        Some(Value::from_int(gc, value))
-    } else if let Some(value) = args[0].as_float() {
-        Some(Value::from_int(gc, value as i64))
-    } else if let Some(value) = args[0].as_str() {
-        value.parse::<i64>().ok().map(|value| Value::from_int(gc, value))
-    } else {
-        args[0]
-            .as_bool()
-            .map(|value| Value::from_int(gc, if value { 1 } else { 0 }))
-    };
-    Ok(wrap_option(gc, result))
-}
-
-pub(crate) fn bi_try_float(gc: &mut GcHeap, args: Vec<Value>) -> Result<Value, String> {
-    if args.is_empty() {
-        return Err("try_float() requires 1 argument".into());
-    }
-    let result = if let Some(value) = args[0].as_float() {
-        Some(Value::from_float(value))
-    } else if let Some(value) = args[0].as_int() {
-        Some(Value::from_float(value as f64))
-    } else if let Some(value) = args[0].as_str() {
-        value.parse::<f64>().ok().map(Value::from_float)
-    } else {
-        None
-    };
-    Ok(wrap_option(gc, result))
 }
 
 pub(crate) fn wrap_option(gc: &mut GcHeap, value: Option<Value>) -> Value {

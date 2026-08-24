@@ -104,6 +104,10 @@ pub struct VM {
     /// cycle. The emit id is created when the timer is scheduled, so a
     /// delayed handler can still explain who armed it.
     pub(crate) delayed_events: Vec<(i64, String, Value, u64)>,
+    /// Bounded, transient byte streams published by deterministic RAD code
+    /// for an embedding host. These are not world state and never enter
+    /// snapshots, forks, digests, or speculative workers.
+    pub(crate) binary_publications: BinaryPublications,
     pub print_buffer: Vec<String>,
     pub eprint_buffer: Vec<String>,
     pub(crate) suppress_output: bool,

@@ -3,7 +3,7 @@
 
 This inventory is generated from the production lexer, AST, parser, and builtin catalog. It is the completeness denominator for the normative reference and Sovereign Grid coverage gate. Names such as `Error` are recovery nodes rather than source syntax; the coverage manifest records explicit exclusions.
 
-Owner digest: `1c170b4eb7c0d98a4a2b172561491c5e97dd43e2df471d0842cbc16709c3f4c5`.
+Owner digest: `8f3ffa740bc74310345cd6f4456d284009b6dddc7a87e35b89ec7f291e6703bb`.
 
 ## Token kinds
 
@@ -311,7 +311,7 @@ Owner digest: `1c170b4eb7c0d98a4a2b172561491c5e97dd43e2df471d0842cbc16709c3f4c5`
 
 ## Builtin API names
 
-The 257 names below come from the one runtime catalog. Signatures and operational semantics are in the [complete builtin API catalog](builtin-api.md); this generated list makes omissions machine-detectable.
+The 258 names below come from the one runtime catalog. Signatures and operational semantics are in the [complete builtin API catalog](builtin-api.md); this generated list makes omissions machine-detectable.
 
 | Name | Runtime variant |
 |---|---|
@@ -480,6 +480,7 @@ The 257 names below come from the one runtime catalog. Signatures and operationa
 | <a id="builtin-bytebuf_get_i32_le"></a>`bytebuf_get_i32_le` | `ByteBufGetI32Le` |
 | <a id="builtin-bytebuf_to_list"></a>`bytebuf_to_list` | `ByteBufToList` |
 | <a id="builtin-bytebuf_from_list"></a>`bytebuf_from_list` | `ByteBufFromList` |
+| <a id="builtin-publish_bytes"></a>`publish_bytes` | `PublishBytes` |
 | <a id="builtin-size_of"></a>`size_of` | `SizeOf` |
 | <a id="builtin-offset_of"></a>`offset_of` | `OffsetOf` |
 | <a id="builtin-decode_le"></a>`decode_le` | `DecodeLe` |

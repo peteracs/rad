@@ -11,7 +11,7 @@ fn main() -> nil {
     assert(offset_of(TelemetryFrame, "checksum") == 14, "checksum offset")
 
     let target: entity = register_device(DeviceId(u32(42)))
-    let bytes: any = captured_frame()
+    let bytes: bytebuf = captured_frame()
     let frame: TelemetryFrame = decode_frame(bytes)
     ingest(bytes, target)
     flush_events()

@@ -126,6 +126,12 @@ Every runtime builtin appears exactly once. Each entry links to its exact contra
 | [`bytebuf_to_list`](builtin-api.md#bytebuf_to_list) | [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad) |
 | [`bytebuf_from_list`](builtin-api.md#bytebuf_from_list) | [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad) |
 
+## Host Publications
+
+| Builtin | Executable evidence |
+|---|---|
+| [`publish_bytes`](builtin-api.md#publish_bytes) | [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad) |
+
 ## Native Layout
 
 | Builtin | Executable evidence |

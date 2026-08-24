@@ -209,7 +209,7 @@
             r#"
             resource Registry owned { revision: int = 0 }
             event Refresh {}
-            on Refresh(event) writes owned [Registry] {
+            on Refresh(evt) writes owned [Registry] {
                 update(Registry) { revision = res(Registry).revision + 1 }
             }
             fn bypass() { update(Registry) { revision = 99 } }

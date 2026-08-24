@@ -22,9 +22,11 @@ public declarations and strict-checking mode require explicit boundaries.
 | `system` | Statically named system reference created by `system::Name`. |
 | `task<T>` | Result of an async call, consumed by `await`. |
 
-`buffer_new` and `bytebuf_new` currently return opaque VM values typed as
-`any`; only their corresponding buffer APIs may inspect or mutate them.
-Network and native-extension handles are likewise opaque host values. Handles
+`bytebuf` is a first-class binary value. Byte-buffer constructors and
+functional setters return `bytebuf`, binary host APIs accept it directly, and
+TypeScript declarations expose it as `Uint8Array`. `buffer_new` remains an
+opaque VM value typed as `any`; only its corresponding text-buffer APIs may
+inspect or mutate it. Network and native-extension handles are likewise opaque host values. Handles
 are process-local, are rejected by persistent serialization, and must be
 closed through the owning API.
 

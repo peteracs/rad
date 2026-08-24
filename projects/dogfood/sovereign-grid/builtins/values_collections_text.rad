@@ -129,7 +129,7 @@ fn exercise_values_collections_text() -> nil {
     text_buffer = buffer_append(text_buffer, "-grid")
     assert(buffer_to_str(text_buffer) == "sovereign-grid", "text buffer")
 
-    let mut bytes: any = bytebuf_new(9)
+    let mut bytes: bytebuf = bytebuf_new(9)
     bytes = bytebuf_set_u8(bytes, 0, 255)
     bytes = bytebuf_set_u32_le(bytes, 1, 305419896)
     bytes = bytebuf_set_i32_le(bytes, 5, -2)
@@ -138,6 +138,7 @@ fn exercise_values_collections_text() -> nil {
     assert(bytebuf_get_u32_le(bytes, 1) == 305419896, "bytebuf u32")
     assert(bytebuf_get_i32_le(bytes, 5) == -2, "bytebuf i32")
     assert(bytebuf_to_list(bytebuf_from_list([1, 2, 3])) == [1, 2, 3], "bytebuf list")
+    publish_bytes("sovereign-grid/reference", bytebuf_from_list([82, 65, 68]))
 
     assert(size_of(SurfacePacket) == 11, "packed native size")
     assert(offset_of(SurfacePacket, "reading") == 7, "native offset")

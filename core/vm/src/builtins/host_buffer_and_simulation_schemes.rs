@@ -19,6 +19,12 @@ fn builtin_type_scheme_host(name: &str) -> Option<BuiltinSig> {
             ret: Ty::Nil,
             is_pure: false,
         },
+        "publish_bytes" => BuiltinSig {
+            type_params: vec![],
+            params: vec![Ty::Str, Ty::ByteBuf],
+            ret: Ty::Nil,
+            is_pure: false,
+        },
         "http_get" => BuiltinSig {
             type_params: vec![],
             params: vec![Ty::Str],
@@ -384,7 +390,7 @@ fn builtin_type_scheme_host(name: &str) -> Option<BuiltinSig> {
         "udp_recv_bytebuf" => BuiltinSig {
             type_params: vec![],
             params: vec![Ty::Int, Ty::Int],
-            ret: Ty::Tuple(vec![Ty::Any, Ty::Str, Ty::Int]),
+            ret: Ty::Tuple(vec![Ty::ByteBuf, Ty::Str, Ty::Int]),
             is_pure: false,
         },
         "udp_recv_bytebuf_timeout" => BuiltinSig {
@@ -392,7 +398,7 @@ fn builtin_type_scheme_host(name: &str) -> Option<BuiltinSig> {
             params: vec![Ty::Int, Ty::Int, Ty::Int],
             ret: Ty::App(
                 "Option".to_string(),
-                vec![Ty::Tuple(vec![Ty::Any, Ty::Str, Ty::Int])],
+                vec![Ty::Tuple(vec![Ty::ByteBuf, Ty::Str, Ty::Int])],
             ),
             is_pure: false,
         },
@@ -410,7 +416,7 @@ fn builtin_type_scheme_host(name: &str) -> Option<BuiltinSig> {
         },
         "udp_send_bytebuf" => BuiltinSig {
             type_params: vec![],
-            params: vec![Ty::Int, Ty::Str, Ty::Int, Ty::Any],
+            params: vec![Ty::Int, Ty::Str, Ty::Int, Ty::ByteBuf],
             ret: Ty::Int,
             is_pure: false,
         },
@@ -505,43 +511,43 @@ fn builtin_type_scheme_buffers(name: &str) -> Option<BuiltinSig> {
         "bytebuf_new" => BuiltinSig {
             type_params: vec![],
             params: vec![Ty::Int],
-            ret: Ty::Any,
+            ret: Ty::ByteBuf,
             is_pure: true,
         },
         "bytebuf_len" => BuiltinSig {
             type_params: vec![],
-            params: vec![Ty::Any],
+            params: vec![Ty::ByteBuf],
             ret: Ty::Int,
             is_pure: true,
         },
         "bytebuf_get" => BuiltinSig {
             type_params: vec![],
-            params: vec![Ty::Any, Ty::Int],
+            params: vec![Ty::ByteBuf, Ty::Int],
             ret: Ty::Int,
             is_pure: true,
         },
         "bytebuf_set_u8" | "bytebuf_set_u32_le" | "bytebuf_set_i32_le" => BuiltinSig {
             type_params: vec![],
-            params: vec![Ty::Any, Ty::Int, Ty::Int],
-            ret: Ty::Any,
+            params: vec![Ty::ByteBuf, Ty::Int, Ty::Int],
+            ret: Ty::ByteBuf,
             is_pure: true,
         },
         "bytebuf_get_u32_le" | "bytebuf_get_i32_le" => BuiltinSig {
             type_params: vec![],
-            params: vec![Ty::Any, Ty::Int],
+            params: vec![Ty::ByteBuf, Ty::Int],
             ret: Ty::Int,
             is_pure: true,
         },
         "bytebuf_to_list" => BuiltinSig {
             type_params: vec![],
-            params: vec![Ty::Any],
+            params: vec![Ty::ByteBuf],
             ret: Ty::List(Box::new(Ty::Int)),
             is_pure: true,
         },
         "bytebuf_from_list" => BuiltinSig {
             type_params: vec![],
             params: vec![Ty::List(Box::new(Ty::Int))],
-            ret: Ty::Any,
+            ret: Ty::ByteBuf,
             is_pure: true,
         },
         "size_of" => BuiltinSig {

@@ -63,4 +63,5 @@ impl BrowserSourceKind {
 // Lexical sections preserve one private semantic namespace.
 include!("wasm/runtime_api.rs");
 include!("wasm/execution.rs");
+include!("wasm/binary_host.rs");
 include!("wasm/rendering_and_tests.rs");

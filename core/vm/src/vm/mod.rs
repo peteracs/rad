@@ -398,6 +398,7 @@ pub struct WorkerResult {
 }
 // VM state, program state, and lifecycle share one private implementation namespace.
 include!("state.rs");
+include!("binary_publications.rs");
 include!("program_state.rs");
 include!("causal_recording.rs");
 include!("lifecycle.rs");

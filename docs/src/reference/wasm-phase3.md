@@ -5,11 +5,12 @@ method; changing a Rust export makes the documentation gate stale.
 
 ## Availability and imports
 
-Browser compilation rejects module `use` declarations because the
-single-source boundary has no filesystem loader. File, process, TCP, UDP, and
-dynamic-library builtins are unavailable. Browser hosts provide explicit,
-effect-declared imports and record nondeterministic results when replay is
-required.
+The single-source browser entry points reject module `use` declarations
+because they have no filesystem loader. Production multi-module browser
+programs use the canonical package boundary described below. File, process,
+TCP, UDP, and dynamic-library builtins are unavailable. Browser hosts provide
+explicit, effect-declared imports and record nondeterministic results when
+replay is required.
 
 Returned JSON strings are UTF-8 command data or tagged failure.
 `compile_and_run_result_json` returns `ok`, `settlement_rejected`,
@@ -34,7 +35,9 @@ export class RadRuntime {
   session_start(source: string): string;
   session_start_package(packageJson: string): string;
   session_emit(event: string, fieldsJson: string): void;
+  session_emit_binary(event: string, payload: Uint8Array): void;
   session_pump(): string;
+  session_drain_binary(channel: string, maxRecords: number, maxPacketBytes: number): Uint8Array;
   session_delta(): string;
   session_apply(delta: string): void;
   session_state(): string;
@@ -82,11 +85,35 @@ crosses as `Uint8Array`.
 
 ## Streaming session
 
-`session_start` compiles once and retains one authority world. Emit/pump
-advances it; `session_delta` returns an authenticated delta and
+`session_start` or `session_start_package` compiles once and retains one
+authority world. Emit/pump advances it; `session_delta` returns an authenticated delta and
 `session_apply` rejects wrong lineage/order. `session_digest` is the
 convergence receipt. State/snapshot imports validate fully before adoption.
 Checkpoint/undo/redo retain canonical snapshots.
+
+## Binary session ingress and publications
+
+Hosts must confirm `"binary-session-io-v1"` in the `runtime_features()`
+`features` array before enabling this boundary.
+
+`session_emit_binary(event, payload)` avoids JSON expansion at the browser
+boundary. The named event must have exactly one field and that field must be
+declared `bytebuf`. The complete event contract and the 1 MiB payload limit are
+validated before the live queue changes, so rejection cannot partially enqueue
+an event.
+
+RAD publishes ordered host records with `publish_bytes(channel, payload)`.
+Publications are transient host output: they do not enter snapshots, world
+digests, forks, or replay state. Inside a transaction the builtin is rejected
+from the transaction body and is allowed only in `post_commit`, after the state
+patch succeeds. The runtime bounds this output to 32 channels, 1,024 queued
+records per channel, 1 MiB per record, and 16 MiB total queued bytes.
+
+`session_drain_binary(channel, maxRecords, maxPacketBytes)` atomically removes
+only complete records that fit the caller's limits. It returns `RBS1`, followed
+by a little-endian `u32` record count and repeated little-endian `u32` byte
+length plus payload records. An empty drain is `RBS1` plus a zero count. If the
+next record cannot fit, the call fails without removing it.
 
 ## Render buffer ownership
 

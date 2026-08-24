@@ -338,6 +338,7 @@ fn ty_to_ts(ty: &Ty, type_params: &[String]) -> Result<String, String> {
         Ty::Task(inner) => format!("Promise<{}>", ty_to_ts(inner, type_params)?),
         Ty::EntityId => "RadEntity".to_string(),
         Ty::BitSet => "ReadonlySet<number>".to_string(),
+        Ty::ByteBuf => "Uint8Array".to_string(),
         Ty::WorldFork => "RadWorldSnapshot".to_string(),
         Ty::SystemRef => "RadSystem".to_string(),
         Ty::Any => "unknown".to_string(),
@@ -398,6 +399,7 @@ mod tests {
             pub component Identity { manager: ManagerGid = ManagerGid(u32(0)) }
             pub resource Clock { tick: u64 = u64(0) }
             pub event Published { target: entity }
+            pub event Packet { payload: bytebuf }
             pub fn find(manager: ManagerGid) -> Option<entity> { return None }
         "#;
         let parsed = crate::pipeline::parse_source(source, crate::parser::ParserOptions);
@@ -431,6 +433,7 @@ mod tests {
         assert!(first.contains("export interface Identity"));
         assert!(first.contains("export interface Clock"));
         assert!(first.contains("readonly $event: \"Published\""));
+        assert!(first.contains("readonly payload: Uint8Array"));
         assert!(first.contains("find(arg0: ManagerGid): Option<RadEntity>;"));
         assert!(first.contains("executeTransition<Name extends keyof RadFunctions>"));
     }

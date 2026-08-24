@@ -142,12 +142,12 @@ remain forbidden inside causal regions and observational attempt replay.
 | Function | Description |
 |---|---|
 | `str(val)` | Convert any value to its string representation |
-| `int(val)` | Convert to integer (accepts int, float→truncate, string, bool→0/1) |
+| `int(val)` | Convert to integer (accepts int, checked fixed-width/opaque/enum/bitflag integers, finite in-range native/ordinary floats→truncate, string, bool→0/1; out-of-range `u64` and non-finite/out-of-range floats fail) |
 | `float(val)` | Convert to float (accepts float, int, string) |
 | `typeof(val)` | Return the type name as a string (`"int"`, `"float"`, `"str"`, `"bool"`, `"list"`, `"nil"`, or the name of a component/sum type like `"Result"`) |
 | `variant_of(val)` | Return the variant name as a string if `val` is a sum type or state (e.g., `"Ok"`, `"Err"`), otherwise returns `nil`. The Rust VM returns canonical short names (never fully-qualified like `"Type::Variant"`). |
-| `try_int(val)` | Safe int conversion — returns `Some(value)` or `None` (never errors) |
-| `try_float(val)` | Safe float conversion — returns `Some(value)` or `None` (never errors) |
+| `try_int(val)` | Safe int conversion, including fixed-width and nominal native values — returns `Some(value)` or `None` for overflow/non-finite/invalid input (never errors) |
+| `try_float(val)` | Safe float conversion, including fixed-width and nominal native values — returns `Some(value)` or `None` (never errors) |
 
 ## Numeric
 

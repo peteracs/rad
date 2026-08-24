@@ -1,6 +1,6 @@
 use "../schema.rad"
 
-pub fn captured_frame() -> any {
+pub fn captured_frame() -> bytebuf {
     return bytebuf_from_list([
         42, 0, 0, 0,
         7, 0, 0, 0,

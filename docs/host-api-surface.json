@@ -1,6 +1,6 @@
 {
   "formatVersion": 1,
-  "ownerDigest": "41cfb98ccc9e116402a34b8de534300c4cecca689ddd8930fff8002a57d405ce",
+  "ownerDigest": "32aa7fdefd34162ed75f4ec20009d33c4f3c65ec1861e7ebc689efe460be2fc3",
   "owners": [
     {
       "path": "adapters/cli/src/cli/arguments.rs",
@@ -8,11 +8,15 @@
     },
     {
       "path": "core/vm/src/wasm/runtime_api.rs",
-      "sha256": "db3c778ef30a3730559de080c925c417375718f446330574429cbd79fd3c450e"
+      "sha256": "e1ff264a53325f97293793380c9aada404caffe6031c035d97f11743e5d60ace"
+    },
+    {
+      "path": "core/vm/src/wasm/binary_host.rs",
+      "sha256": "39614f50bb7de5a86d6b87fc191ecc8c20c44bf8addfd101a11ff794625d6140"
     },
     {
       "path": "core/vm/src/wasm/rendering_and_tests.rs",
-      "sha256": "875b8160f7ee6859c6dd6be603a02b11ccb141f2ff9c35863c529e4b6399b0a8"
+      "sha256": "8a83712ae5bab23dd375aa4c6c402c66de5c9b1d0e15af1e925ceee1a5941599"
     }
   ],
   "cli": {
@@ -139,6 +143,10 @@
       "timeline_world",
       "timeline_events",
       "why_at"
+    ],
+    "binaryMethods": [
+      "session_emit_binary",
+      "session_drain_binary"
     ],
     "chunkMethods": [
       "add_int",

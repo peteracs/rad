@@ -285,6 +285,7 @@ impl VM {
             Builtin::ByteBufGetI32Le => self.bi_bytebuf_get_i32_le(args),
             Builtin::ByteBufToList => self.bi_bytebuf_to_list(args),
             Builtin::ByteBufFromList => self.bi_bytebuf_from_list(args),
+            Builtin::PublishBytes => self.bi_publish_bytes(args),
             Builtin::SizeOf => self.bi_size_of(args),
             Builtin::OffsetOf => self.bi_offset_of(args),
             Builtin::DecodeLe => self.bi_decode_native(args, true),

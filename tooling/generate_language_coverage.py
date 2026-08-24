@@ -28,6 +28,7 @@ CATEGORY_ORDER = [
     "collections",
     "text-json",
     "buffers-bitsets",
+    "host-publications",
     "native-layout",
     "ecs-resources",
     "queries-indexes-views",

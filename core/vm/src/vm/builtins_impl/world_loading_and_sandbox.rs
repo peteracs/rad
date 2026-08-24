@@ -56,6 +56,7 @@ impl VM {
             Ty::Bool => v.as_bool().is_some(),
             Ty::Nil => v.is_nil(),
             Ty::EntityId => v.as_entity_id().is_some(),
+            Ty::ByteBuf => v.as_bytebuf().is_some(),
             Ty::List(elem) => v
                 .as_list()
                 .is_some_and(|items| items.iter().all(|it| Self::loaded_value_conforms(it, elem))),

@@ -231,6 +231,7 @@ pub struct Compiler {
     pub(crate) for_iter_kinds: HashMap<NodeId, ForIterKind>,
     pub(crate) checker_components: HashMap<String, ComponentType>,
     pub(crate) checker_resources: HashMap<String, ResourceType>,
+    pub(crate) checker_events: HashMap<String, EventType>,
     pub(crate) checker_sum_types: HashMap<String, SumTypeDef>,
     pub(crate) type_redirects: HashMap<String, String>,
     pub(crate) native_types: HashMap<String, crate::native_types::NativeTypeDescriptor>,

@@ -1,7 +1,7 @@
 use "../schema.rad"
 use "../owners/telemetry.rad"
 
-pub fn decode_frame(bytes: any) -> TelemetryFrame {
+pub fn decode_frame(bytes: bytebuf) -> TelemetryFrame {
     return TelemetryFrame {
         device: decode_le(bytes, 0, DeviceId),
         sequence: decode_le(bytes, 4, u32),
@@ -21,6 +21,6 @@ pub fn canonical_frame_bytes(frame: TelemetryFrame) -> list {
     ]
 }
 
-pub fn ingest(bytes: any, target: entity) -> nil {
+pub fn ingest(bytes: bytebuf, target: entity) -> nil {
     StoreFrame(target, decode_frame(bytes))
 }

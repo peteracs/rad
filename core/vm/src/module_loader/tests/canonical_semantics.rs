@@ -468,3 +468,96 @@ pub readonly fn count() -> int {
         assert_eq!(output.len(), 2);
         assert_eq!(output[0], output[1]);
     }
+
+    #[test]
+    fn aliased_owner_sees_bare_imported_native_types_during_hoisted_lowering() {
+        let dir = mk_temp_dir();
+        fs::write(
+            dir.join("types.rad"),
+            "pub enum Phase: u8 { Live = 1, Retired = 2 }\n",
+        )
+        .unwrap();
+        fs::write(
+            dir.join("owner.rad"),
+            "use \"types.rad\"\npub component Lifecycle { phase: Phase = Phase::Live }\npub fn stored_phase() -> int { let target = spawn(Lifecycle { phase: Phase::Live }) return int(require(target, Lifecycle).phase) }\n",
+        )
+        .unwrap();
+        fs::write(
+            dir.join("main.rad"),
+            "use \"types.rad\"\nuse \"owner.rad\" as owner\nfn main() -> nil { print(owner.stored_phase()) }\n",
+        )
+        .unwrap();
+
+        assert_eq!(run_module_entry(&dir.join("main.rad")), vec!["1"]);
+    }
+
+    #[test]
+    fn independent_aliased_owner_modules_keep_exported_functions_callable() {
+        let dir = mk_temp_dir();
+        fs::write(
+            dir.join("shared.rad"),
+            concat!(
+                "pub opaque type WireId = u32\n",
+                "pub opaque type Generation = u64\n",
+                "pub enum Phase: u8 { Constructed = 0, Live = 1 }\n",
+            ),
+        )
+        .unwrap();
+        fs::write(
+            dir.join("entities.rad"),
+            concat!(
+                "use \"shared.rad\"\n",
+                "pub component Identity owned { indexed id: WireId = WireId(u32(0)) }\n",
+                "pub component Lifecycle owned { phase: Phase = Phase::Constructed, generation: Generation = Generation(u64(0)) }\n",
+                "pub component Position owned { x: f32 = f32(0.0), y: f32 = f32(0.0), z: f32 = f32(0.0) }\n",
+                "pub component Live owned {}\n",
+                "pub component Visible owned {}\n",
+                "pub materialized view Renderable { depends [Identity, Lifecycle, Position, Live, Visible] key Identity.id }\n",
+                "pub fn publish(id: WireId, generation: Generation, x: f32, y: f32) -> entity writes owned [Identity, Lifecycle, Position, Live, Visible] {\n",
+                "  return spawn(Identity { id: id }, Lifecycle { phase: Phase::Live, generation: generation }, Position { x: x, y: y, z: f32(0.0) }, Live {}, Visible {})\n",
+                "}\n",
+            ),
+        )
+        .unwrap();
+        fs::write(
+            dir.join("sessions.rad"),
+            concat!(
+                "use \"shared.rad\"\n",
+                "pub component Session owned { indexed id: WireId = WireId(u32(0)), generation: Generation = Generation(u64(0)) }\n",
+                "pub component Connected owned {}\n",
+                "pub resource Clock owned { tick: WireId = WireId(u32(0)) }\n",
+                "pub materialized view LiveSessions { depends [Session, Connected] key Session.id }\n",
+                "pub fn open(id: WireId, generation: Generation) -> entity writes owned [Session, Connected] {\n",
+                "  return spawn(Session { id: id, generation: generation }, Connected {})\n",
+                "}\n",
+            ),
+        )
+        .unwrap();
+        fs::write(
+            dir.join("main.rad"),
+            concat!(
+                "use \"shared.rad\"\n",
+                "use \"sessions.rad\" as sessions\n",
+                "use \"entities.rad\" as world\n",
+                "fn main() -> nil {\n",
+                "  let target = world.publish(WireId(u32(1)), Generation(u64(1)), f32(2.0), f32(3.0))\n",
+                "  assert(has(target, world.Live), \"aliased owner function ran\")\n",
+                "}\n",
+            ),
+        )
+        .unwrap();
+
+        let compiled = compile_module_entry(&dir.join("main.rad"));
+        let publish = compiled
+            .global_names
+            .iter()
+            .position(|name| name.ends_with("__publish"))
+            .expect("canonical publish global");
+        let mut vm = VM::new();
+        vm.load_compile_result(compiled);
+        let result = vm.run(0);
+        assert!(
+            result.is_ok(),
+            "canonical publish slot {publish} must hold its function after all aliased modules initialize: {result:?}"
+        );
+    }

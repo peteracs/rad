@@ -186,7 +186,9 @@ embedding API on `RadRuntime` (native and WASM, exported to JS by
 | `runtime_features()` | JSON feature/version handshake for hosts before they enable advanced session features |
 | `session_start(source)` | compile once, run top-level, fix the RNG seed (replicas converge) |
 | `session_emit(event, fields_json)` | push one event; `fields_json` must be an object keyed by event fields, and `{"entity": "name"}` resolves handles |
+| `session_emit_binary(event, payload)` | enqueue one event with exactly one declared `bytebuf` field; validates the contract and 1 MiB limit before mutating the queue |
 | `session_pump()` | flush one frame through the declared handlers; returns that frame's prints |
+| `session_drain_binary(channel, max_records, max_packet_bytes)` | atomically drain complete ordered records from a transient RAD publication channel as a `Uint8Array` `RBS1` packet |
 | `session_render_delta()` | renderer-shaped JSON diff since the last render read: upserts, removes, and changed resources |
 | `session_delta()` | the divergence since the last delta, as `fork_delta` bytes — one broadcast per flush |
 | `session_apply(delta)` | apply a remote delta in order; wrong-lineage deltas are refused by the base fingerprint |
@@ -202,6 +204,16 @@ embedding API on `RadRuntime` (native and WASM, exported to JS by
 | `timeline_world(i)` | renderer-shaped JSON for captured frame `i` |
 | `timeline_events()` | JSON event log sourced from the causality ledger |
 | `why_at(frame, entity, component)` | causal explanation for a named entity/component as of a captured frame |
+
+Guest code sends binary host output with
+`publish_bytes(channel: str, payload: bytebuf)`. The queue is runtime-owned,
+ordered, excluded from semantic snapshots and digests, and bounded to 32
+channels, 1,024 records per channel, 1 MiB per record, and 16 MiB total. A
+transaction body cannot publish; use `post_commit` so failed contracts expose
+no host output. `session_drain_binary` encodes `RBS1`, a little-endian record
+count, then repeated little-endian byte lengths and payloads. It never removes
+a partial record. Hosts enable this path only after finding
+`"binary-session-io-v1"` in the `runtime_features()` feature array.
 
 Host-pushed events get real causality records (`why()` answers for them),
 and a session's frames are the same frame boundary record/replay counts.

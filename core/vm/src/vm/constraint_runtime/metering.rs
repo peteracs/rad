@@ -193,6 +193,11 @@ pub(crate) fn builtin_resource_charge(
         Builtin::ByteBufFromList => list_len(0)
             .map(|count| sized(count.max(1), values(count)))
             .unwrap_or_else(fixed),
+        Builtin::PublishBytes => args
+            .get(1)
+            .and_then(Value::as_bytebuf)
+            .map(|bytes| sized(bytes.len().max(1), bytes.len()))
+            .unwrap_or_else(fixed),
         Builtin::BitsetNew => fixed(),
         Builtin::BitsetSet | Builtin::BitsetClear => {
             let existing_words = args.first().and_then(Value::as_bitset).map(Vec::len);

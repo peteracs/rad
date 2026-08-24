@@ -6,7 +6,7 @@ separate from the language grammar and from tutorials:
 - the [language specification](./spec.md) defines source syntax and core
   semantics;
 - the [builtin category index](./generated/builtin-index.md) and
-  [complete builtin catalog](./generated/builtin-api.md) define the 257
+  [complete builtin catalog](./generated/builtin-api.md) define the 258
   functions installed by the VM;
 - the [CLI guide](../getting-started/forge.md) defines command-line behavior;
 - the [embedding guide](../guide/developer-tools.md#embedding-the-vm-from-rust)
@@ -44,7 +44,7 @@ on missing, duplicate, or orphaned entries.
 
 ## Completeness contract
 
-The source-owned catalog contains 257 builtins. `check_language_surface.py`
+The source-owned catalog contains 258 builtins. `check_language_surface.py`
 requires exactly one generated API entry per runtime name, validates every
 field in the contract above, proves that the linked Sovereign Grid source calls
 that builtin through the compiler AST, and executes the associated command.

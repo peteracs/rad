@@ -152,6 +152,7 @@ impl Checker {
             // multi-module programs; they need a surface type name.
             "world_fork" => Some(Ty::WorldFork),
             "bitset" => Some(Ty::BitSet),
+            "bytebuf" => Some(Ty::ByteBuf),
             "system" => Some(Ty::SystemRef),
             "list" => Some(Ty::List(Box::new(Ty::Any))),
             "map" => Some(Ty::Map(Box::new(Ty::Any), Box::new(Ty::Any))),
