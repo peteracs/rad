@@ -146,10 +146,13 @@ type explicitly. Enum discriminants must be unique and representable. Primitive
 bitflag masks must be nonzero, representable, and non-overlapping.
 
 `repr(C)` fixes C field ordering/alignment; optional `packed` sets alignment to
-one. `size_of`, `offset_of`, `encode_le`, `encode_be`, `decode_le`, and
-`decode_be` use the declared layout. Native structs may contain only
-ABI-supported fields. Encoding is byte-exact; decoding rejects wrong lengths,
-unknown enum discriminants, invalid nominal values, and malformed data.
+one. `size_of`, `offset_of`, `encode_le`, and `encode_be` use the complete
+declared struct layout recursively; RAD-owned padding bytes encode as zero.
+`decode_le` and `decode_be` decode fixed-width native scalar fields at an exact
+offset. Native structs may contain only ABI-supported fields. Encoding is
+byte-exact and rejects values whose runtime fields or widths disagree with the
+sealed layout; scalar decoding rejects out-of-range reads, unknown enum
+discriminants, invalid nominal values, and malformed data.
 
 <a id="type-records"></a>
 ### 2.7 Components, resources, structs, states, events, and sums

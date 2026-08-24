@@ -119,3 +119,45 @@ let wire = WireGid(manager)
         );
         assert_eq!(output, vec!["12", "8", "u32(42)", "true"]);
     }
+
+    #[test]
+    fn native_struct_encoding_uses_closed_layout_and_zero_padding() {
+        let output = run_source(
+            r#"
+            packed repr(C) struct WireTail {
+                skill: u32,
+                region: u16,
+                x: f32,
+            }
+            repr(C) struct Padded {
+                tag: u8,
+                value: u32,
+            }
+            repr(C) struct Nested {
+                prefix: u16,
+                payload: Padded,
+            }
+
+            let tail = WireTail {
+                skill: u32(287454020),
+                region: u16(39338),
+                x: f32(-2.5),
+            }
+            let nested = Nested {
+                prefix: u16(4660),
+                payload: Padded { tag: u8(127), value: u32(1432778632) },
+            }
+            print(bytebuf_to_list(encode_le(tail)))
+            print(bytebuf_to_list(encode_be(tail)))
+            print(bytebuf_to_list(encode_le(nested)))
+            "#,
+        );
+        assert_eq!(
+            output,
+            vec![
+                "[68, 51, 34, 17, 170, 153, 0, 0, 32, 192]",
+                "[17, 34, 51, 68, 153, 170, 192, 32, 0, 0]",
+                "[52, 18, 0, 0, 127, 0, 0, 0, 136, 119, 102, 85]",
+            ]
+        );
+    }

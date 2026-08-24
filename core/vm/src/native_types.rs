@@ -363,18 +363,30 @@ pub fn decode_native_scalar(
     })
 }
 
-pub fn encode_native_scalar(value: &NativeScalarValue, little_endian: bool) -> Vec<u8> {
+pub fn encode_native_scalar_into(
+    value: &NativeScalarValue,
+    little_endian: bool,
+    destination: &mut [u8],
+) -> Result<(), String> {
     let width = value.repr.byte_width();
+    if destination.len() != width {
+        return Err(format!(
+            "native scalar {} requires {width} output bytes, got {}",
+            value.type_name,
+            destination.len()
+        ));
+    }
     let lane = if little_endian {
         value.bits.to_le_bytes()
     } else {
         value.bits.to_be_bytes()
     };
     if little_endian {
-        lane[..width].to_vec()
+        destination.copy_from_slice(&lane[..width]);
     } else {
-        lane[8 - width..].to_vec()
+        destination.copy_from_slice(&lane[8 - width..]);
     }
+    Ok(())
 }
 
 #[derive(Debug, Clone, Copy)]

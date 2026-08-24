@@ -140,6 +140,12 @@ reassignment patterns to in-place writes.
 | `bytebuf_to_list(buf)` | Convert to `list<int>` for interchange and tests |
 | `bytebuf_from_list(bytes)` | Convert `list<int>` byte values into a byte buffer |
 
+`encode_le(value)` and `encode_be(value)` encode fixed-width native scalars or
+complete `repr(C)` struct values. Nested structs follow their sealed layouts;
+padding is deterministic and zeroed. A field/layout mismatch is a runtime error
+rather than a partial packet. `decode_le(bytes, offset, Type)` and
+`decode_be(bytes, offset, Type)` decode one fixed-width native scalar.
+
 ```text
 fn encode_move(client_seq: int, target_x: float, target_y: float) -> any {
     let mut packet = bytebuf_new(17)

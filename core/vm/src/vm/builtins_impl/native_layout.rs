@@ -11,6 +11,109 @@ fn abi_type_name<'a>(value: &'a Value, caller: &str) -> Result<&'a str, String> 
     ))
 }
 
+/// Encode one closed native value. Scalars carry their exact descriptor;
+/// `repr(C)` structs carry ordinary component data plus the compiler's sealed
+/// layout. Padding is deterministically zeroed because RAD values have no
+/// addressable, uninitialized padding bytes.
+fn native_encoded_width(
+    value: &Value,
+    layouts: &std::collections::HashMap<String, crate::native_types::NativeLayout>,
+) -> Result<usize, String> {
+    if let Some(scalar) = value.as_native_scalar() {
+        return Ok(scalar.repr.byte_width());
+    }
+    let component = value.as_component().ok_or_else(|| {
+        format!(
+            "native encoding requires a fixed-width native scalar or repr(C) struct, got {}",
+            value.type_name()
+        )
+    })?;
+    layouts
+        .get(&component.type_name)
+        .map(|layout| layout.size)
+        .ok_or_else(|| {
+            format!(
+                "native encoding requires a repr(C) struct, but {} has no native layout",
+                component.type_name
+            )
+        })
+}
+
+fn encode_native_value_into(
+    value: &Value,
+    little_endian: bool,
+    layouts: &std::collections::HashMap<String, crate::native_types::NativeLayout>,
+    destination: &mut [u8],
+) -> Result<(), String> {
+    if let Some(scalar) = value.as_native_scalar() {
+        return crate::native_types::encode_native_scalar_into(
+            scalar,
+            little_endian,
+            destination,
+        );
+    }
+
+    let component = value.as_component().ok_or_else(|| {
+        format!(
+            "native encoding requires a fixed-width native scalar or repr(C) struct, got {}",
+            value.type_name()
+        )
+    })?;
+    let layout = layouts.get(&component.type_name).ok_or_else(|| {
+        format!(
+            "native encoding requires a repr(C) struct, but {} has no native layout",
+            component.type_name
+        )
+    })?;
+    if destination.len() != layout.size {
+        return Err(format!(
+            "native encoding width mismatch for {}: destination is {} bytes, repr(C) layout is {}",
+            component.type_name,
+            destination.len(),
+            layout.size
+        ));
+    }
+    if component.layout.len() != layout.fields.len()
+        || component.values.len() != layout.fields.len()
+    {
+        return Err(format!(
+            "native encoding layout mismatch for {}: value has {} fields, repr(C) layout has {}",
+            component.type_name,
+            component.values.len(),
+            layout.fields.len()
+        ));
+    }
+
+    destination.fill(0);
+    for ((field_name, value), field) in component
+        .layout
+        .iter()
+        .zip(&component.values)
+        .zip(&layout.fields)
+    {
+        if field_name != &field.name {
+            return Err(format!(
+                "native encoding layout mismatch for {}: value field {} occupies repr(C) slot {}",
+                component.type_name, field_name, field.name
+            ));
+        }
+        let end = field.offset.checked_add(field.size).ok_or_else(|| {
+            format!(
+                "native encoding offset overflow for {}.{}",
+                component.type_name, field.name
+            )
+        })?;
+        encode_native_value_into(
+            value,
+            little_endian,
+            layouts,
+            &mut destination[field.offset..end],
+        )
+        .map_err(|error| format!("{}.{}: {error}", component.type_name, field.name))?;
+    }
+    Ok(())
+}
+
 impl VM {
     fn bi_size_of(&mut self, args: Vec<Value>) -> Result<Value, String> {
         if args.len() != 1 {
@@ -96,10 +199,14 @@ impl VM {
                 args.len()
             ));
         }
-        let value = args[0]
-            .as_native_scalar()
-            .ok_or_else(|| "native encoding requires a fixed-width native value".to_string())?;
-        let bytes = crate::native_types::encode_native_scalar(value, little_endian);
+        let width = native_encoded_width(&args[0], &self.native_layouts)?;
+        let mut bytes = vec![0; width];
+        encode_native_value_into(
+            &args[0],
+            little_endian,
+            &self.native_layouts,
+            &mut bytes,
+        )?;
         Ok(Value::bytebuf(&mut self.gc, bytes))
     }
 }

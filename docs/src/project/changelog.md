@@ -1,5 +1,11 @@
 # Changelog
 
+- **Native struct encoding now honors the sealed `repr(C)` layout.**
+  `encode_le`/`encode_be` recursively encode packed, padded, and nested native
+  structs, reject runtime/layout width drift, and deterministically zero RAD
+  padding. This closes the previous scalar-only runtime gap behind the public
+  native-layout contract.
+
 - **Browser sessions now consume canonical multi-module packages, and production compiler-WASM selection no longer falls back to an empty reactor.** `rad build --target browser-package` checks the entry with browser semantic features and serializes the module loader's exact source bytes, canonical source layout, resolved import graph, compiler/runtime versions, and one BLAKE3 package digest. `RadRuntime.session_start_package()` validates limits, versions, features, layout, imports, and digest before hermetically rebuilding, checking, compiling, and adopting the world. `session_start(source)` remains the single-source playground boundary and still rejects imports. The compiler-reactor build target is now `compiler-wasm`, requires `RAD_COMPILER_WASM`, and never emits the in-tree test reactor as a production artifact. Regressions cover package mutation, semantic mismatch, and an aliased two-module browser session.
 
 All notable changes to the Rad language are documented here.
