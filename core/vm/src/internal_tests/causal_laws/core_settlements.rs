@@ -169,6 +169,7 @@ settle {
         Op::BitsetClearInplace,
         Op::BufferAppendInplace,
         Op::ByteBufSetU8Inplace,
+        Op::ByteBufSetU16LeInplace,
         Op::ByteBufSetU32LeInplace,
         Op::ByteBufSetI32LeInplace,
         Op::IterNext,

@@ -526,13 +526,16 @@ fn builtin_type_scheme_buffers(name: &str) -> Option<BuiltinSig> {
             ret: Ty::Int,
             is_pure: true,
         },
-        "bytebuf_set_u8" | "bytebuf_set_u32_le" | "bytebuf_set_i32_le" => BuiltinSig {
+        "bytebuf_set_u8"
+        | "bytebuf_set_u16_le"
+        | "bytebuf_set_u32_le"
+        | "bytebuf_set_i32_le" => BuiltinSig {
             type_params: vec![],
             params: vec![Ty::ByteBuf, Ty::Int, Ty::Int],
             ret: Ty::ByteBuf,
             is_pure: true,
         },
-        "bytebuf_get_u32_le" | "bytebuf_get_i32_le" => BuiltinSig {
+        "bytebuf_get_u16_le" | "bytebuf_get_u32_le" | "bytebuf_get_i32_le" => BuiltinSig {
             type_params: vec![],
             params: vec![Ty::ByteBuf, Ty::Int],
             ret: Ty::Int,

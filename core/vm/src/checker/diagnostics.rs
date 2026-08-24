@@ -140,6 +140,7 @@ pub(super) fn is_immutable_transform_builtin(name: &str) -> bool {
             | "bitset_clear"
             | "buffer_append"
             | "bytebuf_set_u8"
+            | "bytebuf_set_u16_le"
             | "bytebuf_set_u32_le"
             | "bytebuf_set_i32_le"
     )

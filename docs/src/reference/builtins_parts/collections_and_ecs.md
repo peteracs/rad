@@ -131,8 +131,10 @@ reassignment patterns to in-place writes.
 | `bytebuf_len(buf)` | Return the byte length |
 | `bytebuf_get(buf, index)` | Read one byte as an int `0..255` |
 | `bytebuf_set_u8(buf, index, value)` | Return a buffer with one byte written |
+| `bytebuf_set_u16_le(buf, offset, value)` | Return a buffer with a checked `0..65535` value written as two little-endian bytes |
 | `bytebuf_set_u32_le(buf, offset, value)` | Return a buffer with a little-endian unsigned 32-bit int written |
 | `bytebuf_set_i32_le(buf, offset, value)` | Return a buffer with a little-endian signed 32-bit int written |
+| `bytebuf_get_u16_le(buf, offset)` | Read two little-endian bytes as an int `0..65535` |
 | `bytebuf_get_u32_le(buf, offset)` | Read a little-endian unsigned 32-bit int |
 | `bytebuf_get_i32_le(buf, offset)` | Read a little-endian signed 32-bit int |
 | `bytebuf_to_list(buf)` | Convert to `list<int>` for interchange and tests |
@@ -140,13 +142,14 @@ reassignment patterns to in-place writes.
 
 ```text
 fn encode_move(client_seq: int, target_x: float, target_y: float) -> any {
-    let mut packet = bytebuf_new(15)
+    let mut packet = bytebuf_new(17)
     packet = bytebuf_set_u8(packet, 0, 77)
     packet = bytebuf_set_u8(packet, 1, 4)
     packet = bytebuf_set_u8(packet, 2, 2)
-    packet = bytebuf_set_u32_le(packet, 3, client_seq)
-    packet = bytebuf_set_i32_le(packet, 7, round(target_x * 1000.0))
-    packet = bytebuf_set_i32_le(packet, 11, round(target_y * 1000.0))
+    packet = bytebuf_set_u16_le(packet, 3, 7)
+    packet = bytebuf_set_u32_le(packet, 5, client_seq)
+    packet = bytebuf_set_i32_le(packet, 9, round(target_x * 1000.0))
+    packet = bytebuf_set_i32_le(packet, 13, round(target_y * 1000.0))
     return packet
 }
 ```

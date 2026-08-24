@@ -28,6 +28,9 @@ impl VM {
             Op::ByteBufSetU8Inplace => {
                 self.exec_bytebuf_set_u8_inplace()?;
             }
+            Op::ByteBufSetU16LeInplace => {
+                self.exec_bytebuf_set_u16_le_inplace()?;
+            }
             Op::ByteBufSetU32LeInplace => {
                 self.exec_bytebuf_set_u32_le_inplace()?;
             }

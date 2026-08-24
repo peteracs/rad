@@ -3,7 +3,7 @@
 
 This inventory is generated from the production lexer, AST, parser, and builtin catalog. It is the completeness denominator for the normative reference and Sovereign Grid coverage gate. Names such as `Error` are recovery nodes rather than source syntax; the coverage manifest records explicit exclusions.
 
-Owner digest: `8f3ffa740bc74310345cd6f4456d284009b6dddc7a87e35b89ec7f291e6703bb`.
+Owner digest: `c95198eb77290255cceae93e07d2dbbbdfb26e89ad5c78db483d44775a368a88`.
 
 ## Token kinds
 
@@ -311,7 +311,7 @@ Owner digest: `8f3ffa740bc74310345cd6f4456d284009b6dddc7a87e35b89ec7f291e6703bb`
 
 ## Builtin API names
 
-The 258 names below come from the one runtime catalog. Signatures and operational semantics are in the [complete builtin API catalog](builtin-api.md); this generated list makes omissions machine-detectable.
+The 260 names below come from the one runtime catalog. Signatures and operational semantics are in the [complete builtin API catalog](builtin-api.md); this generated list makes omissions machine-detectable.
 
 | Name | Runtime variant |
 |---|---|
@@ -474,8 +474,10 @@ The 258 names below come from the one runtime catalog. Signatures and operationa
 | <a id="builtin-bytebuf_len"></a>`bytebuf_len` | `ByteBufLen` |
 | <a id="builtin-bytebuf_get"></a>`bytebuf_get` | `ByteBufGet` |
 | <a id="builtin-bytebuf_set_u8"></a>`bytebuf_set_u8` | `ByteBufSetU8` |
+| <a id="builtin-bytebuf_set_u16_le"></a>`bytebuf_set_u16_le` | `ByteBufSetU16Le` |
 | <a id="builtin-bytebuf_set_u32_le"></a>`bytebuf_set_u32_le` | `ByteBufSetU32Le` |
 | <a id="builtin-bytebuf_set_i32_le"></a>`bytebuf_set_i32_le` | `ByteBufSetI32Le` |
+| <a id="builtin-bytebuf_get_u16_le"></a>`bytebuf_get_u16_le` | `ByteBufGetU16Le` |
 | <a id="builtin-bytebuf_get_u32_le"></a>`bytebuf_get_u32_le` | `ByteBufGetU32Le` |
 | <a id="builtin-bytebuf_get_i32_le"></a>`bytebuf_get_i32_le` | `ByteBufGetI32Le` |
 | <a id="builtin-bytebuf_to_list"></a>`bytebuf_to_list` | `ByteBufToList` |

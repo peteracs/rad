@@ -80,8 +80,9 @@ fn builtin_complexity(builtin: Builtin) -> &'static str {
     use Builtin::*;
     match builtin {
         Lookup | GetEntity | RequireEntity | NameOf | IdOf | ViewRevision | ByteAt
-        | ByteLen | ByteBufLen | ByteBufGet | ByteBufSetU8 | ByteBufSetU32Le
-        | ByteBufSetI32Le | ByteBufGetU32Le | ByteBufGetI32Le | BitsetHas
+        | ByteLen | ByteBufLen | ByteBufGet | ByteBufSetU8 | ByteBufSetU16Le
+        | ByteBufSetU32Le | ByteBufSetI32Le | ByteBufGetU16Le | ByteBufGetU32Le
+        | ByteBufGetI32Le | BitsetHas
         | BitsetSet | BitsetClear => "O(1)",
         LowerBound | UpperBound | First | Last | Next | Previous => "O(log n)",
         LookupAll | VisitView | ChangesSince | RecentEvents => "O(k)",
@@ -97,8 +98,9 @@ fn builtin_allocation(builtin: Builtin) -> &'static str {
     match builtin {
         Lookup | GetEntity | RequireEntity | NameOf | IdOf | ViewRevision | QueryCount
         | VisitView | LowerBound | UpperBound | First | Last | Next | Previous | ByteLen
-        | ByteBufLen | ByteBufGet | ByteBufSetU8 | ByteBufSetU32Le | ByteBufSetI32Le
-        | ByteBufGetU32Le | ByteBufGetI32Le | BitsetHas | BitsetSet | BitsetClear
+        | ByteBufLen | ByteBufGet | ByteBufSetU8 | ByteBufSetU16Le | ByteBufSetU32Le
+        | ByteBufSetI32Le | ByteBufGetU16Le | ByteBufGetU32Le | ByteBufGetI32Le
+        | BitsetHas | BitsetSet | BitsetClear
         | Popcount | Ctz | Shl | Shr | Abs | Sign | Min | Max | IntDiv | Round | Floor
         | Ceil | Sqrt | Pow | Clamp => "no collection result; enclosing runtime contract is authoritative",
         Entities | LookupAll | QueryWhere | QueryMap | Sort | SortBy | Range | ChangesSince
@@ -179,8 +181,10 @@ fn builtin_api_category(builtin: Builtin) -> &'static str {
 
         BitsetNew | BitsetSet | BitsetHas | BitsetClear | BufferNew | BufferAppend
         | BufferToStr | ByteBufNew | ByteBufLen | ByteBufGet | ByteBufSetU8
-        | ByteBufSetU32Le | ByteBufSetI32Le | ByteBufGetU32Le | ByteBufGetI32Le
-        | ByteBufToList | ByteBufFromList => "buffers-bitsets",
+        | ByteBufSetU16Le | ByteBufSetU32Le | ByteBufSetI32Le | ByteBufGetU16Le
+        | ByteBufGetU32Le | ByteBufGetI32Le | ByteBufToList | ByteBufFromList => {
+            "buffers-bitsets"
+        }
 
         PublishBytes => "host-publications",
 

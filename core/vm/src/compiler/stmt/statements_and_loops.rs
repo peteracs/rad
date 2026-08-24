@@ -1,4 +1,12 @@
-
+fn bytebuf_inplace_opcode(name: &str) -> Option<Op> {
+    match Builtin::from_name(name) {
+        Some(Builtin::ByteBufSetU8) => Some(Op::ByteBufSetU8Inplace),
+        Some(Builtin::ByteBufSetU16Le) => Some(Op::ByteBufSetU16LeInplace),
+        Some(Builtin::ByteBufSetU32Le) => Some(Op::ByteBufSetU32LeInplace),
+        Some(Builtin::ByteBufSetI32Le) => Some(Op::ByteBufSetI32LeInplace),
+        _ => None,
+    }
+}
 
 impl Compiler {
     pub(crate) fn compile_body(&mut self, stmts: &[Stmt]) -> Result<(), CompileError> {
@@ -235,15 +243,13 @@ impl Compiler {
                         if left_name == name {
                             if let Expr::Call(callee, args, _) = right.as_ref() {
                                 if let Expr::Ident(fn_name, _) = callee.as_ref() {
-                                    let is_bytebuf_setter = fn_name == "bytebuf_set_u8"
-                                        || fn_name == "bytebuf_set_u32_le"
-                                        || fn_name == "bytebuf_set_i32_le";
+                                    let bytebuf_opcode = bytebuf_inplace_opcode(fn_name);
                                     if !self.in_causal_region()
                                         && ((fn_name == "bitset_set"
                                             || fn_name == "bitset_clear"
                                             || fn_name == "buffer_append")
                                             && args.len() == 1
-                                            || is_bytebuf_setter && args.len() == 2)
+                                            || bytebuf_opcode.is_some() && args.len() == 2)
                                         && self.current().unique_locals.contains(name)
                                     {
                                         self.compile_expr(left)?;
@@ -256,12 +262,8 @@ impl Compiler {
                                             self.emit_op(Op::BitsetClearInplace, line);
                                         } else if fn_name == "buffer_append" {
                                             self.emit_op(Op::BufferAppendInplace, line);
-                                        } else if fn_name == "bytebuf_set_u8" {
-                                            self.emit_op(Op::ByteBufSetU8Inplace, line);
-                                        } else if fn_name == "bytebuf_set_u32_le" {
-                                            self.emit_op(Op::ByteBufSetU32LeInplace, line);
-                                        } else if fn_name == "bytebuf_set_i32_le" {
-                                            self.emit_op(Op::ByteBufSetI32LeInplace, line);
+                                        } else if let Some(op) = bytebuf_opcode {
+                                            self.emit_op(op, line);
                                         }
                                         optimized = true;
                                     }
@@ -274,15 +276,13 @@ impl Compiler {
                 if !optimized {
                     if let Expr::Call(callee, args, _) = &a.value {
                         if let Expr::Ident(fn_name, _) = callee.as_ref() {
-                            let is_bytebuf_setter = fn_name == "bytebuf_set_u8"
-                                || fn_name == "bytebuf_set_u32_le"
-                                || fn_name == "bytebuf_set_i32_le";
+                            let bytebuf_opcode = bytebuf_inplace_opcode(fn_name);
                             if ((fn_name == "bitset_set"
                                 || fn_name == "bitset_clear"
                                 || fn_name == "buffer_append"
                                 || fn_name == "push")
                                 && args.len() == 2)
-                                || (is_bytebuf_setter && args.len() == 3)
+                                || (bytebuf_opcode.is_some() && args.len() == 3)
                             {
                                 if let Expr::Ident(arg_name, _) = &args[0] {
                                     if !self.in_causal_region()
@@ -309,12 +309,8 @@ impl Compiler {
                                                 self.emit_op(Op::BitsetClearInplace, line);
                                             } else if fn_name == "buffer_append" {
                                                 self.emit_op(Op::BufferAppendInplace, line);
-                                            } else if fn_name == "bytebuf_set_u8" {
-                                                self.emit_op(Op::ByteBufSetU8Inplace, line);
-                                            } else if fn_name == "bytebuf_set_u32_le" {
-                                                self.emit_op(Op::ByteBufSetU32LeInplace, line);
-                                            } else if fn_name == "bytebuf_set_i32_le" {
-                                                self.emit_op(Op::ByteBufSetI32LeInplace, line);
+                                            } else if let Some(op) = bytebuf_opcode {
+                                                self.emit_op(op, line);
                                             }
                                             optimized = true;
                                         }

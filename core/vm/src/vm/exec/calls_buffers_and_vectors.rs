@@ -314,6 +314,36 @@ impl VM {
         self.exec_bytebuf_set_i32_or_u32_le_inplace("bytebuf_set_u32_le")
     }
 
+    pub(crate) fn exec_bytebuf_set_u16_le_inplace(&mut self) -> Result<(), String> {
+        const FN_NAME: &str = "bytebuf_set_u16_le";
+        let value_val = self.pop()?;
+        let offset_val = self.pop()?;
+        let mut buf_val = self.pop()?;
+        let offset = checked_bytebuf_index(offset_val, FN_NAME)?;
+        let value = value_val
+            .as_int()
+            .and_then(|value| u16::try_from(value).ok())
+            .ok_or_else(|| format!("{} expects an int value in 0..65535", FN_NAME))?;
+
+        match buf_val.as_object_mut() {
+            Some(crate::value::Object::ByteBuf(bytes)) => {
+                let len = bytes.len();
+                let target = bytes
+                    .get_mut(offset..offset.saturating_add(2))
+                    .ok_or_else(|| {
+                        format!(
+                            "{} offset {} out of bounds for 2-byte write (len {})",
+                            FN_NAME, offset, len
+                        )
+                    })?;
+                target.copy_from_slice(&value.to_le_bytes());
+            }
+            _ => return Err(format!("{} expects a bytebuf", FN_NAME)),
+        }
+        self.push(buf_val);
+        Ok(())
+    }
+
     pub(crate) fn exec_bytebuf_set_i32_le_inplace(&mut self) -> Result<(), String> {
         self.exec_bytebuf_set_i32_or_u32_le_inplace("bytebuf_set_i32_le")
     }

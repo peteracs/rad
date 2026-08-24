@@ -1,5 +1,34 @@
 use crate::ast::*;
+use crate::value::Builtin;
 use std::collections::HashSet;
+
+fn inplace_container_setter_arity(name: &str) -> Option<usize> {
+    match Builtin::from_name(name) {
+        Some(Builtin::BitsetSet | Builtin::BitsetClear | Builtin::BufferAppend) => Some(2),
+        Some(
+            Builtin::ByteBufSetU8
+            | Builtin::ByteBufSetU16Le
+            | Builtin::ByteBufSetU32Le
+            | Builtin::ByteBufSetI32Le,
+        ) => Some(3),
+        _ => None,
+    }
+}
+
+fn borrows_first_container_argument(name: &str) -> bool {
+    matches!(
+        Builtin::from_name(name),
+        Some(
+            Builtin::BitsetHas
+                | Builtin::BufferToStr
+                | Builtin::ByteBufLen
+                | Builtin::ByteBufGet
+                | Builtin::ByteBufGetU16Le
+                | Builtin::ByteBufGetU32Le
+                | Builtin::ByteBufGetI32Le
+        )
+    )
+}
 
 pub fn find_unique_locals(body: &Block) -> HashSet<String> {
     let mut analyzer = EscapeAnalyzer {
@@ -55,15 +84,7 @@ impl EscapeAnalyzer {
                 if let Expr::Ident(target_name, _) = &s.target {
                     if let Expr::Call(callee, args, _) = &s.value {
                         if let Expr::Ident(fn_name, _) = callee.as_ref() {
-                            let is_bytebuf_setter = fn_name == "bytebuf_set_u8"
-                                || fn_name == "bytebuf_set_u32_le"
-                                || fn_name == "bytebuf_set_i32_le";
-                            if ((fn_name == "bitset_set"
-                                || fn_name == "bitset_clear"
-                                || fn_name == "buffer_append")
-                                && args.len() == 2)
-                                || (is_bytebuf_setter && args.len() == 3)
-                            {
+                            if inplace_container_setter_arity(fn_name) == Some(args.len()) {
                                 if let Expr::Ident(arg_name, _) = &args[0] {
                                     if arg_name == target_name {
                                         is_inplace = true;
@@ -79,14 +100,8 @@ impl EscapeAnalyzer {
                             if left_name == target_name {
                                 if let Expr::Call(callee, args, _) = right.as_ref() {
                                     if let Expr::Ident(fn_name, _) = callee.as_ref() {
-                                        let is_bytebuf_setter = fn_name == "bytebuf_set_u8"
-                                            || fn_name == "bytebuf_set_u32_le"
-                                            || fn_name == "bytebuf_set_i32_le";
-                                        if ((fn_name == "bitset_set"
-                                            || fn_name == "bitset_clear"
-                                            || fn_name == "buffer_append")
-                                            && args.len() == 1)
-                                            || (is_bytebuf_setter && args.len() == 2)
+                                        if inplace_container_setter_arity(fn_name)
+                                            == Some(args.len() + 1)
                                         {
                                             is_inplace = true;
                                             for arg in args {
@@ -197,14 +212,7 @@ impl EscapeAnalyzer {
             }
             Expr::Call(callee, args, _) => {
                 if let Expr::Ident(fn_name, _) = callee.as_ref() {
-                    if (fn_name == "bitset_has"
-                        || fn_name == "buffer_to_str"
-                        || fn_name == "bytebuf_len"
-                        || fn_name == "bytebuf_get"
-                        || fn_name == "bytebuf_get_u32_le"
-                        || fn_name == "bytebuf_get_i32_le")
-                        && !args.is_empty()
-                    {
+                    if borrows_first_container_argument(fn_name) && !args.is_empty() {
                         // First arg doesn't escape
                         if let Expr::Ident(_, _) = &args[0] {
                             // It's fine, don't mark as escaped
@@ -242,13 +250,7 @@ impl EscapeAnalyzer {
                 let mut is_safe_pipe = false;
                 if let Expr::Call(callee, args, _) = r.as_ref() {
                     if let Expr::Ident(fn_name, _) = callee.as_ref() {
-                        if fn_name == "bitset_has"
-                            || fn_name == "buffer_to_str"
-                            || fn_name == "bytebuf_len"
-                            || fn_name == "bytebuf_get"
-                            || fn_name == "bytebuf_get_u32_le"
-                            || fn_name == "bytebuf_get_i32_le"
-                        {
+                        if borrows_first_container_argument(fn_name) {
                             is_safe_pipe = true;
                             for arg in args {
                                 self.visit_expr(arg);

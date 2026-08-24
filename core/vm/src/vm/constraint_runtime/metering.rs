@@ -183,6 +183,7 @@ pub(crate) fn builtin_resource_charge(
             sized(bytes.max(1), bytes)
         }
         Builtin::ByteBufSetU8
+        | Builtin::ByteBufSetU16Le
         | Builtin::ByteBufSetU32Le
         | Builtin::ByteBufSetI32Le
         | Builtin::ByteBufToList => args
@@ -521,6 +522,7 @@ pub(crate) fn builtin_resource_charge(
         | Builtin::BitsetHas
         | Builtin::ByteBufLen
         | Builtin::ByteBufGet
+        | Builtin::ByteBufGetU16Le
         | Builtin::ByteBufGetU32Le
         | Builtin::ByteBufGetI32Le => fixed(),
         Builtin::Int | Builtin::Float | Builtin::TryInt | Builtin::TryFloat => {

@@ -1,11 +1,11 @@
 {
   "formatVersion": 1,
-  "ownerDigest": "8f3ffa740bc74310345cd6f4456d284009b6dddc7a87e35b89ec7f291e6703bb",
+  "ownerDigest": "c95198eb77290255cceae93e07d2dbbbdfb26e89ad5c78db483d44775a368a88",
   "sources": [
     {
       "role": "builtins",
       "path": "core/vm/src/value/builtin_catalog.rs",
-      "sha256": "01f86090cd8ab560f9b605a1c1959f891240005c9147f6152b9028437aa3f3b8"
+      "sha256": "7f6b748f3d1a9f551545c07f4de8585f64824373a2f6c6961cbd2954ecec11a4"
     },
     {
       "role": "contracts",
@@ -1067,12 +1067,20 @@
       "name": "bytebuf_set_u8"
     },
     {
+      "variant": "ByteBufSetU16Le",
+      "name": "bytebuf_set_u16_le"
+    },
+    {
       "variant": "ByteBufSetU32Le",
       "name": "bytebuf_set_u32_le"
     },
     {
       "variant": "ByteBufSetI32Le",
       "name": "bytebuf_set_i32_le"
+    },
+    {
+      "variant": "ByteBufGetU16Le",
+      "name": "bytebuf_get_u16_le"
     },
     {
       "variant": "ByteBufGetU32Le",

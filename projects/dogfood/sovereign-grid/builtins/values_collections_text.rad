@@ -129,14 +129,16 @@ fn exercise_values_collections_text() -> nil {
     text_buffer = buffer_append(text_buffer, "-grid")
     assert(buffer_to_str(text_buffer) == "sovereign-grid", "text buffer")
 
-    let mut bytes: bytebuf = bytebuf_new(9)
+    let mut bytes: bytebuf = bytebuf_new(11)
     bytes = bytebuf_set_u8(bytes, 0, 255)
     bytes = bytebuf_set_u32_le(bytes, 1, 305419896)
     bytes = bytebuf_set_i32_le(bytes, 5, -2)
-    assert(bytebuf_len(bytes) == 9, "bytebuf checked writes preserve capacity")
+    bytes = bytes |> bytebuf_set_u16_le(9, 43981)
+    assert(bytebuf_len(bytes) == 11, "bytebuf checked writes preserve capacity")
     assert(bytebuf_get(bytes, 0) == 255, "bytebuf_get")
     assert(bytebuf_get_u32_le(bytes, 1) == 305419896, "bytebuf u32")
     assert(bytebuf_get_i32_le(bytes, 5) == -2, "bytebuf i32")
+    assert(bytebuf_get_u16_le(bytes, 9) == 43981, "bytebuf u16")
     assert(bytebuf_to_list(bytebuf_from_list([1, 2, 3])) == [1, 2, 3], "bytebuf list")
     publish_bytes("sovereign-grid/reference", bytebuf_from_list([82, 65, 68]))
 

@@ -247,6 +247,44 @@ fn bytebuf_u8_arg(value: &Value, what: &str) -> Result<u8, String> {
     Ok(byte as u8)
 }
 
+fn bytebuf_u16_arg(value: &Value, what: &str) -> Result<u16, String> {
+    let word = value
+        .as_int()
+        .ok_or_else(|| format!("{} expects int, got {}", what, value.type_name()))?;
+    u16::try_from(word).map_err(|_| format!("{} {} out of range 0..65535", what, word))
+}
+
+fn bytebuf_write_u16_le(
+    bytes: &mut [u8],
+    offset: usize,
+    value: u16,
+    fn_name: &str,
+) -> Result<(), String> {
+    let len = bytes.len();
+    let target = bytes.get_mut(offset..offset.saturating_add(2)).ok_or_else(|| {
+        format!(
+            "{} offset {} out of bounds for 2-byte write (len {})",
+            fn_name,
+            offset,
+            len
+        )
+    })?;
+    target.copy_from_slice(&value.to_le_bytes());
+    Ok(())
+}
+
+fn bytebuf_read_u16_le(bytes: &[u8], offset: usize, fn_name: &str) -> Result<u16, String> {
+    let source = bytes.get(offset..offset.saturating_add(2)).ok_or_else(|| {
+        format!(
+            "{} offset {} out of bounds for 2-byte read (len {})",
+            fn_name,
+            offset,
+            bytes.len()
+        )
+    })?;
+    Ok(u16::from_le_bytes([source[0], source[1]]))
+}
+
 fn bytebuf_write_u32_le(
     bytes: &mut [u8],
     offset: usize,

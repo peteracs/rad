@@ -105,6 +105,7 @@ pub enum Op {
     BitsetClearInplace,
     BufferAppendInplace,
     ByteBufSetU8Inplace,
+    ByteBufSetU16LeInplace,
     ByteBufSetU32LeInplace,
     ByteBufSetI32LeInplace,
 

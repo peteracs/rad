@@ -918,3 +918,41 @@
         );
         assert_eq!(output, vec!["5"]);
     }
+
+    #[test]
+    fn bytebuf_u16_little_endian_round_trips_through_both_inplace_forms() {
+        let output = run_source(
+            r#"
+            fn main() -> nil {
+                let mut bytes: bytebuf = bytebuf_new(4)
+                bytes = bytebuf_set_u16_le(bytes, 0, 4660)
+                bytes = bytes |> bytebuf_set_u16_le(2, 43981)
+                print(bytebuf_get_u16_le(bytes, 0))
+                print(bytebuf_get_u16_le(bytes, 2))
+                print(bytebuf_to_list(bytes))
+            }
+        "#,
+        );
+        assert_eq!(output, vec!["4660", "43981", "[52, 18, 205, 171]"]);
+    }
+
+    #[test]
+    fn bytebuf_u16_rejects_out_of_range_values_and_partial_writes() {
+        let range_error = run_source_result(
+            r#"
+            let mut bytes: bytebuf = bytebuf_new(2)
+            bytes = bytebuf_set_u16_le(bytes, 0, 65536)
+        "#,
+        )
+        .expect_err("u16 writes must not truncate");
+        assert!(range_error.contains("0..65535"), "{range_error}");
+
+        let bounds_error = run_source_result(
+            r#"
+            let mut bytes: bytebuf = bytebuf_new(2)
+            bytes = bytebuf_set_u16_le(bytes, 1, 1)
+        "#,
+        )
+        .expect_err("two-byte writes must fit in full");
+        assert!(bounds_error.contains("2-byte write"), "{bounds_error}");
+    }

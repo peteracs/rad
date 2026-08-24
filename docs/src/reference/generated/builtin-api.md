@@ -3851,6 +3851,30 @@ bytebuf_set_u8(bytebuf, int, int) -> bytebuf
 - Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
+<a id="bytebuf_set_u16_le"></a>
+## `bytebuf_set_u16_le`
+
+```text
+bytebuf_set_u16_le(bytebuf, int, int) -> bytebuf
+```
+
+- Category: `buffers-bitsets`
+- Arity: `exactly 3` argument(s)
+- Effects: `pure`
+- Purity: `pure`
+- Errors: invalid arity, type, range, capability, platform, or runtime state is a runtime error
+- Determinism: deterministic for equal RAD state and arguments
+- Complexity: `O(1)`
+- Allocation: no collection result; enclosing runtime contract is authoritative
+- Native: `available`
+- WASM: `available`
+- Sandbox: `capability-checked`
+- Transaction body: `allowed`
+- Post-commit: `allowed`
+- Settlement: `allowed`
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
+
 <a id="bytebuf_set_u32_le"></a>
 ## `bytebuf_set_u32_le`
 
@@ -3884,6 +3908,30 @@ bytebuf_set_i32_le(bytebuf, int, int) -> bytebuf
 
 - Category: `buffers-bitsets`
 - Arity: `exactly 3` argument(s)
+- Effects: `pure`
+- Purity: `pure`
+- Errors: invalid arity, type, range, capability, platform, or runtime state is a runtime error
+- Determinism: deterministic for equal RAD state and arguments
+- Complexity: `O(1)`
+- Allocation: no collection result; enclosing runtime contract is authoritative
+- Native: `available`
+- WASM: `available`
+- Sandbox: `capability-checked`
+- Transaction body: `allowed`
+- Post-commit: `allowed`
+- Settlement: `allowed`
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
+
+<a id="bytebuf_get_u16_le"></a>
+## `bytebuf_get_u16_le`
+
+```text
+bytebuf_get_u16_le(bytebuf, int) -> int
+```
+
+- Category: `buffers-bitsets`
+- Arity: `exactly 2` argument(s)
 - Effects: `pure`
 - Purity: `pure`
 - Errors: invalid arity, type, range, capability, platform, or runtime state is a runtime error

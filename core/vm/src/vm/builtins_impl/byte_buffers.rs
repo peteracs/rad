@@ -116,6 +116,24 @@ impl VM {
         Ok(Value::bytebuf(&mut self.gc, bytes))
     }
 
+    fn bi_bytebuf_set_u16_le(&mut self, args: Vec<Value>) -> Result<Value, String> {
+        const FN_NAME: &str = "bytebuf_set_u16_le()";
+        if args.len() != 3 {
+            return Err(format!(
+                "{} expects 3 arguments, got {}",
+                FN_NAME,
+                args.len()
+            ));
+        }
+        let mut bytes = args[0]
+            .into_bytebuf()
+            .ok_or_else(|| format!("{} expects a bytebuf", FN_NAME))?;
+        let offset = bytebuf_index_arg(&args[1], &format!("{} offset", FN_NAME))?;
+        let value = bytebuf_u16_arg(&args[2], &format!("{} value", FN_NAME))?;
+        bytebuf_write_u16_le(&mut bytes, offset, value, FN_NAME)?;
+        Ok(Value::bytebuf(&mut self.gc, bytes))
+    }
+
     fn bi_bytebuf_set_u32_le(&mut self, args: Vec<Value>) -> Result<Value, String> {
         self.bi_bytebuf_set_u32_or_i32_le(args, "bytebuf_set_u32_le()")
     }
@@ -145,6 +163,23 @@ impl VM {
             .ok_or_else(|| format!("{} expects int value", fn_name))?;
         bytebuf_write_u32_le(&mut bytes, offset, value as u32, fn_name)?;
         Ok(Value::bytebuf(&mut self.gc, bytes))
+    }
+
+    fn bi_bytebuf_get_u16_le(&mut self, args: Vec<Value>) -> Result<Value, String> {
+        const FN_NAME: &str = "bytebuf_get_u16_le()";
+        if args.len() != 2 {
+            return Err(format!(
+                "{} expects 2 arguments, got {}",
+                FN_NAME,
+                args.len()
+            ));
+        }
+        let bytes = args[0]
+            .as_bytebuf()
+            .ok_or_else(|| format!("{} expects a bytebuf", FN_NAME))?;
+        let offset = bytebuf_index_arg(&args[1], &format!("{} offset", FN_NAME))?;
+        let value = bytebuf_read_u16_le(bytes, offset, FN_NAME)?;
+        Ok(Value::from_int(&mut self.gc, i64::from(value)))
     }
 
     fn bi_bytebuf_get_u32_le(&mut self, args: Vec<Value>) -> Result<Value, String> {

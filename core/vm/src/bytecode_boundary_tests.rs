@@ -213,6 +213,7 @@ fn every_interior_mutation_opcode_is_firewalled_in_causal_regions() {
         ("bitset-clear", Op::BitsetClearInplace, vec![]),
         ("buffer-append", Op::BufferAppendInplace, vec![]),
         ("bytebuf-u8", Op::ByteBufSetU8Inplace, vec![]),
+        ("bytebuf-u16", Op::ByteBufSetU16LeInplace, vec![]),
         ("bytebuf-u32", Op::ByteBufSetU32LeInplace, vec![]),
         ("bytebuf-i32", Op::ByteBufSetI32LeInplace, vec![]),
         ("iterator-progress", Op::IterNext, vec![2]),

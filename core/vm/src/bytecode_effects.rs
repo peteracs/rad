@@ -93,6 +93,7 @@ fn opcode_effect(op: Op) -> OpcodeEffect {
         | BitsetClearInplace
         | BufferAppendInplace
         | ByteBufSetU8Inplace
+        | ByteBufSetU16LeInplace
         | ByteBufSetU32LeInplace
         | ByteBufSetI32LeInplace
         | IterNext => OpcodeEffect::InteriorMutation,
