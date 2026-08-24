@@ -215,7 +215,7 @@ impl Checker {
             match comp_type.field_type(field_name) {
                 Some(expected_ty) => {
                     let actual_ty = self.check_expr(field_expr);
-                    if !expected_ty.assignable_from(&actual_ty) {
+                    if !self.accepts_inferred_value(expected_ty, &actual_ty) {
                         self.error(
                             field_expr.span(),
                             format!(

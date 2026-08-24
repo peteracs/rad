@@ -6,6 +6,7 @@ mod tests {
     include!("pipeline_warnings.rs");
     include!("authority_execution.rs");
     include!("execution_helpers.rs");
+    include!("byte_buffers.rs");
     include!("transactions.rs");
     include!("native_types.rs");
     include!("semantic_features.rs");

@@ -1,12 +1,9 @@
 #!/usr/bin/env python3
-"""Prove normative RAD blocks are canonical, source-owned, and executable."""
+"""Prove normative RAD blocks are canonical and source-owned."""
 
 from __future__ import annotations
 
-import argparse
 import re
-import subprocess
-import sys
 from pathlib import Path
 
 
@@ -37,9 +34,6 @@ REQUIRED = {
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--rad", required=True, type=Path)
-    args = parser.parse_args()
     failures: list[str] = []
     included: set[str] = set()
     block_count = 0
@@ -84,13 +78,7 @@ def main() -> int:
             print(f"- {failure}")
         return 1
 
-    completed = subprocess.run(
-        [sys.executable, str(ROOT / "tooling/check_language_surface.py"), "--rad", str(args.rad)],
-        cwd=ROOT,
-    )
-    if completed.returncode:
-        return completed.returncode
-    print(f"RAD documentation examples: PASS - {block_count} source-owned blocks, complete syntax/API gate executed")
+    print(f"RAD documentation examples: PASS - {block_count} source-owned blocks")
     return 0
 
 

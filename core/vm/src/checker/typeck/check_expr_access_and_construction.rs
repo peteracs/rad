@@ -301,7 +301,8 @@ fn check_expr_access_and_construction(&mut self, expr: &Expr) -> Ty {
                         let actual_ty = self.check_expr(field_expr);
                         match st.field_type(field_name) {
                             Some(expected_ty) => {
-                                if !expected_ty.assignable_from(&actual_ty) && actual_ty != Ty::Any
+                                if actual_ty != Ty::Any
+                                    && !self.accepts_inferred_value(expected_ty, &actual_ty)
                                 {
                                     self.error(
                                         field_expr.span(),
@@ -373,7 +374,8 @@ fn check_expr_access_and_construction(&mut self, expr: &Expr) -> Ty {
                         let actual_ty = self.check_expr(field_expr);
                         match comp.field_type(field_name) {
                             Some(expected_ty) => {
-                                if !expected_ty.assignable_from(&actual_ty) && actual_ty != Ty::Any
+                                if actual_ty != Ty::Any
+                                    && !self.accepts_inferred_value(expected_ty, &actual_ty)
                                 {
                                     self.error(
                                         field_expr.span(),
@@ -448,7 +450,8 @@ fn check_expr_access_and_construction(&mut self, expr: &Expr) -> Ty {
                         let actual_ty = self.check_expr(field_expr);
                         match res.field_type(field_name) {
                             Some(expected_ty) => {
-                                if !expected_ty.assignable_from(&actual_ty) && actual_ty != Ty::Any
+                                if actual_ty != Ty::Any
+                                    && !self.accepts_inferred_value(expected_ty, &actual_ty)
                                 {
                                     self.error(
                                         field_expr.span(),

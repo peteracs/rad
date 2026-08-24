@@ -428,7 +428,7 @@ impl Checker {
                 let declared = self.resolve_type_expr(ann, &stmt.span);
                 if declared != Ty::Any
                     && inferred != Ty::Any
-                    && !declared.assignable_from(&inferred)
+                    && !self.accepts_inferred_value(&declared, &inferred)
                 {
                     self.error(
                         &stmt.span,
@@ -505,7 +505,7 @@ impl Checker {
                 _ => {
                     if declared != Ty::Any
                         && inferred != Ty::Any
-                        && !declared.assignable_from(&inferred)
+                        && !self.accepts_inferred_value(&declared, &inferred)
                     {
                         self.error(
                             &stmt.span,
@@ -776,7 +776,9 @@ impl Checker {
                             };
                             self.error(span, msg, hint);
                         }
-                        if !binding.ty.assignable_from(&val_ty) && binding.ty != Ty::Any {
+                        if binding.ty != Ty::Any
+                            && !self.accepts_inferred_value(&binding.ty, &val_ty)
+                        {
                             self.error(
                                 span,
                                 format!(

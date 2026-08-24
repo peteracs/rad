@@ -285,6 +285,8 @@ impl VM {
             Builtin::ByteBufGetU16Le => self.bi_bytebuf_get_u16_le(args),
             Builtin::ByteBufGetU32Le => self.bi_bytebuf_get_u32_le(args),
             Builtin::ByteBufGetI32Le => self.bi_bytebuf_get_i32_le(args),
+            Builtin::ByteBufSlice => self.bi_bytebuf_slice(args),
+            Builtin::ByteBufCopy => self.bi_bytebuf_copy(args),
             Builtin::ByteBufToList => self.bi_bytebuf_to_list(args),
             Builtin::ByteBufFromList => self.bi_bytebuf_from_list(args),
             Builtin::PublishBytes => self.bi_publish_bytes(args),

@@ -379,6 +379,48 @@ impl VM {
         Ok(())
     }
 
+    pub(crate) fn exec_bytebuf_copy_inplace(&mut self) -> Result<(), String> {
+        const FN_NAME: &str = "bytebuf_copy";
+        let source_val = self.pop()?;
+        let offset_val = self.pop()?;
+        let mut destination_val = self.pop()?;
+        let offset = checked_bytebuf_index(offset_val, FN_NAME)?;
+        let (destination_len, source_len, aliases) = {
+            let destination = destination_val
+                .as_bytebuf()
+                .ok_or_else(|| format!("{} expects a destination bytebuf", FN_NAME))?;
+            let source = source_val
+                .as_bytebuf()
+                .ok_or_else(|| format!("{} expects a source bytebuf", FN_NAME))?;
+            (destination.len(), source.len(), std::ptr::eq(destination, source))
+        };
+        let end = crate::vm::helpers::checked_bytebuf_copy_end(
+            destination_len,
+            source_len,
+            offset,
+        )?;
+        self.charge_work(source_len as u64)?;
+        if aliases {
+            // Copying a whole buffer into itself can fit only at offset zero.
+            // Avoid constructing simultaneous shared/mutable references to the
+            // same GC object; the operation is already complete.
+            debug_assert_eq!(offset, 0);
+            self.push(destination_val);
+            return Ok(());
+        }
+        let source = source_val
+            .as_bytebuf()
+            .expect("source bytebuf was validated above");
+        match destination_val.as_object_mut() {
+            Some(crate::value::Object::ByteBuf(destination)) => {
+                destination[offset..end].copy_from_slice(source);
+            }
+            _ => unreachable!("destination bytebuf was validated above"),
+        }
+        self.push(destination_val);
+        Ok(())
+    }
+
     fn exec_vec_binary<F>(&mut self, mut op_fn: F) -> Result<(), String>
     where
         F: FnMut(&mut crate::gc::GcHeap, Value, Value) -> Result<Value, String>,

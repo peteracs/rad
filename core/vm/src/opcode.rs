@@ -108,6 +108,7 @@ pub enum Op {
     ByteBufSetU16LeInplace,
     ByteBufSetU32LeInplace,
     ByteBufSetI32LeInplace,
+    ByteBufCopyInplace,
 
     VecAdd,
     VecSub,

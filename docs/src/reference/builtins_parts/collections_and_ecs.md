@@ -137,6 +137,8 @@ reassignment patterns to in-place writes.
 | `bytebuf_get_u16_le(buf, offset)` | Read two little-endian bytes as an int `0..65535` |
 | `bytebuf_get_u32_le(buf, offset)` | Read a little-endian unsigned 32-bit int |
 | `bytebuf_get_i32_le(buf, offset)` | Read a little-endian signed 32-bit int |
+| `bytebuf_slice(buf, start, end)` | Copy the checked half-open byte range `start..end` into one new byte buffer |
+| `bytebuf_copy(destination, offset, source)` | Copy all source bytes into a checked destination range and return the destination value |
 | `bytebuf_to_list(buf)` | Convert to `list<int>` for interchange and tests |
 | `bytebuf_from_list(bytes)` | Convert `list<int>` byte values into a byte buffer |
 
@@ -145,6 +147,13 @@ complete `repr(C)` struct values. Nested structs follow their sealed layouts;
 padding is deterministic and zeroed. A field/layout mismatch is a runtime error
 rather than a partial packet. `decode_le(bytes, offset, Type)` and
 `decode_be(bytes, offset, Type)` decode one fixed-width native scalar.
+
+Bulk operations charge semantic work in proportion to copied bytes. A
+functional `bytebuf_copy` preserves its input and therefore clones the whole
+destination. Reassignment to a compiler-proven unique local, including the
+pipe form, lowers to an allocation-free in-place copy. Causal regions always
+retain the functional form so staged execution cannot mutate aliased heap
+objects.
 
 ```text
 fn encode_move(client_seq: int, target_x: float, target_y: float) -> any {

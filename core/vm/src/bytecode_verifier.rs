@@ -213,6 +213,7 @@ fn fixed_operand_bytes(op: Op) -> Option<usize> {
         | ByteBufSetU16LeInplace
         | ByteBufSetU32LeInplace
         | ByteBufSetI32LeInplace
+        | ByteBufCopyInplace
         | VecAdd
         | VecSub
         | VecMul

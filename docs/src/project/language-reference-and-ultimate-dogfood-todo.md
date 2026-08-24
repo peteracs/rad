@@ -2,7 +2,7 @@
 
 Status: **accepted portfolio, language surface, and local release gates green; clean-commit publication pending**
 Owner artifact: `projects/dogfood/sovereign-grid/`
-Verified: 2026-08-23
+Verified: 2026-08-24
 
 This is the cumulative receipt for the original “document and execute every
 feature and syntax” TODO and the subsequent hard subsecond rule. It covers the
@@ -32,7 +32,7 @@ Finished on the current working tree:
   operations. All 187 timed child operations are below one second; the slowest
   is `riskbridge-workflow-tests` at 705.7 ms.
 - [x] Sovereign Grid passes 127/127 acceptance outcomes, covering all 203 public
-  source forms and 260 runtime builtins.
+  source forms and 262 runtime builtins.
 - [x] The exact six-lane affine frontier keeps its depth-1,024, support-16,
   beam-256 workload and completes run, record, independent verification, and
   replay below one second.
@@ -45,7 +45,7 @@ Finished on the current working tree:
   between 1 and 900 ms; the runtime has no hidden one-argument fallback.
 - [x] `tooling/language_surface.py` and
   `tooling/generate_language_coverage.py` regenerated the source inventory and
-  203/260 evidence manifest after the final syntax extraction.
+  203/262 evidence manifest after the final syntax extraction.
 - [x] The failed SMT experiment was rejected after exceeding both the native
   solver's time and memory. Its temporary source and all orphaned Python
   processes were removed; no solver dependency or generated proof entered the
@@ -68,7 +68,7 @@ Still required before commit/release:
 - [x] Rerun formatting, workspace/all-target check, full VM/CLI/LSP,
   conformance/snapshots, strict Clippy, architecture/folder/line gates, corpus,
   WASM, rustdoc, mdBook, and link checks on this exact tree. The source/API
-  corpus gate reports 203 executable syntax rows and all 260 builtins.
+  corpus gate reports 203 executable syntax rows and all 262 builtins.
 - [x] Audit the large accumulated diff and untracked set, remove or archive only
   proven scratch/generated debris, run `git diff --check`, and commit only after
   the tree is organized and all current-tree gates are green. Every remaining
@@ -81,15 +81,15 @@ Still required before commit/release:
 
 - [x] The parser-owned inventory contains 203 executable syntax forms and six
   explicitly internal forms.
-- [x] `Builtin::ALL` contains 260 public builtins and every one has executable
+- [x] `Builtin::ALL` contains 262 public builtins and every one has executable
   API and Sovereign Grid coverage.
-- [x] Seventeen source-owned normative examples execute under the documentation
-  gate; copied project commands execute through the acceptance runners.
+- [x] The documentation gate binds seventeen normative examples to source; the
+  separate complete language-surface gate executes those sources, and copied
+  project commands execute through the acceptance runners.
 - [x] Sovereign Grid passes its workflow, exact negative diagnostics, model,
   causal, relation, FFI, replay, inspection, and benchmark matrix.
-- [x] The equivalent indexed hot path measures 307.16× release-profile median
-  wall-time and
-  53,847.38× semantic-instruction speedup over the correct baseline.
+- [x] The equivalent indexed hot path clears both release-profile 100×
+  ratchets: measured median wall time and deterministic semantic instructions.
 - [x] The cumulative 11-project portfolio passes 189/189 local acceptance
   operations; every project score is at least 18/20.
 - [x] RiskBridge completes each exact one-million-adjudication mode below one
@@ -192,7 +192,7 @@ Still required before commit/release:
 ## Phase 3 — professional API and host references
 
 - [x] The generated [builtin API](../reference/api.md) has one canonical entry
-  for each of the 260 names in `Builtin::ALL`.
+  for each of the 262 names in `Builtin::ALL`.
 - [x] Entries record signature, constraints, return type, failures, effects,
   region/sandbox availability, determinism, platform availability, complexity,
   and allocation category.
@@ -234,9 +234,9 @@ Still required before commit/release:
 - [x] A deliberately correct full-scan baseline and equivalent indexed/view
   implementation assert equal business result and digest first.
 - [x] One release binary and process runs warmup plus 30 samples per mode.
-- [x] Deterministic work improves 53,847.38× and measured release-profile
-  median wall time improves by 307.16×; the report also records p95, CPU, wall
-  time, RSS, all four
+- [x] Deterministic work and measured release-profile median wall time both
+  improve by more than 100×; the report records their exact values plus p95,
+  CPU, wall time, RSS, all four
   allocation categories, cardinality, digest, and query plans.
 - [x] `@no_full_scan` and precise allocation contracts are enforced on the hot
   root with transitive cost-path evidence.
@@ -253,8 +253,9 @@ Still required before commit/release:
   compiled syntax and VM suites plus integration and doc tests, CLI and LSP
   suites, strict Clippy, architecture/SRP,
   280 conformance, 10 feature, 29 causal snapshots, and warning-free WASM pass.
-- [x] All 17 normative RAD examples and the complete generated surface execute.
-- [x] mdBook, 688 internal links, generated catalogs, and warning-free rustdoc
+- [x] All 17 normative RAD examples are source-bound and execute through the
+  complete generated language-surface gate.
+- [x] mdBook, 692 internal links, generated catalogs, and warning-free rustdoc
   pass locally.
 - [x] Ignored acceptance/profiler output is kept outside the source tree and the
   release hygiene scan rejects accidental captures, binaries, and scratch.

@@ -216,6 +216,69 @@ impl VM {
         Ok(Value::from_int(&mut self.gc, result))
     }
 
+    fn bi_bytebuf_slice(&mut self, args: Vec<Value>) -> Result<Value, String> {
+        const FN_NAME: &str = "bytebuf_slice()";
+        if args.len() != 3 {
+            return Err(format!(
+                "{} expects 3 arguments, got {}",
+                FN_NAME,
+                args.len()
+            ));
+        }
+        let bytes = args[0]
+            .as_bytebuf()
+            .ok_or_else(|| format!("{} expects a bytebuf", FN_NAME))?;
+        let start = bytebuf_index_arg(&args[1], &format!("{} start", FN_NAME))?;
+        let end = bytebuf_index_arg(&args[2], &format!("{} end", FN_NAME))?;
+        if start > end || end > bytes.len() {
+            return Err(format!(
+                "{} range {}..{} out of bounds (len {})",
+                FN_NAME,
+                start,
+                end,
+                bytes.len()
+            ));
+        }
+        let copied = end - start;
+        self.charge_work(copied as u64)?;
+        Ok(Value::bytebuf(&mut self.gc, bytes[start..end].to_vec()))
+    }
+
+    fn bi_bytebuf_copy(&mut self, args: Vec<Value>) -> Result<Value, String> {
+        const FN_NAME: &str = "bytebuf_copy()";
+        if args.len() != 3 {
+            return Err(format!(
+                "{} expects 3 arguments, got {}",
+                FN_NAME,
+                args.len()
+            ));
+        }
+        let offset = bytebuf_index_arg(&args[1], &format!("{} offset", FN_NAME))?;
+        let (destination_len, source_len) = {
+            let destination = args[0]
+                .as_bytebuf()
+                .ok_or_else(|| format!("{} expects a destination bytebuf", FN_NAME))?;
+            let source = args[2]
+                .as_bytebuf()
+                .ok_or_else(|| format!("{} expects a source bytebuf", FN_NAME))?;
+            (destination.len(), source.len())
+        };
+        let end = crate::vm::helpers::checked_bytebuf_copy_end(
+            destination_len,
+            source_len,
+            offset,
+        )?;
+        self.charge_work(destination_len.saturating_add(source_len) as u64)?;
+        let mut destination = args[0]
+            .into_bytebuf()
+            .expect("destination bytebuf was validated above");
+        let source = args[2]
+            .as_bytebuf()
+            .expect("source bytebuf was validated above");
+        destination[offset..end].copy_from_slice(source);
+        Ok(Value::bytebuf(&mut self.gc, destination))
+    }
+
     fn bi_bytebuf_to_list(&mut self, args: Vec<Value>) -> Result<Value, String> {
         if args.len() != 1 {
             return Err(format!(

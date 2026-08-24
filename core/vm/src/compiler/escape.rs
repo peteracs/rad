@@ -9,25 +9,35 @@ fn inplace_container_setter_arity(name: &str) -> Option<usize> {
             Builtin::ByteBufSetU8
             | Builtin::ByteBufSetU16Le
             | Builtin::ByteBufSetU32Le
-            | Builtin::ByteBufSetI32Le,
+            | Builtin::ByteBufSetI32Le
+            | Builtin::ByteBufCopy,
         ) => Some(3),
         _ => None,
     }
 }
 
-fn borrows_first_container_argument(name: &str) -> bool {
-    matches!(
-        Builtin::from_name(name),
+fn borrows_container_argument(name: &str, index: usize) -> bool {
+    match Builtin::from_name(name) {
         Some(
             Builtin::BitsetHas
-                | Builtin::BufferToStr
-                | Builtin::ByteBufLen
-                | Builtin::ByteBufGet
-                | Builtin::ByteBufGetU16Le
-                | Builtin::ByteBufGetU32Le
-                | Builtin::ByteBufGetI32Le
-        )
-    )
+            | Builtin::BufferToStr
+            | Builtin::ByteBufLen
+            | Builtin::ByteBufGet
+            | Builtin::ByteBufGetU16Le
+            | Builtin::ByteBufGetU32Le
+            | Builtin::ByteBufGetI32Le
+            | Builtin::ByteBufSlice
+            | Builtin::ByteBufToList,
+        ) => index == 0,
+        Some(Builtin::ByteBufCopy) => index == 0 || index == 2,
+        _ => false,
+    }
+}
+
+fn visit_borrowed_argument(analyzer: &mut EscapeAnalyzer, expression: &Expr) {
+    if !matches!(expression, Expr::Ident(_, _)) {
+        analyzer.visit_expr(expression);
+    }
 }
 
 pub fn find_unique_locals(body: &Block) -> HashSet<String> {
@@ -88,8 +98,12 @@ impl EscapeAnalyzer {
                                 if let Expr::Ident(arg_name, _) = &args[0] {
                                     if arg_name == target_name {
                                         is_inplace = true;
-                                        for arg in args.iter().skip(1) {
-                                            self.visit_expr(arg);
+                                        for (index, arg) in args.iter().enumerate().skip(1) {
+                                            if borrows_container_argument(fn_name, index) {
+                                                visit_borrowed_argument(self, arg);
+                                            } else {
+                                                self.visit_expr(arg);
+                                            }
                                         }
                                     }
                                 }
@@ -104,8 +118,13 @@ impl EscapeAnalyzer {
                                             == Some(args.len() + 1)
                                         {
                                             is_inplace = true;
-                                            for arg in args {
-                                                self.visit_expr(arg);
+                                            for (index, arg) in args.iter().enumerate() {
+                                                let call_index = index + 1;
+                                                if borrows_container_argument(fn_name, call_index) {
+                                                    visit_borrowed_argument(self, arg);
+                                                } else {
+                                                    self.visit_expr(arg);
+                                                }
                                             }
                                         }
                                     }
@@ -212,15 +231,17 @@ impl EscapeAnalyzer {
             }
             Expr::Call(callee, args, _) => {
                 if let Expr::Ident(fn_name, _) = callee.as_ref() {
-                    if borrows_first_container_argument(fn_name) && !args.is_empty() {
-                        // First arg doesn't escape
-                        if let Expr::Ident(_, _) = &args[0] {
-                            // It's fine, don't mark as escaped
-                        } else {
-                            self.visit_expr(&args[0]);
-                        }
-                        for arg in args.iter().skip(1) {
-                            self.visit_expr(arg);
+                    if args
+                        .iter()
+                        .enumerate()
+                        .any(|(index, _)| borrows_container_argument(fn_name, index))
+                    {
+                        for (index, arg) in args.iter().enumerate() {
+                            if borrows_container_argument(fn_name, index) {
+                                visit_borrowed_argument(self, arg);
+                            } else {
+                                self.visit_expr(arg);
+                            }
                         }
                         return;
                     }
@@ -250,10 +271,15 @@ impl EscapeAnalyzer {
                 let mut is_safe_pipe = false;
                 if let Expr::Call(callee, args, _) = r.as_ref() {
                     if let Expr::Ident(fn_name, _) = callee.as_ref() {
-                        if borrows_first_container_argument(fn_name) {
+                        if borrows_container_argument(fn_name, 0) {
                             is_safe_pipe = true;
-                            for arg in args {
-                                self.visit_expr(arg);
+                            for (index, arg) in args.iter().enumerate() {
+                                let call_index = index + 1;
+                                if borrows_container_argument(fn_name, call_index) {
+                                    visit_borrowed_argument(self, arg);
+                                } else {
+                                    self.visit_expr(arg);
+                                }
                             }
                         }
                     }

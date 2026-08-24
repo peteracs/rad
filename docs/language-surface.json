@@ -1,11 +1,11 @@
 {
   "formatVersion": 1,
-  "ownerDigest": "c95198eb77290255cceae93e07d2dbbbdfb26e89ad5c78db483d44775a368a88",
+  "ownerDigest": "95ec0c397f9633019d7829aceb4b091357b078619c3c68edec599e555a00f2bf",
   "sources": [
     {
       "role": "builtins",
       "path": "core/vm/src/value/builtin_catalog.rs",
-      "sha256": "7f6b748f3d1a9f551545c07f4de8585f64824373a2f6c6961cbd2954ecec11a4"
+      "sha256": "77273fde3015cf19e8344fceaf43b994408f941eb9f7fa897e7fd20a7af5f099"
     },
     {
       "role": "contracts",
@@ -1089,6 +1089,14 @@
     {
       "variant": "ByteBufGetI32Le",
       "name": "bytebuf_get_i32_le"
+    },
+    {
+      "variant": "ByteBufSlice",
+      "name": "bytebuf_slice"
+    },
+    {
+      "variant": "ByteBufCopy",
+      "name": "bytebuf_copy"
     },
     {
       "variant": "ByteBufToList",

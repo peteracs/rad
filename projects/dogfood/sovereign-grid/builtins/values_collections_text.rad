@@ -139,6 +139,9 @@ fn exercise_values_collections_text() -> nil {
     assert(bytebuf_get_u32_le(bytes, 1) == 305419896, "bytebuf u32")
     assert(bytebuf_get_i32_le(bytes, 5) == -2, "bytebuf i32")
     assert(bytebuf_get_u16_le(bytes, 9) == 43981, "bytebuf u16")
+    let source_bytes: bytebuf = bytebuf_from_list([16, 32, 48])
+    bytes = bytebuf_copy(bytes, 2, source_bytes)
+    assert(bytebuf_to_list(bytebuf_slice(bytes, 2, 5)) == [16, 32, 48], "bytebuf bulk slice/copy")
     assert(bytebuf_to_list(bytebuf_from_list([1, 2, 3])) == [1, 2, 3], "bytebuf list")
     publish_bytes("sovereign-grid/reference", bytebuf_from_list([82, 65, 68]))
 

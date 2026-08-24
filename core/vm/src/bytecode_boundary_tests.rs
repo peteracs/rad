@@ -216,6 +216,7 @@ fn every_interior_mutation_opcode_is_firewalled_in_causal_regions() {
         ("bytebuf-u16", Op::ByteBufSetU16LeInplace, vec![]),
         ("bytebuf-u32", Op::ByteBufSetU32LeInplace, vec![]),
         ("bytebuf-i32", Op::ByteBufSetI32LeInplace, vec![]),
+        ("bytebuf-copy", Op::ByteBufCopyInplace, vec![]),
         ("iterator-progress", Op::IterNext, vec![2]),
     ];
     for (name, op, operands) in cases {

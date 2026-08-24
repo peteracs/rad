@@ -37,6 +37,9 @@ impl VM {
             Op::ByteBufSetI32LeInplace => {
                 self.exec_bytebuf_set_i32_le_inplace()?;
             }
+            Op::ByteBufCopyInplace => {
+                self.exec_bytebuf_copy_inplace()?;
+            }
             Op::GetIter => {
                 let val = self.pop()?;
                 if let Some(map) = val.as_map() {

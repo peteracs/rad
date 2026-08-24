@@ -157,6 +157,12 @@ settle {
     xs[0] = 2
     let mapped = xs |> map(fn(value) { value + 1 })
     let _ = mapped[0]
+    let mut source = bytebuf_new(2)
+    source = bytebuf_set_u16_le(source, 0, 4660)
+    let mut destination = bytebuf_new(4)
+    destination = bytebuf_copy(destination, 1, source)
+    let copied = bytebuf_slice(destination, 1, 3)
+    assert(bytebuf_get_u16_le(copied, 0) == 4660, "functional bytebuf copy")
 }
 "#;
     let mut vm = compile_vm(source);
@@ -172,6 +178,7 @@ settle {
         Op::ByteBufSetU16LeInplace,
         Op::ByteBufSetU32LeInplace,
         Op::ByteBufSetI32LeInplace,
+        Op::ByteBufCopyInplace,
         Op::IterNext,
     ] {
         assert_eq!(

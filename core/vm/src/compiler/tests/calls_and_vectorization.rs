@@ -196,6 +196,23 @@
     }
 
     #[test]
+    fn annotated_option_none_is_contextually_typed_across_assignment_and_struct_fields() {
+        let output = run_source(
+            r#"
+            pub struct Envelope {
+                value: Option<u32> = None,
+            }
+
+            let mut value: Option<u32> = None
+            value = Some(u32(7))
+            let envelope: Envelope = Envelope { value: value }
+            assert(unwrap(envelope.value) == u32(7), "typed Option survives every boundary")
+            "#,
+        );
+        assert!(output.is_empty());
+    }
+
+    #[test]
     fn compile_now_unix_s_returns_positive_int() {
         let output = run_source(
             r#"

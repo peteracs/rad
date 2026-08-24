@@ -4,6 +4,7 @@ fn bytebuf_inplace_opcode(name: &str) -> Option<Op> {
         Some(Builtin::ByteBufSetU16Le) => Some(Op::ByteBufSetU16LeInplace),
         Some(Builtin::ByteBufSetU32Le) => Some(Op::ByteBufSetU32LeInplace),
         Some(Builtin::ByteBufSetI32Le) => Some(Op::ByteBufSetI32LeInplace),
+        Some(Builtin::ByteBufCopy) => Some(Op::ByteBufCopyInplace),
         _ => None,
     }
 }

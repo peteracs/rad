@@ -36,14 +36,13 @@ entry. It rejects unequal world digests, less than 100× deterministic semantic
 work reduction, less than 100× median measured-entry wall reduction, or any
 guest/host-boundary allocation in the indexed root.
 
-The 2026-08-23 release-profile acceptance measured 16,801,450 ns versus
-54,700 ns median entry time (**307.16×**) and a **53,847.38×** instruction
-reduction. The complete RAD child processes remained below the hard deadline,
-with a 407.739 ms maximum across 122 timed operations. These are a
-source-, profile-, and machine-bound receipt, not universal latency claims; the
-authoritative values, source digest, binary SHA-256, profile, p95, whole-process
-CPU, peak RSS, and all allocation categories are emitted in the acceptance
-report by:
+The 2026-08-24 release-profile acceptance passed both required **100×**
+ratchets: deterministic semantic work and measured median entry wall time. All
+122 governed RAD child processes also remained below the hard one-second
+deadline. Exact medians, speedups, maximum child time, source digest, binary
+SHA-256, profile, p95, whole-process CPU, peak RSS, and all allocation
+categories are machine-bound evidence rather than normative documentation;
+they are emitted together in the acceptance report by:
 
 ```powershell
 projects/dogfood/sovereign-grid/accept.ps1

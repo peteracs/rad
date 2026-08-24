@@ -226,6 +226,7 @@ impl VM {
             | Op::ByteBufSetU16LeInplace
             | Op::ByteBufSetU32LeInplace
             | Op::ByteBufSetI32LeInplace
+            | Op::ByteBufCopyInplace
             | Op::GetIter
             | Op::IterNext
             | Op::ListPushLocal

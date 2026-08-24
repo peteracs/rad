@@ -96,6 +96,7 @@ fn opcode_effect(op: Op) -> OpcodeEffect {
         | ByteBufSetU16LeInplace
         | ByteBufSetU32LeInplace
         | ByteBufSetI32LeInplace
+        | ByteBufCopyInplace
         | IterNext => OpcodeEffect::InteriorMutation,
 
         Call | CallBuiltin => OpcodeEffect::DynamicCall,

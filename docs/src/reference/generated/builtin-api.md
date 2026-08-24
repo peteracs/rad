@@ -3840,8 +3840,8 @@ bytebuf_set_u8(bytebuf, int, int) -> bytebuf
 - Purity: `pure`
 - Errors: invalid arity, type, range, capability, platform, or runtime state is a runtime error
 - Determinism: deterministic for equal RAD state and arguments
-- Complexity: `O(1)`
-- Allocation: no collection result; enclosing runtime contract is authoritative
+- Complexity: `O(1) when assignment lowers in place; O(n) for a functional destination copy`
+- Allocation: functional call allocates a destination-sized bytebuf; assignment to a proven-unique local lowers in place
 - Native: `available`
 - WASM: `available`
 - Sandbox: `capability-checked`
@@ -3864,8 +3864,8 @@ bytebuf_set_u16_le(bytebuf, int, int) -> bytebuf
 - Purity: `pure`
 - Errors: invalid arity, type, range, capability, platform, or runtime state is a runtime error
 - Determinism: deterministic for equal RAD state and arguments
-- Complexity: `O(1)`
-- Allocation: no collection result; enclosing runtime contract is authoritative
+- Complexity: `O(1) when assignment lowers in place; O(n) for a functional destination copy`
+- Allocation: functional call allocates a destination-sized bytebuf; assignment to a proven-unique local lowers in place
 - Native: `available`
 - WASM: `available`
 - Sandbox: `capability-checked`
@@ -3888,8 +3888,8 @@ bytebuf_set_u32_le(bytebuf, int, int) -> bytebuf
 - Purity: `pure`
 - Errors: invalid arity, type, range, capability, platform, or runtime state is a runtime error
 - Determinism: deterministic for equal RAD state and arguments
-- Complexity: `O(1)`
-- Allocation: no collection result; enclosing runtime contract is authoritative
+- Complexity: `O(1) when assignment lowers in place; O(n) for a functional destination copy`
+- Allocation: functional call allocates a destination-sized bytebuf; assignment to a proven-unique local lowers in place
 - Native: `available`
 - WASM: `available`
 - Sandbox: `capability-checked`
@@ -3912,8 +3912,8 @@ bytebuf_set_i32_le(bytebuf, int, int) -> bytebuf
 - Purity: `pure`
 - Errors: invalid arity, type, range, capability, platform, or runtime state is a runtime error
 - Determinism: deterministic for equal RAD state and arguments
-- Complexity: `O(1)`
-- Allocation: no collection result; enclosing runtime contract is authoritative
+- Complexity: `O(1) when assignment lowers in place; O(n) for a functional destination copy`
+- Allocation: functional call allocates a destination-sized bytebuf; assignment to a proven-unique local lowers in place
 - Native: `available`
 - WASM: `available`
 - Sandbox: `capability-checked`
@@ -3986,6 +3986,54 @@ bytebuf_get_i32_le(bytebuf, int) -> int
 - Determinism: deterministic for equal RAD state and arguments
 - Complexity: `O(1)`
 - Allocation: no collection result; enclosing runtime contract is authoritative
+- Native: `available`
+- WASM: `available`
+- Sandbox: `capability-checked`
+- Transaction body: `allowed`
+- Post-commit: `allowed`
+- Settlement: `allowed`
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
+
+<a id="bytebuf_slice"></a>
+## `bytebuf_slice`
+
+```text
+bytebuf_slice(bytebuf, int, int) -> bytebuf
+```
+
+- Category: `buffers-bitsets`
+- Arity: `exactly 3` argument(s)
+- Effects: `pure`
+- Purity: `pure`
+- Errors: invalid arity, type, range, capability, platform, or runtime state is a runtime error
+- Determinism: deterministic for equal RAD state and arguments
+- Complexity: `O(k) in the returned byte count`
+- Allocation: allocates one bytebuf proportional to the returned byte count
+- Native: `available`
+- WASM: `available`
+- Sandbox: `capability-checked`
+- Transaction body: `allowed`
+- Post-commit: `allowed`
+- Settlement: `allowed`
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
+
+<a id="bytebuf_copy"></a>
+## `bytebuf_copy`
+
+```text
+bytebuf_copy(bytebuf, int, bytebuf) -> bytebuf
+```
+
+- Category: `buffers-bitsets`
+- Arity: `exactly 3` argument(s)
+- Effects: `pure`
+- Purity: `pure`
+- Errors: invalid arity, type, range, capability, platform, or runtime state is a runtime error
+- Determinism: deterministic for equal RAD state and arguments
+- Complexity: `O(k) when assignment lowers in place; O(n + k) for a functional destination copy`
+- Allocation: functional call allocates a destination-sized bytebuf; assignment to a proven-unique local lowers in place
 - Native: `available`
 - WASM: `available`
 - Sandbox: `capability-checked`

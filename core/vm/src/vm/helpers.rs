@@ -100,6 +100,23 @@ pub(crate) fn index_as_usize(v: &Value) -> Result<usize, String> {
     }
 }
 
+pub(crate) fn checked_bytebuf_copy_end(
+    destination_len: usize,
+    source_len: usize,
+    offset: usize,
+) -> Result<usize, String> {
+    let end = offset
+        .checked_add(source_len)
+        .ok_or_else(|| "bytebuf_copy destination offset and source length overflow".to_string())?;
+    if end > destination_len {
+        return Err(format!(
+            "bytebuf_copy source length {} at offset {} exceeds destination length {}",
+            source_len, offset, destination_len
+        ));
+    }
+    Ok(end)
+}
+
 fn native_binary(
     gc: &mut GcHeap,
     a: &Value,

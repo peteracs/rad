@@ -386,15 +386,23 @@ def run_ffi_recorded_replay(runner: Runner, rad: Path) -> None:
 def benchmark(runner: Runner, rad: Path, samples: int) -> dict[str, Any]:
     results: dict[str, list[dict[str, Any]]] = {"baseline": [], "indexed": []}
     for mode in ("baseline", "indexed"):
-        runner.run(
+        warmup = runner.run(
             f"benchmark-{mode}-warmup",
             [rad, "bench", PROJECT / "bench.rad", "--json", "--", mode, "1"],
         )
+        if not warmup.passed:
+            raise RuntimeError(
+                f"{warmup.name} failed; inspect {warmup.stdout} and {warmup.stderr}"
+            )
         for sample in range(samples):
             outcome = runner.run(
                 f"benchmark-{mode}-{sample + 1:02d}",
                 [rad, "bench", PROJECT / "bench.rad", "--json", "--", mode, "1"],
             )
+            if not outcome.passed:
+                raise RuntimeError(
+                    f"{outcome.name} failed; inspect {outcome.stdout} and {outcome.stderr}"
+                )
             payload = json.loads((ROOT / outcome.stdout).read_text(encoding="utf-8"))
             system = payload["systems"][0]
             results[mode].append(
@@ -472,7 +480,7 @@ def main() -> int:
     # every child RAD process they own; timing the aggregate Python process as
     # one guest run would punish complete coverage for launching more checks.
     runner.run("language-surface", [sys.executable, ROOT / "tooling/check_language_surface.py", "--rad", rad], limit_ns=0)
-    runner.run("normative-doc-examples", [sys.executable, ROOT / "tooling/check_rad_doc_examples.py", "--rad", rad], limit_ns=0)
+    runner.run("normative-doc-examples", [sys.executable, ROOT / "tooling/check_rad_doc_examples.py"], limit_ns=0)
     runner.run("host-api-surface", [sys.executable, ROOT / "tooling/host_api_surface.py", "--check"], limit_ns=0)
     runner.run("stable-main", [rad, PROJECT / "main.rad", "--strict-types", "--deny-warnings"], pattern="sovereign-grid: stable workflow complete")
     runner.run("workflow-tests", [rad, "test", PROJECT / "tests"], pattern="Results: 10 passed, 0 failed")

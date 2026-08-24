@@ -458,7 +458,7 @@ if (-not $SkipRepositoryGates) {
         @('candidate-constraint-snapshots', $script:resolvedRad, @('snapshot','--experimental-laws','tests/fixtures/causal-constraints')),
         @('language-surface', 'python.exe', @('tooling/check_language_surface.py','--rad',$script:resolvedRad)),
         @('host-api-surface', 'python.exe', @('tooling/host_api_surface.py','--check')),
-        @('documentation-examples', 'python.exe', @('tooling/check_rad_doc_examples.py','--rad',$script:resolvedRad)),
+        @('documentation-examples', 'python.exe', @('tooling/check_rad_doc_examples.py')),
         @('documentation-links', 'python.exe', @('tooling/scripts/check_doc_links.py')),
         @('documentation-build', 'mdbook.exe', @('build','docs')),
         @('wasm-check', 'cargo.exe', @('rustc','-p','rad-vm','--lib','--target','wasm32-unknown-unknown','-j','1','--','-D','warnings')),

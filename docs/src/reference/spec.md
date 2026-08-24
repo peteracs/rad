@@ -6,7 +6,7 @@
 
 This document describes the current v0.5 language and is the normative syntax
 entry point. The generated inventory certifies all 203 public parser-owned
-syntax forms, identifies six internal recovery forms, and binds all 260 public
+syntax forms, identifies six internal recovery forms, and binds all 262 public
 builtins to executable documentation and Sovereign Grid evidence. The exact
 acceptance receipt is the [Language reference and ultimate dogfood
 certification](../project/language-reference-and-ultimate-dogfood-todo.md).

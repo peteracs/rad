@@ -8,14 +8,14 @@ The original implementation order is closed:
 - [x] Transactional state transitions retain atomic `$transition` semantics.
 - [x] Generic type aliases substitute recursively under strict checking.
 - [x] The generated inventory covers 203 source forms, six internal forms, and
-  all 260 builtins.
+  all 262 builtins.
 - [x] The stable production workflow executes every canonical syntax row.
 - [x] Experimental causal settlements and relations, model checking, and FFI
   execute under their exact feature boundaries.
 - [x] Thirty-three negative fixtures match their intended diagnostics; replay
   evidence is deterministic across worker counts.
-- [x] Equivalent baseline and indexed workloads establish 307.16× release-profile median
-  wall-time and 53,847.38× instruction improvements over 30 release samples.
+- [x] Equivalent baseline and indexed workloads clear both 100× release-profile
+  ratchets—median wall time and semantic instructions—over 30 samples.
 - [x] The complete local acceptance runner is green and emits the source-bound
   report at `target/sovereign-grid-acceptance/report.json`.
 - [x] Enforce less than 1,000,000,000 ns end-to-end for every Sovereign Grid

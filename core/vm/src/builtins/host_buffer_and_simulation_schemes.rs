@@ -541,6 +541,18 @@ fn builtin_type_scheme_buffers(name: &str) -> Option<BuiltinSig> {
             ret: Ty::Int,
             is_pure: true,
         },
+        "bytebuf_slice" => BuiltinSig {
+            type_params: vec![],
+            params: vec![Ty::ByteBuf, Ty::Int, Ty::Int],
+            ret: Ty::ByteBuf,
+            is_pure: true,
+        },
+        "bytebuf_copy" => BuiltinSig {
+            type_params: vec![],
+            params: vec![Ty::ByteBuf, Ty::Int, Ty::ByteBuf],
+            ret: Ty::ByteBuf,
+            is_pure: true,
+        },
         "bytebuf_to_list" => BuiltinSig {
             type_params: vec![],
             params: vec![Ty::ByteBuf],

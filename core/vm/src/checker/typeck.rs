@@ -12,6 +12,7 @@ use crate::types::*;
 use crate::value::Builtin;
 // Lexical sections preserve one private semantic namespace.
 include!("typeck/diagnostics.rs");
+include!("typeck/type_compatibility.rs");
 include!("typeck/declaration_routing.rs");
 include!("typeck/data_declarations.rs");
 include!("typeck/executable_declarations.rs");

@@ -200,6 +200,8 @@ define_builtins! {
     ByteBufGetU16Le => "bytebuf_get_u16_le",
     ByteBufGetU32Le => "bytebuf_get_u32_le",
     ByteBufGetI32Le => "bytebuf_get_i32_le",
+    ByteBufSlice => "bytebuf_slice",
+    ByteBufCopy => "bytebuf_copy",
     ByteBufToList => "bytebuf_to_list",
     ByteBufFromList => "bytebuf_from_list",
     PublishBytes => "publish_bytes",
