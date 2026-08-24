@@ -450,6 +450,44 @@ print(r)
     }
 
     #[test]
+    fn session_package_loads_one_canonical_multi_module_graph() {
+        let entry = "use \"shared.rad\" as shared\nfn main() -> nil { print(shared.answer()) }\n";
+        let shared = "pub fn answer() -> int { return 42 }\n";
+        let source = format!("{entry}{shared}");
+        let mut layout = crate::source_bundle::SourceLayout::single("main.rad");
+        layout.push(entry.len(), "shared.rad");
+        layout.add_import(0, "shared.rad", "shared.rad").unwrap();
+        let package = crate::browser_program::BrowserProgramPackage::new(
+            source,
+            layout,
+            crate::browser_program::browser_semantic_features(),
+        )
+        .unwrap();
+
+        let mut runtime = RadRuntime::new();
+        assert_eq!(
+            runtime
+                .session_start_package(&package.to_json().unwrap())
+                .unwrap(),
+            "42"
+        );
+
+        let digest = runtime.session_digest();
+        let mut mutated: serde_json::Value =
+            serde_json::from_str(&package.to_json().unwrap()).unwrap();
+        mutated["source"] = serde_json::Value::String(package.source().replace("42", "43"));
+        let error = runtime
+            .session_start_package(&mutated.to_string())
+            .unwrap_err();
+        assert!(error.contains("digest mismatch"), "{error}");
+        assert_eq!(
+            runtime.session_digest(),
+            digest,
+            "rejected package must not replace the live session"
+        );
+    }
+
+    #[test]
     fn compile_only_counts_chunks_systems_handlers() {
         let rt = RadRuntime::new();
         let src = r#"

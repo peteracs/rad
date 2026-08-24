@@ -359,27 +359,26 @@ impl Compiler {
             .map(|ct| ct.fields.iter().map(|(n, _)| n.clone()).collect())
     }
 
-    fn compile_alias_decls(&mut self) -> Result<(), CompileError> {
+    fn predeclare_alias_decls(&mut self) {
         let alias_decls = std::mem::take(&mut self.alias_decls);
         for binding in crate::ast::canonical_module_bindings(&alias_decls) {
             let decls = binding.declarations();
-            let all_names = binding.local_redirects();
-            self.current_alias_scope = Some(all_names.clone());
-            // Namespaced modules obey the same declaration semantics as the
-            // entry module. Register every compile-time fact before lowering
-            // any body so forward references, system classification, and
-            // view-kernel callback analysis cannot depend on source order.
+            self.current_alias_scope = Some(binding.local_redirects());
             for declaration in decls {
                 self.predeclare_decl_metadata(declaration);
             }
-            for d in decls {
-                if Self::compiles_in_first_pass(d) {
-                    self.compile_decl(d)?;
-                }
-            }
-            for d in decls {
-                if !Self::compiles_in_first_pass(d) {
-                    self.compile_decl(d)?;
+            self.current_alias_scope = None;
+        }
+        self.alias_decls = alias_decls;
+    }
+
+    fn compile_alias_decl_pass(&mut self, first_pass: bool) -> Result<(), CompileError> {
+        let alias_decls = std::mem::take(&mut self.alias_decls);
+        for binding in crate::ast::canonical_module_bindings(&alias_decls) {
+            self.current_alias_scope = Some(binding.local_redirects());
+            for declaration in binding.declarations() {
+                if Self::compiles_in_first_pass(declaration) == first_pass {
+                    self.compile_decl(declaration)?;
                 }
             }
             self.current_alias_scope = None;
@@ -503,16 +502,17 @@ impl Compiler {
         self.resource_types
             .extend(std::mem::take(&mut declaration_metadata.resource_types));
 
-        self.compile_alias_decls()?;
+        self.predeclare_alias_decls();
 
-        // Declaration-metadata pre-pass, then hoist top-level `fn`
-        // definitions ahead of every other declaration. The checker places
+        // With the complete module graph predeclared, emit every first-pass
+        // alias and entry declaration before any stateful initialization.
+        // The checker places
         // every top-level fn in scope everywhere and the docs promise
         // forward references work; without hoisting the binding only exists
         // once execution reaches the `fn` statement, so an earlier call
         // trapped on `nil`. Hoisting is observation-free: a top-level fn
         // decl only emits DefGlobal of a constant fn value (top-level fns
-        // capture no upvalues — main's top-level lets are globals, not
+        // capture no upvalues; main's top-level lets are globals, not
         // locals), so entity-spawn order and statement effects are
         // unchanged. Compiling fn bodies first is only correct because the
         // pre-pass has already registered every later declaration's
@@ -521,11 +521,13 @@ impl Compiler {
         for decl in &program.declarations {
             self.predeclare_decl_metadata(decl);
         }
+        self.compile_alias_decl_pass(true)?;
         for decl in &program.declarations {
             if Self::compiles_in_first_pass(decl) {
                 self.compile_decl(decl)?;
             }
         }
+        self.compile_alias_decl_pass(false)?;
         for decl in &program.declarations {
             if !Self::compiles_in_first_pass(decl) {
                 self.compile_decl(decl)?;

@@ -52,7 +52,8 @@ rad run [options] [-- <program arguments>]
 | `rad snapshot [--update] [--create] [--experimental-laws] [dir]` | Compare `.rad` files with sibling `.snap` outputs. Update rewrites existing baselines; create adds absent ones. |
 | `rad test [path]` | Execute isolated/shared tests and models with per-declaration and aggregate results. |
 | `rad types <input.rad> <output.d.ts> [--feature <name>]` | Emit TypeScript declarations for a checked RAD program. |
-| `rad build --target wasm <input.rad> <output.wasm>` | Emit the checked WASM target. |
+| `rad build --target browser-package <input.rad> <output.radpkg.json>` | Emit a digest-bound canonical multi-module browser package. |
+| `rad build --target compiler-wasm <input.rad> <output.wasm>` | Copy an explicitly configured `RAD_COMPILER_WASM` after checking the program; no placeholder is emitted. |
 | `rad play [--port N]` | Serve the local playground. |
 | `rad lsp [--experimental-relations]` | Run JSON-RPC language service over stdio. |
 

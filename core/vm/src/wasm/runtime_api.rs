@@ -2,7 +2,7 @@
 impl RadRuntime {
     fn checker_options() -> CheckerOptions {
         CheckerOptions {
-            features: vec!["causal_laws".to_string()],
+            features: crate::browser_program::browser_semantic_features(),
             ..CheckerOptions::default()
         }
     }
@@ -71,6 +71,75 @@ impl RadRuntime {
         .map_err(|error| format!("Compile error: {}", error.message))
     }
 
+    fn compile_browser_package(package_json: &str) -> Result<crate::compiler::CompileResult, String> {
+        let options = Self::checker_options();
+        let package = crate::browser_program::BrowserProgramPackage::from_json(
+            package_json,
+            &options.features,
+        )?;
+        let loaded = crate::module_loader::load_program_from_source_bundle(
+            package.source(),
+            package.source_layout(),
+            crate::parser::ParserOptions,
+        )
+        .map_err(|errors| {
+            errors
+                .into_iter()
+                .map(|error| {
+                    format!(
+                        "[{}:{}:{}] Module error: {}",
+                        error.filepath, error.line, error.col, error.message
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join("\n")
+        })?;
+        if !loaded.errors.is_empty() {
+            return Err(loaded
+                .errors
+                .iter()
+                .map(|error| {
+                    format!(
+                        "[{}:{}:{}] Module error: {}",
+                        error.filepath, error.line, error.col, error.message
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join("\n"));
+        }
+        let analysis = crate::pipeline::analyze_program(&loaded.program, &loaded.aliases, options);
+        if !analysis.errors().is_empty() {
+            return Err(analysis
+                .errors()
+                .iter()
+                .map(|error| {
+                    let path = error
+                        .file
+                        .and_then(|file| loaded.source_map.get_file(file))
+                        .map_or("<browser package>", |file| file.path.as_str());
+                    format!(
+                        "[{}:{}:{}] Type error: {}",
+                        path, error.line, error.col, error.message
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join("\n"));
+        }
+        let checked = analysis
+            .into_checked()
+            .map_err(|_| "error-free browser package did not produce checked semantics")?;
+        crate::pipeline::compile_checked_program(
+            &loaded.program,
+            loaded.aliases,
+            checked,
+            crate::pipeline::CheckedCompileOptions {
+                source_identity: Some(package.package_digest().to_string()),
+                ..crate::pipeline::CheckedCompileOptions::default()
+            },
+        )
+        .map_err(|error| format!("Compile error: {}", error.message))
+    }
+
     fn invalidate_presentation_stream(&mut self) {
         self.render_buffer.clear();
         self.presentation_next_sequence = None;
@@ -115,7 +184,7 @@ impl RadRuntime {
         let constraint_limits = self.vm.constraint_limit_profile();
         serde_json::json!({
             "version": env!("CARGO_PKG_VERSION"),
-            "session": 2,
+            "session": crate::browser_program::BROWSER_RUNTIME_API,
             "causal_laws": 1,
             "relations_frontend": 1,
             "host_values": 1,
@@ -364,11 +433,26 @@ impl RadRuntime {
     /// same source converges to the same initial state.
     pub fn session_start(&mut self, source: &str) -> Result<String, String> {
         let stream_id = self.next_presentation_stream_id()?;
+        // Determinism across replicas is non-negotiable for convergence.
+        let out = self.compile_and_run_seeded(source, 7)?;
         self.invalidate_presentation_stream();
         self.session_base = None;
         self.session_cursor = 0;
-        // Determinism across replicas is non-negotiable for convergence.
-        let out = self.compile_and_run_seeded(source, 7)?;
+        self.session_base = Some(self.current_fork()?);
+        self.session_cursor = self.vm.print_buffer.len();
+        self.begin_presentation_stream(stream_id);
+        Ok(out)
+    }
+
+    /// Start one hermetic multi-module browser package produced by the RAD
+    /// module loader. Package integrity and semantic configuration are
+    /// checked before any world is adopted.
+    pub fn session_start_package(&mut self, package_json: &str) -> Result<String, String> {
+        let stream_id = self.next_presentation_stream_id()?;
+        let out = self.compile_and_run_package_seeded(package_json, 7)?;
+        self.invalidate_presentation_stream();
+        self.session_base = None;
+        self.session_cursor = 0;
         self.session_base = Some(self.current_fork()?);
         self.session_cursor = self.vm.print_buffer.len();
         self.begin_presentation_stream(stream_id);

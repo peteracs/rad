@@ -3,6 +3,7 @@ pub mod arena;
 pub mod ast;
 #[cfg(test)]
 mod ast_semantics_tests;
+pub mod browser_program;
 pub mod builtins;
 mod bytecode_verifier;
 pub use bytecode_verifier::VerificationError;

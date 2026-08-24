@@ -24,11 +24,11 @@ pub struct WasmDiagnostic {
     pub message: String,
 }
 
-/// Bytes to load as `compiler.wasm`: path from `RAD_COMPILER_WASM`, else the in-tree stub.
+/// Load the explicitly configured production `compiler.wasm`.
 pub fn compiler_wasm_bytes_from_env() -> Result<Vec<u8>, String> {
     match std::env::var("RAD_COMPILER_WASM") {
         Ok(p) => std::fs::read(&p).map_err(|e| format!("RAD_COMPILER_WASM {p}: {e}")),
-        Err(_) => Ok(crate::wasm_binary_emit::emit_compiler_reactor_stub_module()),
+        Err(_) => Err("RAD_COMPILER_WASM is required; no placeholder compiler is selected".into()),
     }
 }
 

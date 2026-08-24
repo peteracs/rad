@@ -130,7 +130,7 @@ py experiments\c-backend\test_c_backend.py --debug-arena
 | Path | Purpose |
 |---|---|
 | `adapters/cli/src/main.rs` | `rad` CLI composition root and process boundary |
-| `rad` | The main Rad CLI (run, test, fmt, lint, new, snapshot, play, `build --target wasm`, `lsp`) |
+| `rad` | The main Rad CLI (run, test, fmt, lint, new, snapshot, play, explicit build targets, `lsp`) |
 | `core/vm/src/wasm_compiler_host.rs` | Phase 3: wasmtime host, `vfs_read`, guest `rad_*` exports (requires `native-wasm-phase3`) |
 | [`docs/src/reference/wasm-phase3.md`](wasm-phase3.md) | Phase 3 ABI, `rad build`, LSP env vars (`RAD_WASM_PHASE3`, `RAD_COMPILER_WASM`, `RAD_VFS_ROOT`) |
 | `core/syntax/src/lexer.rs`, `lexer/` | Independently compiled tokenizer and focused token/declaration/expression/statement scanners |
@@ -165,7 +165,8 @@ py experiments\c-backend\test_c_backend.py --debug-arena
 | `rad ffi verify` | Verify extension ABI/layout/effect contracts through the isolated FFI worker |
 | `rad types` | Generate TypeScript declarations from checked exported Rad declarations |
 | `rad snapshot` | Verify `.rad` script output against stored `.snap` baselines |
-| `rad build --target wasm` | After type-check, emit `compiler.wasm` (stub or copy from `RAD_COMPILER_WASM`) — see [Phase 3 WASM](wasm-phase3.md) |
+| `rad build --target browser-package` | Emit the canonical digest-bound source/module package consumed by browser sessions — see [Phase 3 WASM](wasm-phase3.md) |
+| `rad build --target compiler-wasm` | After type-check, copy the explicitly configured `RAD_COMPILER_WASM`; absence is an error |
 | LSP (`rad lsp`) | Real-time diagnostics, hover, completions, go-to-def, formatting; optional WASM diagnostics via env vars in [Phase 3 WASM](wasm-phase3.md) |
 
 ## Testing

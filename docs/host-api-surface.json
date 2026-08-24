@@ -1,18 +1,18 @@
 {
   "formatVersion": 1,
-  "ownerDigest": "410d9ba1074511efc097eb97589c4fae44500bc5b1d7ad0f2a436fc7058b38ad",
+  "ownerDigest": "41cfb98ccc9e116402a34b8de534300c4cecca689ddd8930fff8002a57d405ce",
   "owners": [
     {
       "path": "adapters/cli/src/cli/arguments.rs",
-      "sha256": "56a0768ddf2569940a0e1b5505b49c4fcfbf54a22ea66d08d20cdd4969d22703"
+      "sha256": "a9f267cc10f0d26d526bafbe62dbbbe5fc87d7a2d390e0dae224b0c6de30e49e"
     },
     {
       "path": "core/vm/src/wasm/runtime_api.rs",
-      "sha256": "75c3965c9d170a720bb2e64c783793ca1f75a4f2bebd52229764a8bb02e00ede"
+      "sha256": "db3c778ef30a3730559de080c925c417375718f446330574429cbd79fd3c450e"
     },
     {
       "path": "core/vm/src/wasm/rendering_and_tests.rs",
-      "sha256": "be7a8e04a2b1b4605fd6efae618e7a1477c3efdae81c028dfc65ced4b977acc5"
+      "sha256": "875b8160f7ee6859c6dd6be603a02b11ccb141f2ff9c35863c529e4b6399b0a8"
     }
   ],
   "cli": {
@@ -23,7 +23,7 @@
       "new <name> [--template <template>]",
       "snapshot [--update] [--create] [--experimental-laws] [dir]",
       "play [--port <port>]",
-      "build [--target wasm] <input.rad> <output.wasm>",
+      "build --target <compiler-wasm|browser-package> <input.rad> <output>",
       "types <input.rad> <output.d.ts> [--feature <name>]",
       "sandbox serve [host.rad] [--caps <caps.json>]",
       "replay <trace.radr> [--to-frame <n>] [--serve] [--with <fixed.rad>] [--force]",
@@ -110,6 +110,7 @@
       "check_source",
       "reset",
       "session_start",
+      "session_start_package",
       "session_emit",
       "session_pump",
       "session_delta",

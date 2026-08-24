@@ -62,7 +62,7 @@ and
 
 | Status | Item | Required next step |
 |---|---|---|
-| **In progress** | Production WASM compiler guest and footprint | Replace the Phase 3 diagnostic stub with a real checked guest, then measure and optimize the resulting bundle |
+| **In progress** | Production WASM compiler guest and footprint | Build the Phase 3 diagnostic guest, require it explicitly, then measure and optimize the resulting bundle |
 | **Needs RFC** | Package registry | Package identity, version resolution, signing, publishing, and lock semantics; file/URL modules already exist |
 | **Needs RFC** | Standard library distribution | Versioned `std` modules and compatibility policy |
 | **Needs RFC** | Native AOT compilation | A supported backend and parity plan; the old C backend is a frozen experiment |

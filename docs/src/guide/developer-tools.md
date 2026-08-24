@@ -44,14 +44,25 @@ rad lsp
 
 When `rad` is built with the `native-wasm-phase3` Cargo feature (default for the in-tree `rad-vm` crate), you can route **publishDiagnostics** through the self-hosted compiler loaded as WebAssembly instead of the Rust checker, and emit a reactor **`compiler.wasm`** from the CLI.
 
-**Emit a WASM module (after type-checking the entry program):**
+**Package a checked multi-module browser program:**
 
 ```bash
-rad build --target wasm path/to/entry.rad path/to/out.wasm
+rad build --target browser-package path/to/entry.rad path/to/app.radpkg.json
 ```
 
-- Positional arguments are **`entry.rad`** then **`out.wasm`**. Put `--target wasm` before those paths.
-- Output bytes: if **`RAD_COMPILER_WASM`** is set, `rad` copies that file to `out.wasm`; otherwise it writes the in-tree **stub** reactor (until you build a real guest from `emit_wasm.rad`).
+The package is produced by the canonical module loader and includes source,
+resolved import edges, semantic features, runtime/compiler versions, and an
+integrity digest. Browser code passes it unchanged to
+`RadRuntime.session_start_package()`.
+
+**Install an explicitly built compiler reactor:**
+
+```bash
+rad build --target compiler-wasm path/to/entry.rad path/to/compiler.wasm
+```
+
+This command requires `RAD_COMPILER_WASM` and copies that verified input after
+checking the entry program. There is no production placeholder path.
 
 **LSP environment variables:**
 
@@ -61,7 +72,7 @@ rad build --target wasm path/to/entry.rad path/to/out.wasm
 | `RAD_COMPILER_WASM` | Path to a `compiler.wasm` guest; also enables the WASM diagnostic path. |
 | `RAD_VFS_ROOT` | Optional workspace root for `vfs_read` when resolving imports not present in open-editor overlays. |
 
-The host VFS fills the overlay from **open documents**, then falls back to the filesystem (`RAD_VFS_ROOT` or the active file’s directory). The stub reactor returns no diagnostics until the guest implements checking. Hover, completion, go-to-definition, and formatting still use the Rust implementation unless extended separately.
+The host VFS fills the overlay from **open documents**, then falls back to the filesystem (`RAD_VFS_ROOT` or the active file’s directory). If the configured reactor cannot load or execute, WASM diagnostics are unavailable; the host does not substitute an empty diagnostic implementation. Hover, completion, go-to-definition, and formatting still use the Rust implementation unless extended separately.
 
 Full ABI, VFS order, and recovery notes: [Phase 3 WASM](../reference/wasm-phase3.md).
 

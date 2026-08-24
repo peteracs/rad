@@ -32,6 +32,7 @@ export class RadRuntime {
   reset(): void;
 
   session_start(source: string): string;
+  session_start_package(packageJson: string): string;
   session_emit(event: string, fieldsJson: string): void;
   session_pump(): string;
   session_delta(): string;
@@ -53,6 +54,27 @@ export class RadRuntime {
   session_render_buffer_u32_len(): number;
 }
 ```
+
+## Multi-module browser packages
+
+Browser hosts do not concatenate imported source files. Produce one hermetic
+package through the native canonical module loader:
+
+```bash
+rad build --target browser-package src/main.rad app.radpkg.json
+```
+
+The package binds the exact source bytes, canonical source layout and import
+edges, compiler version, runtime API, and sorted semantic feature set under one
+BLAKE3 digest. `session_start_package()` verifies all of those fields, rebuilds
+the module graph without filesystem access, checks it, compiles it, and only
+then adopts a new world. Unknown fields, stale versions, changed source,
+changed imports, feature mismatch, more than 4,096 units, more than 64 MiB of
+source, or more than 96 MiB of encoded package fail closed. Rejected packages
+leave the running session untouched.
+
+`session_start(source)` remains the intentional single-source playground API
+and still rejects `use`; production multi-module apps use the package API.
 
 Rust `Result<T, String>` exports throw JavaScript exceptions on `Err`; generated
 declarations present successful `T`. Callers use `try`/`catch`. `Vec<u8>`

@@ -259,7 +259,8 @@ check the specification against.
 | `rad` CLI | **Working** — execution/checking, tests, formatting/linting, scaffolding, snapshots, WASM/type generation, replay/sandboxing, authority/query/provenance inspection, metered benchmarks, model checking/shrinking, FFI verification, relations, and LSP |
 | Browser playground | **Working** — Rust VM via WASM |
 | LSP server (`rad lsp`) | **Working** — Rust checker diagnostics, hover, go-to-definition, completions, formatting |
-| `build --target wasm` | **Stub** — emits the [Phase 3](./reference/wasm-phase3.md) reactor stub; the WASM guest returns no diagnostics until a real `compiler.wasm` implements checking |
+| `build --target browser-package` | **Working** — emits a digest-bound canonical multi-module package consumed by `RadRuntime.session_start_package()` |
+| `build --target compiler-wasm` | **Explicit guest only** — requires `RAD_COMPILER_WASM`; never emits a diagnostic placeholder |
 
 ### Known limits
 

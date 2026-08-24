@@ -30,7 +30,8 @@ This generates a project directory with a `main.rad` entry point, a `rad.toml` c
 | `rad snapshot --create` | Create snapshots for files that don't have one yet |
 | `rad snapshot --update` | Overwrite all snapshots with current output |
 | `rad play` | Open the browser playground |
-| `rad build --target wasm <in.rad> <out.wasm>` | Type-check and emit the Phase 3 WASM reactor artifact |
+| `rad build --target browser-package <in.rad> <out.radpkg.json>` | Type-check and emit a canonical multi-module browser package |
+| `rad build --target compiler-wasm <in.rad> <out.wasm>` | Copy the explicitly configured Phase 3 compiler reactor after checking the entry |
 | `rad types <in.rad> <out.d.ts>` | Generate TypeScript declarations for exported Rad types |
 | `rad replay <trace.radr>` | Verify or inspect a deterministic recording; supports frame stops, serving, and retroactive `--with` runs |
 | `rad sandbox serve [host.rad]` | Run the capability sandbox JSON-RPC host |

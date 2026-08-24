@@ -49,6 +49,12 @@ enum OperationalQuery {
     },
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum BuildTarget {
+    CompilerWasm,
+    BrowserPackage,
+}
+
 #[derive(Debug)]
 enum CliCommand {
     Surface {
@@ -138,7 +144,8 @@ enum CliCommand {
     },
     Build {
         input_rad: String,
-        output_wasm: String,
+        output: String,
+        target: BuildTarget,
     },
     Types {
         input_rad: String,

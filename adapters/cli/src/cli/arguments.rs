@@ -34,7 +34,7 @@ Usage: {program} <file.rad> [--no-check] [--experimental-laws] [--relation-schem
        {program} new <name> [--template <template>]
        {program} snapshot [--update] [--create] [--experimental-laws] [dir]
        {program} play [--port <port>]
-       {program} build [--target wasm] <input.rad> <output.wasm>
+       {program} build --target <compiler-wasm|browser-package> <input.rad> <output>
        {program} types <input.rad> <output.d.ts> [--feature <name>]
        {program} sandbox serve [host.rad] [--caps <caps.json>]
        {program} replay <trace.radr> [--to-frame <n>] [--serve] [--with <fixed.rad>] [--force]
@@ -755,13 +755,13 @@ fn parse_cli_args(args: &[String]) -> Result<CliCommand, String> {
     }
 
     if args.len() > 1 && args[1] == "build" {
-        let mut target = "wasm".to_string();
+        let mut target = None;
         let mut rest = Vec::new();
         let mut i = 2;
         while i < args.len() {
             let arg = &args[i];
             if arg == "--target" && i + 1 < args.len() {
-                target = args[i + 1].clone();
+                target = Some(args[i + 1].clone());
                 i += 2;
             } else if arg.starts_with('-') {
                 return Err(format!(
@@ -776,20 +776,21 @@ fn parse_cli_args(args: &[String]) -> Result<CliCommand, String> {
         }
         if rest.len() != 2 {
             return Err(format!(
-                "Expected: {} build [--target wasm] <input.rad> <output.wasm>\n\n{}",
+                "Expected: {} build --target <compiler-wasm|browser-package> <input.rad> <output>\n\n{}",
                 program,
                 usage(program)
             ));
         }
-        if target != "wasm" {
-            return Err(format!(
-                "only --target wasm is supported (got {:?})",
-                target
-            ));
-        }
+        let target = match target.as_deref() {
+            Some("compiler-wasm") => BuildTarget::CompilerWasm,
+            Some("browser-package") => BuildTarget::BrowserPackage,
+            Some(other) => return Err(format!("unsupported build target {other:?}")),
+            None => return Err("build requires an explicit --target".to_string()),
+        };
         return Ok(CliCommand::Build {
             input_rad: rest[0].clone(),
-            output_wasm: rest[1].clone(),
+            output: rest[1].clone(),
+            target,
         });
     }
 

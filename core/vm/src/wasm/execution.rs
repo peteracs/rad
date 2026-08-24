@@ -38,21 +38,37 @@ impl RadRuntime {
     }
 
     fn compile_and_run_seeded(&mut self, source: &str, seed: u64) -> Result<String, String> {
-        self.vm = VM::new();
-        self.vm.set_random_seed(seed);
-        self.output.clear();
-
         let compile_result = Self::compile_browser_source(source, BrowserSourceKind::Session)?;
-        self.vm.load_compile_result(compile_result);
-        self.vm.print_buffer.clear();
-        match self.vm.run(0) {
+        self.run_compiled_program(compile_result, seed)
+    }
+
+    fn compile_and_run_package_seeded(
+        &mut self,
+        package_json: &str,
+        seed: u64,
+    ) -> Result<String, String> {
+        let compile_result = Self::compile_browser_package(package_json)?;
+        self.run_compiled_program(compile_result, seed)
+    }
+
+    fn run_compiled_program(
+        &mut self,
+        compile_result: crate::compiler::CompileResult,
+        seed: u64,
+    ) -> Result<String, String> {
+        let mut candidate = VM::new();
+        candidate.set_random_seed(seed);
+        candidate.load_compile_result(compile_result);
+        candidate.print_buffer.clear();
+        match candidate.run(0) {
             Ok(()) => {
-                self.output = self.vm.print_buffer.clone();
+                self.output = candidate.print_buffer.clone();
+                self.vm = candidate;
                 Ok(self.output.join("\n"))
             }
-            Err(e) => {
-                self.output = self.vm.print_buffer.clone();
-                Err(e)
+            Err(error) => {
+                self.output = candidate.print_buffer.clone();
+                Err(error)
             }
         }
     }

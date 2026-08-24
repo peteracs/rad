@@ -341,7 +341,8 @@ fn main() {
 
     if let CliCommand::Build {
         input_rad,
-        output_wasm,
+        output,
+        target,
     } = command
     {
         let loaded = match load_cli_program(&input_rad, ParserOptions) {
@@ -351,7 +352,15 @@ fn main() {
                 process::exit(1);
             }
         };
-        let analysis = analyze_cli_program(&loaded, &input_rad, CheckerOptions::default());
+        let checker_options = match target {
+            BuildTarget::CompilerWasm => CheckerOptions::default(),
+            BuildTarget::BrowserPackage => CheckerOptions {
+                features: rad_vm::browser_program::browser_semantic_features(),
+                ..CheckerOptions::default()
+            },
+        };
+        let semantic_features = checker_options.features.clone();
+        let analysis = analyze_cli_program(&loaded, &input_rad, checker_options);
         for error in &analysis.errors {
             eprintln!("{error}");
         }
@@ -362,20 +371,53 @@ fn main() {
             process::exit(1);
         }
 
-        let wasm_bytes = match env::var("RAD_COMPILER_WASM") {
-            Ok(p) => match fs::read(&p) {
-                Ok(b) => b,
-                Err(e) => {
-                    eprintln!("RAD_COMPILER_WASM {}: {}", p, e);
+        match target {
+            BuildTarget::CompilerWasm => {
+                let compiler_path = match env::var("RAD_COMPILER_WASM") {
+                    Ok(path) => path,
+                    Err(_) => {
+                        eprintln!(
+                            "compiler-wasm build requires RAD_COMPILER_WASM; no placeholder artifact is emitted"
+                        );
+                        process::exit(1);
+                    }
+                };
+                let wasm_bytes = match fs::read(&compiler_path) {
+                    Ok(bytes) => bytes,
+                    Err(error) => {
+                        eprintln!("RAD_COMPILER_WASM {}: {}", compiler_path, error);
+                        process::exit(1);
+                    }
+                };
+                if let Err(error) = fs::write(&output, wasm_bytes) {
+                    eprintln!("Error writing {}: {}", output, error);
                     process::exit(1);
                 }
-            },
-            Err(_) => rad_vm::wasm_binary_emit::emit_compiler_reactor_stub_module(),
-        };
-
-        if let Err(e) = fs::write(&output_wasm, wasm_bytes) {
-            eprintln!("Error writing {}: {}", output_wasm, e);
-            process::exit(1);
+            }
+            BuildTarget::BrowserPackage => {
+                let package = match rad_vm::browser_program::BrowserProgramPackage::new(
+                    loaded.merged_source,
+                    loaded.source_layout,
+                    semantic_features,
+                ) {
+                    Ok(package) => package,
+                    Err(error) => {
+                        eprintln!("Error building browser package: {error}");
+                        process::exit(1);
+                    }
+                };
+                let json = match package.to_json() {
+                    Ok(json) => json,
+                    Err(error) => {
+                        eprintln!("Error building browser package: {error}");
+                        process::exit(1);
+                    }
+                };
+                if let Err(error) = fs::write(&output, json) {
+                    eprintln!("Error writing {}: {}", output, error);
+                    process::exit(1);
+                }
+            }
         }
         return;
     }

@@ -813,12 +813,12 @@ mod tests {
     }
 
     #[test]
-    fn parse_cli_args_parses_build_target_wasm() {
+    fn parse_cli_args_parses_explicit_build_targets() {
         let args = vec![
             "rad".to_string(),
             "build".to_string(),
             "--target".to_string(),
-            "wasm".to_string(),
+            "compiler-wasm".to_string(),
             "a.rad".to_string(),
             "out.wasm".to_string(),
         ];
@@ -826,13 +826,31 @@ mod tests {
         match parsed {
             CliCommand::Build {
                 input_rad,
-                output_wasm,
+                output,
+                target,
             } => {
                 assert_eq!(input_rad, "a.rad");
-                assert_eq!(output_wasm, "out.wasm");
+                assert_eq!(output, "out.wasm");
+                assert_eq!(target, BuildTarget::CompilerWasm);
             }
             _ => panic!("expected build"),
         }
+
+        let browser = vec![
+            "rad".to_string(),
+            "build".to_string(),
+            "--target".to_string(),
+            "browser-package".to_string(),
+            "a.rad".to_string(),
+            "out.radpkg.json".to_string(),
+        ];
+        assert!(matches!(
+            parse_cli_args(&browser).unwrap(),
+            CliCommand::Build {
+                target: BuildTarget::BrowserPackage,
+                ..
+            }
+        ));
     }
 
     #[test]
