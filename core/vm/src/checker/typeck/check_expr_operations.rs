@@ -20,6 +20,28 @@ fn check_expr_operations(&mut self, expr: &Expr) -> Ty {
                 }
                 match self.lookup_with_depth(name) {
                     Some((binding, depth)) => {
+                        // Bare imports share source spellings in the merged
+                        // program, but private declarations are still scoped
+                        // to their source file.  The compiler mangles those
+                        // globals by file; accepting the raw binding here
+                        // otherwise produces a checked program that traps on
+                        // a nil global at runtime.  Enforce visibility at the
+                        // identifier boundary so direct calls, function
+                        // values, and callbacks cannot take different paths.
+                        if !binding.is_pub
+                            && is_cross_file(binding.defined_at.file, span.file)
+                        {
+                            let declaration_kind = if matches!(binding.ty, Ty::Fn { .. }) {
+                                "Function"
+                            } else {
+                                "Declaration"
+                            };
+                            self.error(
+                                span,
+                                format!("{} '{}' is private", declaration_kind, name),
+                                Some(format!("Add `pub` to the declaration of '{}'", name)),
+                            );
+                        }
                         if binding.is_unique {
                             if let Some(anon_base_depth) = self.anon_fn_scope_bases.last().copied()
                             {

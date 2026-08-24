@@ -445,6 +445,81 @@ pub readonly fn count() -> int {
     }
 
     #[test]
+    fn bare_import_cannot_call_a_private_function_across_files() {
+        let dir = mk_temp_dir();
+        fs::write(
+            dir.join("owner.rad"),
+            "pure fn hidden() -> int { return 41 }\n",
+        )
+        .unwrap();
+        fs::write(
+            dir.join("api.rad"),
+            concat!(
+                "use \"owner.rad\"\n",
+                "pub pure fn expose() -> int { return hidden() }\n",
+            ),
+        )
+        .unwrap();
+        fs::write(
+            dir.join("main.rad"),
+            "use \"api.rad\" as api\nfn main() -> nil { print(api.expose()) }\n",
+        )
+        .unwrap();
+
+        let loaded = load_program_with_source_map(dir.join("main.rad").to_str().unwrap()).unwrap();
+        let analysis = crate::pipeline::analyze_program(
+            &loaded.program,
+            &loaded.aliases,
+            CheckerOptions::default(),
+        );
+        assert!(analysis.errors().iter().any(|error| {
+            error.message == "Function 'hidden' is private"
+                && error.hint.as_deref() == Some("Add `pub` to the declaration of 'hidden'")
+        }));
+    }
+
+    #[test]
+    fn bare_import_cannot_capture_a_private_function_across_files() {
+        let dir = mk_temp_dir();
+        fs::write(
+            dir.join("owner.rad"),
+            concat!(
+                "pure fn hidden() -> int { return 41 }\n",
+                "pub pure fn exposed() -> int { return hidden() }\n",
+            ),
+        )
+        .unwrap();
+        fs::write(
+            dir.join("main.rad"),
+            concat!(
+                "use \"owner.rad\"\n",
+                "fn main() -> nil { let callback = hidden print(callback()) print(exposed()) }\n",
+            ),
+        )
+        .unwrap();
+
+        let loaded = load_program_with_source_map(dir.join("main.rad").to_str().unwrap()).unwrap();
+        let analysis = crate::pipeline::analyze_program(
+            &loaded.program,
+            &loaded.aliases,
+            CheckerOptions::default(),
+        );
+        let private_errors = analysis
+            .errors()
+            .iter()
+            .filter(|error| error.message == "Function 'hidden' is private")
+            .count();
+        assert_eq!(private_errors, 1, "the function value must be rejected at capture");
+        assert!(
+            !analysis
+                .errors()
+                .iter()
+                .any(|error| error.message.contains("exposed")),
+            "the declaring module may still call its private helper"
+        );
+    }
+
+    #[test]
     fn aliased_transient_resource_stays_out_of_world_identity() {
         let dir = mk_temp_dir();
         fs::write(
