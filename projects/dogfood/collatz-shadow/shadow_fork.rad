@@ -1,0 +1,63 @@
+use "shadow.rad"
+
+resource Start { n: int = 27 }
+
+component GapEvidence { result: ShadowGap = ShadowGap {} }
+
+entity gap_slot { GapEvidence {} }
+
+system Compare(evidence: mut GapEvidence, start: Start) {
+    evidence = GapEvidence { result: shadow_gap(start.n, mantissa_table()) }
+}
+
+component Feedback { starts: int = 0, violations: int = 0, largest_trapped_gap_micro: int = 0, bites: int = 0 }
+
+entity feedback { Feedback {} }
+
+intent Gap {
+    key target: entity
+    n: int
+    trapped_gap: int
+    violations: int
+    bite_step: int
+    steps: int
+}
+
+law Submit(target: entity, g: ShadowGap) {
+    propose Gap { target: target, n: g.n, trapped_gap: g.max_gap_micro, violations: g.bound_violations,
+        bite_step: g.bite_step, steps: g.steps }
+}
+
+resolver Gather for Gap(target, proposals) {
+    let mut v: int = 0
+    let mut biggest: int = 0
+    let mut bites: int = 0
+    for p in proposals {
+        v = v + p.violations
+        if p.trapped_gap > biggest { biggest = p.trapped_gap }
+        if p.bite_step >= 0 { bites = bites + 1 }
+    }
+    next(target, Feedback { starts: len(proposals), violations: v, largest_trapped_gap_micro: biggest, bites: bites })
+}
+
+constraint LadderHolds for Feedback(subject, proposed) {
+    require proposed.violations == 0 else "shadow.ladder_bound_violated"
+}
+
+fn main() -> nil {
+    let base: world_fork = fork()
+    let starts: list<int> = [27, 703, 10087, 35655, 270271, 626331, 8400511, 63728127]
+    let mut jobs: list<world_fork> = []
+    for n in starts { jobs = push(jobs, fork_with(base, Start { n: n })) }
+    let done: list<world_fork> = simulate_many(jobs, [system::Compare], 1, 1937)
+    let mut gaps: list<ShadowGap> = []
+    for i in range(len(done)) {
+        assert_only_changed(jobs[i], done[i], [GapEvidence])
+        let g: ShadowGap = (peek(done[i], gap_slot, GapEvidence) |> unwrap).result
+        gaps = push(gaps, g)
+        print(json_stringify(g))
+    }
+    settle { for g in gaps { Submit(feedback, g) } }
+    print(json_stringify(require(feedback, Feedback)))
+    print(why(feedback, Feedback))
+}

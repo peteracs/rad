@@ -1,0 +1,75 @@
+{
+  "abstract_forks": 1408,
+  "rad_prefix_checks": 90,
+  "python_prefix_checks": 5150,
+  "worker_counts": [
+    1,
+    4
+  ],
+  "record_replay": true,
+  "forged_X_rejected": true,
+  "actual_elliptic_curves_computed": 0,
+  "unconditional_X_proofs_found": 0,
+  "witnesses": [
+    {
+      "analytic": 4,
+      "corank": 2,
+      "divisible": 0,
+      "eventual_growth": 2,
+      "growth": 2,
+      "level": 0,
+      "primary_finite": true,
+      "rank": 2,
+      "residual_exponent": 0,
+      "tail_pairs": 0,
+      "x1_dimension": false,
+      "x3_at_level": true,
+      "x3_eventually": true
+    },
+    {
+      "analytic": 2,
+      "corank": 4,
+      "divisible": 0,
+      "eventual_growth": 4,
+      "growth": 4,
+      "level": 0,
+      "primary_finite": true,
+      "rank": 4,
+      "residual_exponent": 0,
+      "tail_pairs": 0,
+      "x1_dimension": true,
+      "x3_at_level": false,
+      "x3_eventually": false
+    },
+    {
+      "analytic": 2,
+      "corank": 4,
+      "divisible": 2,
+      "eventual_growth": 4,
+      "growth": 4,
+      "level": 3,
+      "primary_finite": false,
+      "rank": 2,
+      "residual_exponent": 6,
+      "tail_pairs": 0,
+      "x1_dimension": true,
+      "x3_at_level": false,
+      "x3_eventually": false
+    },
+    {
+      "analytic": 2,
+      "corank": 2,
+      "divisible": 0,
+      "eventual_growth": 2,
+      "growth": 4,
+      "level": 2,
+      "primary_finite": true,
+      "rank": 2,
+      "residual_exponent": 4,
+      "tail_pairs": 1,
+      "x1_dimension": true,
+      "x3_at_level": false,
+      "x3_eventually": true
+    }
+  ]
+}

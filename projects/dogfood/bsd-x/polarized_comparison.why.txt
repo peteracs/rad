@@ -1,0 +1,158 @@
+request {"analytic":2,"matrix":[1,0,-2,0,0,1,0,0,-2,0,4,0,0,0,0,0]}
+case {"analytic_reciprocity_verified":false,"diagonal_order":2,"lowest_mixed_degree":2,"minor_cols":[1,2],"minor_rows":[1,2],"target_coefficient":-4,"target_nonvanishing":true,"target_positions":[3,12]}
+request {"analytic":2,"matrix":[1,0,-1,0,0,1,0,0,-2,0,2,0,0,0,0,0]}
+case {"analytic_reciprocity_verified":false,"diagonal_order":2,"lowest_mixed_degree":2,"minor_cols":[1,2],"minor_rows":[1,2],"target_coefficient":-2,"target_nonvanishing":true,"target_positions":[3,12]}
+request {"analytic":2,"matrix":[1,0,0,0,0,1,0,0,-2,0,0,0,0,0,0,0]}
+case {"analytic_reciprocity_verified":false,"diagonal_order":2,"lowest_mixed_degree":2,"minor_cols":[0,1],"minor_rows":[1,2],"target_coefficient":-2,"target_nonvanishing":true,"target_positions":[3,14]}
+request {"analytic":2,"matrix":[1,0,1,0,0,1,0,0,-2,0,-2,0,0,0,0,0]}
+case {"analytic_reciprocity_verified":false,"diagonal_order":2,"lowest_mixed_degree":2,"minor_cols":[1,2],"minor_rows":[1,2],"target_coefficient":2,"target_nonvanishing":true,"target_positions":[3,12]}
+request {"analytic":2,"matrix":[1,0,2,0,0,1,0,0,-2,0,-4,0,0,0,0,0]}
+case {"analytic_reciprocity_verified":false,"diagonal_order":2,"lowest_mixed_degree":2,"minor_cols":[1,2],"minor_rows":[1,2],"target_coefficient":4,"target_nonvanishing":true,"target_positions":[3,12]}
+request {"analytic":2,"matrix":[1,0,-2,0,0,1,0,0,-1,0,2,0,0,0,0,0]}
+case {"analytic_reciprocity_verified":false,"diagonal_order":2,"lowest_mixed_degree":2,"minor_cols":[1,2],"minor_rows":[1,2],"target_coefficient":-2,"target_nonvanishing":true,"target_positions":[3,12]}
+request {"analytic":2,"matrix":[1,0,-1,0,0,1,0,0,-1,0,1,0,0,0,0,0]}
+case {"analytic_reciprocity_verified":false,"diagonal_order":2,"lowest_mixed_degree":2,"minor_cols":[1,2],"minor_rows":[1,2],"target_coefficient":-1,"target_nonvanishing":true,"target_positions":[3,12]}
+request {"analytic":2,"matrix":[1,0,0,0,0,1,0,0,-1,0,0,0,0,0,0,0]}
+case {"analytic_reciprocity_verified":false,"diagonal_order":2,"lowest_mixed_degree":2,"minor_cols":[0,1],"minor_rows":[1,2],"target_coefficient":-1,"target_nonvanishing":true,"target_positions":[3,14]}
+request {"analytic":2,"matrix":[1,0,1,0,0,1,0,0,-1,0,-1,0,0,0,0,0]}
+case {"analytic_reciprocity_verified":false,"diagonal_order":3,"lowest_mixed_degree":2,"minor_cols":[1,2],"minor_rows":[1,2],"target_coefficient":1,"target_nonvanishing":true,"target_positions":[3,12]}
+request {"analytic":2,"matrix":[1,0,2,0,0,1,0,0,-1,0,-2,0,0,0,0,0]}
+case {"analytic_reciprocity_verified":false,"diagonal_order":2,"lowest_mixed_degree":2,"minor_cols":[1,2],"minor_rows":[1,2],"target_coefficient":2,"target_nonvanishing":true,"target_positions":[3,12]}
+request {"analytic":2,"matrix":[1,0,-2,0,0,1,0,0,0,0,0,0,0,0,0,0]}
+case {"analytic_reciprocity_verified":false,"diagonal_order":2,"lowest_mixed_degree":2,"minor_cols":[1,2],"minor_rows":[0,1],"target_coefficient":-2,"target_nonvanishing":true,"target_positions":[11,12]}
+request {"analytic":2,"matrix":[1,0,-1,0,0,1,0,0,0,0,0,0,0,0,0,0]}
+case {"analytic_reciprocity_verified":false,"diagonal_order":2,"lowest_mixed_degree":2,"minor_cols":[1,2],"minor_rows":[0,1],"target_coefficient":-1,"target_nonvanishing":true,"target_positions":[11,12]}
+request {"analytic":2,"matrix":[1,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0]}
+case {"analytic_reciprocity_verified":false,"diagonal_order":2,"lowest_mixed_degree":2,"minor_cols":[0,1],"minor_rows":[0,1],"target_coefficient":-1,"target_nonvanishing":true,"target_positions":[11,14]}
+request {"analytic":2,"matrix":[1,0,1,0,0,1,0,0,0,0,0,0,0,0,0,0]}
+case {"analytic_reciprocity_verified":false,"diagonal_order":2,"lowest_mixed_degree":2,"minor_cols":[1,2],"minor_rows":[0,1],"target_coefficient":1,"target_nonvanishing":true,"target_positions":[11,12]}
+request {"analytic":2,"matrix":[1,0,2,0,0,1,0,0,0,0,0,0,0,0,0,0]}
+case {"analytic_reciprocity_verified":false,"diagonal_order":2,"lowest_mixed_degree":2,"minor_cols":[1,2],"minor_rows":[0,1],"target_coefficient":2,"target_nonvanishing":true,"target_positions":[11,12]}
+request {"analytic":2,"matrix":[1,0,-2,0,0,1,0,0,1,0,-2,0,0,0,0,0]}
+case {"analytic_reciprocity_verified":false,"diagonal_order":2,"lowest_mixed_degree":2,"minor_cols":[1,2],"minor_rows":[1,2],"target_coefficient":2,"target_nonvanishing":true,"target_positions":[3,12]}
+request {"analytic":2,"matrix":[1,0,-1,0,0,1,0,0,1,0,-1,0,0,0,0,0]}
+case {"analytic_reciprocity_verified":false,"diagonal_order":3,"lowest_mixed_degree":2,"minor_cols":[1,2],"minor_rows":[1,2],"target_coefficient":1,"target_nonvanishing":true,"target_positions":[3,12]}
+request {"analytic":2,"matrix":[1,0,0,0,0,1,0,0,1,0,0,0,0,0,0,0]}
+case {"analytic_reciprocity_verified":false,"diagonal_order":2,"lowest_mixed_degree":2,"minor_cols":[0,1],"minor_rows":[1,2],"target_coefficient":1,"target_nonvanishing":true,"target_positions":[3,14]}
+request {"analytic":2,"matrix":[1,0,1,0,0,1,0,0,1,0,1,0,0,0,0,0]}
+case {"analytic_reciprocity_verified":false,"diagonal_order":2,"lowest_mixed_degree":2,"minor_cols":[1,2],"minor_rows":[1,2],"target_coefficient":-1,"target_nonvanishing":true,"target_positions":[3,12]}
+request {"analytic":2,"matrix":[1,0,2,0,0,1,0,0,1,0,2,0,0,0,0,0]}
+case {"analytic_reciprocity_verified":false,"diagonal_order":2,"lowest_mixed_degree":2,"minor_cols":[1,2],"minor_rows":[1,2],"target_coefficient":-2,"target_nonvanishing":true,"target_positions":[3,12]}
+request {"analytic":2,"matrix":[1,0,-2,0,0,1,0,0,2,0,-4,0,0,0,0,0]}
+case {"analytic_reciprocity_verified":false,"diagonal_order":2,"lowest_mixed_degree":2,"minor_cols":[1,2],"minor_rows":[1,2],"target_coefficient":4,"target_nonvanishing":true,"target_positions":[3,12]}
+request {"analytic":2,"matrix":[1,0,-1,0,0,1,0,0,2,0,-2,0,0,0,0,0]}
+case {"analytic_reciprocity_verified":false,"diagonal_order":2,"lowest_mixed_degree":2,"minor_cols":[1,2],"minor_rows":[1,2],"target_coefficient":2,"target_nonvanishing":true,"target_positions":[3,12]}
+request {"analytic":2,"matrix":[1,0,0,0,0,1,0,0,2,0,0,0,0,0,0,0]}
+case {"analytic_reciprocity_verified":false,"diagonal_order":2,"lowest_mixed_degree":2,"minor_cols":[0,1],"minor_rows":[1,2],"target_coefficient":2,"target_nonvanishing":true,"target_positions":[3,14]}
+request {"analytic":2,"matrix":[1,0,1,0,0,1,0,0,2,0,2,0,0,0,0,0]}
+case {"analytic_reciprocity_verified":false,"diagonal_order":2,"lowest_mixed_degree":2,"minor_cols":[1,2],"minor_rows":[1,2],"target_coefficient":-2,"target_nonvanishing":true,"target_positions":[3,12]}
+request {"analytic":2,"matrix":[1,0,2,0,0,1,0,0,2,0,4,0,0,0,0,0]}
+case {"analytic_reciprocity_verified":false,"diagonal_order":2,"lowest_mixed_degree":2,"minor_cols":[1,2],"minor_rows":[1,2],"target_coefficient":-4,"target_nonvanishing":true,"target_positions":[3,12]}
+witness {"analytic_reciprocity_verified":false,"diagonal_order":2,"lowest_mixed_degree":2,"minor_cols":[0,1],"minor_rows":[0,1],"target_coefficient":-1,"target_nonvanishing":true,"target_positions":[11,14]}
+PolarEvidence of rank_two_case = { lowest_mixed_degree: 2, diagonal_order: 2, target_coefficient: -1, target_positions: [11, 1â€¦   (set in frame 0)
+
+  <- resolver `ExplainPolar`
+     intent: PolarChecked
+     key: rank_two_case
+
+     <- proposal PolarChecked { target: rank_two_case, request: PolarRequest { analytic: 2, matrix: [1, 0, 0, 0, â€¦
+        proposed by law `SubmitPolar` at line 87
+
+     settlement origin:
+  <- by top-level code
+PolarEvidence.target_positions of entity 1 = [11, 14]
+PolarEvidence of rank_two_case = { lowest_mixed_degree: 2, diagonal_order: 2, target_coefficient: -1, target_positions: [11, 1â€¦   (set in frame 0)
+
+  <- resolver `ExplainPolar`
+     intent: PolarChecked
+     key: rank_two_case
+
+     <- proposal PolarChecked { target: rank_two_case, request: PolarRequest { analytic: 2, matrix: [1, 0, 0, 0, â€¦
+        proposed by law `SubmitPolar` at line 87
+
+     settlement origin:
+  <- by top-level code
+PolarEvidence.target_coefficient of entity 1 = -1
+PolarEvidence of rank_two_case = { lowest_mixed_degree: 2, diagonal_order: 2, target_coefficient: -1, target_positions: [11, 1â€¦   (set in frame 0)
+
+  <- resolver `ExplainPolar`
+     intent: PolarChecked
+     key: rank_two_case
+
+     <- proposal PolarChecked { target: rank_two_case, request: PolarRequest { analytic: 2, matrix: [1, 0, 0, 0, â€¦
+        proposed by law `SubmitPolar` at line 87
+
+     settlement origin:
+  <- by top-level code
+witness {"analytic_reciprocity_verified":false,"diagonal_order":4,"lowest_mixed_degree":1,"minor_cols":[2,3],"minor_rows":[1,2],"target_coefficient":-1,"target_nonvanishing":true,"target_positions":[1,12]}
+PolarEvidence of nilpotent_case = { lowest_mixed_degree: 1, diagonal_order: 4, target_coefficient: -1, target_positions: [1, 12â€¦   (set in frame 0)
+
+  <- resolver `ExplainPolar`
+     intent: PolarChecked
+     key: nilpotent_case
+
+     <- proposal PolarChecked { target: nilpotent_case, request: PolarRequest { analytic: 2, matrix: [0, 1, 0, 0,â€¦
+        proposed by law `SubmitPolar` at line 87
+
+     settlement origin:
+  <- by top-level code
+PolarEvidence.target_positions of entity 2 = [1, 12]
+PolarEvidence of nilpotent_case = { lowest_mixed_degree: 1, diagonal_order: 4, target_coefficient: -1, target_positions: [1, 12â€¦   (set in frame 0)
+
+  <- resolver `ExplainPolar`
+     intent: PolarChecked
+     key: nilpotent_case
+
+     <- proposal PolarChecked { target: nilpotent_case, request: PolarRequest { analytic: 2, matrix: [0, 1, 0, 0,â€¦
+        proposed by law `SubmitPolar` at line 87
+
+     settlement origin:
+  <- by top-level code
+PolarEvidence.target_coefficient of entity 2 = -1
+PolarEvidence of nilpotent_case = { lowest_mixed_degree: 1, diagonal_order: 4, target_coefficient: -1, target_positions: [1, 12â€¦   (set in frame 0)
+
+  <- resolver `ExplainPolar`
+     intent: PolarChecked
+     key: nilpotent_case
+
+     <- proposal PolarChecked { target: nilpotent_case, request: PolarRequest { analytic: 2, matrix: [0, 1, 0, 0,â€¦
+        proposed by law `SubmitPolar` at line 87
+
+     settlement origin:
+  <- by top-level code
+witness {"analytic_reciprocity_verified":false,"diagonal_order":4,"lowest_mixed_degree":4,"minor_cols":[],"minor_rows":[],"target_coefficient":0,"target_nonvanishing":false,"target_positions":[]}
+PolarEvidence of rank_zero_case = { lowest_mixed_degree: 4, diagonal_order: 4, target_coefficient: 0, target_positions: [], minâ€¦   (set in frame 0)
+
+  <- resolver `ExplainPolar`
+     intent: PolarChecked
+     key: rank_zero_case
+
+     <- proposal PolarChecked { target: rank_zero_case, request: PolarRequest { analytic: 2, matrix: [0, 0, 0, 0,â€¦
+        proposed by law `SubmitPolar` at line 87
+
+     settlement origin:
+  <- by top-level code
+PolarEvidence.target_positions of entity 3 = []
+PolarEvidence of rank_zero_case = { lowest_mixed_degree: 4, diagonal_order: 4, target_coefficient: 0, target_positions: [], minâ€¦   (set in frame 0)
+
+  <- resolver `ExplainPolar`
+     intent: PolarChecked
+     key: rank_zero_case
+
+     <- proposal PolarChecked { target: rank_zero_case, request: PolarRequest { analytic: 2, matrix: [0, 0, 0, 0,â€¦
+        proposed by law `SubmitPolar` at line 87
+
+     settlement origin:
+  <- by top-level code
+PolarEvidence.target_coefficient of entity 3 = 0
+PolarEvidence of rank_zero_case = { lowest_mixed_degree: 4, diagonal_order: 4, target_coefficient: 0, target_positions: [], minâ€¦   (set in frame 0)
+
+  <- resolver `ExplainPolar`
+     intent: PolarChecked
+     key: rank_zero_case
+
+     <- proposal PolarChecked { target: rank_zero_case, request: PolarRequest { analytic: 2, matrix: [0, 0, 0, 0,â€¦
+        proposed by law `SubmitPolar` at line 87
+
+     settlement origin:
+  <- by top-level code

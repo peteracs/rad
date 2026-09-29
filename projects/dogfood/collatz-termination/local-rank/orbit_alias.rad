@@ -1,0 +1,68 @@
+use "features.rad"
+
+resource AliasQuestion { start: int = 1, memory: int = 1, limit: int = 1000, modulus: int = 1 }
+
+component AliasAnswer {
+    input: int = 0, memory: int = 0, modulus: int = 1, found: bool = false, left: int = 0, right: int = 0,
+    steps: int = 0, odds: int = 0, examined: int = 0,
+}
+
+entity scratch { AliasAnswer {} }
+
+system Seek(answer: mut AliasAnswer, question: AliasQuestion) {
+    let mut seen: map<str, int> = {}
+    let mut path: list<int> = []
+    let mut odd_prefixes: list<int> = []
+    let mut value: int = question.start
+    let mut odd_count: int = 0
+    let mut result: AliasAnswer = AliasAnswer { input: value, memory: question.memory, modulus: question.modulus }
+    for step in range(question.limit) {
+        if value == 1 { break }
+        let signature: map<str, int> = factor_counts(binary_word(value), question.memory)
+        let key: str = json_stringify(signature) + "@" + str(value % question.modulus)
+        let earlier: int = get_or(seen, key, -1)
+        result.examined = step + 1
+        if earlier >= 0 and value != path[earlier] and odd_count > odd_prefixes[earlier] {
+            assert(factor_counts(binary_word(path[earlier]), question.memory) == signature, "signature encoding collision")
+            assert(value % question.modulus == path[earlier] % question.modulus, "residue signature collision")
+            result.found = true
+            result.left = path[earlier]
+            result.right = value
+            result.steps = step - earlier
+            result.odds = odd_count - odd_prefixes[earlier]
+            break
+        }
+        seen[key] = step
+        path = push(path, value)
+        odd_prefixes = push(odd_prefixes, odd_count)
+        if value % 2 == 0 { value = int_div(value, 2) }
+        else {
+            assert(value <= 3074457345618258602, "trajectory exceeds signed exact domain")
+            value = int_div(3 * value + 1, 2)
+            odd_count = odd_count + 1
+        }
+    }
+    answer = result
+}
+
+fn main() -> nil {
+    let args: list<str> = sys_args()
+    assert(len(args) == 1, "supply alias questions")
+    let rows: list<map<str, any>> = json_parse(read_file(args[0])) |> unwrap
+    let base: world_fork = fork()
+    let mut jobs: list<world_fork> = []
+    for row in rows {
+        assert(row["memory"] >= 1 and row["memory"] <= 6 and row["start"] > 0 and row["limit"] > 0, "invalid alias question")
+        let modulus: int = get_or(row, "modulus", 1)
+        assert(modulus > 0, "invalid residue modulus")
+        jobs = push(jobs, fork_with(base, AliasQuestion { start: row["start"], memory: row["memory"], limit: row["limit"], modulus: modulus }))
+    }
+    let before: str = world_digest()
+    let results: list<world_fork> = simulate_many(jobs, [system::Seek], 1, 1937)
+    assert(world_digest() == before, "alias search changed live world")
+    for i in range(len(results)) {
+        assert_only_changed(jobs[i], results[i], [AliasAnswer])
+        let result: AliasAnswer = peek(results[i], scratch, AliasAnswer) |> unwrap
+        print(json_stringify(result))
+    }
+}

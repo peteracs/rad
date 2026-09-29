@@ -1,0 +1,15 @@
+use "newton.rad"
+
+fn main() -> nil {
+    assert(newton_tail([nat(1), nat(3), nat(7)]), "valid shifted quadratic tail rejected")
+    assert(not newton_tail([nat(3), nat(1), nat(1)]), "negative first difference accepted")
+    assert(not newton_tail([nat(0), nat(1), nat(2), nat(2)]), "negative higher difference accepted")
+    assert(not newton_tail([nat(100), nat(99)]), "finite positive samples accepted as infinite proof")
+    for x in range(20) {
+        assert(ndecimal(newton_value([0, 0, 1], nat(x))) == str(int_div(x * (x - 1), 2)), "binomial evaluation differs")
+    }
+    let mut large: Natural = nat(64)
+    for _ in range(3) { large = newton_value([0, 0, 0, 0, 1], large) }
+    assert(ndecimal(large) == "88597259123193965850611463382958470855819567111205535250935377064261699023551558853625", "arbitrary precision composition differs")
+    print("Newton finite differences and 286-bit composition verified")
+}

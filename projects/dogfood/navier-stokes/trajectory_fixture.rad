@@ -1,0 +1,20 @@
+use "trajectory_stage.rad"
+pub pure fn fixture_bank(kind: int) -> list<FluidMode> {
+    let waves: list<list<int>> = [[1,0,0],[0,0,1],[1,0,1]]
+    let mut result: list<FluidMode> = []
+    for index in range(3) {
+        for polarity in [-1,1] {
+            let k: list<int> = [polarity*waves[index][0],polarity*waves[index][1],polarity*waves[index][2]]
+            let re: list<int> = if kind == 1 and index == 0 { [0,1,1] }
+                else if kind == 1 and index == 1 { [1,1,0] }
+                else if kind == 3 and index == 0 { [0,1,1] } else { [0,0,0] }
+            let im: list<int> = if kind == 2 and index == 2 { [0,-2*polarity,0] } else { [0,0,0] }
+            result = push(result,FluidMode { k: k,re: re,im: im })
+        }
+    }
+    return result
+}
+pub pure fn fixture_stage() -> SmoothStage {
+    return SmoothStage { a: [fixture_bank(1),fixture_bank(0),fixture_bank(0)],
+        b: [fixture_bank(0),fixture_bank(2),fixture_bank(3)] }
+}

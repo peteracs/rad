@@ -1,0 +1,4 @@
+use "local.rad"
+let k: int = int(sys_args()[0])
+let d: int = int(sys_args()[1])
+print(json_stringify(local_sieve(k, d)))

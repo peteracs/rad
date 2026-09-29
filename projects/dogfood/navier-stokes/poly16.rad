@@ -1,0 +1,53 @@
+// Exact free polynomial algebra: 16 independent scalar variables, radix four.
+// Variables n[3], n_dot[3], v[3], Kv[3], source[3], delta.
+pub struct Term { key: int = 0,c: int = 0 }
+pub pure fn merge(p: list<Term>,t: Term) -> list<Term> {
+    let mut out: list<Term> = p
+    for i in range(len(out)) {
+        if out[i].key == t.key {
+            let c: int = out[i].c+t.c
+            assert(c >= -1000000 and c <= 1000000,"coefficient bound")
+            out[i] = Term { key:t.key,c:c }
+            return out
+        }
+    }
+    assert(len(out) < 1000,"polynomial capacity")
+    return push(out,t)
+}
+pub pure fn plus(p: list<Term>,q: list<Term>,polarity: int) -> list<Term> {
+    assert(polarity == 1 or polarity == -1,"sum sign")
+    let mut out: list<Term> = p
+    for t in q { out = merge(out,Term { key:t.key,c:polarity*t.c }) }
+    return out
+}
+pub pure fn times(p: list<Term>,q: list<Term>) -> list<Term> {
+    let mut out: list<Term> = []
+    for a in p { for b in q {
+        let mut ka: int = a.key
+        let mut kb: int = b.key
+        for _ in range(16) {
+            assert(ka%4+kb%4 < 4,"monomial exponent capacity")
+            ka = int_div(ka,4)
+            kb = int_div(kb,4)
+        }
+        assert(ka == 0 and kb == 0,"variable capacity")
+        assert(a.c >= -1000 and a.c <= 1000 and b.c >= -1000 and b.c <= 1000,"product coefficient bound")
+        out = merge(out,Term { key:a.key+b.key,c:a.c*b.c })
+    } }
+    return out
+}
+pub pure fn variable(index: int) -> list<Term> {
+    assert(index >= 0 and index < 16,"variable index")
+    let mut key: int = 1
+    for _ in range(index) { key = 4*key }
+    return [Term { key:key,c:1 }]
+}
+pub pure fn dot_at(a: int,b: int) -> list<Term> {
+    let mut out: list<Term> = []
+    for i in range(3) { out = plus(out,times(variable(a+i),variable(b+i)),1) }
+    return out
+}
+pub pure fn zero(p: list<Term>) -> bool {
+    for t in p { if t.c != 0 { return false } }
+    return true
+}

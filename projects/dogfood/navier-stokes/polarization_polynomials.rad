@@ -1,0 +1,82 @@
+// Generated from full Fourier convolution; parameters are quarter-integers in [-2,2].
+pub pure fn polarization_receiver_production(x: int,y: int) -> int {
+    assert(x >= -8 and x <= 8 and y >= -8 and y <= 8,"polarization box")
+    let mut result: int = 0
+    result = result+-15*x*x*y*y
+    result = result+118*x*x*y
+    result = result+-176*x*x
+    result = result+-118*x*y*y
+    result = result+-448*x*y
+    result = result+3456*x
+    result = result+-176*y*y
+    result = result+-3456*y
+    result = result+-10240
+    return result
+}
+pub pure fn polarization_receiver_loss(x: int,y: int) -> int {
+    assert(x >= -8 and x <= 8 and y >= -8 and y <= 8,"polarization box")
+    let mut result: int = 0
+    result = result+3*x*x*y*y
+    result = result+-12*x*x*y
+    result = result+74*x*x
+    result = result+12*x*y*y
+    result = result+162*x*y
+    result = result+-528*x
+    result = result+74*y*y
+    result = result+528*y
+    result = result+8448
+    return result
+}
+pub pure fn polarization_receiver_norm(x: int,y: int) -> int {
+    assert(x >= -8 and x <= 8 and y >= -8 and y <= 8,"polarization box")
+    let mut result: int = 0
+    result = result+5*x*x*y*y
+    result = result+-20*x*x*y
+    result = result+220*x*x
+    result = result+20*x*y*y
+    result = result+240*x*y
+    result = result+-1600*x
+    result = result+220*y*y
+    result = result+1600*y
+    result = result+32768
+    return result
+}
+pub pure fn polarization_donor_production(x: int,y: int) -> int {
+    assert(x >= -8 and x <= 8 and y >= -8 and y <= 8,"polarization box")
+    let mut result: int = 0
+    result = result+1*x
+    result = result+1*y
+    return result
+}
+pub pure fn polarization_donor_loss(x: int,y: int) -> int {
+    assert(x >= -8 and x <= 8 and y >= -8 and y <= 8,"polarization box")
+    let mut result: int = 0
+    result = result+1*x*x
+    result = result+1*y*y
+    result = result+88
+    return result
+}
+pub pure fn polarization_donor_h11(x: int,y: int) -> int {
+    assert(x >= -8 and x <= 8 and y >= -8 and y <= 8,"polarization box")
+    let mut result: int = 0
+    result = result+177147*x*x
+    result = result+177147*y*y
+    result = result+11534016
+    return result
+}
+pub pure fn polarization_donor_h7(x: int,y: int) -> int {
+    assert(x >= -8 and x <= 8 and y >= -8 and y <= 8,"polarization box")
+    let mut result: int = 0
+    result = result+2187*x*x
+    result = result+2187*y*y
+    result = result+152256
+    return result
+}
+pub pure fn polarization_donor_norm(x: int,y: int) -> int {
+    assert(x >= -8 and x <= 8 and y >= -8 and y <= 8,"polarization box")
+    let mut result: int = 0
+    result = result+1*x*x
+    result = result+1*y*y
+    result = result+160
+    return result
+}

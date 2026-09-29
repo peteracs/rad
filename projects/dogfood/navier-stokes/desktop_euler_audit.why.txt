@@ -1,0 +1,50 @@
+packet {"j":8,"map_power":1,"margin":779575,"navier_stokes_proved":false,"scale_identity_checked":true}
+packet {"j":12,"map_power":2,"margin":18720371,"navier_stokes_proved":false,"scale_identity_checked":true}
+packet {"j":16,"map_power":3,"margin":165675119,"navier_stokes_proved":false,"scale_identity_checked":true}
+packet {"j":20,"map_power":4,"margin":871922539,"navier_stokes_proved":false,"scale_identity_checked":true}
+packet {"j":24,"map_power":5,"margin":3334742951,"navier_stokes_proved":false,"scale_identity_checked":true}
+packet {"j":28,"map_power":6,"margin":10275174755,"navier_stokes_proved":false,"scale_identity_checked":true}
+packet {"j":32,"map_power":7,"margin":27085529311,"navier_stokes_proved":false,"scale_identity_checked":true}
+packet {"j":36,"map_power":8,"margin":63450239579,"navier_stokes_proved":false,"scale_identity_checked":true}
+packet {"j":40,"map_power":9,"margin":135522617879,"navier_stokes_proved":false,"scale_identity_checked":true}
+packet {"j":44,"map_power":10,"margin":268740098131,"navier_stokes_proved":false,"scale_identity_checked":true}
+packet {"j":48,"map_power":11,"margin":501360537935,"navier_stokes_proved":false,"scale_identity_checked":true}
+packet {"j":52,"map_power":12,"margin":888802155851,"navier_stokes_proved":false,"scale_identity_checked":true}
+packet {"j":56,"map_power":13,"margin":1508869679239,"navier_stokes_proved":false,"scale_identity_checked":true}
+packet {"j":60,"map_power":14,"margin":2467949278019,"navier_stokes_proved":false,"scale_identity_checked":true}
+packet {"j":64,"map_power":15,"margin":3908254859711,"navier_stokes_proved":false,"scale_identity_checked":true}
+packet {"j":68,"map_power":16,"margin":6016208301115,"navier_stokes_proved":false,"scale_identity_checked":true}
+PacketEvidence of packet_result = { j: 8, map_power: 1, margin: 779575, scale_identity_checked: true, navier_stokes_proved: falâ€¦   (set in frame 0)
+
+  <- resolver `CheckPacket`
+     intent: PacketChecked
+     key: packet_result
+
+     <- proposal PacketChecked { target: packet_result, request: PacketCase { j: 12, map_power: 2 }, evidence: Paâ€¦
+        proposed by law `SubmitPacket` at line 27
+
+     <- proposal PacketChecked { target: packet_result, request: PacketCase { j: 16, map_power: 3 }, evidence: Paâ€¦
+        proposed by law `SubmitPacket` at line 27
+
+     <- proposal PacketChecked { target: packet_result, request: PacketCase { j: 20, map_power: 4 }, evidence: Paâ€¦
+        proposed by law `SubmitPacket` at line 27
+
+     <- proposal PacketChecked { target: packet_result, request: PacketCase { j: 24, map_power: 5 }, evidence: Paâ€¦
+        proposed by law `SubmitPacket` at line 27
+
+     <- proposal PacketChecked { target: packet_result, request: PacketCase { j: 28, map_power: 6 }, evidence: Paâ€¦
+        proposed by law `SubmitPacket` at line 27
+
+     <- proposal PacketChecked { target: packet_result, request: PacketCase { j: 32, map_power: 7 }, evidence: Paâ€¦
+        proposed by law `SubmitPacket` at line 27
+
+     <- proposal PacketChecked { target: packet_result, request: PacketCase { j: 36, map_power: 8 }, evidence: Paâ€¦
+        proposed by law `SubmitPacket` at line 27
+
+     <- proposal PacketChecked { target: packet_result, request: PacketCase { j: 40, map_power: 9 }, evidence: Paâ€¦
+        proposed by law `SubmitPacket` at line 27
+
+     <- 8 proposals shown, 8 additional proposals omitted
+
+     settlement origin:
+  <- by top-level code

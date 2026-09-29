@@ -1,0 +1,9 @@
+{
+  "actual_derivative_estimates_proved": false,
+  "full_localized_residual_zero": false,
+  "pressure_cancelled": true,
+  "tangency_defect_damped": true,
+  "symbolic_variables": 16,
+  "record_replay": true,
+  "omitted_damping_rejected": true
+}

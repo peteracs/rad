@@ -1,0 +1,83 @@
+// Residue-uniform merging. A parity word w (length a, q odd steps) sends every
+// n = r_w (mod 2^a) to (3^q n + C_w) / 2^a, where C' = 3^b C + b 2^t per bit b.
+// If a word w' with the same (a, q) has C_w' = C_w + 3^q d, d > 0, then n
+// merges after a steps with n - d (which follows w'). So w is dominated.
+pub struct MergeSieve {
+    depth: int = 0
+    trapped: int = 0          // |S_K|: every prefix keeps 3^q >= 2^t
+    survivors: int = 0        // trapped and no prefix is merge-dominated
+    dominated_at: list<int> = []  // trapped prefixes first dominated at length a (index a)
+}
+
+pub pure fn pow3(q: int) -> int {
+    let mut p: int = 1
+    for _ in range(q) { p = p * 3 }
+    return p
+}
+
+pub pure fn qmin_int(t: int) -> int {
+    let mut q: int = 0
+    let mut p: int = 1
+    while p < (1 << t) { p = p * 3 q = q + 1 }
+    return q
+}
+
+pub pure fn key(a: int, q: int, c: int) -> int { return ((c % pow3(q)) * 64 + a) * 64 + q }
+
+pub pure fn sieve(depth: int) -> MergeSieve {
+    // Pass 1: the largest offset in every (a, q, C mod 3^q) class, over all words.
+    let mut best: map<int, int> = {}
+    let mut stack: list<list<int>> = [[0, 0, 0]]   // length, q, C
+    while len(stack) > 0 {
+        let s: list<int> = stack[len(stack) - 1]
+        stack = slice(stack, 0, len(stack) - 1)
+        let a: int = s[0]
+        let q: int = s[1]
+        let c: int = s[2]
+        if a >= 1 {
+            let k: int = key(a, q, c)
+            if not contains(best, k) or c > best[k] { best = set_at(best, k, c) }
+        }
+        if a < depth {
+            // A partner must match the odd count of some trapped word of length a' <= depth,
+            // which needs q >= qmin(a'), and qmin(a') - a' is smallest at a' = depth.
+            let slack: int = qmin_int(depth) - depth
+            if q >= (a + 1) + slack { stack = push(stack, [a + 1, q, c]) }
+            stack = push(stack, [a + 1, q + 1, 3 * c + (1 << a)])
+        }
+    }
+    // Pass 2: trapped prefixes; a prefix is dominated if its class holds a larger offset.
+    let mut trapped: int = 0
+    let mut survivors: int = 0
+    let mut dominated: list<int> = []
+    for _ in range(depth + 1) { dominated = push(dominated, 0) }
+    let mut walk: list<list<int>> = [[0, 0, 0, 1, 0]]   // length, q, C, 3^q, alive (0/1 dominated flag)
+    while len(walk) > 0 {
+        let s: list<int> = walk[len(walk) - 1]
+        walk = slice(walk, 0, len(walk) - 1)
+        let a: int = s[0]
+        let q: int = s[1]
+        let c: int = s[2]
+        let p3: int = s[3]
+        let hit: int = s[4]
+        if a == depth {
+            trapped = trapped + 1
+            if hit == 0 { survivors = survivors + 1 }
+        } else {
+            for b in [0, 1] {
+                let a2: int = a + 1
+                let q2: int = q + b
+                let p3b: int = if b == 1 { 3 * p3 } else { p3 }
+                if p3b >= (1 << a2) {
+                    let c2: int = if b == 1 { 3 * c + (1 << a) } else { c }
+                    let k2: int = key(a2, q2, c2)
+                    let larger: bool = contains(best, k2) and best[k2] > c2
+                    let mut h: int = hit
+                    if hit == 0 and larger { h = 1 dominated = set_at(dominated, a2, dominated[a2] + 1) }
+                    walk = push(walk, [a2, q2, c2, p3b, h])
+                }
+            }
+        }
+    }
+    return MergeSieve { depth: depth, trapped: trapped, survivors: survivors, dominated_at: dominated }
+}

@@ -1,0 +1,134 @@
+// Exact mixed determinant coefficients; no arithmetic reciprocity is assumed.
+resource PolarRequest { analytic: int = 2,matrix: list<int> = [1,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0] }
+component PolarEvidence { lowest_mixed_degree: int = 0,diagonal_order: int = 0,
+    target_coefficient: int = 0,target_positions: list<int> = [],
+    minor_rows: list<int> = [],minor_cols: list<int> = [],target_nonvanishing: bool = false,
+    analytic_reciprocity_verified: bool = false }
+entity polar_trial { PolarEvidence {} }
+entity rank_two_case { PolarEvidence {} }
+entity nilpotent_case { PolarEvidence {} }
+entity rank_zero_case { PolarEvidence {} }
+
+pure fn has_index(items: list<int>,index: int) -> bool {
+    for item in items { if item==index { return true } }
+    return false
+}
+pure fn mixed_terms(a: list<int>) -> map<int,int> {
+    let mut terms: map<int,int> = {}
+    for p0 in range(4) { for p1 in range(4) { if p0!=p1 {
+        for p2 in range(4) { if p2!=p0 and p2!=p1 {
+            for p3 in range(4) { if p3!=p0 and p3!=p1 and p3!=p2 {
+                let perm: list<int> = [p0,p1,p2,p3]
+                let mut orientation: int = 1
+                for i in range(4) { for j in range(i+1,4) { if perm[i]>perm[j] { orientation=-orientation } } }
+                for subset in range(16) {
+                    let mut mask: int = 0
+                    let mut coefficient: int = orientation
+                    for i in range(4) {
+                        let pos: int = 4*i+perm[i]
+                        if (subset & (1 << i))!=0 { mask=mask+(1 << pos) }
+                        else { coefficient=coefficient*a[pos] }
+                    }
+                    terms[mask]=get_or(terms,mask,0)+coefficient
+                }
+            } }
+        } }
+    } } }
+    return terms
+}
+pure fn assess_polar(q: PolarRequest) -> PolarEvidence {
+    assert(q.analytic>=0 and q.analytic<=4 and len(q.matrix)==16,"four-dimensional diagnostic domain")
+    for a in q.matrix { assert(a>=-5 and a<=5,"matrix coefficient domain") }
+    let terms: map<int,int> = mixed_terms(q.matrix)
+    let mut minimum: int = 5
+    let mut target: int = 0
+    let mut positions: list<int> = []
+    let mut diagonal: list<int> = [0,0,0,0,0]
+    for mask in sort(keys(terms)) {
+        let coefficient: int = get_or(terms,mask,0)
+        if coefficient!=0 {
+            let mut slots: list<int> = []
+            let mut is_diagonal: bool = true
+            for pos in range(16) { if (mask & (1 << pos))!=0 {
+                slots=push(slots,pos)
+                if int_div(pos,4)!=pos%4 { is_diagonal=false }
+            } }
+            let degree: int = len(slots)
+            if degree<minimum { minimum=degree }
+            if is_diagonal { diagonal[degree]=diagonal[degree]+coefficient }
+            if degree==q.analytic and target==0 { target=coefficient positions=slots }
+        }
+    }
+    let mut diag_order: int = 5
+    for i in range(5) { if diagonal[i]!=0 and diag_order==5 { diag_order=i } }
+    assert(minimum<=4 and diag_order<=4 and minimum<=diag_order,"specializing perturbations can increase vanishing")
+    let mut occupied_rows: list<int> = []
+    let mut occupied_cols: list<int> = []
+    for pos in positions {
+        occupied_rows=push(occupied_rows,int_div(pos,4))
+        occupied_cols=push(occupied_cols,pos%4)
+    }
+    let mut minor_rows: list<int> = []
+    let mut minor_cols: list<int> = []
+    if target!=0 {
+        for i in range(4) {
+            if not has_index(occupied_rows,i) { minor_rows=push(minor_rows,i) }
+            if not has_index(occupied_cols,i) { minor_cols=push(minor_cols,i) }
+        }
+        assert(len(minor_rows)==4-q.analytic and len(minor_cols)==4-q.analytic,"mixed coefficient supplies complementary minor")
+    }
+    return PolarEvidence { lowest_mixed_degree:minimum,diagonal_order:diag_order,
+        target_coefficient:target,target_positions:positions,minor_rows:minor_rows,minor_cols:minor_cols,
+        target_nonvanishing:target!=0,analytic_reciprocity_verified:false }
+}
+system PolarStep(row: mut PolarEvidence,q: PolarRequest) { row=assess_polar(q) }
+intent PolarChecked { key target: entity,request: PolarRequest,evidence: PolarEvidence }
+law SubmitPolar(target: entity,request: PolarRequest,evidence: PolarEvidence) {
+    propose PolarChecked { target:target,request:request,evidence:evidence }
+}
+resolver ExplainPolar for PolarChecked(target,proposals) {
+    assert(len(proposals)==1,"one polarized certificate")
+    let row: PolarEvidence = assess_polar(proposals[0].request)
+    assert(row==proposals[0].evidence,"a mixed coefficient is not an arithmetic reciprocity proof")
+    next(target,PolarEvidence { lowest_mixed_degree:row.lowest_mixed_degree,diagonal_order:row.diagonal_order,
+        target_coefficient:row.target_coefficient,target_positions:row.target_positions,
+        minor_rows:row.minor_rows,minor_cols:row.minor_cols,target_nonvanishing:row.target_nonvanishing,
+        analytic_reciprocity_verified:row.analytic_reciprocity_verified })
+}
+fn main() -> nil {
+    let base: world_fork = fork()
+    let digest: str = world_digest()
+    let mut jobs: list<world_fork> = []
+    let mut requests: list<PolarRequest> = []
+    for left in range(-2,3) { for right in range(-2,3) {
+        let q: PolarRequest = PolarRequest { matrix:[1,0,right,0,0,1,0,0,left,0,left*right,0,0,0,0,0] }
+        requests=push(requests,q)
+        jobs=push(jobs,fork_with(base,q))
+    } }
+    let results: list<world_fork> = simulate_many(jobs,[system::PolarStep],1,20260909)
+    for i in range(len(results)) {
+        assert_only_changed(jobs[i],results[i],[PolarEvidence])
+        let row: PolarEvidence = peek(results[i],polar_trial,PolarEvidence) |> unwrap
+        assert(row==assess_polar(requests[i]),"requested polarized matrix evaluated")
+        assert(row.lowest_mixed_degree==2,"rank-two perturbation degree is basis invariant")
+        print("request",json_stringify(requests[i]))
+        print("case",json_stringify(row))
+    }
+    assert(world_digest()==digest,"polarized forks preserve parent")
+    let usual: PolarRequest = PolarRequest {}
+    let nilpotent: PolarRequest = PolarRequest { matrix:[0,1,0,0,0,0,1,0,0,0,0,1,0,0,0,0] }
+    let zero: PolarRequest = PolarRequest { matrix:[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0] }
+    let mut row: PolarEvidence = assess_polar(usual)
+    if len(sys_args())>0 { row.analytic_reciprocity_verified=true }
+    settle {
+        SubmitPolar(rank_two_case,usual,row)
+        SubmitPolar(nilpotent_case,nilpotent,assess_polar(nilpotent))
+        SubmitPolar(rank_zero_case,zero,assess_polar(zero))
+    }
+    for target in [rank_two_case,nilpotent_case,rank_zero_case] {
+        print("witness",json_stringify(require(target,PolarEvidence)))
+        print(why(target,PolarEvidence))
+        print(why_field(target,PolarEvidence,"target_positions"))
+        print(why_field(target,PolarEvidence,"target_coefficient"))
+    }
+}

@@ -1,0 +1,7 @@
+{
+  "calibration_round.rad": "c5a489c0bef1338c6fc4074af9f277627e296e49c74530b11d26ce18b4bde62d",
+  "calibration_bounds.rad": "07aba3864b05180bed35bae2065a0267f5ca1e29c3465598cad9605f6624a446",
+  "polarization_polynomials.rad": "ecb32ce9d81a5a114b6f210ec113d6dc3e804ed46f4a9db39f2619ca226b4dd9",
+  "polarization_polynomials.json": "efa211d83f59ef60169fc53a4eca2b69356c9df6ff5188c70b7446a11cf90050",
+  "rad_executable_sha256": "1e3ac1a285b3bd84df90fc7c8fd0cd10d1d297b84fe5dd24bae1831281419066"
+}

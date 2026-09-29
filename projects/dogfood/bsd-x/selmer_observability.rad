@@ -1,0 +1,128 @@
+// Candidate arithmetic comparison-map laboratory. Matrices are synthetic.
+resource MapRequest { rows: int = 2,cols: int = 3,matrix: list<int> = [1,0,1,0,1,1,0,0,0] }
+component MapEvidence { exact_rank: int = 0,mod5_rank: int = 0,kernel: list<int> = [],
+    injective: bool = false,within_dimension_budget: bool = false,
+    arithmetic_bridge_verified: bool = false,x3_proved: bool = false }
+entity map_trial { MapEvidence {} }
+entity hidden_direction { MapEvidence {} }
+entity added_observation { MapEvidence {} }
+entity divisible_pivots { MapEvidence {} }
+entity injective_example { MapEvidence {} }
+
+pure fn residue5(x: int) -> int { return ((x%5)+5)%5 }
+pure fn nonzero(x: int,modular: bool) -> bool { return if modular { residue5(x)!=0 } else { x!=0 } }
+pure fn det2(a: list<int>,i: int,j: int,k: int,l: int) -> int {
+    return a[3*i+k]*a[3*j+l]-a[3*i+l]*a[3*j+k]
+}
+pure fn matrix_rank(c: MapRequest,modular: bool) -> int {
+    let a: list<int> = c.matrix
+    let mut rank: int = 0
+    for i in range(c.rows) { for j in range(c.cols) {
+        if nonzero(a[3*i+j],modular) { rank=1 }
+    } }
+    for i in range(c.rows) { for j in range(i+1,c.rows) {
+        for k in range(c.cols) { for l in range(k+1,c.cols) {
+            if nonzero(det2(a,i,j,k,l),modular) { rank=2 }
+        } }
+    } }
+    if c.rows==3 and c.cols==3 {
+        let determinant: int = a[0]*det2(a,1,2,1,2)-a[1]*det2(a,1,2,0,2)+a[2]*det2(a,1,2,0,1)
+        if nonzero(determinant,modular) { rank=3 }
+    }
+    return rank
+}
+pure fn kernel_witness(c: MapRequest,rank: int) -> list<int> {
+    if rank==c.cols { return [0,0,0] }
+    if rank==0 { return [1,0,0] }
+    let a: list<int> = c.matrix
+    if rank==2 {
+        for i in range(c.rows) { for j in range(i+1,c.rows) {
+            let v: list<int> = [det2(a,i,j,1,2),-det2(a,i,j,0,2),det2(a,i,j,0,1)]
+            if v!=[0,0,0] { return v }
+        } }
+    }
+    if rank==1 {
+        for i in range(c.rows) {
+            if a[3*i]!=0 or a[3*i+1]!=0 { return [a[3*i+1],-a[3*i],0] }
+            if c.cols==3 and a[3*i+2]!=0 { return [1,0,0] }
+        }
+    }
+    assert(false,"rank-deficient matrix must provide a kernel witness")
+    return [0,0,0]
+}
+pure fn assess_map(c: MapRequest) -> MapEvidence {
+    assert(c.rows>=2 and c.rows<=3 and c.cols>=2 and c.cols<=3 and len(c.matrix)==9,"matrix dimensions")
+    for entry in c.matrix { assert(entry>=-5 and entry<=5,"coefficient domain") }
+    for i in range(3) { for j in range(3) {
+        if i>=c.rows or j>=c.cols { assert(c.matrix[3*i+j]==0,"unused matrix coordinates must vanish") }
+    } }
+    let rank: int = matrix_rank(c,false)
+    let mod_rank: int = matrix_rank(c,true)
+    let v: list<int> = kernel_witness(c,rank)
+    if rank<c.cols {
+        assert(v!=[0,0,0],"nonzero hidden direction")
+        for i in range(c.rows) {
+            let mut product_sum: int = 0
+            for j in range(c.cols) { product_sum=product_sum+c.matrix[3*i+j]*v[j] }
+            assert(product_sum==0,"kernel vector annihilated by every observation")
+        }
+    }
+    assert(mod_rank<=rank,"modular rank is only a lower bound on exact rank")
+    // m=2 is the dimension-budget diagnostic. No actual Selmer/analytic map is bound.
+    return MapEvidence { exact_rank:rank,mod5_rank:mod_rank,kernel:v,injective:rank==c.cols,
+        within_dimension_budget:c.rows<=2,arithmetic_bridge_verified:false,x3_proved:false }
+}
+system MapStep(row: mut MapEvidence,c: MapRequest) { row=assess_map(c) }
+intent MapChecked { key target: entity,request: MapRequest,evidence: MapEvidence }
+law SubmitMap(target: entity,request: MapRequest,evidence: MapEvidence) {
+    propose MapChecked { target:target,request:request,evidence:evidence }
+}
+resolver ExplainMap for MapChecked(target,proposals) {
+    assert(len(proposals)==1,"one map certificate")
+    let row: MapEvidence = assess_map(proposals[0].request)
+    assert(row==proposals[0].evidence,"unproved arithmetic bridge in submitted evidence")
+    next(target,MapEvidence { exact_rank:row.exact_rank,mod5_rank:row.mod5_rank,kernel:row.kernel,
+        injective:row.injective,within_dimension_budget:row.within_dimension_budget,
+        arithmetic_bridge_verified:row.arithmetic_bridge_verified,x3_proved:row.x3_proved })
+}
+fn main() -> nil {
+    let base: world_fork = fork()
+    let digest: str = world_digest()
+    let mut jobs: list<world_fork> = []
+    let mut requests: list<MapRequest> = []
+    for code in range(729) {
+        let mut digits: int = code
+        let mut a: list<int> = [0,0,0,0,0,0,0,0,0]
+        for slot in range(6) { a[slot]=digits%3-1 digits=int_div(digits,3) }
+        let c: MapRequest = MapRequest { matrix:a }
+        requests=push(requests,c)
+        jobs=push(jobs,fork_with(base,c))
+    }
+    let results: list<world_fork> = simulate_many(jobs,[system::MapStep],1,20260909)
+    for i in range(len(results)) {
+        assert_only_changed(jobs[i],results[i],[MapEvidence])
+        let row: MapEvidence = peek(results[i],map_trial,MapEvidence) |> unwrap
+        assert(row==assess_map(requests[i]),"requested matrix evaluated")
+        print("matrix",json_stringify(requests[i].matrix))
+        print("case",json_stringify(row))
+    }
+    assert(world_digest()==digest,"map forks preserve parent")
+    let hidden: MapRequest = MapRequest {}
+    let extra: MapRequest = MapRequest { rows:3,matrix:[1,0,1,0,1,1,0,0,1] }
+    let scaled: MapRequest = MapRequest { cols:2,matrix:[5,0,0,0,5,0,0,0,0] }
+    let identity: MapRequest = MapRequest { cols:2,matrix:[1,0,0,0,1,0,0,0,0] }
+    let mut row: MapEvidence = assess_map(identity)
+    if len(sys_args())>0 { row.arithmetic_bridge_verified=true row.x3_proved=true }
+    settle {
+        SubmitMap(hidden_direction,hidden,assess_map(hidden))
+        SubmitMap(added_observation,extra,assess_map(extra))
+        SubmitMap(divisible_pivots,scaled,assess_map(scaled))
+        SubmitMap(injective_example,identity,row)
+    }
+    for target in [hidden_direction,added_observation,divisible_pivots,injective_example] {
+        print("witness",json_stringify(require(target,MapEvidence)))
+        print(why(target,MapEvidence))
+        print(why_field(target,MapEvidence,"kernel"))
+        print(why_field(target,MapEvidence,"arithmetic_bridge_verified"))
+    }
+}

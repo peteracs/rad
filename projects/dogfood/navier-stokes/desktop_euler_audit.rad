@@ -1,0 +1,86 @@
+use "forced_fourier.rad"
+
+resource PacketCase { j: int = 8, map_power: int = 1 }
+component PacketEvidence { j: int = 0, map_power: int = 0, margin: int = 0,
+    scale_identity_checked: bool = false, navier_stokes_proved: bool = false }
+entity packet_trial { PacketEvidence {} }
+entity packet_result { PacketEvidence {} }
+pure fn power(a: int,n: int) -> int {
+    let mut v: int = 1
+    for _ in range(n) { v = v*a }
+    return v
+}
+pure fn assess(c: PacketCase) -> PacketEvidence {
+    assert(c.map_power >= 1 and c.map_power <= 16,"bounded exact arithmetic")
+    assert(c.j >= 4*(c.map_power+1) and c.j <= 80,"large-stage threshold")
+    // Lower bound for log(damping / parent shear) minus x/j^2,
+    // multiplied by the positive denominator j^2 (j-1)^7 / x.
+    // Assumes |m| >= k_previous^(-map_power). Localization only helps damping.
+    let margin: int = power(c.j-1,7)-2*c.map_power*c.j*c.j*power(c.j-1,3)-c.j*c.j
+    assert(margin > 0,"physical diffusion outruns this parent-scale bound")
+    return PacketEvidence { j:c.j,map_power:c.map_power,margin:margin,
+        scale_identity_checked:true,navier_stokes_proved:false }
+}
+system EvaluatePacket(row: mut PacketEvidence,c: PacketCase) { row = assess(c) }
+intent PacketChecked { key target: entity, request: PacketCase, evidence: PacketEvidence }
+law SubmitPacket(target: entity,request: PacketCase,evidence: PacketEvidence) {
+    propose PacketChecked { target:target,request:request,evidence:evidence }
+}
+resolver CheckPacket for PacketChecked(target,proposals) {
+    let mut row: PacketEvidence = proposals[0].evidence
+    for proposal in proposals {
+        assert(proposal.evidence == assess(proposal.request),"forged PDE conclusion")
+        if proposal.evidence.j < row.j { row = proposal.evidence }
+    }
+    next(target,PacketEvidence { j:row.j,map_power:row.map_power,margin:row.margin,
+        scale_identity_checked:row.scale_identity_checked,navier_stokes_proved:row.navier_stokes_proved })
+}
+fn main() -> nil {
+    // An exact transverse Fourier shear: Euler stationary, NS requires
+    // either decay u_t=-k^2 u or the nonzero force f=k^2 u (viscosity one).
+    for k in range(1,9) {
+        let u: list<FluidMode> = [
+            FluidMode { k:[k,0,0],re:[0,1,0],im:[0,0,0] },
+            FluidMode { k:[-k,0,0],re:[0,1,0],im:[0,0,0] }]
+        let ut: list<FluidMode> = [
+            FluidMode { k:[k,0,0],re:[0,-k*k,0],im:[0,0,0] },
+            FluidMode { k:[-k,0,0],re:[0,-k*k,0],im:[0,0,0] }]
+        let force: list<ForceMode> = actual_force(u,[],1)
+        for mode in force {
+            let active: bool = mode.k == [k,0,0] or mode.k == [-k,0,0]
+            assert(mode.re[0] == 0 and mode.re[2] == 0 and mode.im == [0,0,0],"transverse force")
+            if active { assert(2*mode.re[1] == k*k*mode.denominator,"physical Laplacian symbol") }
+            else { assert(mode.re[1] == 0,"no hidden generated force") }
+        }
+        for mode in actual_force(u,ut,1) {
+            assert(mode.re == [0,0,0] and mode.im == [0,0,0],"heat evolution cancels force")
+        }
+    }
+    let base: world_fork = fork()
+    let digest: str = world_digest()
+    let mut requests: list<PacketCase> = []
+    let mut jobs: list<world_fork> = []
+    for c in range(1,17) {
+        let request: PacketCase = PacketCase { j:4*(c+1),map_power:c }
+        requests = push(requests,request)
+        jobs = push(jobs,fork_with(base,request))
+    }
+    let results: list<world_fork> = simulate_many(jobs,[system::EvaluatePacket],1,20260909)
+    let mut rows: list<PacketEvidence> = []
+    for i in range(len(results)) {
+        assert_only_changed(jobs[i],results[i],[PacketEvidence])
+        let row: PacketEvidence = peek(results[i],packet_trial,PacketEvidence) |> unwrap
+        rows = push(rows,row)
+        print("packet",json_stringify(row))
+    }
+    assert(world_digest() == digest,"fork isolation")
+    let args: list<str> = sys_args()
+    if len(args) > 0 {
+        assert(args[0] == "forge","mutation name")
+        let mut row: PacketEvidence = rows[0]
+        row.navier_stokes_proved = true
+        rows[0] = row
+    }
+    settle { for i in range(len(rows)) { SubmitPacket(packet_result,requests[i],rows[i]) } }
+    print(why(packet_result,PacketEvidence))
+}

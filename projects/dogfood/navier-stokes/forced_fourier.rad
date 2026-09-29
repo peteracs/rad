@@ -1,0 +1,122 @@
+// Complete instantaneous projected force for bounded Fourier input.
+// Input coefficients are (re+i im)/2; viscosity is an integer.
+// This checks finite algebra only, not time evolution or an infinite-stage limit.
+pub struct FluidMode { k: list<int> = [], re: list<int> = [], im: list<int> = [] }
+pub struct ForceMode { k: list<int> = [], re: list<int> = [], im: list<int> = [], denominator: int = 1 }
+pure fn validate_bank(modes: list<FluidMode>) -> nil {
+    assert(len(modes) <= 48, "Fourier bank capacity")
+    let mut seen: list<list<int>> = []
+    for mode in modes {
+        assert(len(mode.k) == 3 and len(mode.re) == 3 and len(mode.im) == 3, "Fourier dimensions")
+        let mut dr: int = 0
+        let mut di: int = 0
+        for j in range(3) {
+            assert(mode.k[j] >= -8 and mode.k[j] <= 8, "Fourier input frequency bound")
+            assert(mode.re[j] >= -8192 and mode.re[j] <= 8192 and mode.im[j] >= -8192 and mode.im[j] <= 8192, "Fourier input coefficient bound")
+            dr = dr+mode.k[j]*mode.re[j]
+            di = di+mode.k[j]*mode.im[j]
+        }
+        assert(dr == 0 and di == 0, "Fourier divergence")
+        for old in seen { assert(old != mode.k, "duplicate Fourier mode") }
+        seen = push(seen,mode.k)
+    }
+    for mode in modes {
+        let opposite: list<int> = [-mode.k[0],-mode.k[1],-mode.k[2]]
+        let mut found: bool = false
+        for other in modes {
+            if other.k == opposite {
+                assert(other.re == mode.re, "Fourier real conjugacy")
+                for j in range(3) { assert(other.im[j] == -mode.im[j], "Fourier imaginary conjugacy") }
+                found = true
+            }
+        }
+        assert(found, "missing conjugate Fourier mode")
+    }
+}
+pure fn insert_wave(waves: list<list<int>>, k: list<int>) -> list<list<int>> {
+    for old in waves { if old == k { return waves } }
+    return push(waves,k)
+}
+pub pure fn actual_force(u: list<FluidMode>, ut: list<FluidMode>, viscosity: int) -> list<ForceMode> {
+    return actual_force_scaled(u,ut,viscosity,1)
+}
+// The force is INPUT. The returned u_t is dictated by Navier-Stokes, with
+// every generated mode retained. This is an RHS evaluation, not integration.
+pub pure fn dictated_velocity_rate(u: list<FluidMode>, prescribed_force: list<FluidMode>, viscosity: int, scale: int) -> list<ForceMode> {
+    // actual_force(u,f) = f + N(u) - nu Delta u, so u_t=2f-actual_force(u,f).
+    let combined: list<ForceMode> = actual_force_scaled(u,prescribed_force,viscosity,scale)
+    let mut result: list<ForceMode> = []
+    for mode in combined {
+        assert(mode.denominator%scale == 0,"dictated derivative denominator")
+        let multiplier: int = int_div(mode.denominator,scale)
+        let mut re: list<int> = [-mode.re[0],-mode.re[1],-mode.re[2]]
+        let mut im: list<int> = [-mode.im[0],-mode.im[1],-mode.im[2]]
+        for force in prescribed_force {
+            if force.k == mode.k {
+                for j in range(3) { re[j] = re[j]+multiplier*force.re[j]
+                    im[j] = im[j]+multiplier*force.im[j] }
+            }
+        }
+        result = push(result,ForceMode { k: mode.k,re: re,im: im,denominator: mode.denominator })
+    }
+    return result
+}
+// Input coefficients now represent (re+i im)/(2*scale). This allows exact
+// rational trajectory samples without incorrectly scaling the nonlinear term.
+pub pure fn actual_force_scaled(u: list<FluidMode>, ut: list<FluidMode>, viscosity: int, scale: int) -> list<ForceMode> {
+    validate_bank(u)
+    validate_bank(ut)
+    assert(viscosity >= 1 and viscosity <= 16, "positive bounded viscosity")
+    // Expanded rational grid for calibrated polarization profiles. With 48 modes,
+    // |k_j|<=8, |coeff|<=8192, nu<=16 and scale<=512, even the conservative
+    // final divergence-check intermediate bound is <6e17 (int64-safe).
+    assert(scale >= 1 and scale <= 512,"Fourier rational scale domain")
+    let mut waves: list<list<int>> = []
+    for mode in u { waves = insert_wave(waves,mode.k) }
+    for mode in ut { waves = insert_wave(waves,mode.k) }
+    for p in u {
+        for q in u { waves = insert_wave(waves,[p.k[0]+q.k[0],p.k[1]+q.k[1],p.k[2]+q.k[2]]) }
+    }
+    let mut result: list<ForceMode> = []
+    for k in waves {
+        let norm: int = k[0]*k[0]+k[1]*k[1]+k[2]*k[2]
+        let mut nr: list<int> = [0,0,0]
+        let mut ni: list<int> = [0,0,0]
+        let mut ur: list<int> = [0,0,0]
+        let mut ui: list<int> = [0,0,0]
+        let mut tr: list<int> = [0,0,0]
+        let mut ti: list<int> = [0,0,0]
+        for mode in ut { if mode.k == k { tr = mode.re
+            ti = mode.im } }
+        for p in u {
+            if p.k == k { ur = p.re
+                ui = p.im }
+            for q in u {
+                if p.k[0]+q.k[0] == k[0] and p.k[1]+q.k[1] == k[1] and p.k[2]+q.k[2] == k[2] {
+                    let dr: int = p.re[0]*q.k[0]+p.re[1]*q.k[1]+p.re[2]*q.k[2]
+                    let di: int = p.im[0]*q.k[0]+p.im[1]*q.k[1]+p.im[2]*q.k[2]
+                    for j in range(3) {
+                        nr[j] = nr[j]+dr*q.re[j]-di*q.im[j]
+                        ni[j] = ni[j]+dr*q.im[j]+di*q.re[j]
+                    }
+                }
+            }
+        }
+        if norm == 0 {
+            assert(nr == [0,0,0] and ni == [0,0,0], "nonlinear mean identity")
+            result = push(result,ForceMode { k: k, re: tr, im: ti, denominator: 2*scale })
+        } else {
+            let kr: int = k[0]*nr[0]+k[1]*nr[1]+k[2]*nr[2]
+            let ki: int = k[0]*ni[0]+k[1]*ni[1]+k[2]*ni[2]
+            let mut fr: list<int> = []
+            let mut fi: list<int> = []
+            for j in range(3) {
+                fr = push(fr,2*norm*scale*tr[j]-norm*ni[j]+k[j]*ki+2*viscosity*norm*norm*scale*ur[j])
+                fi = push(fi,2*norm*scale*ti[j]+norm*nr[j]-k[j]*kr+2*viscosity*norm*norm*scale*ui[j])
+            }
+            assert(k[0]*fr[0]+k[1]*fr[1]+k[2]*fr[2] == 0 and k[0]*fi[0]+k[1]*fi[1]+k[2]*fi[2] == 0, "projected force divergence")
+            result = push(result,ForceMode { k: k, re: fr, im: fi, denominator: 4*norm*scale*scale })
+        }
+    }
+    return result
+}

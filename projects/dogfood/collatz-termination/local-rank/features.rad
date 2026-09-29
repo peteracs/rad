@@ -1,0 +1,91 @@
+pub struct LinearRow {
+    kind: int = 0, rule: int = -1, before: list<int> = [], after: list<int> = [],
+    state: list<int> = [], symbol: int = -1, terms: map<str, int> = {}, bound: int = 0,
+}
+
+pub pure fn word_key(word: list<int>) -> str {
+    let mut code: int = 1
+    for symbol in word { code = 8 * code + symbol }
+    return str(code)
+}
+
+pub pure fn digits(word: list<int>) -> bool {
+    for symbol in word { if symbol != 0 and symbol != 1 and symbol != 4 and symbol != 5 and symbol != 6 { return false } }
+    return true
+}
+
+pub pure fn binary_word(value: int) -> list<int> {
+    assert(value > 0, "binary word needs a positive integer")
+    let mut n: int = value
+    let mut bits: list<int> = []
+    while n > 1 {
+        bits = push(bits, n % 2)
+        n = int_div(n, 2)
+    }
+    return append(append([2], reverse(bits)), [3])
+}
+
+pub pure fn contexts(depth: int) -> list<list<int>> {
+    assert(depth >= 0 and depth <= 5, "context depth outside exact generator domain")
+    let mut result: list<list<int>> = [[]]
+    let mut layer: list<list<int>> = [[]]
+    for _ in range(depth) {
+        let mut next_layer: list<list<int>> = []
+        for word in layer { for symbol in [0, 1, 4, 5, 6] { next_layer = push(next_layer, push(word, symbol)) } }
+        result = append(result, next_layer)
+        layer = next_layer
+    }
+    return result
+}
+
+pub pure fn factor_counts(word: list<int>, memory: int) -> map<str, int> {
+    assert(memory >= 1 and memory <= 6, "invalid factor memory")
+    let mut result: map<str, int> = {}
+    for i in range(len(word)) {
+        let mut code: int = 1
+        for j in range(i, min(len(word), i + memory)) {
+            code = 8 * code + word[j]
+            let key: str = str(code)
+            result[key] = get_or(result, key, 0) + 1
+        }
+    }
+    return result
+}
+
+pub pure fn rewrite_row(memory: int, boundary: int, rule: int, before: list<int>, after: list<int>) -> LinearRow {
+    assert(rule >= 0 and rule < 11 and boundary > 0 and (boundary & 2047) == boundary, "invalid rewrite request")
+    assert(digits(before) and digits(after), "invalid context digit")
+    assert((rule >= 8 and len(before) == 0) or rule < 8, "left-boundary rule has a prefix")
+    assert((rule < 2 and len(after) == 0) or rule >= 2, "right-boundary rule has a suffix")
+    let lefts: list<list<int>> = [[0, 3], [1, 3], [0, 4], [0, 5], [0, 6], [1, 4], [1, 5], [1, 6], [2, 4], [2, 5], [2, 6]]
+    let rights: list<list<int>> = [[3], [6, 3], [4, 0], [4, 1], [5, 0], [5, 1], [6, 0], [6, 1], [2, 1], [2, 0, 0], [2, 0, 1]]
+    let prefix: list<int> = if rule >= 8 { [] } else { append([2], before) }
+    let suffix: list<int> = if rule < 2 { [] } else { append(after, [3]) }
+    let lhs: list<int> = append(append(prefix, lefts[rule]), suffix)
+    let rhs: list<int> = append(append(prefix, rights[rule]), suffix)
+    let mut terms: map<str, int> = factor_counts(lhs, memory)
+    let subtract: map<str, int> = factor_counts(rhs, memory)
+    for entry in entries(subtract) { terms[entry[0]] = get_or(terms, entry[0], 0) - entry[1] }
+    return LinearRow { rule: rule, before: before, after: after, terms: terms, bound: if (boundary & (1 << rule)) != 0 { 1 } else { 0 } }
+}
+
+// A potential on the finite suffix graph certifies a lower bound for the
+// signed factor sum on every valid word, including arbitrarily long words.
+pub pure fn lower_bound_row(memory: int, state: list<int>, symbol: int) -> LinearRow {
+    assert(memory >= 1 and memory <= 6 and len(state) == memory - 1 and digits(state) and digits([symbol]), "invalid lower-bound edge")
+    let extended: list<int> = push(state, symbol)
+    let target: list<int> = slice(extended, 1, len(extended))
+    let mut terms: map<str, int> = {}
+    for i in range(len(extended)) { terms[word_key(slice(extended, i, len(extended)))] = 1 }
+    let source_key: str = "h:" + word_key(state)
+    let target_key: str = "h:" + word_key(target)
+    terms[source_key] = get_or(terms, source_key, 0) + 1
+    terms[target_key] = get_or(terms, target_key, 0) - 1
+    return LinearRow { kind: 1, state: state, symbol: symbol, terms: terms }
+}
+
+pub pure fn rebuild_row(memory: int, boundary: int, row: LinearRow) -> LinearRow {
+    assert(row.kind == 0 or row.kind == 1, "unknown linear row kind")
+    return if row.kind == 0 { rewrite_row(memory, boundary, row.rule, row.before, row.after) }
+    else { lower_bound_row(memory, row.state, row.symbol) }
+}

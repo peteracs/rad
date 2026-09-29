@@ -1,0 +1,14 @@
+{
+  "forks": 625,
+  "sharpness_witnesses": 2,
+  "independent_all_partition_oracle": true,
+  "worker_counts": [
+    1,
+    4
+  ],
+  "record_replay": true,
+  "forged_claim_rejected": true,
+  "universal_X3_proved": false,
+  "web_search_used": false,
+  "conclusion": "Fixed-module decision terminates by max(0,delta-m-1); positivity is not universal."
+}

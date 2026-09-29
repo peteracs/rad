@@ -1,0 +1,114 @@
+use "matrix.rad"
+use "../collatz-barrier/natural.rad"
+
+pub struct NewtonModel {
+    label: str = ""
+    degree: int = 0
+    maximum: int = 0
+    tail: int = 0
+    reverse: bool = false
+    omitted: int = -1
+    polynomials: list<list<int>> = []
+    strict_rules: list<int> = []
+    complete_proof: bool = false
+}
+
+pub pure fn newton_value(polynomial: list<int>, x: Natural) -> Natural {
+    let mut choose: Natural = nat(1)
+    let mut positive: Natural = nat(0)
+    let mut negative: Natural = nat(0)
+    if polynomial[0] >= 0 { positive = nat(polynomial[0]) }
+    else { negative = nat(-polynomial[0]) }
+    for i in range(1, len(polynomial)) {
+        if ncmp(x, nat(i)) < 0 { choose = nat(0) }
+        else {
+            let numerator: Natural = nmul(choose, nsub(x, nat(i - 1)))
+            choose = ndiv_small(numerator, i)
+            assert(ncmp(nscale(choose, i), numerator) == 0, "nonintegral binomial recurrence")
+        }
+        if polynomial[i] >= 0 { positive = nadd(positive, nscale(choose, polynomial[i])) }
+        else { negative = nadd(negative, nscale(choose, -polynomial[i])) }
+    }
+    assert(ncmp(positive, negative) >= 0, "negative integer-valued polynomial")
+    return nsub(positive, negative)
+}
+
+pure fn newton_word(word: list<int>, model: NewtonModel, x: int) -> Natural {
+    let mut result: Natural = nat(x)
+    for i in range(len(word)) {
+        let index: int = if model.reverse { i } else { len(word) - 1 - i }
+        result = newton_value(model.polynomials[word[index]], result)
+    }
+    return result
+}
+
+// A nonnegative difference table is equivalent to nonnegative Newton
+// coefficients. Every row is reconstructed by Pascal summation from its
+// first entries, so checking the whole triangle adds no restriction.
+pub pure fn newton_tail(samples: list<Natural>) -> bool {
+    let mut row: list<Natural> = samples
+    while len(row) > 1 {
+        let mut after: list<Natural> = []
+        for i in range(len(row) - 1) {
+            if ncmp(row[i + 1], row[i]) < 0 { return false }
+            after = push(after, nsub(row[i + 1], row[i]))
+        }
+        row = after
+    }
+    return true
+}
+
+pub pure fn check_newton(model: NewtonModel) -> CheckedModel {
+    assert(model.degree >= 1 and model.degree <= 4, "unsupported Newton degree")
+    assert(model.maximum >= 1 and model.maximum <= 15, "unsupported Newton coefficient bound")
+    assert(model.tail >= 0 and model.tail <= 32, "invalid Newton tail origin")
+    assert(model.omitted >= -1 and model.omitted < 11, "invalid omitted rule")
+    assert(len(model.polynomials) == 7, "incomplete Newton alphabet")
+    for polynomial in model.polynomials {
+        assert(len(polynomial) == model.degree + 1, "Newton polynomial shape")
+        for c in polynomial { assert(c >= -model.maximum and c <= model.maximum, "Newton coefficient domain") }
+        assert(polynomial[0] >= 0, "negative Newton origin value")
+        let mut derivative: list<int> = []
+        for i in range(1, len(polynomial)) { derivative = push(derivative, polynomial[i]) }
+        let mut tail_samples: list<Natural> = []
+        for x in range(model.tail + model.degree) {
+            let sample: Natural = newton_value(derivative, nat(x))
+            if x >= model.tail { tail_samples = push(tail_samples, sample) }
+        }
+        assert(newton_tail(tail_samples), "Newton letter monotonicity is unproved")
+    }
+    let lefts: list<list<int>> = [[0, 3], [1, 3], [0, 4], [0, 5], [0, 6], [1, 4], [1, 5], [1, 6], [2, 4], [2, 5], [2, 6]]
+    let rights: list<list<int>> = [[3], [6, 3], [4, 0], [4, 1], [5, 0], [5, 1], [6, 0], [6, 1], [2, 1], [2, 0, 0], [2, 0, 1]]
+    let mut removed: list<int> = []
+    let mut comparisons: int = 0
+    let mut active: int = 0
+    let mut boundary_count: int = 0
+    for rule in range(11) {
+        if rule != model.omitted {
+            active = active + 1
+            let mut bound: int = 1
+            for _ in range(max(len(lefts[rule]), len(rights[rule]))) { bound = bound * model.degree }
+            let mut samples: list<Natural> = []
+            let mut strict: bool = true
+            for x in range(model.tail + bound + 1) {
+                let lhs: Natural = newton_word(lefts[rule], model, x)
+                let rhs: Natural = newton_word(rights[rule], model, x)
+                assert(ncmp(lhs, rhs) >= 0, "negative Newton rule value")
+                let difference: Natural = nsub(lhs, rhs)
+                if x <= model.tail and ncmp(difference, nat(0)) == 0 { strict = false }
+                if x >= model.tail { samples = push(samples, difference) }
+            }
+            assert(newton_tail(samples), "negative Newton tail coefficient")
+            comparisons = comparisons + model.tail + bound + 1
+            if (model.reverse and rule < 2) or (not model.reverse and rule >= 8) {
+                boundary_count = boundary_count + 1
+                if strict { removed = push(removed, rule) }
+            }
+        }
+    }
+    assert(len(removed) > 0 and removed == model.strict_rules, "invalid Newton strict-rule claim")
+    let complete: bool = model.omitted == -1 and len(removed) == boundary_count
+    assert(complete == model.complete_proof, "false complete Newton proof")
+    return CheckedModel { label: model.label, active_rules: active,
+        coefficient_comparisons: comparisons, strict_rules: removed, complete_proof: complete }
+}

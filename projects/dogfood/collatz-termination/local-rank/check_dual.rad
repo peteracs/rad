@@ -1,0 +1,27 @@
+use "features.rad"
+
+fn main() -> nil {
+    let args: list<str> = sys_args()
+    assert(len(args) == 1, "supply an exact linear obstruction")
+    let proof: map<str, any> = json_parse(read_file(args[0])) |> unwrap
+    let memory: int = proof["memory"]
+    let boundary: int = proof["boundary"]
+    let rows: list<map<str, any>> = proof["rows"]
+    assert(len(rows) > 0 and len(rows) <= 10000, "invalid obstruction size")
+    let mut totals: map<str, int> = {}
+    let mut contradiction: int = 0
+    for row in rows {
+        let multiplier: int = row["multiplier"]
+        assert(multiplier > 0 and multiplier <= 1000000000, "invalid exact multiplier")
+        let raw: map<str, any> = row["constraint"]
+        let descriptor: LinearRow = LinearRow { kind: raw["kind"], rule: raw["rule"], before: raw["before"], after: raw["after"], state: raw["state"], symbol: raw["symbol"] }
+        assert(len(descriptor.before) <= 16 and len(descriptor.after) <= 16, "context exceeds exact arithmetic budget")
+        let rebuilt: LinearRow = rebuild_row(memory, boundary, descriptor)
+        contradiction = contradiction + multiplier * rebuilt.bound
+        for entry in entries(rebuilt.terms) { totals[entry[0]] = get_or(totals, entry[0], 0) + multiplier * entry[1] }
+    }
+    for entry in entries(totals) { assert(entry[1] == 0, "obstruction coefficients do not cancel") }
+    assert(contradiction > 0, "no strict inequality in obstruction")
+    let output: map<str, any> = { "memory": memory, "boundary": boundary, "constraints": len(rows), "contradiction": contradiction, "verified": true, "collatz_proved": false }
+    print(json_stringify(output))
+}

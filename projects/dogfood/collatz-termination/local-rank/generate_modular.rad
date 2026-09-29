@@ -1,0 +1,16 @@
+use "modular.rad"
+
+fn main() -> nil {
+    let args: list<str> = sys_args()
+    assert(len(args) == 2, "supply modulus and strict-rule mask")
+    let modulus: int = int(args[0])
+    let boundary: int = int(args[1])
+    assert(modulus >= 1 and modulus <= 256, "invalid modulus")
+    for rule in range(11) {
+        let residues: list<int> = if rule >= 8 { [1 % modulus] } else { range(modulus) }
+        for residue in residues { print(json_stringify(modular_row(modulus, boundary, rule, residue, -1))) }
+    }
+    for residue in range(modulus) {
+        for symbol in [0, 1, 4, 5, 6] { print(json_stringify(modular_row(modulus, boundary, -1, residue, symbol))) }
+    }
+}

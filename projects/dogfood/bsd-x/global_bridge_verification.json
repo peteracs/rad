@@ -1,0 +1,13 @@
+{
+  "symbolic_forks": 4,
+  "parameter_domain": "all integers u,v>=0",
+  "interpretation": "listed numerical premises only; not elliptic curves",
+  "worker_counts": [
+    1,
+    4
+  ],
+  "record_replay": true,
+  "forged_evidence_rejected": true,
+  "universal_X_proofs_found": 0,
+  "foundational_formalization": false
+}

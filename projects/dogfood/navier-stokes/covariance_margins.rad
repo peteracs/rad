@@ -1,0 +1,93 @@
+use "poly16.rad"
+use "poly16_bounds.rad"
+
+resource MarginCase { corner: int = 0,side: int = 1,quadratic_cost: int = 2 }
+component MarginCheck { corner: int = 0,side: int = 0,box_bound: bool = false }
+entity margin_trial { MarginCheck {} }
+component MarginSummary { box_certificates: int = 0,column_scaling: bool = false }
+entity margin_result { MarginSummary {} }
+
+pure fn determinant(h: list<list<Term>>) -> list<Term> {
+    assert(len(h) == 4,"matrix shape")
+    return plus(times(h[0],h[3]),times(h[1],h[2]),-1)
+}
+pure fn numerators(h: list<list<Term>>,t: list<list<Term>>) -> list<list<Term>> {
+    return [plus(times(t[0],h[3]),times(h[1],t[1]),-1),plus(times(h[0],t[1]),times(t[0],h[2]),-1)]
+}
+pure fn check_margin(c: MarginCase) -> MarginCheck {
+    assert(c.corner >= 0 and c.corner < 256 and (c.side == 1 or c.side == -1),"box domain")
+    assert(c.quadratic_cost == 1 or c.quadratic_cost == 2,"cost domain")
+    let m: list<Term> = variable(0)
+    let rho: list<Term> = variable(1)
+    let mut corner: int = c.corner
+    let mut original: list<list<Term>> = []
+    let mut perturbed: list<list<Term>> = []
+    for _ in range(4) {
+        let a: list<Term> = scaled(m,2*(corner%2)-1)
+        corner = int_div(corner,2)
+        let e: list<Term> = scaled(rho,2*(corner%2)-1)
+        corner = int_div(corner,2)
+        original = push(original,a)
+        perturbed = push(perturbed,plus(a,e,1))
+    }
+    let delta: list<Term> = plus(determinant(perturbed),determinant(original),-1)
+    let bound: list<Term> = plus(scaled(times(m,rho),4),scaled(times(rho,rho),c.quadratic_cost),1)
+    assert(positive_coefficients(plus(bound,scaled(delta,c.side),-1)),"determinant perturbation bound")
+    return MarginCheck { corner:c.corner,side:c.side,box_bound:true }
+}
+system MarginStep(row: mut MarginCheck,c: MarginCase) { row = check_margin(c) }
+
+pure fn check_columns() -> bool {
+    let mut h: list<list<Term>> = []
+    let mut hc: list<list<Term>> = []
+    let mut normalized: list<list<Term>> = []
+    let radius: list<Term> = variable(9)
+    for i in range(4) {
+        h = push(h,variable(i))
+        hc = push(hc,times(variable(i),variable(6+i%2)))
+        normalized = push(normalized,times(radius,hc[i]))
+    }
+    let t: list<list<Term>> = [variable(4),variable(5)]
+    let tz: list<list<Term>> = [times(variable(8),t[0]),times(variable(8),t[1])]
+    let d: list<Term> = determinant(h)
+    let cc: list<Term> = times(variable(6),variable(7))
+    assert(zero(plus(determinant(hc),times(cc,d),-1)),"column determinant scaling")
+    assert(zero(plus(determinant(normalized),times(times(radius,radius),times(cc,d)),-1)),"normalized determinant scaling")
+    let n: list<list<Term>> = numerators(h,t)
+    let nc: list<list<Term>> = numerators(hc,tz)
+    for j in range(2) {
+        assert(zero(plus(nc[j],times(times(variable(8),variable(7-j)),n[j]),-1)),"flat target numerator scaling")
+    }
+    return true
+}
+intent MarginsChecked { key target: entity,count: int }
+law SubmitMargins(target: entity,count: int) { propose MarginsChecked { target:target,count:count } }
+resolver ConcludeMargins for MarginsChecked(target,proposals) {
+    assert(proposals[0].count == 512,"both signs of every multiaffine vertex")
+    for corner in range(256) { for side in [-1,1] {
+        let row: MarginCheck = check_margin(MarginCase { corner:corner,side:side })
+        assert(row.box_bound,"settled determinant certificate")
+    } }
+    assert(check_columns(),"column scaling")
+    next(target,MarginSummary { box_certificates:512,column_scaling:true })
+}
+fn main() -> nil {
+    let args: list<str> = sys_args()
+    let base: world_fork = fork()
+    let digest: str = world_digest()
+    let mut jobs: list<world_fork> = []
+    for corner in range(256) { for side in [-1,1] {
+        jobs = push(jobs,fork_with(base,MarginCase { corner:corner,side:side,quadratic_cost:if len(args)>0 { 1 } else { 2 } }))
+    } }
+    let results: list<world_fork> = simulate_many(jobs,[system::MarginStep],1,20260909)
+    for i in range(len(results)) {
+        assert_only_changed(jobs[i],results[i],[MarginCheck])
+        let row: MarginCheck = peek(results[i],margin_trial,MarginCheck) |> unwrap
+        assert(row.corner == int_div(i,2) and row.side == 2*(i%2)-1,"fork evaluated its requested matrix case")
+        assert(row.box_bound,"covariance certificate incomplete")
+    }
+    assert(world_digest() == digest,"margin forks leave parent untouched")
+    settle { SubmitMargins(margin_result,len(results)) }
+    print(json_stringify(require(margin_result,MarginSummary)))
+    print(why(margin_result,MarginSummary))
+}

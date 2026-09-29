@@ -1,0 +1,44 @@
+use "matrix.rad"
+
+pure fn represented_integer(word: list<int>) -> int {
+    assert(len(word) >= 2 and word[0] == 2 and word[len(word) - 1] == 3, "invalid boundary word")
+    let mut value: int = 1
+    for i in range(1, len(word) - 1) {
+        let digit: int = word[i]
+        if digit >= 0 and digit <= 1 { value = 2 * value + digit }
+        else {
+            assert(digit >= 4 and digit <= 6, "invalid mixed-base digit")
+            value = 3 * value + digit - 4
+        }
+    }
+    return value
+}
+
+fn main() -> nil {
+    let args: list<str> = sys_args()
+    assert(len(args) == 1, "supply failed-context witnesses")
+    let rows: list<map<str, any>> = json_parse(read_file(args[0])) |> unwrap
+    let lefts: list<list<int>> = [[0, 3], [1, 3], [0, 4], [0, 5], [0, 6], [1, 4], [1, 5], [1, 6], [2, 4], [2, 5], [2, 6]]
+    let rights: list<list<int>> = [[3], [6, 3], [4, 0], [4, 1], [5, 0], [5, 1], [6, 0], [6, 1], [2, 1], [2, 0, 0], [2, 0, 1]]
+    for row in rows {
+        let encoded: map<str, any> = row["model"]
+        let model: Model = Model { label: encoded["label"], dimension: encoded["dimension"],
+            maximum: encoded["maximum"], matrices: encoded["matrices"] }
+        let rule: int = row["rule"]
+        let prefix: list<int> = row["prefix"]
+        let suffix: list<int> = row["suffix"]
+        let lhs: list<int> = append(append(prefix, lefts[rule]), suffix)
+        let rhs: list<int> = append(append(prefix, rights[rule]), suffix)
+        let initial: int = represented_integer(lhs)
+        let after: int = represented_integer(rhs)
+        if rule == 0 { assert(initial % 2 == 0 and after == initial / 2, "even rewrite differs from Collatz") }
+        else if rule == 1 { assert(initial % 2 == 1 and after == (3 * initial + 1) / 2, "odd rewrite differs from Collatz") }
+        else { assert(initial == after, "converter changed represented integer") }
+        let left_rank: int = interpret(lhs, model)[0][model.dimension]
+        let right_rank: int = interpret(rhs, model)[0][model.dimension]
+        assert(right_rank > left_rank and left_rank == row["left_rank"] and right_rank == row["right_rank"], "context is not a rank increase")
+        let output: map<str, any> = { "label": model.label, "rule": rule, "integer_before": initial,
+            "integer_after": after, "rank_before": left_rank, "rank_after": right_rank }
+        print(json_stringify(output))
+    }
+}

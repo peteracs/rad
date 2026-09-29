@@ -1,0 +1,121 @@
+use "natural.rad"
+
+pub struct LogInterval { lower: Natural = Natural {}, upper: Natural = Natural {} }
+pub struct Barrier {
+    label: str = ""
+    last_depth: int = 0
+    lower_numerator: int = 0
+    lower_denominator: int = 0
+    upper_numerator: int = 0
+    upper_denominator: int = 0
+    floor_value: str = ""
+    gap_lower: str = ""
+    strict_margin: str = ""
+}
+pub struct Envelope {
+    depth: int = 0
+    odd_steps: int = 0
+    cutoff: int = 0
+    max_coefficient: str = ""
+    max_offset: str = ""
+    gap: str = ""
+}
+
+// 2*atanh(1/r): r=3 gives ln(2), r=2 gives ln(3).
+// Scale 2^192; 192 floored terms lose less than 384 units, tail < 1 unit.
+pub pure fn log_interval(r: int) -> LogInterval {
+    assert(r == 2 or r == 3, "unsupported logarithm argument")
+    let mut power: Natural = ndiv_small(npow2(192), r)
+    let mut total: Natural = nat(0)
+    for j in range(192) {
+        total = nadd(total, ndiv_small(power, 2 * j + 1))
+        power = ndiv_small(power, r * r)
+    }
+    let lower: Natural = nscale(total, 2)
+    return LogInterval { lower: lower, upper: nadd(lower, nat(385)) }
+}
+
+pub pure fn check_barrier(label: str, a: int, b: int, c: int, d: int, floor_value: Natural) -> Barrier {
+    let l2: LogInterval = log_interval(3)
+    let l3: LogInterval = log_interval(2)
+    // a/b < log_2(3) < c/d and cb-ad=1: a genuine Farey gap.
+    assert(ncmp(nscale(l2.upper, a), nscale(l3.lower, b)) < 0, "lower fraction not below log_2(3)")
+    let gap: Natural = nsub(nscale(l2.lower, c), nscale(l3.upper, d))
+    assert(ncmp(gap, nat(0)) > 0, "upper fraction not above log_2(3)")
+    assert(ncmp(nmul(nat(c), nat(b)), nadd(nmul(nat(a), nat(d)), nat(1))) == 0, "Farey determinant is not one")
+    // Every contraction with length < a+c has j/q >= c/d.
+    // C/3^q <= q/3 and exp(delta)-1 > delta give threshold < d/(3*gap/S).
+    let lhs: Natural = nscale(nmul(floor_value, gap), 3)
+    let rhs: Natural = nscale(npow2(192), d)
+    assert(ncmp(lhs, rhs) > 0, "floor does not dominate additive envelope")
+    return Barrier {
+        label: label, last_depth: a + c - 1,
+        lower_numerator: a, lower_denominator: b, upper_numerator: c, upper_denominator: d,
+        floor_value: ndecimal(floor_value), gap_lower: ndecimal(gap),
+        strict_margin: ndecimal(nsub(lhs, rhs)),
+    }
+}
+
+// Exact maximum over all first-contraction words with q odd steps:
+// C_q = 3*C_(q-1) + 2^floor(log_2(3^(q-1))).
+// An integer n >= cutoff descends at every first contraction of length <= limit.
+pub pure fn envelope_records(limit: int) -> list<Envelope> {
+    let mut coefficient: Natural = nat(1)
+    let mut offset: Natural = nat(0)
+    let mut cutoff: int = 1
+    let mut records: list<Envelope> = []
+    for q in range(1, limit + 1) {
+        offset = nadd(nscale(offset, 3), npow2(nbits(coefficient) - 1))
+        coefficient = nscale(coefficient, 3)
+        let depth: int = nbits(coefficient)
+        if depth > limit { break }
+        let gap: Natural = nsub(npow2(depth), coefficient)
+        // cutoff is floor(C/gap)+1, with strict descent also at integral ratios.
+        if ncmp(nscale(gap, cutoff), offset) <= 0 {
+            let mut lo: int = cutoff
+            let mut hi: int = cutoff * 2
+            while ncmp(nscale(gap, hi), offset) <= 0 { hi = hi * 2 }
+            while hi - lo > 1 {
+                let middle: int = int_div(hi + lo, 2)
+                if ncmp(nscale(gap, middle), offset) > 0 { hi = middle }
+                else { lo = middle }
+            }
+            cutoff = hi
+            records = push(records, Envelope {
+                depth: depth, odd_steps: q, cutoff: cutoff,
+                max_coefficient: ndecimal(coefficient), max_offset: ndecimal(offset), gap: ndecimal(gap),
+            })
+        }
+    }
+    return records
+}
+
+// Exhaustive parity-tree audit independent of the extremal recurrence.
+// At every first contraction, record the maximum literal affine offset.
+pub pure fn enumerate_offsets(depth: int, odd: int, coefficient: int, offset: int, denominator: int, limit: int, maxima: list<int>) -> list<int> {
+    if coefficient < denominator { return set_at(maxima, odd, max(maxima[odd], offset)) }
+    if depth == limit { return maxima }
+    let evens: list<int> = enumerate_offsets(depth + 1, odd, coefficient, offset, denominator * 2, limit, maxima)
+    return enumerate_offsets(depth + 1, odd + 1, coefficient * 3, offset * 3 + denominator, denominator * 2, limit, evens)
+}
+
+pub pure fn audit_extremizer(limit: int) -> int {
+    assert(limit >= 2 and limit <= 22, "exhaustive audit limit outside 2..22")
+    let mut empty: list<int> = []
+    for _ in range(limit + 1) { empty = push(empty, -1) }
+    let maxima: list<int> = enumerate_offsets(0, 0, 1, 0, 1, limit, empty)
+    let mut coefficient: int = 1
+    let mut offset: int = 0
+    let mut count: int = 0
+    for q in range(1, limit + 1) {
+        let mut power: int = 1
+        while 2 * power <= coefficient { power = power * 2 }
+        offset = 3 * offset + power
+        coefficient = 3 * coefficient
+        if coefficient < (1 << limit) {
+            assert(maxima[q] == offset, "sharp envelope disagrees with exhaustive parity search")
+            count = count + 1
+        }
+    }
+    return count
+}

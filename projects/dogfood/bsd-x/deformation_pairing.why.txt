@@ -1,0 +1,630 @@
+request {"a":-1,"b":-1,"c":-1,"h":-1,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,-2,-1,0,0,0,0,0],"effective_second":-2,"elimination_correction":-1,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":2,"x3_proved":false}
+request {"a":-1,"b":-1,"c":0,"h":-1,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,-1,-1,0,0,0,0,0],"effective_second":-1,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":2,"x3_proved":false}
+request {"a":-1,"b":-1,"c":1,"h":-1,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,0,-1,0,0,0,0,0],"effective_second":0,"elimination_correction":1,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":2,"x3_proved":false}
+request {"a":-1,"b":0,"c":-1,"h":-1,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,-1,-1,0,0,0,0,0],"effective_second":-1,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":2,"x3_proved":false}
+request {"a":-1,"b":0,"c":0,"h":-1,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,-1,-1,0,0,0,0,0],"effective_second":-1,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":2,"x3_proved":false}
+request {"a":-1,"b":0,"c":1,"h":-1,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,-1,-1,0,0,0,0,0],"effective_second":-1,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":2,"x3_proved":false}
+request {"a":-1,"b":1,"c":-1,"h":-1,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,0,-1,0,0,0,0,0],"effective_second":0,"elimination_correction":1,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":2,"x3_proved":false}
+request {"a":-1,"b":1,"c":0,"h":-1,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,-1,-1,0,0,0,0,0],"effective_second":-1,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":2,"x3_proved":false}
+request {"a":-1,"b":1,"c":1,"h":-1,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,-2,-1,0,0,0,0,0],"effective_second":-2,"elimination_correction":-1,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":2,"x3_proved":false}
+request {"a":0,"b":-1,"c":-1,"h":-1,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,-2,0,0,0,0,0,0],"effective_second":-2,"elimination_correction":-1,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":2,"x3_proved":false}
+request {"a":0,"b":-1,"c":0,"h":-1,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,-1,0,0,0,0,0,0],"effective_second":-1,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":2,"x3_proved":false}
+request {"a":0,"b":-1,"c":1,"h":-1,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,0,0,0,0,0,0,0],"effective_second":0,"elimination_correction":1,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":2,"x3_proved":false}
+request {"a":0,"b":0,"c":-1,"h":-1,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,-1,0,0,0,0,0,0],"effective_second":-1,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":2,"x3_proved":false}
+request {"a":0,"b":0,"c":0,"h":-1,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,-1,0,0,0,0,0,0],"effective_second":-1,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":2,"x3_proved":false}
+request {"a":0,"b":0,"c":1,"h":-1,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,-1,0,0,0,0,0,0],"effective_second":-1,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":2,"x3_proved":false}
+request {"a":0,"b":1,"c":-1,"h":-1,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,0,0,0,0,0,0,0],"effective_second":0,"elimination_correction":1,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":2,"x3_proved":false}
+request {"a":0,"b":1,"c":0,"h":-1,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,-1,0,0,0,0,0,0],"effective_second":-1,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":2,"x3_proved":false}
+request {"a":0,"b":1,"c":1,"h":-1,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,-2,0,0,0,0,0,0],"effective_second":-2,"elimination_correction":-1,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":2,"x3_proved":false}
+request {"a":1,"b":-1,"c":-1,"h":-1,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,-2,1,0,0,0,0,0],"effective_second":-2,"elimination_correction":-1,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":2,"x3_proved":false}
+request {"a":1,"b":-1,"c":0,"h":-1,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,-1,1,0,0,0,0,0],"effective_second":-1,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":2,"x3_proved":false}
+request {"a":1,"b":-1,"c":1,"h":-1,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,0,1,0,0,0,0,0],"effective_second":0,"elimination_correction":1,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":2,"x3_proved":false}
+request {"a":1,"b":0,"c":-1,"h":-1,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,-1,1,0,0,0,0,0],"effective_second":-1,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":2,"x3_proved":false}
+request {"a":1,"b":0,"c":0,"h":-1,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,-1,1,0,0,0,0,0],"effective_second":-1,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":2,"x3_proved":false}
+request {"a":1,"b":0,"c":1,"h":-1,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,-1,1,0,0,0,0,0],"effective_second":-1,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":2,"x3_proved":false}
+request {"a":1,"b":1,"c":-1,"h":-1,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,0,1,0,0,0,0,0],"effective_second":0,"elimination_correction":1,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":2,"x3_proved":false}
+request {"a":1,"b":1,"c":0,"h":-1,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,-1,1,0,0,0,0,0],"effective_second":-1,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":2,"x3_proved":false}
+request {"a":1,"b":1,"c":1,"h":-1,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,-2,1,0,0,0,0,0],"effective_second":-2,"elimination_correction":-1,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":2,"x3_proved":false}
+request {"a":-1,"b":-1,"c":-1,"h":-1,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,-1,-1,0,0,0,0,0],"effective_second":-1,"elimination_correction":-1,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":0,"vanishing_order":2,"x3_proved":false}
+request {"a":-1,"b":-1,"c":0,"h":-1,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,0,-1,0,0,0,0,0],"effective_second":0,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":0,"vanishing_order":2,"x3_proved":false}
+request {"a":-1,"b":-1,"c":1,"h":-1,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,1,-1,0,0,0,0,0],"effective_second":1,"elimination_correction":1,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":0,"vanishing_order":2,"x3_proved":false}
+request {"a":-1,"b":0,"c":-1,"h":-1,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,0,-1,0,0,0,0,0],"effective_second":0,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":0,"vanishing_order":2,"x3_proved":false}
+request {"a":-1,"b":0,"c":0,"h":-1,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,0,-1,0,0,0,0,0],"effective_second":0,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":0,"vanishing_order":2,"x3_proved":false}
+request {"a":-1,"b":0,"c":1,"h":-1,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,0,-1,0,0,0,0,0],"effective_second":0,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":0,"vanishing_order":2,"x3_proved":false}
+request {"a":-1,"b":1,"c":-1,"h":-1,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,1,-1,0,0,0,0,0],"effective_second":1,"elimination_correction":1,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":0,"vanishing_order":2,"x3_proved":false}
+request {"a":-1,"b":1,"c":0,"h":-1,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,0,-1,0,0,0,0,0],"effective_second":0,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":0,"vanishing_order":2,"x3_proved":false}
+request {"a":-1,"b":1,"c":1,"h":-1,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,-1,-1,0,0,0,0,0],"effective_second":-1,"elimination_correction":-1,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":0,"vanishing_order":2,"x3_proved":false}
+request {"a":0,"b":-1,"c":-1,"h":-1,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,-1,0,0,0,0,0,0],"effective_second":-1,"elimination_correction":-1,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":0,"vanishing_order":2,"x3_proved":false}
+request {"a":0,"b":-1,"c":0,"h":-1,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,0,0,0,0,0,0,0],"effective_second":0,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":0,"vanishing_order":2,"x3_proved":false}
+request {"a":0,"b":-1,"c":1,"h":-1,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,1,0,0,0,0,0,0],"effective_second":1,"elimination_correction":1,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":0,"vanishing_order":2,"x3_proved":false}
+request {"a":0,"b":0,"c":-1,"h":-1,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,0,0,0,0,0,0,0],"effective_second":0,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":0,"vanishing_order":2,"x3_proved":false}
+request {"a":0,"b":0,"c":0,"h":-1,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,0,0,0,0,0,0,0],"effective_second":0,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":0,"vanishing_order":2,"x3_proved":false}
+request {"a":0,"b":0,"c":1,"h":-1,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,0,0,0,0,0,0,0],"effective_second":0,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":0,"vanishing_order":2,"x3_proved":false}
+request {"a":0,"b":1,"c":-1,"h":-1,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,1,0,0,0,0,0,0],"effective_second":1,"elimination_correction":1,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":0,"vanishing_order":2,"x3_proved":false}
+request {"a":0,"b":1,"c":0,"h":-1,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,0,0,0,0,0,0,0],"effective_second":0,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":0,"vanishing_order":2,"x3_proved":false}
+request {"a":0,"b":1,"c":1,"h":-1,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,-1,0,0,0,0,0,0],"effective_second":-1,"elimination_correction":-1,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":0,"vanishing_order":2,"x3_proved":false}
+request {"a":1,"b":-1,"c":-1,"h":-1,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,-1,1,0,0,0,0,0],"effective_second":-1,"elimination_correction":-1,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":0,"vanishing_order":2,"x3_proved":false}
+request {"a":1,"b":-1,"c":0,"h":-1,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,0,1,0,0,0,0,0],"effective_second":0,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":0,"vanishing_order":2,"x3_proved":false}
+request {"a":1,"b":-1,"c":1,"h":-1,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,1,1,0,0,0,0,0],"effective_second":1,"elimination_correction":1,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":0,"vanishing_order":2,"x3_proved":false}
+request {"a":1,"b":0,"c":-1,"h":-1,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,0,1,0,0,0,0,0],"effective_second":0,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":0,"vanishing_order":2,"x3_proved":false}
+request {"a":1,"b":0,"c":0,"h":-1,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,0,1,0,0,0,0,0],"effective_second":0,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":0,"vanishing_order":2,"x3_proved":false}
+request {"a":1,"b":0,"c":1,"h":-1,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,0,1,0,0,0,0,0],"effective_second":0,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":0,"vanishing_order":2,"x3_proved":false}
+request {"a":1,"b":1,"c":-1,"h":-1,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,1,1,0,0,0,0,0],"effective_second":1,"elimination_correction":1,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":0,"vanishing_order":2,"x3_proved":false}
+request {"a":1,"b":1,"c":0,"h":-1,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,0,1,0,0,0,0,0],"effective_second":0,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":0,"vanishing_order":2,"x3_proved":false}
+request {"a":1,"b":1,"c":1,"h":-1,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,-1,1,0,0,0,0,0],"effective_second":-1,"elimination_correction":-1,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":0,"vanishing_order":2,"x3_proved":false}
+request {"a":-1,"b":-1,"c":-1,"h":-1,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,0,-1,0,0,0,0,0],"effective_second":0,"elimination_correction":-1,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":2,"x3_proved":false}
+request {"a":-1,"b":-1,"c":0,"h":-1,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,1,-1,0,0,0,0,0],"effective_second":1,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":2,"x3_proved":false}
+request {"a":-1,"b":-1,"c":1,"h":-1,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,2,-1,0,0,0,0,0],"effective_second":2,"elimination_correction":1,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":2,"x3_proved":false}
+request {"a":-1,"b":0,"c":-1,"h":-1,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,1,-1,0,0,0,0,0],"effective_second":1,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":2,"x3_proved":false}
+request {"a":-1,"b":0,"c":0,"h":-1,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,1,-1,0,0,0,0,0],"effective_second":1,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":2,"x3_proved":false}
+request {"a":-1,"b":0,"c":1,"h":-1,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,1,-1,0,0,0,0,0],"effective_second":1,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":2,"x3_proved":false}
+request {"a":-1,"b":1,"c":-1,"h":-1,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,2,-1,0,0,0,0,0],"effective_second":2,"elimination_correction":1,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":2,"x3_proved":false}
+request {"a":-1,"b":1,"c":0,"h":-1,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,1,-1,0,0,0,0,0],"effective_second":1,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":2,"x3_proved":false}
+request {"a":-1,"b":1,"c":1,"h":-1,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,0,-1,0,0,0,0,0],"effective_second":0,"elimination_correction":-1,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":2,"x3_proved":false}
+request {"a":0,"b":-1,"c":-1,"h":-1,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,0,0,0,0,0,0,0],"effective_second":0,"elimination_correction":-1,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":2,"x3_proved":false}
+request {"a":0,"b":-1,"c":0,"h":-1,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,1,0,0,0,0,0,0],"effective_second":1,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":2,"x3_proved":false}
+request {"a":0,"b":-1,"c":1,"h":-1,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,2,0,0,0,0,0,0],"effective_second":2,"elimination_correction":1,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":2,"x3_proved":false}
+request {"a":0,"b":0,"c":-1,"h":-1,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,1,0,0,0,0,0,0],"effective_second":1,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":2,"x3_proved":false}
+request {"a":0,"b":0,"c":0,"h":-1,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,1,0,0,0,0,0,0],"effective_second":1,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":2,"x3_proved":false}
+request {"a":0,"b":0,"c":1,"h":-1,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,1,0,0,0,0,0,0],"effective_second":1,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":2,"x3_proved":false}
+request {"a":0,"b":1,"c":-1,"h":-1,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,2,0,0,0,0,0,0],"effective_second":2,"elimination_correction":1,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":2,"x3_proved":false}
+request {"a":0,"b":1,"c":0,"h":-1,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,1,0,0,0,0,0,0],"effective_second":1,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":2,"x3_proved":false}
+request {"a":0,"b":1,"c":1,"h":-1,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,0,0,0,0,0,0,0],"effective_second":0,"elimination_correction":-1,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":2,"x3_proved":false}
+request {"a":1,"b":-1,"c":-1,"h":-1,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,0,1,0,0,0,0,0],"effective_second":0,"elimination_correction":-1,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":2,"x3_proved":false}
+request {"a":1,"b":-1,"c":0,"h":-1,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,1,1,0,0,0,0,0],"effective_second":1,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":2,"x3_proved":false}
+request {"a":1,"b":-1,"c":1,"h":-1,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,2,1,0,0,0,0,0],"effective_second":2,"elimination_correction":1,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":2,"x3_proved":false}
+request {"a":1,"b":0,"c":-1,"h":-1,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,1,1,0,0,0,0,0],"effective_second":1,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":2,"x3_proved":false}
+request {"a":1,"b":0,"c":0,"h":-1,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,1,1,0,0,0,0,0],"effective_second":1,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":2,"x3_proved":false}
+request {"a":1,"b":0,"c":1,"h":-1,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,1,1,0,0,0,0,0],"effective_second":1,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":2,"x3_proved":false}
+request {"a":1,"b":1,"c":-1,"h":-1,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,2,1,0,0,0,0,0],"effective_second":2,"elimination_correction":1,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":2,"x3_proved":false}
+request {"a":1,"b":1,"c":0,"h":-1,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,1,1,0,0,0,0,0],"effective_second":1,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":2,"x3_proved":false}
+request {"a":1,"b":1,"c":1,"h":-1,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,-1,0,1,0,0,0,0,0],"effective_second":0,"elimination_correction":-1,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":2,"x3_proved":false}
+request {"a":-1,"b":-1,"c":-1,"h":0,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,-2,-1,0,0,0,0,0],"effective_second":-2,"elimination_correction":-1,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":3,"x3_proved":false}
+request {"a":-1,"b":-1,"c":0,"h":0,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,-1,-1,0,0,0,0,0],"effective_second":-1,"elimination_correction":0,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":3,"x3_proved":false}
+request {"a":-1,"b":-1,"c":1,"h":0,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,0,-1,0,0,0,0,0],"effective_second":0,"elimination_correction":1,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":4,"x3_proved":false}
+request {"a":-1,"b":0,"c":-1,"h":0,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,-1,-1,0,0,0,0,0],"effective_second":-1,"elimination_correction":0,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":3,"x3_proved":false}
+request {"a":-1,"b":0,"c":0,"h":0,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,-1,-1,0,0,0,0,0],"effective_second":-1,"elimination_correction":0,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":3,"x3_proved":false}
+request {"a":-1,"b":0,"c":1,"h":0,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,-1,-1,0,0,0,0,0],"effective_second":-1,"elimination_correction":0,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":3,"x3_proved":false}
+request {"a":-1,"b":1,"c":-1,"h":0,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,0,-1,0,0,0,0,0],"effective_second":0,"elimination_correction":1,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":4,"x3_proved":false}
+request {"a":-1,"b":1,"c":0,"h":0,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,-1,-1,0,0,0,0,0],"effective_second":-1,"elimination_correction":0,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":3,"x3_proved":false}
+request {"a":-1,"b":1,"c":1,"h":0,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,-2,-1,0,0,0,0,0],"effective_second":-2,"elimination_correction":-1,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":3,"x3_proved":false}
+request {"a":0,"b":-1,"c":-1,"h":0,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,-2,0,0,0,0,0,0],"effective_second":-2,"elimination_correction":-1,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":3,"x3_proved":false}
+request {"a":0,"b":-1,"c":0,"h":0,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,-1,0,0,0,0,0,0],"effective_second":-1,"elimination_correction":0,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":3,"x3_proved":false}
+request {"a":0,"b":-1,"c":1,"h":0,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,0,0,0,0,0,0,0],"effective_second":0,"elimination_correction":1,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":true,"raw_second":-1,"vanishing_order":-1,"x3_proved":false}
+request {"a":0,"b":0,"c":-1,"h":0,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,-1,0,0,0,0,0,0],"effective_second":-1,"elimination_correction":0,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":3,"x3_proved":false}
+request {"a":0,"b":0,"c":0,"h":0,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,-1,0,0,0,0,0,0],"effective_second":-1,"elimination_correction":0,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":3,"x3_proved":false}
+request {"a":0,"b":0,"c":1,"h":0,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,-1,0,0,0,0,0,0],"effective_second":-1,"elimination_correction":0,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":3,"x3_proved":false}
+request {"a":0,"b":1,"c":-1,"h":0,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,0,0,0,0,0,0,0],"effective_second":0,"elimination_correction":1,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":true,"raw_second":-1,"vanishing_order":-1,"x3_proved":false}
+request {"a":0,"b":1,"c":0,"h":0,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,-1,0,0,0,0,0,0],"effective_second":-1,"elimination_correction":0,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":3,"x3_proved":false}
+request {"a":0,"b":1,"c":1,"h":0,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,-2,0,0,0,0,0,0],"effective_second":-2,"elimination_correction":-1,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":3,"x3_proved":false}
+request {"a":1,"b":-1,"c":-1,"h":0,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,-2,1,0,0,0,0,0],"effective_second":-2,"elimination_correction":-1,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":3,"x3_proved":false}
+request {"a":1,"b":-1,"c":0,"h":0,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,-1,1,0,0,0,0,0],"effective_second":-1,"elimination_correction":0,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":3,"x3_proved":false}
+request {"a":1,"b":-1,"c":1,"h":0,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,0,1,0,0,0,0,0],"effective_second":0,"elimination_correction":1,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":4,"x3_proved":false}
+request {"a":1,"b":0,"c":-1,"h":0,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,-1,1,0,0,0,0,0],"effective_second":-1,"elimination_correction":0,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":3,"x3_proved":false}
+request {"a":1,"b":0,"c":0,"h":0,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,-1,1,0,0,0,0,0],"effective_second":-1,"elimination_correction":0,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":3,"x3_proved":false}
+request {"a":1,"b":0,"c":1,"h":0,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,-1,1,0,0,0,0,0],"effective_second":-1,"elimination_correction":0,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":3,"x3_proved":false}
+request {"a":1,"b":1,"c":-1,"h":0,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,0,1,0,0,0,0,0],"effective_second":0,"elimination_correction":1,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":4,"x3_proved":false}
+request {"a":1,"b":1,"c":0,"h":0,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,-1,1,0,0,0,0,0],"effective_second":-1,"elimination_correction":0,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":3,"x3_proved":false}
+request {"a":1,"b":1,"c":1,"h":0,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,-2,1,0,0,0,0,0],"effective_second":-2,"elimination_correction":-1,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":3,"x3_proved":false}
+request {"a":-1,"b":-1,"c":-1,"h":0,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,-1,-1,0,0,0,0,0],"effective_second":-1,"elimination_correction":-1,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":false,"raw_second":0,"vanishing_order":3,"x3_proved":false}
+request {"a":-1,"b":-1,"c":0,"h":0,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,0,-1,0,0,0,0,0],"effective_second":0,"elimination_correction":0,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":false,"raw_second":0,"vanishing_order":4,"x3_proved":false}
+request {"a":-1,"b":-1,"c":1,"h":0,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,1,-1,0,0,0,0,0],"effective_second":1,"elimination_correction":1,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":false,"raw_second":0,"vanishing_order":3,"x3_proved":false}
+request {"a":-1,"b":0,"c":-1,"h":0,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,0,-1,0,0,0,0,0],"effective_second":0,"elimination_correction":0,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":false,"raw_second":0,"vanishing_order":4,"x3_proved":false}
+request {"a":-1,"b":0,"c":0,"h":0,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,0,-1,0,0,0,0,0],"effective_second":0,"elimination_correction":0,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":false,"raw_second":0,"vanishing_order":4,"x3_proved":false}
+request {"a":-1,"b":0,"c":1,"h":0,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,0,-1,0,0,0,0,0],"effective_second":0,"elimination_correction":0,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":false,"raw_second":0,"vanishing_order":4,"x3_proved":false}
+request {"a":-1,"b":1,"c":-1,"h":0,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,1,-1,0,0,0,0,0],"effective_second":1,"elimination_correction":1,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":false,"raw_second":0,"vanishing_order":3,"x3_proved":false}
+request {"a":-1,"b":1,"c":0,"h":0,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,0,-1,0,0,0,0,0],"effective_second":0,"elimination_correction":0,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":false,"raw_second":0,"vanishing_order":4,"x3_proved":false}
+request {"a":-1,"b":1,"c":1,"h":0,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,-1,-1,0,0,0,0,0],"effective_second":-1,"elimination_correction":-1,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":false,"raw_second":0,"vanishing_order":3,"x3_proved":false}
+request {"a":0,"b":-1,"c":-1,"h":0,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,-1,0,0,0,0,0,0],"effective_second":-1,"elimination_correction":-1,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":false,"raw_second":0,"vanishing_order":3,"x3_proved":false}
+request {"a":0,"b":-1,"c":0,"h":0,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,0,0,0,0,0,0,0],"effective_second":0,"elimination_correction":0,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":true,"raw_second":0,"vanishing_order":-1,"x3_proved":false}
+request {"a":0,"b":-1,"c":1,"h":0,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,1,0,0,0,0,0,0],"effective_second":1,"elimination_correction":1,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":false,"raw_second":0,"vanishing_order":3,"x3_proved":false}
+request {"a":0,"b":0,"c":-1,"h":0,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,0,0,0,0,0,0,0],"effective_second":0,"elimination_correction":0,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":true,"raw_second":0,"vanishing_order":-1,"x3_proved":false}
+request {"a":0,"b":0,"c":0,"h":0,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,0,0,0,0,0,0,0],"effective_second":0,"elimination_correction":0,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":true,"raw_second":0,"vanishing_order":-1,"x3_proved":false}
+request {"a":0,"b":0,"c":1,"h":0,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,0,0,0,0,0,0,0],"effective_second":0,"elimination_correction":0,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":true,"raw_second":0,"vanishing_order":-1,"x3_proved":false}
+request {"a":0,"b":1,"c":-1,"h":0,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,1,0,0,0,0,0,0],"effective_second":1,"elimination_correction":1,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":false,"raw_second":0,"vanishing_order":3,"x3_proved":false}
+request {"a":0,"b":1,"c":0,"h":0,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,0,0,0,0,0,0,0],"effective_second":0,"elimination_correction":0,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":true,"raw_second":0,"vanishing_order":-1,"x3_proved":false}
+request {"a":0,"b":1,"c":1,"h":0,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,-1,0,0,0,0,0,0],"effective_second":-1,"elimination_correction":-1,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":false,"raw_second":0,"vanishing_order":3,"x3_proved":false}
+request {"a":1,"b":-1,"c":-1,"h":0,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,-1,1,0,0,0,0,0],"effective_second":-1,"elimination_correction":-1,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":false,"raw_second":0,"vanishing_order":3,"x3_proved":false}
+request {"a":1,"b":-1,"c":0,"h":0,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,0,1,0,0,0,0,0],"effective_second":0,"elimination_correction":0,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":false,"raw_second":0,"vanishing_order":4,"x3_proved":false}
+request {"a":1,"b":-1,"c":1,"h":0,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,1,1,0,0,0,0,0],"effective_second":1,"elimination_correction":1,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":false,"raw_second":0,"vanishing_order":3,"x3_proved":false}
+request {"a":1,"b":0,"c":-1,"h":0,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,0,1,0,0,0,0,0],"effective_second":0,"elimination_correction":0,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":false,"raw_second":0,"vanishing_order":4,"x3_proved":false}
+request {"a":1,"b":0,"c":0,"h":0,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,0,1,0,0,0,0,0],"effective_second":0,"elimination_correction":0,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":false,"raw_second":0,"vanishing_order":4,"x3_proved":false}
+request {"a":1,"b":0,"c":1,"h":0,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,0,1,0,0,0,0,0],"effective_second":0,"elimination_correction":0,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":false,"raw_second":0,"vanishing_order":4,"x3_proved":false}
+request {"a":1,"b":1,"c":-1,"h":0,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,1,1,0,0,0,0,0],"effective_second":1,"elimination_correction":1,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":false,"raw_second":0,"vanishing_order":3,"x3_proved":false}
+request {"a":1,"b":1,"c":0,"h":0,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,0,1,0,0,0,0,0],"effective_second":0,"elimination_correction":0,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":false,"raw_second":0,"vanishing_order":4,"x3_proved":false}
+request {"a":1,"b":1,"c":1,"h":0,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,-1,1,0,0,0,0,0],"effective_second":-1,"elimination_correction":-1,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":false,"raw_second":0,"vanishing_order":3,"x3_proved":false}
+request {"a":-1,"b":-1,"c":-1,"h":0,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,0,-1,0,0,0,0,0],"effective_second":0,"elimination_correction":-1,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":4,"x3_proved":false}
+request {"a":-1,"b":-1,"c":0,"h":0,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,1,-1,0,0,0,0,0],"effective_second":1,"elimination_correction":0,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":3,"x3_proved":false}
+request {"a":-1,"b":-1,"c":1,"h":0,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,2,-1,0,0,0,0,0],"effective_second":2,"elimination_correction":1,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":3,"x3_proved":false}
+request {"a":-1,"b":0,"c":-1,"h":0,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,1,-1,0,0,0,0,0],"effective_second":1,"elimination_correction":0,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":3,"x3_proved":false}
+request {"a":-1,"b":0,"c":0,"h":0,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,1,-1,0,0,0,0,0],"effective_second":1,"elimination_correction":0,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":3,"x3_proved":false}
+request {"a":-1,"b":0,"c":1,"h":0,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,1,-1,0,0,0,0,0],"effective_second":1,"elimination_correction":0,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":3,"x3_proved":false}
+request {"a":-1,"b":1,"c":-1,"h":0,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,2,-1,0,0,0,0,0],"effective_second":2,"elimination_correction":1,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":3,"x3_proved":false}
+request {"a":-1,"b":1,"c":0,"h":0,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,1,-1,0,0,0,0,0],"effective_second":1,"elimination_correction":0,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":3,"x3_proved":false}
+request {"a":-1,"b":1,"c":1,"h":0,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,0,-1,0,0,0,0,0],"effective_second":0,"elimination_correction":-1,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":4,"x3_proved":false}
+request {"a":0,"b":-1,"c":-1,"h":0,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,0,0,0,0,0,0,0],"effective_second":0,"elimination_correction":-1,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":true,"raw_second":1,"vanishing_order":-1,"x3_proved":false}
+request {"a":0,"b":-1,"c":0,"h":0,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,1,0,0,0,0,0,0],"effective_second":1,"elimination_correction":0,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":3,"x3_proved":false}
+request {"a":0,"b":-1,"c":1,"h":0,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,2,0,0,0,0,0,0],"effective_second":2,"elimination_correction":1,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":3,"x3_proved":false}
+request {"a":0,"b":0,"c":-1,"h":0,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,1,0,0,0,0,0,0],"effective_second":1,"elimination_correction":0,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":3,"x3_proved":false}
+request {"a":0,"b":0,"c":0,"h":0,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,1,0,0,0,0,0,0],"effective_second":1,"elimination_correction":0,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":3,"x3_proved":false}
+request {"a":0,"b":0,"c":1,"h":0,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,1,0,0,0,0,0,0],"effective_second":1,"elimination_correction":0,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":3,"x3_proved":false}
+request {"a":0,"b":1,"c":-1,"h":0,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,2,0,0,0,0,0,0],"effective_second":2,"elimination_correction":1,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":3,"x3_proved":false}
+request {"a":0,"b":1,"c":0,"h":0,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,1,0,0,0,0,0,0],"effective_second":1,"elimination_correction":0,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":3,"x3_proved":false}
+request {"a":0,"b":1,"c":1,"h":0,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,0,0,0,0,0,0,0],"effective_second":0,"elimination_correction":-1,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":true,"raw_second":1,"vanishing_order":-1,"x3_proved":false}
+request {"a":1,"b":-1,"c":-1,"h":0,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,0,1,0,0,0,0,0],"effective_second":0,"elimination_correction":-1,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":4,"x3_proved":false}
+request {"a":1,"b":-1,"c":0,"h":0,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,1,1,0,0,0,0,0],"effective_second":1,"elimination_correction":0,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":3,"x3_proved":false}
+request {"a":1,"b":-1,"c":1,"h":0,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,2,1,0,0,0,0,0],"effective_second":2,"elimination_correction":1,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":3,"x3_proved":false}
+request {"a":1,"b":0,"c":-1,"h":0,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,1,1,0,0,0,0,0],"effective_second":1,"elimination_correction":0,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":3,"x3_proved":false}
+request {"a":1,"b":0,"c":0,"h":0,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,1,1,0,0,0,0,0],"effective_second":1,"elimination_correction":0,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":3,"x3_proved":false}
+request {"a":1,"b":0,"c":1,"h":0,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,1,1,0,0,0,0,0],"effective_second":1,"elimination_correction":0,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":3,"x3_proved":false}
+request {"a":1,"b":1,"c":-1,"h":0,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,2,1,0,0,0,0,0],"effective_second":2,"elimination_correction":1,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":3,"x3_proved":false}
+request {"a":1,"b":1,"c":0,"h":0,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,1,1,0,0,0,0,0],"effective_second":1,"elimination_correction":0,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":3,"x3_proved":false}
+request {"a":1,"b":1,"c":1,"h":0,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,0,1,0,0,0,0,0],"effective_second":0,"elimination_correction":-1,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":4,"x3_proved":false}
+request {"a":-1,"b":-1,"c":-1,"h":1,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,-2,-1,0,0,0,0,0],"effective_second":-2,"elimination_correction":-1,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":2,"x3_proved":false}
+request {"a":-1,"b":-1,"c":0,"h":1,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,-1,-1,0,0,0,0,0],"effective_second":-1,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":2,"x3_proved":false}
+request {"a":-1,"b":-1,"c":1,"h":1,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,0,-1,0,0,0,0,0],"effective_second":0,"elimination_correction":1,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":2,"x3_proved":false}
+request {"a":-1,"b":0,"c":-1,"h":1,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,-1,-1,0,0,0,0,0],"effective_second":-1,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":2,"x3_proved":false}
+request {"a":-1,"b":0,"c":0,"h":1,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,-1,-1,0,0,0,0,0],"effective_second":-1,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":2,"x3_proved":false}
+request {"a":-1,"b":0,"c":1,"h":1,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,-1,-1,0,0,0,0,0],"effective_second":-1,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":2,"x3_proved":false}
+request {"a":-1,"b":1,"c":-1,"h":1,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,0,-1,0,0,0,0,0],"effective_second":0,"elimination_correction":1,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":2,"x3_proved":false}
+request {"a":-1,"b":1,"c":0,"h":1,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,-1,-1,0,0,0,0,0],"effective_second":-1,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":2,"x3_proved":false}
+request {"a":-1,"b":1,"c":1,"h":1,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,-2,-1,0,0,0,0,0],"effective_second":-2,"elimination_correction":-1,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":2,"x3_proved":false}
+request {"a":0,"b":-1,"c":-1,"h":1,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,-2,0,0,0,0,0,0],"effective_second":-2,"elimination_correction":-1,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":2,"x3_proved":false}
+request {"a":0,"b":-1,"c":0,"h":1,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,-1,0,0,0,0,0,0],"effective_second":-1,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":2,"x3_proved":false}
+request {"a":0,"b":-1,"c":1,"h":1,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,0,0,0,0,0,0,0],"effective_second":0,"elimination_correction":1,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":2,"x3_proved":false}
+request {"a":0,"b":0,"c":-1,"h":1,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,-1,0,0,0,0,0,0],"effective_second":-1,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":2,"x3_proved":false}
+request {"a":0,"b":0,"c":0,"h":1,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,-1,0,0,0,0,0,0],"effective_second":-1,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":2,"x3_proved":false}
+request {"a":0,"b":0,"c":1,"h":1,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,-1,0,0,0,0,0,0],"effective_second":-1,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":2,"x3_proved":false}
+request {"a":0,"b":1,"c":-1,"h":1,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,0,0,0,0,0,0,0],"effective_second":0,"elimination_correction":1,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":2,"x3_proved":false}
+request {"a":0,"b":1,"c":0,"h":1,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,-1,0,0,0,0,0,0],"effective_second":-1,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":2,"x3_proved":false}
+request {"a":0,"b":1,"c":1,"h":1,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,-2,0,0,0,0,0,0],"effective_second":-2,"elimination_correction":-1,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":2,"x3_proved":false}
+request {"a":1,"b":-1,"c":-1,"h":1,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,-2,1,0,0,0,0,0],"effective_second":-2,"elimination_correction":-1,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":2,"x3_proved":false}
+request {"a":1,"b":-1,"c":0,"h":1,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,-1,1,0,0,0,0,0],"effective_second":-1,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":2,"x3_proved":false}
+request {"a":1,"b":-1,"c":1,"h":1,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,0,1,0,0,0,0,0],"effective_second":0,"elimination_correction":1,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":2,"x3_proved":false}
+request {"a":1,"b":0,"c":-1,"h":1,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,-1,1,0,0,0,0,0],"effective_second":-1,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":2,"x3_proved":false}
+request {"a":1,"b":0,"c":0,"h":1,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,-1,1,0,0,0,0,0],"effective_second":-1,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":2,"x3_proved":false}
+request {"a":1,"b":0,"c":1,"h":1,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,-1,1,0,0,0,0,0],"effective_second":-1,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":2,"x3_proved":false}
+request {"a":1,"b":1,"c":-1,"h":1,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,0,1,0,0,0,0,0],"effective_second":0,"elimination_correction":1,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":2,"x3_proved":false}
+request {"a":1,"b":1,"c":0,"h":1,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,-1,1,0,0,0,0,0],"effective_second":-1,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":2,"x3_proved":false}
+request {"a":1,"b":1,"c":1,"h":1,"k":-1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,-2,1,0,0,0,0,0],"effective_second":-2,"elimination_correction":-1,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":-1,"vanishing_order":2,"x3_proved":false}
+request {"a":-1,"b":-1,"c":-1,"h":1,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,-1,-1,0,0,0,0,0],"effective_second":-1,"elimination_correction":-1,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":0,"vanishing_order":2,"x3_proved":false}
+request {"a":-1,"b":-1,"c":0,"h":1,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,0,-1,0,0,0,0,0],"effective_second":0,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":0,"vanishing_order":2,"x3_proved":false}
+request {"a":-1,"b":-1,"c":1,"h":1,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,1,-1,0,0,0,0,0],"effective_second":1,"elimination_correction":1,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":0,"vanishing_order":2,"x3_proved":false}
+request {"a":-1,"b":0,"c":-1,"h":1,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,0,-1,0,0,0,0,0],"effective_second":0,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":0,"vanishing_order":2,"x3_proved":false}
+request {"a":-1,"b":0,"c":0,"h":1,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,0,-1,0,0,0,0,0],"effective_second":0,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":0,"vanishing_order":2,"x3_proved":false}
+request {"a":-1,"b":0,"c":1,"h":1,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,0,-1,0,0,0,0,0],"effective_second":0,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":0,"vanishing_order":2,"x3_proved":false}
+request {"a":-1,"b":1,"c":-1,"h":1,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,1,-1,0,0,0,0,0],"effective_second":1,"elimination_correction":1,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":0,"vanishing_order":2,"x3_proved":false}
+request {"a":-1,"b":1,"c":0,"h":1,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,0,-1,0,0,0,0,0],"effective_second":0,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":0,"vanishing_order":2,"x3_proved":false}
+request {"a":-1,"b":1,"c":1,"h":1,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,-1,-1,0,0,0,0,0],"effective_second":-1,"elimination_correction":-1,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":0,"vanishing_order":2,"x3_proved":false}
+request {"a":0,"b":-1,"c":-1,"h":1,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,-1,0,0,0,0,0,0],"effective_second":-1,"elimination_correction":-1,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":0,"vanishing_order":2,"x3_proved":false}
+request {"a":0,"b":-1,"c":0,"h":1,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,0,0,0,0,0,0,0],"effective_second":0,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":0,"vanishing_order":2,"x3_proved":false}
+request {"a":0,"b":-1,"c":1,"h":1,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,1,0,0,0,0,0,0],"effective_second":1,"elimination_correction":1,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":0,"vanishing_order":2,"x3_proved":false}
+request {"a":0,"b":0,"c":-1,"h":1,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,0,0,0,0,0,0,0],"effective_second":0,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":0,"vanishing_order":2,"x3_proved":false}
+request {"a":0,"b":0,"c":0,"h":1,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,0,0,0,0,0,0,0],"effective_second":0,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":0,"vanishing_order":2,"x3_proved":false}
+request {"a":0,"b":0,"c":1,"h":1,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,0,0,0,0,0,0,0],"effective_second":0,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":0,"vanishing_order":2,"x3_proved":false}
+request {"a":0,"b":1,"c":-1,"h":1,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,1,0,0,0,0,0,0],"effective_second":1,"elimination_correction":1,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":0,"vanishing_order":2,"x3_proved":false}
+request {"a":0,"b":1,"c":0,"h":1,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,0,0,0,0,0,0,0],"effective_second":0,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":0,"vanishing_order":2,"x3_proved":false}
+request {"a":0,"b":1,"c":1,"h":1,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,-1,0,0,0,0,0,0],"effective_second":-1,"elimination_correction":-1,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":0,"vanishing_order":2,"x3_proved":false}
+request {"a":1,"b":-1,"c":-1,"h":1,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,-1,1,0,0,0,0,0],"effective_second":-1,"elimination_correction":-1,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":0,"vanishing_order":2,"x3_proved":false}
+request {"a":1,"b":-1,"c":0,"h":1,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,0,1,0,0,0,0,0],"effective_second":0,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":0,"vanishing_order":2,"x3_proved":false}
+request {"a":1,"b":-1,"c":1,"h":1,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,1,1,0,0,0,0,0],"effective_second":1,"elimination_correction":1,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":0,"vanishing_order":2,"x3_proved":false}
+request {"a":1,"b":0,"c":-1,"h":1,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,0,1,0,0,0,0,0],"effective_second":0,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":0,"vanishing_order":2,"x3_proved":false}
+request {"a":1,"b":0,"c":0,"h":1,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,0,1,0,0,0,0,0],"effective_second":0,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":0,"vanishing_order":2,"x3_proved":false}
+request {"a":1,"b":0,"c":1,"h":1,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,0,1,0,0,0,0,0],"effective_second":0,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":0,"vanishing_order":2,"x3_proved":false}
+request {"a":1,"b":1,"c":-1,"h":1,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,1,1,0,0,0,0,0],"effective_second":1,"elimination_correction":1,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":0,"vanishing_order":2,"x3_proved":false}
+request {"a":1,"b":1,"c":0,"h":1,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,0,1,0,0,0,0,0],"effective_second":0,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":0,"vanishing_order":2,"x3_proved":false}
+request {"a":1,"b":1,"c":1,"h":1,"k":0}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,-1,1,0,0,0,0,0],"effective_second":-1,"elimination_correction":-1,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":0,"vanishing_order":2,"x3_proved":false}
+request {"a":-1,"b":-1,"c":-1,"h":1,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,0,-1,0,0,0,0,0],"effective_second":0,"elimination_correction":-1,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":2,"x3_proved":false}
+request {"a":-1,"b":-1,"c":0,"h":1,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,1,-1,0,0,0,0,0],"effective_second":1,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":2,"x3_proved":false}
+request {"a":-1,"b":-1,"c":1,"h":1,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,2,-1,0,0,0,0,0],"effective_second":2,"elimination_correction":1,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":2,"x3_proved":false}
+request {"a":-1,"b":0,"c":-1,"h":1,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,1,-1,0,0,0,0,0],"effective_second":1,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":2,"x3_proved":false}
+request {"a":-1,"b":0,"c":0,"h":1,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,1,-1,0,0,0,0,0],"effective_second":1,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":2,"x3_proved":false}
+request {"a":-1,"b":0,"c":1,"h":1,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,1,-1,0,0,0,0,0],"effective_second":1,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":2,"x3_proved":false}
+request {"a":-1,"b":1,"c":-1,"h":1,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,2,-1,0,0,0,0,0],"effective_second":2,"elimination_correction":1,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":2,"x3_proved":false}
+request {"a":-1,"b":1,"c":0,"h":1,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,1,-1,0,0,0,0,0],"effective_second":1,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":2,"x3_proved":false}
+request {"a":-1,"b":1,"c":1,"h":1,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,0,-1,0,0,0,0,0],"effective_second":0,"elimination_correction":-1,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":2,"x3_proved":false}
+request {"a":0,"b":-1,"c":-1,"h":1,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,0,0,0,0,0,0,0],"effective_second":0,"elimination_correction":-1,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":2,"x3_proved":false}
+request {"a":0,"b":-1,"c":0,"h":1,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,1,0,0,0,0,0,0],"effective_second":1,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":2,"x3_proved":false}
+request {"a":0,"b":-1,"c":1,"h":1,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,2,0,0,0,0,0,0],"effective_second":2,"elimination_correction":1,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":2,"x3_proved":false}
+request {"a":0,"b":0,"c":-1,"h":1,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,1,0,0,0,0,0,0],"effective_second":1,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":2,"x3_proved":false}
+request {"a":0,"b":0,"c":0,"h":1,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,1,0,0,0,0,0,0],"effective_second":1,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":2,"x3_proved":false}
+request {"a":0,"b":0,"c":1,"h":1,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,1,0,0,0,0,0,0],"effective_second":1,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":2,"x3_proved":false}
+request {"a":0,"b":1,"c":-1,"h":1,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,2,0,0,0,0,0,0],"effective_second":2,"elimination_correction":1,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":2,"x3_proved":false}
+request {"a":0,"b":1,"c":0,"h":1,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,1,0,0,0,0,0,0],"effective_second":1,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":2,"x3_proved":false}
+request {"a":0,"b":1,"c":1,"h":1,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,0,0,0,0,0,0,0],"effective_second":0,"elimination_correction":-1,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":2,"x3_proved":false}
+request {"a":1,"b":-1,"c":-1,"h":1,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,0,1,0,0,0,0,0],"effective_second":0,"elimination_correction":-1,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":2,"x3_proved":false}
+request {"a":1,"b":-1,"c":0,"h":1,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,1,1,0,0,0,0,0],"effective_second":1,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":2,"x3_proved":false}
+request {"a":1,"b":-1,"c":1,"h":1,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,2,1,0,0,0,0,0],"effective_second":2,"elimination_correction":1,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":2,"x3_proved":false}
+request {"a":1,"b":0,"c":-1,"h":1,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,1,1,0,0,0,0,0],"effective_second":1,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":2,"x3_proved":false}
+request {"a":1,"b":0,"c":0,"h":1,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,1,1,0,0,0,0,0],"effective_second":1,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":2,"x3_proved":false}
+request {"a":1,"b":0,"c":1,"h":1,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,1,1,0,0,0,0,0],"effective_second":1,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":2,"x3_proved":false}
+request {"a":1,"b":1,"c":-1,"h":1,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,2,1,0,0,0,0,0],"effective_second":2,"elimination_correction":1,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":2,"x3_proved":false}
+request {"a":1,"b":1,"c":0,"h":1,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,1,1,0,0,0,0,0],"effective_second":1,"elimination_correction":0,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":2,"x3_proved":false}
+request {"a":1,"b":1,"c":1,"h":1,"k":1}
+case {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,0,1,0,0,0,0,0],"effective_second":0,"elimination_correction":-1,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":2,"x3_proved":false}
+witness {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,1,-1,0,0,0,0,0,0],"effective_second":-1,"elimination_correction":-1,"first_pairing_rank":2,"gauge_invariant":true,"identically_zero":false,"raw_second":0,"vanishing_order":2,"x3_proved":false}
+DeformationEvidence of first_order_case = { constant_corank: 2, first_pairing_rank: 2, raw_second: 0, elimination_correction: -1, effecâ€¦   (set in frame 0)
+
+  <- resolver `ExplainDeformation`
+     intent: DeformationChecked
+     key: first_order_case
+
+     <- proposal DeformationChecked { target: first_order_case, request: Deformation { h: 1, k: 0, a: 0, b: 1, c:â€¦
+        proposed by law `SubmitDeformation` at line 58
+
+     settlement origin:
+  <- by top-level code
+DeformationEvidence.effective_second of entity 1 = -1
+DeformationEvidence of first_order_case = { constant_corank: 2, first_pairing_rank: 2, raw_second: 0, elimination_correction: -1, effecâ€¦   (set in frame 0)
+
+  <- resolver `ExplainDeformation`
+     intent: DeformationChecked
+     key: first_order_case
+
+     <- proposal DeformationChecked { target: first_order_case, request: Deformation { h: 1, k: 0, a: 0, b: 1, c:â€¦
+        proposed by law `SubmitDeformation` at line 58
+
+     settlement origin:
+  <- by top-level code
+DeformationEvidence.vanishing_order of entity 1 = 2
+DeformationEvidence of first_order_case = { constant_corank: 2, first_pairing_rank: 2, raw_second: 0, elimination_correction: -1, effecâ€¦   (set in frame 0)
+
+  <- resolver `ExplainDeformation`
+     intent: DeformationChecked
+     key: first_order_case
+
+     <- proposal DeformationChecked { target: first_order_case, request: Deformation { h: 1, k: 0, a: 0, b: 1, c:â€¦
+        proposed by law `SubmitDeformation` at line 58
+
+     settlement origin:
+  <- by top-level code
+witness {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,1,1,0,0,0,0,0],"effective_second":1,"elimination_correction":-1,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":false,"raw_second":2,"vanishing_order":3,"x3_proved":false}
+DeformationEvidence of second_order_case = { constant_corank: 2, first_pairing_rank: 1, raw_second: 2, elimination_correction: -1, effecâ€¦   (set in frame 0)
+
+  <- resolver `ExplainDeformation`
+     intent: DeformationChecked
+     key: second_order_case
+
+     <- proposal DeformationChecked { target: second_order_case, request: Deformation { h: 0, k: 2, a: 1, b: 1, câ€¦
+        proposed by law `SubmitDeformation` at line 58
+
+     settlement origin:
+  <- by top-level code
+DeformationEvidence.effective_second of entity 2 = 1
+DeformationEvidence of second_order_case = { constant_corank: 2, first_pairing_rank: 1, raw_second: 2, elimination_correction: -1, effecâ€¦   (set in frame 0)
+
+  <- resolver `ExplainDeformation`
+     intent: DeformationChecked
+     key: second_order_case
+
+     <- proposal DeformationChecked { target: second_order_case, request: Deformation { h: 0, k: 2, a: 1, b: 1, câ€¦
+        proposed by law `SubmitDeformation` at line 58
+
+     settlement origin:
+  <- by top-level code
+DeformationEvidence.vanishing_order of entity 2 = 3
+DeformationEvidence of second_order_case = { constant_corank: 2, first_pairing_rank: 1, raw_second: 2, elimination_correction: -1, effecâ€¦   (set in frame 0)
+
+  <- resolver `ExplainDeformation`
+     intent: DeformationChecked
+     key: second_order_case
+
+     <- proposal DeformationChecked { target: second_order_case, request: Deformation { h: 0, k: 2, a: 1, b: 1, câ€¦
+        proposed by law `SubmitDeformation` at line 58
+
+     settlement origin:
+  <- by top-level code
+witness {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,0,1,0,0,0,0,0],"effective_second":0,"elimination_correction":-1,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":false,"raw_second":1,"vanishing_order":4,"x3_proved":false}
+DeformationEvidence of hidden_cancellation = { constant_corank: 2, first_pairing_rank: 1, raw_second: 1, elimination_correction: -1, effecâ€¦   (set in frame 0)
+
+  <- resolver `ExplainDeformation`
+     intent: DeformationChecked
+     key: hidden_cancellation
+
+     <- proposal DeformationChecked { target: hidden_cancellation, request: Deformation { h: 0, k: 1, a: 1, b: 1,â€¦
+        proposed by law `SubmitDeformation` at line 58
+
+     settlement origin:
+  <- by top-level code
+DeformationEvidence.effective_second of entity 3 = 0
+DeformationEvidence of hidden_cancellation = { constant_corank: 2, first_pairing_rank: 1, raw_second: 1, elimination_correction: -1, effecâ€¦   (set in frame 0)
+
+  <- resolver `ExplainDeformation`
+     intent: DeformationChecked
+     key: hidden_cancellation
+
+     <- proposal DeformationChecked { target: hidden_cancellation, request: Deformation { h: 0, k: 1, a: 1, b: 1,â€¦
+        proposed by law `SubmitDeformation` at line 58
+
+     settlement origin:
+  <- by top-level code
+DeformationEvidence.vanishing_order of entity 3 = 4
+DeformationEvidence of hidden_cancellation = { constant_corank: 2, first_pairing_rank: 1, raw_second: 1, elimination_correction: -1, effecâ€¦   (set in frame 0)
+
+  <- resolver `ExplainDeformation`
+     intent: DeformationChecked
+     key: hidden_cancellation
+
+     <- proposal DeformationChecked { target: hidden_cancellation, request: Deformation { h: 0, k: 1, a: 1, b: 1,â€¦
+        proposed by law `SubmitDeformation` at line 58
+
+     settlement origin:
+  <- by top-level code
+witness {"arithmetic_identification":false,"constant_corank":2,"determinant":[0,0,0,0,0,0,0,0,0,0],"effective_second":0,"elimination_correction":-1,"first_pairing_rank":1,"gauge_invariant":true,"identically_zero":true,"raw_second":1,"vanishing_order":-1,"x3_proved":false}
+DeformationEvidence of zero_germ = { constant_corank: 2, first_pairing_rank: 1, raw_second: 1, elimination_correction: -1, effecâ€¦   (set in frame 0)
+
+  <- resolver `ExplainDeformation`
+     intent: DeformationChecked
+     key: zero_germ
+
+     <- proposal DeformationChecked { target: zero_germ, request: Deformation { h: 0, k: 1, a: 0, b: 1, c: 1 }, eâ€¦
+        proposed by law `SubmitDeformation` at line 58
+
+     settlement origin:
+  <- by top-level code
+DeformationEvidence.effective_second of entity 4 = 0
+DeformationEvidence of zero_germ = { constant_corank: 2, first_pairing_rank: 1, raw_second: 1, elimination_correction: -1, effecâ€¦   (set in frame 0)
+
+  <- resolver `ExplainDeformation`
+     intent: DeformationChecked
+     key: zero_germ
+
+     <- proposal DeformationChecked { target: zero_germ, request: Deformation { h: 0, k: 1, a: 0, b: 1, c: 1 }, eâ€¦
+        proposed by law `SubmitDeformation` at line 58
+
+     settlement origin:
+  <- by top-level code
+DeformationEvidence.vanishing_order of entity 4 = -1
+DeformationEvidence of zero_germ = { constant_corank: 2, first_pairing_rank: 1, raw_second: 1, elimination_correction: -1, effecâ€¦   (set in frame 0)
+
+  <- resolver `ExplainDeformation`
+     intent: DeformationChecked
+     key: zero_germ
+
+     <- proposal DeformationChecked { target: zero_germ, request: Deformation { h: 0, k: 1, a: 0, b: 1, c: 1 }, eâ€¦
+        proposed by law `SubmitDeformation` at line 58
+
+     settlement origin:
+  <- by top-level code

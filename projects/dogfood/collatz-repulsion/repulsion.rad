@@ -1,0 +1,93 @@
+// Is positivity a repulsive force? Compare how many n < 2^L stay trapped for
+// t steps with the uniform (Terras) prediction mu(t) 2^L. Exact for t <= L.
+use "../collatz-steer/sieve.rad"
+
+pub pure fn tstep(x: int) -> int { return if x % 2 == 0 { int_div(x, 2) } else { int_div(3 * x + 1, 2) } }
+
+// tau(n): first t with 3^q < 2^t (walk turns positive). tau(1) handled as 2.
+pub pure fn tau(n: int, floors: list<int>) -> int {
+    let mut x: int = n
+    let mut q: int = 0
+    let mut t: int = 0
+    let mut trapped: bool = true
+    while trapped {
+        if x % 2 == 1 { q = q + 1 }
+        x = tstep(x)
+        t = t + 1
+        if q < floors[t] { trapped = false }
+    }
+    return t
+}
+
+pub pure fn floor_table(limit: int) -> list<int> {
+    let mut out: list<int> = [0]
+    for t in range(1, limit + 1) { out = push(out, qmin(t)) }
+    return out
+}
+
+// log2 mu(t) for t = 0..limit from the survival DP (float, renormalized).
+pub pure fn log2_mu(limit: int) -> list<float> {
+    let mut prob: list<float> = [1.0]
+    let mut scale: float = 0.0
+    let mut out: list<float> = [0.0]
+    for t in range(1, limit + 1) {
+        let floor_q: int = qmin(t)
+        let mut nxt: list<float> = []
+        let mut mass: float = 0.0
+        for q in range(t + 1) {
+            let even: float = if q < len(prob) { prob[q] } else { 0.0 }
+            let odd: float = if q >= 1 and q - 1 < len(prob) { prob[q - 1] } else { 0.0 }
+            let v: float = if q >= floor_q { 0.5 * (even + odd) } else { 0.0 }
+            nxt = push(nxt, v)
+            mass = mass + v
+        }
+        let mut renorm: list<float> = []
+        for v in nxt { renorm = push(renorm, v / mass) }
+        prob = renorm
+        scale = scale + log2f(mass)
+        out = push(out, scale)
+    }
+    return out
+}
+
+pub struct Repulsion {
+    bits: int = 0
+    max_tau: int = 0
+    argmax: int = 0
+    t_star: int = 0                    // first t where the uniform prediction mu(t) 2^L drops below 1
+    ratios_x1000: list<list<int>> = [] // [t, observed count, ratio x1000] at checkpoints
+}
+
+pub pure fn repulsion(bits: int) -> Repulsion {
+    let limit: int = 700
+    let floors: list<int> = floor_table(limit + 5)
+    let lmu: list<float> = log2_mu(limit)
+    let mut hist: list<int> = []
+    for _ in range(limit + 2) { hist = push(hist, 0) }
+    let mut best: int = 0
+    let mut arg: int = 0
+    for n in range(2, 1 << bits) {
+        let t: int = tau(n, floors)
+        hist = set_at(hist, min(t, limit + 1), hist[min(t, limit + 1)] + 1)
+        if t > best { best = t arg = n }
+    }
+    // survivors beyond t: tail sums of the histogram (tau > t).
+    let mut tail: list<int> = []
+    for _ in range(limit + 2) { tail = push(tail, 0) }
+    let mut acc: int = 0
+    let mut i: int = limit + 1
+    while i >= 0 { tail = set_at(tail, i, acc) acc = acc + hist[i] i = i - 1 }
+    // tail[t] = #{ n : tau(n) > t }
+    let mut t_star: int = 0
+    for t in range(1, limit) { if t_star == 0 and lmu[t] + float(bits) < 0.0 { t_star = t } }
+    let mut rows: list<list<int>> = []
+    let marks: list<int> = [bits, int_div(3 * bits, 2), 2 * bits, 3 * bits, 4 * bits, 5 * bits, 6 * bits, 8 * bits, 10 * bits]
+    for t in marks {
+        if t < limit {
+            let expected: float = pow(2.0, lmu[t] + float(bits))
+            let ratio: int = if expected > 0.0 { int(1000.0 * float(tail[t]) / expected) } else { 0 }
+            rows = push(rows, [t, tail[t], ratio])
+        }
+    }
+    return Repulsion { bits: bits, max_tau: best, argmax: arg, t_star: t_star, ratios_x1000: rows }
+}

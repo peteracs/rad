@@ -1,0 +1,57 @@
+// Exact finite algebra behind GLOBAL_PRESSURE_MATCHING.md.
+// All particular/source coefficients below have denominator 10395.
+resource PressureSpec { ell: int = 0 }
+component PressureResult { ell: int = 0, particular_verified: bool = false, homogeneous_verified: bool = false }
+entity candidate { PressureResult {} }
+pure fn check_mode(ell: int) -> PressureResult {
+    assert(ell == 0 or ell == 2 or ell == 4, "pressure harmonic domain")
+    let g: list<int> = if ell == 0 { [0, -24255, 33957, -12397] }
+        else if ell == 2 { [0, 2970, -1265, 0] } else { [0, -5460, 0, 0] }
+    let f: list<int> = if ell == 0 { [-145530, 679140, -520674] }
+        else if ell == 2 { [41580, -45540, 0] } else { [-120120, 0, 0] }
+    for j in range(3) {
+        assert((j+1)*(4*j+4*ell+6)*g[j+1] == f[j], "particular pressure ODE mismatch")
+    }
+    // q^alpha is homogeneous if alpha(4alpha+4ell+2)=0.
+    // alpha2=2alpha avoids half-integer rounding.
+    for alpha2 in [0, -2*ell-1] {
+        assert(alpha2*(alpha2+2*ell+1) == 0, "homogeneous pressure ODE mismatch")
+    }
+    assert(2*ell+1 > 0, "matching Wronskian must be nonzero for q>0")
+    return PressureResult { ell: ell, particular_verified: true, homogeneous_verified: true }
+}
+system CheckPressure(result: mut PressureResult, spec: PressureSpec) { result = check_mode(spec.ell) }
+component PressureAudit { modes: int = 0, radial_identities_verified: bool = false }
+entity audit { PressureAudit {} }
+intent PressureChecked { key target: entity, evidence: PressureResult }
+law SubmitPressure(target: entity, evidence: PressureResult) { propose PressureChecked { target: target, evidence: evidence } }
+resolver AssemblePressure for PressureChecked(target, proposals) {
+    assert(len(proposals) == 3, "incomplete pressure modes")
+    let mut seen: list<bool> = [false, false, false]
+    for proposal in proposals {
+        let row: PressureResult = proposal.evidence
+        assert(row == check_mode(row.ell), "forged pressure certificate")
+        let slot: int = int_div(row.ell, 2)
+        assert(not seen[slot], "duplicate pressure harmonic")
+        seen[slot] = true
+    }
+    next(target, PressureAudit { modes: 3, radial_identities_verified: true })
+}
+fn main() -> nil {
+    let live: str = world_digest()
+    let base: world_fork = fork()
+    let mut jobs: list<world_fork> = []
+    for ell in [0, 2, 4] { jobs = push(jobs, fork_with(base, PressureSpec { ell: ell })) }
+    let results: list<world_fork> = simulate_many(jobs, [system::CheckPressure], 1, 20260908)
+    let mut rows: list<PressureResult> = []
+    for i in range(3) {
+        assert_only_changed(jobs[i], results[i], [PressureResult])
+        let row: PressureResult = peek(results[i], candidate, PressureResult) |> unwrap
+        rows = push(rows, row)
+        print(json_stringify(row))
+    }
+    assert(world_digest() == live, "pressure fork isolation")
+    settle { for row in rows { SubmitPressure(audit, row) } }
+    print(why(audit, PressureAudit))
+    print("scope: finite radial identities; global integrals and energy arguments are not kernel proofs")
+}

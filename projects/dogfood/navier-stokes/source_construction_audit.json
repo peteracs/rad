@@ -1,0 +1,17 @@
+{
+  "rad_forks": 36,
+  "heat_integrand_polynomial_identity": true,
+  "radial_laplacian_coefficient_identity": true,
+  "deterministic_workers": [
+    1,
+    4
+  ],
+  "record_replay": true,
+  "forged_analytic_claim_rejected": true,
+  "local_source_modules": 2486,
+  "navier_stokes_import_closure": 580,
+  "challenge_module_imported": false,
+  "lean_executed": false,
+  "physical_estimates_verified": false,
+  "blowup_proved": false
+}

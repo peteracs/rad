@@ -138,6 +138,7 @@ rad/
         - `projects/dogfood/clearpay/scenarios/` - Production-shaped payment workloads.
         - `projects/dogfood/clearpay/systems/` - Settlement and capture systems.
         - `projects/dogfood/clearpay/tests/` - Payment workflow acceptance programs.
+      - `projects/dogfood/deletion-sync/` - Exact deletion-resilient reset/cost proofs, a general power-rank theorem, and independent mathematical audits.
       - `projects/dogfood/dispatch60/` - Real-time fleet scheduler for transitive hot-path cost contracts.
         - `projects/dogfood/dispatch60/negative/` - Rejected scans, allocations, and authority bypasses.
         - `projects/dogfood/dispatch60/owners/` - Authoritative fleet mutation boundary.
@@ -210,6 +211,13 @@ rad/
       - `projects/dogfood/causal-constraints/` - RFC-0002 candidate acceptance and rejection examples.
       - `projects/dogfood/causality/` - Provenance and `why()` explanation example.
       - `projects/dogfood/causal-laws/` - RFC-0001 proposal, resolver, and settlement example.
+      - `projects/dogfood/collatz-barrier/` - First-contraction extremizers, exact rotation bounds, arbitrary-natural RAD arithmetic, and replayable descent certificates.
+        - `projects/dogfood/collatz-barrier/escape/` - Polynomial coefficient-spread bounds, exact strip deadlines, and causal selection of certified exponents.
+        - `projects/dogfood/collatz-barrier/correction/` - Uniform additive-correction bounds from exact image collisions and certified infinite tails.
+        - `projects/dogfood/collatz-barrier/ladder/` - Complete sharp linear-envelope family near the limit slope, convergent-denominator ladder, and causally assembled parallel block certificates.
+      - `projects/dogfood/collatz-termination/` - Direct termination search with speculative RAD repair lanes, native acceleration, and independent matrix and polynomial certificate checks.
+        - `projects/dogfood/collatz-termination/local-rank/` - Question-led factor and prefix-residue rank investigations with exact RAD obstruction checks.
+          - `projects/dogfood/collatz-termination/local-rank/certificates/` - Durable sparse contradiction certificates and a literal Collatz orbit witness.
       - `projects/dogfood/collatz-lab/` - Exact structural Collatz search, certificates, and independent verifiers.
         - `projects/dogfood/collatz-lab/verifier/` - Standalone Rust verifier crate with no RAD runtime or native-extension dependency.
           - `projects/dogfood/collatz-lab/verifier/src/` - Independent certificate traversal and verification implementation.

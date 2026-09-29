@@ -1,0 +1,131 @@
+// Independent concrete checker. No SMT expressions or bit-vector arithmetic.
+pub struct Model {
+    label: str = ""
+    dimension: int = 0
+    maximum: int = 0
+    denominator: int = 1
+    reverse: bool = false
+    arctic: bool = false
+    omitted: int = -1
+    matrices: list<list<list<int>>> = []
+    strict_rules: list<int> = []
+    complete_proof: bool = false
+}
+
+pub struct CheckedModel {
+    label: str = ""
+    active_rules: int = 0
+    coefficient_comparisons: int = 0
+    strict_rules: list<int> = []
+    complete_proof: bool = false
+}
+
+pure fn product(a: list<list<int>>, b: list<list<int>>, arctic: bool) -> list<list<int>> {
+    let size: int = len(a)
+    let unique mut rows: list<list<int>> = []
+    for i in range(size) {
+        let mut row: list<int> = []
+        for j in range(size) {
+            let mut value: int = if arctic { -1000000 } else { 0 }
+            for k in range(size) {
+                if arctic {
+                    if a[i][k] != -1000000 and b[k][j] != -1000000 {
+                        value = max(value, a[i][k] + b[k][j])
+                    }
+                }
+                else { value = value + a[i][k] * b[k][j] }
+            }
+            row = push(row, value)
+        }
+        rows = push(rows, row)
+    }
+    return rows
+}
+
+pub pure fn interpret(word: list<int>, model: Model) -> list<list<int>> {
+    let size: int = model.dimension + 1
+    let unique mut value: list<list<int>> = []
+    for i in range(size) {
+        let mut row: list<int> = []
+        for j in range(size) {
+            row = push(row, if i == j { if model.arctic { 0 } else { 1 } } else { if model.arctic { -1000000 } else { 0 } })
+        }
+        value = push(value, row)
+    }
+    for i in range(len(word)) {
+        let position: int = if model.reverse { len(word) - 1 - i } else { i }
+        value = product(value, model.matrices[word[position]], model.arctic)
+    }
+    return value
+}
+
+pub pure fn check_model(model: Model) -> CheckedModel {
+    assert(model.dimension >= 1 and model.dimension <= 16, "matrix dimension outside checked domain")
+    assert(model.maximum >= 1 and model.maximum <= 31, "matrix coefficient bound outside checked domain")
+    assert(model.denominator >= 1 and model.denominator <= 31, "invalid rational denominator")
+    assert(not model.arctic or model.denominator == 1, "arctic entries must be integers")
+    assert(model.omitted >= -1 and model.omitted < 11, "invalid omitted rule")
+    assert(len(model.matrices) == 7, "missing symbol interpretation")
+    let d: int = model.dimension
+    for matrix in model.matrices {
+        assert(len(matrix) == d + 1, "matrix row count")
+        for i in range(d + 1) {
+            assert(len(matrix[i]) == d + 1, "matrix column count")
+            for j in range(d + 1) {
+                let value: int = matrix[i][j]
+                if i == d {
+                    let expected: int = if j == d { if model.arctic { 0 } else { model.denominator } } else { if model.arctic { -1000000 } else { 0 } }
+                    assert(value == expected, "invalid homogeneous coordinate")
+                }
+                else if model.arctic {
+                    assert(value == -1000000 or (value >= -model.maximum and value <= model.maximum), "arctic coefficient domain")
+                }
+                else { assert(value >= 0 and value <= model.maximum, "natural coefficient domain") }
+            }
+        }
+        if model.arctic { assert(matrix[0][0] >= 0 or matrix[0][d] >= 0, "arctic carrier not preserved") }
+    }
+    // Alphabet a,b = binary digits; e,f,g = ternary digits; c,d = boundaries.
+    let lefts: list<list<int>> = [[0, 3], [1, 3], [0, 4], [0, 5], [0, 6], [1, 4], [1, 5], [1, 6], [2, 4], [2, 5], [2, 6]]
+    let rights: list<list<int>> = [[3], [6, 3], [4, 0], [4, 1], [5, 0], [5, 1], [6, 0], [6, 1], [2, 1], [2, 0, 0], [2, 0, 1]]
+    let mut strict_rules: list<int> = []
+    let mut comparisons: int = 0
+    let mut active: int = 0
+    let mut boundary_count: int = 0
+    for rule in range(11) {
+        if rule != model.omitted {
+            active = active + 1
+            let lhs: list<list<int>> = interpret(lefts[rule], model)
+            let rhs: list<list<int>> = interpret(rights[rule], model)
+            let mut left_factor: int = 1
+            let mut right_factor: int = 1
+            if not model.arctic {
+                for _ in rights[rule] { left_factor = left_factor * model.denominator }
+                for _ in lefts[rule] { right_factor = right_factor * model.denominator }
+            }
+            for i in range(d) {
+                for j in range(d + 1) {
+                    assert(lhs[i][j] * left_factor >= rhs[i][j] * right_factor, "a rewrite increases the interpretation")
+                    comparisons = comparisons + 1
+                }
+            }
+            if (model.reverse and rule < 2) or (not model.reverse and rule >= 8) {
+                boundary_count = boundary_count + 1
+                let mut strict: bool = lhs[0][d] * left_factor > rhs[0][d] * right_factor
+                if model.arctic {
+                    strict = true
+                    for j in range(d + 1) {
+                        strict = strict and (lhs[0][j] > rhs[0][j] or (lhs[0][j] == -1000000 and rhs[0][j] == -1000000))
+                    }
+                }
+                if strict { strict_rules = push(strict_rules, rule) }
+            }
+        }
+    }
+    assert(len(strict_rules) > 0, "no rule was proved strictly decreasing")
+    assert(strict_rules == model.strict_rules, "declared strict rules disagree with arithmetic")
+    let complete: bool = model.omitted == -1 and len(strict_rules) == boundary_count
+    assert(complete == model.complete_proof, "false complete proof claim")
+    return CheckedModel { label: model.label, active_rules: active,
+        coefficient_comparisons: comparisons, strict_rules: strict_rules, complete_proof: complete }
+}

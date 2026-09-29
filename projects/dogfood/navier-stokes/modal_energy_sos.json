@@ -1,0 +1,8 @@
+{
+  "coefficient_box_certified": true,
+  "full_construction_certified": false,
+  "quadratic_error_factor": 2,
+  "vertices": 16,
+  "record_replay": true,
+  "invalid_stronger_bound_rejected": true
+}

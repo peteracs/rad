@@ -1,0 +1,58 @@
+use "epoch.rad"
+
+resource Setting { bits: int = 12 }
+
+component EpochEvidence { result: EpochPair = EpochPair {} }
+
+entity epoch_slot { EpochEvidence {} }
+
+system Measure(evidence: mut EpochEvidence, s: Setting) {
+    evidence = EpochEvidence { result: epoch_pair(s.bits, 977) }
+}
+
+component Verdict { worlds: int = 0, max_both_gap: int = 0, max_corr_gap_x1000: int = 0 }
+
+entity verdict { Verdict {} }
+
+intent Reading {
+    key target: entity
+    bits: int
+    both_real: int
+    both_null: int
+    corr_real: int
+    corr_null: int
+}
+
+law Report(target: entity, p: EpochPair) {
+    propose Reading { target: target, bits: p.real.bits, both_real: p.real.both_expand, both_null: p.null.both_expand,
+        corr_real: p.real.corr_x1000, corr_null: p.null.corr_x1000 }
+}
+
+// A self-correcting mechanism would show real consecutive expansions well
+// below the length-matched null; the verdict records the largest gap.
+resolver Judge for Reading(target, proposals) {
+    let mut gap: int = 0
+    let mut cgap: int = 0
+    for p in proposals {
+        gap = max(gap, abs(p.both_real - p.both_null))
+        cgap = max(cgap, abs(p.corr_real - p.corr_null))
+    }
+    next(target, Verdict { worlds: len(proposals), max_both_gap: gap, max_corr_gap_x1000: cgap })
+}
+
+fn main() -> nil {
+    let base: world_fork = fork()
+    let mut jobs: list<world_fork> = []
+    for b in [12, 14, 16] { jobs = push(jobs, fork_with(base, Setting { bits: b })) }
+    let done: list<world_fork> = simulate_many(jobs, [system::Measure], 1, 1937)
+    let mut pairs: list<EpochPair> = []
+    for i in range(len(done)) {
+        assert_only_changed(jobs[i], done[i], [EpochEvidence])
+        let p: EpochPair = (peek(done[i], epoch_slot, EpochEvidence) |> unwrap).result
+        pairs = push(pairs, p)
+        print(json_stringify(p))
+    }
+    settle { for p in pairs { Report(verdict, p) } }
+    print(json_stringify(require(verdict, Verdict)))
+    print(why(verdict, Verdict))
+}

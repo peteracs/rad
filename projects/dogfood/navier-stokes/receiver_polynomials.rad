@@ -1,0 +1,46 @@
+// Generated from complete symbolic Fourier convolution by build_receiver_calibration.py.
+// Inputs a..e are normalized integer amplitudes; no PDE return map is assumed.
+pub pure fn receiver_production_n(x: list<int>) -> int {
+    assert(len(x) == 5,"receiver parameter dimension")
+    for value in x { assert(value >= 1 and value <= 8,"receiver parameter box") }
+    let mut result: int = 0
+    result = result+-19*x[0]*x[0]*x[2]*x[2]*x[4]*x[4]
+    result = result+-51*x[2]*x[2]*x[3]*x[3]*x[4]*x[4]
+    return result
+}
+pub pure fn receiver_loss_n(x: list<int>) -> int {
+    assert(len(x) == 5,"receiver parameter dimension")
+    for value in x { assert(value >= 1 and value <= 8,"receiver parameter box") }
+    let mut result: int = 0
+    result = result+105*x[0]*x[0]*x[2]*x[2]
+    result = result+156*x[0]*x[0]*x[4]*x[4]
+    result = result+-78*x[0]*x[2]*x[3]*x[4]
+    result = result+5*x[1]*x[1]*x[2]*x[2]
+    result = result+105*x[1]*x[1]*x[4]*x[4]
+    result = result+156*x[2]*x[2]*x[3]*x[3]
+    result = result+432*x[2]*x[2]*x[4]*x[4]
+    result = result+5*x[3]*x[3]*x[4]*x[4]
+    return result
+}
+pub pure fn receiver_norm_n(x: list<int>) -> int {
+    assert(len(x) == 5,"receiver parameter dimension")
+    for value in x { assert(value >= 1 and value <= 8,"receiver parameter box") }
+    let mut result: int = 0
+    result = result+63*x[0]*x[0]*x[2]*x[2]
+    result = result+260*x[0]*x[0]*x[4]*x[4]
+    result = result+-130*x[0]*x[2]*x[3]*x[4]
+    result = result+3*x[1]*x[1]*x[2]*x[2]
+    result = result+63*x[1]*x[1]*x[4]*x[4]
+    result = result+260*x[2]*x[2]*x[3]*x[3]
+    result = result+180*x[2]*x[2]*x[4]*x[4]
+    result = result+3*x[3]*x[3]*x[4]*x[4]
+    return result
+}
+pub pure fn receiver_donor_production_n(x: list<int>) -> int {
+    assert(len(x) == 5,"receiver parameter dimension")
+    for value in x { assert(value >= 1 and value <= 8,"receiver parameter box") }
+    let mut result: int = 0
+    result = result+1*x[0]*x[1]*x[2]
+    result = result+1*x[1]*x[3]*x[4]
+    return result
+}

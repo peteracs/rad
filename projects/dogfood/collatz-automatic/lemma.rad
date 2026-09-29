@@ -1,0 +1,35 @@
+use "rewrite.rad"
+
+struct LemmaAudit { starts: int = 0, odd_steps: int = 0, even_steps: int = 0, max_ternary_at_once: int = 0, max_word: int = 0 }
+
+// Exhaustive audit: along every trajectory from 2 <= n < limit down to 1,
+// each odd step fires exactly one strict boundary rule, never holds more
+// than one ternary symbol, and lands on the binary word of T(n).
+pure fn audit(limit: int) -> LemmaAudit {
+    let mut odd: int = 0
+    let mut even: int = 0
+    let mut max_ternary: int = 0
+    let mut max_word: int = 0
+    for start in range(2, limit) {
+        let mut n: int = start
+        let mut word: list<int> = binary_word(n)
+        while n > 1 {
+            if n % 2 == 1 {
+                let step: OddStep = odd_step(word)
+                assert(step.boundary_firings == 1, "odd step fired a boundary rule other than once")
+                word = step.word
+                if step.ternary_seen > max_ternary { max_ternary = step.ternary_seen }
+                odd = odd + 1
+            } else {
+                word = even_step(word)
+                even = even + 1
+            }
+            n = collatz_next(n)
+            assert(word == binary_word(n), "rewrite and arithmetic diverged")
+            if len(word) > max_word { max_word = len(word) }
+        }
+    }
+    return LemmaAudit { starts: limit - 2, odd_steps: odd, even_steps: even, max_ternary_at_once: max_ternary, max_word: max_word }
+}
+
+print(json_stringify(audit(int(sys_args()[0]))))

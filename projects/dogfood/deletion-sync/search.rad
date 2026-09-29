@@ -1,0 +1,107 @@
+// Exact breadth-first search. All mathematics executes as RAD bytecode.
+pub struct SearchResult {
+    n: int = 0
+    budget: int = 0
+    length: int = -1
+    word: str = ""
+    target: int = -1
+    discovered: int = 0
+    expanded: int = 0
+}
+
+pub pure fn letter_image(mask: int, letter: int, n: int) -> int {
+    let full: int = (1 << n) - 1
+    if letter == 0 { return ((mask << 1) & full) | (mask >> (n - 1)) }
+    let top: int = 1 << (n - 1)
+    return (mask & (top - 1)) | (mask >> (n - 1))
+}
+
+pub pure fn advance(code: int, letter: int, n: int, budget: int) -> int {
+    let full: int = (1 << n) - 1
+    let mut answer: int = 0
+    for level in range(budget + 1) {
+        let current: int = (code >> (n * level)) & full
+        let lower: int = if level == 0 { 0 } else { (code >> (n * (level - 1))) & full }
+        answer = answer | ((letter_image(current, letter, n) | lower) << (n * level))
+    }
+    return answer
+}
+
+// Nested sets S0 <= ... <= Sk have exactly (k+2)^n encodings.
+// A state's digit counts the uncertainty layers containing that state.
+pure fn dense_rank(code: int, n: int, budget: int) -> int {
+    let mut rank: int = 0
+    let mut place: int = 1
+    for q in range(n) {
+        let mut digit: int = 0
+        for level in range(budget + 1) {
+            digit = digit + ((code >> (n * level + q)) & 1)
+        }
+        rank = rank + place * digit
+        place = place * (budget + 2)
+    }
+    return rank
+}
+
+pub pure fn exact_search(n: int, budget: int) -> SearchResult {
+    assert(n >= 2 and n <= 10, "exact search supports 2..10 states")
+    assert(budget >= 0 and budget <= 2, "exact search supports 0..2 deletions")
+    let mut capacity: int = 1
+    for _ in range(n) { capacity = capacity * (budget + 2) }
+    let mut queue: bytebuf = bytebuf_new(capacity * 9)
+    let mut visited: bytebuf = bytebuf_new(capacity)
+    let full: int = (1 << n) - 1
+    let start: int = (1 << (n * (budget + 1))) - 1
+    queue = bytebuf_set_u32_le(queue, 0, start)
+    visited = bytebuf_set_u8(visited, dense_rank(start, n, budget), 1)
+    let mut head: int = 0
+    let mut tail: int = 1
+    while head < tail {
+        let code: int = bytebuf_get_u32_le(queue, head * 9)
+        let uncertain: int = (code >> (n * budget)) & full
+        if (uncertain & (uncertain - 1)) == 0 {
+            let mut word: str = ""
+            let mut cursor: int = head
+            while cursor > 0 {
+                let letter: int = bytebuf_get(queue, cursor * 9 + 8)
+                word = (if letter == 0 { "a" } else { "b" }) + word
+                cursor = bytebuf_get_u32_le(queue, cursor * 9 + 4)
+            }
+            let mut target: int = 0
+            while ((uncertain >> target) & 1) == 0 { target = target + 1 }
+            return SearchResult {
+                n: n, budget: budget, length: len(word), word: word,
+                target: target, discovered: tail, expanded: head,
+            }
+        }
+        for letter in range(2) {
+            let successor: int = advance(code, letter, n, budget)
+            let rank: int = dense_rank(successor, n, budget)
+            if bytebuf_get(visited, rank) == 0 {
+                assert(tail < capacity, "nested-set state bound exceeded")
+                visited = bytebuf_set_u8(visited, rank, 1)
+                queue = bytebuf_set_u32_le(queue, tail * 9, successor)
+                queue = bytebuf_set_u32_le(queue, tail * 9 + 4, head)
+                queue = bytebuf_set_u8(queue, tail * 9 + 8, letter)
+                tail = tail + 1
+            }
+        }
+        head = head + 1
+    }
+    return SearchResult {
+        n: n, budget: budget, length: -1, word: "", target: -1,
+        discovered: tail, expanded: head,
+    }
+}
+
+// A uniform one-deletion-resilient candidate, to be proved symbolically.
+pub pure fn square_word(n: int) -> str {
+    if n == 2 { return "bb" }
+    let mut long_run: str = ""
+    for _ in range(n - 1) { long_run = long_run + "a" }
+    let mut short_run: str = ""
+    for _ in range(n - 2) { short_run = short_run + "a" }
+    let mut word: str = "b" + long_run
+    for _ in range(n - 2) { word = word + "b" + "a" + "b" + short_run }
+    return word + "a" + "b"
+}

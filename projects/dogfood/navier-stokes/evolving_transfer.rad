@@ -1,0 +1,76 @@
+use "segment_seed.rad"
+component TransferEvidence {
+    target: list<int> = [], target_squared_frequency: int = 0,
+    initial_max_squared_frequency: int = 2, target_z_source: int = 0,
+    source_error_upper_n: int = 0, source_error_upper_d: int = 1,
+    amplitude_rate_lower: int = 0, high_band_energy_coefficient: int = 0,
+    H3_profile_error_coefficient_power_two: int = 49,
+    time_horizon_negative_power_two: int = 98,
+    total_energy_decreases: bool = false, nonlinear_transfer_proved_by_written_lemmas: bool = false,
+    repeated_scale_transfer_proved: bool = false, explanation: str = ""
+}
+entity transfer_result { TransferEvidence {} }
+pure fn check_transfer() -> TransferEvidence {
+    let seed: list<FluidMode> = segment_seed()
+    let drift: list<ForceMode> = actual_force(seed,[],1)
+    let mut found: bool = false
+    for mode in seed {
+        let n: int = mode.k[0]*mode.k[0]+mode.k[1]*mode.k[1]+mode.k[2]*mode.k[2]
+        assert(n <= 2,"initial band")
+        assert(mode.k != [2,1,0],"target initially empty")
+    }
+    for term in drift { if term.k == [2,1,0] {
+        assert(term.denominator == 20,"target denominator")
+        assert(term.re == [4096,-8192,40960] and term.im == [0,0,0],"full projected nonlinear source")
+        found = true
+    } }
+    assert(found,"generated frequency missing")
+    // Modal bilinear estimate: |N_k(u)-N_k(v)| <= 3*(2048+2048)*delta.
+    assert(3*4096*64 == 3*262144,"source error <= 3/64 at delta=2^-18")
+    assert(3 < 64,"source error < 1")
+    assert(2047*3 > 4*1024,"heat-weighted modal lower bound")
+    // Old gradient norm 192, perturbation < 1, force work <= 2048.
+    assert(192*192 == 9*4096 and 191*191 > 2048,"strict total energy decrease")
+    // H3 error <= 128*(2048+1024)*sqrt(t)*delta(t), relaxed to 4096.
+    assert(128*4096 == 524288,"profile Lipschitz constant")
+    assert(4352 < 536870912,"profile remainder coefficient margin")
+    assert(49-98 == -49,"endpoint H3 profile error")
+    return TransferEvidence { target:[2,1,0],target_squared_frequency:5,
+        initial_max_squared_frequency:2,target_z_source:-2048,
+        source_error_upper_n:3,source_error_upper_d:64,
+        amplitude_rate_lower:1024,high_band_energy_coefficient:1048576,
+        H3_profile_error_coefficient_power_two:49,time_horizon_negative_power_two:98,
+        total_energy_decreases:true,nonlinear_transfer_proved_by_written_lemmas:true,
+        repeated_scale_transfer_proved:false,
+        explanation:"mode-specific dual functional resolves transfer hidden by the coarse H3 error; actual high-band kinetic energy >= 2^20*t^2 while total energy decreases; evolving first-Picard profile error <= 2^49*t; iteration to successively higher bands unproved" }
+}
+intent TransferChecked { key target: entity, evidence: TransferEvidence }
+law SubmitTransfer(target: entity,evidence: TransferEvidence) {
+    propose TransferChecked { target:target,evidence:evidence }
+}
+resolver CheckTransfer for TransferChecked(target,proposals) {
+    assert(len(proposals) == 1,"one transfer certificate")
+    let row: TransferEvidence = proposals[0].evidence
+    assert(row == check_transfer(),"forged evolving-transfer certificate")
+    next(target,TransferEvidence { target:row.target,target_squared_frequency:row.target_squared_frequency,
+        initial_max_squared_frequency:row.initial_max_squared_frequency,target_z_source:row.target_z_source,
+        source_error_upper_n:row.source_error_upper_n,source_error_upper_d:row.source_error_upper_d,
+        amplitude_rate_lower:row.amplitude_rate_lower,high_band_energy_coefficient:row.high_band_energy_coefficient,
+        H3_profile_error_coefficient_power_two:row.H3_profile_error_coefficient_power_two,
+        time_horizon_negative_power_two:row.time_horizon_negative_power_two,
+        total_energy_decreases:row.total_energy_decreases,
+        nonlinear_transfer_proved_by_written_lemmas:row.nonlinear_transfer_proved_by_written_lemmas,
+        repeated_scale_transfer_proved:row.repeated_scale_transfer_proved,explanation:row.explanation })
+}
+fn main() -> nil {
+    let mut row: TransferEvidence = check_transfer()
+    let args: list<str> = sys_args()
+    if len(args) > 0 {
+        if args[0] == "forge-repeat" { row.repeated_scale_transfer_proved = true }
+        else { assert(args[0] == "forge-source","unknown mutation")
+            row.target_z_source = -4096 }
+    }
+    settle { SubmitTransfer(transfer_result,row) }
+    print("transfer",json_stringify(require(transfer_result,TransferEvidence)))
+    print(why(transfer_result,TransferEvidence))
+}

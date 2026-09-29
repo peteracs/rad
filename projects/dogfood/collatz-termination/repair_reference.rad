@@ -1,0 +1,72 @@
+use "matrix.rad"
+
+pub struct RankScore { weak: int = 0, strict: int = 0, total: int = 0 }
+
+pub pure fn reference_score(request: map<str, any>, matrices: list<list<list<int>>>) -> RankScore {
+    let d: int = request["dimension"]
+    let rules: list<list<list<int>>> = request["rules"]
+    let model: Model = Model { dimension: d, maximum: request["maximum"], reverse: request["reverse"], matrices: matrices }
+    let mut weak: int = 0
+    let mut strict: int = 0
+    for r in range(len(rules)) {
+        if (request["active_mask"] & (1 << r)) != 0 {
+            let lhs: list<list<int>> = interpret(rules[r][0], model)
+            let rhs: list<list<int>> = interpret(rules[r][1], model)
+            for i in range(d) {
+                for j in range(d + 1) { weak = weak + max(0, rhs[i][j] - lhs[i][j]) }
+            }
+            if (request["strict_mask"] & (1 << r)) != 0 { strict = strict + max(0, 1 + rhs[0][d] - lhs[0][d]) }
+        }
+    }
+    return RankScore { weak: weak, strict: strict, total: weak + request["strict_weight"] * strict }
+}
+
+// Deliberately separate reference: every trial recomputes every rule in
+// ordinary RAD. The native implementation caches unaffected comparisons.
+pub pure fn reference_walk(request: map<str, any>) -> map<str, any> {
+    let d: int = request["dimension"]
+    let mut matrices: list<list<list<int>>> = request["matrices"]
+    let mut positions: list<list<int>> = []
+    for s in range(len(matrices)) {
+        for i in range(d) {
+            for j in range(d + 1) {
+                if request["ground"] != s or j == d { positions = push(positions, [s, i, j]) }
+            }
+        }
+    }
+    let initial: RankScore = reference_score(request, matrices)
+    let mut current: RankScore = initial
+    let mut best: RankScore = initial
+    let mut best_matrices: list<list<list<int>>> = matrices
+    let mut seed: int = request["seed"]
+    let mut evaluated: int = 0
+    let mut accepted: int = 0
+    let mut checksum: int = 0
+    for iteration in range(request["trials"]) {
+        if request["stop_on_zero"] and best.total == 0 { break }
+        seed = (seed * 48271) % 2147483647
+        let position: list<int> = positions[seed % len(positions)]
+        seed = (seed * 48271) % 2147483647
+        let value: int = seed % (request["maximum"] + 1)
+        seed = (seed * 48271) % 2147483647
+        let old: int = matrices[position[0]][position[1]][position[2]]
+        matrices[position[0]][position[1]][position[2]] = value
+        let candidate: RankScore = reference_score(request, matrices)
+        checksum = (checksum + (candidate.total % 2147483647) * (1 + iteration % 97)) % 2147483647
+        evaluated = evaluated + 1
+        let temperature: int = int_div(request["temperature"] * (1024 - iteration % 1024), 1024)
+        let delta: int = candidate.total - current.total
+        if delta <= 0 or (temperature > 0 and seed % (delta + temperature) < temperature) {
+            current = candidate
+            accepted = accepted + 1
+            if current.total < best.total {
+                best = current
+                best_matrices = matrices
+            }
+        }
+        else { matrices[position[0]][position[1]][position[2]] = old }
+    }
+    let report: map<str, any> = { "initial": initial, "best": best, "final_score": current, "matrices": best_matrices,
+        "seed": seed, "evaluated": evaluated, "accepted": accepted, "checksum": checksum }
+    return report
+}

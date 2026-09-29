@@ -1,0 +1,144 @@
+use "ladder.rad"
+
+// One isolated world per slice of block lengths m in [first, last].
+resource Lane { first: int = 1, last: int = 1, block: int = 15601 }
+
+component LaneEvidence { result: BlockLane = BlockLane {} }
+
+entity lane_slot { LaneEvidence {} }
+
+system EvaluateLane(evidence: mut LaneEvidence, lane: Lane) {
+    evidence = LaneEvidence { result: block_lane(lane.first, lane.last, lane.block) }
+}
+
+// Assembled block certificate: F_r(x) - sigma* r <= excess for r < block,
+// and M_block <= sigma* block, for every phase x.
+component BlockCertificate {
+    block: int = 0
+    lanes: int = 0
+    covered: int = 0
+    excess: int = 0
+    excess_argmax: int = 0
+    block_upper: int = 0
+    contracts: bool = false
+}
+
+entity forward { BlockCertificate {} }
+
+entity reversed { BlockCertificate {} }
+
+intent LaneResult {
+    key target: entity
+    first: int
+    last: int
+    block: int
+    excess: int
+    excess_argmax: int
+    block_upper: int
+}
+
+law Submit(target: entity, lane: BlockLane) {
+    propose LaneResult { target: target, first: lane.first, last: lane.last, block: lane.block,
+        excess: lane.excess_max, excess_argmax: lane.excess_argmax, block_upper: lane.block_upper }
+}
+
+// Proposals are canonicalized by payload, so this resolver cannot depend on
+// which lane finished first. Pairwise-disjoint slices whose sizes sum to the
+// block length, spanning [1, block], are an exact cover.
+resolver Assemble for LaneResult(target, proposals) {
+    let block: int = proposals[0].block
+    let mut covered: int = 0
+    let mut low: int = block
+    let mut high: int = 0
+    let mut excess: int = 0
+    let mut argmax: int = 0
+    let mut upper: int = 0
+    for p in proposals {
+        assert(p.block == block, "lanes certify different blocks")
+        covered = covered + (p.last - p.first + 1)
+        if p.first < low { low = p.first }
+        if p.last > high { high = p.last }
+        if p.excess > excess or (p.excess == excess and p.excess_argmax < argmax) {
+            excess = p.excess
+            argmax = p.excess_argmax
+        }
+        if p.last == block { upper = p.block_upper }
+        for other in proposals {
+            if other.first != p.first {
+                assert(other.last < p.first or other.first > p.last, "lanes overlap")
+            }
+        }
+    }
+    let exact_cover: bool = low == 1 and high == block and covered == block
+    next(target, BlockCertificate { block: block, lanes: len(proposals),
+        covered: if exact_cover { covered } else { 0 }, excess: excess, excess_argmax: argmax,
+        block_upper: upper, contracts: upper > 0 and upper <= sigma_unit() * block })
+}
+
+constraint CompleteBlock for BlockCertificate(subject, proposed) {
+    require proposed.lanes == 16 else "ladder.incomplete_lanes"
+    require proposed.covered == proposed.block else "ladder.not_an_exact_cover"
+    require proposed.contracts else "ladder.block_does_not_contract"
+}
+
+// Convergent-denominator portfolio: which block lengths contract at sigma*?
+resource Probe { block: int = 12 }
+
+component ProbeEvidence { result: BlockLane = BlockLane {} }
+
+entity probe_slot { ProbeEvidence {} }
+
+system EvaluateProbe(evidence: mut ProbeEvidence, probe: Probe) {
+    evidence = ProbeEvidence { result: block_lane(probe.block, probe.block, probe.block) }
+}
+
+struct ProbeRow { kind: str = "probe", block: int = 0, block_upper: int = 0, sigma_bound: int = 0, contracts: bool = false }
+
+struct Completion { kind: str = "complete", block: int = 0, horizon: int = 0 }
+
+fn main() -> nil {
+    let block: int = 15601
+    let horizon: int = 20000
+    let base: world_fork = fork()
+
+    let bounds: list<int> = lane_bounds(block, 16)
+    let mut jobs: list<world_fork> = []
+    for lane in range(16) {
+        jobs = push(jobs, fork_with(base, Lane { first: bounds[lane] + 1, last: bounds[lane + 1], block: block }))
+    }
+    let results: list<world_fork> = simulate_many(jobs, [system::EvaluateLane], 1, 1937)
+    let mut lanes: list<BlockLane> = []
+    for i in range(len(results)) {
+        assert_only_changed(jobs[i], results[i], [LaneEvidence])
+        let evidence: LaneEvidence = peek(results[i], lane_slot, LaneEvidence) |> unwrap
+        let restored: world_fork = fork_from_bytes(fork_to_bytes(results[i])) |> unwrap
+        assert(peek(restored, lane_slot, LaneEvidence) == peek(results[i], lane_slot, LaneEvidence), "lane snapshot round trip changed evidence")
+        lanes = push(lanes, evidence.result)
+        print(json_stringify(evidence.result))
+    }
+    assert(require(lane_slot, LaneEvidence).result.block == 0, "lane work leaked into the live world")
+
+    settle { for lane in lanes { Submit(forward, lane) } }
+    settle { for i in range(len(lanes)) { Submit(reversed, lanes[len(lanes) - 1 - i]) } }
+    let certificate: BlockCertificate = require(forward, BlockCertificate)
+    assert(certificate == require(reversed, BlockCertificate), "proposal order changed the block certificate")
+    print(json_stringify(certificate))
+
+    let mut probes: list<world_fork> = []
+    for length in [12, 41, 53, 306, 665] { probes = push(probes, fork_with(base, Probe { block: length })) }
+    let probed: list<world_fork> = simulate_many(probes, [system::EvaluateProbe], 1, 1937)
+    for i in range(len(probed)) {
+        assert_only_changed(probes[i], probed[i], [ProbeEvidence])
+        let row: BlockLane = (peek(probed[i], probe_slot, ProbeEvidence) |> unwrap).result
+        let bound: int = sigma_unit() * row.block
+        print(json_stringify(ProbeRow { block: row.block, block_upper: row.block_upper,
+            sigma_bound: bound, contracts: row.block_upper <= bound }))
+    }
+
+    let f: PhaseZero = phase_zero(horizon)
+    let vertices: list<int> = select_vertices(f, horizon)
+    let ladder: LadderCertificate = certify_ladder(f, horizon, vertices, block, certificate.block_upper, certificate.excess)
+    print(json_stringify(ladder))
+    print(json_stringify(Completion { block: block, horizon: horizon }))
+    print(why(forward, BlockCertificate))
+}

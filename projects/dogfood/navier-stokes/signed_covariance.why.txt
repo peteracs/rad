@@ -1,0 +1,12 @@
+{"cross_identity":true,"quadratic_remainder":true}
+CovarianceEvidence of covariance_result = { cross_identity: true, quadratic_remainder: true }   (set in frame 0)
+
+  <- resolver `CovarianceResolver`
+     intent: CheckCovariance
+     key: covariance_result
+
+     <- proposal CheckCovariance { target: covariance_result, drop_square: false }
+        proposed by law `SubmitCovariance` at line 9
+
+     settlement origin:
+  <- by top-level code

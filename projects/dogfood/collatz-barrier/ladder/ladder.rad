@@ -1,0 +1,277 @@
+// Sharp envelope ladder for first-contraction offsets.
+//
+// alpha = log_2(3), v_k = 2^-{k alpha}, F_q(x) = sum_{i<q} 2^-{x + i alpha}.
+// C_q/3^q = F_q(0)/3, where C_q is the exact maximal first-contraction offset.
+//
+// All values are rigorous integer enclosures. Phases follow the exact
+// recurrence v_{k+1} = v_k * 2^d / 3, where d is the unique choice keeping
+// v_{k+1} in (1/2, 1]. Values are propagated at scale 2^52 with outward
+// rounding, then rounded outward to the summation scale 2^40. Integer
+// overflow traps in RAD, so no wrapped product can enter a certificate.
+
+pub struct Phases {
+    lo: list<int> = []
+    hi: list<int> = []
+    doubling: list<bool> = []
+}
+
+pub struct BlockLane {
+    first: int = 0
+    last: int = 0
+    block: int = 0
+    excess_max: int = 0
+    excess_argmax: int = 0
+    block_upper: int = 0
+    candidate_phases: int = 0
+}
+
+pub struct Vertex { q: int = 0, lo: int = 0, hi: int = 0 }
+
+pub struct LadderCertificate {
+    block: int = 0
+    sigma_numerator: int = 0
+    sigma_bits: int = 0
+    scale_bits: int = 0
+    vertices: list<int> = []
+    gaps: list<int> = []
+    vertex_lo: list<int> = []
+    vertex_hi: list<int> = []
+    tail_start: int = 0
+    bootstrap_margin: int = 0
+    tail_margin: int = 0
+    min_concavity_margin: int = 0
+    min_segment_margin: int = 0
+}
+
+pub pure fn fine_scale() -> int { return 1 << 52 }
+pub pure fn scale() -> int { return 1 << 40 }
+pub pure fn sigma_numerator() -> int { return 756421 }
+pub pure fn sigma_bits() -> int { return 20 }
+// sigma* * 2^40 as an exact integer.
+pub pure fn sigma_unit() -> int { return sigma_numerator() << (40 - sigma_bits()) }
+
+pub pure fn floor_to_scale(value: int) -> int { return value >> 12 }
+pub pure fn ceil_to_scale(value: int) -> int { return (value + 4095) >> 12 }
+
+// Forward phases v_0 .. v_{count-1} and the step choices d_k (true: d=2).
+pub pure fn forward_phases(count: int) -> Phases {
+    assert(count >= 1, "empty phase table")
+    let fine: int = fine_scale()
+    let mut lo: int = fine
+    let mut hi: int = fine
+    let mut out_lo: list<int> = []
+    let mut out_hi: list<int> = []
+    let mut doubling: list<bool> = []
+    for _ in range(count) {
+        out_lo = push(out_lo, floor_to_scale(lo))
+        out_hi = push(out_hi, ceil_to_scale(hi))
+        // v <= 3/4 forces d=2 (multiply by 4/3); v > 3/4 forces d=1.
+        let four: bool = 4 * hi <= 3 * fine
+        let two: bool = 4 * lo > 3 * fine
+        assert(four != two, "phase enclosure straddles the 3/4 branch point")
+        if four {
+            lo = int_div(4 * lo, 3)
+            hi = int_div(4 * hi + 2, 3)
+        } else {
+            lo = int_div(2 * lo, 3)
+            hi = int_div(2 * hi + 2, 3)
+        }
+        assert(2 * lo > fine and hi <= fine, "phase left (1/2, 1]")
+        doubling = push(doubling, four)
+    }
+    return Phases { lo: out_lo, hi: out_hi, doubling: doubling }
+}
+
+// Upper enclosures of v_{-k}, 1 <= k < count, using
+// v_{-1} = 3/4 and v_{-(k+1)} = v_{-k} * 3 / 2^{d_k}.
+pub pure fn backward_upper(forward: Phases, count: int) -> list<int> {
+    let fine: int = fine_scale()
+    let mut hi: int = 3 * (fine >> 2)
+    let mut out: list<int> = [0]
+    for k in range(1, count) {
+        out = push(out, ceil_to_scale(hi))
+        if forward.doubling[k] { hi = (3 * hi + 3) >> 2 } else { hi = (3 * hi + 1) >> 1 }
+        assert(hi <= fine, "backward phase exceeded one")
+    }
+    return out
+}
+
+// Upper prefix sums of v_k for k = -(length-1) .. length-1.
+pub pure fn block_prefix(length: int) -> list<int> {
+    let forward: Phases = forward_phases(length)
+    let backward: list<int> = backward_upper(forward, length)
+    let mut prefix: list<int> = [0]
+    let mut total: int = 0
+    for i in range(length - 1) {
+        total = total + backward[length - 1 - i]
+        prefix = push(prefix, total)
+    }
+    for k in range(length) {
+        total = total + forward.hi[k]
+        prefix = push(prefix, total)
+    }
+    return prefix
+}
+
+// M_m = max_x F_m(x) is attained at one of the m phases x = {-h alpha}.
+// For m in [start, stop], record the largest M_m - sigma* m (block excess).
+pub pure fn block_lane(start: int, stop: int, length: int) -> BlockLane {
+    assert(1 <= start and start <= stop and stop <= length, "invalid lane")
+    let prefix: list<int> = block_prefix(length)
+    let origin: int = length - 1
+    let unit: int = sigma_unit()
+    let mut best: int = 0 - (1 << 62)
+    let mut best_m: int = 0
+    let mut block_upper: int = 0
+    let mut phases: int = 0
+    for m in range(start, stop + 1) {
+        let mut top: int = 0
+        for h in range(m) {
+            let value: int = prefix[origin - h + m] - prefix[origin - h]
+            if value > top { top = value }
+        }
+        phases = phases + m
+        if m == length {
+            block_upper = top
+        } else {
+            let excess: int = top - unit * m
+            if excess > best {
+                best = excess
+                best_m = m
+            }
+        }
+    }
+    return BlockLane { first: start, last: stop, block: length, excess_max: best,
+        excess_argmax: best_m, block_upper: block_upper, candidate_phases: phases }
+}
+
+// Balanced lanes: the work for m is proportional to m.
+pub pure fn lane_bounds(length: int, lanes: int) -> list<int> {
+    let mut bounds: list<int> = [0]
+    let total: int = length * (length + 1)
+    let mut m: int = 0
+    for lane in range(1, lanes) {
+        let target: int = int_div(total * lane, lanes)
+        while m * (m + 1) < target { m = m + 1 }
+        bounds = push(bounds, m)
+    }
+    return push(bounds, length)
+}
+
+pub struct PhaseZero { lo: list<int> = [], hi: list<int> = [] }
+
+pub pure fn phase_zero(count: int) -> PhaseZero {
+    let phases: Phases = forward_phases(count)
+    let mut lo: list<int> = [0]
+    let mut hi: list<int> = [0]
+    for k in range(count) {
+        lo = push(lo, lo[k] + phases.lo[k])
+        hi = push(hi, hi[k] + phases.hi[k])
+    }
+    return PhaseZero { lo: lo, hi: hi }
+}
+
+// Selection uses coarse midpoints; every accepted fact is re-proved below
+// from the rigorous enclosures, so selection needs no soundness argument.
+pub pure fn select_vertices(f: PhaseZero, horizon: int) -> list<int> {
+    let mut vertices: list<int> = [0]
+    let mut a: int = 0
+    let threshold: int = sigma_unit() >> 20
+    let mut searching: bool = true
+    while searching {
+        let base: int = (f.lo[a] + f.hi[a]) >> 21
+        let mut best_q: int = 0 - 1
+        let mut best_rise: int = 0
+        let mut best_run: int = 1
+        for q in range(a + 1, horizon + 1) {
+            let rise: int = ((f.lo[q] + f.hi[q]) >> 21) - base
+            let run: int = q - a
+            if best_q < 0 or rise * best_run > best_rise * run {
+                best_q = q
+                best_rise = rise
+                best_run = run
+            }
+        }
+        if best_q < 0 or best_rise <= threshold * best_run {
+            searching = false
+        } else {
+            vertices = push(vertices, best_q)
+            a = best_q
+        }
+    }
+    return vertices
+}
+
+// Proves, for every slope sigma >= sigma*:
+//   sup_{q >= 0} (F_q(0) - sigma q) = max_{v in vertices} (F_v(0) - sigma v),
+// given a block certificate: M_block <= sigma* block and
+// F_r(x) - sigma* r <= excess for all r < block and all x.
+pub pure fn certify_ladder(f: PhaseZero, horizon: int, vertices: list<int>, block: int, block_upper: int, excess: int) -> LadderCertificate {
+    let unit: int = sigma_unit()
+    assert(block_upper <= unit * block, "block does not contract at sigma*")
+    assert(excess >= 0, "empty block excess")
+    let n: int = len(vertices)
+    assert(n >= 2 and vertices[0] == 0, "ladder must start at q=0")
+    let mut gaps: list<int> = []
+    let mut vlo: list<int> = []
+    let mut vhi: list<int> = []
+    let mut min_segment: int = 1 << 62
+    for i in range(n) {
+        vlo = push(vlo, f.lo[vertices[i]])
+        vhi = push(vhi, f.hi[vertices[i]])
+    }
+    for i in range(n - 1) {
+        let a: int = vertices[i]
+        let b: int = vertices[i + 1]
+        let gap: int = b - a
+        assert(gap >= 1 and gap <= 1024, "gap outside the overflow-safe range")
+        gaps = push(gaps, gap)
+        // Every point strictly between lies below the chord (both ends lower bounds).
+        let rise: int = f.lo[b] - f.lo[a]
+        for q in range(a + 1, b) {
+            let margin: int = rise * (q - a) - (f.hi[q] - f.lo[a]) * gap
+            assert(margin > 0, "a point rises above a ladder segment")
+            if margin < min_segment { min_segment = margin }
+        }
+    }
+    // Strict concavity at each interior vertex.
+    let mut min_concavity: int = 1 << 62
+    for i in range(1, n - 1) {
+        let left: int = vertices[i] - vertices[i - 1]
+        let right: int = vertices[i + 1] - vertices[i]
+        let margin: int = (f.lo[vertices[i]] - f.hi[vertices[i - 1]]) * right
+            - (f.hi[vertices[i + 1]] - f.lo[vertices[i]]) * left
+        assert(margin > 0, "ladder is not strictly concave")
+        if margin < min_concavity { min_concavity = margin }
+    }
+    // The last vertex is exposed at sigma*: its incoming edge is steeper.
+    let top: int = vertices[n - 1]
+    let into_last: int = (f.lo[top] - f.hi[vertices[n - 2]]) - unit * (top - vertices[n - 2])
+    assert(into_last > 0, "last ladder edge is not steeper than sigma*")
+    if into_last < min_concavity { min_concavity = into_last }
+    // Tail: F_q <= F_last + sigma* (q - last) until the bootstrap closes.
+    let target: int = f.lo[top] - unit * top
+    let mut q: int = top + 1
+    let mut tail_margin: int = 1 << 62
+    let mut closed: bool = false
+    let mut bootstrap: int = 0
+    while q <= horizon and not closed {
+        let height: int = f.hi[q] - unit * q
+        let margin: int = target - height
+        assert(margin > 0, "a tail point rises above the sigma* ray")
+        if margin < tail_margin { tail_margin = margin }
+        // For all p >= q: F_p(0) - sigma* p <= F_q(0) - sigma* q + excess.
+        if height + excess < target {
+            closed = true
+            bootstrap = target - height - excess
+        } else {
+            q = q + 1
+        }
+    }
+    assert(closed, "bootstrap did not close inside the horizon")
+    return LadderCertificate { block: block, sigma_numerator: sigma_numerator(),
+        sigma_bits: sigma_bits(), scale_bits: 40, vertices: vertices, gaps: gaps,
+        vertex_lo: vlo, vertex_hi: vhi, tail_start: q, bootstrap_margin: bootstrap,
+        tail_margin: tail_margin, min_concavity_margin: min_concavity,
+        min_segment_margin: min_segment }
+}

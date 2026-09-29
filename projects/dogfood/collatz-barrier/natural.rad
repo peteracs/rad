@@ -1,0 +1,138 @@
+// Arbitrary nonnegative integers in ordinary RAD. Little-endian base 2^15.
+// The native int intermediates stay below 2^55 for the permitted small factors.
+pub struct Natural { digits: list<int> = [] }
+
+pub pure fn nat(n: int) -> Natural {
+    assert(n >= 0, "negative natural")
+    let mut value: int = n
+    let mut digits: list<int> = []
+    while value > 0 {
+        digits = push(digits, value % 32768)
+        value = int_div(value, 32768)
+    }
+    return Natural { digits: digits }
+}
+
+pub pure fn normalized(digits: list<int>) -> Natural {
+    let mut size: int = len(digits)
+    while size > 0 and digits[size - 1] == 0 { size = size - 1 }
+    let mut result: list<int> = []
+    for i in range(size) { result = push(result, digits[i]) }
+    return Natural { digits: result }
+}
+
+pub pure fn ncmp(a: Natural, b: Natural) -> int {
+    if len(a.digits) != len(b.digits) {
+        return if len(a.digits) > len(b.digits) { 1 } else { -1 }
+    }
+    let mut i: int = len(a.digits)
+    while i > 0 {
+        i = i - 1
+        if a.digits[i] != b.digits[i] {
+            return if a.digits[i] > b.digits[i] { 1 } else { -1 }
+        }
+    }
+    return 0
+}
+
+pub pure fn nadd(a: Natural, b: Natural) -> Natural {
+    let mut result: list<int> = []
+    let mut carry: int = 0
+    for i in range(max(len(a.digits), len(b.digits))) {
+        let av: int = if i < len(a.digits) { a.digits[i] } else { 0 }
+        let bv: int = if i < len(b.digits) { b.digits[i] } else { 0 }
+        let v: int = av + bv + carry
+        result = push(result, v % 32768)
+        carry = int_div(v, 32768)
+    }
+    if carry > 0 { result = push(result, carry) }
+    return Natural { digits: result }
+}
+
+pub pure fn nsub(a: Natural, b: Natural) -> Natural {
+    assert(ncmp(a, b) >= 0, "negative natural difference")
+    let mut result: list<int> = []
+    let mut borrow: int = 0
+    for i in range(len(a.digits)) {
+        let bv: int = if i < len(b.digits) { b.digits[i] } else { 0 }
+        let v: int = a.digits[i] - bv - borrow
+        result = push(result, if v < 0 { v + 32768 } else { v })
+        borrow = if v < 0 { 1 } else { 0 }
+    }
+    assert(borrow == 0, "natural borrow escaped")
+    return normalized(result)
+}
+
+pub pure fn nscale(a: Natural, factor: int) -> Natural {
+    assert(factor >= 0 and factor <= 1099511627776, "small factor outside 0..2^40")
+    if factor == 0 { return nat(0) }
+    let mut result: list<int> = []
+    let mut carry: int = 0
+    for digit in a.digits {
+        let v: int = digit * factor + carry
+        result = push(result, v % 32768)
+        carry = int_div(v, 32768)
+    }
+    while carry > 0 {
+        result = push(result, carry % 32768)
+        carry = int_div(carry, 32768)
+    }
+    return Natural { digits: result }
+}
+
+pub pure fn ndiv_small(a: Natural, divisor: int) -> Natural {
+    assert(divisor > 0 and divisor <= 1099511627776, "small divisor outside 1..2^40")
+    let mut digits: list<int> = a.digits
+    let mut remainder: int = 0
+    let mut i: int = len(digits)
+    while i > 0 {
+        i = i - 1
+        let v: int = remainder * 32768 + a.digits[i]
+        digits = set_at(digits, i, int_div(v, divisor))
+        remainder = v % divisor
+    }
+    return normalized(digits)
+}
+
+pub pure fn npow2(exponent: int) -> Natural {
+    assert(exponent >= 0, "negative power")
+    let mut digits: list<int> = []
+    for _ in range(int_div(exponent, 15)) { digits = push(digits, 0) }
+    digits = push(digits, 1 << (exponent % 15))
+    return Natural { digits: digits }
+}
+
+pub pure fn nbits(a: Natural) -> int {
+    if len(a.digits) == 0 { return 0 }
+    let mut result: int = 15 * (len(a.digits) - 1)
+    let mut high: int = a.digits[len(a.digits) - 1]
+    while high > 0 {
+        result = result + 1
+        high = int_div(high, 2)
+    }
+    return result
+}
+
+pub pure fn nmul(a: Natural, b: Natural) -> Natural {
+    let mut result: Natural = nat(0)
+    let mut i: int = len(b.digits)
+    while i > 0 {
+        i = i - 1
+        result = nadd(nscale(result, 32768), nscale(a, b.digits[i]))
+    }
+    return result
+}
+
+pub pure fn ndecimal(a: Natural) -> str {
+    if len(a.digits) == 0 { return "0" }
+    let mut value: Natural = a
+    let mut result: str = ""
+    while len(value.digits) > 0 {
+        let quotient: Natural = ndiv_small(value, 10)
+        let remainder: Natural = nsub(value, nscale(quotient, 10))
+        let digit: int = if len(remainder.digits) == 0 { 0 } else { remainder.digits[0] }
+        result = str(digit) + result
+        value = quotient
+    }
+    return result
+}

@@ -1,0 +1,3 @@
+use "sieve.rad"
+let s: Survival = survival(int(sys_args()[0]))
+print(json_stringify(s))

@@ -1,0 +1,110 @@
+use "search.rad"
+
+component Verdict { width: int = 0, length: int = 0, checks: int = 0, cases: int = 0 }
+
+intent CheckedEvidence {
+    key target: entity
+    width: int
+    length: int
+    kind: int
+    cases: int
+}
+
+law Submit(target: entity, width: int, length: int, kind: int, cases: int) {
+    propose CheckedEvidence {
+        target: target, width: width, length: length, kind: kind, cases: cases,
+    }
+}
+
+resolver Conclude for CheckedEvidence(target, proposals) {
+    let width: int = proposals[0].width
+    let length: int = proposals[0].length
+    let mut checks: int = 0
+    let mut cases: int = 0
+    for evidence in proposals {
+        assert(evidence.width == width, "mixed problem instances")
+        assert(evidence.length == length, "construction and optimum disagree")
+        assert((checks & evidence.kind) == 0, "duplicated evidence lane")
+        checks = checks | evidence.kind
+        cases = cases + evidence.cases
+    }
+    next(target, Verdict { width: width, length: length, checks: checks, cases: cases })
+}
+
+constraint Complete for Verdict(subject, proposed) {
+    require proposed.checks == 7 else "sync.incomplete_evidence"
+    require proposed.length == proposed.width * proposed.width else "sync.square_mismatch"
+    require proposed.cases > 0 else "sync.empty_audit"
+}
+
+entity forward { Verdict {} }
+
+entity reversed_order { Verdict {} }
+
+// This audit follows individual trajectories, not the BFS uncertainty encoding.
+pure fn direct_audit(n: int, word: str) -> int {
+    let letters: list<str> = chars(word)
+    let mut cases: int = 0
+    for deleted in range(len(letters) + 1) {
+        for initial in range(n) {
+            let mut q: int = initial
+            for position in range(len(letters)) {
+                if position != deleted {
+                    if letters[position] == "a" { q = (q + 1) % n }
+                    else { if q == n - 1 { q = 0 } }
+                }
+            }
+            assert(q == 0, "a corrupted construction did not reset to zero")
+            cases = cases + 1
+        }
+    }
+    return cases
+}
+
+// Check every step of the written interval induction, including n=3 and m=0.
+pure fn audit_induction(n: int) -> nil {
+    let full: int = (1 << n) - 1
+    let mut pair: int = (1 << (2 * n)) - 1
+    pair = advance(pair, 1, n, 1)
+    for _ in range(n - 1) { pair = advance(pair, 0, n, 1) }
+    for block in range(n - 1) {
+        let prefix: int = (1 << (n - 2 - block)) - 1
+        let expected_zero: int = prefix | (1 << (n - 1))
+        let expected_one: int = expected_zero | (1 << (n - 2))
+        assert((pair & full) == expected_zero, "zero-deletion induction failed")
+        assert(((pair >> n) & full) == expected_one, "one-deletion induction failed")
+        if block < n - 2 {
+            pair = advance(pair, 1, n, 1)
+            pair = advance(pair, 0, n, 1)
+            pair = advance(pair, 1, n, 1)
+            for _ in range(n - 2) { pair = advance(pair, 0, n, 1) }
+        }
+    }
+    pair = advance(pair, 0, n, 1)
+    pair = advance(pair, 1, n, 1)
+    assert(pair == (1 | (1 << n)), "final two commands did not reset both layers")
+}
+
+fn main() -> nil {
+    for width in range(3, 23) { audit_induction(width) }
+    let n: int = 6
+    let candidate: str = square_word(n)
+    let direct_cases: int = direct_audit(n, candidate)
+    let exact: SearchResult = exact_search(n, 1)
+    let impossible: SearchResult = exact_search(n, 2)
+    assert(impossible.length == -1, "two-deletion obstruction falsified")
+    assert(impossible.discovered == impossible.expanded, "rejection was not exhaustive")
+    settle {
+        Submit(forward, n, exact.length, 1, exact.expanded)
+        Submit(forward, n, len(candidate), 2, direct_cases)
+        Submit(forward, n, len(candidate), 4, impossible.expanded)
+    }
+    settle {
+        Submit(reversed_order, n, len(candidate), 4, impossible.expanded)
+        Submit(reversed_order, n, len(candidate), 2, direct_cases)
+        Submit(reversed_order, n, exact.length, 1, exact.expanded)
+    }
+    assert(require(forward, Verdict) == require(reversed_order, Verdict), "producer order changed the verdict")
+    print(json_stringify(require(forward, Verdict)))
+    print(why(forward, Verdict))
+}

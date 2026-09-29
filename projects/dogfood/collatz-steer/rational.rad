@@ -1,0 +1,83 @@
+// Rational points of S: 2-adic fixed points x = C/(2^j - 3^q) of periodic
+// parity words whose every prefix keeps 3^q >= 2^t (so the walk never turns
+// positive). C follows C' = 3^b C + b 2^t for each bit b.
+pub pure fn gcd(a: int, b: int) -> int {
+    let mut x: int = abs(a)
+    let mut y: int = abs(b)
+    while y != 0 { let r: int = x % y x = y y = r }
+    return x
+}
+
+pub pure fn primitive(word: int, j: int) -> bool {
+    for d in range(1, j) {
+        if j % d == 0 {
+            let mask: int = (1 << d) - 1
+            let block: int = word & mask
+            let mut same: bool = true
+            for i in range(1, int_div(j, d)) { if ((word >> (i * d)) & mask) != block { same = false } }
+            if same { return false }
+        }
+    }
+    return true
+}
+
+pub struct Spectrum {
+    max_length: int = 0
+    points: int = 0            // primitive trapped periodic words (one per rotation that stays trapped)
+    necklaces: int = 0         // distinct cycles represented
+    integers: list<int> = []   // integer fixed points found
+    smallest_denominator_nonint: int = 0
+    denominators_seen: int = 0
+}
+
+pub pure fn spectrum(max_j: int) -> Spectrum {
+    let mut points: int = 0
+    let mut integers: list<int> = []
+    let mut min_den: int = 0
+    let mut dens: list<int> = []
+    let mut necklace_count: int = 0
+    // Depth-first over trapped prefixes only: (word, length, C, 3^q).
+    let mut stack: list<list<int>> = [[0, 0, 0, 1]]
+    while len(stack) > 0 {
+        let top: list<int> = stack[len(stack) - 1]
+        stack = slice(stack, 0, len(stack) - 1)
+        let word: int = top[0]
+        let t: int = top[1]
+        let c: int = top[2]
+        let p3: int = top[3]
+        if t >= 1 and p3 > (1 << t) and primitive(word, t) {
+            let den: int = (1 << t) - p3
+            let g: int = gcd(c, den)
+            let num: int = int_div(c, g)
+            let d: int = int_div(den, g)
+            points = points + 1
+            if is_min_rotation(word, t) { necklace_count = necklace_count + 1 }
+            if abs(d) == 1 {
+                let value: int = if d < 0 { 0 - num } else { num }
+                if not contains(integers, value) { integers = push(integers, value) }
+            } else {
+                if min_den == 0 or abs(d) < min_den { min_den = abs(d) }
+                if len(dens) < 100 and not contains(dens, abs(d)) { dens = push(dens, abs(d)) }
+            }
+        }
+        if t < max_j {
+            // even step keeps C and 3^q; odd step: C' = 3C + 2^t, 3^q' = 3 * 3^q.
+            if p3 >= (1 << (t + 1)) { stack = push(stack, [word, t + 1, c, p3]) }
+            let p3o: int = 3 * p3
+            if p3o >= (1 << (t + 1)) { stack = push(stack, [word | (1 << t), t + 1, 3 * c + (1 << t), p3o]) }
+        }
+    }
+    return Spectrum { max_length: max_j, points: points, necklaces: necklace_count, integers: integers,
+        smallest_denominator_nonint: min_den, denominators_seen: len(dens) }
+}
+
+pub pure fn push_count(n: int) -> int { return n + 1 }
+
+pub pure fn is_min_rotation(word: int, j: int) -> bool {
+    let mask: int = (1 << j) - 1
+    for r in range(1, j) {
+        let rotated: int = ((word >> r) | (word << (j - r))) & mask
+        if rotated < word { return false }
+    }
+    return true
+}

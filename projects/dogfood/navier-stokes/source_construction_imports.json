@@ -1,0 +1,4102 @@
+{
+  "scope": "static import navigation only",
+  "files": {
+    "NavierStokes.ActivationBounds": "cf60d02ccb694f460bb0b85bc3ec80c4e6eab43ce976b0816b86b2b959e79736",
+    "NavierStokes.ActivationCone": "298375556473e79b94a25fdf3627cdfef09c5bc437b13276109d56333f5ffb44",
+    "NavierStokes.ActivationContinuation": "f39cdae1f862cd3154a2321e2aa4e1e57b56b0a9ddb4a875306020c7494ad6b2",
+    "NavierStokes.ActivationHolomorphic": "996ec0e85bd0c0fa904f0c9ee41c730daa232954d02e59cd7a301d189b2daf4a",
+    "NavierStokes.ActivationStocks": "e95526a777350a5bad4b9baf68175622e1341a9a6a49016496ab378a07ae1d37",
+    "NavierStokes.ActiveAnnulusWeight": "27f917c2e43326ddca8835927f57e7037ce7dcb449225fe515f02a6b9de2d752",
+    "NavierStokes.ActualBaseResidual": "f09e02e5df8a28cf4b8b020088fd92cfae40f3d356f116fbda89a5d1fa68e765",
+    "NavierStokes.ActualBaseVelocityBounds": "ac6e7e129eb2ec167facd40a96ddc67e059c34411561b06f753798b3c2b1a2ad",
+    "NavierStokes.ActualCandidateAssembly": "bba2f74a938039caec486ca6a35576efd21e6fe35c1ba695e4d21609d89b8a94",
+    "NavierStokes.ActualCandidateConstruction": "c8ac0ed2cac0390ea16ad9e2fa300e23cbc9950220dba0432f61724a3ea8c20f",
+    "NavierStokes.ActualCarrierGeometry": "73c4a89856395b6414c49fc0d5a8d054571ebb0b724a5f368e7abbcb9786e312",
+    "NavierStokes.ActualCarrierTransport": "a1b3dcd2bb202af069ed304410ce3164aa1b0139cb94fe0ce4fbc4a2e893bc49",
+    "NavierStokes.ActualCarrierTransportBase": "9ae1e3146a5492ca42d904cad3f653c7da506fbd75f2c65b4995238fb8786c04",
+    "NavierStokes.ActualCopySliceRegularity": "b064ccf4823d8ba094b99dd7c3850f85d731a437e9fbf6ae0c0a7b32a0d3dd45",
+    "NavierStokes.ActualCoreSupport": "7f505b0475c8981e5bd8382cddea1839cf61fc65e5a8ff7acf68dbcaf6b3527f",
+    "NavierStokes.ActualCurrentCarrierJets": "b292e337f4edf0c87f322adeda4d1c3e949ddf5f6dd350d35cff5e793ce071e1",
+    "NavierStokes.ActualCurrentParticularAssembly": "ef23a15e45fc54ca0e732805c39daf9f11f694d8440fd01f246f7670fbcd4832",
+    "NavierStokes.ActualCurrentParticularBounds": "bb2e9a8441857e945c18b658d85412b2929db18e8fa64f3c13e25742c1f51d42",
+    "NavierStokes.ActualCurrentParticularPhysical": "e8e02f39b3321493639a153f6acb3d1d36fa364420f59160aa0f7627fd0d680f",
+    "NavierStokes.ActualCurrentWaveSupport": "bfe9d89941842402ffd89e18eee0074f0e66e24ddc0bc3c5dd8e984576827bfb",
+    "NavierStokes.ActualCycleAssembly": "a26c8192e6d1069535d443feb2ad01a53a24baa0fa5d74fc98830570b57e7769",
+    "NavierStokes.ActualCycleCoherence": "f99252c887898f554bbb9721025876fccbe9ad2e3c9556242030bc567658aa3d",
+    "NavierStokes.ActualCycleExcluded": "71e69da16c00b70d137a3217613f4d0b919c0acdec919a723780f94206575792",
+    "NavierStokes.ActualCycleGeometry": "973aed720304308accc9f1fadfefba526b69e74092e9040ee40bc226dd5d3d7c",
+    "NavierStokes.ActualCycleParameters": "4101ac8a09f5fddcd893994d9417e79e9adf5525d079bed315313023406339a0",
+    "NavierStokes.ActualCyclePeriodicity": "f94acca6df9a8b6c49ec12425db3749f81ff15b288b1c4b723d3a593117f2c85",
+    "NavierStokes.ActualCyclePreservation": "f6d26b802063ee803bcc2e7923555481144e6919f64ddcb4d265cdd4d0d4674c",
+    "NavierStokes.ActualCycleResidualBounds": "58da6df60e7cf32e7f04e7ff87d94e45ac3315d99ca6d4784eeef9f3a1723c0b",
+    "NavierStokes.ActualEndpointInputs": "029c960ecc05292e4b5b1c475f4fe7df0b7e16821f1b4e017122ed00b624dd6f",
+    "NavierStokes.ActualExteriorPrefix": "9cfc1ec5f0dc0cd8aebb60d8b8215c629c582bd4f8524502df594fd7fe537c42",
+    "NavierStokes.ActualGaussianCoverage": "605065fbef52f62a513c73f464de6bf48c2d1f344e22486d887884fbe66c7ab1",
+    "NavierStokes.ActualInitialCoherence": "b169e3dc15da8d5a7ba1aa717902f17069fc5525db5118933eb6dd6d2f51f448",
+    "NavierStokes.ActualInitialExcluded": "bfb2c0c945e96f7a8570581b04a0d7f71b3a2b389270e639cbc199e38de92480",
+    "NavierStokes.ActualInitialMean": "011d45ba60429ffcceedf25d9d6867a58209a1d34bfdd2e01aeb4dfef2de8880",
+    "NavierStokes.ActualInitialMeanEquation": "7e43ce45b6974b860517116f61512313db945772b789f2b804fe1e387d695102",
+    "NavierStokes.ActualInitialization": "90c3c2e2b815a1cea3d0462312369579d5de0f0dbc9a674e2942cd6d47c01415",
+    "NavierStokes.ActualIntermediateDebtBounds": "ae331b57c46e9ad595cafcf533446f5f2408c27f21dd5336c4b59c486290f999",
+    "NavierStokes.ActualIterationLedger": "25a1b7e920cfe0af7cdda488c4d0407ee47c526abcfa3a6491a8fb335a1a6a31",
+    "NavierStokes.ActualMeanExterior": "f9c1d7e1fd4e659185f580112b45941c72c09c54cc92210a07d23764b9ef77ea",
+    "NavierStokes.ActualMeanPhysicalData": "c02d02e1af34d47b5d9fd5a58dec92ccfc8884033f783377fb2dee68bf147648",
+    "NavierStokes.ActualMeanPotentialRealization": "0e134e809e038bdcf60f868a65885ff8e81f0e42ee3c5e551e6403a8181a6e0b",
+    "NavierStokes.ActualMeanStageData": "7195488e5bed2a1261067ff7e997c7b1ce230747b235b9178c53da3a7184b471",
+    "NavierStokes.ActualParticularBackground": "ffc9ee8993b4b34be267f5be6d1b17eba9ee67ddd958fd117843aece52f56c24",
+    "NavierStokes.ActualParticularCoherence": "ea6b28a49d44631f15b44b524cf45d83417a82b81041e0028e6e8c1427e4e4f5",
+    "NavierStokes.ActualParticularControl": "a25f2bfdeec0d2279fe1fa6f4adecc2ebca8168a63bb79c216ff7fd91f92355e",
+    "NavierStokes.ActualParticularCycleData": "1a5f7134028ebc31452fc1116187d913e2eec38d7d9cb6c9d8c0ad693a12ad19",
+    "NavierStokes.ActualParticularDynamics": "0131f17e5bc64f55189efb14424189e1a6a41c0574acf7193e35daf2cade0c45",
+    "NavierStokes.ActualParticularGaussian": "309650e3073ead1a776b75337265042f0b9f378799868040c89e735a62488841",
+    "NavierStokes.ActualParticularMeanGain": "f8cd3f9691e456caba4064e51ca153398712088cfc80ef68d849ad58afcbbc40",
+    "NavierStokes.ActualParticularPotentialCoherence": "c87205aa184e3b2de8a5a30a8392be11ffdecf8c3875b3e92b32d8f0a6d1746c",
+    "NavierStokes.ActualParticularRealization": "719cc92fb43bdd34ed41a8c7700b396839d08859a0f9050bc303b789692337c8",
+    "NavierStokes.ActualParticularStageControls": "fa9e51f5e110789977611e8dc8730fea8ff0c55a98600db3c59d258c8c2540c6",
+    "NavierStokes.ActualPeriodizedSignedRealization": "3b7af53183442aba7c252de5fc6d942e495115696727ef36c9f74b6d200c74c1",
+    "NavierStokes.ActualPhaseDefect": "9f2027858628291ea79d5cc218be0c73fd8b3e644a6c1f761f8dfafc6944bf52",
+    "NavierStokes.ActualPhaseJetBounds": "0eaa43826bf37b36a3e34369e02aa9726cf57191d14839abcff4a077e512b959",
+    "NavierStokes.ActualPhysicalPrefixFields": "3f03223ea715627a2eb2ea80218edaf99a9e9e2f937a8e896cfe7015b6df0b32",
+    "NavierStokes.ActualPhysicalStageBounds": "d3e0d63e4e2a311029a3155d88e14d00f1f58a5bc6b99ff842ad8dba7586ebd4",
+    "NavierStokes.ActualPolarCoverage": "5a200c8e0c23011bb09ff0bc33b90753abacd4b02e34f927a48bfb8a954a83e7",
+    "NavierStokes.ActualPrimaryBounds": "9ac571c161016081a212ff57a98ed915d68ecf6ab67c8cb455bc0954fba6d39b",
+    "NavierStokes.ActualPrimaryCoherence": "7c508e8ab05bd21763c177005d5d352a85a5ad85bc9587d1dd6acb0410b9017f",
+    "NavierStokes.ActualPrimaryCovariance": "9acd63d2870909d9754fb88b320df86c92dc113522cfc6b5b0f1908c66b069fb",
+    "NavierStokes.ActualPrimaryDynamics": "bac8db6ef2f8de2b35821d340f9cd68732768bd4ffc6dbee779a3dae2aaee222",
+    "NavierStokes.ActualReferenceRebase": "93fe7ada17aa7f7c0ed75b0df06e7a68b3bb0cf2f431823af063277f89601b09",
+    "NavierStokes.ActualSeedPeriodicity": "9b924dffa093774e1e195ce2dd52e5ecbbb5bb01ad2a11bb38b781474a66f568",
+    "NavierStokes.ActualSignedCoherence": "e729eb3bc76cbb5429b5b153b62c61cdfaecfe7290de38ee6459eb72306e3615",
+    "NavierStokes.ActualSignedCommonDynamics": "2a53864b95b39fe4d93b97c22b7a237d8ff2537dec524d140e3ace1869020e08",
+    "NavierStokes.ActualSignedControl": "9ff00ba8f5710177d57132736d1ea211822f533b77110df7449867d159d2dd03",
+    "NavierStokes.ActualSignedCurrentSupport": "82ebe7f816f7ab7c9fd3fbbe0bcb6c8fde61d97248168ef35f7685cd89ba10ad",
+    "NavierStokes.ActualSignedDynamics": "c0e9f7d67ed3ae0fcedea9117f6d4f5863d9535e9b55959e10b875b0934179e8",
+    "NavierStokes.ActualSignedExterior": "459cd2997fb53946e4bcd273b37cb2981de42ef4c6bf50e759dd824a67d38b16",
+    "NavierStokes.ActualSignedFamilySupport": "ba7577a2be313f861f5ba3bb73841e2f23e94fb1f5b0b4b86442a06336bc972e",
+    "NavierStokes.ActualSignedGaussian": "07391f33140c079f9b83de610d6ac76a53580a8091dc65e04947dddc98ccfd4e",
+    "NavierStokes.ActualSignedGaussianCoherence": "b9fe34da89a171f332c05a93e33cebf27d891193c5bc8b37c24b5c7ed30e897a",
+    "NavierStokes.ActualSignedGeometry": "9197f783e6c5e95a5e25cf4afc96ad48d7236976c8259058aee2f620b94e809f",
+    "NavierStokes.ActualSignedMeanBinding": "a1dcaf34bf2e773002034594023641d2f614da8e38e534f439c956a10daaa8f0",
+    "NavierStokes.ActualSignedNativeBounds": "8c0a1fde48de80171989739562fc703be4e69b8849449562847dcd6e320074c0",
+    "NavierStokes.ActualSignedNativeProfiles": "998ead497be29ea4c27eb967a77d051755688d7f1c3d95d20457699e76f3ccbd",
+    "NavierStokes.ActualSignedNativeRegularity": "d9a90cc772243b305cd3fd0625ecbc99aadc1931cac25f9c4ce63e1118890a64",
+    "NavierStokes.ActualSignedOutputBounds": "20f1eaae807da92f5442fa48b052b5f7a902e15ec470a0a80c70a29ef0fdad80",
+    "NavierStokes.ActualSignedPhysicalBinding": "62393dfd772e2d218c14faccb2c1c522cf929000c3b520275d80c607feadad75",
+    "NavierStokes.ActualSignedPhysicalCoherence": "bdfc44a045e3613d44991684904e2bbb4385125ce42c584954321484adc78b65",
+    "NavierStokes.ActualSignedPhysicalData": "b6cc6122526a2e89f910ff385008acaf6c560c7fd0c36ab3ed473314568ff6e4",
+    "NavierStokes.ActualSignedPhysicalGeometry": "e3151e1f4ff8c0f516d0c9dcaa38bfa3b0c10f9d9b558d456d38ddcc7754f871",
+    "NavierStokes.ActualSignedPhysicalZeros": "67a425b3d0a995d635b18e472eeb10804ca949630fac37071cc8422e29340d3e",
+    "NavierStokes.ActualSignedPotentialCoherence": "8b0793aa87a46cec9a0d8687457761131d18a9b4d30e878eb9060f9926efa7d8",
+    "NavierStokes.ActualSignedReferenceGeometry": "5383398017b5d0c8d307143e0c5c76915c4ea3ba9d549d09b2627b5fd8fce3c4",
+    "NavierStokes.ActualSignedStageControls": "8cd7fbdc7cafaec24cfd1527f6f430eb405552a9fe0b7ee8ea732128a20c5a11",
+    "NavierStokes.ActualSignedUnmaskedBinding": "cf6cfd696ba7f11cdda06c3ef6ac6b9666a22de1cc139a46f4cfa8cbfeea7de8",
+    "NavierStokes.ActualSignedUnmaskedBounds": "df1e255bafdd8f6af620564de04e99af9da308e15d30825c82ce6195b91e67bd",
+    "NavierStokes.ActualSignedWaveData": "8f4dc17ac772b32c88d4c8fba4469387626878aa95d669735b828aabcb52830c",
+    "NavierStokes.ActualSlowAxis": "179020174c953ebe7cf258d3596f925543f7fa03108f49d137ab4f112f0f5d8c",
+    "NavierStokes.ActualStageEstimates": "c23f7573ea3db4ea8435c863110ee7e2ef81bb3cf23161f565acb39a27cbf99d",
+    "NavierStokes.ActualValidBandWaves": "3e058e7f84b61de977590972218906cdffd387954280a095f830de77164e0991",
+    "NavierStokes.ActualWaveCoefficientPeriodicity": "f0f1ee040357cbdef1fca702bbed5754dd37728ac61539fab210901038d9b76a",
+    "NavierStokes.ActualWaveRegularity": "f3c7693e3a50b63e1496187f574b74ab7ccacce995cc0583b3489c3b60a83b1b",
+    "NavierStokes.ActualWaveRegularityData": "79783380f276e7380d12b4d1c9f10f313a3435eed6f215b9733c4056a608171a",
+    "NavierStokes.AlignedProfileSpectralCone": "889a1fe68422b615ee861c6cb8841e17f108080f334f56a49446890bb3d2fd41",
+    "NavierStokes.AllBandBaseJets": "4491f10073211c7fe81b1e5260f747aaa2d209d9f06aadfbb7465da214463486",
+    "NavierStokes.AnalyticCoefficientBounds": "65938f84b2dad5519bfc4c76412540edb552a3b5bf300f3422b8639acc9c9941",
+    "NavierStokes.AnalyticPrimitive": "37ce34327c1920de33dcbfabd0a6c3c5cb524359c395e2a526266851d20e4008",
+    "NavierStokes.AngularMomentReset": "54e4ee32a9b432e589dafddf73b6a2a2cffeac75627ebcbcf5e0e2b93e9892cc",
+    "NavierStokes.AnnularAuxiliary": "c209e2a42824dcbc3a0c4a2285ac0f812a90a9fc827a4b2ebc74b5f9f2384e13",
+    "NavierStokes.AnnularEndpoint": "e6b8975eeda50369d802cb89837c6aa6e47c10c62ce3f043caf8f2b11cd84dad",
+    "NavierStokes.AssembledSlowBase": "c0a4c39b0f7cb8e975b925f8a9ea342b65ff19e14a956392310385e47138221b",
+    "NavierStokes.AxisCoefficientSpace": "7ba94255b58aad84c19d8803fca4a4db5750f40bafdf8fd5a02d14fcd1a4467c",
+    "NavierStokes.AxisContraction": "d9151673815948eef8e8e2db3e93c95119ce7be80fc6a01d8a83f2bc4cd4df9d",
+    "NavierStokes.AxisEvaluation": "98ed7ae961cd3f1fd7ea50c28296a3d827b0c3c24c4ed3e73a5e4e073bcd5cb8",
+    "NavierStokes.AxisEvaluationAlgebra": "90f950860a4ccaa61f14e7906bbaa7e92bac8b01949c7443ebd32d770b15576a",
+    "NavierStokes.AxisHolomorphic": "b7e0c8b8ba3e429d0fbbdd1f53b75449030624af084767cccb28c3ca6d88f7bd",
+    "NavierStokes.AxisHolomorphicJoint": "2ed527f237047f94251ca92c7b60e5c09a9f5a6bbbef3c87cb2fe7e832786094",
+    "NavierStokes.AxisOperators": "ac985c72a27a89528fd7087b5252de43b488fe41c780da289f16ec0f756597c8",
+    "NavierStokes.AxisPreservation": "a176022e61983163d3df923484324af5bd1f8962af08f4769e76fe578cf6e78d",
+    "NavierStokes.AxisProfile": "f52fa0e7ae3f27869eb50fd2d1fbcad6794734fa16f45c74299c5ddda0ffc42e",
+    "NavierStokes.AxisReference": "4cdc595ab11bdb2b42b7e1096764f9f4d2605d8fb458158533e1cde1a5f4ed32",
+    "NavierStokes.AxisResolvent": "9118d00d4e748561f2df2b6be2a86df83ff08e9cfbebfea1b48375e8224cef99",
+    "NavierStokes.AxisSeries": "c3ea1179ece5d6dbbeaf8ababf7ac8e7e5e49b36351073d7a367ff51c1908013",
+    "NavierStokes.AxisSourceRegularity": "de672f3c03d548bcd053a6829f5d8476ec997ac9544d034bba3800f492d7e8e3",
+    "NavierStokes.AxisTailRegularity": "b9b4a0d3dae9997f44e50b16fe1115a30f745ee3fa06e3f73a10cac006a233c3",
+    "NavierStokes.AxisWeightEstimates": "d053266bd9effd8c5fc159e41107725f468b41a7cfb44f32564842ed0884e930",
+    "NavierStokes.AxisymmetricFields": "41d403ae4cec8887c17a80f621744399522a3247bddbcab64e577cb296b3020d",
+    "NavierStokes.AxisymmetricResidual": "07dcb2c088db4a1359bd21c093eb5811848cf44042126c07457519a4c89d51fb",
+    "NavierStokes.AxisymmetricResidualGrouping": "655bbbab367234f72c289b1801f9ee8d6afaacb15274f9f554722957cf9f5b03",
+    "NavierStokes.BandReindexedSignedMeanGain": "9b8e39cf5b65931e89df314b97391ed5c1d90ab508f169532646ed3a9b4e89f5",
+    "NavierStokes.BaseChartJets": "d811f25ca3cd4c645a5efdddd3edeb58dde1989c69865bbd124c3013f516cb20",
+    "NavierStokes.BaseContextAssembly": "3fed93378f4979e5e1eecc0dd7ee4c62470480ad5fa341b7fbea8fc4a1bef91a",
+    "NavierStokes.BaseExterior": "41e3b35b8f78c5f3da8fc1ead33f579f6bd2934f44088bfc872a3842a7118504",
+    "NavierStokes.BasePhaseGeometry": "9fd6839486f88c2b2f91387a092c9bd5d0386f1bbbf591ec6fd8546058a8afb4",
+    "NavierStokes.BasePrefixIdentity": "1e4b02e2cdb960d757694ffc1bc96949f9128e5c5bb27aeb0c9c449e032939c4",
+    "NavierStokes.BaseRadialJets": "f898c6949b7a15a972ba3910da707424808449380d55631681850c4ac0ff1f29",
+    "NavierStokes.BaseRankPatch": "ac027ec06a232d8a6d76985307db32dd411d4d50dc3d9bea220f901cdfdb9202",
+    "NavierStokes.BaseResidual": "0f1f9a492e8cea457406dd0b20df625c9bd0650bef5253da49c0c7ac766c0700",
+    "NavierStokes.BaseStressClasses": "4d3f3b5fa7dfc6435aaaf716628be8870e1042208feb71e2c66d3b0aac8a4381",
+    "NavierStokes.BlowupImplication": "3f0f889e236aa7f6a4424f53247375d63d3ae4ca92a7bcbaf79f55b61e92706e",
+    "NavierStokes.BorelExtension": "a6c048b45f2ebbb11d155a0dd332e336786d1f508b7a2a1561ee2c9ee1bf003b",
+    "NavierStokes.BoundaryAxisJets": "420084e348dacaf17dc21b859166e858180281196c8265b7094be002799f9162",
+    "NavierStokes.CandidateConsequences": "4dbfba3964bbff446b34f92bb4047d36f2df07a28c6b83caeb5dfa7f6a16f101",
+    "NavierStokes.CandidateFromLimits": "fda1a76cd1179fa0596f933c3c360fc385048eef7d5b70aa17e9acdbdd7e8ad0",
+    "NavierStokes.CartesianCopySource": "5905566ecf79bc056c521291cd8f07a216dd0369c515c8b322f36149c245d346",
+    "NavierStokes.CauchyRestriction": "e50f8cd040633d28c042fe7a04827225b0f16c9574966ec34f2700f393c4af00",
+    "NavierStokes.ChartScales": "3e06d0814833ca93f01c5cdb2f4d8de8dc8d40668d5a13ceb7477c4672f01f2b",
+    "NavierStokes.ClosedNativeWaveIdentities": "2e9ef00399ba594c649a60d806cc867c0dc056b128fcebe5af28d6c21ca781c2",
+    "NavierStokes.CommonBaseContext": "0118d96b4a125b3c6709ea98d0de92b262f3f5aa44d46876647a80e5ebdbe1f2",
+    "NavierStokes.CommonCoverClass": "c216db21d5059008df6b403589fc688381afac15fa71edd4a836866709595a8b",
+    "NavierStokes.CommonCoverSolve": "67796025e2b0ebadb2e6902940b4371c1ed7cb0019f8f8d923ec96c4e49b1d19",
+    "NavierStokes.CompactForceDecay": "6d67368eb29c87ecfc6c2097006537fb2504084f3e3fe22ef7a332b31adaad72",
+    "NavierStokes.CompactSmoothFamily": "7b8e463d7a6c5a3b8883a5989e1b12a533f3715ddcf366415f4c94164d1efe36",
+    "NavierStokes.CompactSpatialForceDecay": "6d917a5b09e4476bb4ffd9aa50d454ee1c21a10d9908ccfbea96ef52a89c780d",
+    "NavierStokes.ComparatorBridge": "cbb7731d5dc36363f0d4c3d1d3aba572302de4dc474d3a329b975d8d646c50ab",
+    "NavierStokes.ComparatorDefinitions": "8d90e0f9eee14f8b01773852083a02fd58bda59d4de2abb60d1787bbc9f6ebf4",
+    "NavierStokes.ComparatorR3Bridge": "9fc2c90638b1b0ac344bf7d834c3e09214aade778222ec7f25492ba5950239f3",
+    "NavierStokes.ComparatorR3Theorem": "bcf984eb9f9b70d2f0a3850b146bccef918b36d27831f607b5c1aed14aab92a3",
+    "NavierStokes.ComparatorSolution": "52950d5d618a8d34c9bfbdb16641c81c276e97b6d7fd2a76c08577353f0b0227",
+    "NavierStokes.ComparatorTheorem": "94b2218013c242e55b8726523ca1151bc1bd5e2b55a5d6d0909cd867bf5e1f59",
+    "NavierStokes.ConeAlgebra": "6abdb1b40360a88bf404468c570083661b164ce7bc58687919da6faabeb8c6cb",
+    "NavierStokes.ConstructedSlowBase": "e11ceb382f21a852bbd3d0046668fdf0028b4099513ac8d7dd1244db5576f837",
+    "NavierStokes.CoordinateAlgebra": "a44fdca888466f5e3a7ffa73562496c565a8cfe7748171f1a0574d0ec7b35c0b",
+    "NavierStokes.CopyAngularInvariance": "37fc300d5659a9212fef1019a47f433635b9e54fa3743fc814764897f79eab5e",
+    "NavierStokes.CopySolveCompatibility": "0dd1a9119240bd6bef9d80bfaa7b43f64f3aa302fb990a8386beeb0db4b75701",
+    "NavierStokes.CorrectedPressureBounds": "c325a69b56784219df1e8fbab1120a7b18ab4704978ad744117ca7c1c765a629",
+    "NavierStokes.CorrectedPulseAmplitude": "2862d5d4201a5fa637546dd58086283c69eeee4570907ebfac82233995b327aa",
+    "NavierStokes.CorrectionAnalyticStep": "cdb8d393c22b2d11e39e7589bcb3cbfa0ed8cc8837835dea69e17f4863821ab2",
+    "NavierStokes.CorrectionInitialization": "de409e3e0ce7bba9ee567fa7e51143c7b5219c47622fe44ad7a04d48287e143b",
+    "NavierStokes.CorrectionState": "22eeff8985d8e546ad4fac61a9f87f778c0f152413bbb8e0e2b55fe7d06b7a1d",
+    "NavierStokes.CorrectionStep": "a5ab01cd25d186deec3f136cc15d2d31032151ae7ddb5213a7f3d6b244ec8f8f",
+    "NavierStokes.Covariance": "b2ff9f3242d7593c75cdbd0cece0ef0a5a9a9bcfef0e41d566c2d8d823027b71",
+    "NavierStokes.CrossBasedMeanComposition": "fda6c0d6f65dc4bf4de1551f9fee81fe5c4e881d8816de477ea5ebea80949814",
+    "NavierStokes.CurlClassBounds": "4d55fd5b8fbfc8efa27b3819ccd10c5526246aa6e4b70bc9c32dc206f00a2373",
+    "NavierStokes.CurlGeometry": "316fab7e2cf55a8779b09e68596a6de7eadcf6f2a42ca14c40e5c1d66dc46907",
+    "NavierStokes.CurrentModeGeometry": "b2c5f5d41bb376bb3757ad1856a4d1d6d6893f0490c066dc25c5fcc5c91abb83",
+    "NavierStokes.CurrentParticularLabelBounds": "0c647a2b9448843e59c7eb75e6e8f86e4b4fe9fc1a4c7881a2930051b05300f0",
+    "NavierStokes.CurrentParticularPhysicalCoherence": "d52a79cc99eef0295028ac8c3ab689af7378d9988eb760e8db40b74790deff66",
+    "NavierStokes.CurrentPhysicalChartJets": "2b8dc3d100ab36e6088da17ffa6bf205b687390746fb0576a134fce099afe1c3",
+    "NavierStokes.CurrentPhysicalModeGerms": "f3afbb8423326e5d6fea88d494e343ba8aa1a4094ccd1a294f77bdcac29e0089",
+    "NavierStokes.CurrentSignedCurl": "77a779c28870c4ea77336ad9fffcbf703b89c9cdf548382fe0f0afba347cfda2",
+    "NavierStokes.CutStageEstimates": "d9a22889d854d7bb07a27259bc4299280b927b08af4fad1fc48cac3a8e29dcbd",
+    "NavierStokes.CycleMeanEquation": "0e51db5359f968a4191f324475dba070668d8242924525999db45ed472b9a55f",
+    "NavierStokes.CyclePhysicalPrefixes": "1e3d449ccf5d8766a0ab9ef029ffac2df956705c97c51ae3008a9724fe1f7af0",
+    "NavierStokes.CycleStateCoherence": "11bad00b20157137ef295733fe6f486b511cb1503e150fa886bcdf64f87bf662",
+    "NavierStokes.CylindricalResidual": "ac17130b0b70d24fb25c19bcff3c366331e2caa5680496d7ffb21a74f0ee6d37",
+    "NavierStokes.DefectIncrementBounds": "18ab30e324965dfbb1014e477f6db9f7f83e480ef15958d89a2be83ea03f2662",
+    "NavierStokes.DependentSignedPhysicalFamily": "44e934b74924ea899ba1159c8cff7e7001cbf806e5d0db2b4cda60739521d697",
+    "NavierStokes.DiagonalJetBounds": "f4d280335c0fb02d2ae1f459b9a86296d5172bedd404fad6a8bdf313bf894cd5",
+    "NavierStokes.DiagonalResidual": "fc311fbb36cd0e52bdca561a73d1e4aec7f281c1513c44784edfc48fcebb4230",
+    "NavierStokes.DiagonalScale": "2b2d15adcf33400d3a192864dd9ae797b6ea1d1ca27a45990554891d3894b3ad",
+    "NavierStokes.DiophantineGraph": "cd1670e8d468b13cbe2a19987df457943ecf45aaceae3c372ce7e4d710bb29ef",
+    "NavierStokes.DirectAngularDiagonal": "cf0ada62acda94278fa3c2f7f30688462ba9b2490740e3b73fe21a8d6939651f",
+    "NavierStokes.EdgeWeightJets": "dafc16774bc5160f09d2ea20b8b8c7d3fcb33639b87642ff38710ba57af3b08d",
+    "NavierStokes.EndpointCoordinates": "50f6a422ad5f9993e368915b4d1eacdf7dd49e71bfefe9112e64ff57b9d310ee",
+    "NavierStokes.EndpointExtension": "a4275387cb8f14c6273f18cc9e91bcb5fb26bf99bcd9e3f64fe0a754d8f1d58a",
+    "NavierStokes.EntranceAlignedBase": "b7edc8b71658a095eef31897b57d874ec6958381198f6acff8d9905f822802d5",
+    "NavierStokes.ErrorHarmonics": "c735c77e928cb54f6422034012b00ead5a544def18dadefcc6676e35faf2789d",
+    "NavierStokes.EvenSmoothDescent": "de21ad35eba2ab170aa5fea744f707c29e41d7936e55d8f4f24f2bd772f95a83",
+    "NavierStokes.ExponentLedger": "06b9d8d6439b0bdd72f44ce404b1ce986e68f367c03c7dfd5edca8e2d2a0140a",
+    "NavierStokes.ExtendedHeatDebts": "9f12a65cd662b6d39ec735fbfea6e123b05f4b40f8107a93e8fbd218b6776eed",
+    "NavierStokes.ExtendedHeatedOutgoing": "1b9a1a6597d4f6d68af6e757b5068f3e901413c10a033a481579d9ec859ed151",
+    "NavierStokes.FinalSlowBase": "d46846fea27ac623967e008301789edc4c52f915e63e2ba1f5f8f73df3d95314",
+    "NavierStokes.FiniteHeadClass": "5b48b6351377094660dcd52366d168b20ada05f5480737c082e4fd07af53de78",
+    "NavierStokes.FirstOrderBaseEdge": "f09ee36d118db234f2296f138174e72f471824b9b63d33c6a9c1ab973255ac0d",
+    "NavierStokes.FiveProfileMoments": "b745efc2f7ad4fabc5fb68408c6641286a2df8421b289dddc501a7084c5674f7",
+    "NavierStokes.FiveRowRank": "26273fa01b90b282a7b61d941377ca6a5be0ff1cebef94958f3eb02083dd12d8",
+    "NavierStokes.FlatCovariance": "6fd432f77bf9e914113553756bce063a26b044a4ee2cdec79f0f13da3301e653",
+    "NavierStokes.FlatCutoff": "fa8b6c0283fbbd949e2501649c67617174fbf4d2d11d5c3ac1556daa6c186d17",
+    "NavierStokes.FlatDyadicExtension": "071120d9fde60452df6b5973dcfcecd21c43d3de06b3685183797028cd2c4c5a",
+    "NavierStokes.FlatKernelBounds": "35388c0177533940d0823a9caa38b02e05b633f8b486073457530a4f6dd5de04",
+    "NavierStokes.FlatPrimitive": "3067ae265a5193ad39c5c13d61cf4e7f279e09ec373cf5f33d1d6d23000c61ba",
+    "NavierStokes.FlatPrimitiveFactor": "9d18cc8fbe259c32dcf57328ad146aa64f88b93932bf8061d32f7f99096fb0a7",
+    "NavierStokes.FlatZeroExtension": "6b1a715e234da5c55139f2e2edfd6d19e534045c36f76dc92322d889040d7482",
+    "NavierStokes.Flatness": "550606d4d1e14fb16612375de57d837df325a7b2265de6ed056c935ff96b2bc6",
+    "NavierStokes.FourierAlias": "66d31483f4e46eea92f89ac12c8f87c6bb08c7c8174dd0ac2263e8da4198efa7",
+    "NavierStokes.FuturePressureBounds": "e55060a6239e37b56308ab631949c20174d4231c6f209eaa005ce182c32d5c86",
+    "NavierStokes.GaugeAliasDecay": "42b50344cf2251490c7ea4f7ca89f1447a586eb7350be8475f733cc3ecfd93d1",
+    "NavierStokes.GaugeDebtIncrement": "e59a72f625c57a06acf10d5a4854391e21e15e00b185003773695d190274c948",
+    "NavierStokes.GaugeExcludedBounds": "2bcbd77e5d3781ed7830304f65337014a5be8f5e90e27bb1c2ee5879c842735d",
+    "NavierStokes.GaugeMassPreservation": "abede97ab52a079f26180bb529fa0053dfb1a976173fde7ec634232f45af4b5a",
+    "NavierStokes.GaugeMomentBalances": "06d5a93beb5edc2ffff7ccbe1cf7df25f9ce1484aafa10b497b430617bb03ac4",
+    "NavierStokes.GaugeRadialResidualBounds": "211ef976166b2b04b457135fa83d1454c31782c0dda1d50388690dd637f1ca74",
+    "NavierStokes.GaugeStateCoherence": "21cd060290ca02670d56ba5ee5ac20ad65540030188f95c23d34482179a6f1a6",
+    "NavierStokes.GaussianEnvelope": "4526fc3d96bb57ddd887e43d6b69e291a69bd81096340b8baf671ae0755b80b4",
+    "NavierStokes.GaussianErrorNaturality": "fa1bee4caff766fe9985dec0a7891300f9df8ff9aadd44f6e39752416e0f58f9",
+    "NavierStokes.GaussianTailFlat": "97a9c971088cb66beb7b58781d46e3a987fe4266d839889c43cfcbed1fce0635",
+    "NavierStokes.GenericEndpointExtension": "b624345fb4a21a05af53a01cbaf55fe6d4c94992e05284f0292222f708f98dc7",
+    "NavierStokes.GermCandidateAssembly": "8cb58c1ada5867cd1f92588f7362168bc999629e2fea13bbe33eee239bc6a164",
+    "NavierStokes.GermEndpointInputs": "ad8b15210c18e428ec8694d51f5ac88daf1431e8dde2725319e4926e45692e1e",
+    "NavierStokes.GlobalBaseError": "a53d749742da599957c2d2723c98824276b2da7a8c4169eabbf6e896825d3c73",
+    "NavierStokes.GlobalSlowProfiles": "a192fdd95f1f6169fa1489cb9da3877c1fda81eb11385201959a21c715de5bad",
+    "NavierStokes.GlobalStressSupport": "68b5b5bfd05fe049f8660cade382a614af3b1ea4c71792819d4ce3ef5fe1120c",
+    "NavierStokes.GluedStageEstimates": "3a25e7806e31b8c434062b43fb9fc6293de20f66faa5ce4ce6344db45f5dddcf",
+    "NavierStokes.GraphCalculus": "a2a91d6b6f1a25b13ddb50a0a51f5a1be85327240da15982ca472e45eb104cfd",
+    "NavierStokes.GrowingMode": "90bfab462d646c1f1e4589d0099c1d822c1cd020ae1a3c5100c9afdbe10e5805",
+    "NavierStokes.HarmonicCalculus": "50d32515db9e119f41dec0d8d613b20554f6935313f45422fa905dcdf06b0692",
+    "NavierStokes.HarmonicCovariance": "0a0b784165cda7e91dcc40a4cb59915d229c4cc859bec8ad5e2a8dbc4cabad35",
+    "NavierStokes.HarmonicFields": "6cde19157ae8d279355206d4db98582eb1a4ae7a831c2419c6bba54b8fe43a41",
+    "NavierStokes.HarmonicMeanInteraction": "44a0fe3a2882a70c14b8cc5ca0407f07045bf2136612e0116189490c00f97955",
+    "NavierStokes.HarmonicResidual": "a1584fe2c682abc154862b9ac5186b74d6f02aea2cb8cc18ca76fa2b6fc22b5b",
+    "NavierStokes.HarmonicSourceSupport": "dc2eb77fecf3d7cfe1423fd3ffb383983a2cb5638fc0acb97132bb68d50d7d85",
+    "NavierStokes.HarmonicStructurePreservation": "30c79eaf513343deea2753cf6eb5370fac2f9b83e7f63304b2f7457a8abc8bf6",
+    "NavierStokes.HarmonicWaveInteraction": "52149d5832a6bc9c20fa8b693c80d01b071680eb2c58ec3bb3e9819155c69815",
+    "NavierStokes.HeatProfileExtension": "aad000a14b0b83e9b68ffca85c49ce0abd5f9950f832028bca3290a80fdff513",
+    "NavierStokes.HeatSwitchCone": "23031d9c31adbdddf6ace15349088f3585919c4ed268bbd02b8f331046e7cdea",
+    "NavierStokes.HeatSwitchHistoryDerivatives": "710a2e12c2394e43e77484ef7a2daef61de0695c01b1ecaba388ad825c94d4a3",
+    "NavierStokes.HeatTailEdit": "b59c10979ae70d2b6e2b5f8f58721f2330c05ce3e41ced1ade7dce2e23b6ed70",
+    "NavierStokes.HeatTailHistoryLimits": "b8118d1a93565c7847914a3a27e29e4898b1cd2cd0f71106f3cf08f963a7a1dd",
+    "NavierStokes.HeatedOutgoing": "48dfe55ed9b7100a7c18c5c70c6e6b68089c9d94ec1de6f35778561c88974399",
+    "NavierStokes.HolomorphicFamily": "2952d07ade05104ed7c6fea89e9506dc05b824a81b297da126c5d1ef699d148c",
+    "NavierStokes.InitialNativeRegularity": "4f82e231b8c9f7f3250aec0f9ed43a9a09bcf7266bb7f7c8257655a3179f1bbf",
+    "NavierStokes.InitialPhysicalData": "1d02c1a398e9cbbbc68afa622fff661c8870ca2138feebbd06aa991614e18e1e",
+    "NavierStokes.InitializedPhysicalBackground": "d5ce0291b1b6c41ed0677f4abc1fc2e0fadfe978fac5e1b2505fa73bd30f69e1",
+    "NavierStokes.IntegratedMeanBalances": "6ac76e324059a0dfdaee4f6182951171b61b057f205a00d7676896352dec5228",
+    "NavierStokes.IntervalCopyTransport": "cec324745419c94e1fac2cf248efdac593cf83c11af11184b510483f8f177488",
+    "NavierStokes.JetBounds": "f1497e9e9821e1dcea778a84607833d304f18041f52af6745b03f620334c6de1",
+    "NavierStokes.JointODE": "3476f43caf90146f67232ee6416d4b6aeb6d2307af09e48c09f4296f8b5a16aa",
+    "NavierStokes.JointResidualLimits": "98829b82fd15e4577108367ae0fb8c0ae7289ae707c94b733922cb6bf843b3bf",
+    "NavierStokes.LabelSumBounds": "96ec7f87e43291b693131119d674c7642243a69ef6932c72ee1533b2eba09c66",
+    "NavierStokes.LabelSupportPreservation": "e27b747ce553af70257cf13833a92bd07ad55aa5024218228c7de5be90418a62",
+    "NavierStokes.LeadingStress": "56a709ceac268657c4f2c5e65e151e34ab010554953cf2aa362c69f0199094a2",
+    "NavierStokes.LeadingStressWeights": "fc0e3e8800470238eab766220e79267bb84fbc8accc9d54e0f4b07281c44821d",
+    "NavierStokes.LiftedMeanResidual": "6816fe321faea4741d95e63fce6ef9842f7f946fe918f9ae04346888e446d902",
+    "NavierStokes.LinearWaveBounds": "2a8f5064f25cb97121eb757a3c52307aab3b14e5f6f8c8b9a21d426e84f4d67f",
+    "NavierStokes.LinearWaveResidual": "4a80e08fef738be7032db1e465e3219d56e10da2e368ac06d1a8023ccc1e85dc",
+    "NavierStokes.LocalAngularDiagonal": "9da7c4034c502b84ca191e16f545c220a7b1bfa42c6f08f6dcfc300ecd9c9ec6",
+    "NavierStokes.LocalAxisymmetricResidual": "8efc62eaa945cbd4c3fda1d8861a5ce430cc50011dbe3023ec1119fd39bae0e2",
+    "NavierStokes.LocalMeanPhysicalBounds": "e7d3bbcb8014521cdf39042a3f69b68c2f9039c1ee3b7507aeb14fa988f84197",
+    "NavierStokes.LocalPhysicalCopyBounds": "edcb7a17b9a03342ec5a072bb7da5569dcb31853b8bf84560ae9b16fd2122dc4",
+    "NavierStokes.LocalRankDefect": "5959d06849d34137b885e000ff7a9e0c90531ceb472d83c3e700586c7beef978",
+    "NavierStokes.LocalResidualGrouping": "d09727062da141a299743d7337a3a217f3ede082c61a4989c593365dcdb7f744",
+    "NavierStokes.LocalSignedRequest": "5245ace61e10bd3ae3e83b26e5d4dd8524901d7d2ba1db8958e18e08358d1dde",
+    "NavierStokes.LocalizedCurlRealization": "b308ebc90916e3c2511bc92d207c098063d82aacafadd43511c7c71d9e4d9726",
+    "NavierStokes.LocalizedGaussianBounds": "ddb2542c3ae51f00535f82415a09f135071f7ccfa8d2bebe51fc7bc2ee3172a5",
+    "NavierStokes.LocalizedMeanInteraction": "ce0b5d5cafc65f7b8691bd0fb21af33c2f6990f9961a52a931c3a8a9840bb34b",
+    "NavierStokes.LocalizedMomentRepair": "b85a6f3dfde75e7ea9f6996a2f15da1475418f84c788dbe2558aa73c8a109e25",
+    "NavierStokes.LocalizedWaveBounds": "dd77712311d6d4bbb563327ba5560d4d26b899879701722f3f16ace8b6d58ebf",
+    "NavierStokes.LoopMoments": "d708c00e12ec059b047acf2b22546b84a72b6e84299754e3b34da63c404a4ef2",
+    "NavierStokes.LoopVariance": "d79ee70ca87e6c50ce8413f64bd815183e11d52837dd1913c4c757a9138c279e",
+    "NavierStokes.MatchingConeBounds": "f24da61f73ec31e616e19f5c8ca3944af4613d670246736ac5391bb1e4f1c874",
+    "NavierStokes.MatchingDebtBounds": "f3eaf49ea04aaa06392ba14d1157b437c9da07087442498967d9cad3e1e3caf3",
+    "NavierStokes.MaximalLifespan": "264e0dd85e14c5817af318d5650c1b62c033748d83ffee5ec5653a2b59e3c5b5",
+    "NavierStokes.MeanBoundsReindex": "96339cf10aea6cc58b5003d8657e813d35509a8abbd383d0555245007f0d4353",
+    "NavierStokes.MeanChartCompatibility": "3540b7a13a5bc2c32163e6b5da620d34e95cbe19de9e74aa78dd0590c6df24d2",
+    "NavierStokes.MeanIncrementBounds": "96704a870d77f13c053f766b99bfd11c7e5db7d491588167a3724f9e99a68a41",
+    "NavierStokes.MeanMomentBounds": "834f3b3b925db977da12ca40d88f75e54559c96f1eaaef04190f951646250cb5",
+    "NavierStokes.MeanRankUpdate": "297384e99f97232dcff27b0a3a2537185471898e5f24904a35474b7e1a16e392",
+    "NavierStokes.MeanResidual": "eac401f899ab206a302891c671fa73a58d9e8b7bc6556581cb2e57ee9ac8a3fb",
+    "NavierStokes.MeanStageRegularity": "c1a146e445edcd7f5f611583521878f0220be88b4cbfd02f799966ec2f539586",
+    "NavierStokes.MeanStateRegularity": "6e4867619366112ba74bd174c6b15df5f8ffcb7258fc08e9a27a015aeb98366a",
+    "NavierStokes.MixedAxisPreservation": "b66076e1f17b6c66187319cf99c199d826fb8e375c86eff662ba4a1dcb4f9da5",
+    "NavierStokes.MixedCandidateAssembly": "e17114b5c3156765615c81c8c2c58f80a9f99d2febf57e8c1776f3d01cd4856a",
+    "NavierStokes.MixedCandidateWitness": "28e71eb4b5a072c7d44d7c1d3552bab2a4441cc1ef6aa21e990567a816377998",
+    "NavierStokes.MixedDiagonalExtensions": "14deca2b2eef024cf4df6b2302b03ba736cba9eae62c53741fa32050c9e38a2e",
+    "NavierStokes.MixedDiagonalResidual": "205b10f76d6133c264cdb699192334c4c2d72755007026eda2ee2a13f84c30ea",
+    "NavierStokes.MixedDiagonalSchedule": "753f735695069e1bf7abc6a8c95c08eaa8f4458a1ea3922293611c65d8120431",
+    "NavierStokes.MixedFiniteBackground": "0cb8d2c38d13fdf8451bb322b2547f51c233bbee2ccb2a0443824e8881466090",
+    "NavierStokes.MixedPeriodicAssembly": "5be1155c4b334fd8921545462dae6048a854e14f19e0e99a8bdb94cd64e4a773",
+    "NavierStokes.ModeSolenoidalReindex": "769045bd21d60f1ee61b9a387dc49f0af83d5d83ad2fbd1a2e243f6dd26d0194",
+    "NavierStokes.ModulatedCone": "83ceee8cfcb4f77a6a16f76b9fe33617b7ef2b46adde537798ac577d46e64cd7",
+    "NavierStokes.ModulatedExterior": "5c6aeaf40b32466d2fe4bb5d651b02e879833539b81d0bfcb3c15a3fdf3123a0",
+    "NavierStokes.ModulatedHistories": "a39ebe0e9577de51f513111456b10c3032a47004422336f5ab65ef27f7ebd0f3",
+    "NavierStokes.ModulatedProfileAssembly": "006af898d4f7dd76d8ac79a0ee43189e88ac34ca80e9e92ec7e0d78927fcae47",
+    "NavierStokes.ModulatedStockBounds": "1f44364eca5d5e7eef1df43873c8f76c553fc2e4ad6e496ad267cd510175a902",
+    "NavierStokes.MomentRepair": "9e4fb5b8eb471acc59871cbf37c8570d847d2a9197b6b9b4cd78032583fece7d",
+    "NavierStokes.MovingFrameODE": "237f85280253e318da2c7dace62a5fc33ad635c07143f403962dc557878a2fac",
+    "NavierStokes.MovingMomentBounds": "090df5c8bdffbc2cefc9a1e51bf123d1134defb6a171ad90f6011ee9e39979a7",
+    "NavierStokes.NativeBandExtension": "f9d3c3bed76dc607e9a241e922238651ebb72a4b96aa81b830b328bf947aad39",
+    "NavierStokes.NativeCutoffJets": "1bd2edd525ef22dba986470bb79ec18a7e3679ad1bd6eb74bb01e7f043dee82c",
+    "NavierStokes.NativePrincipalEquations": "d8857dcfdee523f6812d67d7a6bccda67def36cb248a26b0a877ccd49b4a5a90",
+    "NavierStokes.NaturalAxisBridge": "9d1d98bdc48199dd483ab6cc8cd5a356847373faab7aca2908c166cd6d0c754f",
+    "NavierStokes.NaturalAxisCoefficients": "8670037ee6f718bc66f0e5c4f6509d590d1ee2a11a9b64744570f49f1f50776d",
+    "NavierStokes.NaturalAxisData": "4fff0e94f1b98acec9ac9efc83a7df8cfe83475e241d79d3697c8df2ab2835f8",
+    "NavierStokes.NaturalCoefficientBridge": "eb109bef226d45f80bbe8c9ea3d82959f269061ab1fb8488bf34344f4c91136a",
+    "NavierStokes.NaturalCore": "917d33e04cdd939d475a2e76de8a1ee250c8844320f7416144f56bfe63fbab0e",
+    "NavierStokes.NaturalEntrance": "ba639708d35a3c92c2faab27b60a05f0aee74c256b43a89daf5371ed00350c11",
+    "NavierStokes.NaturalProfile": "c8c74b5eef59a4b221dad4f7cb6b075669dc3a20e70d632e914d97992fb249fb",
+    "NavierStokes.NilpotentVolterra": "68e9c6933a788db087384426a96459552d95d82901a321b3b84162e80b9b4be7",
+    "NavierStokes.NominalConeAssembly": "ad0f8947723416c950c1e3cbb82bac8c83b03ef25fa5aba495a3e29508b14cb5",
+    "NavierStokes.NominalProfile": "e0e218e1b70505e2d0831a7641e69332036395a01bcc7df00ad6493392e1229f",
+    "NavierStokes.NormalScaling": "a93529712b3daf691c42af11cfa277e15f25fd7a8fe7bd9208e2cb2fc5f5db54",
+    "NavierStokes.OffplaneCorrectionExtensions": "a136f1c7debc77afce4b6deec6848b1708bfb8ee028c61675ea5b5104a1fc5fe",
+    "NavierStokes.OffplaneJetExtensions": "7300e09621773cb941a3bb92f782d26acc2687171635344b69879014734b803e",
+    "NavierStokes.OscillatoryCurl": "c0d1083fedc4bc0628e453a839a153b8658bc84f14a9c789a5f87c4733b6a9d3",
+    "NavierStokes.OutgoingCone": "615b435a0983f522137f82501ea105773c38d43287433fa33c5de951692c4ce3",
+    "NavierStokes.OutgoingDilation": "d45c1981a39df2b771065661250e3ca0ef08e352b53e5667976c6bff71b9a809",
+    "NavierStokes.OutgoingEntranceCone": "5006a2e51e68aca5c9bd3042b7831e88475a9a9879174a2a33575a880f3f4680",
+    "NavierStokes.OutgoingHistories": "a1ec7816c6f58942e22a329232e49c6b780df33b72a74cd838d91c9f253e0d56",
+    "NavierStokes.OutgoingProfile": "c62ac452804940732e017daa7ae11545e3db58ee22b5effa395dc3ff9afde520",
+    "NavierStokes.OutgoingPulseBounds": "c7a25e38f34f1c6d7f3a3f0de830cee9979155956c80896014558b61e27de478",
+    "NavierStokes.OutgoingSchedule": "680379d41f5ecb928f53278860c807e3344e9bcaefbcd6c4bbcc493f812bc552",
+    "NavierStokes.OutgoingTail": "450c6d0cea94de6ebaad98d199bfa5b45b1cbc249decec3fd44b796ddd43eba5",
+    "NavierStokes.ParametricEvenDescent": "6318f297fbbaf6481dbf23e526c936c1b574a218a84f30531c16812770d12f1f",
+    "NavierStokes.ParametricFlatFactor": "aaf668ac7dab3cbd942a4dd72343bcffda5051379afeca8d75f5dc98cc577ef2",
+    "NavierStokes.ParametricHeatTail": "af647fa400a693330ee9553ac33832add39657c6fca2eb90bbe25e9e2934d28b",
+    "NavierStokes.ParametricKernelBounds": "241582869a91ff877ad0064f79e7c734e102047180cf858f0b000cbfc457a049",
+    "NavierStokes.ParametricModulation": "1706cacc24f99d57de20f3bbbd89529ec5cae25877094329caa3cd9692431c5f",
+    "NavierStokes.ParametricODE": "aa70ca575903663a3161320315ff997b1a05d435a1a90a2878fe751763e18122",
+    "NavierStokes.ParametricRadialExtension": "2f2407622d0fb13cbe7929d087e72ef470b3752122ce0673cd93106add54ac4b",
+    "NavierStokes.ParametricRephase": "27c7fdee501b0f32d31ac5ef7dc85a200ed81400d8d740729638ee46d62b818f",
+    "NavierStokes.ParametricTerminalCompensation": "002cd46b8bada02fc2794680f2fa5785834b2b2a707b2de4216ab562384c7d77",
+    "NavierStokes.ParametricTorusInverse": "b4930518678ae79a85cfde23ecf7200d01495a94b5f19e0443aaea89e25f6cb0",
+    "NavierStokes.ParticularCopyBounds": "02065f814496e71885090c55f25e9bf30266b35115676003ce5e8c575bbe269e",
+    "NavierStokes.ParticularPaddedBackground": "229d3da72ab1963835a145a91f45130048acc2f94c9d72f8d67f0c447df71093",
+    "NavierStokes.ParticularWaveAssembly": "6db7956c021b8742c9bbf1f92127abecb2c24fce2529ad40a96cf08e59e9296d",
+    "NavierStokes.ParticularWaveBounds": "71febf45bbed1c5aacc7c7f9d91bf6ddea0284bcbda14c8e9f03a178489fa555",
+    "NavierStokes.PartitionedCovariance": "2fa4f3f7a6d4780556abc587ce8306952e69aaaabdbeedfd6858e3a2a2c74863",
+    "NavierStokes.PastExtension": "70b40604b420c843738b323895cf54b96763015c982818f23a691fea464575de",
+    "NavierStokes.PeriodicIntegration": "4f637ee61edc17fd3e99da4c407f13a9c749bf7e6f6a2c49a85396e7a56eec1a",
+    "NavierStokes.PeriodicLocalization": "97f246d8ec74ee6a4f49afa54f909f20d74c5c5293ed4303057b89030dc09898",
+    "NavierStokes.PeriodicPhaseAssembly": "ee936a3fb36821b5f541bea8b77b860e807aa26f6eac5c3fd719075e4ebc461c",
+    "NavierStokes.PeriodicResidualLimits": "d5a9baa1de9abf9990a775f77ec2235f11dab6d6d3cb3c3c070cc2973c60eed2",
+    "NavierStokes.PeriodicSobolev": "95f45f4e0b8dccbc57b38ebdd85a16c4d9253b85e8bdeda8f4bd189347ce8c7b",
+    "NavierStokes.PeriodicUniqueness": "fa8f82a4f4fabb6bd6b6c8d0d450152ab7fa540f9bf22235ea8eb70931a30558",
+    "NavierStokes.PeriodizedWaveBounds": "2b8356c500c42ab0acf4f1f18be4c18d6936905e66c859ffc1ac2aa24ec35085",
+    "NavierStokes.PhaseCalculus": "779aa94a4a4ffe83089bb21b24e61503948449a98ec09bf500789d791181255e",
+    "NavierStokes.PhaseEstimates": "d450bccab6fe76231b4b0a0d72a3977e4254d2ee5366e00a30d6bbf8eb685b9e",
+    "NavierStokes.PhaseJetBounds": "815362ab83b9d078e825214f517ca7b3262823849d5745e0f41f5138ac8cc05d",
+    "NavierStokes.PhysicalClassBounds": "4d09f8d6a42e13ca5892f1a4d7ac736ea57c2561a9aba92799b4853f31163f3e",
+    "NavierStokes.PhysicalCoordinateBounds": "b69675f414a1fcb6a152d8f361bdc218b43a8d4a69357fe542ac58618288a743",
+    "NavierStokes.PhysicalCopyBounds": "ec9f3b772c4d3c1192930ff2a3709a051559af8df89c6a6b80b933d8746c2b8b",
+    "NavierStokes.PhysicalCurlCovariance": "cf6f9b6df11d2db493f260b71ad0c34c571405e606f834d497e9d4c80474a8dd",
+    "NavierStokes.PhysicalGraphBounds": "a281c27cd3f6cc40ad6791556a10b569682a216784dddec9db6c9c1cdde12838",
+    "NavierStokes.PhysicalHeatCoordinates": "d99ad202f3d84449b04fdb107dd92e777e53fc2363a5ea7daad90900008e88a7",
+    "NavierStokes.PhysicalMeanDomain": "2ca751a5641510c6d60752e1769c4ef6afed3aa274eeb3289873250003455104",
+    "NavierStokes.PhysicalMeanJetBounds": "c588b5b12bdf2d5dc7c2997fc57c89c8166f9b326482908ce11aea1186c53e1f",
+    "NavierStokes.PhysicalParticularWave": "2632a076fcf0dac82339db9dafe501ac1dcc32e3b05fbea97134d9b8999f4fad",
+    "NavierStokes.PhysicalResidualBridge": "4e1bd852b2d5e0ecdd1134896d6ff44cdc757da7f1e9738130bfb9a9ca3e22b4",
+    "NavierStokes.PhysicalResidualJetBounds": "9fe11980d3ef8338f11c8845d3adcab3ff3c7fc5bd21cbcb1d53bd5314ddd2d9",
+    "NavierStokes.PhysicalResidualNaturality": "adbdb99bea374a4cfc0452712760607dcb6db0a1e645929860fe933ac49328aa",
+    "NavierStokes.PhysicalResidualTZ": "4107bfef57037dc6cc9eb80e6bb2a856dae337be848aab64b6f467c4dffa80ad",
+    "NavierStokes.PhysicalSignedWave": "5fc5e5a2aabfddd22fb1a64bb1951e6a009d5774ebb5bb0c974dd3bf335c209f",
+    "NavierStokes.PhysicalStageBounds": "b86797123c5c17bfacaeb069232d0231dbfa0bf47b2ff3a69fab872b353c9a30",
+    "NavierStokes.PhysicalStageSupport": "82f49228e3406c7a77aaa2b426f7831332d154fbbc75c8cc9702cb0d3eedd30d",
+    "NavierStokes.PhysicalWaveSum": "5713536b5d510c2ab2c2151b4b1aa6c8822535169ae0e73ff60d9f7b69e9ea81",
+    "NavierStokes.PolarCharts": "eab3f37646bd642ca0d6710e8db1f231b85e247e6f2bf1635037226271e0cec0",
+    "NavierStokes.PositiveAxisExistence": "ad88813104428c30dc08d190fbe997a7c7953fecd57310137963d6c155334ed5",
+    "NavierStokes.PositiveAxisSystem": "75183c27ba7a8502c0d944d62e0f19afca3d997dabec6b6845eaf582207c2cab",
+    "NavierStokes.PositiveOrderMoments": "97e62940ffe93b0535c4d87fd3c30967febd85830bfff7bbf4d4ce54684db2e5",
+    "NavierStokes.PositiveRepresentatives": "302673b00ad8deb0bb701e0052cc91d1d74e3ee153363b37e291ac35e2f28882",
+    "NavierStokes.PositiveTimeCopyFamily": "85d4a69dfdee2c2b4df0a8030581df6766f312becbaece4fca0a703073adce04",
+    "NavierStokes.PositiveTimeSignedData": "6c668281be4891207883497ce2fef8e91b9528ad184659b6725b5437b972fa98",
+    "NavierStokes.PositiveTimeSignedLocalization": "4b99969be51c159e0d59def5428a7d3dc1bd606b3bd8b05b3c7020b23bdff14d",
+    "NavierStokes.PowerMomentMatrix": "22db0293650330a0098df08e85b6c39ca2a622eef661df5a6e65b5016c0aa34e",
+    "NavierStokes.PreparedOutgoing": "b17ae08fd3e31ae75821d47fe801901a226d7ebe8f2fff8f442fc8751ad1a069",
+    "NavierStokes.PressureDatum": "a1ad3e25e569532b0dc21c71f5f8e0092bb8abd2096f03c3469639d2435a2513",
+    "NavierStokes.PressureStream": "d0fe232768935e56975a160a60c1bb380021b87da42d70b270a904a846cf92c3",
+    "NavierStokes.PrimaryCopyBounds": "9be9720cce018dcc06eb6227ec5899200f172be2549c77c90b71754c8ca27d46",
+    "NavierStokes.PrimaryCopyBridge": "0393f51a0881c396d45564da573df02a252f70949489a5c2543e1a58816548d4",
+    "NavierStokes.PrimaryCovarianceBounds": "7417f840e9689a41504a1cc368acc04d565d2c5bac2cca3959675a9a86b97862",
+    "NavierStokes.PrimaryFieldAssembly": "dd8a5487a5706e914c172fa6c28575cb87c3d981c738a93fced8bafd39468aa7",
+    "NavierStokes.PrimaryGeometryAssembly": "ca704dcae58e7339d91758a0f5e0fd545628e24df4d3841ea3d118e542feceab",
+    "NavierStokes.PrimaryMaterialDefect": "e80e28e25fa37b2c97da2bbdea43ee2785d5de4d8c552dd1989437be05f72225",
+    "NavierStokes.PrimaryODE": "8952eec0456e15b311826e7d1a0ab42bf0974622a445d1adc02dc043d6cf6b82",
+    "NavierStokes.PrimaryPulseBounds": "c6f13688e93981dc7459532d3b030d233fde7d8eab698d44b059f8a28c2a3935",
+    "NavierStokes.PrimaryRepresentatives": "4cc7961bb79ee22a1c95bde37d9113a0c1c834f1fd4f8654c97c9bf9cdfa08e4",
+    "NavierStokes.PrimaryResidualClass": "18f4c21020e6e82db1a89199a73d1c72aecd8fca4a57f14f3d30ff6ec71b1bc2",
+    "NavierStokes.PrimaryTargetBounds": "56ef8f911a7805f72657b5c6671a7049c9d81fba5f2cac3139a57e3f67672f0f",
+    "NavierStokes.ProblemStatement": "d2f5cdf24a060acd41011b50492e89058991965e18d2cb797c58d915f95af633",
+    "NavierStokes.ProfileHistories": "1e4176760ac0ec433f72c57a632362fafcff5d420246689b3fad18a06d1d35e7",
+    "NavierStokes.ProfileSpectralCone": "6ed8f36dd65be0a30a2b93cf2f7da513ceea9c9143175b7ad7abe16b2507aed9",
+    "NavierStokes.PulseAmplitude": "7b04d2c9266f20f35137b554793f6730b902efb92166d58f323ecbc4f3f043a2",
+    "NavierStokes.PulseCone": "d48c935f688cfe8bf5c8234006bd7c1dfacfa2bf2aece60ec21db469ee36fcbb",
+    "NavierStokes.PulseCovariance": "b93b8ed06651c256254ea0751b12d9967b196415ab295ad8c102cb5aadf4634a",
+    "NavierStokes.PulseEnergyHistory": "598fb0a367e62cf6e9ceef1d9f1f96d7399776ece7d9f507c8a2819d0137207a",
+    "NavierStokes.PulseGrowth": "beccfa127913f2224b114a1f2a4f41983032c1666fb17c50ca04a1ed774d7277",
+    "NavierStokes.PulseLag": "5130bf734c38d364fcbf696d74fa3d2ddabf179ade01398781252a6e297e5bd5",
+    "NavierStokes.R3.ActualPressureFlux": "56c026a1fe91d64a8e05b13ca678cffa9073d39d308f990939d72286c094f0ee",
+    "NavierStokes.R3.CompactComparisonBounds": "59aa6b7ede54c7fcffc9d2d7d6b2b577dbc1308ca249df82751a10a452e828f6",
+    "NavierStokes.R3.CompactEnergy": "5f6b0e17cd55b82672d52d04de70a973d74ee483316a5fe993aee7ccdb9ac71e",
+    "NavierStokes.R3.CompactForceBound": "ed2e1ad50aa4b24554092ee0bfe19390131c85d43f2b563d26e1a184ea85f36b",
+    "NavierStokes.R3.CompactSchwartz": "d56930b6144facde894ff13057791b0235833d739c8bca5a313f2d7a2f9ad622",
+    "NavierStokes.R3.CompactTimeIntegral": "65f72cbcff36ec69bc7b2cf925db98aad723dc6a4a09be8acc76f9ef1ce3d08a",
+    "NavierStokes.R3.ComparisonCutoffs": "a4fba9b793ad51dca007cc6d8f6adf30f06b4f79c9c9811384ec299da230ab6b",
+    "NavierStokes.R3.ComparisonFiniteEnergy": "f73e27eca00d63d6a13cda5d4239ee70c2334e3e410ab90ab9533d674c7418c6",
+    "NavierStokes.R3.ComparisonFourierSetup": "30b9551a34a825c2c9de181eb28c4e48a14091e927ad8dfdedad1c84e8a468ff",
+    "NavierStokes.R3.ComparisonGronwall": "165a2076c39df025d4dbc94e94b46c21ac9e8ccb03c0ab5f241fe1f073ba22d2",
+    "NavierStokes.R3.ComparisonRateBound": "b992584a72424037527f2db635834446b873f3d77ebe362f3f896c777ae9334b",
+    "NavierStokes.R3.ComparisonSetup": "2c1335d9da753d25c73b2b102b0c7686648c8928ddfac416d87284bb9b20fbde",
+    "NavierStokes.R3.ComparisonTimeAverages": "b8f58608f5954801f892e990714c2cf7d96cfa7f9105ac1c5421baea55da169c",
+    "NavierStokes.R3.ComparisonYoung": "1ede4e4ee74651b222e1676ff7a1fd32d3772eff0a866aca28ec4e05c2e3e2b4",
+    "NavierStokes.R3.ConservativeDifference": "380ad80fd48eb8a509d618fbba31e2e0bec6fed9b8254596db4cc8f65d8f31db",
+    "NavierStokes.R3.FourierConvolution": "394ffeddbc14c6cdfc61aec9ff1d98dcfa57e3e4a9f941686b32125f0b794d47",
+    "NavierStokes.R3.FourierSobolevWeights": "073f501e63394b0b378e1a8480a8443f217c6b337d96941df461210115990245",
+    "NavierStokes.R3.FourierTestDerivatives": "3937144132a8a69cb739890a585a964d9c98f12850fba615217b6292422f8c63",
+    "NavierStokes.R3.GaussianMoments": "638e482ba99943b1c3198949ffb8a894140d04d2cfb04661ba1e6e011898430d",
+    "NavierStokes.R3.GradientOperator": "94559bda701acd5e8be547573aa95f8324d92ab420653af01dc27cde5f73c5bb",
+    "NavierStokes.R3.HarmonicTestFunctionals": "5046e01dd9701ffa030b59aa6d86ab6740444fed3eaec2d7abc4baac47ec62b8",
+    "NavierStokes.R3.HeatKernel": "a15d6b8e8d21756fddddaa5525e2cdd36d9d4b3c12d17a7321c7eefadcbe7212",
+    "NavierStokes.R3.HeatKernelCancellation": "1d4cb71389454447f3e1e818c379fc726bc836a312662e125028470bc77c0267",
+    "NavierStokes.R3.HeatKernelCommutator": "a72f167f34047e271508da9bcda8ee5bf7739247a36e85da9769d87051a08e20",
+    "NavierStokes.R3.HeatKernelFourier": "43de750a908fe9e9203d0d210a7ee37e1830ff5d77f23a9c2761ca94f158ded8",
+    "NavierStokes.R3.HeatKernelFubini": "16d156e1264df28d130cbbd5dca6cc8cf8d76ea07132358eea5712a696c7364e",
+    "NavierStokes.R3.HeatKernelPairedBound": "64dfb0726c3edc2c38542315b7db8eff2500a4405f2e7f3890e202d7651c9e17",
+    "NavierStokes.R3.HeatKernelTimeBound": "0fb569cbbc8757f8bb6ceca8e4465287e1185fd2383e3d916ebf270e03d0db59",
+    "NavierStokes.R3.HilbertFunctionalExtension": "757d1c4955ac1e88a5207292da7e306c7c203c50f0dec114edcdd401685fc536",
+    "NavierStokes.R3.LocalizedDifferenceEnergy": "08751df30963bfced9a1aeba5c56d3a263fdae2b4c68e69b42f3b640c39733aa",
+    "NavierStokes.R3.LocalizedFluxEstimates": "5c0730ac51fd0445b8ab52b428d3c5fbf0182ca375ef4bf00d77b676ad0b2583",
+    "NavierStokes.R3.LocalizedLaplacian": "5ee2093c65c9c02327237f9c093d45c1afca69924c77ed1cb9fcbfc7542c6965",
+    "NavierStokes.R3.LocalizedTensorBounds": "0240381b0b7054bd2f92f110e70e031e9ab622cfb5aac823445cb747b4ca6aa0",
+    "NavierStokes.R3.LocalizedTransport": "a1d95e1e9a57544cb9652fd3993cf2ec9fecf7b4894f00a9882dc4821dd1a4f7",
+    "NavierStokes.R3.LpNormTools": "a5f032aaefda87c09048c77c88a87eb980b36b531cd2a4acabd408ea078a738e",
+    "NavierStokes.R3.PairedKernelBound": "f52333ca33743338b34b0fbd32fc82292ece2e2621dfdb25ac2ac515ab51b9bd",
+    "NavierStokes.R3.PressureFlux": "0adffc7879e8e5e226e5d4b2d721139a4ff12a04b4c9b4ebc12cf0d0f597fc2a",
+    "NavierStokes.R3.PressureFluxIdentity": "a6167833447ef6e0f03e0b91e98266820c8fa40b6dae34bce99a3ac42f5fc25e",
+    "NavierStokes.R3.PressureFluxTest": "435b82aec70d0894178086fb38e3433752b5cbb72d05caf3a8b7e349c73b1a30",
+    "NavierStokes.R3.PressureFunctionals": "5eeb4124298159564ad6034fbd2189c8083e2199e1a212e712d4d603edfd2d15",
+    "NavierStokes.R3.PressureRecovery": "089962e70d0e0c8aa1970785e4203910bdb56d9e16cd98cf80d5bbe72d4e6098",
+    "NavierStokes.R3.PressureRecoveryHelpers": "efa98613cf549e064efb6bc44b92648e0b00a461bb423864586fe4ff3fcc24b7",
+    "NavierStokes.R3.PressureTemporalIdentity": "4cc785f9e168faab1ed11b34a4ba6f8165d63b54f35e4eeb448192d7f39f55ef",
+    "NavierStokes.R3.PressureTestBounds": "3d9984e6a89c9e252af10e8bdd226723570457260f5c3c366e60de5825df9527",
+    "NavierStokes.R3.ProblemStatement": "8b0a28b3b93fb8dfcf967d0082a5a2829a5e5f079de6662c846417057b0856d7",
+    "NavierStokes.R3.RadialKernelBounds": "4dfc00b6ee64e9886a98456cff3b344dc86ef299252068068486fef81b501140",
+    "NavierStokes.R3.RieszHeatRepresentation": "238018df10708279be34b9e21efbacd854b3a7bdbb72575534fa3809cf792dec",
+    "NavierStokes.R3.RieszL2Bounds": "986161e3e04e00668868a5b46902675b73139c4639bbd09bea4b4241db8897fe",
+    "NavierStokes.R3.RieszLinearityDecay": "0d23e250e2605f29362400ff5763072ea018865e59a9982ea2286afe2c725fa1",
+    "NavierStokes.R3.RieszPairing": "6da03c719747f40ca67d7b37721932efa0e015224c2ab66aff5e0acad285aee0",
+    "NavierStokes.R3.RieszSymbolRegularity": "9087b62cecf3a443ed55c9d833846b30ac9728dd4d7af5168eb5f0b02ddba41d",
+    "NavierStokes.R3.RieszTestOperators": "95aff76a30315a8c937150186e6fc0817d6c06e216f15da2172d55b736d9aa19",
+    "NavierStokes.R3.ScalarEnergyBound": "ee2a47869f1f8466984dc025eeb448b0165cb4980cc278e95bea49aa6755f5d9",
+    "NavierStokes.R3.SchwartzCompactApproximation": "65805b2ea9af8a2f96c00ed1c76e11783662d25a38493d4ceecfab9cd4e356fd",
+    "NavierStokes.R3.SchwartzParseval": "c45a84eb3715812072a6772e58e11e866f91a4675ca35b72a67d06df32039c68",
+    "NavierStokes.R3.SmoothSobolevL6": "1c89ed275a84d3ccfac47f573e4d5039c86c9fe9be7642aecbc84c83a4c2bace",
+    "NavierStokes.R3.TemporalTestUniqueness": "8da8ce6d03d609ee8d20a60b3995103d5414da96eb0a62bdcf2b386fbc931051",
+    "NavierStokes.R3.WeakFourierUniqueness": "18a754a3dc55954c11e397126529fa170c7552eab4065c47da24572fc0162d95",
+    "NavierStokes.R3.WeakTimeContinuity": "35c1c03b202bc8ff103c61ccba274c04241ecd22b34113d67972e59c09248ea2",
+    "NavierStokes.R3.WeightedInterpolation": "919ba5c3d2df2d88ace044a03555b91aa5000bc2a63997b4f683fb867f5638f1",
+    "NavierStokes.R3.WeightedSobolev": "69faf86d194c00acd438c6ce40b102ff3d40d55fd5dc4470a5b6c27306d6f136",
+    "NavierStokes.R3.WholeSpaceComparisonClosure": "a341c40686a2ab0f4b5916b2813814a176438210df63350b2d88b308ce106b3d",
+    "NavierStokes.R3.WholeSpaceEnergyLimit": "1a0518847b2b01324506d288a28148f4ec24b87f584d838383f469ef8a5589e1",
+    "NavierStokes.R3.WholeSpaceUniqueness": "c5db96b5a524d852cecc34947be821e1ccab983febdb3fd71f398cabf5e46dcf",
+    "NavierStokes.R3ActualCandidate": "4f4d09f05a6cad9cdeb52b3be2f3e8b365c83db89df5e79bbc5970e82106308b",
+    "NavierStokes.R3CompactCandidate": "5831f975030543c5b670ee3b0ed116222848725df7b14892ba4d6592a47ae5f0",
+    "NavierStokes.R3FiniteEnergyComparison": "3107919d5407ecc43d165e197a4b4e73c69475246c4748de620d764351ee6948",
+    "NavierStokes.RadialAlias": "73e102688dbbf8b2305f8d443dcde8fd99b42d7cd41fbbbfc6841bc21db4180c",
+    "NavierStokes.RadialFluxResidual": "f2e2e202bcf2dde6c3e61e20560a7a6081d0ab2d3be72e9df3f35310dd646eb7",
+    "NavierStokes.RadialHeatProfile": "0f013be73eb2d1715efff3d755f96d53a5d7b88d3d9a0f00d5ce7a6c5062bfc3",
+    "NavierStokes.RadialModulation": "0bfa57acf961b66cb8c7a07f8ba6c8e5f81c71d4711974b5f3c53030e5f6f606",
+    "NavierStokes.RadialPullback": "9a340c3e53adc2085a5c214eba3c362cb74b5457aa2e2f9ba375dd76678a2c3a",
+    "NavierStokes.RadialSchedule": "7fd62542bc5a4c4c3bf48eb8098f66cbf9616200fb6349dd704bd42e7873e17f",
+    "NavierStokes.RankStateBounds": "233483831ddf3eb2ba98ff472931968bf04348f952651ec82ad0c70386827798",
+    "NavierStokes.RankStateCoherence": "c5193a9590af15dbfaae2655fe4b6d32945592c8ecbc6c7b3549e11076ec6520",
+    "NavierStokes.ReferenceBounds": "34e7c7f37a90bb6d5f3902b25fbf3c80ce4f335703be350d78b9598634511127",
+    "NavierStokes.ReferenceJetBounds": "0c6339d4ff995d6adde59151e461f353415f483e3627ec38624de9e7ab97cccd",
+    "NavierStokes.ReferencePath": "906261b8e3fe1f94345eb1176e58c1f2c9d6ed3bb404c576afe12a473513efe8",
+    "NavierStokes.ReleaseMoments": "60c04774f52818314e034cee95702eefe5e8b31b0de73829f7e262d63c0dbe72",
+    "NavierStokes.RenormalizedHeatMoment": "c9d357894e9aec32c0cd759a92eac51ff4a0f6f82670a4b9946e1bfb9f3a167b",
+    "NavierStokes.RepairConeBounds": "7b3efa13a32a1691f546b8edfee94110e1f524340f5f2b93415844511bc9a11e",
+    "NavierStokes.ReservedPatches": "1128ac51aa4ab7f41b9ff3b6e860c69c4cdd5881ed29068043deead3f619ac53",
+    "NavierStokes.ResetEnergyBounds": "b762b6bd1182f6cdacdcc14e5126f1ecfc0ac91514c7f174b4ced30465263596",
+    "NavierStokes.ResidualCalculus": "128b42ecd93d9b7623e8a6499306fdfe5f135f148c1c503da236e9e0c2988eab",
+    "NavierStokes.ResidualPolarGraph": "a11be923e9946b29c62592e50dc812fe4c149d9a6387be39710a495d4e40d233",
+    "NavierStokes.ResidualRegularity": "919da797b7627ec6fa38d77c4b4a6c9adda3541ef4fbbd110cc2cf522bc0ad52",
+    "NavierStokes.ResidualStability": "cb0611d2fc94bc84f498b4eac743bdfa2b60fb7cf497ce90e470293d3bd059c1",
+    "NavierStokes.ScalarParticularSupport": "4894c9d6615fbbdd8160b1073683ef17827c1632992d95c79eae3111c8450fe3",
+    "NavierStokes.ScaledActualParticularControl": "2c79a60d2a572f02843d302bc99f313d0d750d2c7457374ff6729e2981285f51",
+    "NavierStokes.ScaledParticularFrameJets": "4636f2a5baa9dd8014f4fcda38a3df29203a726caa81ff69e2d63d66c7f677af",
+    "NavierStokes.ScaledTangentTransport": "9dcce4090a92123d5b78c825af02e1bf7bcd4a33001e038dbe5d1780a73c4fb0",
+    "NavierStokes.Scaling": "d42a5c7983e4626082be605ac56a52f2cea398c56afe9a5ada00d4640d5f62b3",
+    "NavierStokes.SchedulePressure": "d4146daa477827b6f69c752510699becf1c97973f96e50f8636991958fa1e159",
+    "NavierStokes.ScheduledProfileChoice": "8601fa30190269937efd5afeb72587ed0834d28631603b9996477061709a3485",
+    "NavierStokes.ShapeTransition": "b77976925675b3708712bbcb629dd05e9ae1f319cb962517d2a367d69b251b23",
+    "NavierStokes.ShapedWaitBounds": "21c1bc976fca73b3403965aa45f566aee6615bef8e6a467678047d1eebdd6693",
+    "NavierStokes.SignedCopyBounds": "92c80c65c74c64c45c3021f44c3ed50f94a7ea44c8779d67a3e0f18cb70029c3",
+    "NavierStokes.SignedCovariance": "55a60ffd8bc1e7e0d223930619990573b3303bdd4f0589ba15f565c6ea4eef57",
+    "NavierStokes.SignedCrossDefectClass": "de50e43622270e62c26dd764f184568aab72b1506333108db3e8baaa6205ef8b",
+    "NavierStokes.SignedMeanGain": "e5d0fb76670920b23fc7c5a59b17ad3362990133574fd2d36ec3a839d6c17744",
+    "NavierStokes.SignedPhysicalSumCalculus": "35788a333484c73f5c6b44a8bd5ec8df83448285dac002c4d3bc5b915586a108",
+    "NavierStokes.SignedStressPrimitive": "cf683d91506d6ec3bb99817a03f40867f01fac51c18fa250177598d1467ff971",
+    "NavierStokes.SignedWaveUpdate": "f3eb4dfb2505dedbe5538259f709ad49dfdb3380afc1b3947b99e57f7eaf9445",
+    "NavierStokes.SimilarityApproach": "6bc176a7e69e0b164f310ef424c7773a875d5988d66c55c6e5a34478acd881fc",
+    "NavierStokes.SimilarityCoordinates": "de85505217232fed653c70fb73edf5658c1bf995bb36792cab5a4653d063ca1f",
+    "NavierStokes.SimilarityHomogeneity": "cdfde019bd66003d2067fe386545b0781febd58aa0457e5a40a1d108dc668393",
+    "NavierStokes.SimilarityProfile": "82ef1138367d9a916ab6a478086a6e308ad24d901e58a62920c6f0095a503cd0",
+    "NavierStokes.SlotColoring": "e1dc6ebeb18e91be7dcbb253dae4ba94975354a4dc3a7cba3c7259f778cac617",
+    "NavierStokes.SlotGeometry": "dab3c73fbaacaee8626ed2d5ff5834184d386865078b958a9145a0e575d5603f",
+    "NavierStokes.SlowBaseEndpoint": "a8d28d6228860ba8c9d2373839649526cdf0f7c7b0014a6932fc9286f6fde490",
+    "NavierStokes.SlowBorelBase": "10f39b7931e942874396afcdfdd88a806d36a785cd6ef55faed710014757a550",
+    "NavierStokes.SlowDivergence": "deebed99a10501f5b8c6c777f4e71786048ff31781d808772aff2642c774415f",
+    "NavierStokes.SlowExpansionResidual": "bab85a3afb1980c19bf8d32f399b7c6f0a22afaf5945ec537ce34b385f5f85f7",
+    "NavierStokes.SlowFirstOrderEdge": "5d163978cb70bf73a467dad78070bfad214b48d022ee07782305534a001bd1ee",
+    "NavierStokes.SlowRecursion": "a6fcbc3cafc6bb120728c5f8ef0fd2acc6b8b5cf672805b6c5a7386cf15108fe",
+    "NavierStokes.SlowResidualMatching": "e280caedf620cfd64c7aa58610810cab4b605ecb1284205d5b3a4049b71c82f7",
+    "NavierStokes.SlowStressSupport": "018fc8896392d75d1104176bf64331d37435ceacaac9166162291da0eba99710",
+    "NavierStokes.SmoothCovariance": "1124f4ae69a3a8237081b7596c8dbeb8557afac52ff894f8c4a5a8af4d0580ee",
+    "NavierStokes.SmoothCutoffs": "b91e18a05f40cb46257b481b2281d2a3cf56b2409a93b16ac2aab88dc58eafd2",
+    "NavierStokes.SmoothFamilyTorusInverse": "165c097077dc3687fd1d6f93c356059e5254be17c799950873f54d91a71e90c8",
+    "NavierStokes.SmoothFourierData": "980b746ca551345d88351dd961d30b69876c68c84f0c758445593025d9dbc642",
+    "NavierStokes.SmoothLoop": "bdbd7a430c187bcd4604767ddadd0538642c148389b7bae908ddf9a224485682",
+    "NavierStokes.SmoothMomentRepair": "268dfcc29154a52c3feda85db884aa9230f8aa89f6d109b4d7e00b4458a46acb",
+    "NavierStokes.SmoothParameterIntegral": "354cd9ec9630c3436bfa1b867dfc12ac0f978932ca91d2571d973fe91c7d2b7a",
+    "NavierStokes.SmoothPathFamily": "d3f2d5a03bd066a52cb2a5444154fa34d32f023aff0b05797a1cf2372b2e3b42",
+    "NavierStokes.SolenoidalDiagonal": "548b6292d7e41f434ec996ee2d6ee683c526339422da18ff9ee96a93486329c7",
+    "NavierStokes.SpacetimeEndpoint": "e48e544364e7c6b1728c8e341dd74fbb530895d2e0591e84c66ce05bea43ffbe",
+    "NavierStokes.SpacetimeGluing": "b365b88d0e2cd529b1d8bc025e6b479c89598efcf3aa340b756507c343b6c7a2",
+    "NavierStokes.SpatialBorelExtension": "c89ef7d3e704618f76ec8c732093332241046eaf10443101acb2d0c4d7c35208",
+    "NavierStokes.SpatialCurl": "09f00171979dbfbd2bfa6ad6a561b6e27fd384bd91b025e58240f6647af1a94d",
+    "NavierStokes.SpatialLocalization": "62afe29ed1dffe71e178784b76b5ea4cc965b1d2ca854602d982210e2de94785",
+    "NavierStokes.SquaredPartition": "977d398868e26de886d4ecc943d8c7590853d84f3cc8e5c07a834707e14eed7a",
+    "NavierStokes.StateMomentBalances": "35af8bb1f3fc66f644c929e7c4271dd6188742f55aa7f8541f673cdf742e5264",
+    "NavierStokes.StateReindex": "f99b3002510dd3097d1293dee271bd5c447bd23a096c6d6144d47e6bf6f67ec1",
+    "NavierStokes.StressActivation": "cf4920c889087fb0a7fa3c334cd48e4d0ae7598e39bc9c30939285fffdf9099d",
+    "NavierStokes.StressAlgebra": "60dd4b762b4193f082f6d376b7185ef5e70a35a063bde8ba1c8c55d7aeaeb3cc",
+    "NavierStokes.SubcoverPeriodicity": "84f436fd13e42e0770417faea3a2283d1d936494f378fd0b3d335e6e936e696d",
+    "NavierStokes.TailCone": "51d6aa37e0cdd5fa7c0dff3f7d4d0fbb8bc4eaf6d0ef4fbc37175bb7dab19f28",
+    "NavierStokes.TailEnergyBounds": "cc2771933c88bef01f7957b4903e28c84ec8ed588c9ae757c17b519e458abd1d",
+    "NavierStokes.TailGaugePotential": "fe7b635fe047f4ebd57f05fb4991c8707fe66569f1d96d53847e18fcac173b54",
+    "NavierStokes.TangentODE": "68a2bb985ce28c8d98c43aae33179d4bf8d5eeac4ead2729fea2cfe8de113c5c",
+    "NavierStokes.TangentProjection": "bb1bf09359e60eb7f429333e4874fdc3c61c76985361062c3ba827826a67b9e6",
+    "NavierStokes.TemporalMeanUpdate": "e0c9c6790f1a770966f55d6c9edc1284c425fc8528a9116f71cb5585efdba282",
+    "NavierStokes.TemporalStateCoherence": "e6f8d59c8c5ca89d27bf8ed428d812c8b0048fda5aac4b29063da4fe41084e7c",
+    "NavierStokes.TerminalCompensation": "f3be972d01e2053aeb03afb95ccf8a0755b82f01bcaecd08dda4cf083a4a3a0e",
+    "NavierStokes.TerminalCone": "1f9861a45be73b92cd998cffc027384e7bafb0635bf5ec2990a513153ec0aa12",
+    "NavierStokes.TerminalEdgeFactor": "b14ed441de67342cbe609f3a1abbd8d5824be95c7cbe7837badbf64305fb2943",
+    "NavierStokes.TerminalHistoryBridge": "fcb96f9ce69eb9eb8b72c95a9944a54be28f86ee76cd5cce94f9092e258d1354",
+    "NavierStokes.TerminalPressure": "31e8d8865bbf66b31fcf621e2c72bfbcb7f60d71da286ed1ff36fa35e2b90933",
+    "NavierStokes.TerminalStress": "1f6d08fe9cddb2b7fbf738db961c1423c51dbf19b79d78e474a2806b6321adac",
+    "NavierStokes.TimeLocalization": "295de27f11ba189b9bd1263dc6571f7410947b3e6de1106d55f05440fdb79a70",
+    "NavierStokes.TorusAverages": "5371eb425510ac42686fe66713073b3a7cd97a4031d1ccb48959af9027d7eb87",
+    "NavierStokes.TorusInverse": "891440bdb5501c67b63d2758c2dfb98c46f250aca38ce0b33498e1eacc768aeb",
+    "NavierStokes.TorusMeanRequestRebase": "f8246acbc47d65e91e64ab89d30e0b52f09a1723f30c6c2ac894e1c4b6b142fc",
+    "NavierStokes.TransitionRamp": "5b89596296dee12ee43150a160bef6e3ff1192317b32fdcf2bc69c20d84ee937",
+    "NavierStokes.TransportPrimitive": "789ab1c05fbd0399bd0e65e4c4c29faa0dfdf7aa57906fa9431d9b6799fc7fd4",
+    "NavierStokes.TrueConeLoop": "d2dff774bb9a5227ee5a58767b5e0603d04a66c7affe726b818c1beafd2d2c39",
+    "NavierStokes.UniformAngularReset": "f34b5ac90f565d9ce34d1d417a56b0f99a3ed771f22988ee9ba16d7629b90584",
+    "NavierStokes.UniformBlockBounds": "22a7de68f8c407fd6349b09f7c033b78060f229002a4d572043836975ed9536b",
+    "NavierStokes.UniformCone": "c1ccacdc8020a75880e6079f88ba74dea91f9452b43576638ba083615cd40380",
+    "NavierStokes.UniformFourierAlias": "5ff6a898ed9aba76cea7038a356efd97674ffb06dc43a56d1779f2b6ca7fbeed",
+    "NavierStokes.UniformHarmonicInteraction": "d4536d3e6ebf61a513ec67a68832a30eb39d71b35297eac2962261cc021be9aa",
+    "NavierStokes.UniformPrimaryWeights": "43580129bbd6ceb3a76f489b9f386f2749d06365efdc1a1af0c5c0bbe070cba6",
+    "NavierStokes.ValidBandGluing": "d22381ae30fb6db529a6e2885fa77edf6b3e66a88e03b0cfebeeb17a5fd1f743",
+    "NavierStokes.ValidDyadicBandCover": "694c8a83c01f0fdd5c670f81e24570d559585025b6d216067c9362eea2e6d75c",
+    "NavierStokes.VariableGaugeMean": "21f00ccc8c9aee33c16cde2f3a2ce477c1f39580db96a8d3ae668bb46f0806bb",
+    "NavierStokes.ViscousPropagator": "f214fbb7f2699b7aeeeef8af595a53b3a0c6ef350c568f84ff774e901cca8f1f",
+    "NavierStokes.VolterraAnalyticBounds": "05523a67ac37504fce86e87c6a13e436a36b59829a3a7274d275ca64371c462d",
+    "NavierStokes.VolterraParity": "364f87a2a1361b8ee1dd68f0c3aa9dbcbcf3a02c1cfa128bb66c6fc2146048b0",
+    "NavierStokes.VolterraRegularity": "522fe09045047d904cf81d3e4ac6f0132750727fba1755b7c8636e52d1699433",
+    "NavierStokes.WaveEdgeExtension": "c3c03266954802b9ba07ab09043673aed9cf163608bbd1d1c114c924e142d34b",
+    "NavierStokes.WaveEnvelopeTransport": "3a290f4fee86cb84cf45a298e5eccccfe2d0ed91035fd7e470f66c96bd65227f",
+    "NavierStokes.WaveInteractionBounds": "dc321405c8f02c5c1c268b90314700eb967fbdc8defe8c105467fc171cfa0bea",
+    "NavierStokes.WaveStateRegularity": "c6e7098cc1ef9a2ad0dbb8c5c7bab1becf5b40fd099c786b6765577dcd175b31",
+    "NavierStokes.WeightedClasses": "aa1724190228aadedc8ae1cd4bee9efe7c35c5bceac234a18448894f78d21bd7",
+    "NavierStokes.WeightedODEJets": "f47cffe2850dc9135407aa2ead9956c052ccab4c4279abdd1b48442ded275b73",
+    "NavierStokes.WeightedQuotients": "f5dde8a7610465f599cdd88b02f5ae6b029183c37aeda316373684f31673fc4b",
+    "NavierStokes.WeightedRadialPrimitive": "9300a2be3663ec006a4e0e72c7de746aa5c52f5ffd99928066ba6350b88d6989",
+    "NavierStokes.ZerothStressIdentity": "566ee77b1a113c3aa00dfa50f0bcf40c7026dc5fde3dd3055126193a24b6b0d1"
+  },
+  "imports": {
+    "NavierStokes.ActivationBounds": [
+      "NavierStokes.StressActivation"
+    ],
+    "NavierStokes.ActivationCone": [
+      "NavierStokes.ConeAlgebra",
+      "NavierStokes.StressActivation",
+      "NavierStokes.UniformCone",
+      "NavierStokes.NaturalEntrance",
+      "NavierStokes.ActivationBounds",
+      "NavierStokes.ActivationStocks",
+      "Mathlib.Tactic.GCongr",
+      "Mathlib.Topology.UniformSpace.HeineCantor"
+    ],
+    "NavierStokes.ActivationContinuation": [
+      "NavierStokes.ReferenceBounds",
+      "NavierStokes.ActivationCone",
+      "NavierStokes.TransitionRamp",
+      "Mathlib.Analysis.Calculus.Deriv.MeanValue"
+    ],
+    "NavierStokes.ActivationHolomorphic": [
+      "NavierStokes.AxisHolomorphicJoint",
+      "NavierStokes.HolomorphicFamily",
+      "NavierStokes.ReferenceJetBounds",
+      "NavierStokes.StressActivation",
+      "Mathlib.Analysis.SpecialFunctions.Complex.LogDeriv",
+      "Mathlib.Analysis.Complex.LocallyUniformLimit",
+      "Mathlib.Algebra.Group.EvenFunction"
+    ],
+    "NavierStokes.ActivationStocks": [
+      "NavierStokes.ActivationBounds",
+      "NavierStokes.NaturalEntrance"
+    ],
+    "NavierStokes.ActiveAnnulusWeight": [
+      "NavierStokes.ActivationCone",
+      "NavierStokes.FlatCutoff",
+      "NavierStokes.UniformCone",
+      "NavierStokes.EdgeWeightJets",
+      "NavierStokes.TerminalEdgeFactor",
+      "Mathlib.Analysis.Calculus.IteratedDeriv.Lemmas",
+      "Mathlib.Topology.Separation.Hausdorff"
+    ],
+    "NavierStokes.ActualBaseResidual": [
+      "NavierStokes.CommonBaseContext",
+      "NavierStokes.CopyAngularInvariance",
+      "NavierStokes.GaugeStateCoherence"
+    ],
+    "NavierStokes.ActualBaseVelocityBounds": [
+      "NavierStokes.AllBandBaseJets",
+      "NavierStokes.AnnularEndpoint",
+      "NavierStokes.PhysicalClassBounds",
+      "NavierStokes.WeightedQuotients"
+    ],
+    "NavierStokes.ActualCandidateAssembly": [
+      "NavierStokes.ActualCandidateConstruction",
+      "NavierStokes.InitialPhysicalData",
+      "NavierStokes.ActualPhysicalStageBounds",
+      "NavierStokes.GermCandidateAssembly",
+      "NavierStokes.ActualValidBandWaves",
+      "NavierStokes.ActualMeanExterior",
+      "NavierStokes.ActualPhysicalPrefixFields",
+      "NavierStokes.ActualStageEstimates",
+      "NavierStokes.ActualSignedExterior",
+      "NavierStokes.ActualCurrentParticularAssembly",
+      "NavierStokes.GluedStageEstimates",
+      "NavierStokes.ActualSignedWaveData",
+      "NavierStokes.CurrentSignedCurl",
+      "NavierStokes.ActualSignedPhysicalCoherence",
+      "NavierStokes.GermEndpointInputs"
+    ],
+    "NavierStokes.ActualCandidateConstruction": [
+      "NavierStokes.ActualCycleParameters",
+      "NavierStokes.CyclePhysicalPrefixes",
+      "NavierStokes.CycleStateCoherence",
+      "NavierStokes.ActualInitialMeanEquation",
+      "NavierStokes.ActualIterationLedger",
+      "NavierStokes.ActualCarrierGeometry",
+      "NavierStokes.ActualMeanPhysicalData",
+      "NavierStokes.ActualMeanStageData",
+      "NavierStokes.MixedCandidateAssembly"
+    ],
+    "NavierStokes.ActualCarrierGeometry": [
+      "NavierStokes.ActualInitialExcluded",
+      "NavierStokes.ActualPrimaryCovariance"
+    ],
+    "NavierStokes.ActualCarrierTransport": [
+      "NavierStokes.ActualCarrierTransportBase",
+      "NavierStokes.ActualCycleParameters"
+    ],
+    "NavierStokes.ActualCarrierTransportBase": [
+      "NavierStokes.ActualCarrierGeometry"
+    ],
+    "NavierStokes.ActualCopySliceRegularity": [
+      "NavierStokes.ActualParticularStageControls",
+      "NavierStokes.ActualCoreSupport",
+      "NavierStokes.ActualCarrierGeometry"
+    ],
+    "NavierStokes.ActualCoreSupport": [
+      "NavierStokes.ActualInitialization"
+    ],
+    "NavierStokes.ActualCurrentCarrierJets": [
+      "NavierStokes.ActualPhaseJetBounds",
+      "NavierStokes.ParticularPaddedBackground",
+      "NavierStokes.LocalPhysicalCopyBounds",
+      "NavierStokes.ActualParticularStageControls"
+    ],
+    "NavierStokes.ActualCurrentParticularAssembly": [
+      "NavierStokes.ActualCurrentParticularPhysical",
+      "NavierStokes.ActualPhysicalPrefixFields"
+    ],
+    "NavierStokes.ActualCurrentParticularBounds": [
+      "NavierStokes.ValidDyadicBandCover",
+      "NavierStokes.CartesianCopySource",
+      "NavierStokes.ParticularPaddedBackground",
+      "NavierStokes.ActualParticularStageControls",
+      "NavierStokes.ActualCurrentCarrierJets",
+      "NavierStokes.ActualCurrentParticularPhysical",
+      "NavierStokes.CurrentPhysicalChartJets",
+      "NavierStokes.CurrentPhysicalModeGerms",
+      "NavierStokes.CurrentParticularLabelBounds",
+      "NavierStokes.CurrentModeGeometry"
+    ],
+    "NavierStokes.ActualCurrentParticularPhysical": [
+      "NavierStokes.ActualWaveRegularityData",
+      "NavierStokes.ActualParticularDynamics",
+      "NavierStokes.ActualParticularCoherence",
+      "NavierStokes.ActualSignedPhysicalData",
+      "NavierStokes.ActualMeanPotentialRealization",
+      "NavierStokes.ActualParticularCycleData"
+    ],
+    "NavierStokes.ActualCurrentWaveSupport": [
+      "NavierStokes.ActualCycleAssembly",
+      "NavierStokes.ActualCurrentParticularPhysical",
+      "NavierStokes.ActualPolarCoverage",
+      "NavierStokes.GermCandidateAssembly",
+      "NavierStokes.PhysicalStageSupport",
+      "NavierStokes.ValidDyadicBandCover"
+    ],
+    "NavierStokes.ActualCycleAssembly": [
+      "NavierStokes.ActualCycleParameters",
+      "NavierStokes.ActualCarrierGeometry",
+      "NavierStokes.ScalarParticularSupport",
+      "NavierStokes.ActualCarrierTransport",
+      "NavierStokes.ActualCoreSupport",
+      "NavierStokes.ActualWaveRegularityData"
+    ],
+    "NavierStokes.ActualCycleCoherence": [
+      "NavierStokes.ActualMeanPhysicalData",
+      "NavierStokes.ActualCycleParameters",
+      "NavierStokes.CorrectionAnalyticStep",
+      "NavierStokes.ActualReferenceRebase",
+      "NavierStokes.ActualCoreSupport",
+      "NavierStokes.ActualWaveRegularityData",
+      "NavierStokes.ActualSignedCoherence",
+      "NavierStokes.ActualSignedGaussianCoherence",
+      "NavierStokes.ActualParticularCoherence"
+    ],
+    "NavierStokes.ActualCycleExcluded": [
+      "NavierStokes.CorrectionStep",
+      "NavierStokes.GaugeExcludedBounds"
+    ],
+    "NavierStokes.ActualCycleGeometry": [
+      "NavierStokes.ActualInitialization",
+      "NavierStokes.ActualCycleExcluded"
+    ],
+    "NavierStokes.ActualCycleParameters": [
+      "NavierStokes.ActualInitialization",
+      "NavierStokes.ActualParticularStageControls",
+      "NavierStokes.ActualSignedStageControls",
+      "NavierStokes.ActualCycleGeometry"
+    ],
+    "NavierStokes.ActualCyclePeriodicity": [
+      "NavierStokes.ActualCycleParameters",
+      "NavierStokes.ActualWaveRegularityData",
+      "NavierStokes.ActualSeedPeriodicity",
+      "NavierStokes.ActualWaveCoefficientPeriodicity"
+    ],
+    "NavierStokes.ActualCyclePreservation": [
+      "NavierStokes.CorrectionAnalyticStep",
+      "NavierStokes.ActualCycleParameters",
+      "NavierStokes.ActualCarrierGeometry",
+      "NavierStokes.ActualCoreSupport",
+      "NavierStokes.ActualWaveRegularityData",
+      "NavierStokes.ActualParticularMeanGain",
+      "NavierStokes.ActualSignedOutputBounds",
+      "NavierStokes.ActualSignedGaussian",
+      "NavierStokes.ActualCycleAssembly",
+      "NavierStokes.ActualSignedMeanBinding",
+      "NavierStokes.ActualSignedCommonDynamics",
+      "NavierStokes.ActualParticularCycleData",
+      "NavierStokes.ActualIntermediateDebtBounds",
+      "NavierStokes.ActualCycleCoherence",
+      "NavierStokes.ActualCyclePeriodicity",
+      "NavierStokes.ActualIterationLedger"
+    ],
+    "NavierStokes.ActualCycleResidualBounds": [
+      "NavierStokes.PhysicalResidualJetBounds",
+      "NavierStokes.ActualInitialization",
+      "NavierStokes.ActualInitialExcluded",
+      "NavierStokes.GaugeExcludedBounds",
+      "NavierStokes.ActualIterationLedger",
+      "NavierStokes.GlobalBaseError",
+      "NavierStokes.ActualCarrierGeometry",
+      "NavierStokes.ActualPolarCoverage"
+    ],
+    "NavierStokes.ActualEndpointInputs": [
+      "NavierStokes.OffplaneJetExtensions",
+      "NavierStokes.MixedCandidateAssembly",
+      "NavierStokes.ActualMeanStageData",
+      "NavierStokes.TailGaugePotential",
+      "NavierStokes.SlowBaseEndpoint",
+      "NavierStokes.ActualStageEstimates"
+    ],
+    "NavierStokes.ActualExteriorPrefix": [
+      "NavierStokes.ActualCycleResidualBounds",
+      "NavierStokes.MixedDiagonalResidual",
+      "NavierStokes.TailGaugePotential",
+      "NavierStokes.PhysicalCurlCovariance"
+    ],
+    "NavierStokes.ActualGaussianCoverage": [
+      "NavierStokes.ScaledActualParticularControl",
+      "NavierStokes.LocalizedGaussianBounds"
+    ],
+    "NavierStokes.ActualInitialCoherence": [
+      "NavierStokes.ActualPrimaryCoherence",
+      "NavierStokes.ActualPrimaryCovariance",
+      "NavierStokes.ActualBaseResidual",
+      "NavierStokes.MeanStageRegularity",
+      "NavierStokes.WaveStateRegularity",
+      "NavierStokes.RankStateCoherence"
+    ],
+    "NavierStokes.ActualInitialExcluded": [
+      "NavierStokes.GaugeExcludedBounds",
+      "NavierStokes.ActualBaseResidual",
+      "NavierStokes.GlobalBaseError",
+      "NavierStokes.SlowBaseEndpoint",
+      "NavierStokes.ActualPrimaryBounds",
+      "NavierStokes.ActualPrimaryDynamics",
+      "NavierStokes.ActualGaussianCoverage",
+      "NavierStokes.ActualPrimaryCovariance",
+      "NavierStokes.ActualInitialMean",
+      "NavierStokes.ActualInitialCoherence",
+      "NavierStokes.ActualPhaseJetBounds",
+      "Mathlib.Analysis.Calculus.LocalExtr.Basic"
+    ],
+    "NavierStokes.ActualInitialMean": [
+      "NavierStokes.ActualBaseResidual",
+      "NavierStokes.CorrectionInitialization",
+      "NavierStokes.ActualPrimaryBounds",
+      "NavierStokes.ActualPrimaryCovariance",
+      "NavierStokes.ActualPrimaryCoherence"
+    ],
+    "NavierStokes.ActualInitialMeanEquation": [
+      "NavierStokes.ActualInitialCoherence",
+      "NavierStokes.LiftedMeanResidual"
+    ],
+    "NavierStokes.ActualInitialization": [
+      "NavierStokes.ActualInitialMeanEquation",
+      "NavierStokes.ActualPrimaryDynamics",
+      "NavierStokes.ActualInitialExcluded",
+      "NavierStokes.ActualInitialCoherence",
+      "NavierStokes.ActualInitialMean",
+      "NavierStokes.GaugeRadialResidualBounds",
+      "NavierStokes.CorrectionInitialization",
+      "NavierStokes.ActualBaseResidual",
+      "NavierStokes.ActualPrimaryBounds"
+    ],
+    "NavierStokes.ActualIntermediateDebtBounds": [
+      "NavierStokes.ActualParticularMeanGain",
+      "NavierStokes.CorrectionAnalyticStep"
+    ],
+    "NavierStokes.ActualIterationLedger": [
+      "NavierStokes.ExponentLedger",
+      "NavierStokes.PhysicalStageBounds"
+    ],
+    "NavierStokes.ActualMeanExterior": [
+      "NavierStokes.ActualMeanStageData",
+      "NavierStokes.ActualPolarCoverage"
+    ],
+    "NavierStokes.ActualMeanPhysicalData": [
+      "NavierStokes.ActualInitialCoherence",
+      "NavierStokes.ActualInitialMean",
+      "NavierStokes.CycleStateCoherence",
+      "NavierStokes.ActualMeanPotentialRealization",
+      "NavierStokes.PhysicalStageBounds",
+      "NavierStokes.LocalMeanPhysicalBounds"
+    ],
+    "NavierStokes.ActualMeanPotentialRealization": [
+      "NavierStokes.PhysicalMeanJetBounds",
+      "NavierStokes.OffplaneCorrectionExtensions",
+      "NavierStokes.CyclePhysicalPrefixes",
+      "NavierStokes.CorrectionInitialization"
+    ],
+    "NavierStokes.ActualMeanStageData": [
+      "NavierStokes.ActualMeanPhysicalData",
+      "NavierStokes.LocalAngularDiagonal",
+      "NavierStokes.PhysicalStageSupport"
+    ],
+    "NavierStokes.ActualParticularBackground": [
+      "NavierStokes.ActualPrimaryBounds",
+      "NavierStokes.ParticularWaveAssembly"
+    ],
+    "NavierStokes.ActualParticularCoherence": [
+      "NavierStokes.ActualReferenceRebase",
+      "NavierStokes.ActualParticularRealization",
+      "NavierStokes.GaussianErrorNaturality",
+      "NavierStokes.CycleStateCoherence",
+      "NavierStokes.IntervalCopyTransport",
+      "NavierStokes.ActualCopySliceRegularity"
+    ],
+    "NavierStokes.ActualParticularControl": [
+      "NavierStokes.ParticularCopyBounds",
+      "NavierStokes.ParticularWaveAssembly",
+      "NavierStokes.WaveEnvelopeTransport",
+      "NavierStokes.ScaledTangentTransport"
+    ],
+    "NavierStokes.ActualParticularCycleData": [
+      "NavierStokes.ActualCycleAssembly",
+      "NavierStokes.ActualParticularMeanGain",
+      "NavierStokes.ActualCycleCoherence",
+      "NavierStokes.ActualCyclePeriodicity",
+      "NavierStokes.ActualParticularDynamics",
+      "NavierStokes.ActualParticularGaussian"
+    ],
+    "NavierStokes.ActualParticularDynamics": [
+      "NavierStokes.ActualParticularStageControls",
+      "NavierStokes.ActualSignedDynamics",
+      "NavierStokes.ClosedNativeWaveIdentities",
+      "NavierStokes.ModeSolenoidalReindex"
+    ],
+    "NavierStokes.ActualParticularGaussian": [
+      "NavierStokes.ActualParticularStageControls",
+      "NavierStokes.ActualGaussianCoverage"
+    ],
+    "NavierStokes.ActualParticularMeanGain": [
+      "NavierStokes.ActualCycleParameters"
+    ],
+    "NavierStokes.ActualParticularPotentialCoherence": [
+      "NavierStokes.ActualParticularCoherence"
+    ],
+    "NavierStokes.ActualParticularRealization": [
+      "NavierStokes.CorrectionStep",
+      "NavierStokes.CyclePhysicalPrefixes"
+    ],
+    "NavierStokes.ActualParticularStageControls": [
+      "NavierStokes.CorrectionInitialization",
+      "NavierStokes.ScaledActualParticularControl",
+      "NavierStokes.ScaledParticularFrameJets",
+      "NavierStokes.ActualParticularBackground",
+      "NavierStokes.ActualCarrierTransportBase",
+      "NavierStokes.ScalarParticularSupport",
+      "NavierStokes.NativeCutoffJets",
+      "NavierStokes.ParticularPaddedBackground"
+    ],
+    "NavierStokes.ActualPeriodizedSignedRealization": [
+      "NavierStokes.PhysicalSignedWave",
+      "NavierStokes.PeriodizedWaveBounds"
+    ],
+    "NavierStokes.ActualPhaseDefect": [
+      "NavierStokes.CorrectionInitialization"
+    ],
+    "NavierStokes.ActualPhaseJetBounds": [
+      "NavierStokes.ActualPrimaryBounds",
+      "NavierStokes.ActualGaussianCoverage",
+      "NavierStokes.ActualPrimaryCoherence"
+    ],
+    "NavierStokes.ActualPhysicalPrefixFields": [
+      "NavierStokes.ActualCycleResidualBounds",
+      "NavierStokes.ActualMeanPotentialRealization",
+      "NavierStokes.TailGaugePotential",
+      "NavierStokes.ActualExteriorPrefix"
+    ],
+    "NavierStokes.ActualPhysicalStageBounds": [
+      "NavierStokes.LocalMeanPhysicalBounds",
+      "NavierStokes.InitializedPhysicalBackground",
+      "NavierStokes.ActualIterationLedger",
+      "NavierStokes.ActualMeanPhysicalData"
+    ],
+    "NavierStokes.ActualPolarCoverage": [
+      "NavierStokes.PhysicalResidualJetBounds",
+      "NavierStokes.ActualInitialization"
+    ],
+    "NavierStokes.ActualPrimaryBounds": [
+      "NavierStokes.CorrectionInitialization",
+      "NavierStokes.LocalizedWaveBounds",
+      "NavierStokes.UniformBlockBounds",
+      "NavierStokes.ActualPhaseDefect"
+    ],
+    "NavierStokes.ActualPrimaryCoherence": [
+      "NavierStokes.CorrectionInitialization",
+      "NavierStokes.PhysicalCurlCovariance",
+      "NavierStokes.TemporalStateCoherence"
+    ],
+    "NavierStokes.ActualPrimaryCovariance": [
+      "NavierStokes.CorrectionInitialization",
+      "NavierStokes.BaseStressClasses"
+    ],
+    "NavierStokes.ActualPrimaryDynamics": [
+      "NavierStokes.ActualPrimaryCoherence",
+      "NavierStokes.ActualPhaseDefect",
+      "NavierStokes.LocalizedWaveBounds"
+    ],
+    "NavierStokes.ActualReferenceRebase": [
+      "NavierStokes.ActualParticularStageControls",
+      "NavierStokes.PhysicalResidualNaturality",
+      "NavierStokes.ActualInitialCoherence",
+      "NavierStokes.SubcoverPeriodicity"
+    ],
+    "NavierStokes.ActualSeedPeriodicity": [
+      "NavierStokes.ActualInitialization",
+      "NavierStokes.ActualWaveRegularityData"
+    ],
+    "NavierStokes.ActualSignedCoherence": [
+      "NavierStokes.ActualInitialization",
+      "NavierStokes.ActualSignedStageControls",
+      "NavierStokes.ActualPeriodizedSignedRealization",
+      "NavierStokes.CycleStateCoherence"
+    ],
+    "NavierStokes.ActualSignedCommonDynamics": [
+      "NavierStokes.ActualSignedOutputBounds",
+      "NavierStokes.ClosedNativeWaveIdentities",
+      "NavierStokes.ActualInitialization"
+    ],
+    "NavierStokes.ActualSignedControl": [
+      "NavierStokes.PrimaryCopyBounds",
+      "NavierStokes.SignedCopyBounds",
+      "NavierStokes.PhysicalSignedWave"
+    ],
+    "NavierStokes.ActualSignedCurrentSupport": [
+      "NavierStokes.ActualCyclePreservation",
+      "NavierStokes.CurrentSignedCurl"
+    ],
+    "NavierStokes.ActualSignedDynamics": [
+      "NavierStokes.ActualPrimaryDynamics"
+    ],
+    "NavierStokes.ActualSignedExterior": [
+      "NavierStokes.ActualSignedPhysicalBinding",
+      "NavierStokes.ActualCycleParameters",
+      "NavierStokes.DependentSignedPhysicalFamily",
+      "NavierStokes.ActualPolarCoverage"
+    ],
+    "NavierStokes.ActualSignedFamilySupport": [
+      "NavierStokes.PositiveTimeSignedData"
+    ],
+    "NavierStokes.ActualSignedGaussian": [
+      "NavierStokes.ActualSignedStageControls",
+      "NavierStokes.ActualWaveRegularityData",
+      "NavierStokes.ActualInitialExcluded",
+      "NavierStokes.UniformBlockBounds"
+    ],
+    "NavierStokes.ActualSignedGaussianCoherence": [
+      "NavierStokes.ActualSignedCoherence"
+    ],
+    "NavierStokes.ActualSignedGeometry": [
+      "NavierStokes.ActualSignedControl",
+      "NavierStokes.BaseContextAssembly",
+      "NavierStokes.CommonBaseContext",
+      "NavierStokes.PeriodicPhaseAssembly"
+    ],
+    "NavierStokes.ActualSignedMeanBinding": [
+      "NavierStokes.ActualSignedStageControls",
+      "NavierStokes.ActualPrimaryCovariance",
+      "NavierStokes.ActualInitialization",
+      "NavierStokes.BandReindexedSignedMeanGain",
+      "NavierStokes.SignedCrossDefectClass",
+      "NavierStokes.ActualCycleParameters"
+    ],
+    "NavierStokes.ActualSignedNativeBounds": [
+      "NavierStokes.ActualSignedExterior",
+      "NavierStokes.ActualSignedOutputBounds",
+      "NavierStokes.ActualSignedUnmaskedBounds",
+      "NavierStokes.InitialPhysicalData"
+    ],
+    "NavierStokes.ActualSignedNativeProfiles": [
+      "NavierStokes.ActualSignedExterior"
+    ],
+    "NavierStokes.ActualSignedNativeRegularity": [
+      "NavierStokes.ActualWaveRegularityData",
+      "NavierStokes.ActualSignedPhysicalBinding",
+      "NavierStokes.FlatDyadicExtension",
+      "NavierStokes.ActualSignedUnmaskedBounds",
+      "NavierStokes.ActualSignedUnmaskedBinding"
+    ],
+    "NavierStokes.ActualSignedOutputBounds": [
+      "NavierStokes.ActualSignedStageControls",
+      "NavierStokes.ActualWaveRegularityData"
+    ],
+    "NavierStokes.ActualSignedPhysicalBinding": [
+      "NavierStokes.ActualSignedPhysicalData",
+      "NavierStokes.ActualSignedStageControls",
+      "NavierStokes.ActualReferenceRebase",
+      "NavierStokes.TorusMeanRequestRebase",
+      "NavierStokes.ActualCycleParameters"
+    ],
+    "NavierStokes.ActualSignedPhysicalCoherence": [
+      "NavierStokes.ActualSignedPotentialCoherence",
+      "NavierStokes.ActualSignedExterior",
+      "NavierStokes.ActualSignedNativeRegularity",
+      "NavierStokes.ActualPhysicalPrefixFields",
+      "NavierStokes.ActualSignedReferenceGeometry",
+      "NavierStokes.ActualSignedPhysicalGeometry",
+      "NavierStokes.ActualSignedCurrentSupport",
+      "NavierStokes.ActualSignedPhysicalZeros",
+      "NavierStokes.SignedPhysicalSumCalculus"
+    ],
+    "NavierStokes.ActualSignedPhysicalData": [
+      "NavierStokes.ActualPeriodizedSignedRealization",
+      "NavierStokes.ActualSignedGeometry",
+      "NavierStokes.PhysicalStageBounds",
+      "NavierStokes.MixedAxisPreservation",
+      "NavierStokes.CartesianCopySource"
+    ],
+    "NavierStokes.ActualSignedPhysicalGeometry": [
+      "NavierStokes.ActualPolarCoverage",
+      "NavierStokes.ActualSignedPotentialCoherence",
+      "NavierStokes.ActualSignedPhysicalData"
+    ],
+    "NavierStokes.ActualSignedPhysicalZeros": [
+      "NavierStokes.ActualSignedPhysicalGeometry",
+      "NavierStokes.ActualSignedExterior",
+      "NavierStokes.ActualSignedNativeRegularity"
+    ],
+    "NavierStokes.ActualSignedPotentialCoherence": [
+      "NavierStokes.ActualSignedCoherence"
+    ],
+    "NavierStokes.ActualSignedReferenceGeometry": [
+      "NavierStokes.ActualSignedExterior"
+    ],
+    "NavierStokes.ActualSignedStageControls": [
+      "NavierStokes.CorrectionInitialization",
+      "NavierStokes.CorrectionStep",
+      "NavierStokes.ActualSignedControl",
+      "NavierStokes.ActualSignedGeometry",
+      "NavierStokes.ActualPhaseDefect",
+      "NavierStokes.ActualPrimaryDynamics",
+      "NavierStokes.ActualPrimaryBounds",
+      "NavierStokes.ActualSignedDynamics"
+    ],
+    "NavierStokes.ActualSignedUnmaskedBinding": [
+      "NavierStokes.ActualSignedUnmaskedBounds",
+      "NavierStokes.ActualSignedExterior"
+    ],
+    "NavierStokes.ActualSignedUnmaskedBounds": [
+      "NavierStokes.ActualSignedPhysicalBinding",
+      "NavierStokes.ActualSignedOutputBounds"
+    ],
+    "NavierStokes.ActualSignedWaveData": [
+      "NavierStokes.ActualSignedExterior",
+      "NavierStokes.ActualSignedNativeProfiles",
+      "NavierStokes.ActualPhaseJetBounds",
+      "NavierStokes.PositiveTimeCopyFamily",
+      "NavierStokes.PositiveTimeSignedData",
+      "NavierStokes.ActualSignedReferenceGeometry",
+      "NavierStokes.ActualSignedFamilySupport",
+      "NavierStokes.ActualSignedNativeRegularity",
+      "NavierStokes.ActualSignedNativeBounds",
+      "NavierStokes.GluedStageEstimates"
+    ],
+    "NavierStokes.ActualSlowAxis": [
+      "NavierStokes.SlowRecursion",
+      "NavierStokes.ActivationHolomorphic",
+      "NavierStokes.TransitionRamp"
+    ],
+    "NavierStokes.ActualStageEstimates": [
+      "NavierStokes.ActualPhysicalStageBounds",
+      "NavierStokes.ActualCycleResidualBounds",
+      "NavierStokes.ActualCyclePreservation",
+      "NavierStokes.ActualIntermediateDebtBounds",
+      "NavierStokes.MixedCandidateAssembly"
+    ],
+    "NavierStokes.ActualValidBandWaves": [
+      "NavierStokes.ValidDyadicBandCover",
+      "NavierStokes.ActualCurrentParticularPhysical",
+      "NavierStokes.ActualCycleParameters",
+      "NavierStokes.ActualCycleCoherence",
+      "NavierStokes.ActualCyclePreservation",
+      "NavierStokes.ActualCurrentWaveSupport",
+      "NavierStokes.ActualParticularPotentialCoherence",
+      "NavierStokes.CurrentParticularPhysicalCoherence",
+      "NavierStokes.ActualParticularCycleData"
+    ],
+    "NavierStokes.ActualWaveCoefficientPeriodicity": [
+      "NavierStokes.ActualWaveRegularityData",
+      "NavierStokes.ActualCycleParameters"
+    ],
+    "NavierStokes.ActualWaveRegularity": [
+      "NavierStokes.CorrectionStep",
+      "NavierStokes.WaveEdgeExtension"
+    ],
+    "NavierStokes.ActualWaveRegularityData": [
+      "NavierStokes.ActualWaveRegularity",
+      "NavierStokes.ActualSignedStageControls",
+      "NavierStokes.ActualParticularStageControls",
+      "NavierStokes.LabelSupportPreservation"
+    ],
+    "NavierStokes.AlignedProfileSpectralCone": [
+      "NavierStokes.ProfileSpectralCone",
+      "NavierStokes.EntranceAlignedBase"
+    ],
+    "NavierStokes.AllBandBaseJets": [
+      "NavierStokes.BaseRadialJets"
+    ],
+    "NavierStokes.AnalyticCoefficientBounds": [
+      "NavierStokes.AxisCoefficientSpace",
+      "Mathlib.Analysis.Complex.CauchyIntegral",
+      "Mathlib.Analysis.Complex.RealDeriv",
+      "Mathlib.Analysis.SpecificLimits.Normed",
+      "Mathlib.Analysis.SpecialFunctions.ExpDeriv"
+    ],
+    "NavierStokes.AnalyticPrimitive": [
+      "Mathlib.Analysis.Calculus.ParametricIntervalIntegral",
+      "Mathlib.Analysis.Complex.CauchyIntegral",
+      "Mathlib.Analysis.Complex.RealDeriv",
+      "Mathlib.Analysis.Convex.Basic",
+      "Mathlib.Analysis.Normed.Group.Bounded",
+      "Mathlib.Analysis.SpecialFunctions.ExpDeriv",
+      "Mathlib.MeasureTheory.Integral.IntervalIntegral.FundThmCalculus"
+    ],
+    "NavierStokes.AngularMomentReset": [
+      "NavierStokes.LocalizedMomentRepair",
+      "NavierStokes.SmoothMomentRepair",
+      "Mathlib.MeasureTheory.Group.Integral",
+      "Mathlib.Topology.Algebra.Module.FiniteDimension",
+      "Mathlib.Tactic.FinCases"
+    ],
+    "NavierStokes.AnnularAuxiliary": [
+      "NavierStokes.ParametricRadialExtension",
+      "NavierStokes.TransportPrimitive"
+    ],
+    "NavierStokes.AnnularEndpoint": [
+      "NavierStokes.PhysicalCopyBounds",
+      "NavierStokes.SimilarityApproach",
+      "NavierStokes.TailGaugePotential"
+    ],
+    "NavierStokes.AssembledSlowBase": [
+      "NavierStokes.GlobalSlowProfiles",
+      "NavierStokes.ParametricRadialExtension",
+      "NavierStokes.SlowBorelBase",
+      "NavierStokes.ModulatedHistories",
+      "NavierStokes.ModulatedCone",
+      "NavierStokes.ReservedPatches",
+      "NavierStokes.NominalProfile",
+      "NavierStokes.ActualSlowAxis",
+      "NavierStokes.NaturalCoefficientBridge"
+    ],
+    "NavierStokes.AxisCoefficientSpace": [
+      "NavierStokes.AxisWeightEstimates",
+      "Mathlib.Topology.ContinuousMap.Bounded.Normed",
+      "Mathlib.Topology.Order.ProjIcc",
+      "Mathlib.MeasureTheory.Integral.IntervalIntegral.FundThmCalculus",
+      "Mathlib.MeasureTheory.Integral.DominatedConvergence",
+      "Mathlib.Analysis.Calculus.IteratedDeriv.Lemmas",
+      "Mathlib.Analysis.Normed.Module.Basic",
+      "Mathlib.Tactic.Positivity",
+      "Mathlib.Tactic.Ring"
+    ],
+    "NavierStokes.AxisContraction": [
+      "NavierStokes.AxisCoefficientSpace",
+      "NavierStokes.AxisEvaluation",
+      "NavierStokes.AxisOperators",
+      "NavierStokes.AxisResolvent",
+      "Mathlib.Analysis.Normed.Operator.BoundedLinearMaps",
+      "Mathlib.Topology.MetricSpace.Contracting",
+      "Mathlib.Tactic.Abel",
+      "Mathlib.Tactic.GCongr",
+      "Mathlib.Tactic.Linarith",
+      "Mathlib.Tactic.Positivity",
+      "Mathlib.Tactic.Ring"
+    ],
+    "NavierStokes.AxisEvaluation": [
+      "NavierStokes.AxisCoefficientSpace",
+      "Mathlib.Analysis.Calculus.SmoothSeries",
+      "Mathlib.Analysis.Calculus.Deriv.Pow",
+      "Mathlib.Analysis.Calculus.Deriv.Prod",
+      "Mathlib.Analysis.SpecificLimits.Normed",
+      "Mathlib.Data.Nat.Choose.Bounds",
+      "Mathlib.Algebra.Order.Algebra",
+      "Mathlib.Analysis.Normed.Group.Basic",
+      "Mathlib.Analysis.Real.Sqrt",
+      "Mathlib.Data.EReal.Inv",
+      "Mathlib.Tactic.GCongr"
+    ],
+    "NavierStokes.AxisEvaluationAlgebra": [
+      "NavierStokes.AxisEvaluation",
+      "NavierStokes.AxisOperators",
+      "Mathlib.Analysis.Normed.Ring.InfiniteSum",
+      "Mathlib.MeasureTheory.Integral.IntervalIntegral.FundThmCalculus"
+    ],
+    "NavierStokes.AxisHolomorphic": [
+      "NavierStokes.AxisEvaluation",
+      "Mathlib.Analysis.Complex.CauchyIntegral",
+      "Mathlib.Analysis.Complex.RealDeriv"
+    ],
+    "NavierStokes.AxisHolomorphicJoint": [
+      "NavierStokes.AxisHolomorphic",
+      "NavierStokes.HolomorphicFamily"
+    ],
+    "NavierStokes.AxisOperators": [
+      "NavierStokes.AxisCoefficientSpace",
+      "Mathlib.Analysis.Normed.Operator.Bilinear",
+      "Mathlib.Analysis.Calculus.Deriv.Mul",
+      "Mathlib.Analysis.Calculus.Deriv.Add",
+      "Mathlib.Tactic.Ring"
+    ],
+    "NavierStokes.AxisPreservation": [
+      "NavierStokes.PhysicalWaveSum",
+      "NavierStokes.SolenoidalDiagonal"
+    ],
+    "NavierStokes.AxisProfile": [
+      "Mathlib.Analysis.Calculus.Deriv.Pow",
+      "Mathlib.Analysis.Calculus.Deriv.Mul",
+      "Mathlib.Data.Nat.Factorial.Basic",
+      "Mathlib.Tactic.FieldSimp",
+      "Mathlib.Tactic.Linarith",
+      "Mathlib.Tactic.NormNum",
+      "Mathlib.Tactic.Positivity",
+      "Mathlib.Tactic.Ring"
+    ],
+    "NavierStokes.AxisReference": [
+      "NavierStokes.NaturalAxisBridge",
+      "NavierStokes.AxisSeries"
+    ],
+    "NavierStokes.AxisResolvent": [
+      "NavierStokes.AxisCoefficientSpace",
+      "NavierStokes.AxisOperators",
+      "Mathlib.Analysis.Normed.Operator.ContinuousLinearMap",
+      "Mathlib.Analysis.SpecificLimits.Normed",
+      "Mathlib.Topology.Algebra.InfiniteSum.Ring",
+      "Mathlib.Tactic.GCongr"
+    ],
+    "NavierStokes.AxisSeries": [
+      "NavierStokes.AxisProfile",
+      "Mathlib.Analysis.Calculus.SmoothSeries",
+      "Mathlib.Analysis.SpecificLimits.Normed",
+      "Mathlib.Topology.Algebra.InfiniteSum.NatInt",
+      "Mathlib.Tactic.GCongr"
+    ],
+    "NavierStokes.AxisSourceRegularity": [
+      "NavierStokes.SimilarityProfile",
+      "Mathlib.Algebra.BigOperators.NatAntidiagonal",
+      "Mathlib.Analysis.Calculus.FDeriv.Analytic"
+    ],
+    "NavierStokes.AxisTailRegularity": [
+      "NavierStokes.SlowResidualMatching"
+    ],
+    "NavierStokes.AxisWeightEstimates": [
+      "Mathlib.Data.Nat.Choose.Vandermonde",
+      "Mathlib.Data.Nat.Choose.Cast",
+      "Mathlib.Algebra.BigOperators.NatAntidiagonal",
+      "Mathlib.Algebra.BigOperators.Intervals",
+      "Mathlib.Data.Real.Basic",
+      "Mathlib.Tactic.FieldSimp",
+      "Mathlib.Tactic.Linarith",
+      "Mathlib.Tactic.NormNum",
+      "Mathlib.Tactic.Ring"
+    ],
+    "NavierStokes.AxisymmetricFields": [
+      "NavierStokes.SpatialCurl",
+      "Mathlib.Analysis.Calculus.ContDiff.Operations",
+      "Mathlib.Analysis.Calculus.FDeriv.Mul",
+      "Mathlib.Tactic.Ring"
+    ],
+    "NavierStokes.AxisymmetricResidual": [
+      "NavierStokes.AxisymmetricFields",
+      "Mathlib.Tactic.Ring"
+    ],
+    "NavierStokes.AxisymmetricResidualGrouping": [
+      "NavierStokes.HarmonicResidual"
+    ],
+    "NavierStokes.BandReindexedSignedMeanGain": [
+      "NavierStokes.SignedMeanGain"
+    ],
+    "NavierStokes.BaseChartJets": [
+      "NavierStokes.BasePhaseGeometry",
+      "NavierStokes.SlowBorelBase",
+      "NavierStokes.SimilarityHomogeneity",
+      "NavierStokes.ConstructedSlowBase",
+      "NavierStokes.PositiveRepresentatives"
+    ],
+    "NavierStokes.BaseContextAssembly": [
+      "NavierStokes.FinalSlowBase",
+      "NavierStokes.LocalSignedRequest",
+      "NavierStokes.LocalRankDefect",
+      "NavierStokes.PrimaryResidualClass",
+      "NavierStokes.PrimaryMaterialDefect",
+      "NavierStokes.PhysicalResidualTZ",
+      "NavierStokes.PrimaryTargetBounds",
+      "NavierStokes.AllBandBaseJets"
+    ],
+    "NavierStokes.BaseExterior": [
+      "NavierStokes.BaseResidual",
+      "NavierStokes.PhysicalHeatCoordinates",
+      "NavierStokes.TerminalPressure",
+      "NavierStokes.HeatProfileExtension",
+      "NavierStokes.AssembledSlowBase"
+    ],
+    "NavierStokes.BasePhaseGeometry": [
+      "NavierStokes.PrimaryPulseBounds",
+      "NavierStokes.PhaseEstimates",
+      "NavierStokes.ChartScales",
+      "NavierStokes.PrimaryCovarianceBounds",
+      "NavierStokes.PrimaryRepresentatives"
+    ],
+    "NavierStokes.BasePrefixIdentity": [
+      "NavierStokes.BaseResidual",
+      "NavierStokes.SlowDivergence"
+    ],
+    "NavierStokes.BaseRadialJets": [
+      "NavierStokes.BaseChartJets",
+      "NavierStokes.UniformPrimaryWeights",
+      "NavierStokes.FinalSlowBase"
+    ],
+    "NavierStokes.BaseRankPatch": [
+      "NavierStokes.BaseChartJets",
+      "NavierStokes.FinalSlowBase",
+      "NavierStokes.MeanRankUpdate",
+      "NavierStokes.VariableGaugeMean"
+    ],
+    "NavierStokes.BaseResidual": [
+      "NavierStokes.SlowBorelBase",
+      "NavierStokes.NaturalCore",
+      "NavierStokes.DiagonalResidual",
+      "NavierStokes.ParametricModulation",
+      "NavierStokes.SlowResidualMatching",
+      "NavierStokes.ParametricRadialExtension",
+      "NavierStokes.ActiveAnnulusWeight",
+      "NavierStokes.AxisTailRegularity",
+      "NavierStokes.SlowFirstOrderEdge"
+    ],
+    "NavierStokes.BaseStressClasses": [
+      "NavierStokes.BaseContextAssembly"
+    ],
+    "NavierStokes.BlowupImplication": [
+      "Mathlib.Analysis.SpecialFunctions.Pow.Asymptotics",
+      "Mathlib.Analysis.Normed.Module.Basic",
+      "Mathlib.Topology.Order.LeftRightNhds",
+      "Mathlib.Tactic.Linarith"
+    ],
+    "NavierStokes.BorelExtension": [
+      "NavierStokes.SmoothCutoffs",
+      "NavierStokes.DiagonalScale",
+      "Mathlib.Analysis.Calculus.SmoothSeries",
+      "Mathlib.Analysis.Calculus.Deriv.Pow"
+    ],
+    "NavierStokes.BoundaryAxisJets": [
+      "NavierStokes.EvenSmoothDescent",
+      "NavierStokes.ParametricEvenDescent",
+      "NavierStokes.HolomorphicFamily",
+      "NavierStokes.VolterraRegularity",
+      "Mathlib.Analysis.Complex.LocallyUniformLimit",
+      "Mathlib.Analysis.Calculus.Deriv.Slope"
+    ],
+    "NavierStokes.CandidateConsequences": [
+      "NavierStokes.MaximalLifespan",
+      "NavierStokes.PeriodicSobolev",
+      "NavierStokes.CompactForceDecay",
+      "NavierStokes.CandidateFromLimits",
+      "NavierStokes.MixedPeriodicAssembly"
+    ],
+    "NavierStokes.CandidateFromLimits": [
+      "NavierStokes.PastExtension",
+      "NavierStokes.SpacetimeGluing",
+      "NavierStokes.CompactForceDecay"
+    ],
+    "NavierStokes.CartesianCopySource": [
+      "NavierStokes.LocalPhysicalCopyBounds"
+    ],
+    "NavierStokes.CauchyRestriction": [
+      "Mathlib.Analysis.Complex.Liouville",
+      "Mathlib.Topology.ContinuousMap.Compact",
+      "Mathlib.MeasureTheory.Integral.Bochner.ContinuousLinearMap",
+      "Mathlib.Tactic.FieldSimp",
+      "Mathlib.Tactic.Linarith",
+      "Mathlib.Tactic.Positivity",
+      "Mathlib.Tactic.Ring"
+    ],
+    "NavierStokes.ChartScales": [
+      "NavierStokes.SlotColoring",
+      "NavierStokes.Scaling",
+      "Mathlib.Analysis.SpecialFunctions.Pow.Asymptotics"
+    ],
+    "NavierStokes.ClosedNativeWaveIdentities": [
+      "NavierStokes.LocalizedCurlRealization",
+      "NavierStokes.CopyAngularInvariance"
+    ],
+    "NavierStokes.CommonBaseContext": [
+      "NavierStokes.BaseContextAssembly",
+      "NavierStokes.BaseStressClasses",
+      "NavierStokes.PhysicalResidualNaturality"
+    ],
+    "NavierStokes.CommonCoverClass": [
+      "NavierStokes.CommonCoverSolve",
+      "NavierStokes.PhysicalGraphBounds",
+      "NavierStokes.WeightedClasses",
+      "NavierStokes.SimilarityHomogeneity"
+    ],
+    "NavierStokes.CommonCoverSolve": [
+      "NavierStokes.TorusAverages",
+      "NavierStokes.SlotGeometry",
+      "NavierStokes.SmoothPathFamily",
+      "NavierStokes.JointODE",
+      "NavierStokes.WeightedODEJets"
+    ],
+    "NavierStokes.CompactForceDecay": [
+      "NavierStokes.ProblemStatement",
+      "Mathlib.Analysis.Calculus.ContDiff.Operations",
+      "Mathlib.Analysis.Normed.Group.Bounded",
+      "Mathlib.Analysis.SpecialFunctions.Pow.Real",
+      "Mathlib.Algebra.Order.Floor.Ring",
+      "Mathlib.Algebra.Ring.Periodic",
+      "Mathlib.Tactic.Linarith",
+      "Mathlib.Tactic.NormNum"
+    ],
+    "NavierStokes.CompactSmoothFamily": [
+      "Mathlib.Analysis.Calculus.MeanValue",
+      "Mathlib.Analysis.Calculus.ContDiff.Operations",
+      "Mathlib.Topology.ContinuousMap.Compact",
+      "Mathlib.Topology.CompactOpen"
+    ],
+    "NavierStokes.CompactSpatialForceDecay": [
+      "NavierStokes.ComparatorBridge"
+    ],
+    "NavierStokes.ComparatorBridge": [
+      "NavierStokes.ComparatorDefinitions",
+      "NavierStokes.ProblemStatement"
+    ],
+    "NavierStokes.ComparatorDefinitions": [
+      "Mathlib"
+    ],
+    "NavierStokes.ComparatorR3Bridge": [
+      "NavierStokes.ComparatorBridge"
+    ],
+    "NavierStokes.ComparatorR3Theorem": [
+      "NavierStokes.R3FiniteEnergyComparison",
+      "NavierStokes.R3ActualCandidate"
+    ],
+    "NavierStokes.ComparatorSolution": [
+      "NavierStokes.ComparatorR3Theorem",
+      "NavierStokes.ComparatorTheorem"
+    ],
+    "NavierStokes.ComparatorTheorem": [
+      "NavierStokes.ComparatorBridge",
+      "NavierStokes.ActualCandidateAssembly",
+      "NavierStokes.CandidateConsequences"
+    ],
+    "NavierStokes.ConeAlgebra": [
+      "Mathlib.Analysis.Real.Sqrt",
+      "Mathlib.Tactic.FieldSimp",
+      "Mathlib.Tactic.Linarith",
+      "Mathlib.Tactic.Ring"
+    ],
+    "NavierStokes.ConstructedSlowBase": [
+      "NavierStokes.AssembledSlowBase",
+      "NavierStokes.GlobalStressSupport",
+      "NavierStokes.BasePrefixIdentity",
+      "NavierStokes.PreparedOutgoing",
+      "NavierStokes.BaseExterior",
+      "NavierStokes.TerminalHistoryBridge",
+      "NavierStokes.ModulatedProfileAssembly",
+      "NavierStokes.FirstOrderBaseEdge"
+    ],
+    "NavierStokes.CoordinateAlgebra": [
+      "Mathlib.Analysis.SpecialFunctions.Pow.Real",
+      "Mathlib.Tactic.FieldSimp",
+      "Mathlib.Tactic.Linarith",
+      "Mathlib.Tactic.Ring"
+    ],
+    "NavierStokes.CopyAngularInvariance": [
+      "NavierStokes.CopySolveCompatibility",
+      "NavierStokes.LinearWaveBounds",
+      "NavierStokes.HarmonicFields"
+    ],
+    "NavierStokes.CopySolveCompatibility": [
+      "NavierStokes.CommonCoverClass"
+    ],
+    "NavierStokes.CorrectedPressureBounds": [
+      "NavierStokes.FuturePressureBounds",
+      "NavierStokes.TransportPrimitive"
+    ],
+    "NavierStokes.CorrectedPulseAmplitude": [
+      "NavierStokes.PulseAmplitude",
+      "NavierStokes.ResetEnergyBounds"
+    ],
+    "NavierStokes.CorrectionAnalyticStep": [
+      "NavierStokes.CorrectionStep",
+      "NavierStokes.CrossBasedMeanComposition",
+      "NavierStokes.ActualCycleExcluded",
+      "NavierStokes.CycleMeanEquation",
+      "NavierStokes.SignedCrossDefectClass"
+    ],
+    "NavierStokes.CorrectionInitialization": [
+      "NavierStokes.CorrectionState",
+      "NavierStokes.PartitionedCovariance",
+      "NavierStokes.LinearWaveBounds",
+      "NavierStokes.TemporalMeanUpdate",
+      "NavierStokes.MeanRankUpdate",
+      "NavierStokes.CorrectionStep",
+      "NavierStokes.IntegratedMeanBalances",
+      "NavierStokes.DefectIncrementBounds",
+      "NavierStokes.WaveInteractionBounds",
+      "NavierStokes.HarmonicCovariance",
+      "NavierStokes.ErrorHarmonics",
+      "NavierStokes.PrimaryFieldAssembly",
+      "NavierStokes.ParticularWaveBounds",
+      "NavierStokes.StateMomentBalances",
+      "NavierStokes.SignedWaveUpdate",
+      "NavierStokes.VariableGaugeMean",
+      "NavierStokes.PrimaryMaterialDefect",
+      "NavierStokes.PrimaryResidualClass",
+      "NavierStokes.LabelSumBounds",
+      "NavierStokes.LocalRankDefect",
+      "NavierStokes.UniformPrimaryWeights",
+      "NavierStokes.RankStateBounds",
+      "NavierStokes.MovingMomentBounds",
+      "NavierStokes.GaugeMassPreservation",
+      "NavierStokes.PrimaryTargetBounds",
+      "NavierStokes.BaseContextAssembly",
+      "NavierStokes.CommonBaseContext",
+      "NavierStokes.PeriodicPhaseAssembly",
+      "NavierStokes.BaseRankPatch",
+      "NavierStokes.ActualSignedGeometry",
+      "NavierStokes.NativeBandExtension"
+    ],
+    "NavierStokes.CorrectionState": [
+      "NavierStokes.MeanIncrementBounds",
+      "NavierStokes.HarmonicFields",
+      "NavierStokes.TemporalMeanUpdate",
+      "NavierStokes.MeanRankUpdate"
+    ],
+    "NavierStokes.CorrectionStep": [
+      "NavierStokes.LabelSupportPreservation",
+      "NavierStokes.HarmonicStructurePreservation",
+      "NavierStokes.LocalResidualGrouping",
+      "NavierStokes.AxisymmetricResidualGrouping",
+      "NavierStokes.MeanBoundsReindex",
+      "NavierStokes.MeanStageRegularity",
+      "NavierStokes.WaveStateRegularity",
+      "NavierStokes.MeanStateRegularity",
+      "NavierStokes.BandReindexedSignedMeanGain",
+      "NavierStokes.PhysicalResidualNaturality",
+      "NavierStokes.UniformBlockBounds",
+      "NavierStokes.UniformHarmonicInteraction",
+      "NavierStokes.LocalizedCurlRealization",
+      "NavierStokes.LocalizedMeanInteraction",
+      "NavierStokes.HarmonicSourceSupport",
+      "NavierStokes.NativePrincipalEquations",
+      "NavierStokes.ParticularCopyBounds",
+      "NavierStokes.SignedCopyBounds",
+      "NavierStokes.LocalizedWaveBounds",
+      "NavierStokes.MovingMomentBounds",
+      "NavierStokes.GaugeDebtIncrement",
+      "NavierStokes.GaugeMassPreservation",
+      "NavierStokes.RankStateBounds",
+      "NavierStokes.SignedMeanGain",
+      "NavierStokes.PeriodizedWaveBounds",
+      "NavierStokes.MeanIncrementBounds",
+      "NavierStokes.HarmonicFields",
+      "NavierStokes.ExponentLedger",
+      "NavierStokes.CorrectionState",
+      "NavierStokes.LinearWaveResidual",
+      "NavierStokes.DefectIncrementBounds",
+      "NavierStokes.HarmonicResidual",
+      "NavierStokes.LiftedMeanResidual",
+      "NavierStokes.MeanChartCompatibility",
+      "NavierStokes.HarmonicCovariance",
+      "NavierStokes.HarmonicMeanInteraction",
+      "NavierStokes.PhysicalMeanDomain",
+      "NavierStokes.SignedWaveUpdate",
+      "NavierStokes.VariableGaugeMean",
+      "NavierStokes.PhysicalResidualBridge",
+      "NavierStokes.LabelSumBounds",
+      "NavierStokes.HarmonicWaveInteraction",
+      "NavierStokes.LocalSignedRequest",
+      "NavierStokes.ParticularWaveAssembly",
+      "NavierStokes.LocalRankDefect",
+      "NavierStokes.StateReindex"
+    ],
+    "NavierStokes.Covariance": [
+      "Mathlib.Analysis.Real.Sqrt",
+      "Mathlib.LinearAlgebra.Matrix.NonsingularInverse",
+      "Mathlib.Tactic.FieldSimp",
+      "Mathlib.Tactic.FinCases",
+      "Mathlib.Tactic.Linarith",
+      "Mathlib.Tactic.Positivity",
+      "Mathlib.Tactic.Ring"
+    ],
+    "NavierStokes.CrossBasedMeanComposition": [
+      "NavierStokes.CorrectionStep",
+      "NavierStokes.FiniteHeadClass"
+    ],
+    "NavierStokes.CurlClassBounds": [
+      "NavierStokes.OscillatoryCurl",
+      "NavierStokes.HarmonicCalculus",
+      "NavierStokes.WeightedClasses",
+      "NavierStokes.PhaseJetBounds",
+      "NavierStokes.Scaling",
+      "Mathlib.Analysis.Calculus.FDeriv.Symmetric",
+      "Mathlib.Analysis.Calculus.ContDiff.WithLp"
+    ],
+    "NavierStokes.CurlGeometry": [
+      "Mathlib.Data.Complex.Basic",
+      "Mathlib.LinearAlgebra.Matrix.Notation",
+      "Mathlib.Tactic.FieldSimp",
+      "Mathlib.Tactic.FinCases",
+      "Mathlib.Tactic.Linarith",
+      "Mathlib.Tactic.Ring"
+    ],
+    "NavierStokes.CurrentModeGeometry": [
+      "NavierStokes.CurrentPhysicalModeGerms",
+      "NavierStokes.ActualCurrentWaveSupport"
+    ],
+    "NavierStokes.CurrentParticularLabelBounds": [
+      "NavierStokes.ActualCurrentWaveSupport",
+      "NavierStokes.LabelSumBounds"
+    ],
+    "NavierStokes.CurrentParticularPhysicalCoherence": [
+      "NavierStokes.ActualCurrentParticularPhysical",
+      "NavierStokes.PhysicalParticularWave"
+    ],
+    "NavierStokes.CurrentPhysicalChartJets": [
+      "NavierStokes.ActualSignedPhysicalData",
+      "NavierStokes.PhysicalParticularWave",
+      "NavierStokes.CartesianCopySource",
+      "NavierStokes.WaveEnvelopeTransport"
+    ],
+    "NavierStokes.CurrentPhysicalModeGerms": [
+      "NavierStokes.ActualCurrentParticularPhysical",
+      "NavierStokes.ResidualPolarGraph",
+      "NavierStokes.CurrentPhysicalChartJets"
+    ],
+    "NavierStokes.CurrentSignedCurl": [
+      "NavierStokes.ActualSignedPotentialCoherence",
+      "NavierStokes.ActualSignedOutputBounds",
+      "NavierStokes.ActualSignedCommonDynamics",
+      "NavierStokes.ActualPhysicalPrefixFields"
+    ],
+    "NavierStokes.CutStageEstimates": [
+      "NavierStokes.DiagonalJetBounds",
+      "NavierStokes.PhysicalCoordinateBounds",
+      "NavierStokes.PhysicalWaveSum"
+    ],
+    "NavierStokes.CycleMeanEquation": [
+      "NavierStokes.CorrectionStep",
+      "NavierStokes.ActualInitialMeanEquation"
+    ],
+    "NavierStokes.CyclePhysicalPrefixes": [
+      "NavierStokes.CorrectionStep",
+      "NavierStokes.PhysicalResidualTZ",
+      "NavierStokes.PhysicalCurlCovariance",
+      "NavierStokes.MixedDiagonalResidual"
+    ],
+    "NavierStokes.CycleStateCoherence": [
+      "NavierStokes.CorrectionStep",
+      "NavierStokes.GaugeStateCoherence",
+      "NavierStokes.TemporalStateCoherence",
+      "NavierStokes.RankStateCoherence",
+      "NavierStokes.MeanStageRegularity"
+    ],
+    "NavierStokes.CylindricalResidual": [
+      "NavierStokes.LocalAxisymmetricResidual",
+      "Mathlib.Analysis.SpecialFunctions.Trigonometric.Deriv",
+      "Mathlib.Tactic.FieldSimp",
+      "Mathlib.Tactic.Module",
+      "Mathlib.Tactic.LinearCombination"
+    ],
+    "NavierStokes.DefectIncrementBounds": [
+      "NavierStokes.MeanMomentBounds",
+      "NavierStokes.MeanIncrementBounds",
+      "NavierStokes.MeanRankUpdate",
+      "NavierStokes.CorrectionState"
+    ],
+    "NavierStokes.DependentSignedPhysicalFamily": [
+      "NavierStokes.ActualSignedPhysicalData"
+    ],
+    "NavierStokes.DiagonalJetBounds": [
+      "NavierStokes.SolenoidalDiagonal",
+      "Mathlib.Analysis.Normed.Group.InfiniteSum"
+    ],
+    "NavierStokes.DiagonalResidual": [
+      "NavierStokes.DiagonalJetBounds",
+      "NavierStokes.ResidualStability"
+    ],
+    "NavierStokes.DiagonalScale": [
+      "Mathlib.Analysis.SpecialFunctions.Pow.Asymptotics",
+      "Mathlib.Analysis.SpecificLimits.Normed",
+      "Mathlib.Topology.Order.LeftRightNhds",
+      "Mathlib.Tactic.Linarith",
+      "Mathlib.Tactic.NormNum",
+      "Mathlib.Tactic.Ring"
+    ],
+    "NavierStokes.DiophantineGraph": [
+      "Mathlib.NumberTheory.Real.Irrational",
+      "Mathlib.Tactic.FieldSimp",
+      "Mathlib.Tactic.Linarith",
+      "Mathlib.Tactic.NormNum",
+      "Mathlib.Tactic.Positivity",
+      "Mathlib.Tactic.Ring"
+    ],
+    "NavierStokes.DirectAngularDiagonal": [
+      "NavierStokes.SolenoidalDiagonal",
+      "NavierStokes.AxisymmetricResidual",
+      "NavierStokes.PhysicalWaveSum",
+      "NavierStokes.VariableGaugeMean",
+      "NavierStokes.ResidualCalculus",
+      "NavierStokes.SpatialLocalization",
+      "NavierStokes.OffplaneCorrectionExtensions",
+      "NavierStokes.LocalRankDefect"
+    ],
+    "NavierStokes.EdgeWeightJets": [
+      "NavierStokes.WeightedQuotients",
+      "NavierStokes.ParametricFlatFactor"
+    ],
+    "NavierStokes.EndpointCoordinates": [
+      "NavierStokes.PositiveRepresentatives",
+      "NavierStokes.SlowBorelBase"
+    ],
+    "NavierStokes.EndpointExtension": [
+      "Mathlib.Analysis.Calculus.IteratedDeriv.Defs",
+      "Mathlib.Analysis.Calculus.ContDiff.Comp"
+    ],
+    "NavierStokes.EntranceAlignedBase": [
+      "NavierStokes.ConstructedSlowBase",
+      "NavierStokes.ModulatedProfileAssembly",
+      "NavierStokes.FirstOrderBaseEdge",
+      "NavierStokes.ZerothStressIdentity",
+      "NavierStokes.LeadingStressWeights"
+    ],
+    "NavierStokes.ErrorHarmonics": [
+      "NavierStokes.HarmonicFields",
+      "NavierStokes.LinearWaveBounds",
+      "NavierStokes.CorrectionState",
+      "NavierStokes.AxisymmetricResidual"
+    ],
+    "NavierStokes.EvenSmoothDescent": [
+      "NavierStokes.SmoothParameterIntegral",
+      "NavierStokes.SmoothCutoffs",
+      "Mathlib.Analysis.Calculus.FDeriv.Extend",
+      "Mathlib.Analysis.SpecialFunctions.Sqrt",
+      "Mathlib.Analysis.SpecialFunctions.Integrals.Basic",
+      "Mathlib.Algebra.Group.EvenFunction"
+    ],
+    "NavierStokes.ExponentLedger": [
+      "Mathlib.Data.Real.Basic",
+      "Mathlib.Tactic.Linarith",
+      "Mathlib.Tactic.NormNum",
+      "Mathlib.Tactic.Ring"
+    ],
+    "NavierStokes.ExtendedHeatDebts": [
+      "NavierStokes.HeatProfileExtension",
+      "NavierStokes.ParametricTerminalCompensation"
+    ],
+    "NavierStokes.ExtendedHeatedOutgoing": [
+      "NavierStokes.HeatedOutgoing",
+      "NavierStokes.ExtendedHeatDebts"
+    ],
+    "NavierStokes.FinalSlowBase": [
+      "NavierStokes.EntranceAlignedBase",
+      "NavierStokes.ModulatedExterior",
+      "NavierStokes.AlignedProfileSpectralCone"
+    ],
+    "NavierStokes.FiniteHeadClass": [
+      "NavierStokes.WeightedClasses"
+    ],
+    "NavierStokes.FirstOrderBaseEdge": [
+      "NavierStokes.GlobalStressSupport",
+      "NavierStokes.SlowFirstOrderEdge",
+      "NavierStokes.TerminalHistoryBridge",
+      "NavierStokes.BaseResidual",
+      "NavierStokes.ModulatedProfileAssembly"
+    ],
+    "NavierStokes.FiveProfileMoments": [
+      "NavierStokes.FiveRowRank",
+      "NavierStokes.UniformAngularReset",
+      "NavierStokes.JetBounds",
+      "Mathlib.Analysis.Calculus.ContDiff.Bounds"
+    ],
+    "NavierStokes.FiveRowRank": [
+      "NavierStokes.LocalizedMomentRepair",
+      "Mathlib.Tactic.FinCases"
+    ],
+    "NavierStokes.FlatCovariance": [
+      "NavierStokes.FlatCutoff",
+      "NavierStokes.SmoothCovariance",
+      "Mathlib.Analysis.Calculus.IteratedDeriv.Lemmas"
+    ],
+    "NavierStokes.FlatCutoff": [
+      "Mathlib.Analysis.SpecialFunctions.SmoothTransition",
+      "Mathlib.Analysis.Calculus.IteratedDeriv.Defs",
+      "Mathlib.Tactic.FieldSimp",
+      "Mathlib.Tactic.Linarith",
+      "Mathlib.Tactic.Ring"
+    ],
+    "NavierStokes.FlatDyadicExtension": [
+      "NavierStokes.NativeBandExtension"
+    ],
+    "NavierStokes.FlatKernelBounds": [
+      "Mathlib.Analysis.Calculus.IteratedDeriv.Defs",
+      "Mathlib.Analysis.Calculus.Deriv.Add",
+      "Mathlib.Analysis.Calculus.Deriv.Inv",
+      "Mathlib.Analysis.SpecialFunctions.Sqrt",
+      "Mathlib.Analysis.Normed.Group.Bounded",
+      "Mathlib.Analysis.SpecialFunctions.Exp",
+      "Mathlib.Tactic.FieldSimp",
+      "Mathlib.Tactic.Linarith",
+      "Mathlib.Tactic.Positivity",
+      "Mathlib.Tactic.Ring"
+    ],
+    "NavierStokes.FlatPrimitive": [
+      "NavierStokes.FlatCutoff",
+      "Mathlib.MeasureTheory.Integral.IntervalIntegral.FundThmCalculus",
+      "Mathlib.Analysis.Calculus.LHopital",
+      "Mathlib.Analysis.Calculus.IteratedDeriv.Lemmas"
+    ],
+    "NavierStokes.FlatPrimitiveFactor": [
+      "NavierStokes.FlatPrimitive",
+      "NavierStokes.FlatKernelBounds",
+      "NavierStokes.SmoothParameterIntegral",
+      "Mathlib.MeasureTheory.Function.Jacobian",
+      "Mathlib.Analysis.SpecialFunctions.Sqrt",
+      "Mathlib.Analysis.SpecialFunctions.ImproperIntegrals",
+      "Mathlib.Analysis.SpecialFunctions.Pow.Asymptotics",
+      "Mathlib.MeasureTheory.Integral.ExpDecay"
+    ],
+    "NavierStokes.FlatZeroExtension": [
+      "NavierStokes.FlatCutoff",
+      "Mathlib.Analysis.Calculus.ContDiff.Comp"
+    ],
+    "NavierStokes.Flatness": [
+      "Mathlib.Analysis.Normed.Group.Continuity",
+      "Mathlib.Analysis.Normed.Field.Basic",
+      "Mathlib.Tactic.Ring"
+    ],
+    "NavierStokes.FourierAlias": [
+      "NavierStokes.TransportPrimitive",
+      "NavierStokes.SmoothFourierData",
+      "NavierStokes.ParametricTorusInverse",
+      "NavierStokes.ChartScales",
+      "NavierStokes.Flatness",
+      "Mathlib.MeasureTheory.Integral.IntervalIntegral.Periodic"
+    ],
+    "NavierStokes.FuturePressureBounds": [
+      "NavierStokes.SchedulePressure",
+      "NavierStokes.UniformAngularReset",
+      "Mathlib.Analysis.Calculus.Deriv.MeanValue"
+    ],
+    "NavierStokes.GaugeAliasDecay": [
+      "NavierStokes.GaugeMomentBalances"
+    ],
+    "NavierStokes.GaugeDebtIncrement": [
+      "NavierStokes.MovingMomentBounds",
+      "NavierStokes.SignedMeanGain"
+    ],
+    "NavierStokes.GaugeExcludedBounds": [
+      "NavierStokes.GaugeAliasDecay",
+      "NavierStokes.MeanStateRegularity",
+      "NavierStokes.HarmonicWaveInteraction"
+    ],
+    "NavierStokes.GaugeMassPreservation": [
+      "NavierStokes.GaugeAliasDecay"
+    ],
+    "NavierStokes.GaugeMomentBalances": [
+      "NavierStokes.StateMomentBalances",
+      "NavierStokes.VariableGaugeMean",
+      "NavierStokes.LocalSignedRequest"
+    ],
+    "NavierStokes.GaugeRadialResidualBounds": [
+      "NavierStokes.MeanStateRegularity",
+      "NavierStokes.RankStateBounds"
+    ],
+    "NavierStokes.GaugeStateCoherence": [
+      "NavierStokes.PhysicalResidualNaturality",
+      "NavierStokes.VariableGaugeMean"
+    ],
+    "NavierStokes.GaussianEnvelope": [
+      "NavierStokes.PulseGrowth",
+      "Mathlib.Analysis.Calculus.Deriv.MeanValue",
+      "Mathlib.Analysis.SpecialFunctions.Integrals.Basic",
+      "Mathlib.Analysis.SpecialFunctions.Sqrt"
+    ],
+    "NavierStokes.GaussianErrorNaturality": [
+      "NavierStokes.CorrectionStep"
+    ],
+    "NavierStokes.GaussianTailFlat": [
+      "NavierStokes.GaussianEnvelope",
+      "NavierStokes.SmoothCutoffs",
+      "NavierStokes.WeightedRadialPrimitive",
+      "NavierStokes.WeightedClasses",
+      "NavierStokes.PhysicalGraphBounds"
+    ],
+    "NavierStokes.GenericEndpointExtension": [
+      "Mathlib.Analysis.Calculus.TangentCone.Prod",
+      "Mathlib.Analysis.Calculus.FDeriv.Symmetric",
+      "Mathlib.Analysis.Calculus.FDeriv.Extend",
+      "Mathlib.Analysis.Calculus.ContDiff.FiniteDimension",
+      "Mathlib.Analysis.Calculus.IteratedDeriv.Lemmas",
+      "Mathlib.Topology.ExtendFrom",
+      "NavierStokes.SpatialBorelExtension"
+    ],
+    "NavierStokes.GermCandidateAssembly": [
+      "NavierStokes.MixedCandidateWitness"
+    ],
+    "NavierStokes.GermEndpointInputs": [
+      "NavierStokes.ActualEndpointInputs",
+      "NavierStokes.GermCandidateAssembly",
+      "NavierStokes.InitialPhysicalData"
+    ],
+    "NavierStokes.GlobalBaseError": [
+      "NavierStokes.FinalSlowBase",
+      "NavierStokes.SimilarityApproach",
+      "NavierStokes.JointResidualLimits"
+    ],
+    "NavierStokes.GlobalSlowProfiles": [
+      "NavierStokes.SlowRecursion",
+      "NavierStokes.PositiveOrderMoments",
+      "NavierStokes.TransportPrimitive",
+      "NavierStokes.SlowStressSupport",
+      "NavierStokes.SlowResidualMatching"
+    ],
+    "NavierStokes.GlobalStressSupport": [
+      "NavierStokes.AssembledSlowBase"
+    ],
+    "NavierStokes.GluedStageEstimates": [
+      "NavierStokes.ActualStageEstimates",
+      "NavierStokes.ActualParticularCycleData",
+      "NavierStokes.ActualValidBandWaves",
+      "NavierStokes.InitialPhysicalData",
+      "NavierStokes.CurrentParticularLabelBounds",
+      "NavierStokes.ActualCurrentParticularBounds"
+    ],
+    "NavierStokes.GraphCalculus": [
+      "Mathlib.Analysis.Calculus.Deriv.Comp",
+      "Mathlib.Analysis.Calculus.Deriv.Prod",
+      "Mathlib.Analysis.Calculus.FDeriv.Symmetric",
+      "Mathlib.Analysis.SpecialFunctions.Pow.Deriv"
+    ],
+    "NavierStokes.GrowingMode": [
+      "NavierStokes.TangentODE",
+      "NavierStokes.GaussianEnvelope",
+      "Mathlib.Analysis.InnerProductSpace.PiL2",
+      "Mathlib.Topology.Order.IntermediateValue",
+      "Mathlib.Tactic.FinCases"
+    ],
+    "NavierStokes.HarmonicCalculus": [
+      "NavierStokes.PhaseCalculus",
+      "NavierStokes.GraphCalculus",
+      "NavierStokes.JetBounds",
+      "Mathlib.Analysis.Calculus.ContDiff.Operations"
+    ],
+    "NavierStokes.HarmonicCovariance": [
+      "NavierStokes.CorrectionState",
+      "NavierStokes.WaveInteractionBounds",
+      "NavierStokes.HarmonicResidual"
+    ],
+    "NavierStokes.HarmonicFields": [
+      "NavierStokes.HarmonicCalculus",
+      "NavierStokes.MeanResidual",
+      "Mathlib.Algebra.MonoidAlgebra.Support",
+      "Mathlib.Analysis.SpecialFunctions.Integrals.Basic"
+    ],
+    "NavierStokes.HarmonicMeanInteraction": [
+      "NavierStokes.HarmonicResidual",
+      "NavierStokes.WaveInteractionBounds"
+    ],
+    "NavierStokes.HarmonicResidual": [
+      "NavierStokes.CorrectionState",
+      "NavierStokes.LinearWaveResidual",
+      "NavierStokes.HarmonicFields"
+    ],
+    "NavierStokes.HarmonicSourceSupport": [
+      "NavierStokes.PeriodizedWaveBounds"
+    ],
+    "NavierStokes.HarmonicStructurePreservation": [
+      "NavierStokes.HarmonicWaveInteraction"
+    ],
+    "NavierStokes.HarmonicWaveInteraction": [
+      "NavierStokes.HarmonicMeanInteraction"
+    ],
+    "NavierStokes.HeatProfileExtension": [
+      "NavierStokes.RadialHeatProfile",
+      "NavierStokes.BorelExtension",
+      "NavierStokes.EndpointExtension"
+    ],
+    "NavierStokes.HeatSwitchCone": [
+      "NavierStokes.HeatedOutgoing",
+      "NavierStokes.OutgoingCone",
+      "Mathlib.Analysis.Calculus.MeanValue",
+      "Mathlib.Topology.MetricSpace.Thickening"
+    ],
+    "NavierStokes.HeatSwitchHistoryDerivatives": [
+      "NavierStokes.HeatSwitchCone"
+    ],
+    "NavierStokes.HeatTailEdit": [
+      "NavierStokes.RadialHeatProfile",
+      "NavierStokes.OutgoingTail",
+      "NavierStokes.SmoothCutoffs",
+      "Mathlib.Analysis.SpecialFunctions.ImproperIntegrals"
+    ],
+    "NavierStokes.HeatTailHistoryLimits": [
+      "NavierStokes.RenormalizedHeatMoment",
+      "NavierStokes.ExtendedHeatDebts",
+      "Mathlib.Analysis.SpecialFunctions.ImproperIntegrals"
+    ],
+    "NavierStokes.HeatedOutgoing": [
+      "NavierStokes.OutgoingDilation",
+      "NavierStokes.ParametricTerminalCompensation",
+      "NavierStokes.HeatProfileExtension"
+    ],
+    "NavierStokes.HolomorphicFamily": [
+      "NavierStokes.CauchyRestriction",
+      "NavierStokes.CompactSmoothFamily"
+    ],
+    "NavierStokes.InitialNativeRegularity": [
+      "NavierStokes.ActualPrimaryBounds",
+      "NavierStokes.ActualPrimaryCoherence"
+    ],
+    "NavierStokes.InitialPhysicalData": [
+      "NavierStokes.ActualPrimaryBounds",
+      "NavierStokes.ActualPrimaryDynamics",
+      "NavierStokes.ActualPrimaryCovariance",
+      "NavierStokes.ActualCarrierGeometry",
+      "NavierStokes.ActualSignedPhysicalData",
+      "NavierStokes.CartesianCopySource",
+      "NavierStokes.PhysicalStageBounds",
+      "NavierStokes.MixedAxisPreservation",
+      "NavierStokes.InitialNativeRegularity"
+    ],
+    "NavierStokes.InitializedPhysicalBackground": [
+      "NavierStokes.PhysicalStageBounds",
+      "NavierStokes.ActualBaseVelocityBounds",
+      "NavierStokes.MixedFiniteBackground"
+    ],
+    "NavierStokes.IntegratedMeanBalances": [
+      "NavierStokes.TransportPrimitive",
+      "NavierStokes.PressureStream",
+      "Mathlib.MeasureTheory.Integral.IntegralEqImproper",
+      "Mathlib.Analysis.Calculus.Deriv.Support",
+      "Mathlib.MeasureTheory.Function.LocallyIntegrable"
+    ],
+    "NavierStokes.IntervalCopyTransport": [
+      "NavierStokes.ScaledTangentTransport"
+    ],
+    "NavierStokes.JetBounds": [
+      "Mathlib.Analysis.Calculus.ContDiff.Bounds",
+      "Mathlib.Analysis.SpecialFunctions.Pow.Real",
+      "Mathlib.Data.Nat.Choose.Sum",
+      "Mathlib.Tactic.Abel",
+      "Mathlib.Tactic.NormNum",
+      "Mathlib.Tactic.Positivity",
+      "Mathlib.Tactic.Ring"
+    ],
+    "NavierStokes.JointODE": [
+      "NavierStokes.SmoothPathFamily"
+    ],
+    "NavierStokes.JointResidualLimits": [
+      "NavierStokes.SpacetimeEndpoint",
+      "Mathlib.Topology.UniformSpace.LocallyUniformConvergence"
+    ],
+    "NavierStokes.LabelSumBounds": [
+      "NavierStokes.PhysicalWaveSum",
+      "NavierStokes.HarmonicCovariance",
+      "NavierStokes.PrimaryPulseBounds"
+    ],
+    "NavierStokes.LabelSupportPreservation": [
+      "NavierStokes.ActualGaussianCoverage",
+      "NavierStokes.HarmonicWaveInteraction"
+    ],
+    "NavierStokes.LeadingStress": [
+      "NavierStokes.ProfileHistories",
+      "NavierStokes.SimilarityProfile",
+      "NavierStokes.SlowDivergence",
+      "NavierStokes.SlowExpansionResidual",
+      "Mathlib.Analysis.SpecialFunctions.Sqrt"
+    ],
+    "NavierStokes.LeadingStressWeights": [
+      "NavierStokes.ActiveAnnulusWeight",
+      "NavierStokes.ModulatedProfileAssembly",
+      "NavierStokes.LeadingStress"
+    ],
+    "NavierStokes.LiftedMeanResidual": [
+      "NavierStokes.CorrectionState",
+      "NavierStokes.WaveInteractionBounds"
+    ],
+    "NavierStokes.LinearWaveBounds": [
+      "NavierStokes.LinearWaveResidual",
+      "NavierStokes.WeightedClasses",
+      "NavierStokes.CurlClassBounds",
+      "NavierStokes.GaussianTailFlat"
+    ],
+    "NavierStokes.LinearWaveResidual": [
+      "NavierStokes.HarmonicCalculus",
+      "NavierStokes.CylindricalResidual",
+      "NavierStokes.TangentProjection"
+    ],
+    "NavierStokes.LocalAngularDiagonal": [
+      "NavierStokes.MixedAxisPreservation",
+      "NavierStokes.CutStageEstimates"
+    ],
+    "NavierStokes.LocalAxisymmetricResidual": [
+      "NavierStokes.AxisymmetricResidual"
+    ],
+    "NavierStokes.LocalMeanPhysicalBounds": [
+      "NavierStokes.PhysicalStageSupport"
+    ],
+    "NavierStokes.LocalPhysicalCopyBounds": [
+      "NavierStokes.PhysicalCopyBounds",
+      "Mathlib.Analysis.Calculus.BumpFunction.FiniteDimension"
+    ],
+    "NavierStokes.LocalRankDefect": [
+      "NavierStokes.DefectIncrementBounds",
+      "NavierStokes.VariableGaugeMean"
+    ],
+    "NavierStokes.LocalResidualGrouping": [
+      "NavierStokes.AxisymmetricResidualGrouping"
+    ],
+    "NavierStokes.LocalSignedRequest": [
+      "NavierStokes.PhysicalMeanDomain",
+      "NavierStokes.SignedWaveUpdate",
+      "NavierStokes.MeanChartCompatibility",
+      "NavierStokes.HarmonicWaveInteraction"
+    ],
+    "NavierStokes.LocalizedCurlRealization": [
+      "NavierStokes.LocalizedWaveBounds",
+      "NavierStokes.ParticularCopyBounds"
+    ],
+    "NavierStokes.LocalizedGaussianBounds": [
+      "NavierStokes.HarmonicSourceSupport",
+      "NavierStokes.LocalizedWaveBounds"
+    ],
+    "NavierStokes.LocalizedMeanInteraction": [
+      "NavierStokes.LocalizedWaveBounds",
+      "NavierStokes.HarmonicWaveInteraction"
+    ],
+    "NavierStokes.LocalizedMomentRepair": [
+      "NavierStokes.SmoothCutoffs",
+      "NavierStokes.PowerMomentMatrix",
+      "NavierStokes.MomentRepair"
+    ],
+    "NavierStokes.LocalizedWaveBounds": [
+      "NavierStokes.PeriodizedWaveBounds"
+    ],
+    "NavierStokes.LoopMoments": [
+      "Mathlib.Algebra.BigOperators.Ring.Finset",
+      "Mathlib.Analysis.Real.Sqrt",
+      "Mathlib.Tactic.FieldSimp",
+      "Mathlib.Tactic.Linarith",
+      "Mathlib.Tactic.Ring"
+    ],
+    "NavierStokes.LoopVariance": [
+      "NavierStokes.SmoothLoop",
+      "Mathlib.Probability.Moments.MGFAnalytic",
+      "Mathlib.Analysis.Analytic.IsolatedZeros",
+      "Mathlib.Analysis.SpecialFunctions.Trigonometric.Bounds",
+      "Mathlib.Analysis.SpecialFunctions.Gaussian.GaussianIntegral",
+      "Mathlib.Analysis.SpecialFunctions.Sqrt"
+    ],
+    "NavierStokes.MatchingConeBounds": [
+      "NavierStokes.MatchingDebtBounds",
+      "NavierStokes.OutgoingEntranceCone"
+    ],
+    "NavierStokes.MatchingDebtBounds": [
+      "NavierStokes.NominalProfile",
+      "NavierStokes.ActivationContinuation"
+    ],
+    "NavierStokes.MaximalLifespan": [
+      "NavierStokes.PeriodicUniqueness"
+    ],
+    "NavierStokes.MeanBoundsReindex": [
+      "NavierStokes.UniformBlockBounds",
+      "NavierStokes.UniformHarmonicInteraction"
+    ],
+    "NavierStokes.MeanChartCompatibility": [
+      "NavierStokes.CorrectionState",
+      "NavierStokes.CommonCoverClass"
+    ],
+    "NavierStokes.MeanIncrementBounds": [
+      "NavierStokes.MeanResidual",
+      "NavierStokes.WeightedClasses",
+      "NavierStokes.PressureStream",
+      "NavierStokes.MeanMomentBounds"
+    ],
+    "NavierStokes.MeanMomentBounds": [
+      "NavierStokes.WeightedRadialPrimitive",
+      "NavierStokes.PressureStream",
+      "NavierStokes.SmoothParameterIntegral",
+      "NavierStokes.IntegratedMeanBalances"
+    ],
+    "NavierStokes.MeanRankUpdate": [
+      "NavierStokes.FiveRowRank",
+      "NavierStokes.FiveProfileMoments",
+      "NavierStokes.PressureStream",
+      "NavierStokes.WeightedClasses",
+      "NavierStokes.PhysicalCoordinateBounds",
+      "NavierStokes.ParametricFlatFactor",
+      "NavierStokes.ReservedPatches",
+      "Mathlib.MeasureTheory.Measure.Haar.NormedSpace"
+    ],
+    "NavierStokes.MeanResidual": [
+      "NavierStokes.CylindricalResidual",
+      "NavierStokes.TransportPrimitive"
+    ],
+    "NavierStokes.MeanStageRegularity": [
+      "NavierStokes.MeanStateRegularity"
+    ],
+    "NavierStokes.MeanStateRegularity": [
+      "NavierStokes.GaugeDebtIncrement"
+    ],
+    "NavierStokes.MixedAxisPreservation": [
+      "NavierStokes.LocalPhysicalCopyBounds",
+      "NavierStokes.DirectAngularDiagonal",
+      "NavierStokes.AxisPreservation",
+      "NavierStokes.TailGaugePotential"
+    ],
+    "NavierStokes.MixedCandidateAssembly": [
+      "NavierStokes.MixedDiagonalResidual",
+      "NavierStokes.MixedDiagonalExtensions",
+      "NavierStokes.LocalAngularDiagonal"
+    ],
+    "NavierStokes.MixedCandidateWitness": [
+      "NavierStokes.MixedCandidateAssembly",
+      "NavierStokes.CandidateConsequences"
+    ],
+    "NavierStokes.MixedDiagonalExtensions": [
+      "NavierStokes.OffplaneCorrectionExtensions",
+      "NavierStokes.AnnularEndpoint",
+      "NavierStokes.LocalPhysicalCopyBounds"
+    ],
+    "NavierStokes.MixedDiagonalResidual": [
+      "NavierStokes.MixedPeriodicAssembly",
+      "NavierStokes.DiagonalResidual",
+      "NavierStokes.AnnularEndpoint",
+      "NavierStokes.MixedDiagonalSchedule"
+    ],
+    "NavierStokes.MixedDiagonalSchedule": [
+      "NavierStokes.CutStageEstimates"
+    ],
+    "NavierStokes.MixedFiniteBackground": [
+      "NavierStokes.MixedCandidateAssembly",
+      "NavierStokes.PhysicalParticularWave"
+    ],
+    "NavierStokes.MixedPeriodicAssembly": [
+      "NavierStokes.PeriodicResidualLimits",
+      "NavierStokes.DirectAngularDiagonal"
+    ],
+    "NavierStokes.ModeSolenoidalReindex": [
+      "NavierStokes.StateReindex",
+      "NavierStokes.HarmonicWaveInteraction"
+    ],
+    "NavierStokes.ModulatedCone": [
+      "NavierStokes.ParametricModulation",
+      "NavierStokes.StressActivation",
+      "NavierStokes.UniformCone",
+      "NavierStokes.ModulatedStockBounds",
+      "NavierStokes.ModulatedHistories"
+    ],
+    "NavierStokes.ModulatedExterior": [
+      "NavierStokes.BaseExterior",
+      "NavierStokes.ConstructedSlowBase"
+    ],
+    "NavierStokes.ModulatedHistories": [
+      "NavierStokes.ParametricModulation",
+      "NavierStokes.ShapeTransition",
+      "NavierStokes.FiveProfileMoments",
+      "NavierStokes.ActivationStocks"
+    ],
+    "NavierStokes.ModulatedProfileAssembly": [
+      "NavierStokes.AnnularAuxiliary",
+      "NavierStokes.ModulatedCone",
+      "NavierStokes.NominalProfile",
+      "NavierStokes.ReservedPatches",
+      "NavierStokes.NominalConeAssembly",
+      "NavierStokes.AssembledSlowBase"
+    ],
+    "NavierStokes.ModulatedStockBounds": [
+      "NavierStokes.ActivationStocks",
+      "NavierStokes.JetBounds",
+      "Mathlib.Analysis.Calculus.MeanValue",
+      "Mathlib.Analysis.Normed.Group.Bounded"
+    ],
+    "NavierStokes.MomentRepair": [
+      "Mathlib.LinearAlgebra.Matrix.NonsingularInverse",
+      "Mathlib.Analysis.Normed.Operator.ContinuousLinearMap",
+      "Mathlib.Analysis.Normed.Module.Basic",
+      "Mathlib.Topology.MetricSpace.Contracting",
+      "Mathlib.Tactic.Linarith",
+      "Mathlib.Tactic.Ring"
+    ],
+    "NavierStokes.MovingFrameODE": [
+      "NavierStokes.TangentProjection",
+      "NavierStokes.PhaseCalculus",
+      "NavierStokes.GrowingMode",
+      "NavierStokes.ViscousPropagator",
+      "Mathlib.Analysis.InnerProductSpace.PiL2",
+      "Mathlib.Analysis.Calculus.Deriv.Prod",
+      "Mathlib.Analysis.Calculus.Deriv.Inv",
+      "Mathlib.Tactic.FinCases",
+      "Mathlib.Tactic.Positivity"
+    ],
+    "NavierStokes.MovingMomentBounds": [
+      "NavierStokes.VariableGaugeMean",
+      "NavierStokes.LocalRankDefect"
+    ],
+    "NavierStokes.NativeBandExtension": [
+      "NavierStokes.WaveEdgeExtension",
+      "NavierStokes.ActualSignedGeometry"
+    ],
+    "NavierStokes.NativeCutoffJets": [
+      "NavierStokes.ActualGaussianCoverage"
+    ],
+    "NavierStokes.NativePrincipalEquations": [
+      "NavierStokes.ParticularCopyBounds"
+    ],
+    "NavierStokes.NaturalAxisBridge": [
+      "NavierStokes.AxisContraction",
+      "NavierStokes.AxisEvaluationAlgebra",
+      "Mathlib.Analysis.Calculus.Deriv.Mul",
+      "Mathlib.Tactic.Ring"
+    ],
+    "NavierStokes.NaturalAxisCoefficients": [
+      "NavierStokes.AnalyticCoefficientBounds",
+      "NavierStokes.AnalyticPrimitive",
+      "NavierStokes.NaturalAxisData",
+      "NavierStokes.NaturalAxisBridge",
+      "Mathlib.Topology.MetricSpace.Thickening",
+      "Mathlib.Analysis.Normed.Module.Convex",
+      "Mathlib.Tactic.FunProp"
+    ],
+    "NavierStokes.NaturalAxisData": [
+      "NavierStokes.PressureDatum",
+      "Mathlib.Analysis.Calculus.ContDiff.Operations",
+      "Mathlib.Topology.Order.IntermediateValue",
+      "Mathlib.Topology.Order.Compact",
+      "Mathlib.Analysis.Real.Sqrt",
+      "Mathlib.Tactic.FunProp",
+      "Mathlib.Tactic.Linarith",
+      "Mathlib.Tactic.Positivity",
+      "Mathlib.Tactic.Ring"
+    ],
+    "NavierStokes.NaturalCoefficientBridge": [
+      "NavierStokes.ActualSlowAxis",
+      "NavierStokes.SlowResidualMatching"
+    ],
+    "NavierStokes.NaturalCore": [
+      "NavierStokes.NaturalProfile",
+      "NavierStokes.SimilarityCoordinates",
+      "NavierStokes.AxisymmetricFields",
+      "NavierStokes.SmoothParameterIntegral",
+      "NavierStokes.BlowupImplication"
+    ],
+    "NavierStokes.NaturalEntrance": [
+      "NavierStokes.NaturalProfile",
+      "NavierStokes.ProfileHistories",
+      "Mathlib.Topology.Order.Compact",
+      "Mathlib.Data.Fin.VecNotation",
+      "Mathlib.Tactic.FinCases"
+    ],
+    "NavierStokes.NaturalProfile": [
+      "NavierStokes.NaturalAxisCoefficients",
+      "NavierStokes.AxisReference",
+      "Mathlib.Analysis.Calculus.IteratedDeriv.Lemmas"
+    ],
+    "NavierStokes.NilpotentVolterra": [
+      "Mathlib.Analysis.Calculus.ParametricIntervalIntegral",
+      "Mathlib.Analysis.Calculus.Deriv.Slope",
+      "Mathlib.Analysis.Calculus.Deriv.Inv",
+      "Mathlib.Analysis.Calculus.Deriv.Pow",
+      "Mathlib.Analysis.SpecialFunctions.Integrals.Basic",
+      "Mathlib.Tactic.Ring",
+      "Mathlib.Tactic.FieldSimp",
+      "Mathlib.Topology.ContinuousMap.Compact",
+      "Mathlib.Analysis.Normed.Operator.Bilinear",
+      "Mathlib.LinearAlgebra.Matrix.ToLin",
+      "Mathlib.Analysis.Complex.CauchyIntegral",
+      "Mathlib.Analysis.Complex.LocallyUniformLimit",
+      "NavierStokes.VolterraAnalyticBounds"
+    ],
+    "NavierStokes.NominalConeAssembly": [
+      "NavierStokes.NominalProfile",
+      "NavierStokes.MatchingDebtBounds",
+      "NavierStokes.OutgoingCone",
+      "NavierStokes.HeatSwitchCone",
+      "NavierStokes.TerminalHistoryBridge",
+      "NavierStokes.TrueConeLoop",
+      "NavierStokes.ModulatedCone",
+      "NavierStokes.MatchingConeBounds",
+      "NavierStokes.PreparedOutgoing",
+      "NavierStokes.RepairConeBounds"
+    ],
+    "NavierStokes.NominalProfile": [
+      "NavierStokes.OutgoingDilation",
+      "NavierStokes.OutgoingHistories",
+      "NavierStokes.NaturalEntrance",
+      "NavierStokes.ReferencePath",
+      "NavierStokes.ShapeTransition",
+      "NavierStokes.FiveProfileMoments",
+      "NavierStokes.TransitionRamp",
+      "NavierStokes.HeatedOutgoing",
+      "NavierStokes.ActivationContinuation",
+      "NavierStokes.ExtendedHeatedOutgoing"
+    ],
+    "NavierStokes.NormalScaling": [
+      "NavierStokes.CommonCoverSolve"
+    ],
+    "NavierStokes.OffplaneCorrectionExtensions": [
+      "NavierStokes.AnnularEndpoint",
+      "NavierStokes.VariableGaugeMean",
+      "NavierStokes.PeriodicPhaseAssembly"
+    ],
+    "NavierStokes.OffplaneJetExtensions": [
+      "NavierStokes.GenericEndpointExtension",
+      "NavierStokes.MixedDiagonalExtensions",
+      "NavierStokes.CutStageEstimates",
+      "NavierStokes.ActualPhysicalStageBounds"
+    ],
+    "NavierStokes.OscillatoryCurl": [
+      "NavierStokes.SpatialCurl",
+      "NavierStokes.ResidualStability",
+      "NavierStokes.CurlGeometry",
+      "NavierStokes.JetBounds",
+      "Mathlib.Analysis.InnerProductSpace.Calculus",
+      "Mathlib.Analysis.SpecialFunctions.Trigonometric.Deriv"
+    ],
+    "NavierStokes.OutgoingCone": [
+      "NavierStokes.OutgoingEntranceCone",
+      "NavierStokes.ShapedWaitBounds",
+      "NavierStokes.PulseCone",
+      "NavierStokes.TailCone",
+      "NavierStokes.OutgoingProfile"
+    ],
+    "NavierStokes.OutgoingDilation": [
+      "NavierStokes.OutgoingProfile",
+      "NavierStokes.TerminalCompensation"
+    ],
+    "NavierStokes.OutgoingEntranceCone": [
+      "NavierStokes.SchedulePressure",
+      "NavierStokes.ProfileHistories",
+      "NavierStokes.OutgoingPulseBounds",
+      "NavierStokes.FuturePressureBounds",
+      "NavierStokes.OutgoingHistories",
+      "NavierStokes.UniformCone"
+    ],
+    "NavierStokes.OutgoingHistories": [
+      "NavierStokes.CorrectedPulseAmplitude",
+      "NavierStokes.SchedulePressure",
+      "NavierStokes.ProfileHistories",
+      "Mathlib.MeasureTheory.Integral.IntegralEqImproper"
+    ],
+    "NavierStokes.OutgoingProfile": [
+      "NavierStokes.CorrectedPulseAmplitude",
+      "NavierStokes.ReleaseMoments",
+      "NavierStokes.SchedulePressure",
+      "NavierStokes.ParametricRephase"
+    ],
+    "NavierStokes.OutgoingPulseBounds": [
+      "NavierStokes.OutgoingSchedule",
+      "Mathlib.Analysis.Calculus.IteratedDeriv.Lemmas",
+      "Mathlib.MeasureTheory.Measure.Haar.NormedSpace"
+    ],
+    "NavierStokes.OutgoingSchedule": [
+      "NavierStokes.FlatPrimitive",
+      "NavierStokes.LocalizedMomentRepair",
+      "Mathlib.Analysis.SpecialFunctions.Log.Deriv",
+      "Mathlib.Analysis.SpecialFunctions.Integrals.Basic",
+      "Mathlib.Analysis.Calculus.Deriv.MeanValue",
+      "Mathlib.MeasureTheory.Integral.IntervalIntegral.IntegrationByParts",
+      "Mathlib.Tactic.FinCases"
+    ],
+    "NavierStokes.OutgoingTail": [
+      "NavierStokes.OutgoingSchedule",
+      "Mathlib.Analysis.Normed.Group.Bounded"
+    ],
+    "NavierStokes.ParametricEvenDescent": [
+      "NavierStokes.EvenSmoothDescent",
+      "NavierStokes.ParametricRephase",
+      "Mathlib.Analysis.Calculus.Deriv.Prod"
+    ],
+    "NavierStokes.ParametricFlatFactor": [
+      "NavierStokes.FlatPrimitiveFactor",
+      "NavierStokes.ParametricKernelBounds",
+      "Mathlib.Analysis.Normed.Module.FiniteDimension"
+    ],
+    "NavierStokes.ParametricHeatTail": [
+      "NavierStokes.HeatTailEdit",
+      "Mathlib.Analysis.Calculus.ContDiff.Bounds",
+      "Mathlib.Analysis.Calculus.IteratedDeriv.Lemmas"
+    ],
+    "NavierStokes.ParametricKernelBounds": [
+      "Mathlib.Analysis.Normed.Operator.Prod",
+      "NavierStokes.FlatKernelBounds",
+      "Mathlib.Analysis.Calculus.ContDiff.Bounds",
+      "Mathlib.Algebra.Order.Algebra",
+      "Mathlib.Analysis.Normed.Group.Basic",
+      "Mathlib.Analysis.Real.Sqrt",
+      "Mathlib.Data.EReal.Inv"
+    ],
+    "NavierStokes.ParametricModulation": [
+      "NavierStokes.RadialModulation",
+      "NavierStokes.TrueConeLoop",
+      "NavierStokes.ParametricRephase",
+      "Mathlib.Analysis.Calculus.BumpFunction.FiniteDimension"
+    ],
+    "NavierStokes.ParametricODE": [
+      "NavierStokes.TangentODE",
+      "Mathlib.Analysis.Normed.Operator.Banach",
+      "Mathlib.Analysis.Calculus.ContDiff.Operations"
+    ],
+    "NavierStokes.ParametricRadialExtension": [
+      "NavierStokes.BoundaryAxisJets",
+      "NavierStokes.SpacetimeGluing",
+      "Mathlib.Topology.MetricSpace.Thickening"
+    ],
+    "NavierStokes.ParametricRephase": [
+      "NavierStokes.SmoothLoop",
+      "NavierStokes.SmoothParameterIntegral",
+      "Mathlib.Analysis.Calculus.InverseFunctionTheorem.ContDiff",
+      "Mathlib.Analysis.Normed.Module.FiniteDimension"
+    ],
+    "NavierStokes.ParametricTerminalCompensation": [
+      "NavierStokes.TerminalCompensation",
+      "NavierStokes.ParametricHeatTail"
+    ],
+    "NavierStokes.ParametricTorusInverse": [
+      "NavierStokes.SmoothFourierData",
+      "NavierStokes.TransportPrimitive",
+      "Mathlib.Analysis.Calculus.SmoothSeries"
+    ],
+    "NavierStokes.ParticularCopyBounds": [
+      "NavierStokes.SignedCopyBounds",
+      "NavierStokes.ParticularWaveBounds"
+    ],
+    "NavierStokes.ParticularPaddedBackground": [
+      "NavierStokes.ActualParticularBackground",
+      "NavierStokes.ActualCarrierGeometry"
+    ],
+    "NavierStokes.ParticularWaveAssembly": [
+      "NavierStokes.HarmonicResidual",
+      "NavierStokes.ErrorHarmonics",
+      "NavierStokes.ParticularWaveBounds",
+      "NavierStokes.CopyAngularInvariance",
+      "NavierStokes.SignedWaveUpdate"
+    ],
+    "NavierStokes.ParticularWaveBounds": [
+      "NavierStokes.PrimaryPulseBounds",
+      "NavierStokes.CommonCoverSolve",
+      "NavierStokes.CommonCoverClass",
+      "NavierStokes.CopySolveCompatibility",
+      "NavierStokes.CopyAngularInvariance",
+      "NavierStokes.PrimaryODE",
+      "NavierStokes.PrimaryCopyBridge",
+      "NavierStokes.LinearWaveBounds"
+    ],
+    "NavierStokes.PartitionedCovariance": [
+      "NavierStokes.SquaredPartition",
+      "NavierStokes.TorusAverages",
+      "NavierStokes.PhaseCalculus",
+      "NavierStokes.ParametricODE",
+      "NavierStokes.PhaseEstimates"
+    ],
+    "NavierStokes.PastExtension": [
+      "NavierStokes.TimeLocalization",
+      "NavierStokes.ResidualRegularity",
+      "NavierStokes.SpacetimeEndpoint"
+    ],
+    "NavierStokes.PeriodicIntegration": [
+      "NavierStokes.ProblemStatement",
+      "Mathlib.MeasureTheory.Integral.DivergenceTheorem",
+      "Mathlib.MeasureTheory.Measure.OpenPos",
+      "Mathlib.Analysis.Calculus.ParametricIntegral",
+      "Mathlib.Analysis.Calculus.ContDiff.Operations",
+      "Mathlib.Analysis.Calculus.Deriv.Prod"
+    ],
+    "NavierStokes.PeriodicLocalization": [
+      "NavierStokes.ProblemStatement",
+      "Mathlib.Analysis.Calculus.ContDiff.Operations",
+      "Mathlib.Topology.Algebra.InfiniteSum.Basic",
+      "Mathlib.Topology.LocallyFinite",
+      "Mathlib.Data.Int.Interval",
+      "Mathlib.Data.Fintype.Pi",
+      "Mathlib.Tactic.Abel",
+      "Mathlib.Tactic.Linarith",
+      "Mathlib.Tactic.NormNum",
+      "Mathlib.Tactic.Ring"
+    ],
+    "NavierStokes.PeriodicPhaseAssembly": [
+      "NavierStokes.PeriodizedWaveBounds",
+      "NavierStokes.PhysicalParticularWave",
+      "Mathlib.Analysis.SpecialFunctions.SmoothTransition"
+    ],
+    "NavierStokes.PeriodicResidualLimits": [
+      "NavierStokes.JointResidualLimits",
+      "NavierStokes.SpatialLocalization",
+      "NavierStokes.CandidateFromLimits",
+      "Mathlib.Algebra.Order.Round"
+    ],
+    "NavierStokes.PeriodicSobolev": [
+      "NavierStokes.PeriodicUniqueness",
+      "Mathlib.MeasureTheory.Integral.IntervalIntegral.FundThmCalculus",
+      "Mathlib.Analysis.Calculus.Deriv.Mul",
+      "Mathlib.Tactic.FinCases"
+    ],
+    "NavierStokes.PeriodicUniqueness": [
+      "Mathlib.Analysis.Calculus.TangentCone.Prod",
+      "NavierStokes.ProblemStatement",
+      "NavierStokes.PeriodicIntegration",
+      "Mathlib.Analysis.InnerProductSpace.Calculus",
+      "Mathlib.Analysis.Calculus.Deriv.MeanValue",
+      "Mathlib.Analysis.SpecialFunctions.ExpDeriv",
+      "Mathlib.Algebra.Ring.Periodic",
+      "Mathlib.Algebra.Order.Floor.Ring",
+      "Mathlib.Tactic.Abel",
+      "Mathlib.Tactic.Linarith",
+      "Mathlib.Tactic.Ring"
+    ],
+    "NavierStokes.PeriodizedWaveBounds": [
+      "NavierStokes.ParticularWaveAssembly",
+      "NavierStokes.WaveEnvelopeTransport",
+      "NavierStokes.LabelSumBounds"
+    ],
+    "NavierStokes.PhaseCalculus": [
+      "Mathlib.Analysis.Calculus.FDeriv.Mul",
+      "Mathlib.Analysis.Calculus.Deriv.Mul",
+      "Mathlib.Analysis.Calculus.ContDiff.Comp",
+      "Mathlib.Analysis.Calculus.ContDiff.Operations",
+      "Mathlib.Analysis.InnerProductSpace.PiL2",
+      "Mathlib.Analysis.SpecialFunctions.ExpDeriv",
+      "Mathlib.Analysis.SpecialFunctions.Trigonometric.Basic",
+      "Mathlib.Tactic.FieldSimp",
+      "Mathlib.Tactic.FinCases",
+      "Mathlib.Tactic.Linarith",
+      "Mathlib.Tactic.Ring"
+    ],
+    "NavierStokes.PhaseEstimates": [
+      "NavierStokes.MovingFrameODE",
+      "NavierStokes.ChartScales",
+      "Mathlib.Algebra.Order.Floor.Ring",
+      "Mathlib.Analysis.Calculus.MeanValue"
+    ],
+    "NavierStokes.PhaseJetBounds": [
+      "NavierStokes.JetBounds",
+      "NavierStokes.PrimaryODE"
+    ],
+    "NavierStokes.PhysicalClassBounds": [
+      "NavierStokes.LabelSumBounds",
+      "NavierStokes.WeightedRadialPrimitive",
+      "NavierStokes.LocalSignedRequest",
+      "NavierStokes.SpatialCurl"
+    ],
+    "NavierStokes.PhysicalCoordinateBounds": [
+      "NavierStokes.SimilarityCoordinates",
+      "Mathlib.Analysis.Calculus.ContDiff.Bounds",
+      "Mathlib.Analysis.Normed.Group.Bounded"
+    ],
+    "NavierStokes.PhysicalCopyBounds": [
+      "NavierStokes.PhysicalClassBounds",
+      "NavierStokes.PeriodizedWaveBounds"
+    ],
+    "NavierStokes.PhysicalCurlCovariance": [
+      "NavierStokes.PhysicalResidualBridge",
+      "NavierStokes.LinearWaveBounds",
+      "NavierStokes.SpatialCurl",
+      "NavierStokes.CopyAngularInvariance"
+    ],
+    "NavierStokes.PhysicalGraphBounds": [
+      "NavierStokes.ChartScales",
+      "NavierStokes.GraphCalculus",
+      "NavierStokes.SlotGeometry",
+      "NavierStokes.AxisymmetricFields",
+      "NavierStokes.JetBounds",
+      "NavierStokes.PhaseCalculus",
+      "NavierStokes.CoordinateAlgebra",
+      "NavierStokes.PolarCharts",
+      "Mathlib.Analysis.Calculus.ContDiff.Bounds",
+      "Mathlib.Analysis.Calculus.IteratedDeriv.Lemmas",
+      "Mathlib.Analysis.SpecialFunctions.ExpDeriv",
+      "Mathlib.Analysis.Normed.Group.Bounded"
+    ],
+    "NavierStokes.PhysicalHeatCoordinates": [
+      "NavierStokes.ParametricHeatTail",
+      "NavierStokes.TerminalStress"
+    ],
+    "NavierStokes.PhysicalMeanDomain": [
+      "NavierStokes.MeanRankUpdate",
+      "NavierStokes.MeanIncrementBounds",
+      "NavierStokes.TemporalMeanUpdate",
+      "Mathlib.Analysis.Calculus.BumpFunction.FiniteDimension"
+    ],
+    "NavierStokes.PhysicalMeanJetBounds": [
+      "NavierStokes.LocalPhysicalCopyBounds",
+      "NavierStokes.VariableGaugeMean",
+      "Mathlib.Algebra.Order.Archimedean.Basic"
+    ],
+    "NavierStokes.PhysicalParticularWave": [
+      "NavierStokes.ParticularWaveAssembly",
+      "NavierStokes.PhysicalCurlCovariance",
+      "NavierStokes.PhysicalResidualTZ",
+      "NavierStokes.StateReindex",
+      "NavierStokes.ScaledTangentTransport"
+    ],
+    "NavierStokes.PhysicalResidualBridge": [
+      "NavierStokes.LinearWaveResidual",
+      "NavierStokes.PhysicalGraphBounds",
+      "NavierStokes.LiftedMeanResidual",
+      "NavierStokes.MeanChartCompatibility"
+    ],
+    "NavierStokes.PhysicalResidualJetBounds": [
+      "NavierStokes.PhysicalMeanJetBounds",
+      "NavierStokes.PhysicalResidualTZ",
+      "NavierStokes.UniformHarmonicInteraction",
+      "NavierStokes.AnnularEndpoint",
+      "NavierStokes.DiagonalResidual",
+      "NavierStokes.ResidualPolarGraph"
+    ],
+    "NavierStokes.PhysicalResidualNaturality": [
+      "NavierStokes.PhysicalParticularWave",
+      "NavierStokes.HarmonicSourceSupport"
+    ],
+    "NavierStokes.PhysicalResidualTZ": [
+      "NavierStokes.PhysicalResidualBridge",
+      "Mathlib.Analysis.Calculus.FDeriv.Equiv"
+    ],
+    "NavierStokes.PhysicalSignedWave": [
+      "NavierStokes.LocalSignedRequest",
+      "NavierStokes.PhysicalParticularWave",
+      "NavierStokes.PrimaryFieldAssembly",
+      "NavierStokes.PhysicalResidualNaturality",
+      "NavierStokes.PeriodicPhaseAssembly"
+    ],
+    "NavierStokes.PhysicalStageBounds": [
+      "NavierStokes.PhysicalMeanJetBounds",
+      "NavierStokes.MixedDiagonalSchedule",
+      "NavierStokes.TailGaugePotential"
+    ],
+    "NavierStokes.PhysicalStageSupport": [
+      "NavierStokes.PhysicalStageBounds",
+      "NavierStokes.MixedCandidateAssembly",
+      "NavierStokes.ActualInitialization"
+    ],
+    "NavierStokes.PhysicalWaveSum": [
+      "NavierStokes.PhysicalGraphBounds",
+      "NavierStokes.CommonCoverSolve",
+      "NavierStokes.SquaredPartition",
+      "NavierStokes.SimilarityProfile",
+      "Mathlib.Data.Set.Card"
+    ],
+    "NavierStokes.PolarCharts": [
+      "NavierStokes.RadialPullback",
+      "Mathlib.Analysis.SpecialFunctions.Trigonometric.ArctanDeriv",
+      "Mathlib.Analysis.SpecialFunctions.Trigonometric.Angle",
+      "Mathlib.Analysis.SpecialFunctions.Sqrt",
+      "Mathlib.Analysis.Normed.Group.Bounded",
+      "Mathlib.Tactic.FinCases"
+    ],
+    "NavierStokes.PositiveAxisExistence": [
+      "NavierStokes.VolterraRegularity",
+      "NavierStokes.ParametricEvenDescent",
+      "NavierStokes.PositiveAxisSystem",
+      "NavierStokes.HolomorphicFamily",
+      "Mathlib.Analysis.Normed.Module.FiniteDimension"
+    ],
+    "NavierStokes.PositiveAxisSystem": [
+      "NavierStokes.SimilarityProfile",
+      "NavierStokes.SlowDivergence",
+      "NavierStokes.VolterraAnalyticBounds",
+      "NavierStokes.VolterraParity",
+      "Mathlib.Analysis.Calculus.ContDiff.Operations",
+      "Mathlib.Analysis.Analytic.Constructions",
+      "Mathlib.Analysis.Complex.RealDeriv",
+      "Mathlib.Algebra.BigOperators.Group.Finset.Basic",
+      "Mathlib.Tactic.FinCases",
+      "Mathlib.Tactic.LinearCombination"
+    ],
+    "NavierStokes.PositiveOrderMoments": [
+      "NavierStokes.PositiveAxisSystem",
+      "NavierStokes.FiveRowRank",
+      "NavierStokes.ProfileHistories",
+      "Mathlib.MeasureTheory.Integral.IntervalIntegral.IntegrationByParts"
+    ],
+    "NavierStokes.PositiveRepresentatives": [
+      "NavierStokes.PrimaryRepresentatives",
+      "Mathlib.Analysis.Calculus.Deriv.MeanValue"
+    ],
+    "NavierStokes.PositiveTimeCopyFamily": [
+      "NavierStokes.LocalPhysicalCopyBounds"
+    ],
+    "NavierStokes.PositiveTimeSignedData": [
+      "NavierStokes.ActualSignedPhysicalData",
+      "NavierStokes.PositiveTimeCopyFamily",
+      "NavierStokes.PositiveTimeSignedLocalization",
+      "NavierStokes.ActualSignedNativeProfiles"
+    ],
+    "NavierStokes.PositiveTimeSignedLocalization": [
+      "NavierStokes.ActualSignedPhysicalBinding",
+      "NavierStokes.ActualWaveRegularityData",
+      "NavierStokes.InitialPhysicalData"
+    ],
+    "NavierStokes.PowerMomentMatrix": [
+      "Mathlib.Analysis.Calculus.Deriv.MeanValue",
+      "Mathlib.Analysis.SpecialFunctions.ExpDeriv",
+      "Mathlib.Analysis.SpecialFunctions.Pow.Real",
+      "Mathlib.Analysis.SpecialFunctions.Pow.Continuity",
+      "Mathlib.LinearAlgebra.Matrix.NonsingularInverse",
+      "Mathlib.MeasureTheory.Integral.Average",
+      "Mathlib.MeasureTheory.Function.LocallyIntegrable",
+      "Mathlib.MeasureTheory.Measure.Lebesgue.Basic",
+      "Mathlib.Topology.Order.IntermediateValue",
+      "Mathlib.Tactic.Linarith",
+      "Mathlib.Tactic.Ring"
+    ],
+    "NavierStokes.PreparedOutgoing": [
+      "NavierStokes.ScheduledProfileChoice",
+      "NavierStokes.MatchingDebtBounds",
+      "NavierStokes.OutgoingCone"
+    ],
+    "NavierStokes.PressureDatum": [
+      "Mathlib.Analysis.Calculus.ParametricIntegral",
+      "Mathlib.Analysis.Complex.CauchyIntegral",
+      "Mathlib.Analysis.Complex.RealDeriv",
+      "Mathlib.Analysis.SpecialFunctions.Complex.LogDeriv",
+      "Mathlib.Analysis.SpecialFunctions.Pow.Real",
+      "Mathlib.Analysis.SpecialFunctions.ImproperIntegrals",
+      "Mathlib.MeasureTheory.Group.Integral",
+      "Mathlib.MeasureTheory.Integral.Bochner.Set",
+      "Mathlib.Tactic.Linarith",
+      "Mathlib.Tactic.Positivity",
+      "Mathlib.Tactic.Ring"
+    ],
+    "NavierStokes.PressureStream": [
+      "NavierStokes.TransportPrimitive",
+      "NavierStokes.FourierAlias",
+      "NavierStokes.RadialPullback",
+      "Mathlib.Analysis.Calculus.BumpFunction.Normed",
+      "Mathlib.Analysis.Calculus.BumpFunction.InnerProduct",
+      "Mathlib.Analysis.Calculus.FDeriv.Symmetric"
+    ],
+    "NavierStokes.PrimaryCopyBounds": [
+      "NavierStokes.PrimaryTargetBounds",
+      "NavierStokes.UniformPrimaryWeights",
+      "NavierStokes.PeriodizedWaveBounds"
+    ],
+    "NavierStokes.PrimaryCopyBridge": [
+      "NavierStokes.PrimaryODE",
+      "NavierStokes.CommonCoverSolve"
+    ],
+    "NavierStokes.PrimaryCovarianceBounds": [
+      "NavierStokes.PrimaryPulseBounds",
+      "NavierStokes.ChartScales"
+    ],
+    "NavierStokes.PrimaryFieldAssembly": [
+      "NavierStokes.PrimaryPulseBounds",
+      "NavierStokes.LinearWaveBounds"
+    ],
+    "NavierStokes.PrimaryGeometryAssembly": [
+      "NavierStokes.FinalSlowBase",
+      "NavierStokes.BaseChartJets"
+    ],
+    "NavierStokes.PrimaryMaterialDefect": [
+      "NavierStokes.BasePhaseGeometry",
+      "NavierStokes.LinearWaveBounds"
+    ],
+    "NavierStokes.PrimaryODE": [
+      "NavierStokes.MovingFrameODE",
+      "NavierStokes.SmoothPathFamily",
+      "NavierStokes.WeightedODEJets",
+      "NavierStokes.PulseCovariance",
+      "NavierStokes.PhaseEstimates",
+      "NavierStokes.JointODE"
+    ],
+    "NavierStokes.PrimaryPulseBounds": [
+      "NavierStokes.PhaseJetBounds",
+      "NavierStokes.WeightedClasses",
+      "NavierStokes.WeightedQuotients",
+      "NavierStokes.PartitionedCovariance",
+      "NavierStokes.JointODE",
+      "NavierStokes.CurlClassBounds",
+      "NavierStokes.SignedCovariance",
+      "NavierStokes.GaussianTailFlat"
+    ],
+    "NavierStokes.PrimaryRepresentatives": [
+      "NavierStokes.PartitionedCovariance",
+      "NavierStokes.UniformCone",
+      "NavierStokes.SimilarityHomogeneity",
+      "Mathlib.Topology.UniformSpace.HeineCantor"
+    ],
+    "NavierStokes.PrimaryResidualClass": [
+      "NavierStokes.HarmonicWaveInteraction",
+      "NavierStokes.SignedWaveUpdate"
+    ],
+    "NavierStokes.PrimaryTargetBounds": [
+      "NavierStokes.BasePhaseGeometry",
+      "NavierStokes.AlignedProfileSpectralCone",
+      "NavierStokes.PrimaryGeometryAssembly",
+      "NavierStokes.LocalSignedRequest"
+    ],
+    "NavierStokes.ProblemStatement": [
+      "Mathlib.Analysis.Calculus.ContDiff.Comp",
+      "Mathlib.Analysis.InnerProductSpace.PiL2"
+    ],
+    "NavierStokes.ProfileHistories": [
+      "NavierStokes.StressAlgebra",
+      "NavierStokes.SmoothParameterIntegral",
+      "NavierStokes.ParametricFlatFactor",
+      "Mathlib.Analysis.Calculus.ParametricIntervalIntegral",
+      "Mathlib.Analysis.Calculus.Deriv.Prod",
+      "Mathlib.Analysis.Calculus.Deriv.Comp",
+      "Mathlib.Analysis.SpecialFunctions.Sqrt",
+      "Mathlib.Analysis.SpecialFunctions.Log.Deriv"
+    ],
+    "NavierStokes.ProfileSpectralCone": [
+      "NavierStokes.ModulatedProfileAssembly",
+      "NavierStokes.PrimaryRepresentatives",
+      "NavierStokes.LeadingStress",
+      "NavierStokes.BaseChartJets"
+    ],
+    "NavierStokes.PulseAmplitude": [
+      "NavierStokes.OutgoingSchedule",
+      "NavierStokes.OutgoingTail",
+      "NavierStokes.TailEnergyBounds",
+      "NavierStokes.OutgoingPulseBounds",
+      "NavierStokes.RadialSchedule",
+      "Mathlib.Analysis.SpecialFunctions.Sqrt",
+      "Mathlib.Analysis.SpecialFunctions.ImproperIntegrals",
+      "Mathlib.Analysis.SpecialFunctions.Pow.Asymptotics",
+      "Mathlib.MeasureTheory.Function.Jacobian"
+    ],
+    "NavierStokes.PulseCone": [
+      "NavierStokes.PulseLag",
+      "NavierStokes.OutgoingHistories",
+      "NavierStokes.OutgoingEntranceCone",
+      "NavierStokes.PulseEnergyHistory",
+      "NavierStokes.ShapedWaitBounds"
+    ],
+    "NavierStokes.PulseCovariance": [
+      "NavierStokes.SmoothCovariance",
+      "NavierStokes.FlatCovariance",
+      "NavierStokes.GaussianEnvelope",
+      "Mathlib.Analysis.SpecialFunctions.Gaussian.GaussianIntegral",
+      "Mathlib.MeasureTheory.Function.LocallyIntegrable",
+      "Mathlib.MeasureTheory.Measure.Haar.NormedSpace"
+    ],
+    "NavierStokes.PulseEnergyHistory": [
+      "NavierStokes.OutgoingHistories",
+      "NavierStokes.PulseLag"
+    ],
+    "NavierStokes.PulseGrowth": [
+      "Mathlib.Analysis.Real.Sqrt",
+      "Mathlib.Tactic.FieldSimp",
+      "Mathlib.Tactic.Linarith",
+      "Mathlib.Tactic.Ring"
+    ],
+    "NavierStokes.PulseLag": [
+      "NavierStokes.OutgoingPulseBounds",
+      "NavierStokes.PulseAmplitude",
+      "NavierStokes.CorrectedPulseAmplitude",
+      "Mathlib.MeasureTheory.Integral.IntervalIntegral.IntegrationByParts",
+      "Mathlib.Analysis.Calculus.IteratedDeriv.Lemmas"
+    ],
+    "NavierStokes.R3.ActualPressureFlux": [
+      "NavierStokes.R3.PressureRecovery",
+      "NavierStokes.R3.PressureFluxIdentity"
+    ],
+    "NavierStokes.R3.CompactComparisonBounds": [
+      "NavierStokes.R3.ComparisonFiniteEnergy",
+      "NavierStokes.R3.CompactTimeIntegral",
+      "NavierStokes.R3.ComparisonCutoffs"
+    ],
+    "NavierStokes.R3.CompactEnergy": [
+      "NavierStokes.PeriodicUniqueness",
+      "Mathlib.Analysis.Calculus.LineDeriv.IntegrationByParts",
+      "NavierStokes.R3.CompactTimeIntegral",
+      "NavierStokes.R3.ScalarEnergyBound",
+      "NavierStokes.R3.CompactForceBound"
+    ],
+    "NavierStokes.R3.CompactForceBound": [
+      "NavierStokes.ProblemStatement",
+      "Mathlib.MeasureTheory.Integral.Bochner.Set",
+      "Mathlib.MeasureTheory.Measure.Haar.InnerProductSpace",
+      "Mathlib.Topology.Algebra.Support"
+    ],
+    "NavierStokes.R3.CompactSchwartz": [
+      "NavierStokes.R3.ProblemStatement",
+      "Mathlib.Analysis.Distribution.SchwartzSpace.Deriv"
+    ],
+    "NavierStokes.R3.CompactTimeIntegral": [
+      "NavierStokes.R3.ProblemStatement",
+      "Mathlib.Analysis.Calculus.ParametricIntegral",
+      "Mathlib.Analysis.Calculus.ContDiff.Basic",
+      "Mathlib.Analysis.Calculus.Deriv.Prod",
+      "Mathlib.Analysis.Calculus.Deriv.Comp"
+    ],
+    "NavierStokes.R3.ComparisonCutoffs": [
+      "NavierStokes.R3.ComparisonSetup",
+      "Mathlib.Analysis.Calculus.BumpFunction.InnerProduct",
+      "Mathlib.Analysis.Normed.Group.Bounded"
+    ],
+    "NavierStokes.R3.ComparisonFiniteEnergy": [
+      "NavierStokes.R3.ComparisonSetup",
+      "NavierStokes.R3.LpNormTools"
+    ],
+    "NavierStokes.R3.ComparisonFourierSetup": [
+      "NavierStokes.R3.ComparisonSetup",
+      "Mathlib.Analysis.Distribution.SchwartzSpace.Fourier"
+    ],
+    "NavierStokes.R3.ComparisonGronwall": [
+      "Mathlib.Analysis.Calculus.Deriv.MeanValue",
+      "Mathlib.Analysis.SpecialFunctions.ExpDeriv",
+      "Mathlib.Tactic.Linarith",
+      "Mathlib.Tactic.Ring"
+    ],
+    "NavierStokes.R3.ComparisonRateBound": [
+      "NavierStokes.R3.ComparisonYoung"
+    ],
+    "NavierStokes.R3.ComparisonSetup": [
+      "NavierStokes.R3.ProblemStatement",
+      "NavierStokes.PeriodicUniqueness",
+      "Mathlib.MeasureTheory.Function.L2Space"
+    ],
+    "NavierStokes.R3.ComparisonTimeAverages": [
+      "NavierStokes.R3.ComparisonFiniteEnergy",
+      "Mathlib.MeasureTheory.Integral.Prod",
+      "Mathlib.MeasureTheory.Integral.Bochner.ContinuousLinearMap"
+    ],
+    "NavierStokes.R3.ComparisonYoung": [
+      "Mathlib.Analysis.SpecialFunctions.Pow.Asymptotics",
+      "Mathlib.Tactic.Linarith",
+      "Mathlib.Tactic.Positivity",
+      "Mathlib.Tactic.Ring"
+    ],
+    "NavierStokes.R3.ConservativeDifference": [
+      "NavierStokes.R3.ComparisonSetup",
+      "NavierStokes.R3.CompactEnergy",
+      "Mathlib.Analysis.Calculus.FDeriv.Symmetric"
+    ],
+    "NavierStokes.R3.FourierConvolution": [
+      "NavierStokes.R3.ComparisonFourierSetup"
+    ],
+    "NavierStokes.R3.FourierSobolevWeights": [
+      "NavierStokes.R3.ComparisonFourierSetup"
+    ],
+    "NavierStokes.R3.FourierTestDerivatives": [
+      "NavierStokes.R3.ComparisonFourierSetup"
+    ],
+    "NavierStokes.R3.GaussianMoments": [
+      "NavierStokes.R3.HeatKernel",
+      "Mathlib.Analysis.SpecialFunctions.Gaussian.FourierTransform"
+    ],
+    "NavierStokes.R3.GradientOperator": [
+      "NavierStokes.R3.ComparisonSetup"
+    ],
+    "NavierStokes.R3.HarmonicTestFunctionals": [
+      "NavierStokes.R3.FourierTestDerivatives",
+      "NavierStokes.R3.FourierSobolevWeights",
+      "NavierStokes.R3.HilbertFunctionalExtension",
+      "NavierStokes.R3.WeakFourierUniqueness",
+      "NavierStokes.R3.SchwartzCompactApproximation"
+    ],
+    "NavierStokes.R3.HeatKernel": [
+      "NavierStokes.R3.ComparisonSetup"
+    ],
+    "NavierStokes.R3.HeatKernelCancellation": [
+      "NavierStokes.R3.ComparisonSetup",
+      "Mathlib.MeasureTheory.Integral.Prod"
+    ],
+    "NavierStokes.R3.HeatKernelCommutator": [
+      "NavierStokes.R3.HeatKernelCancellation",
+      "NavierStokes.R3.HeatKernelFourier",
+      "NavierStokes.R3.FourierConvolution",
+      "NavierStokes.R3.HeatKernelFubini",
+      "NavierStokes.R3.HeatKernelPairedBound"
+    ],
+    "NavierStokes.R3.HeatKernelFourier": [
+      "NavierStokes.R3.HeatKernel",
+      "NavierStokes.R3.GaussianMoments",
+      "NavierStokes.R3.RieszTestOperators",
+      "NavierStokes.R3.RieszHeatRepresentation",
+      "Mathlib.Analysis.Fourier.Inversion"
+    ],
+    "NavierStokes.R3.HeatKernelFubini": [
+      "NavierStokes.R3.HeatKernelCancellation",
+      "NavierStokes.R3.PairedKernelBound",
+      "NavierStokes.R3.RadialKernelBounds"
+    ],
+    "NavierStokes.R3.HeatKernelPairedBound": [
+      "NavierStokes.R3.HeatKernelCancellation",
+      "NavierStokes.R3.HeatKernelTimeBound",
+      "NavierStokes.R3.RadialKernelBounds",
+      "NavierStokes.R3.PairedKernelBound"
+    ],
+    "NavierStokes.R3.HeatKernelTimeBound": [
+      "NavierStokes.R3.HeatKernel",
+      "Mathlib.Analysis.SpecialFunctions.Gaussian.GaussianIntegral"
+    ],
+    "NavierStokes.R3.HilbertFunctionalExtension": [
+      "Mathlib.Analysis.InnerProductSpace.Dual",
+      "Mathlib.Analysis.Normed.Module.HahnBanach"
+    ],
+    "NavierStokes.R3.LocalizedDifferenceEnergy": [
+      "NavierStokes.R3.CompactEnergy",
+      "NavierStokes.R3.ComparisonSetup",
+      "NavierStokes.R3.LocalizedLaplacian",
+      "NavierStokes.R3.LocalizedTransport"
+    ],
+    "NavierStokes.R3.LocalizedFluxEstimates": [
+      "NavierStokes.R3.LocalizedDifferenceEnergy",
+      "NavierStokes.R3.WeightedSobolev",
+      "NavierStokes.R3.ComparisonCutoffs"
+    ],
+    "NavierStokes.R3.LocalizedLaplacian": [
+      "NavierStokes.R3.CompactEnergy"
+    ],
+    "NavierStokes.R3.LocalizedTensorBounds": [
+      "NavierStokes.R3.WeightedSobolev"
+    ],
+    "NavierStokes.R3.LocalizedTransport": [
+      "NavierStokes.R3.CompactEnergy"
+    ],
+    "NavierStokes.R3.LpNormTools": [
+      "NavierStokes.R3.ComparisonSetup"
+    ],
+    "NavierStokes.R3.PairedKernelBound": [
+      "NavierStokes.R3.ComparisonSetup",
+      "Mathlib.MeasureTheory.Function.LpSeminorm.CompareExp",
+      "Mathlib.MeasureTheory.Group.Integral",
+      "Mathlib.MeasureTheory.Integral.Prod",
+      "Mathlib.MeasureTheory.Measure.Haar.NormedSpace"
+    ],
+    "NavierStokes.R3.PressureFlux": [
+      "NavierStokes.R3.PressureFluxTest",
+      "NavierStokes.R3.PressureRecoveryHelpers",
+      "NavierStokes.R3.RieszTestOperators",
+      "NavierStokes.R3.LocalizedTensorBounds",
+      "NavierStokes.R3.ActualPressureFlux",
+      "NavierStokes.R3.HeatKernelCommutator",
+      "Mathlib.Analysis.Calculus.MeanValue"
+    ],
+    "NavierStokes.R3.PressureFluxIdentity": [
+      "NavierStokes.R3.PressureRecoveryHelpers",
+      "NavierStokes.R3.LocalizedTransport",
+      "NavierStokes.R3.PressureFunctionals",
+      "NavierStokes.R3.RieszLinearityDecay"
+    ],
+    "NavierStokes.R3.PressureFluxTest": [
+      "NavierStokes.R3.ComparisonCutoffs",
+      "NavierStokes.R3.WeightedSobolev"
+    ],
+    "NavierStokes.R3.PressureFunctionals": [
+      "NavierStokes.R3.PressureTestBounds",
+      "NavierStokes.R3.RieszPairing",
+      "NavierStokes.R3.RieszLinearityDecay"
+    ],
+    "NavierStokes.R3.PressureRecovery": [
+      "NavierStokes.R3.PressureRecoveryHelpers",
+      "NavierStokes.R3.PressureFunctionals",
+      "NavierStokes.R3.ComparisonTimeAverages",
+      "NavierStokes.R3.WeakTimeContinuity",
+      "NavierStokes.R3.TemporalTestUniqueness",
+      "NavierStokes.R3.HarmonicTestFunctionals",
+      "NavierStokes.R3.RieszTestOperators",
+      "NavierStokes.R3.RieszLinearityDecay"
+    ],
+    "NavierStokes.R3.PressureRecoveryHelpers": [
+      "NavierStokes.R3.PressureTemporalIdentity",
+      "NavierStokes.R3.CompactSchwartz",
+      "NavierStokes.R3.FourierTestDerivatives",
+      "Mathlib.MeasureTheory.Integral.Bochner.ContinuousLinearMap"
+    ],
+    "NavierStokes.R3.PressureTemporalIdentity": [
+      "NavierStokes.R3.ConservativeDifference",
+      "Mathlib.MeasureTheory.Integral.IntervalIntegral.FundThmCalculus"
+    ],
+    "NavierStokes.R3.PressureTestBounds": [
+      "NavierStokes.R3.SchwartzParseval",
+      "NavierStokes.R3.FourierTestDerivatives",
+      "NavierStokes.R3.FourierSobolevWeights",
+      "NavierStokes.R3.RieszSymbolRegularity",
+      "Mathlib.Analysis.SpecialFunctions.JapaneseBracket"
+    ],
+    "NavierStokes.R3.ProblemStatement": [
+      "NavierStokes.ProblemStatement",
+      "Mathlib.MeasureTheory.Integral.Bochner.Basic",
+      "Mathlib.MeasureTheory.Measure.Haar.InnerProductSpace",
+      "Mathlib.Topology.Algebra.Support"
+    ],
+    "NavierStokes.R3.RadialKernelBounds": [
+      "NavierStokes.R3.ComparisonSetup",
+      "Mathlib.MeasureTheory.Measure.Haar.NormedSpace",
+      "Mathlib.MeasureTheory.Integral.Layercake",
+      "Mathlib.Analysis.SpecialFunctions.ImproperIntegrals"
+    ],
+    "NavierStokes.R3.RieszHeatRepresentation": [
+      "NavierStokes.R3.ComparisonFourierSetup",
+      "NavierStokes.R3.RieszSymbolRegularity",
+      "Mathlib.Analysis.SpecialFunctions.ImproperIntegrals"
+    ],
+    "NavierStokes.R3.RieszL2Bounds": [
+      "NavierStokes.R3.RieszPairing",
+      "NavierStokes.R3.SchwartzParseval",
+      "NavierStokes.R3.CompactSchwartz",
+      "Mathlib.Analysis.Calculus.BumpFunction.FiniteDimension"
+    ],
+    "NavierStokes.R3.RieszLinearityDecay": [
+      "NavierStokes.R3.RieszSymbolRegularity",
+      "Mathlib.Analysis.Fourier.RiemannLebesgueLemma"
+    ],
+    "NavierStokes.R3.RieszPairing": [
+      "NavierStokes.R3.RieszSymbolRegularity",
+      "NavierStokes.R3.SchwartzParseval"
+    ],
+    "NavierStokes.R3.RieszSymbolRegularity": [
+      "NavierStokes.R3.ComparisonFourierSetup"
+    ],
+    "NavierStokes.R3.RieszTestOperators": [
+      "NavierStokes.R3.RieszSymbolRegularity",
+      "NavierStokes.R3.RieszL2Bounds",
+      "NavierStokes.R3.SmoothSobolevL6",
+      "NavierStokes.R3.LpNormTools",
+      "NavierStokes.R3.FourierTestDerivatives",
+      "NavierStokes.R3.RieszLinearityDecay"
+    ],
+    "NavierStokes.R3.ScalarEnergyBound": [
+      "Mathlib.Analysis.Calculus.Deriv.MeanValue",
+      "Mathlib.Analysis.SpecialFunctions.ExpDeriv",
+      "Mathlib.Tactic.Linarith",
+      "Mathlib.Tactic.Ring"
+    ],
+    "NavierStokes.R3.SchwartzCompactApproximation": [
+      "NavierStokes.R3.CompactSchwartz",
+      "NavierStokes.R3.ComparisonCutoffs"
+    ],
+    "NavierStokes.R3.SchwartzParseval": [
+      "NavierStokes.R3.ComparisonFourierSetup"
+    ],
+    "NavierStokes.R3.SmoothSobolevL6": [
+      "NavierStokes.R3.ComparisonCutoffs",
+      "Mathlib.Analysis.FunctionalSpaces.SobolevInequality",
+      "Mathlib.MeasureTheory.Function.LpSpace.Complete"
+    ],
+    "NavierStokes.R3.TemporalTestUniqueness": [
+      "Mathlib.Analysis.Distribution.AEEqOfIntegralContDiff",
+      "Mathlib.MeasureTheory.Measure.OpenPos"
+    ],
+    "NavierStokes.R3.WeakFourierUniqueness": [
+      "NavierStokes.R3.CompactSchwartz",
+      "NavierStokes.R3.ComparisonFourierSetup",
+      "Mathlib.Analysis.Distribution.AEEqOfIntegralContDiff"
+    ],
+    "NavierStokes.R3.WeakTimeContinuity": [
+      "NavierStokes.R3.CompactTimeIntegral",
+      "NavierStokes.R3.ComparisonCutoffs",
+      "Mathlib.Analysis.Normed.Group.ZeroAtInfty",
+      "Mathlib.Topology.UniformSpace.UniformApproximation"
+    ],
+    "NavierStokes.R3.WeightedInterpolation": [
+      "NavierStokes.R3.ComparisonSetup",
+      "Mathlib.MeasureTheory.Function.LpSeminorm.CompareExp"
+    ],
+    "NavierStokes.R3.WeightedSobolev": [
+      "NavierStokes.R3.ComparisonSetup",
+      "NavierStokes.R3.LpNormTools",
+      "NavierStokes.R3.GradientOperator",
+      "NavierStokes.R3.WeightedInterpolation",
+      "Mathlib.Analysis.FunctionalSpaces.SobolevInequality"
+    ],
+    "NavierStokes.R3.WholeSpaceComparisonClosure": [
+      "NavierStokes.R3.WholeSpaceEnergyLimit",
+      "NavierStokes.R3.LocalizedFluxEstimates",
+      "NavierStokes.R3.ComparisonRateBound"
+    ],
+    "NavierStokes.R3.WholeSpaceEnergyLimit": [
+      "NavierStokes.R3.ComparisonCutoffs",
+      "NavierStokes.R3.ComparisonFiniteEnergy",
+      "NavierStokes.R3.ComparisonGronwall",
+      "NavierStokes.R3.LocalizedDifferenceEnergy",
+      "Mathlib.MeasureTheory.Integral.DominatedConvergence",
+      "Mathlib.MeasureTheory.Measure.OpenPos"
+    ],
+    "NavierStokes.R3.WholeSpaceUniqueness": [
+      "NavierStokes.R3.WholeSpaceComparisonClosure",
+      "NavierStokes.R3.PressureFlux",
+      "NavierStokes.R3.CompactComparisonBounds"
+    ],
+    "NavierStokes.R3ActualCandidate": [
+      "NavierStokes.R3CompactCandidate",
+      "NavierStokes.ActualCandidateAssembly"
+    ],
+    "NavierStokes.R3CompactCandidate": [
+      "NavierStokes.CompactSpatialForceDecay",
+      "NavierStokes.PeriodicResidualLimits"
+    ],
+    "NavierStokes.R3FiniteEnergyComparison": [
+      "NavierStokes.R3.WholeSpaceUniqueness",
+      "NavierStokes.R3CompactCandidate",
+      "NavierStokes.ComparatorR3Bridge"
+    ],
+    "NavierStokes.RadialAlias": [
+      "Mathlib.MeasureTheory.Integral.IntervalIntegral.FundThmCalculus",
+      "Mathlib.Analysis.Calculus.ContDiff.Comp",
+      "Mathlib.Analysis.Calculus.Deriv.Prod",
+      "Mathlib.Analysis.Calculus.Deriv.Mul",
+      "Mathlib.Analysis.Calculus.Deriv.Comp",
+      "Mathlib.Logic.Function.Iterate"
+    ],
+    "NavierStokes.RadialFluxResidual": [
+      "NavierStokes.AxisymmetricResidual",
+      "NavierStokes.LocalAxisymmetricResidual",
+      "Mathlib.Analysis.Calculus.Deriv.Inv",
+      "Mathlib.Tactic.FieldSimp",
+      "Mathlib.Tactic.Linarith"
+    ],
+    "NavierStokes.RadialHeatProfile": [
+      "NavierStokes.SmoothParameterIntegral",
+      "Mathlib.Analysis.SpecialFunctions.Gamma.Basic",
+      "Mathlib.Analysis.SpecialFunctions.Pow.Deriv",
+      "Mathlib.Analysis.Calculus.FDeriv.Extend"
+    ],
+    "NavierStokes.RadialModulation": [
+      "Mathlib.Analysis.Calculus.Deriv.Prod",
+      "Mathlib.Analysis.Calculus.IteratedDeriv.Defs",
+      "Mathlib.Analysis.Calculus.MeanValue",
+      "Mathlib.Analysis.Normed.Group.Bounded",
+      "Mathlib.Analysis.SpecialFunctions.ExpDeriv",
+      "Mathlib.Analysis.SpecialFunctions.Log.Deriv",
+      "Mathlib.MeasureTheory.Integral.IntervalIntegral.Periodic",
+      "Mathlib.MeasureTheory.Integral.IntervalIntegral.FundThmCalculus",
+      "Mathlib.Tactic.FieldSimp",
+      "Mathlib.Tactic.GCongr",
+      "Mathlib.Tactic.Linarith",
+      "Mathlib.Tactic.Ring"
+    ],
+    "NavierStokes.RadialPullback": [
+      "NavierStokes.WeightedRadialPrimitive",
+      "Mathlib.Analysis.SpecialFunctions.Pow.Deriv"
+    ],
+    "NavierStokes.RadialSchedule": [
+      "Mathlib.Analysis.SpecialFunctions.Integrals.Basic",
+      "Mathlib.Analysis.SpecialFunctions.ExpDeriv",
+      "Mathlib.Topology.Order.IntermediateValue",
+      "Mathlib.Tactic.FieldSimp",
+      "Mathlib.Tactic.Linarith",
+      "Mathlib.Tactic.NormNum",
+      "Mathlib.Tactic.Positivity",
+      "Mathlib.Tactic.Ring"
+    ],
+    "NavierStokes.RankStateBounds": [
+      "NavierStokes.LocalRankDefect"
+    ],
+    "NavierStokes.RankStateCoherence": [
+      "NavierStokes.GaugeStateCoherence",
+      "NavierStokes.RankStateBounds",
+      "NavierStokes.BaseRankPatch",
+      "NavierStokes.TemporalStateCoherence"
+    ],
+    "NavierStokes.ReferenceBounds": [
+      "NavierStokes.ProfileHistories",
+      "NavierStokes.NaturalProfile",
+      "NavierStokes.NaturalEntrance",
+      "NavierStokes.ReferencePath",
+      "NavierStokes.ReferenceJetBounds",
+      "Mathlib.Analysis.Calculus.Deriv.MeanValue",
+      "Mathlib.Analysis.SpecialFunctions.Integrals.Basic"
+    ],
+    "NavierStokes.ReferenceJetBounds": [
+      "NavierStokes.NaturalEntrance",
+      "NavierStokes.ReferencePath"
+    ],
+    "NavierStokes.ReferencePath": [
+      "NavierStokes.ProfileHistories",
+      "NavierStokes.NaturalProfile",
+      "Mathlib.Analysis.SpecialFunctions.SmoothTransition",
+      "Mathlib.Topology.UniformSpace.HeineCantor",
+      "Mathlib.Topology.UniformSpace.UniformConvergence"
+    ],
+    "NavierStokes.ReleaseMoments": [
+      "NavierStokes.UniformAngularReset",
+      "Mathlib.Analysis.Calculus.LocalExtr.Basic",
+      "Mathlib.MeasureTheory.Function.Jacobian"
+    ],
+    "NavierStokes.RenormalizedHeatMoment": [
+      "NavierStokes.ParametricHeatTail",
+      "NavierStokes.ParametricRephase",
+      "NavierStokes.SimilarityProfile",
+      "NavierStokes.OutgoingDilation",
+      "NavierStokes.HeatedOutgoing",
+      "Mathlib.MeasureTheory.Function.Jacobian",
+      "Mathlib.Analysis.SpecialFunctions.Integrals.Basic"
+    ],
+    "NavierStokes.RepairConeBounds": [
+      "NavierStokes.MatchingDebtBounds",
+      "NavierStokes.HeatSwitchCone"
+    ],
+    "NavierStokes.ReservedPatches": [
+      "NavierStokes.HeatedOutgoing",
+      "NavierStokes.FiveProfileMoments"
+    ],
+    "NavierStokes.ResetEnergyBounds": [
+      "NavierStokes.UniformAngularReset",
+      "NavierStokes.TailEnergyBounds"
+    ],
+    "NavierStokes.ResidualCalculus": [
+      "NavierStokes.ProblemStatement",
+      "Mathlib.Analysis.Calculus.FDeriv.Add",
+      "Mathlib.Analysis.Calculus.FDeriv.Mul",
+      "Mathlib.Tactic.Abel"
+    ],
+    "NavierStokes.ResidualPolarGraph": [
+      "NavierStokes.PhysicalMeanJetBounds",
+      "NavierStokes.PhysicalResidualTZ"
+    ],
+    "NavierStokes.ResidualRegularity": [
+      "NavierStokes.ProblemStatement",
+      "Mathlib.Analysis.Calculus.ContDiff.Operations",
+      "Mathlib.Analysis.Calculus.FDeriv.Add"
+    ],
+    "NavierStokes.ResidualStability": [
+      "NavierStokes.ResidualCalculus",
+      "NavierStokes.ResidualRegularity",
+      "NavierStokes.SpatialCurl",
+      "NavierStokes.JetBounds",
+      "NavierStokes.Flatness",
+      "Mathlib.Analysis.Calculus.FDeriv.Prod"
+    ],
+    "NavierStokes.ScalarParticularSupport": [
+      "NavierStokes.LabelSupportPreservation"
+    ],
+    "NavierStokes.ScaledActualParticularControl": [
+      "NavierStokes.ActualParticularControl",
+      "NavierStokes.ActualSignedGeometry"
+    ],
+    "NavierStokes.ScaledParticularFrameJets": [
+      "NavierStokes.ScaledActualParticularControl"
+    ],
+    "NavierStokes.ScaledTangentTransport": [
+      "NavierStokes.ParticularWaveBounds",
+      "NavierStokes.NormalScaling"
+    ],
+    "NavierStokes.Scaling": [
+      "Mathlib.Analysis.SpecialFunctions.Pow.Real",
+      "Mathlib.Algebra.Order.AbsoluteValue.Basic",
+      "Mathlib.Data.Rat.Floor",
+      "Mathlib.Tactic.FieldSimp",
+      "Mathlib.Tactic.Linarith",
+      "Mathlib.Tactic.NormNum",
+      "Mathlib.Tactic.Positivity",
+      "Mathlib.Tactic.Ring"
+    ],
+    "NavierStokes.SchedulePressure": [
+      "NavierStokes.OutgoingTail",
+      "NavierStokes.TailEnergyBounds",
+      "NavierStokes.PressureDatum",
+      "NavierStokes.NaturalProfile"
+    ],
+    "NavierStokes.ScheduledProfileChoice": [
+      "NavierStokes.ExtendedHeatedOutgoing",
+      "NavierStokes.TerminalCone"
+    ],
+    "NavierStokes.ShapeTransition": [
+      "NavierStokes.OutgoingSchedule",
+      "NavierStokes.SmoothParameterIntegral",
+      "NavierStokes.ParametricFlatFactor",
+      "Mathlib.Analysis.Calculus.ContDiff.Bounds",
+      "Mathlib.Analysis.Calculus.IteratedDeriv.Lemmas",
+      "Mathlib.Analysis.SpecialFunctions.Pow.Asymptotics"
+    ],
+    "NavierStokes.ShapedWaitBounds": [
+      "NavierStokes.OutgoingEntranceCone"
+    ],
+    "NavierStokes.SignedCopyBounds": [
+      "NavierStokes.PeriodizedWaveBounds",
+      "NavierStokes.UniformPrimaryWeights",
+      "NavierStokes.SignedWaveUpdate"
+    ],
+    "NavierStokes.SignedCovariance": [
+      "NavierStokes.PartitionedCovariance",
+      "NavierStokes.FlatCovariance",
+      "NavierStokes.WeightedQuotients",
+      "NavierStokes.WeightedClasses"
+    ],
+    "NavierStokes.SignedCrossDefectClass": [
+      "NavierStokes.MeanStateRegularity",
+      "NavierStokes.FiniteHeadClass"
+    ],
+    "NavierStokes.SignedMeanGain": [
+      "NavierStokes.GaugeMomentBalances",
+      "NavierStokes.LabelSumBounds",
+      "NavierStokes.LocalRankDefect"
+    ],
+    "NavierStokes.SignedPhysicalSumCalculus": [
+      "NavierStokes.PhysicalWaveSum",
+      "NavierStokes.PhysicalCurlCovariance"
+    ],
+    "NavierStokes.SignedStressPrimitive": [
+      "NavierStokes.IntegratedMeanBalances",
+      "NavierStokes.WeightedRadialPrimitive",
+      "NavierStokes.RadialPullback"
+    ],
+    "NavierStokes.SignedWaveUpdate": [
+      "NavierStokes.SignedCovariance",
+      "NavierStokes.SignedStressPrimitive",
+      "NavierStokes.PrimaryPulseBounds",
+      "NavierStokes.ParticularWaveBounds",
+      "NavierStokes.ErrorHarmonics",
+      "NavierStokes.MeanMomentBounds",
+      "NavierStokes.CopyAngularInvariance"
+    ],
+    "NavierStokes.SimilarityApproach": [
+      "NavierStokes.SimilarityProfile",
+      "NavierStokes.DiagonalResidual"
+    ],
+    "NavierStokes.SimilarityCoordinates": [
+      "Mathlib.Analysis.SpecialFunctions.Pow.Deriv",
+      "Mathlib.Analysis.Calculus.InverseFunctionTheorem.ContDiff",
+      "Mathlib.Topology.Order.IntermediateValue",
+      "Mathlib.Tactic.FieldSimp",
+      "Mathlib.Tactic.Linarith",
+      "Mathlib.Tactic.Ring"
+    ],
+    "NavierStokes.SimilarityHomogeneity": [
+      "NavierStokes.SimilarityProfile",
+      "NavierStokes.Scaling"
+    ],
+    "NavierStokes.SimilarityProfile": [
+      "NavierStokes.SimilarityCoordinates",
+      "NavierStokes.CoordinateAlgebra"
+    ],
+    "NavierStokes.SlotColoring": [
+      "NavierStokes.SlotGeometry",
+      "Mathlib.Analysis.SpecialFunctions.Pow.Real",
+      "Mathlib.Data.Fintype.Pi",
+      "Mathlib.Data.Fintype.Card",
+      "Mathlib.Data.Fintype.BigOperators",
+      "Mathlib.LinearAlgebra.Matrix.Notation",
+      "Mathlib.Algebra.Order.Floor.Ring",
+      "Mathlib.Algebra.Order.Floor.Semiring",
+      "Mathlib.Order.Interval.Finset.Nat",
+      "Mathlib.Analysis.Real.Sqrt"
+    ],
+    "NavierStokes.SlotGeometry": [
+      "Mathlib.Analysis.Normed.Operator.ContinuousLinearMap",
+      "Mathlib.Topology.Algebra.Module.ContinuousLinearMap.PiProd",
+      "Mathlib.Topology.Instances.Int",
+      "Mathlib.Data.Rat.Cast.Order",
+      "Mathlib.Tactic.FieldSimp",
+      "Mathlib.Tactic.Linarith",
+      "Mathlib.Tactic.NormNum",
+      "Mathlib.Tactic.Positivity",
+      "Mathlib.Tactic.Ring",
+      "Mathlib.Tactic.Abel"
+    ],
+    "NavierStokes.SlowBaseEndpoint": [
+      "NavierStokes.EndpointCoordinates",
+      "NavierStokes.ModulatedExterior",
+      "NavierStokes.FinalSlowBase",
+      "NavierStokes.JointResidualLimits",
+      "NavierStokes.SpacetimeGluing",
+      "Mathlib.Analysis.Calculus.BumpFunction.FiniteDimension"
+    ],
+    "NavierStokes.SlowBorelBase": [
+      "NavierStokes.DiagonalJetBounds",
+      "NavierStokes.SpatialBorelExtension",
+      "NavierStokes.SlowExpansionResidual",
+      "NavierStokes.PhysicalCoordinateBounds",
+      "NavierStokes.ProfileHistories",
+      "Mathlib.Analysis.Calculus.ContDiff.Bounds",
+      "Mathlib.Analysis.SpecialFunctions.Sqrt"
+    ],
+    "NavierStokes.SlowDivergence": [
+      "NavierStokes.ProfileHistories",
+      "NavierStokes.SimilarityProfile"
+    ],
+    "NavierStokes.SlowExpansionResidual": [
+      "NavierStokes.AxisymmetricResidual",
+      "NavierStokes.SimilarityProfile",
+      "NavierStokes.RadialFluxResidual",
+      "NavierStokes.LocalAxisymmetricResidual",
+      "Mathlib.Algebra.BigOperators.NatAntidiagonal",
+      "Mathlib.Analysis.SpecialFunctions.Pow.Real"
+    ],
+    "NavierStokes.SlowFirstOrderEdge": [
+      "NavierStokes.TerminalEdgeFactor"
+    ],
+    "NavierStokes.SlowRecursion": [
+      "NavierStokes.PositiveAxisExistence",
+      "NavierStokes.AxisSourceRegularity",
+      "NavierStokes.BoundaryAxisJets"
+    ],
+    "NavierStokes.SlowResidualMatching": [
+      "NavierStokes.SlowExpansionResidual",
+      "NavierStokes.SlowRecursion",
+      "NavierStokes.LeadingStress",
+      "NavierStokes.SlowStressSupport",
+      "NavierStokes.SlowBorelBase",
+      "NavierStokes.RenormalizedHeatMoment"
+    ],
+    "NavierStokes.SlowStressSupport": [
+      "NavierStokes.PositiveOrderMoments",
+      "NavierStokes.SlowExpansionResidual",
+      "NavierStokes.WeightedRadialPrimitive",
+      "Mathlib.Analysis.Calculus.Deriv.Support"
+    ],
+    "NavierStokes.SmoothCovariance": [
+      "NavierStokes.Covariance",
+      "Mathlib.Analysis.SpecialFunctions.Sqrt",
+      "Mathlib.Topology.Order.Compact",
+      "Mathlib.Topology.MetricSpace.Thickening"
+    ],
+    "NavierStokes.SmoothCutoffs": [
+      "Mathlib.Analysis.Calculus.BumpFunction.InnerProduct",
+      "Mathlib.Analysis.Calculus.Deriv.Support",
+      "Mathlib.Analysis.Calculus.IteratedDeriv.Lemmas",
+      "Mathlib.Analysis.Normed.Group.Bounded",
+      "Mathlib.Tactic.FieldSimp",
+      "Mathlib.Tactic.Linarith",
+      "Mathlib.Tactic.NormNum",
+      "Mathlib.Tactic.Positivity",
+      "Mathlib.Tactic.Ring"
+    ],
+    "NavierStokes.SmoothFamilyTorusInverse": [
+      "NavierStokes.ParametricTorusInverse",
+      "Mathlib.Analysis.Calculus.ContDiff.Bounds",
+      "Mathlib.Analysis.Normed.Module.FiniteDimension"
+    ],
+    "NavierStokes.SmoothFourierData": [
+      "NavierStokes.TorusInverse",
+      "Mathlib.Analysis.Fourier.AddCircleMulti",
+      "Mathlib.Analysis.Calculus.FDeriv.Add",
+      "Mathlib.Analysis.Calculus.Deriv.Prod",
+      "Mathlib.Analysis.Normed.Group.Bounded",
+      "Mathlib.Analysis.PSeries",
+      "Mathlib.Analysis.Normed.Ring.InfiniteSum"
+    ],
+    "NavierStokes.SmoothLoop": [
+      "NavierStokes.LoopMoments",
+      "Mathlib.Analysis.SpecialFunctions.Integrals.Basic",
+      "Mathlib.Analysis.SpecialFunctions.Trigonometric.Deriv",
+      "Mathlib.Analysis.Calculus.Deriv.MeanValue",
+      "Mathlib.MeasureTheory.Integral.IntervalIntegral.Periodic",
+      "Mathlib.Topology.Order.MonotoneContinuity"
+    ],
+    "NavierStokes.SmoothMomentRepair": [
+      "NavierStokes.MomentRepair",
+      "Mathlib.Analysis.Calculus.InverseFunctionTheorem.ContDiff",
+      "Mathlib.Analysis.Calculus.FDeriv.Mul",
+      "Mathlib.Analysis.Normed.Group.Bounded",
+      "Mathlib.Tactic.Abel",
+      "Mathlib.Tactic.FieldSimp",
+      "Mathlib.Tactic.Positivity"
+    ],
+    "NavierStokes.SmoothParameterIntegral": [
+      "Mathlib.Analysis.Calculus.ParametricIntegral",
+      "Mathlib.Analysis.Calculus.IteratedDeriv.Defs",
+      "Mathlib.Analysis.Calculus.ContDiff.Comp",
+      "Mathlib.MeasureTheory.Integral.IntervalIntegral.Basic"
+    ],
+    "NavierStokes.SmoothPathFamily": [
+      "NavierStokes.ParametricODE",
+      "Mathlib.Analysis.Calculus.MeanValue",
+      "Mathlib.Analysis.Calculus.ContDiff.Operations",
+      "Mathlib.Topology.CompactOpen"
+    ],
+    "NavierStokes.SolenoidalDiagonal": [
+      "NavierStokes.SmoothCutoffs",
+      "NavierStokes.DiagonalScale",
+      "NavierStokes.SpatialCurl",
+      "Mathlib.Analysis.Calculus.ContDiff.Operations",
+      "Mathlib.Topology.LocallyFinite"
+    ],
+    "NavierStokes.SpacetimeEndpoint": [
+      "Mathlib.Analysis.Calculus.FDeriv.Extend",
+      "Mathlib.Analysis.Calculus.TangentCone.Prod",
+      "Mathlib.Topology.UniformSpace.UniformApproximation",
+      "NavierStokes.ProblemStatement"
+    ],
+    "NavierStokes.SpacetimeGluing": [
+      "Mathlib.Analysis.Calculus.FDeriv.Symmetric",
+      "Mathlib.Analysis.Calculus.ContDiff.FiniteDimension",
+      "Mathlib.Analysis.Calculus.IteratedDeriv.Lemmas",
+      "NavierStokes.SpacetimeEndpoint",
+      "NavierStokes.SpatialBorelExtension"
+    ],
+    "NavierStokes.SpatialBorelExtension": [
+      "NavierStokes.BorelExtension",
+      "Mathlib.Analysis.Calculus.BumpFunction.FiniteDimension",
+      "Mathlib.Algebra.Order.Algebra",
+      "Mathlib.Analysis.Normed.Group.Basic",
+      "Mathlib.Analysis.Real.Sqrt",
+      "Mathlib.Data.EReal.Inv"
+    ],
+    "NavierStokes.SpatialCurl": [
+      "NavierStokes.ProblemStatement",
+      "Mathlib.Analysis.Calculus.FDeriv.Symmetric",
+      "Mathlib.Analysis.Calculus.FDeriv.Add",
+      "Mathlib.Tactic.Abel",
+      "Mathlib.Tactic.FinCases"
+    ],
+    "NavierStokes.SpatialLocalization": [
+      "NavierStokes.PeriodicLocalization",
+      "NavierStokes.SolenoidalDiagonal",
+      "NavierStokes.CylindricalResidual",
+      "NavierStokes.ResidualRegularity",
+      "NavierStokes.TimeLocalization"
+    ],
+    "NavierStokes.SquaredPartition": [
+      "NavierStokes.ChartScales",
+      "Mathlib.Analysis.Calculus.BumpFunction.InnerProduct",
+      "Mathlib.Analysis.Calculus.IteratedDeriv.Lemmas",
+      "Mathlib.Analysis.SpecialFunctions.Log.Deriv",
+      "Mathlib.Topology.Algebra.Support",
+      "Mathlib.Algebra.BigOperators.Finprod",
+      "Mathlib.Algebra.BigOperators.Ring.Finset",
+      "Mathlib.Analysis.Normed.Group.Bounded"
+    ],
+    "NavierStokes.StateMomentBalances": [
+      "NavierStokes.CorrectionState",
+      "NavierStokes.IntegratedMeanBalances",
+      "NavierStokes.MeanMomentBounds",
+      "NavierStokes.DefectIncrementBounds",
+      "NavierStokes.SignedStressPrimitive"
+    ],
+    "NavierStokes.StateReindex": [
+      "NavierStokes.ParticularWaveBounds",
+      "NavierStokes.HarmonicResidual",
+      "NavierStokes.LiftedMeanResidual"
+    ],
+    "NavierStokes.StressActivation": [
+      "NavierStokes.ProfileHistories",
+      "NavierStokes.OutgoingSchedule",
+      "NavierStokes.ParametricFlatFactor",
+      "NavierStokes.ReferencePath",
+      "Mathlib.Analysis.Calculus.BumpFunction.Basic",
+      "Mathlib.Analysis.Calculus.BumpFunction.FiniteDimension",
+      "Mathlib.Analysis.Calculus.IteratedDeriv.Lemmas"
+    ],
+    "NavierStokes.StressAlgebra": [
+      "Mathlib.Analysis.Calculus.Deriv.Mul",
+      "Mathlib.MeasureTheory.Integral.IntervalIntegral.FundThmCalculus",
+      "Mathlib.Tactic.FieldSimp",
+      "Mathlib.Tactic.LinearCombination",
+      "Mathlib.Tactic.Ring"
+    ],
+    "NavierStokes.SubcoverPeriodicity": [
+      "NavierStokes.ParticularWaveBounds"
+    ],
+    "NavierStokes.TailCone": [
+      "NavierStokes.ReleaseMoments",
+      "NavierStokes.CorrectedPulseAmplitude",
+      "NavierStokes.FuturePressureBounds",
+      "NavierStokes.UniformCone",
+      "NavierStokes.CoordinateAlgebra",
+      "NavierStokes.OutgoingHistories",
+      "NavierStokes.CorrectedPressureBounds",
+      "NavierStokes.PulseCone"
+    ],
+    "NavierStokes.TailEnergyBounds": [
+      "NavierStokes.OutgoingTail",
+      "NavierStokes.ParametricRephase",
+      "Mathlib.Analysis.SpecialFunctions.ImproperIntegrals",
+      "Mathlib.Analysis.Calculus.ParametricIntervalIntegral"
+    ],
+    "NavierStokes.TailGaugePotential": [
+      "NavierStokes.ModulatedExterior",
+      "NavierStokes.JointResidualLimits",
+      "NavierStokes.SlowBaseEndpoint"
+    ],
+    "NavierStokes.TangentODE": [
+      "NavierStokes.TangentProjection",
+      "Mathlib.Analysis.ODE.PicardLindelof",
+      "Mathlib.Analysis.ODE.Gronwall",
+      "Mathlib.Analysis.ODE.ExistUnique"
+    ],
+    "NavierStokes.TangentProjection": [
+      "Mathlib.Analysis.InnerProductSpace.Calculus",
+      "Mathlib.Analysis.Calculus.MeanValue",
+      "Mathlib.Analysis.SpecialFunctions.ExpDeriv",
+      "Mathlib.Data.Complex.Basic",
+      "Mathlib.Tactic.FieldSimp",
+      "Mathlib.Tactic.Linarith",
+      "Mathlib.Tactic.Module"
+    ],
+    "NavierStokes.TemporalMeanUpdate": [
+      "NavierStokes.ParametricTorusInverse",
+      "NavierStokes.SmoothFamilyTorusInverse",
+      "NavierStokes.PressureStream",
+      "NavierStokes.ChartScales",
+      "NavierStokes.TorusAverages",
+      "NavierStokes.UniformFourierAlias"
+    ],
+    "NavierStokes.TemporalStateCoherence": [
+      "NavierStokes.GaugeStateCoherence",
+      "NavierStokes.CommonBaseContext"
+    ],
+    "NavierStokes.TerminalCompensation": [
+      "NavierStokes.UniformAngularReset",
+      "NavierStokes.HeatTailEdit",
+      "Mathlib.Tactic.FinCases"
+    ],
+    "NavierStokes.TerminalCone": [
+      "NavierStokes.HeatedOutgoing",
+      "NavierStokes.TerminalEdgeFactor"
+    ],
+    "NavierStokes.TerminalEdgeFactor": [
+      "NavierStokes.TerminalStress",
+      "NavierStokes.TransportPrimitive",
+      "NavierStokes.HeatProfileExtension",
+      "NavierStokes.EdgeWeightJets",
+      "NavierStokes.PhysicalHeatCoordinates",
+      "NavierStokes.TerminalPressure",
+      "NavierStokes.UniformCone"
+    ],
+    "NavierStokes.TerminalHistoryBridge": [
+      "NavierStokes.HeatedOutgoing",
+      "NavierStokes.TerminalEdgeFactor",
+      "NavierStokes.LeadingStress",
+      "NavierStokes.HeatSwitchCone",
+      "NavierStokes.TerminalCone",
+      "NavierStokes.HeatSwitchHistoryDerivatives",
+      "NavierStokes.HeatTailHistoryLimits"
+    ],
+    "NavierStokes.TerminalPressure": [
+      "NavierStokes.TerminalStress",
+      "NavierStokes.ParametricHeatTail",
+      "NavierStokes.SmoothParameterIntegral",
+      "NavierStokes.TailCone"
+    ],
+    "NavierStokes.TerminalStress": [
+      "NavierStokes.LeadingStress",
+      "NavierStokes.RadialHeatProfile",
+      "NavierStokes.OutgoingTail",
+      "NavierStokes.ParametricFlatFactor",
+      "Mathlib.MeasureTheory.Integral.IntegralEqImproper"
+    ],
+    "NavierStokes.TimeLocalization": [
+      "NavierStokes.SmoothCutoffs",
+      "NavierStokes.ResidualCalculus",
+      "NavierStokes.ProblemStatement"
+    ],
+    "NavierStokes.TorusAverages": [
+      "NavierStokes.SmoothFourierData",
+      "NavierStokes.SmoothLoop",
+      "NavierStokes.PulseCovariance",
+      "Mathlib.MeasureTheory.Measure.Haar.Unique",
+      "Mathlib.Dynamics.Ergodic.MeasurePreserving",
+      "Mathlib.MeasureTheory.Group.FundamentalDomain",
+      "Mathlib.MeasureTheory.Measure.Lebesgue.EqHaar",
+      "Mathlib.MeasureTheory.Function.LocallyIntegrable"
+    ],
+    "NavierStokes.TorusInverse": [
+      "NavierStokes.DiophantineGraph",
+      "Mathlib.Analysis.Calculus.SmoothSeries",
+      "Mathlib.Analysis.SpecialFunctions.ExpDeriv",
+      "Mathlib.Analysis.Fourier.AddCircle",
+      "Mathlib.MeasureTheory.Integral.Prod",
+      "Mathlib.MeasureTheory.Integral.DominatedConvergence"
+    ],
+    "NavierStokes.TorusMeanRequestRebase": [
+      "NavierStokes.PhysicalSignedWave",
+      "NavierStokes.MeanStateRegularity"
+    ],
+    "NavierStokes.TransitionRamp": [
+      "NavierStokes.ActivationStocks",
+      "NavierStokes.ReferenceJetBounds",
+      "Mathlib.Analysis.Calculus.ContDiff.Bounds"
+    ],
+    "NavierStokes.TransportPrimitive": [
+      "NavierStokes.RadialAlias",
+      "Mathlib.Analysis.Calculus.ParametricIntervalIntegral",
+      "Mathlib.Analysis.Calculus.FDeriv.Mul",
+      "Mathlib.Analysis.Calculus.ContDiff.Bounds",
+      "Mathlib.Analysis.SpecialFunctions.SmoothTransition",
+      "Mathlib.Analysis.Normed.Group.Bounded"
+    ],
+    "NavierStokes.TrueConeLoop": [
+      "NavierStokes.LoopVariance",
+      "NavierStokes.UniformCone",
+      "NavierStokes.ParametricRephase",
+      "Mathlib.Analysis.SpecialFunctions.SmoothTransition",
+      "Mathlib.Algebra.Field.Periodic"
+    ],
+    "NavierStokes.UniformAngularReset": [
+      "NavierStokes.AngularMomentReset",
+      "NavierStokes.OutgoingTail",
+      "NavierStokes.ParametricFlatFactor",
+      "Mathlib.Analysis.Calculus.ParametricIntegral",
+      "Mathlib.Analysis.Calculus.ParametricIntervalIntegral",
+      "Mathlib.Analysis.SpecialFunctions.Pow.Asymptotics",
+      "Mathlib.Analysis.SpecialFunctions.ImproperIntegrals"
+    ],
+    "NavierStokes.UniformBlockBounds": [
+      "NavierStokes.ParticularWaveAssembly",
+      "NavierStokes.StateReindex",
+      "NavierStokes.UniformPrimaryWeights",
+      "NavierStokes.HarmonicWaveInteraction",
+      "NavierStokes.PeriodizedWaveBounds"
+    ],
+    "NavierStokes.UniformCone": [
+      "NavierStokes.ConeAlgebra",
+      "Mathlib.Topology.Order.Compact",
+      "Mathlib.Topology.MetricSpace.Thickening"
+    ],
+    "NavierStokes.UniformFourierAlias": [
+      "NavierStokes.FourierAlias",
+      "NavierStokes.WeightedRadialPrimitive",
+      "NavierStokes.RadialPullback",
+      "NavierStokes.SmoothFamilyTorusInverse"
+    ],
+    "NavierStokes.UniformHarmonicInteraction": [
+      "NavierStokes.UniformPrimaryWeights",
+      "NavierStokes.LocalizedMeanInteraction"
+    ],
+    "NavierStokes.UniformPrimaryWeights": [
+      "NavierStokes.LabelSumBounds",
+      "NavierStokes.LinearWaveBounds",
+      "Mathlib.Data.Countable.Defs"
+    ],
+    "NavierStokes.ValidBandGluing": [
+      "NavierStokes.SpatialCurl"
+    ],
+    "NavierStokes.ValidDyadicBandCover": [
+      "NavierStokes.PhysicalMeanJetBounds",
+      "NavierStokes.CutStageEstimates",
+      "NavierStokes.MixedDiagonalExtensions",
+      "NavierStokes.ValidBandGluing"
+    ],
+    "NavierStokes.VariableGaugeMean": [
+      "NavierStokes.MeanChartCompatibility",
+      "NavierStokes.PhysicalMeanDomain",
+      "NavierStokes.LocalSignedRequest"
+    ],
+    "NavierStokes.ViscousPropagator": [
+      "NavierStokes.GaussianEnvelope",
+      "NavierStokes.TangentODE",
+      "Mathlib.Analysis.InnerProductSpace.Calculus",
+      "Mathlib.Analysis.InnerProductSpace.PiL2",
+      "Mathlib.Analysis.ODE.Gronwall",
+      "Mathlib.Tactic.Module",
+      "Mathlib.Tactic.FinCases"
+    ],
+    "NavierStokes.VolterraAnalyticBounds": [
+      "Mathlib.Analysis.Complex.CauchyIntegral",
+      "Mathlib.Analysis.SpecialFunctions.Integrals.Basic",
+      "Mathlib.Data.Matrix.Mul",
+      "Mathlib.Analysis.Normed.Group.Constructions",
+      "Mathlib.Analysis.Normed.Group.Basic",
+      "Mathlib.Data.EReal.Operations",
+      "Mathlib.Topology.Algebra.InfiniteSum.Order",
+      "Mathlib.Topology.MetricSpace.Bounded",
+      "Mathlib.Tactic.FinCases",
+      "Mathlib.Tactic.Positivity",
+      "Mathlib.Tactic.Ring",
+      "NavierStokes.AnalyticCoefficientBounds"
+    ],
+    "NavierStokes.VolterraParity": [
+      "NavierStokes.NilpotentVolterra",
+      "Mathlib.Topology.Piecewise",
+      "Mathlib.Topology.Order.OrderClosed"
+    ],
+    "NavierStokes.VolterraRegularity": [
+      "NavierStokes.NilpotentVolterra",
+      "NavierStokes.VolterraParity",
+      "NavierStokes.CauchyRestriction",
+      "NavierStokes.CompactSmoothFamily",
+      "Mathlib.Analysis.Calculus.ContDiff.Operations",
+      "Mathlib.Analysis.Calculus.IteratedDeriv.Lemmas"
+    ],
+    "NavierStokes.WaveEdgeExtension": [
+      "NavierStokes.PrimaryCopyBounds",
+      "NavierStokes.PhysicalClassBounds",
+      "NavierStokes.FlatZeroExtension",
+      "NavierStokes.VariableGaugeMean"
+    ],
+    "NavierStokes.WaveEnvelopeTransport": [
+      "NavierStokes.GaussianTailFlat",
+      "NavierStokes.CommonCoverClass"
+    ],
+    "NavierStokes.WaveInteractionBounds": [
+      "NavierStokes.WeightedClasses",
+      "NavierStokes.LinearWaveResidual",
+      "NavierStokes.PartitionedCovariance",
+      "NavierStokes.CurlClassBounds"
+    ],
+    "NavierStokes.WaveStateRegularity": [
+      "NavierStokes.GaugeDebtIncrement",
+      "NavierStokes.ParametricFlatFactor"
+    ],
+    "NavierStokes.WeightedClasses": [
+      "NavierStokes.JetBounds",
+      "Mathlib.Analysis.InnerProductSpace.PiL2",
+      "Mathlib.Tactic.Linarith"
+    ],
+    "NavierStokes.WeightedODEJets": [
+      "NavierStokes.SmoothPathFamily",
+      "NavierStokes.ViscousPropagator",
+      "Mathlib.Data.List.OfFn"
+    ],
+    "NavierStokes.WeightedQuotients": [
+      "NavierStokes.FlatCutoff",
+      "NavierStokes.FlatZeroExtension",
+      "Mathlib.Analysis.Calculus.ContDiff.Bounds",
+      "Mathlib.Analysis.Calculus.IteratedDeriv.Lemmas",
+      "Mathlib.Analysis.SpecialFunctions.Pow.Deriv",
+      "Mathlib.Analysis.SpecialFunctions.Sqrt"
+    ],
+    "NavierStokes.WeightedRadialPrimitive": [
+      "NavierStokes.FlatPrimitiveFactor",
+      "NavierStokes.ParametricFlatFactor",
+      "NavierStokes.UniformCone",
+      "NavierStokes.TransportPrimitive",
+      "NavierStokes.WeightedClasses",
+      "Mathlib.MeasureTheory.Integral.IntervalIntegral.IntegrationByParts",
+      "Mathlib.Algebra.Order.Algebra",
+      "Mathlib.Analysis.Normed.Group.Basic",
+      "Mathlib.Analysis.Real.Sqrt",
+      "Mathlib.Data.EReal.Inv",
+      "Mathlib.Tactic.GCongr"
+    ],
+    "NavierStokes.ZerothStressIdentity": [
+      "NavierStokes.AssembledSlowBase",
+      "NavierStokes.LeadingStress"
+    ]
+  }
+}

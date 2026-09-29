@@ -1,0 +1,49 @@
+use "forced_fourier.rad"
+// q>=1: I_q=[1-2^{-(q-1)},1-2^{-q}], amplitude 2^{5-q^2}.
+// beta(s)=exp(4-1/s-1/(1-s)) on (0,1), zero outside.
+// f_q=amplitude*beta(2^q(t-start))*sum c_j cos(2^{q-1}x_j)e_(j+1 mod 3).
+// The fixed bump lemma and the infinite summation argument are documented.
+pub struct ForceAtom { q: int = 1, start_gap_exponent: int = 0, end_gap_exponent: int = 1,
+    frequency_exponent: int = 0, amplitude_exponent: int = 4, coefficients: list<int> = [] }
+pub pure fn force_atom(q: int, coefficients: list<int>) -> ForceAtom {
+    assert(q >= 1 and q <= 1000000,"force descriptor integer domain")
+    assert(len(coefficients) == 3,"force control dimension")
+    for c in coefficients { assert(c >= -1 and c <= 1,"force control amplitude") }
+    return ForceAtom { q: q,start_gap_exponent: q-1,end_gap_exponent: q,
+        frequency_exponent: q-1,amplitude_exponent: 5-q*q,coefficients: coefficients }
+}
+pub pure fn scheduled_controls(lane: int) -> list<int> {
+    assert(lane >= 0 and lane < 27,"control request domain")
+    return [int_div(lane,9)-1,int_div(lane,3)%3-1,lane%3-1]
+}
+pub pure fn cyclic_bank(amplitudes: list<int>) -> list<FluidMode> {
+    assert(len(amplitudes) == 3,"cyclic field dimension")
+    let mut result: list<FluidMode> = []
+    for axis in range(3) {
+        assert(amplitudes[axis] >= -128 and amplitudes[axis] <= 128,"cyclic amplitude domain")
+        for polarity in [-1,1] {
+            let mut k: list<int> = [0,0,0]
+            let mut re: list<int> = [0,0,0]
+            k[axis] = polarity
+            re[(axis+1)%3] = amplitudes[axis]
+            result = push(result,FluidMode { k: k,re: re,im: [0,0,0] })
+        }
+    }
+    return result
+}
+pub pure fn first_pulse_peak(coefficients: list<int>) -> list<FluidMode> {
+    let descriptor: ForceAtom = force_atom(1,coefficients)
+    assert(descriptor.amplitude_exponent == 4,"first pulse normalization")
+    return cyclic_bank([16*coefficients[0],16*coefficients[1],16*coefficients[2]])
+}
+pub pure fn verify_force_tail(spatial_order: int, time_order: int, q: int) -> int {
+    assert(spatial_order >= 0 and spatial_order <= 64 and time_order >= 0 and time_order <= 64,"force derivative test domain")
+    assert(q >= 1 and q <= 1000000,"force stage test domain")
+    let d: int = spatial_order+time_order
+    let exponent: int = 5-q*q+d*q
+    let global_exponent: int = 5+int_div(d*d,4)
+    assert((2*q-d)*(2*q-d) == 4*q*q-4*d*q+d*d,"force completing-square identity")
+    assert(exponent <= global_exponent,"uniform derivative coefficient bound")
+    if q >= d+1 { assert(exponent <= 5-q,"summable actual-force tail") }
+    return exponent
+}

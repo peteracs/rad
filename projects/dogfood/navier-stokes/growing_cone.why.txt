@@ -1,0 +1,12 @@
+{"boundary_certificates":32,"scale_margin_identity":true}
+ConeSummary of cone_result = { boundary_certificates: 32, scale_margin_identity: true }   (set in frame 0)
+
+  <- resolver `ConcludeCone`
+     intent: ConeChecked
+     key: cone_result
+
+     <- proposal ConeChecked { target: cone_result, count: 32 }
+        proposed by law `SubmitCone` at line 42
+
+     settlement origin:
+  <- by top-level code

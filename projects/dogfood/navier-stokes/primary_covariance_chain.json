@@ -1,0 +1,36 @@
+{
+  "growing_cone": {
+    "boundary_certificates": 32,
+    "scale_margin_identity": true,
+    "deterministic_workers": [
+      1,
+      4
+    ],
+    "record_replay": true,
+    "mutation_rejected": true
+  },
+  "covariance_margins": {
+    "box_certificates": 512,
+    "column_scaling": true,
+    "deterministic_workers": [
+      1,
+      4
+    ],
+    "record_replay": true,
+    "mutation_rejected": true
+  },
+  "independent_symbolic_checks": true,
+  "inverse_matrix_derivatives_checked": [
+    1,
+    2
+  ],
+  "lean_executed": false,
+  "full_navier_stokes_proof": false,
+  "source_sha256": {
+    "GrowingMode.lean": "90bfab462d646c1f1e4589d0099c1d822c1cd020ae1a3c5100c9afdbe10e5805",
+    "PulseCovariance.lean": "b93b8ed06651c256254ea0751b12d9967b196415ab295ad8c102cb5aadf4634a",
+    "PrimaryCovarianceBounds.lean": "7417f840e9689a41504a1cc368acc04d565d2c5bac2cca3959675a9a86b97862",
+    "SignedCopyBounds.lean": "92c80c65c74c64c45c3021f44c3ed50f94a7ea44c8779d67a3e0f18cb70029c3",
+    "PrimaryPulseBounds.lean": "c6f13688e93981dc7459532d3b030d233fde7d8eab698d44b059f8a28c2a3935"
+  }
+}

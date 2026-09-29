@@ -1,0 +1,109 @@
+// The proof-dependency graph of this session as a RAD world. Each statement is
+// an entity; each reduction or refutation is a proposal; resolvers derive status.
+component Claim { status: str = "open", support: str = "" }
+
+// Leaves carry their evidence directly.
+entity ladder { Claim { status: "proved", support: "collatz-barrier/ladder: C/3^q <= 0.24046 q + 0.688, sharp, certified" } }
+entity baker { Claim { status: "cited", support: "log2 3 has finite irrationality measure (Baker; explicit bounds by Rhin and successors)" } }
+entity verified_2_71 { Claim { status: "cited", support: "Barina: all n < 2^71 converge" } }
+entity feedback_bound { Claim { status: "proved", support: "collatz-shadow: eta <= log2(1 + (0.24046 q + 0.688)/n) while trapped" } }
+entity mirror_law { Claim { status: "proved", support: "collatz-automatic: T-^j(2^L - n) + T+^j(n) = 3^q 2^(L-j)" } }
+entity cycle_length { Claim { status: "proved", support: "collatz-steer/cycle_bound: any cycle has >= 72,057,431,991 odd steps" } }
+entity tau_poly { Claim { status: "open", support: "tau(n) <= n^eps for all large n" } }
+entity tau_log { Claim { status: "open", support: "tau(n) <= C log2 n; measured tau/log2 n <= 14.5 on record holders" } }
+
+// Derived statements.
+entity descent_from_tau { Claim {} }
+entity collatz { Claim {} }
+
+// Branches that were tried and closed, with the evidence that closed them.
+entity automatic_certificate { Claim {} }
+entity residue_template { Claim {} }
+entity statistical_bias { Claim {} }
+entity coalescence { Claim {} }
+entity tau_by_counting { Claim {} }
+entity tau_by_mirror { Claim {} }
+entity tau_by_residues { Claim {} }
+
+intent Reduction {
+    key target: entity
+    label: str
+    children: list<str>
+    child_status: list<str>
+}
+
+intent Refutation {
+    key target: entity
+    evidence: str
+}
+
+law Reduces(target: entity, label: str, names: list<str>, statuses: list<str>) {
+    propose Reduction { target: target, label: label, children: names, child_status: statuses }
+}
+
+law Refutes(target: entity, evidence: str) {
+    propose Refutation { target: target, evidence: evidence }
+}
+
+pub pure fn closed(s: str) -> bool { return s == "proved" or s == "cited" or s == "verified" or s == "reduced" }
+
+resolver Derive for Reduction(target, proposals) {
+    let mut status: str = "open"
+    let mut support: str = ""
+    for p in proposals {
+        let mut all_closed: bool = true
+        let mut missing: list<str> = []
+        for i in range(len(p.children)) {
+            if not closed(p.child_status[i]) { all_closed = false missing = push(missing, p.children[i]) }
+        }
+        if all_closed { status = "reduced" support = p.label }
+        else if status != "reduced" { support = format("{} (open: {})", p.label, join(missing, ", ")) }
+    }
+    next(target, Claim { status: status, support: support })
+}
+
+resolver Close for Refutation(target, proposals) {
+    let mut ev: list<str> = []
+    for p in proposals { ev = push(ev, p.evidence) }
+    next(target, Claim { status: "refuted", support: join(ev, " | ") })
+}
+
+fn st(e: entity) -> str { return require(e, Claim).status }
+
+fn main() -> nil {
+    // Level 1: closed branches.
+    settle {
+        Refutes(automatic_certificate, "stopping-time Hankel rank grows ~1.75x per digit and equally for 3x-1 (collatz-steer)")
+        Refutes(automatic_certificate, "digit-weight counting forces w_b > w_b (collatz-automatic)")
+        Refutes(residue_template, "Karp witness is the 2-adic fixed point -1 at every k (collatz-cegar)")
+        Refutes(statistical_bias, "carry transport matches random within 1.3% (collatz-carry)")
+        Refutes(statistical_bias, "epoch correlations vanish under a length-matched null (collatz-epoch)")
+        Refutes(statistical_bias, "post-window trapping matches the exact fair-coin null for L = 24..30 (collatz-repulsion)")
+        Refutes(coalescence, "merging removes a constant 18.6% of trapped residues, not an exponent (collatz-merge)")
+        Refutes(tau_by_counting, "tau(n) > t iff n in S_t; 'S_t has no small integers' restates tau_poly (circular)")
+        Refutes(tau_by_mirror, "mirror and exit laws fix tau through the exit; beyond it depends on the unknown orbit of 3^(kq) - m")
+        Refutes(tau_by_residues, "residue classes with short trapping cover only finitely many depths; -1 persists at every depth")
+    }
+    // Level 2: the reduction from a sub-polynomial stopping-time bound.
+    settle {
+        Reduces(descent_from_tau, "ladder + Baker: contraction at tau forces descent once n > poly(tau)",
+            ["ladder", "baker", "tau_poly"], [st(ladder), st(baker), st(tau_poly)])
+        Reduces(descent_from_tau, "a logarithmic bound implies the polynomial one",
+            ["ladder", "baker", "tau_log"], [st(ladder), st(baker), st(tau_log)])
+    }
+    // Level 3: the root.
+    settle {
+        Reduces(collatz, "every large n descends, strong induction, verification below the threshold",
+            ["descent_from_tau", "verified_2_71"], [st(descent_from_tau), st(verified_2_71)])
+    }
+    for name in ["collatz", "descent_from_tau", "automatic_certificate", "residue_template", "statistical_bias", "coalescence", "tau_by_counting", "tau_by_mirror", "tau_by_residues"] {
+        let e: entity = if name == "collatz" { collatz } else if name == "descent_from_tau" { descent_from_tau }
+            else if name == "automatic_certificate" { automatic_certificate } else if name == "residue_template" { residue_template }
+            else if name == "statistical_bias" { statistical_bias } else if name == "coalescence" { coalescence }
+            else if name == "tau_by_counting" { tau_by_counting } else if name == "tau_by_mirror" { tau_by_mirror } else { tau_by_residues }
+        let c: Claim = require(e, Claim)
+        print(format("{}: {} -- {}", name, c.status, c.support))
+    }
+    print(why(collatz, Claim))
+    print(why(descent_from_tau, Claim))
+}

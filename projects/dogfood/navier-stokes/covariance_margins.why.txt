@@ -1,0 +1,12 @@
+{"box_certificates":512,"column_scaling":true}
+MarginSummary of margin_result = { box_certificates: 512, column_scaling: true }   (set in frame 0)
+
+  <- resolver `ConcludeMargins`
+     intent: MarginsChecked
+     key: margin_result
+
+     <- proposal MarginsChecked { target: margin_result, count: 512 }
+        proposed by law `SubmitMargins` at line 64
+
+     settlement origin:
+  <- by top-level code

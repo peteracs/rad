@@ -1,0 +1,63 @@
+use "exact_null.rad"
+
+resource Case { bits: int = 16, min_start: int = 2 }
+
+pub struct CaseResult { bits: int = 0, min_start: int = 0, rows: list<ZRow> = [] }
+
+component CaseEvidence { result: CaseResult = CaseResult {} }
+
+entity case_slot { CaseEvidence {} }
+
+system Test(evidence: mut CaseEvidence, c: Case) {
+    let marks: list<int> = [2 * c.bits, 3 * c.bits, 4 * c.bits, 5 * c.bits, 6 * c.bits]
+    evidence = CaseEvidence { result: CaseResult { bits: c.bits, min_start: c.min_start, rows: exact_test(c.bits, c.min_start, marks) } }
+}
+
+component Verdict { cases: int = 0, negative_z: int = 0, rows: int = 0, most_negative_z_x100: int = 0 }
+
+entity verdict { Verdict {} }
+
+intent Zs {
+    key target: entity
+    bits: int
+    zs: list<int>
+}
+
+law Report(target: entity, r: CaseResult) {
+    let mut zs: list<int> = []
+    for row in r.rows { zs = push(zs, row.z_x100) }
+    propose Zs { target: target, bits: r.bits, zs: zs }
+}
+
+resolver Judge for Zs(target, proposals) {
+    let mut neg: int = 0
+    let mut total: int = 0
+    let mut worst: int = 0
+    for p in proposals {
+        for z in p.zs {
+            total = total + 1
+            if z < 0 { neg = neg + 1 }
+            if z < worst { worst = z }
+        }
+    }
+    next(target, Verdict { cases: len(proposals), negative_z: neg, rows: total, most_negative_z_x100: worst })
+}
+
+fn main() -> nil {
+    let base: world_fork = fork()
+    let mut jobs: list<world_fork> = []
+    for c in [Case { bits: 16, min_start: 1 << 15 }, Case { bits: 18, min_start: 1 << 17 }, Case { bits: 20, min_start: 1 << 19 }] {
+        jobs = push(jobs, fork_with(base, c))
+    }
+    let done: list<world_fork> = simulate_many(jobs, [system::Test], 1, 1937)
+    let mut results: list<CaseResult> = []
+    for i in range(len(done)) {
+        assert_only_changed(jobs[i], done[i], [CaseEvidence])
+        let r: CaseResult = (peek(done[i], case_slot, CaseEvidence) |> unwrap).result
+        results = push(results, r)
+        print(json_stringify(r))
+    }
+    settle { for r in results { Report(verdict, r) } }
+    print(json_stringify(require(verdict, Verdict)))
+    print(why(verdict, Verdict))
+}

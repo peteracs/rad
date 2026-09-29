@@ -1,0 +1,24 @@
+use "forced_fourier.rad"
+fn main() -> nil {
+    // Shear heat solution: the full residual must vanish exactly.
+    let shear: list<FluidMode> = [FluidMode { k: [1,0,0], re: [0,4,0], im: [0,0,0] },
+        FluidMode { k: [-1,0,0], re: [0,4,0], im: [0,0,0] }]
+    let heat: list<FluidMode> = [FluidMode { k: [1,0,0], re: [0,-4,0], im: [0,0,0] },
+        FluidMode { k: [-1,0,0], re: [0,-4,0], im: [0,0,0] }]
+    for mode in actual_force(shear,heat,1) {
+        assert(mode.re == [0,0,0] and mode.im == [0,0,0], "heat residual")
+    }
+    // Two interacting waves: cover generated frequencies, not just inputs.
+    let pair: list<FluidMode> = [FluidMode { k: [1,0,0], re: [0,2,2], im: [0,0,0] },
+        FluidMode { k: [-1,0,0], re: [0,2,2], im: [0,0,0] },
+        FluidMode { k: [0,0,1], re: [2,2,0], im: [0,0,0] },
+        FluidMode { k: [0,0,-1], re: [2,2,0], im: [0,0,0] }]
+    let empty: list<FluidMode> = []
+    let mut generated: bool = false
+    for mode in actual_force(pair,empty,1) {
+        if mode.k == [1,0,1] { assert(mode.im == [0,16,0] and mode.denominator == 8, "generated force coefficient")
+            generated = true }
+        print(json_stringify(mode))
+    }
+    assert(generated,"missing generated force")
+}

@@ -1,0 +1,112 @@
+// Exact conditional transfer through 0 -> TX -> X -> X/TX -> 0.
+// All data are synthetic module invariants; comparison_kind=1 grants a numerical
+// source bound for testing, not an arithmetic theorem about complex L-values.
+resource TransferRequest { analytic: int = 2,budget: int = 2,depth: int = 2,
+    comparison_kind: int = 1,exponents: list<int> = [1,3] }
+component TransferEvidence { original_length: int = 0,quotient_length: int = 0,
+    discarded_length: int = 0,tail_lower_bound: int = 0,tail_layers: list<int> = [],
+    source_upper_bound_holds: bool = false,complex_comparison_supplied: bool = false,
+    budget_covered: bool = false,conditional_bound_transferred: bool = false,
+    exact_target_holds: bool = false,arithmetic_instantiation_verified: bool = false }
+entity transfer_trial { TransferEvidence {} }
+entity direct_upper_bound { TransferEvidence {} }
+entity corrected_upper_bound { TransferEvidence {} }
+entity insufficient_tail { TransferEvidence {} }
+entity insufficient_defect { TransferEvidence {} }
+entity padic_identity_only { TransferEvidence {} }
+
+pure fn assess_transfer(c: TransferRequest) -> TransferEvidence {
+    assert(c.analytic>=0 and c.analytic<=20 and c.budget>=0 and c.budget<=40,"bound domain")
+    assert(c.depth>=0 and c.depth<=20 and len(c.exponents)<=6,"filtration domain")
+    assert(c.comparison_kind==0 or c.comparison_kind==1,"known source-comparison kind")
+    let mut delta: int = 0
+    let mut count: int = 0
+    let mut epsilon: int = 0
+    let mut max_exponent: int = 0
+    for a in c.exponents {
+        assert(a>=0 and a<=20,"Smith exponent domain")
+        delta=delta+a
+        if a>0 { count=count+1 epsilon=epsilon+a-1 }
+        if a>max_exponent { max_exponent=a }
+    }
+    assert(delta==count+epsilon,"exact-sequence length additivity")
+    let mut layers: list<int> = []
+    let mut lower: int = 0
+    for j in range(1,c.depth+1) {
+        let mut layer: int = 0
+        for a in c.exponents { if a>j { layer=layer+1 } }
+        layers=push(layers,layer)
+        lower=lower+layer
+    }
+    assert(lower<=epsilon,"finite tail data gives a lower bound on discarded length")
+    if c.depth>=max_exponent { assert(lower==epsilon,"full filtration recovers discarded length") }
+    let source: bool = delta<=c.analytic+c.budget
+    let covered: bool = lower>=c.budget
+    let passed: bool = c.comparison_kind==1 and source and covered
+    if passed {
+        assert(count==delta-epsilon and count<=c.analytic,"source bound minus certified defect implies target")
+    }
+    return TransferEvidence { original_length:delta,quotient_length:count,discarded_length:epsilon,
+        tail_lower_bound:lower,tail_layers:layers,source_upper_bound_holds:source,
+        complex_comparison_supplied:c.comparison_kind==1,budget_covered:covered,
+        conditional_bound_transferred:passed,exact_target_holds:count<=c.analytic,
+        arithmetic_instantiation_verified:false }
+}
+system TransferStep(row: mut TransferEvidence,c: TransferRequest) { row=assess_transfer(c) }
+intent TransferChecked { key target: entity,request: TransferRequest,evidence: TransferEvidence }
+law SubmitTransfer(target: entity,request: TransferRequest,evidence: TransferEvidence) {
+    propose TransferChecked { target:target,request:request,evidence:evidence }
+}
+resolver ExplainTransfer for TransferChecked(target,proposals) {
+    assert(len(proposals)==1,"one quotient comparison")
+    let row: TransferEvidence = assess_transfer(proposals[0].request)
+    assert(row==proposals[0].evidence,"unsupported transfer or arithmetic identification")
+    next(target,TransferEvidence { original_length:row.original_length,quotient_length:row.quotient_length,
+        discarded_length:row.discarded_length,tail_lower_bound:row.tail_lower_bound,tail_layers:row.tail_layers,
+        source_upper_bound_holds:row.source_upper_bound_holds,complex_comparison_supplied:row.complex_comparison_supplied,
+        budget_covered:row.budget_covered,conditional_bound_transferred:row.conditional_bound_transferred,
+        exact_target_holds:row.exact_target_holds,arithmetic_instantiation_verified:row.arithmetic_instantiation_verified })
+}
+fn main() -> nil {
+    let base: world_fork = fork()
+    let digest: str = world_digest()
+    let mut requests: list<TransferRequest> = []
+    let mut jobs: list<world_fork> = []
+    for code in range(64) { for budget in range(4) { for depth in range(4) {
+        let mut digits: int = code
+        let mut exponents: list<int> = []
+        for _ in range(3) { exponents=push(exponents,digits%4) digits=int_div(digits,4) }
+        let c: TransferRequest = TransferRequest { exponents:exponents,budget:budget,depth:depth }
+        requests=push(requests,c)
+        jobs=push(jobs,fork_with(base,c))
+    } } }
+    let results: list<world_fork> = simulate_many(jobs,[system::TransferStep],1,20260909)
+    for i in range(len(results)) {
+        assert_only_changed(jobs[i],results[i],[TransferEvidence])
+        let row: TransferEvidence = peek(results[i],transfer_trial,TransferEvidence) |> unwrap
+        assert(row==assess_transfer(requests[i]),"requested transfer evaluated")
+        print("request",json_stringify(requests[i]))
+        print("case",json_stringify(row))
+    }
+    assert(world_digest()==digest,"transfer forks preserve parent")
+    let direct: TransferRequest = TransferRequest { analytic:4,budget:0,depth:0 }
+    let corrected: TransferRequest = TransferRequest {}
+    let short_tail: TransferRequest = TransferRequest { depth:1 }
+    let no_defect: TransferRequest = TransferRequest { exponents:[1,1,1,1] }
+    let padic: TransferRequest = TransferRequest { comparison_kind:0 }
+    let mut row: TransferEvidence = assess_transfer(padic)
+    if len(sys_args())>0 { row.conditional_bound_transferred=true row.arithmetic_instantiation_verified=true }
+    settle {
+        SubmitTransfer(direct_upper_bound,direct,assess_transfer(direct))
+        SubmitTransfer(corrected_upper_bound,corrected,assess_transfer(corrected))
+        SubmitTransfer(insufficient_tail,short_tail,assess_transfer(short_tail))
+        SubmitTransfer(insufficient_defect,no_defect,assess_transfer(no_defect))
+        SubmitTransfer(padic_identity_only,padic,row)
+    }
+    for target in [direct_upper_bound,corrected_upper_bound,insufficient_tail,insufficient_defect,padic_identity_only] {
+        print("witness",json_stringify(require(target,TransferEvidence)))
+        print(why(target,TransferEvidence))
+        print(why_field(target,TransferEvidence,"tail_lower_bound"))
+        print(why_field(target,TransferEvidence,"conditional_bound_transferred"))
+    }
+}

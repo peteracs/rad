@@ -1,0 +1,32 @@
+{
+  "samples_ns": {
+    "before": [
+      12840365900,
+      8913604900,
+      8637661400
+    ],
+    "after": [
+      170039900,
+      149980000,
+      155253300
+    ]
+  },
+  "result": {
+    "budget": 2,
+    "discovered": 6529,
+    "expanded": 6529,
+    "length": -1,
+    "n": 8,
+    "target": -1,
+    "word": ""
+  },
+  "median_speedup": 57.41330393621263,
+  "binary_sha256": {
+    "before": "15f115a4981bcc840849a0ab2b8be1449472e42bdc2ef9b85674eae5a8c38885",
+    "after": "4997366f760995e10d4692b7feb76457171778a80207c489fd6979aaf94ba68d"
+  },
+  "source_sha256": {
+    "search.rad": "86400e449b65314304911b6584328c151768db89f2d263a5f5dadff0581570b5",
+    "single.rad": "a061cf07e05dfc43e34b2a9ae96b33ba60a2118f1a6069b90b338eeca5f13ad0"
+  }
+}

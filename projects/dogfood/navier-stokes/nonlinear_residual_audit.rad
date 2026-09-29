@@ -1,0 +1,75 @@
+use "residual_jets.rad"
+resource JetRequest { orders: list<int> = [0,0,0,0],nu: int = 1 }
+component JetEvidence { orders: list<int> = [],nu: int = 1,identity: bool = false,
+    derivative_product_weight: int = 0,actual_stage_bounds_verified: bool = false }
+entity jet_trial { JetEvidence {} }
+entity jet_result { JetEvidence {} }
+pure fn audit(request: JetRequest,omit_cross: bool) -> JetEvidence {
+    assert(len(request.orders) == 4,"spacetime derivative dimensions")
+    let mut degree: int = 0
+    for d in request.orders { assert(d >= 0 and d <= 3,"derivative domain")
+        degree = degree+d }
+    assert(degree <= 3,"bounded mixed derivative audit")
+    for i in range(3) {
+        let mut actual: list<JetTerm> = combine(residual(i,true,request.nu),residual(i,false,request.nu),-1)
+        let mut expected: list<JetTerm> = expected_update(i,request.nu,omit_cross)
+        for axis in range(4) { for _ in range(request.orders[axis]) {
+            actual = differentiate(actual,axis)
+            expected = differentiate(expected,axis)
+        } }
+        assert(is_zero(combine(actual,expected,-1)),"missing nonlinear cross term or differential term")
+    }
+    // Positive symbolic bilinear_terms coefficients count every Leibniz split.
+    let mut bilinear_terms: list<JetTerm> = [JetTerm { c:1,a:atom(0,0,0),b:atom(1,1,0) }]
+    let mut bound: int = 1
+    for axis in range(4) { for _ in range(request.orders[axis]) {
+        bilinear_terms = differentiate(bilinear_terms,axis)
+        bound = 2*bound
+    } }
+    let mut weight: int = 0
+    for term in bilinear_terms { assert(term.c >= 0,"positive Leibniz weights")
+        weight = weight+term.c }
+    assert(weight == bound,"complete bilinear derivative count")
+    return JetEvidence { orders:request.orders,nu:request.nu,identity:true,
+        derivative_product_weight:weight,actual_stage_bounds_verified:false }
+}
+system CheckJets(row: mut JetEvidence,request: JetRequest) { row = audit(request,false) }
+intent JetsChecked { key target: entity,request: JetRequest,evidence: JetEvidence }
+law SubmitJets(target: entity,request: JetRequest,evidence: JetEvidence) {
+    propose JetsChecked { target:target,request:request,evidence:evidence }
+}
+resolver ResolveJets for JetsChecked(target,proposals) {
+    for proposal in proposals { assert(proposal.evidence == audit(proposal.request,false),"forged actual-stage bound") }
+    next(target,JetEvidence { orders:[0,0,0,0],nu:1,identity:true,
+        derivative_product_weight:1,actual_stage_bounds_verified:false })
+}
+fn main() -> nil {
+    let args: list<str> = sys_args()
+    if len(args) > 0 and args[0] == "omit-cross" { print(audit(JetRequest {},true)) }
+    let base: world_fork = fork()
+    let digest: str = world_digest()
+    let mut requests: list<JetRequest> = []
+    let mut jobs: list<world_fork> = []
+    for t in range(4) { for x in range(4-t) { for y in range(4-t-x) { for z in range(4-t-x-y) {
+        let request: JetRequest = JetRequest { orders:[t,x,y,z],nu:1+t+x+y+z }
+        requests = push(requests,request)
+        jobs = push(jobs,fork_with(base,request))
+    } } } }
+    assert(len(jobs) == 35,"all mixed derivatives through order three")
+    let results: list<world_fork> = simulate_many(jobs,[system::CheckJets],1,20260909)
+    let mut rows: list<JetEvidence> = []
+    for i in range(len(results)) {
+        assert_only_changed(jobs[i],results[i],[JetEvidence])
+        let row: JetEvidence = peek(results[i],jet_trial,JetEvidence) |> unwrap
+        rows = push(rows,row)
+        print("jet",json_stringify(row))
+    }
+    assert(world_digest() == digest,"jet fork isolation")
+    if len(args) > 0 and args[0] == "forge" {
+        let mut row: JetEvidence = rows[0]
+        row.actual_stage_bounds_verified = true
+        rows[0] = row
+    }
+    settle { for i in range(len(rows)) { SubmitJets(jet_result,requests[i],rows[i]) } }
+    print(why(jet_result,JetEvidence))
+}

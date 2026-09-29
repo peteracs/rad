@@ -1,0 +1,95 @@
+// Mirror exit law. For a 3x-1 cycle through m with q odd steps and length j:
+//   T+^(kj)(2^(kj) - m) = 3^(kq) - m   (exact, every k >= 1),
+// and nu2(3^Q - c) follows the 2-adic logarithm of c base 3.
+pub pure fn plus_step(n: int) -> int { return if n % 2 == 0 { int_div(n, 2) } else { int_div(3 * n + 1, 2) } }
+
+pub pure fn pow_int(b: int, e: int) -> int {
+    let mut r: int = 1
+    for _ in range(e) { r = r * b }
+    return r
+}
+
+pub pure fn powmod(b: int, e: int, bits: int) -> int {
+    let mask: int = (1 << bits) - 1
+    let mut result: int = 1
+    let mut base: int = b & mask
+    let mut x: int = e
+    while x > 0 {
+        if x % 2 == 1 { result = (result * base) & mask }
+        base = (base * base) & mask
+        x = int_div(x, 2)
+    }
+    return result
+}
+
+pub pure fn nu2(x: int) -> int {
+    assert(x != 0, "valuation of zero")
+    let mut v: int = 0
+    let mut y: int = x
+    while y % 2 == 0 { y = int_div(y, 2) v = v + 1 }
+    return v
+}
+
+// 2-adic discrete log mod 2^(bits-2): s with 3^s = u mod 2^bits, u = 1 or 3 mod 8.
+pub pure fn log3(u: int, bits: int) -> int {
+    let mut s: int = if u % 8 == 3 { 1 } else { 0 }
+    for t in range(3, bits) {
+        let mask: int = (1 << (t + 1)) - 1
+        if (powmod(3, s, 30) & mask) != (u & mask) { s = s + (1 << (t - 2)) }
+    }
+    return s
+}
+
+pub struct ExitLaw {
+    m: int = 0
+    q: int = 0
+    j: int = 0
+    identity_checked: int = 0      // k values where the exact exit identity was verified
+    valuation_checked: int = 0     // k values where the closed-form valuation matched
+    collapse_ks: list<int> = []    // k with nu2 > k * delta (immediate drop below start)
+    max_excess_bits_x1000: int = 0 // largest k*delta - nu2 at k = kmax, in millibits
+    log3_c: int = 0 - 1            // s mod 2^26 when c is a power of 3 in Z_2
+}
+
+// delta_c = log2(3^q / 2^j) in millibits.
+pub pure fn delta_millibits(q: int, j: int) -> int {
+    return int_div(1584963 * q, 1000) - 1000 * j
+}
+
+pub pure fn exit_law(m: int, q: int, j: int, identity_k: int, kmax: int) -> ExitLaw {
+    // Exact identity by direct iteration while values fit in 64 bits.
+    let mut checked: int = 0
+    for k in range(1, identity_k + 1) {
+        let mut x: int = (1 << (k * j)) - m
+        for _ in range(k * j) { x = plus_step(x) }
+        assert(x == pow_int(3, k * q) - m, "mirror exit identity failed")
+        checked = checked + 1
+    }
+    // Closed-form valuation vs direct computation mod 2^30.
+    let in_group: bool = m % 8 == 1 or m % 8 == 3
+    let s: int = if in_group { log3(m, 30) } else { log3((0 - m) & ((1 << 30) - 1), 30) }
+    let delta: int = delta_millibits(q, j)
+    let mut agree: int = 0
+    let mut collapse: list<int> = []
+    let mut excess: int = 0
+    for k in range(1, kmax + 1) {
+        let big_q: int = k * q
+        let residue: int = (powmod(3, big_q, 30) - m) & ((1 << 30) - 1)
+        let direct: int = if residue == 0 { 30 } else { nu2(residue) }
+        let gap: int = big_q - s
+        let mut predicted: int = 0
+        if in_group {
+            predicted = if gap % 2 != 0 { 1 } else if gap == 0 { 30 } else { min(30, 2 + nu2(gap)) }
+        } else {
+            predicted = if gap % 2 != 0 { 2 } else { 1 }
+        }
+        if direct < 28 {
+            assert(predicted == direct, "valuation law failed")
+            agree = agree + 1
+        }
+        if 1000 * direct > k * delta { collapse = push(collapse, k) }
+        if k == kmax { excess = k * delta - 1000 * direct }
+    }
+    return ExitLaw { m: m, q: q, j: j, identity_checked: checked, valuation_checked: agree,
+        collapse_ks: collapse, max_excess_bits_x1000: excess, log3_c: if in_group { s & ((1 << 26) - 1) } else { 0 - 1 } }
+}

@@ -1,0 +1,90 @@
+// Abstract p-primary groups, including groups not asserted realizable by curves.
+// This checks a universal-lemma consequence, not universal existence of its input.
+resource LevelRequest { analytic: int = 2,rank: int = 2,divisible: int = 0,level: int = 4,spectrum: list<int> = [1,2] }
+component LevelEvidence { exponent: int = 0,average_floor: int = 0,last_growth: int = 0,next_growth: int = 0,
+    threshold: int = 0,certificate: bool = false,rank_closed: bool = false,primary_closed: bool = false }
+entity level_trial { LevelEvidence {} }
+entity accepted_level { LevelEvidence {} }
+entity strict_boundary { LevelEvidence {} }
+entity late_finite { LevelEvidence {} }
+
+pure fn exponent(c: LevelRequest,k: int) -> int {
+    let mut value: int = k*(c.rank+c.divisible)
+    for a in c.spectrum { value=value+(if a<k { a } else { k }) }
+    return value
+}
+pure fn assess_level(c: LevelRequest) -> LevelEvidence {
+    assert(c.analytic>=0 and c.analytic<=20 and c.rank>=0 and c.rank<=20,"rank domain")
+    assert(c.divisible>=0 and c.divisible<=20 and c.level>=1 and c.level<=20,"level domain")
+    assert(len(c.spectrum)<=20,"spectrum domain")
+    for a in c.spectrum { assert(a>=1 and a<=40,"cyclic exponent domain") }
+    let total: int = exponent(c,c.level)
+    let upper: int = int_div(total,c.level)
+    let final_increment: int = total-exponent(c,c.level-1)
+    let growth: int = exponent(c,c.level+1)-total
+    assert(final_increment<=upper,"last observed growth is bounded by preceding average")
+    assert(growth<=upper,"nonincreasing growth is bounded by its preceding average")
+    // This finite loop audits the model; the companion proof controls all k.
+    for k in range(c.level,c.level+41) {
+        assert(exponent(c,k+1)-exponent(c,k)<=upper,"propagated growth bound")
+    }
+    let passed: bool = total<c.level*(c.analytic+1)
+    let closed: bool = passed and c.rank>=c.analytic
+    if passed { assert(growth<=c.analytic,"single-level X3 certificate") }
+    if closed {
+        assert(c.rank == c.analytic and c.divisible == 0,"rank and divisible part forced")
+        for a in c.spectrum { assert(a<c.level,"entire finite primary tail saturated") }
+    }
+    return LevelEvidence { exponent:total,average_floor:upper,last_growth:final_increment,next_growth:growth,
+        threshold:c.level*(c.analytic+1),certificate:passed,rank_closed:closed,primary_closed:closed }
+}
+system LevelStep(row: mut LevelEvidence,c: LevelRequest) { row=assess_level(c) }
+intent LevelChecked { key target: entity,request: LevelRequest,evidence: LevelEvidence }
+law SubmitLevel(target: entity,request: LevelRequest,evidence: LevelEvidence) {
+    propose LevelChecked { target:target,request:request,evidence:evidence }
+}
+resolver ExplainLevel for LevelChecked(target,proposals) {
+    assert(len(proposals)==1,"one level certificate")
+    let row: LevelEvidence = assess_level(proposals[0].request)
+    assert(row == proposals[0].evidence,"unsupported single-level certificate")
+    next(target,LevelEvidence { exponent:row.exponent,average_floor:row.average_floor,last_growth:row.last_growth,
+        next_growth:row.next_growth,threshold:row.threshold,certificate:row.certificate,
+        rank_closed:row.rank_closed,primary_closed:row.primary_closed })
+}
+fn main() -> nil {
+    let base: world_fork = fork()
+    let digest: str = world_digest()
+    let mut jobs: list<world_fork> = []
+    let mut requests: list<LevelRequest> = []
+    for m in [2,3,4] { for r in range(5) { for t in range(3) {
+        for n in range(1,5) { for spectrum in [[],[1],[3],[1,4]] {
+            let c: LevelRequest = LevelRequest { analytic:m,rank:r,divisible:t,level:n,spectrum:spectrum }
+            requests=push(requests,c)
+            jobs=push(jobs,fork_with(base,c))
+        } }
+    } } }
+    let results: list<world_fork> = simulate_many(jobs,[system::LevelStep],1,20260909)
+    for i in range(len(results)) {
+        assert_only_changed(jobs[i],results[i],[LevelEvidence])
+        let row: LevelEvidence = peek(results[i],level_trial,LevelEvidence) |> unwrap
+        assert(row == assess_level(requests[i]),"requested fork agreement")
+        print("request",json_stringify(requests[i]))
+        print("case",json_stringify(row))
+    }
+    assert(world_digest() == digest,"isolated level forks preserve parent")
+    let accepted: LevelRequest = LevelRequest {}
+    let edge: LevelRequest = LevelRequest { divisible:1,spectrum:[] }
+    let late: LevelRequest = LevelRequest { spectrum:[8] }
+    let mut row: LevelEvidence = assess_level(edge)
+    if len(sys_args())>0 { row.certificate=true }
+    settle {
+        SubmitLevel(accepted_level,accepted,assess_level(accepted))
+        SubmitLevel(strict_boundary,edge,row)
+        SubmitLevel(late_finite,late,assess_level(late))
+    }
+    for target in [accepted_level,strict_boundary,late_finite] {
+        print("witness",json_stringify(require(target,LevelEvidence)))
+        print(why(target,LevelEvidence))
+        print(why_field(target,LevelEvidence,"certificate"))
+    }
+}

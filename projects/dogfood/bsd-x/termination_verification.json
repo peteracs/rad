@@ -1,0 +1,15 @@
+{
+  "web_search_used": false,
+  "independent_hypotheses_tested": 2,
+  "potential_candidates": 729,
+  "potential_candidates_accepted": 0,
+  "conditional_block_checks": 110,
+  "worker_counts": [
+    1,
+    4
+  ],
+  "record_replay": true,
+  "forged_acceptance_rejected": true,
+  "universal_X_proofs_found": 0,
+  "conclusion": "block decrease suffices but its existence is equivalent to the missing termination claim"
+}

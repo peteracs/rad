@@ -1,0 +1,69 @@
+// Independent hypothesis synthesis. No web input; no elliptic-curve instances.
+// Candidate potential: a*D+b*k+c*h, D=e_k-k*(m+1), h=g_k-(m+1).
+resource PotentialRequest { a: int = 0,b: int = 0,c: int = 0 }
+component PotentialEvidence { globally_nonnegative: bool = false,strict_plateau_drop: bool = false,accepted: bool = false }
+entity potential_trial { PotentialEvidence {} }
+entity selected_hypothesis { PotentialEvidence {} }
+pure fn assess_potential(q: PotentialRequest) -> PotentialEvidence {
+    // On the whole nonnegative orthant: nonnegative iff each coefficient is.
+    let nonnegative: bool = q.a>=0 and q.b>=0 and q.c>=0
+    // Parity-compatible plateau g=m+2: D'=D+1, k'=k+1, h'=h=1.
+    let descent: bool = q.a+q.b<=-1
+    assert(not (nonnegative and descent),"no linear ranking can eliminate the permitted plateau")
+    return PotentialEvidence { globally_nonnegative:nonnegative,strict_plateau_drop:descent,accepted:nonnegative and descent }
+}
+system PotentialStep(row: mut PotentialEvidence,q: PotentialRequest) { row=assess_potential(q) }
+intent PotentialChecked { key target: entity,request: PotentialRequest,evidence: PotentialEvidence }
+law SubmitPotential(target: entity,request: PotentialRequest,evidence: PotentialEvidence) {
+    propose PotentialChecked { target:target,request:request,evidence:evidence }
+}
+resolver ExplainPotential for PotentialChecked(target,proposals) {
+    assert(len(proposals)==1,"one potential explanation")
+    let row: PotentialEvidence = assess_potential(proposals[0].request)
+    assert(row==proposals[0].evidence,"unsupported termination proof")
+    next(target,PotentialEvidence { globally_nonnegative:row.globally_nonnegative,
+        strict_plateau_drop:row.strict_plateau_drop,accepted:row.accepted })
+}
+pure fn block_mass(height: int,delay: int) -> int {
+    assert(height>=0 and height<=100 and delay>=1 and delay<=100,"conditional arithmetic domain")
+    let mut mass: int = 0
+    for k in range(height*delay) {
+        mass=mass+height-int_div(k,delay)
+    }
+    let formula: int = int_div(delay*height*(height+1),2)
+    assert(mass==formula,"sum of descending block heights")
+    assert(mass<mass+1,"strict certificate at N=mass+1")
+    return mass
+}
+fn main() -> nil {
+    let base: world_fork = fork()
+    let digest: str = world_digest()
+    let mut jobs: list<world_fork> = []
+    let mut requests: list<PotentialRequest> = []
+    for a in range(-4,5) { for b in range(-4,5) { for c in range(-4,5) {
+        let q: PotentialRequest = PotentialRequest { a:a,b:b,c:c }
+        requests=push(requests,q)
+        jobs=push(jobs,fork_with(base,q))
+    } } }
+    let results: list<world_fork> = simulate_many(jobs,[system::PotentialStep],1,20260909)
+    let mut accepted: int = 0
+    for i in range(len(results)) {
+        assert_only_changed(jobs[i],results[i],[PotentialEvidence])
+        let row: PotentialEvidence = peek(results[i],potential_trial,PotentialEvidence) |> unwrap
+        assert(row==assess_potential(requests[i]),"candidate request agreement")
+        if row.accepted { accepted=accepted+1 }
+    }
+    assert(world_digest()==digest,"synthesis preserves parent")
+    print("candidates",len(results),"accepted",accepted)
+    // Adaptive repair: add bounded-block decrease as an EXPLICIT hypothesis.
+    // These checks do not establish that hypothesis for actual Selmer groups.
+    for height in range(11) { for delay in range(1,11) {
+        print("block",height,delay,block_mass(height,delay))
+    } }
+    let q: PotentialRequest = PotentialRequest { a:1,b:0,c:1 }
+    let mut row: PotentialEvidence = assess_potential(q)
+    if len(sys_args())>0 { row.accepted=true }
+    settle { SubmitPotential(selected_hypothesis,q,row) }
+    print(why(selected_hypothesis,PotentialEvidence))
+    print(why_field(selected_hypothesis,PotentialEvidence,"strict_plateau_drop"))
+}

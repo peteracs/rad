@@ -1,0 +1,122 @@
+use "trajectory_fixture.rad"
+// A diagnostic grammar, not a theorem about all possible constructions.
+pub pure fn stationary_predecessor() -> SmoothStage {
+    return SmoothStage { a: [fixture_bank(1),fixture_bank(0),fixture_bank(0)],
+        b: [fixture_bank(0),fixture_bank(0),fixture_bank(0)] }
+}
+pub pure fn repair_endpoint_jet(stage: SmoothStage) -> SmoothStage {
+    assert(stage.inverse_duration == 1,"endpoint repair duration")
+    let u: list<FluidMode> = stage_bank(stage,0,0,false)
+    let f: list<ForceMode> = actual_force(u,[],stage.viscosity)
+    let mut derivative: list<FluidMode> = []
+    for mode in u {
+        let mut re: list<int> = [0,0,0]
+        let mut im: list<int> = [0,0,0]
+        for force in f {
+            if force.k == mode.k {
+                for j in range(3) {
+                    assert((2*force.re[j])%force.denominator == 0 and (2*force.im[j])%force.denominator == 0,"endpoint repair rational grid")
+                    re[j] = -int_div(2*force.re[j],force.denominator)
+                    im[j] = -int_div(2*force.im[j],force.denominator)
+                }
+            }
+        }
+        derivative = push(derivative,FluidMode { k: mode.k,re: re,im: im })
+    }
+    // This grammar only represents corrections on the current union support.
+    // Verify the FULL residual before calling the zeroth jet repaired.
+    for residual in actual_force(u,derivative,stage.viscosity) {
+        assert(residual.re == [0,0,0] and residual.im == [0,0,0],"unrepresented generated derivative mode")
+    }
+    let mut repaired: SmoothStage = stage
+    repaired.a = [stage.a[0],derivative,stage.a[2]]
+    return repaired
+}
+pub pure fn backpropagate_jet(stage: SmoothStage) -> SmoothStage {
+    // Translate the selected A germ backward by one unit. This changes upstream data.
+    let mut a0: list<FluidMode> = []
+    let mut a1: list<FluidMode> = []
+    for index in range(len(stage.a[0])) {
+        let mut r0: list<int> = []
+        let mut i0: list<int> = []
+        let mut r1: list<int> = []
+        let mut i1: list<int> = []
+        for j in range(3) {
+            r0 = push(r0,stage.a[0][index].re[j]-stage.a[1][index].re[j]+stage.a[2][index].re[j])
+            i0 = push(i0,stage.a[0][index].im[j]-stage.a[1][index].im[j]+stage.a[2][index].im[j])
+            r1 = push(r1,stage.a[1][index].re[j]-2*stage.a[2][index].re[j])
+            i1 = push(i1,stage.a[1][index].im[j]-2*stage.a[2][index].im[j])
+        }
+        a0 = push(a0,FluidMode { k: stage.a[0][index].k,re: r0,im: i0 })
+        a1 = push(a1,FluidMode { k: stage.a[0][index].k,re: r1,im: i1 })
+    }
+    let upstream: SmoothStage = SmoothStage { a: [a0,a1,stage.a[2]],
+        b: [fixture_bank(0),fixture_bank(0),fixture_bank(0)] }
+    assert(stage_join(upstream,stage),"backpropagated endpoint closure")
+    return upstream
+}
+pub pure fn midpoint_force(stage: SmoothStage) -> list<ForceMode> {
+    // At s=1/2 the exact fixed-step values are theta=1/2 and theta'=2.
+    // Numerators below use the common Fourier coefficient denominator 16.
+    let mut u: list<FluidMode> = []
+    let mut ut: list<FluidMode> = []
+    for index in range(len(stage.a[0])) {
+        let mut re: list<int> = []
+        let mut im: list<int> = []
+        let mut tr: list<int> = []
+        let mut ti: list<int> = []
+        for j in range(3) {
+            re = push(re,8*stage.a[0][index].re[j]+4*stage.a[1][index].re[j]+2*stage.a[2][index].re[j]
+                +4*stage.b[0][index].re[j]+2*stage.b[1][index].re[j]+stage.b[2][index].re[j])
+            im = push(im,8*stage.a[0][index].im[j]+4*stage.a[1][index].im[j]+2*stage.a[2][index].im[j]
+                +4*stage.b[0][index].im[j]+2*stage.b[1][index].im[j]+stage.b[2][index].im[j])
+            tr = push(tr,stage.inverse_duration*(8*stage.a[1][index].re[j]+8*stage.a[2][index].re[j]
+                +16*stage.b[0][index].re[j]+12*stage.b[1][index].re[j]+8*stage.b[2][index].re[j]))
+            ti = push(ti,stage.inverse_duration*(8*stage.a[1][index].im[j]+8*stage.a[2][index].im[j]
+                +16*stage.b[0][index].im[j]+12*stage.b[1][index].im[j]+8*stage.b[2][index].im[j]))
+        }
+        u = push(u,FluidMode { k: stage.a[0][index].k,re: re,im: im })
+        ut = push(ut,FluidMode { k: stage.a[0][index].k,re: tr,im: ti })
+    }
+    return actual_force_scaled(u,ut,stage.viscosity,8)
+}
+pub pure fn link_predecessor(upstream: SmoothStage, downstream: SmoothStage) -> SmoothStage {
+    // Keep the predecessor's entrance germ AND the shared velocity fixed.
+    // Change its exit germ through its own flat switch, which acts at that exit.
+    let shared: list<FluidMode> = stage_bank(upstream,1,1,false)
+    assert(shared == stage_bank(downstream,0,0,false),"shared velocity must remain fixed")
+    let hl: int = upstream.inverse_duration
+    let hr: int = downstream.inverse_duration
+    let divisor: int = hl*hl
+    let mut b: list<list<FluidMode>> = []
+    for order in range(3) {
+        let mut bank: list<FluidMode> = []
+        for index in range(len(shared)) {
+            let mut re: list<int> = []
+            let mut im: list<int> = []
+            for j in range(3) {
+                let r0: int = downstream.a[0][index].re[j]
+                let r1: int = downstream.a[1][index].re[j]
+                let r2: int = downstream.a[2][index].re[j]
+                let i0: int = downstream.a[0][index].im[j]
+                let i1: int = downstream.a[1][index].im[j]
+                let i2: int = downstream.a[2][index].im[j]
+                let rn: int = if order == 0 { hl*hl*r0-hr*hl*r1+hr*hr*r2 }
+                    else if order == 1 { hr*hl*r1-2*hr*hr*r2 } else { hr*hr*r2 }
+                let inn: int = if order == 0 { hl*hl*i0-hr*hl*i1+hr*hr*i2 }
+                    else if order == 1 { hr*hl*i1-2*hr*hr*i2 } else { hr*hr*i2 }
+                assert(rn%divisor == 0 and inn%divisor == 0,"joint repair rational grid")
+                re = push(re,int_div(rn,divisor)-upstream.a[order][index].re[j])
+                im = push(im,int_div(inn,divisor)-upstream.a[order][index].im[j])
+            }
+            bank = push(bank,FluidMode { k: shared[index].k,re: re,im: im })
+        }
+        b = push(b,bank)
+    }
+    let mut repaired: SmoothStage = upstream
+    repaired.b = b
+    assert(repaired.a == upstream.a,"predecessor entrance germ changed")
+    assert(stage_bank(repaired,1,1,false) == shared,"shared velocity changed")
+    assert(stage_join(repaired,downstream),"joint endpoint closure")
+    return repaired
+}

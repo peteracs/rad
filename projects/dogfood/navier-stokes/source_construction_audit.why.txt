@@ -1,0 +1,71 @@
+source {"all_margins":true,"bar_margin":1000,"blowup_proved":false,"defect_margin":80000,"kappa_units":0,"mean_margin":7000,"particular_margin":30000,"physical_estimates_verified":false,"signed_margin":30000,"stage":0}
+source {"all_margins":true,"bar_margin":998,"blowup_proved":false,"defect_margin":79996,"kappa_units":1,"mean_margin":7000,"particular_margin":30000,"physical_estimates_verified":false,"signed_margin":29999,"stage":0}
+source {"all_margins":true,"bar_margin":2,"blowup_proved":false,"defect_margin":78004,"kappa_units":499,"mean_margin":7000,"particular_margin":30000,"physical_estimates_verified":false,"signed_margin":29501,"stage":0}
+source {"all_margins":false,"bar_margin":0,"blowup_proved":false,"defect_margin":78000,"kappa_units":500,"mean_margin":7000,"particular_margin":30000,"physical_estimates_verified":false,"signed_margin":29500,"stage":0}
+source {"all_margins":false,"bar_margin":-2,"blowup_proved":false,"defect_margin":77996,"kappa_units":501,"mean_margin":7000,"particular_margin":30000,"physical_estimates_verified":false,"signed_margin":29499,"stage":0}
+source {"all_margins":false,"bar_margin":-12000,"blowup_proved":false,"defect_margin":60000,"kappa_units":5000,"mean_margin":7000,"particular_margin":25000,"physical_estimates_verified":false,"signed_margin":20000,"stage":0}
+source {"all_margins":true,"bar_margin":1000,"blowup_proved":false,"defect_margin":80000,"kappa_units":0,"mean_margin":7000,"particular_margin":30000,"physical_estimates_verified":false,"signed_margin":30000,"stage":1}
+source {"all_margins":true,"bar_margin":998,"blowup_proved":false,"defect_margin":79996,"kappa_units":1,"mean_margin":7000,"particular_margin":30000,"physical_estimates_verified":false,"signed_margin":29999,"stage":1}
+source {"all_margins":true,"bar_margin":2,"blowup_proved":false,"defect_margin":78004,"kappa_units":499,"mean_margin":7000,"particular_margin":30000,"physical_estimates_verified":false,"signed_margin":29501,"stage":1}
+source {"all_margins":false,"bar_margin":0,"blowup_proved":false,"defect_margin":78000,"kappa_units":500,"mean_margin":7000,"particular_margin":30000,"physical_estimates_verified":false,"signed_margin":29500,"stage":1}
+source {"all_margins":false,"bar_margin":-2,"blowup_proved":false,"defect_margin":77996,"kappa_units":501,"mean_margin":7000,"particular_margin":30000,"physical_estimates_verified":false,"signed_margin":29499,"stage":1}
+source {"all_margins":false,"bar_margin":-9000,"blowup_proved":false,"defect_margin":60000,"kappa_units":5000,"mean_margin":7000,"particular_margin":25000,"physical_estimates_verified":false,"signed_margin":20000,"stage":1}
+source {"all_margins":true,"bar_margin":1000,"blowup_proved":false,"defect_margin":80000,"kappa_units":0,"mean_margin":7000,"particular_margin":30000,"physical_estimates_verified":false,"signed_margin":30000,"stage":2}
+source {"all_margins":true,"bar_margin":998,"blowup_proved":false,"defect_margin":79996,"kappa_units":1,"mean_margin":7000,"particular_margin":30000,"physical_estimates_verified":false,"signed_margin":29999,"stage":2}
+source {"all_margins":true,"bar_margin":2,"blowup_proved":false,"defect_margin":78004,"kappa_units":499,"mean_margin":7000,"particular_margin":30000,"physical_estimates_verified":false,"signed_margin":29501,"stage":2}
+source {"all_margins":false,"bar_margin":0,"blowup_proved":false,"defect_margin":78000,"kappa_units":500,"mean_margin":7000,"particular_margin":30000,"physical_estimates_verified":false,"signed_margin":29500,"stage":2}
+source {"all_margins":false,"bar_margin":-2,"blowup_proved":false,"defect_margin":77996,"kappa_units":501,"mean_margin":7000,"particular_margin":30000,"physical_estimates_verified":false,"signed_margin":29499,"stage":2}
+source {"all_margins":false,"bar_margin":-9000,"blowup_proved":false,"defect_margin":60000,"kappa_units":5000,"mean_margin":7000,"particular_margin":25000,"physical_estimates_verified":false,"signed_margin":20000,"stage":2}
+source {"all_margins":true,"bar_margin":1000,"blowup_proved":false,"defect_margin":80000,"kappa_units":0,"mean_margin":7000,"particular_margin":30000,"physical_estimates_verified":false,"signed_margin":30000,"stage":10}
+source {"all_margins":true,"bar_margin":998,"blowup_proved":false,"defect_margin":79996,"kappa_units":1,"mean_margin":7000,"particular_margin":30000,"physical_estimates_verified":false,"signed_margin":29999,"stage":10}
+source {"all_margins":true,"bar_margin":2,"blowup_proved":false,"defect_margin":78004,"kappa_units":499,"mean_margin":7000,"particular_margin":30000,"physical_estimates_verified":false,"signed_margin":29501,"stage":10}
+source {"all_margins":false,"bar_margin":0,"blowup_proved":false,"defect_margin":78000,"kappa_units":500,"mean_margin":7000,"particular_margin":30000,"physical_estimates_verified":false,"signed_margin":29500,"stage":10}
+source {"all_margins":false,"bar_margin":-2,"blowup_proved":false,"defect_margin":77996,"kappa_units":501,"mean_margin":7000,"particular_margin":30000,"physical_estimates_verified":false,"signed_margin":29499,"stage":10}
+source {"all_margins":false,"bar_margin":-9000,"blowup_proved":false,"defect_margin":60000,"kappa_units":5000,"mean_margin":7000,"particular_margin":25000,"physical_estimates_verified":false,"signed_margin":20000,"stage":10}
+source {"all_margins":true,"bar_margin":1000,"blowup_proved":false,"defect_margin":80000,"kappa_units":0,"mean_margin":7000,"particular_margin":30000,"physical_estimates_verified":false,"signed_margin":30000,"stage":100}
+source {"all_margins":true,"bar_margin":998,"blowup_proved":false,"defect_margin":79996,"kappa_units":1,"mean_margin":7000,"particular_margin":30000,"physical_estimates_verified":false,"signed_margin":29999,"stage":100}
+source {"all_margins":true,"bar_margin":2,"blowup_proved":false,"defect_margin":78004,"kappa_units":499,"mean_margin":7000,"particular_margin":30000,"physical_estimates_verified":false,"signed_margin":29501,"stage":100}
+source {"all_margins":false,"bar_margin":0,"blowup_proved":false,"defect_margin":78000,"kappa_units":500,"mean_margin":7000,"particular_margin":30000,"physical_estimates_verified":false,"signed_margin":29500,"stage":100}
+source {"all_margins":false,"bar_margin":-2,"blowup_proved":false,"defect_margin":77996,"kappa_units":501,"mean_margin":7000,"particular_margin":30000,"physical_estimates_verified":false,"signed_margin":29499,"stage":100}
+source {"all_margins":false,"bar_margin":-9000,"blowup_proved":false,"defect_margin":60000,"kappa_units":5000,"mean_margin":7000,"particular_margin":25000,"physical_estimates_verified":false,"signed_margin":20000,"stage":100}
+source {"all_margins":true,"bar_margin":1000,"blowup_proved":false,"defect_margin":80000,"kappa_units":0,"mean_margin":7000,"particular_margin":30000,"physical_estimates_verified":false,"signed_margin":30000,"stage":10000}
+source {"all_margins":true,"bar_margin":998,"blowup_proved":false,"defect_margin":79996,"kappa_units":1,"mean_margin":7000,"particular_margin":30000,"physical_estimates_verified":false,"signed_margin":29999,"stage":10000}
+source {"all_margins":true,"bar_margin":2,"blowup_proved":false,"defect_margin":78004,"kappa_units":499,"mean_margin":7000,"particular_margin":30000,"physical_estimates_verified":false,"signed_margin":29501,"stage":10000}
+source {"all_margins":false,"bar_margin":0,"blowup_proved":false,"defect_margin":78000,"kappa_units":500,"mean_margin":7000,"particular_margin":30000,"physical_estimates_verified":false,"signed_margin":29500,"stage":10000}
+source {"all_margins":false,"bar_margin":-2,"blowup_proved":false,"defect_margin":77996,"kappa_units":501,"mean_margin":7000,"particular_margin":30000,"physical_estimates_verified":false,"signed_margin":29499,"stage":10000}
+source {"all_margins":false,"bar_margin":-9000,"blowup_proved":false,"defect_margin":60000,"kappa_units":5000,"mean_margin":7000,"particular_margin":25000,"physical_estimates_verified":false,"signed_margin":20000,"stage":10000}
+selected {"all_margins":true,"bar_margin":998,"blowup_proved":false,"defect_margin":79996,"kappa_units":1,"mean_margin":7000,"particular_margin":30000,"physical_estimates_verified":false,"signed_margin":29999,"stage":0}
+SourceEvidence of source_result = { stage: 0, kappa_units: 1, particular_margin: 30000, signed_margin: 29999, bar_margin: 998, â€¦   (set in frame 0)
+
+  <- resolver `CheckSource`
+     intent: SourceChecked
+     key: source_result
+
+     <- proposal SourceChecked { target: source_result, request: SourceCase { stage: 0, kappa_units: 5000 }, evidâ€¦
+        proposed by law `SubmitSource` at line 55
+
+     <- proposal SourceChecked { target: source_result, request: SourceCase { stage: 0, kappa_units: 501 }, evideâ€¦
+        proposed by law `SubmitSource` at line 55
+
+     <- proposal SourceChecked { target: source_result, request: SourceCase { stage: 10000, kappa_units: 501 }, eâ€¦
+        proposed by law `SubmitSource` at line 55
+
+     <- proposal SourceChecked { target: source_result, request: SourceCase { stage: 100, kappa_units: 501 }, eviâ€¦
+        proposed by law `SubmitSource` at line 55
+
+     <- proposal SourceChecked { target: source_result, request: SourceCase { stage: 10, kappa_units: 501 }, evidâ€¦
+        proposed by law `SubmitSource` at line 55
+
+     <- proposal SourceChecked { target: source_result, request: SourceCase { stage: 1, kappa_units: 501 }, evideâ€¦
+        proposed by law `SubmitSource` at line 55
+
+     <- proposal SourceChecked { target: source_result, request: SourceCase { stage: 2, kappa_units: 501 }, evideâ€¦
+        proposed by law `SubmitSource` at line 55
+
+     <- proposal SourceChecked { target: source_result, request: SourceCase { stage: 10000, kappa_units: 5000 }, â€¦
+        proposed by law `SubmitSource` at line 55
+
+     <- 8 proposals shown, 28 additional proposals omitted
+
+     settlement origin:
+  <- by top-level code

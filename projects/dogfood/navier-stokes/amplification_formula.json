@@ -1,0 +1,15 @@
+{
+  "amplitudes": [
+    "a",
+    "b",
+    "c",
+    "d",
+    "e",
+    "f"
+  ],
+  "enstrophy": "a**2/2 + b**2/2 + 3*c**2/2 + d**2/2 + 3*e**2/2 + 25*f**2/4",
+  "rate": "-a**2*nu + a*b*c/2 - b**2*nu + b*d*e/2 - 6*c**2*nu - d**2*nu - d*e*f/4 - 6*e**2*nu - 125*f**2*nu/2",
+  "dissipation": "a**2 + b**2 + 6*c**2 + d**2 + 6*e**2 + 125*f**2/2",
+  "input_modes": 12,
+  "derivative_modes": 46
+}

@@ -1,0 +1,64 @@
+use "natural.rad"
+
+pub struct LiteralResult {
+    start: int = 0
+    end: int = 0
+    tested: int = 0
+    steps: int = 0
+    max_tau: int = 0
+    witness: int = 0
+    peak: int = 0
+    censored: int = 0
+}
+
+pub pure fn minimum_odds(limit: int) -> list<int> {
+    let mut coefficient: Natural = nat(1)
+    let mut odd: int = 0
+    let mut result: list<int> = [0]
+    for depth in range(1, limit + 1) {
+        if ncmp(coefficient, npow2(depth)) < 0 {
+            coefficient = nscale(coefficient, 3)
+            odd = odd + 1
+        }
+        assert(ncmp(coefficient, npow2(depth)) >= 0, "odd-count ceiling failed")
+        result = push(result, odd)
+    }
+    return result
+}
+
+// Follow literal integer trajectories, using a separately computed exact
+// coefficient boundary. Success means t(n)=tau(n), not merely convergence.
+pub pure fn literal_range(start: int, end: int, odds: list<int>) -> LiteralResult {
+    assert(start >= 2 and end >= start, "bad literal interval")
+    let mut steps: int = 0
+    let mut maximum: int = 0
+    let mut witness: int = 0
+    let mut peak: int = 0
+    let mut censored: int = 0
+    for n in range(start, end) {
+        let mut value: int = n
+        let mut odd: int = 0
+        let mut stopped: bool = false
+        for depth in range(1, len(odds)) {
+            if value % 2 == 1 {
+                value = int_div(3 * value + 1, 2)
+                odd = odd + 1
+            } else { value = int_div(value, 2) }
+            peak = max(peak, value)
+            steps = steps + 1
+            if odd < odds[depth] {
+                assert(value < n, "CST counterexample: coefficient contracted without descent")
+                if depth > maximum {
+                    maximum = depth
+                    witness = n
+                }
+                stopped = true
+                break
+            }
+            assert(value >= n, "literal descent preceded coefficient contraction")
+        }
+        if not stopped { censored = censored + 1 }
+    }
+    return LiteralResult { start: start, end: end, tested: end - start, steps: steps,
+        max_tau: maximum, witness: witness, peak: peak, censored: censored }
+}

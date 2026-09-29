@@ -1,0 +1,48 @@
+// f(x)=2^-{x}, alpha=log_2(3). Between its discontinuities, the block
+// sum F_m(x)=sum(i=0..m-1) f(x+i*alpha) strictly decreases. Therefore
+// its maximum occurs at one of x={-j*alpha}, 0<=j<m.
+// At such a point each term is a rational power of 2 divided by a power
+// of 3, or vice versa. For m<=12 they all divide the common denominator.
+pub struct RotationRow {
+    block_length: int = 0
+    phases: int = 0
+    maximizing_phase: int = 0
+    maximum_scaled: int = 0
+    denominator: int = 0
+}
+
+pub pure fn rotation_rows() -> list<RotationRow> {
+    let denominator: int = (1 << 18) * 177147
+    let mut result: list<RotationRow> = []
+    for m in range(1, 13) {
+        let mut maximum: int = 0
+        let mut maximizing: int = 0
+        for phase in range(m) {
+            let mut total: int = 0
+            for i in range(m) {
+                let k: int = i - phase
+                let magnitude: int = abs(k)
+                let power3: int = pow(3, magnitude)
+                let mut lower2: int = 1
+                while lower2 * 2 <= power3 { lower2 = lower2 * 2 }
+                if k >= 0 {
+                    assert(denominator % power3 == 0, "positive phase denominator is not exact")
+                    total = total + int_div(denominator, power3) * lower2
+                } else {
+                    assert(denominator % (2 * lower2) == 0, "negative phase denominator is not exact")
+                    total = total + int_div(denominator, 2 * lower2) * power3
+                }
+            }
+            if total > maximum {
+                maximum = total
+                maximizing = phase
+            }
+        }
+        if m == 12 { assert(4 * maximum < 3 * m * denominator, "12-step block does not contract the excess") }
+        else { assert(36 * maximum <= (27 * m + 11) * denominator, "short-block excess exceeds 11/36") }
+        if m == 3 { assert(36 * maximum == (27 * m + 11) * denominator, "sharp intercept is not attained") }
+        result = push(result, RotationRow { block_length: m, phases: m,
+            maximizing_phase: maximizing, maximum_scaled: maximum, denominator: denominator })
+    }
+    return result
+}

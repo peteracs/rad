@@ -1,0 +1,64 @@
+use "probes.rad"
+
+resource Probe { kind: int = 0 }
+
+component Evidence { result: ProbeResult = ProbeResult {} }
+
+entity evidence_slot { Evidence {} }
+
+system RunProbe(evidence: mut Evidence, probe: Probe) {
+    let r: ProbeResult = if probe.kind == 0 { probe_automaton() } else if probe.kind == 1 { probe_mirror() } else { probe_cycles() }
+    evidence = Evidence { result: r }
+}
+
+component Direction { strategy: str = "", leverage: int = 0, rejected: int = 0, considered: int = 0 }
+
+entity direction { Direction {} }
+
+intent Lead {
+    key target: entity
+    strategy: str
+    leverage: int
+    separates: bool
+}
+
+law Propose(target: entity, r: ProbeResult) {
+    propose Lead { target: target, strategy: r.strategy, leverage: r.leverage, separates: r.separates }
+}
+
+// Calibration is enforced here: a lead that cannot tell 3x+1 from 3x-1 is
+// recorded as rejected and can never be selected.
+resolver Choose for Lead(target, proposals) {
+    let mut chosen: str = ""
+    let mut best: int = 0 - 1
+    let mut rejected: int = 0
+    for p in proposals {
+        if not p.separates { rejected = rejected + 1 }
+        else if p.leverage > best {
+            best = p.leverage
+            chosen = p.strategy
+        }
+    }
+    next(target, Direction { strategy: chosen, leverage: best, rejected: rejected, considered: len(proposals) })
+}
+
+constraint Calibrated for Direction(subject, proposed) {
+    require proposed.leverage >= 0 else "steer.no_calibrated_lead"
+}
+
+fn main() -> nil {
+    let base: world_fork = fork()
+    let mut jobs: list<world_fork> = []
+    for kind in range(3) { jobs = push(jobs, fork_with(base, Probe { kind: kind })) }
+    let done: list<world_fork> = simulate_many(jobs, [system::RunProbe], 1, 1937)
+    let mut results: list<ProbeResult> = []
+    for i in range(len(done)) {
+        assert_only_changed(jobs[i], done[i], [Evidence])
+        let r: ProbeResult = (peek(done[i], evidence_slot, Evidence) |> unwrap).result
+        results = push(results, r)
+        print(json_stringify(r))
+    }
+    settle { for r in results { Propose(direction, r) } }
+    print(json_stringify(require(direction, Direction)))
+    print(why(direction, Direction))
+}

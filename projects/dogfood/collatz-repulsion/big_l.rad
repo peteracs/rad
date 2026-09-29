@@ -1,0 +1,4 @@
+use "signed.rad"
+let b: int = int(sys_args()[0])
+let rows: list<ZRow> = signed_test(b, 1, [2 * b, 3 * b, 4 * b, 5 * b])
+for r in rows { print(json_stringify(r)) }

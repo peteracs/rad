@@ -1,0 +1,42 @@
+use "poly16.rad"
+
+component PrincipalEvidence { pressure_cancelled: bool = false,tangency_defect_damped: bool = false,
+    full_localized_residual_zero: bool = false,actual_derivative_estimates_proved: bool = false }
+entity principal_result { PrincipalEvidence {} }
+intent PrincipalChecked { key target: entity, omit_damping: bool }
+law SubmitPrincipal(target: entity,omit_damping: bool) { propose PrincipalChecked { target:target,omit_damping:omit_damping } }
+resolver CheckPrincipal for PrincipalChecked(target,proposals) {
+    let d: list<Term> = dot_at(0,0)
+    let nk: list<Term> = dot_at(0,9)
+    let nv: list<Term> = dot_at(3,6)
+    let nf: list<Term> = dot_at(0,12)
+    let pi_num: list<Term> = plus(plus(nk,nv,-1),nf,1)
+    let mut normal_derivative: list<Term> = []
+    for i in range(3) {
+        // d*v_dot from the source's projectedRhs, including -P_n(source).
+        let mut rhs: list<Term> = plus([],times(d,variable(9+i)),-1)
+        rhs = plus(rhs,times(plus(nk,nv,-1),variable(i)),1)
+        if not proposals[0].omit_damping { rhs = plus(rhs,times(times(d,variable(15)),variable(6+i)),-1) }
+        rhs = plus(rhs,times(d,variable(12+i)),-1)
+        rhs = plus(rhs,times(nf,variable(i)),1)
+        // Full principal balance, multiplied by |n|^2.
+        let mut balance: list<Term> = plus(rhs,times(d,variable(9+i)),1)
+        balance = plus(balance,times(times(d,variable(15)),variable(6+i)),1)
+        balance = plus(balance,times(pi_num,variable(i)),-1)
+        balance = plus(balance,times(d,variable(12+i)),1)
+        assert(zero(balance),"physical principal residual does not cancel")
+        normal_derivative = plus(normal_derivative,times(variable(i),rhs),1)
+    }
+    normal_derivative = plus(normal_derivative,times(d,nv),1)
+    normal_derivative = plus(normal_derivative,times(times(d,variable(15)),dot_at(0,6)),1)
+    assert(zero(normal_derivative),"tangency defect equation")
+    next(target,PrincipalEvidence { pressure_cancelled:true,tangency_defect_damped:true,
+        full_localized_residual_zero:false,actual_derivative_estimates_proved:false })
+}
+fn main() -> nil {
+    let args: list<str> = sys_args()
+    let omit: bool = len(args) > 0
+    settle { SubmitPrincipal(principal_result,omit) }
+    print(json_stringify(require(principal_result,PrincipalEvidence)))
+    print(why(principal_result,PrincipalEvidence))
+}

@@ -1,0 +1,58 @@
+use "exit_law.rad"
+
+resource Family { m: int = 1, q: int = 1, j: int = 1, identity_k: int = 30 }
+
+component LawEvidence { result: ExitLaw = ExitLaw {} }
+
+entity law_slot { LawEvidence {} }
+
+system Derive(evidence: mut LawEvidence, family: Family) {
+    evidence = LawEvidence { result: exit_law(family.m, family.q, family.j, family.identity_k, 4096) }
+}
+
+component Boundary { families: int = 0, total_collapses: int = 0, largest_collapse_k: int = 0 }
+
+entity boundary { Boundary {} }
+
+intent Collapse {
+    key target: entity
+    m: int
+    collapses: int
+    last_k: int
+}
+
+law Report(target: entity, law: ExitLaw) {
+    propose Collapse { target: target, m: law.m, collapses: len(law.collapse_ks),
+        last_k: if len(law.collapse_ks) > 0 { law.collapse_ks[len(law.collapse_ks) - 1] } else { 0 } }
+}
+
+resolver Combine for Collapse(target, proposals) {
+    let mut total: int = 0
+    let mut largest: int = 0
+    for p in proposals {
+        total = total + p.collapses
+        if p.last_k > largest { largest = p.last_k }
+    }
+    next(target, Boundary { families: len(proposals), total_collapses: total, largest_collapse_k: largest })
+}
+
+fn main() -> nil {
+    let base: world_fork = fork()
+    // 3x-1 cycles: fixed point 1 (q=1,j=1); 5,7,10 (q=2,j=3); 17-cycle (q=7,j=11).
+    let jobs: list<world_fork> = [
+        fork_with(base, Family { m: 1, q: 1, j: 1, identity_k: 38 }),
+        fork_with(base, Family { m: 5, q: 2, j: 3, identity_k: 19 }),
+        fork_with(base, Family { m: 17, q: 7, j: 11, identity_k: 5 }),
+    ]
+    let done: list<world_fork> = simulate_many(jobs, [system::Derive], 1, 1937)
+    let mut laws: list<ExitLaw> = []
+    for i in range(len(done)) {
+        assert_only_changed(jobs[i], done[i], [LawEvidence])
+        let law: ExitLaw = (peek(done[i], law_slot, LawEvidence) |> unwrap).result
+        laws = push(laws, law)
+        print(json_stringify(law))
+    }
+    settle { for law in laws { Report(boundary, law) } }
+    print(json_stringify(require(boundary, Boundary)))
+    print(why(boundary, Boundary))
+}

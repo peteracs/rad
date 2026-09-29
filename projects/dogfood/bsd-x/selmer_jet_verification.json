@@ -1,0 +1,14 @@
+{
+  "matrix_jet_forks": 243,
+  "independent_exact_interpolation": true,
+  "worker_counts": [
+    1,
+    4
+  ],
+  "replay_verified": true,
+  "forged_provenance_rejected": true,
+  "corank_two_nonzero_coefficients": 69,
+  "corank_one_higher_jet_changes": 69,
+  "actual_Galois_deformations_constructed": 0,
+  "universal_X3_proved": false
+}

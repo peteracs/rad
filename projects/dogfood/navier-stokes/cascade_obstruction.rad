@@ -1,0 +1,69 @@
+// Exact witnesses for the specific segment certificate and periodic seed.
+// The all-mode projection and energy lemmas are in CASCADE_OBSTRUCTION.md.
+component CascadeEvidence {
+    radius_reset_proved: bool = false, bounded_tube_can_blow_up: bool = false,
+    doubled_periodic_seed_reachable: bool = false, blowup_proved: bool = false,
+    force_L1L2_upper: int = 18, velocity_L2_upper: int = 175,
+    doubled_seed_L2_lower: int = 312, low_band_H3_lower: int = 640,
+    explanation: str = ""
+}
+entity cascade_result { CascadeEvidence {} }
+pure fn diagnose_cascade() -> CascadeEvidence {
+    // Seed norms from independent full Fourier calculations.
+    let l2square: int = 6*4096
+    let h3square: int = 105*4096
+    assert(l2square < 157*157,"initial L2 upper")
+    assert(4*l2square > 312*312,"doubled periodic seed L2 lower")
+    assert(h3square > 640*640,"persistent old-band H3 lower")
+    // Integral force cost <= 16 + sum_{n>=0}(1/64)^n < 18.
+    assert(16*63+64 < 18*63,"actual schedule impulse bound")
+    assert(157+18 == 175 and 312-1 > 175,"energy excludes doubled seed tube")
+    // Exact Fourier support separator, robust to translation and phase.
+    let occupied: list<list<int>> = [[1,0,0],[0,1,0],[1,1,0],[0,0,1],[0,1,1]]
+    for k in occupied { for p in occupied {
+        assert(k != [2*p[0],2*p[1],2*p[2]],"old and doubled bands must be disjoint")
+    } }
+    // Radius recurrence supplied by the actual short-segment certificate.
+    // epsilon_next <= epsilon + eta provides no same-radius upper bound.
+    let rho_n: int = 1
+    let rho_d: int = 1
+    let defect_units: int = 1
+    for radius in [0,1,2,16,1024] {
+        assert(rho_n*radius+rho_d*defect_units > rho_d*radius,"no reset in this estimate")
+    }
+    // Conditional repair arithmetic, NOT an available PDE contraction.
+    assert(1*2+2*1 <= 2*2,"rho=1/2, defect=1, radius=2 would close")
+    // Uniform H3 bound B bounds enstrophy by B^2/2.
+    assert(2048*2048 == 4194304,"bounded tube enstrophy ceiling")
+    return CascadeEvidence { radius_reset_proved:false,bounded_tube_can_blow_up:false,
+        doubled_periodic_seed_reachable:false,blowup_proved:false,
+        force_L1L2_upper:18,velocity_L2_upper:175,doubled_seed_L2_lower:312,low_band_H3_lower:640,
+        explanation:"fixed H3 tube prevents blowup; radius estimate spends eta; old Fourier band excludes immediate doubled profile; global energy excludes doubled full-torus seed at every pre-blowup time with this force; localized transfer and contracting normalized errors are unproved alternatives" }
+}
+intent CascadeChecked { key target: entity, evidence: CascadeEvidence }
+law SubmitCascade(target: entity,evidence: CascadeEvidence) {
+    propose CascadeChecked { target:target,evidence:evidence }
+}
+resolver CheckCascade for CascadeChecked(target,proposals) {
+    assert(len(proposals) == 1,"one cascade diagnosis")
+    let row: CascadeEvidence = proposals[0].evidence
+    assert(row == diagnose_cascade(),"forged cascade implication")
+    next(target,CascadeEvidence { radius_reset_proved:row.radius_reset_proved,
+        bounded_tube_can_blow_up:row.bounded_tube_can_blow_up,
+        doubled_periodic_seed_reachable:row.doubled_periodic_seed_reachable,
+        blowup_proved:row.blowup_proved,force_L1L2_upper:row.force_L1L2_upper,
+        velocity_L2_upper:row.velocity_L2_upper,doubled_seed_L2_lower:row.doubled_seed_L2_lower,
+        low_band_H3_lower:row.low_band_H3_lower,explanation:row.explanation })
+}
+fn main() -> nil {
+    let mut row: CascadeEvidence = diagnose_cascade()
+    let args: list<str> = sys_args()
+    if len(args) > 0 {
+        if args[0] == "forge-transfer" { row.doubled_periodic_seed_reachable = true }
+        else { assert(args[0] == "forge-reset","unknown mutation")
+            row.radius_reset_proved = true }
+    }
+    settle { SubmitCascade(cascade_result,row) }
+    print("cascade",json_stringify(require(cascade_result,CascadeEvidence)))
+    print(why(cascade_result,CascadeEvidence))
+}

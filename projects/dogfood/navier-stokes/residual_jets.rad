@@ -1,0 +1,82 @@
+// Free commutative differential-polynomial algebra for u,w,p,r jets.
+// Each key is 10000*(3*field+comp)+1000*dt+100*dx+10*dy+dz.
+// Valid only for the bounded differentiation domain checked below.
+pub struct JetTerm { c: int = 0, a: int = -1,b: int = -1 }
+pub pure fn atom(field: int,comp: int,derivatives: int) -> int {
+    assert(field >= 0 and field <= 3 and comp >= 0 and comp < 3,"jet field")
+    assert(derivatives >= 0 and derivatives < 10000,"jet derivative key")
+    return 10000*(3*field+comp)+derivatives
+}
+pub pure fn insert(p: list<JetTerm>,term: JetTerm) -> list<JetTerm> {
+    assert(term.c >= -1000000 and term.c <= 1000000,"jet coefficient domain")
+    let mut result: list<JetTerm> = p
+    let a: int = if term.b >= 0 and term.b < term.a { term.b } else { term.a }
+    let b: int = if term.b >= 0 and term.b < term.a { term.a } else { term.b }
+    for i in range(len(result)) {
+        if result[i].a == a and result[i].b == b {
+            let c: int = result[i].c+term.c
+            assert(c >= -1000000 and c <= 1000000,"combined coefficient domain")
+            result[i] = JetTerm { c:c,a:a,b:b }
+            return result
+        }
+    }
+    return push(result,JetTerm { c:term.c,a:a,b:b })
+}
+pub pure fn combine(p: list<JetTerm>,q: list<JetTerm>,polarity: int) -> list<JetTerm> {
+    assert(polarity == 1 or polarity == -1,"signed sum")
+    let mut result: list<JetTerm> = p
+    for t in q { result = insert(result,JetTerm { c:polarity*t.c,a:t.a,b:t.b }) }
+    return result
+}
+pub pure fn advance(key: int,axis: int) -> int {
+    assert(key >= 0 and key < 120000 and axis >= 0 and axis < 4,"derivative atom")
+    let stride: int = [1000,100,10,1][axis]
+    assert(int_div(key%10000,stride)%10 < 8,"jet order capacity")
+    return key+stride
+}
+pub pure fn differentiate(p: list<JetTerm>,axis: int) -> list<JetTerm> {
+    let mut result: list<JetTerm> = []
+    for t in p {
+        if t.c != 0 {
+            result = insert(result,JetTerm { c:t.c,a:advance(t.a,axis),b:t.b })
+            if t.b >= 0 {
+                result = insert(result,JetTerm { c:t.c,a:t.a,b:advance(t.b,axis) })
+            }
+        }
+    }
+    return result
+}
+pub pure fn residual(comp: int,augmented: bool,nu: int) -> list<JetTerm> {
+    assert(nu >= 1 and nu <= 16,"positive viscosity domain")
+    let fields: list<int> = if augmented { [0,1] } else { [0] }
+    let pressures: list<int> = if augmented { [2,3] } else { [2] }
+    let mut p: list<JetTerm> = []
+    for f in fields {
+        p = insert(p,JetTerm { c:1,a:atom(f,comp,1000) })
+        for j in range(3) {
+            let d: int = [100,10,1][j]
+            p = insert(p,JetTerm { c:-nu,a:atom(f,comp,2*d) })
+            for g in fields {
+                p = insert(p,JetTerm { c:1,a:atom(f,j,0),b:atom(g,comp,d) })
+            }
+        }
+    }
+    for f in pressures { p = insert(p,JetTerm { c:1,a:atom(f,0,[100,10,1][comp]) }) }
+    return p
+}
+pub pure fn expected_update(comp: int,nu: int,omit_cross: bool) -> list<JetTerm> {
+    let mut p: list<JetTerm> = [JetTerm { c:1,a:atom(1,comp,1000) },
+        JetTerm { c:1,a:atom(3,0,[100,10,1][comp]) }]
+    for j in range(3) {
+        let d: int = [100,10,1][j]
+        p = insert(p,JetTerm { c:-nu,a:atom(1,comp,2*d) })
+        p = insert(p,JetTerm { c:1,a:atom(0,j,0),b:atom(1,comp,d) })
+        if not omit_cross { p = insert(p,JetTerm { c:1,a:atom(1,j,0),b:atom(0,comp,d) }) }
+        p = insert(p,JetTerm { c:1,a:atom(1,j,0),b:atom(1,comp,d) })
+    }
+    return p
+}
+pub pure fn is_zero(p: list<JetTerm>) -> bool {
+    for t in p { if t.c != 0 { return false } }
+    return true
+}

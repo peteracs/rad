@@ -1,0 +1,32 @@
+scale {"actual_weighted_invariant_proved":false,"inverse_exponent_algebra":true,"polynomial_degree":1,"ratio_polynomial_nonnegative":true}
+scale {"actual_weighted_invariant_proved":false,"inverse_exponent_algebra":true,"polynomial_degree":2,"ratio_polynomial_nonnegative":true}
+scale {"actual_weighted_invariant_proved":false,"inverse_exponent_algebra":true,"polynomial_degree":3,"ratio_polynomial_nonnegative":true}
+scale {"actual_weighted_invariant_proved":false,"inverse_exponent_algebra":true,"polynomial_degree":4,"ratio_polynomial_nonnegative":true}
+scale {"actual_weighted_invariant_proved":false,"inverse_exponent_algebra":true,"polynomial_degree":5,"ratio_polynomial_nonnegative":true}
+scale {"actual_weighted_invariant_proved":false,"inverse_exponent_algebra":true,"polynomial_degree":6,"ratio_polynomial_nonnegative":true}
+ScaleEvidence of scale_result = { polynomial_degree: 0, ratio_polynomial_nonnegative: true, inverse_exponent_algebra: true, aâ€¦   (set in frame 0)
+
+  <- resolver `ResolveScale`
+     intent: ScaleChecked
+     key: scale_result
+
+     <- proposal ScaleChecked { target: scale_result, request: ScaleRequest { polynomial_degree: 1 }, evidence: Sâ€¦
+        proposed by law `SubmitScale` at line 35
+
+     <- proposal ScaleChecked { target: scale_result, request: ScaleRequest { polynomial_degree: 2 }, evidence: Sâ€¦
+        proposed by law `SubmitScale` at line 35
+
+     <- proposal ScaleChecked { target: scale_result, request: ScaleRequest { polynomial_degree: 3 }, evidence: Sâ€¦
+        proposed by law `SubmitScale` at line 35
+
+     <- proposal ScaleChecked { target: scale_result, request: ScaleRequest { polynomial_degree: 4 }, evidence: Sâ€¦
+        proposed by law `SubmitScale` at line 35
+
+     <- proposal ScaleChecked { target: scale_result, request: ScaleRequest { polynomial_degree: 5 }, evidence: Sâ€¦
+        proposed by law `SubmitScale` at line 35
+
+     <- proposal ScaleChecked { target: scale_result, request: ScaleRequest { polynomial_degree: 6 }, evidence: Sâ€¦
+        proposed by law `SubmitScale` at line 35
+
+     settlement origin:
+  <- by top-level code

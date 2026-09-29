@@ -1,0 +1,56 @@
+// m-th derivative of R/(2 sqrt(Y)); common denominator 2^(m+1).
+// key's radix-16 digit j counts factors Y^(j+1).
+struct JetTerm { r: int = 0,key: int = 0,c: int = 0 }
+pure fn collect(terms: list<JetTerm>,t: JetTerm) -> list<JetTerm> {
+    let mut out: list<JetTerm> = terms
+    for i in range(len(out)) {
+        if out[i].r == t.r and out[i].key == t.key {
+            let c: int = out[i].c+t.c
+            assert(c >= -1000000000000 and c <= 1000000000000,"coefficient capacity")
+            out[i] = JetTerm { r:t.r,key:t.key,c:c }
+            return out
+        }
+    }
+    return push(out,t)
+}
+pure fn differentiated(terms: list<JetTerm>) -> list<JetTerm> {
+    let mut out: list<JetTerm> = []
+    for t in terms {
+        out = collect(out,JetTerm { r:t.r+1,key:t.key,c:2*t.c })
+        let mut key: int = t.key
+        let mut place: int = 1
+        let mut count: int = 0
+        for _ in range(10) {
+            let n: int = key%16
+            if n>0 {
+                out = collect(out,JetTerm { r:t.r,key:t.key+15*place,c:2*n*t.c })
+            }
+            count = count+n
+            place = 16*place
+            key = int_div(key,16)
+        }
+        assert(key == 0 and t.key%16 < 15,"jet capacity")
+        out = collect(out,JetTerm { r:t.r,key:t.key+1,c:-(2*count+1)*t.c })
+    }
+    return out
+}
+fn main() -> nil {
+    let mut terms: list<JetTerm> = [JetTerm { c:1 }]
+    for order in range(9) {
+        for t in terms {
+            let mut key: int = t.key
+            let mut degree: int = t.r
+            let mut factors: int = 0
+            for j in range(10) {
+                let n: int = key%16
+                degree = degree+(j+1)*n
+                factors = factors+n
+                key = int_div(key,16)
+            }
+            assert(key == 0 and degree == order,"derivative order conservation")
+            assert(2*(1+factors)-(2*factors+1) == 1,"half-weight preservation")
+        }
+        print(json_stringify(terms))
+        if order<8 { terms = differentiated(terms) }
+    }
+}

@@ -1,0 +1,33 @@
+use "rank_constraint.rad"
+
+pub component RepairEvidence {
+    label: str = "", score: int = -1, independent: int = -1, evaluated: int = 0,
+    complete_proof: bool = false, model: Model = Model {},
+}
+
+intent RepairObservation {
+    key target: entity, label: str, score: int, independent: int, evaluated: int,
+    complete_proof: bool, model: Model,
+}
+pub law SubmitRepair(target: entity, label: str, score: int, independent: int, evaluated: int, complete_proof: bool, model: Model) {
+    propose RepairObservation { target: target, label: label, score: score, independent: independent,
+        evaluated: evaluated, complete_proof: complete_proof, model: model }
+}
+
+resolver SelectRepair for RepairObservation(target, proposals) {
+    let mut best: int = 0
+    for i in range(len(proposals)) {
+        if (proposals[i].complete_proof and not proposals[best].complete_proof) or
+        (proposals[i].complete_proof == proposals[best].complete_proof and (proposals[i].score < proposals[best].score or
+            (proposals[i].score == proposals[best].score and sort([proposals[i].label, proposals[best].label])[0] == proposals[i].label))) { best = i }
+    }
+    next(target, RepairEvidence { label: proposals[best].label, score: proposals[best].score, independent: proposals[best].independent,
+        evaluated: proposals[best].evaluated, complete_proof: proposals[best].complete_proof, model: proposals[best].model })
+}
+
+constraint CheckedRepair for RepairEvidence(subject, proposed) {
+    require proposed.score >= 0 else "rank.negative_score"
+    require proposed.score == proposed.independent else "rank.native_reference_disagree"
+    require not proposed.complete_proof or proposed.score == 0 else "rank.false_completion"
+    require not proposed.complete_proof or certifies_complete_rank(proposed.model) else "rank.unproved_complete_system"
+}

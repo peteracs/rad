@@ -1,0 +1,13 @@
+use "repair_reference.rad"
+use "repair_native.rad"
+
+fn main() -> nil {
+    let args: list<str> = sys_args()
+    assert(len(args) == 2, "supply reference/native and request JSON")
+    let request: map<str, any> = json_parse(read_file(args[1])) |> unwrap
+    let raw_report: map<str, any> = if args[0] == "reference" { reference_walk(request) } else { native_rank_search(request) }
+    let report: map<str, any> = json_parse(json_stringify(raw_report)) |> unwrap
+    let score: RankScore = reference_score(request, report["matrices"])
+    assert(score.total == report["best"]["total"] and score.weak == report["best"]["weak"] and score.strict == report["best"]["strict"], "native candidate score differs")
+    print(json_stringify(report))
+}

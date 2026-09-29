@@ -1,0 +1,116 @@
+// Decision from total length and observed layers only; parity is an explicit premise.
+// This does not prove a positive answer occurs at any prime for every curve.
+resource LayerRequest { analytic: int = 2,exponents: list<int> = [1,9] }
+struct LayerDecision { lower: int = 0,upper: int = 0,status: int = 0 }
+component AdaptiveEvidence { delta: int = 0,cutoff: int = 0,queries: int = 0,
+    observed: list<int> = [],lower: int = 0,upper: int = 0,status: int = 0,
+    universal_X3_proved: bool = false }
+entity adaptive_trial { AdaptiveEvidence {} }
+entity long_good { AdaptiveEvidence {} }
+entity long_bad { AdaptiveEvidence {} }
+
+pure fn decide(delta: int,m: int,prefix: list<int>) -> LayerDecision {
+    // No access to the hidden Smith exponents, corank, or a chosen elliptic curve.
+    let mut total: int = 0
+    let mut previous_layer: int = delta
+    for layer in prefix {
+        assert(layer>=0 and layer<=previous_layer,"nonincreasing nonnegative observations")
+        total=total+layer
+        previous_layer=layer
+    }
+    let mut lower: int = if delta==0 { 0 } else { 1 }
+    let mut upper: int = delta-total
+    if len(prefix)>0 {
+        if prefix[len(prefix)-1]==0 { lower=upper }
+        else { lower=prefix[0] }
+    }
+    if lower%2!=m%2 { lower=lower+1 }
+    if upper%2!=m%2 { upper=upper-1 }
+    assert(lower<=upper,"observations must admit the stated parity")
+    let status: int = if upper<=m { 1 } else { if lower>m { -1 } else { 0 } }
+    return LayerDecision { lower:lower,upper:upper,status:status }
+}
+pure fn assess_adaptive(q: LayerRequest) -> AdaptiveEvidence {
+    assert(q.analytic>=2 and q.analytic<=10 and len(q.exponents)<=10,"request domain")
+    let mut delta: int = 0
+    let mut actual: int = 0
+    for a in q.exponents {
+        assert(a>=0 and a<=40,"finite module domain")
+        delta=delta+a
+        if a>0 { actual=actual+1 }
+    }
+    assert(actual%2==q.analytic%2,"supplied arithmetic parity premise")
+    let cutoff: int = if delta>q.analytic+1 { delta-q.analytic-1 } else { 0 }
+    let mut prefix: list<int> = []
+    let mut result: LayerDecision = decide(delta,q.analytic,prefix)
+    for j in range(1,cutoff+1) {
+        if result.status==0 {
+            let mut observed: int = 0
+            for a in q.exponents { if a>j { observed=observed+1 } }
+            prefix=push(prefix,observed)
+            result=decide(delta,q.analytic,prefix)
+        }
+    }
+    assert(result.status!=0,"proved adaptive cutoff suffices to decide")
+    assert((result.status==1)==(actual<=q.analytic),"decision agrees with hidden module")
+    assert(result.lower<=actual and actual<=result.upper,"valid interval contains actual corank")
+    return AdaptiveEvidence { delta:delta,cutoff:cutoff,queries:len(prefix),observed:prefix,
+        lower:result.lower,upper:result.upper,status:result.status,universal_X3_proved:false }
+}
+system AdaptiveStep(row: mut AdaptiveEvidence,q: LayerRequest) { row=assess_adaptive(q) }
+intent AdaptiveChecked { key target: entity,request: LayerRequest,evidence: AdaptiveEvidence }
+law SubmitAdaptive(target: entity,request: LayerRequest,evidence: AdaptiveEvidence) {
+    propose AdaptiveChecked { target:target,request:request,evidence:evidence }
+}
+resolver ExplainAdaptive for AdaptiveChecked(target,proposals) {
+    assert(len(proposals)==1,"one adaptive decision")
+    let row: AdaptiveEvidence = assess_adaptive(proposals[0].request)
+    assert(row==proposals[0].evidence,"a terminating decision is not a universal positive answer")
+    next(target,AdaptiveEvidence { delta:row.delta,cutoff:row.cutoff,queries:row.queries,
+        observed:row.observed,lower:row.lower,upper:row.upper,status:row.status,
+        universal_X3_proved:row.universal_X3_proved })
+}
+fn main() -> nil {
+    let base: world_fork = fork()
+    let digest: str = world_digest()
+    let mut requests: list<LayerRequest> = []
+    let mut jobs: list<world_fork> = []
+    for code in range(625) {
+        let mut digits: int = code
+        let mut exponents: list<int> = []
+        let mut count: int = 0
+        for _ in range(4) {
+            let a: int = digits%5
+            exponents=push(exponents,a)
+            if a>0 { count=count+1 }
+            digits=int_div(digits,5)
+        }
+        let m: int = if count%2==0 { 2 } else { 3 }
+        let q: LayerRequest = LayerRequest { analytic:m,exponents:exponents }
+        requests=push(requests,q)
+        jobs=push(jobs,fork_with(base,q))
+    }
+    let results: list<world_fork> = simulate_many(jobs,[system::AdaptiveStep],1,20260909)
+    for i in range(len(results)) {
+        assert_only_changed(jobs[i],results[i],[AdaptiveEvidence])
+        let row: AdaptiveEvidence = peek(results[i],adaptive_trial,AdaptiveEvidence) |> unwrap
+        assert(row==assess_adaptive(requests[i]),"requested oracle module evaluated")
+        print("request",json_stringify(requests[i]))
+        print("case",json_stringify(row))
+    }
+    assert(world_digest()==digest,"adaptive forks preserve parent")
+    let good: LayerRequest = LayerRequest {}
+    let bad: LayerRequest = LayerRequest { exponents:[1,1,1,7] }
+    let mut row: AdaptiveEvidence = assess_adaptive(bad)
+    if len(sys_args())>0 { row.status=1 row.universal_X3_proved=true }
+    settle {
+        SubmitAdaptive(long_good,good,assess_adaptive(good))
+        SubmitAdaptive(long_bad,bad,row)
+    }
+    for target in [long_good,long_bad] {
+        print("witness",json_stringify(require(target,AdaptiveEvidence)))
+        print(why(target,AdaptiveEvidence))
+        print(why_field(target,AdaptiveEvidence,"observed"))
+        print(why_field(target,AdaptiveEvidence,"status"))
+    }
+}

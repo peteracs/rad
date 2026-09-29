@@ -1,0 +1,108 @@
+use "smooth_force_schedule.rad"
+resource ControlRequest { lane: int = 0 }
+component ControlEvidence { lane: int = 0, controls: list<int> = [],
+    enstrophy_rate8: int = 0, forcing_production8: int = 0, viscous_loss8: int = 768,
+    nonlinear_production8: int = 0, generated_velocity_modes: int = 0,
+    prescribed_schedule_admissible: bool = false, rhs_checked: bool = false,
+    velocity_trajectory_proved: bool = false, repeated_amplification_proved: bool = false }
+entity control_trial { ControlEvidence {} }
+pure fn assess_control(request: ControlRequest) -> ControlEvidence {
+    let controls: list<int> = scheduled_controls(request.lane)
+    let atom: ForceAtom = force_atom(1,controls)
+    assert(atom.frequency_exponent == 0,"probe frequency")
+    // This is a vector-field query at a specified test state and t=1/4.
+    // It does NOT assert that the initial-value solution reaches this state then.
+    let u: list<FluidMode> = cyclic_bank([8,8,8])
+    let prescribed: list<FluidMode> = first_pulse_peak(controls)
+    let velocity_rate: list<ForceMode> = dictated_velocity_rate(u,prescribed,1,1)
+    let nonlinear_and_viscous: list<ForceMode> = actual_force(u,[],1)
+    let mut rate8: int = 0
+    let mut generated: int = 0
+    for mode in velocity_rate {
+        let mut occupied: bool = false
+        for initial in u {
+            if initial.k == mode.k {
+                assert(mode.denominator == 4,"probe moment denominator")
+                occupied = true
+                for j in range(3) { rate8 = rate8+initial.re[j]*mode.re[j]+initial.im[j]*mode.im[j] }
+            }
+        }
+        if not occupied and (mode.re != [0,0,0] or mode.im != [0,0,0]) { generated = generated+1 }
+        // Independently check the force equation using the full drift residual.
+        for drift in nonlinear_and_viscous {
+            if drift.k == mode.k {
+                assert(drift.denominator == mode.denominator,"RHS force denominator")
+                let mut fr: list<int> = [0,0,0]
+                let mut fi: list<int> = [0,0,0]
+                for force in prescribed { if force.k == mode.k { fr = force.re
+                    fi = force.im } }
+                for j in range(3) {
+                    assert(2*(mode.re[j]+drift.re[j]) == mode.denominator*fr[j]
+                        and 2*(mode.im[j]+drift.im[j]) == mode.denominator*fi[j],"dictated RHS disagrees with prescribed force")
+                }
+            }
+        }
+    }
+    let production8: int = 512*(controls[0]+controls[1]+controls[2])
+    assert(rate8 == production8-768,"separate forcing from nonlinear production")
+    return ControlEvidence { lane: request.lane,controls: controls,enstrophy_rate8: rate8,
+        forcing_production8: production8,viscous_loss8: 768,nonlinear_production8: 0,
+        generated_velocity_modes: generated,prescribed_schedule_admissible: true,rhs_checked: true,
+        velocity_trajectory_proved: false,repeated_amplification_proved: false }
+}
+system EvaluateControl(row: mut ControlEvidence, request: ControlRequest) { row = assess_control(request) }
+component ForceFirstDecision { selected_controls: list<int> = [], schedule_amplitude_exponent: int = 5,
+    schedule_defined_for_all_stages: bool = false, actual_force_budget: str = "",
+    gain_source: str = "", probe_is_solution_trajectory: bool = false, blowup_proved: bool = false }
+entity force_first_decision { ForceFirstDecision {} }
+intent ControlChecked { key target: entity, request: ControlRequest, evidence: ControlEvidence }
+law SubmitControl(target: entity, request: ControlRequest, evidence: ControlEvidence) {
+    propose ControlChecked { target: target,request: request,evidence: evidence }
+}
+resolver SelectControl for ControlChecked(target, proposals) {
+    assert(len(proposals) == 27,"control portfolio coverage")
+    let mut seen: list<bool> = []
+    for _ in range(27) { seen = push(seen,false) }
+    let mut best: int = -100000
+    let mut selected: list<int> = []
+    for proposal in proposals {
+        let lane: int = proposal.request.lane
+        assert(lane >= 0 and lane < 27 and not seen[lane],"control identity")
+        seen[lane] = true
+        let row: ControlEvidence = proposal.evidence
+        assert(row == assess_control(proposal.request),"forged force-first certificate")
+        if row.enstrophy_rate8 > best { best = row.enstrophy_rate8
+            selected = row.controls }
+    }
+    assert(best == 768 and selected == [1,1,1],"control optimum")
+    next(target,ForceFirstDecision { selected_controls: selected,schedule_amplitude_exponent: 5,
+        schedule_defined_for_all_stages: true,
+        actual_force_budget: "proved by the fixed-bump and summable-tail analytic lemmas",
+        gain_source: "direct forcing in the probe; nonlinear enstrophy production is zero",
+        probe_is_solution_trajectory: false,blowup_proved: false })
+}
+fn main() -> nil {
+    let base: world_fork = fork()
+    let digest: str = world_digest()
+    let mut jobs: list<world_fork> = []
+    for lane in range(27) { jobs = push(jobs,fork_with(base,ControlRequest { lane: lane })) }
+    let results: list<world_fork> = simulate_many(jobs,[system::EvaluateControl],1,20260908)
+    let mut evidence: list<ControlEvidence> = []
+    for i in range(27) {
+        assert_only_changed(jobs[i],results[i],[ControlEvidence])
+        let row: ControlEvidence = peek(results[i],control_trial,ControlEvidence) |> unwrap
+        evidence = push(evidence,row)
+        print("control",json_stringify(row))
+    }
+    assert(world_digest() == digest,"control fork isolation")
+    let args: list<str> = sys_args()
+    if len(args) > 0 {
+        assert(args[0] == "forge-cascade","unknown control probe")
+        let mut forged: ControlEvidence = evidence[26]
+        forged.repeated_amplification_proved = true
+        evidence[26] = forged
+    }
+    settle { for i in range(27) { SubmitControl(force_first_decision,ControlRequest { lane: i },evidence[i]) } }
+    print("decision",json_stringify(require(force_first_decision,ForceFirstDecision)))
+    print(why(force_first_decision,ForceFirstDecision))
+}

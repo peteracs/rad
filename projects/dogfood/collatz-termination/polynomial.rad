@@ -1,0 +1,85 @@
+use "matrix.rad"
+
+pub struct PolynomialModel {
+    label: str = ""
+    degree: int = 0
+    maximum: int = 0
+    reverse: bool = false
+    omitted: int = -1
+    polynomials: list<list<int>> = []
+    strict_rules: list<int> = []
+    complete_proof: bool = false
+}
+
+pure fn poly_product(a: list<int>, b: list<int>) -> list<int> {
+    let mut answer: list<int> = []
+    for total in range(len(a) + len(b) - 1) {
+        let mut coefficient: int = 0
+        for i in range(len(a)) {
+            let j: int = total - i
+            if j >= 0 and j < len(b) { coefficient = coefficient + a[i] * b[j] }
+        }
+        answer = push(answer, coefficient)
+    }
+    return answer
+}
+
+pure fn poly_compose(a: list<int>, b: list<int>) -> list<int> {
+    let mut answer: list<int> = [a[len(a) - 1]]
+    let mut i: int = len(a) - 1
+    while i > 0 {
+        i = i - 1
+        answer = poly_product(answer, b)
+        answer = set_at(answer, 0, answer[0] + a[i])
+    }
+    return answer
+}
+
+pure fn poly_word(word: list<int>, model: PolynomialModel) -> list<int> {
+    let mut answer: list<int> = [0, 1]
+    for i in range(len(word)) {
+        let index: int = if model.reverse { len(word) - 1 - i } else { i }
+        answer = poly_compose(answer, model.polynomials[word[index]])
+    }
+    return answer
+}
+
+pub pure fn check_polynomial(model: PolynomialModel) -> CheckedModel {
+    assert(model.degree >= 1 and model.degree <= 4, "unsupported polynomial degree")
+    assert(model.maximum >= 1 and model.maximum <= 7, "unsupported polynomial coefficient")
+    assert(model.degree < 4 or model.maximum <= 2, "polynomial arithmetic could exceed signed 64 bits")
+    assert(model.omitted >= -1 and model.omitted < 11, "invalid omitted rule")
+    assert(len(model.polynomials) == 7, "incomplete polynomial alphabet")
+    for polynomial in model.polynomials {
+        assert(len(polynomial) == model.degree + 1, "polynomial coefficient count")
+        for c in polynomial { assert(c >= 0 and c <= model.maximum, "polynomial coefficient domain") }
+    }
+    let lefts: list<list<int>> = [[0, 3], [1, 3], [0, 4], [0, 5], [0, 6], [1, 4], [1, 5], [1, 6], [2, 4], [2, 5], [2, 6]]
+    let rights: list<list<int>> = [[3], [6, 3], [4, 0], [4, 1], [5, 0], [5, 1], [6, 0], [6, 1], [2, 1], [2, 0, 0], [2, 0, 1]]
+    let mut removed: list<int> = []
+    let mut comparisons: int = 0
+    let mut active: int = 0
+    let mut boundary_count: int = 0
+    for rule in range(11) {
+        if rule != model.omitted {
+            active = active + 1
+            let a: list<int> = poly_word(lefts[rule], model)
+            let b: list<int> = poly_word(rights[rule], model)
+            for i in range(max(len(a), len(b))) {
+                let lhs: int = if i < len(a) { a[i] } else { 0 }
+                let rhs: int = if i < len(b) { b[i] } else { 0 }
+                assert(lhs >= rhs, "rewrite polynomial has a negative difference coefficient")
+                comparisons = comparisons + 1
+            }
+            if (model.reverse and rule < 2) or (not model.reverse and rule >= 8) {
+                boundary_count = boundary_count + 1
+                if a[0] > b[0] { removed = push(removed, rule) }
+            }
+        }
+    }
+    assert(len(removed) > 0 and removed == model.strict_rules, "invalid polynomial strict-rule claim")
+    let complete: bool = model.omitted == -1 and len(removed) == boundary_count
+    assert(complete == model.complete_proof, "false complete polynomial proof")
+    return CheckedModel { label: model.label, active_rules: active,
+        coefficient_comparisons: comparisons, strict_rules: removed, complete_proof: complete }
+}

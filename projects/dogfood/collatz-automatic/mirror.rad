@@ -1,0 +1,33 @@
+// Mirror identity between 3x+1 and 3x-1 on a finite binary window.
+struct MirrorAudit { windows: int = 0, pairs: int = 0, steps: int = 0, max_bits: int = 0 }
+
+pure fn audit(max_bits: int) -> MirrorAudit {
+    let mut pairs: int = 0
+    let mut steps: int = 0
+    for bits in range(1, max_bits + 1) {
+        let top: int = 1 << bits
+        for n in range(1, top) {
+            let mut x: int = n
+            let mut y: int = top - n
+            let mut scale: int = top      // 3^q 2^(L-j)
+            for _ in range(bits) {
+                assert(x % 2 == y % 2, "parity vectors diverged inside the window")
+                if x % 2 == 1 {
+                    x = int_div(3 * x + 1, 2)
+                    y = int_div(3 * y - 1, 2)
+                    scale = int_div(3 * scale, 2)
+                } else {
+                    x = int_div(x, 2)
+                    y = int_div(y, 2)
+                    scale = int_div(scale, 2)
+                }
+                assert(x + y == scale, "mirror conservation law failed")
+                steps = steps + 1
+            }
+            pairs = pairs + 1
+        }
+    }
+    return MirrorAudit { windows: max_bits, pairs: pairs, steps: steps, max_bits: max_bits }
+}
+
+print(json_stringify(audit(int(sys_args()[0]))))

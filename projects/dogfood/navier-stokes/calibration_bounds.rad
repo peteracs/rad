@@ -1,0 +1,91 @@
+use "polarization_polynomials.rad"
+pub resource CalibrationRequest { round: int = 0, lane: int = 0, p: int = 4, q: int = 4, radius_eighths: int = 16, method: int = 0 }
+pub component CalibrationEvidence {
+    p: int = 0, q: int = 0, radius_eighths: int = 0, method: int = 0,
+    donor_production_n: int = 0, receiver_production_n: int = 0, receiver_loss_n: int = 0,
+    seed_H7_upper: int = 0, H7_ball: int = 0, time_exponent: int = 0,
+    profile_error_coefficient: int = 0, actual_receiver_amplitude_power_two: int = 0,
+    finite_transfer_bounds_pass: bool = false, limiting_bound: str = "",
+    receiver_autonomous_amplification_reached: bool = false, return_map_proved: bool = false
+}
+pub pure fn calibration_ceil_div(n: int,d: int) -> int {
+    assert(n >= 0 and d > 0,"positive calibration division")
+    return int_div(n,d)+if n%d == 0 { 0 } else { 1 }
+}
+pub pure fn calibration_log2_ceil(n: int) -> int {
+    assert(n >= 1 and n <= 4000000000000000000,"calibration logarithm domain")
+    let mut value: int = 1
+    let mut exponent: int = 0
+    while value < n { value = value*2
+        exponent = exponent+1 }
+    return exponent
+}
+pub pure fn calibration_sqrt_ceil(n: int) -> int {
+    assert(n > 0 and n < 65536*65536,"seed norm domain")
+    let mut low: int = 0
+    let mut high: int = 65536
+    while high-low > 1 {
+        let mid: int = int_div(low+high,2)
+        if mid*mid >= n { high = mid } else { low = mid }
+    }
+    return high
+}
+pub pure fn assess_calibration(request: CalibrationRequest) -> CalibrationEvidence {
+    assert(request.radius_eighths >= 9 and request.radius_eighths <= 24,"radius search range")
+    assert(request.method == 0 or request.method == 1,"proved existence method")
+    let donor: int = polarization_donor_production(request.p,request.q)
+    let receiver: int = polarization_receiver_production(request.p,request.q)
+    let loss: int = polarization_receiver_loss(request.p,request.q)
+    let mut row: CalibrationEvidence = CalibrationEvidence { p:request.p,q:request.q,radius_eighths:request.radius_eighths,method:request.method,
+        donor_production_n:donor,receiver_production_n:receiver,receiver_loss_n:loss }
+    if donor <= 0 or receiver <= 0 {
+        row.limiting_bound = "donor or isolated receiver lacks positive nonlinear production"
+        return row
+    }
+    // physical donor =64*d; donor_h7 has denominator supplied by generator (32).
+    let norm_square_upper: int = calibration_ceil_div(4096*polarization_donor_h7(request.p,request.q),32)
+    let seed_upper: int = calibration_sqrt_ceil(norm_square_upper)
+    let ball: int = calibration_ceil_div(seed_upper*request.radius_eighths,8)
+    assert(ball > seed_upper+1 and ball < 32768,"calibration ball")
+    let displacement: int = ball+256*ball*ball+32768
+    let profile_error: int = 64*(ball+seed_upper)*displacement+256*seed_upper*seed_upper
+    let existence_exponent: int = calibration_log2_ceil(calibration_ceil_div(2048*ball*ball,ball-seed_upper-1))
+    let contraction_exponent: int = calibration_log2_ceil(8192*ball)
+    let error_exponent: int = calibration_log2_ceil(calibration_ceil_div(profile_error,512))
+    let displacement_exponent: int = calibration_log2_ceil(displacement)
+    let mut time_exponent: int = 2*existence_exponent
+    let mut limiter: str = "H7 existence ball"
+    if 2*contraction_exponent > time_exponent { time_exponent = 2*contraction_exponent
+        limiter = "H7 contraction" }
+    if request.method == 1 {
+        time_exponent = calibration_log2_ceil(calibration_ceil_div(2*(3584*ball*ball+32768),ball-seed_upper))
+        limiter = "H7 energy barrier"
+    }
+    if error_exponent > time_exponent { time_exponent = error_exponent
+        limiter = "receiver relative profile error" }
+    if displacement_exponent > time_exponent { time_exponent = displacement_exponent
+        limiter = "donor displacement" }
+    assert(time_exponent >= 15 and time_exponent <= 120,"certified time range")
+    assert(polarization_receiver_norm(request.p,request.q) >= 1920,"receiver L2 norm >=1")
+    // At amplitude A, receiver enstrophy derivative is A^3 S-A^2 D.
+    // A=2048*T. Acrit=D/S=120*loss/receiver. In this box Acrit>1 while A<1.
+    assert(120*loss > receiver and time_exponent > 11,"isolated receiver threshold not reached")
+    assert(calibration_log2_ceil(4*(128*seed_upper*seed_upper+512)) <= time_exponent,"actual high-band H3 norm <=1/4")
+    row.seed_H7_upper = seed_upper
+    row.H7_ball = ball
+    row.time_exponent = time_exponent
+    row.profile_error_coefficient = profile_error
+    row.actual_receiver_amplitude_power_two = 11-time_exponent
+    row.finite_transfer_bounds_pass = true
+    row.limiting_bound = limiter
+    row.receiver_autonomous_amplification_reached = false
+    row.return_map_proved = false
+    return row
+}
+pub pure fn calibration_better(a: CalibrationEvidence,b: CalibrationEvidence) -> bool {
+    if a.finite_transfer_bounds_pass != b.finite_transfer_bounds_pass { return a.finite_transfer_bounds_pass }
+    if not a.finite_transfer_bounds_pass { return false }
+    if a.time_exponent != b.time_exponent { return a.time_exponent < b.time_exponent }
+    // After longest certified interval, prefer smaller isolated-receiver activation threshold.
+    return a.receiver_loss_n*b.receiver_production_n < b.receiver_loss_n*a.receiver_production_n
+}

@@ -1,0 +1,9 @@
+{
+  "pdf_sha256": "714dd538ed6cdb5c4d7e80e436d2a3347e6246437fc9dc7da017c44b0caa6703",
+  "rad_cases": 16,
+  "universal_positive_polynomial_terms": 36,
+  "principal_damping_identity": true,
+  "forged_proof_rejected": true,
+  "euler_paper_verified": false,
+  "navier_stokes_proved": false
+}

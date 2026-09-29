@@ -1,0 +1,100 @@
+// Calibration: 3x+1, 3x-1 and 5x+1 in isolated worlds. A Lyapunov function
+// with Φ(Tn) <= Φ(n) - ε on odd steps cannot exist through a positive cycle
+// containing an odd step; each world reports the smallest such obstruction.
+resource MapSpec { multiplier: int = 3, offset: int = 1 }
+
+pub struct Obstruction { multiplier: int = 0, offset: int = 0, cycle_min: int = 0, cycle_length: int = 0, odd_steps: int = 0, scanned: int = 0, escaped: int = 0 }
+
+component Finding { result: Obstruction = Obstruction {} }
+
+entity finding_slot { Finding {} }
+
+pure fn step(n: int, m: int, d: int) -> int {
+    return if n % 2 == 0 { int_div(n, 2) } else { int_div(m * n + d, 2) }
+}
+
+// Smallest cycle (other than the trivial 1 <-> 2 for 3x+1 / fixed 1 for 3x-1)
+// reached from starts below `limit`; trajectories above `cap` count as escaped.
+pure fn scan(m: int, d: int, limit: int, cap: int) -> Obstruction {
+    let mut best: Obstruction = Obstruction { multiplier: m, offset: d, scanned: limit - 1 }
+    let mut escaped: int = 0
+    for start in range(1, limit) {
+        let mut slow: int = start
+        let mut fast: int = start
+        let mut looping: bool = true
+        let mut guard: int = 0
+        while looping and guard < 2000 {
+            slow = step(slow, m, d)
+            fast = step(step(fast, m, d), m, d)
+            if fast > cap { looping = false escaped = escaped + 1 }
+            else if slow == fast {
+                let mut low: int = slow
+                let mut length: int = 0
+                let mut odd: int = 0
+                let mut x: int = slow
+                let mut entering: bool = true
+                while entering or x != slow {
+                    entering = false
+                    if x % 2 == 1 { odd = odd + 1 }
+                    if x < low { low = x }
+                    x = step(x, m, d)
+                    length = length + 1
+                }
+                let trivial: bool = low == 1
+                if not trivial and (best.cycle_min == 0 or low < best.cycle_min) {
+                    best = Obstruction { multiplier: m, offset: d, cycle_min: low, cycle_length: length, odd_steps: odd, scanned: limit - 1 }
+                }
+                looping = false
+            }
+            guard = guard + 1
+        }
+    }
+    return Obstruction { multiplier: best.multiplier, offset: best.offset, cycle_min: best.cycle_min,
+        cycle_length: best.cycle_length, odd_steps: best.odd_steps, scanned: limit - 1, escaped: escaped }
+}
+
+system Calibrate(finding: mut Finding, spec: MapSpec) {
+    finding = Finding { result: scan(spec.multiplier, spec.offset, 3000, 1 << 50) }
+}
+
+component Verdict { blocked: int = 0, open: int = 0, worlds: int = 0 }
+
+entity verdict { Verdict {} }
+
+intent Report {
+    key target: entity
+    multiplier: int
+    offset: int
+    cycle_min: int
+    odd_steps: int
+}
+
+law Submit(target: entity, found: Obstruction) {
+    propose Report { target: target, multiplier: found.multiplier, offset: found.offset,
+        cycle_min: found.cycle_min, odd_steps: found.odd_steps }
+}
+
+resolver Tally for Report(target, proposals) {
+    let mut blocked: int = 0
+    let mut open: int = 0
+    for p in proposals { if p.cycle_min > 0 and p.odd_steps > 0 { blocked = blocked + 1 } else { open = open + 1 } }
+    next(target, Verdict { blocked: blocked, open: open, worlds: len(proposals) })
+}
+
+fn main() -> nil {
+    let base: world_fork = fork()
+    let specs: list<MapSpec> = [MapSpec { multiplier: 3, offset: 1 }, MapSpec { multiplier: 3, offset: -1 }, MapSpec { multiplier: 5, offset: 1 }]
+    let mut jobs: list<world_fork> = []
+    for s in specs { jobs = push(jobs, fork_with(base, s)) }
+    let done: list<world_fork> = simulate_many(jobs, [system::Calibrate], 1, 1937)
+    let mut found: list<Obstruction> = []
+    for i in range(len(done)) {
+        assert_only_changed(jobs[i], done[i], [Finding])
+        let r: Obstruction = (peek(done[i], finding_slot, Finding) |> unwrap).result
+        found = push(found, r)
+        print(json_stringify(r))
+    }
+    settle { for r in found { Submit(verdict, r) } }
+    print(json_stringify(require(verdict, Verdict)))
+    print(why(verdict, Verdict))
+}

@@ -1,0 +1,60 @@
+// Real world vs 2-adic shadow. The shadow follows the same parity word with
+// the +1 removed, so log2 of its value is exactly log2 n - W_t. The gap
+// eta_t = log2 T^t(n) - (log2 n - W_t) is the whole Archimedean feedback.
+use "../collatz-steer/excursion.rad"
+
+pub struct ShadowGap {
+    n: int = 0
+    steps: int = 0
+    trapped_steps: int = 0         // prefix where the walk has not contracted (W <= 0)
+    max_gap_micro: int = 0         // max eta over the trapped prefix
+    max_gap_step: int = 0
+    bound_violations: int = 0      // eta exceeding the ladder bound (+ log tolerance)
+    worst_bound_slack_micro: int = 0
+    bite_step: int = 0 - 1         // first step anywhere with eta > 0.1 bit
+    bite_value: int = 0
+    final_gap_micro: int = 0       // eta at the end (value 1)
+}
+
+// log2(1 + y) in micro-bits for small positive y (y given as num/den), via the mantissa table.
+pub pure fn log1p_micro(num: int, den: int, table: list<int>) -> int {
+    // 1 + num/den as a ratio (den + num)/den
+    return log2_micro(den + num, table) - log2_micro(den, table)
+}
+
+pub pure fn shadow_gap(n: int, table: list<int>) -> ShadowGap {
+    let ln: int = log2_micro(n, table)
+    let mut x: int = n
+    let mut w: int = 0
+    let mut q: int = 0
+    let mut t: int = 0
+    let mut trapped: bool = true
+    let mut trapped_steps: int = 0
+    let mut max_gap: int = 0
+    let mut max_step: int = 0
+    let mut violations: int = 0
+    let mut worst_slack: int = 1000000000
+    let mut bite: int = 0 - 1
+    let mut bite_value: int = 0
+    let mut gap: int = 0
+    while x != 1 {
+        if x % 2 == 1 { q = q + 1 w = w - 584963 } else { w = w + 1000000 }
+        x = tstep(x)
+        t = t + 1
+        gap = log2_micro(x, table) - (ln - w)
+        if bite < 0 and gap > 100000 { bite = t bite_value = x }
+        if trapped and w > 0 { trapped = false }
+        if trapped {
+            trapped_steps = t
+            if gap > max_gap { max_gap = gap max_step = t }
+            // ladder bound: eta <= log2(1 + (0.24046 q + 0.6882) / n), in micro units
+            let bound: int = log1p_micro(240460 * q + 688200, 1000000 * n, table)
+            let slack: int = bound - gap
+            if slack < worst_slack { worst_slack = slack }
+            if gap > bound + 3000 { violations = violations + 1 }
+        }
+    }
+    return ShadowGap { n: n, steps: t, trapped_steps: trapped_steps, max_gap_micro: max_gap, max_gap_step: max_step,
+        bound_violations: violations, worst_bound_slack_micro: worst_slack, bite_step: bite, bite_value: bite_value,
+        final_gap_micro: gap }
+}

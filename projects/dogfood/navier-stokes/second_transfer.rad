@@ -1,0 +1,108 @@
+use "coupled_basis.rad"
+// Return P_(|k|^2>6) B(v/64,r); the physical second Taylor profile is 65536 times this.
+pure fn second_band() -> list<ForceMode> {
+    let banks: CoupledBanks = coupled_banks()
+    let joined: list<ForceMode> = actual_force_scaled(banks.joined,[],1,30)
+    let donor: list<ForceMode> = actual_force_scaled(banks.donor,[],1,30)
+    let receiver: list<ForceMode> = actual_force_scaled(banks.receiver,[],1,30)
+    let mut result: list<ForceMode> = []
+    for term in joined {
+        let n: int = term.k[0]*term.k[0]+term.k[1]*term.k[1]+term.k[2]*term.k[2]
+        if n > 6 {
+            let mut re: list<int> = [-term.re[0],-term.re[1],-term.re[2]]
+            let mut im: list<int> = [-term.im[0],-term.im[1],-term.im[2]]
+            for mode in donor { if mode.k == term.k {
+                assert(mode.denominator == term.denominator,"donor denominator")
+                for j in range(3) { re[j] = re[j]+mode.re[j]
+                    im[j] = im[j]+mode.im[j] }
+            } }
+            for mode in receiver { if mode.k == term.k {
+                assert(mode.denominator == term.denominator,"receiver denominator")
+                for j in range(3) { re[j] = re[j]+mode.re[j]
+                    im[j] = im[j]+mode.im[j] }
+            } }
+            if re != [0,0,0] or im != [0,0,0] {
+                result = push(result,ForceMode { k:term.k,re:re,im:im,denominator:term.denominator })
+            }
+        }
+    }
+    return result
+}
+component SecondTransferEvidence {
+    mode_count: int = 32, initial_band_squared: int = 2,
+    first_band_squared: int = 6, second_band_squared: int = 14,
+    H11_ball: int = 131072, normalized_profile_error_negative_power_two: int = 12,
+    time_horizon_negative_power_two: int = 98,
+    higher_band_energy_lower_negative_power_two_at_endpoint: int = 362,
+    actual_second_transfer_by_written_lemmas: bool = false,
+    repeated_scale_closure: bool = false, explanation: str = ""
+}
+entity second_transfer_result { SecondTransferEvidence {} }
+pure fn certify_second_transfer() -> SecondTransferEvidence {
+    let modes: list<ForceMode> = second_band()
+    assert(len(modes) == 32,"complete second profile")
+    let mut target_found: bool = false
+    for mode in modes {
+        let n: int = mode.k[0]*mode.k[0]+mode.k[1]*mode.k[1]+mode.k[2]*mode.k[2]
+        assert(n > 6 and n <= 14,"strictly finer second band")
+        if mode.k == [1,3,2] {
+            assert(mode.re == [0,0,0]
+                and mode.im == [-mode.denominator,mode.denominator,-mode.denominator],"second transfer witness")
+            target_found = true
+        }
+    }
+    assert(target_found,"new high-frequency witness")
+    let seed: list<FluidMode> = segment_seed()
+    let mut square4: int = 0
+    for mode in seed {
+        let n: int = mode.k[0]*mode.k[0]+mode.k[1]*mode.k[1]+mode.k[2]*mode.k[2]
+        let mut weight: int = 1
+        for _ in range(11) { weight = weight*(1+n) }
+        for j in range(3) { square4 = square4+weight*(mode.re[j]*mode.re[j]+mode.im[j]*mode.im[j]) }
+    }
+    assert(square4 == 4*537585*4096 and square4 < 4*65536*65536,"H11 datum")
+    assert(15+34-49 == 0 and 1+15+17-49 == -16,"H11 Picard margins")
+    // beta derivative bounds: C1<2^10 and C2<2^17, via e<3 and x^j exp(-x)<=j^j.
+    assert(2*81*4 < 1024 and 81*(4*256+4*27) < 131072,"fixed bump derivative constants")
+    // Temporal derivative bounds: ut H7 <2^46, utt H5 <2^74, uttt H3 <2^102.
+    assert(11+34 == 45 and 131072+32768 < 35184372088832,"first derivative bound")
+    assert(1+9+17+46 == 73 and 46+1 < 73,"second derivative bound")
+    assert(1+7+17+74 == 99 and 1+7+46+46 == 100,"third derivative exponents")
+    assert(100+2 == 102,"third derivative sum bound")
+    assert(102-16-98 == -12,"normalized second-band Taylor remainder")
+    assert(4*98-30 == 362,"second-band energy endpoint lower bound")
+    return SecondTransferEvidence { mode_count:32,initial_band_squared:2,first_band_squared:6,
+        second_band_squared:14,H11_ball:131072,normalized_profile_error_negative_power_two:12,
+        time_horizon_negative_power_two:98,higher_band_energy_lower_negative_power_two_at_endpoint:362,
+        actual_second_transfer_by_written_lemmas:true,repeated_scale_closure:false,
+        explanation:"full second Taylor coefficient equals the polarized donor/receiver source in the higher band; H11 evolution controls all third-order errors; second profile amplitude is order t^2, so this proves a second finite transfer, not scale-uniform amplification" }
+}
+intent SecondTransferChecked { key target: entity, evidence: SecondTransferEvidence }
+law SubmitSecondTransfer(target: entity,evidence: SecondTransferEvidence) {
+    propose SecondTransferChecked { target:target,evidence:evidence }
+}
+resolver CheckSecondTransfer for SecondTransferChecked(target,proposals) {
+    assert(len(proposals) == 1,"one second transfer certificate")
+    let row: SecondTransferEvidence = proposals[0].evidence
+    assert(row == certify_second_transfer(),"forged second-transfer closure")
+    next(target,SecondTransferEvidence { mode_count:row.mode_count,initial_band_squared:row.initial_band_squared,
+        first_band_squared:row.first_band_squared,second_band_squared:row.second_band_squared,
+        H11_ball:row.H11_ball,normalized_profile_error_negative_power_two:row.normalized_profile_error_negative_power_two,
+        time_horizon_negative_power_two:row.time_horizon_negative_power_two,
+        higher_band_energy_lower_negative_power_two_at_endpoint:row.higher_band_energy_lower_negative_power_two_at_endpoint,
+        actual_second_transfer_by_written_lemmas:row.actual_second_transfer_by_written_lemmas,
+        repeated_scale_closure:row.repeated_scale_closure,explanation:row.explanation })
+}
+fn main() -> nil {
+    let mut row: SecondTransferEvidence = certify_second_transfer()
+    let args: list<str> = sys_args()
+    if len(args) > 0 {
+        if args[0] == "forge-repeat" { row.repeated_scale_closure = true }
+        else { assert(args[0] == "forge-error","unknown mutation")
+            row.normalized_profile_error_negative_power_two = 50 }
+    }
+    settle { SubmitSecondTransfer(second_transfer_result,row) }
+    for mode in second_band() { print("mode",json_stringify(mode)) }
+    print("second",json_stringify(require(second_transfer_result,SecondTransferEvidence)))
+    print(why(second_transfer_result,SecondTransferEvidence))
+}

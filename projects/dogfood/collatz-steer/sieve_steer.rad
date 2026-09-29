@@ -1,0 +1,64 @@
+use "sieve.rad"
+use "rational.rad"
+
+resource Task { kind: int = 0 }
+
+component SurvivalEvidence { result: Survival = Survival {} }
+component SpectrumEvidence { result: Spectrum = Spectrum {} }
+
+entity probe_slot { SurvivalEvidence {} SpectrumEvidence {} }
+
+system Measure(s: mut SurvivalEvidence, r: mut SpectrumEvidence, task: Task) {
+    if task.kind == 0 { s = SurvivalEvidence { result: survival(600) } }
+    else { r = SpectrumEvidence { result: spectrum(18) } }
+}
+
+component Anatomy { trapped_cycles: int = 0, integer_points: list<int> = [], decay_bits_per_100: int = 0, facts: int = 0 }
+
+entity anatomy { Anatomy {} }
+
+intent Fact {
+    key target: entity
+    source: str
+    value: int
+    integers: list<int>
+}
+
+law Observe(target: entity, source: str, value: int, integers: list<int>) {
+    propose Fact { target: target, source: source, value: value, integers: integers }
+}
+
+resolver Assemble for Fact(target, proposals) {
+    let mut cycles: int = 0
+    let mut decay: int = 0
+    let mut ints: list<int> = []
+    for p in proposals {
+        if p.source == "spectrum" { cycles = p.value ints = p.integers }
+        if p.source == "survival" { decay = p.value }
+    }
+    next(target, Anatomy { trapped_cycles: cycles, integer_points: ints, decay_bits_per_100: decay, facts: len(proposals) })
+}
+
+constraint OnlyKnownIntegers for Anatomy(subject, proposed) {
+    require len(proposed.integer_points) == 3 else "sieve.new_negative_cycle_found"
+}
+
+fn main() -> nil {
+    let base: world_fork = fork()
+    let jobs: list<world_fork> = [fork_with(base, Task { kind: 0 }), fork_with(base, Task { kind: 1 })]
+    let done: list<world_fork> = simulate_many(jobs, [system::Measure], 1, 1937)
+    assert_only_changed(jobs[0], done[0], [SurvivalEvidence, SpectrumEvidence])
+    assert_only_changed(jobs[1], done[1], [SurvivalEvidence, SpectrumEvidence])
+    let sv: Survival = (peek(done[0], probe_slot, SurvivalEvidence) |> unwrap).result
+    let sp: Spectrum = (peek(done[1], probe_slot, SpectrumEvidence) |> unwrap).result
+    let n: int = len(sv.log2_mu_x1e6)
+    let decay: int = sv.log2_mu_x1e6[n - 2] - sv.log2_mu_x1e6[n - 1]
+    print(json_stringify(sv))
+    print(json_stringify(sp))
+    settle {
+        Observe(anatomy, "survival", decay, [])
+        Observe(anatomy, "spectrum", sp.necklaces, sp.integers)
+    }
+    print(json_stringify(require(anatomy, Anatomy)))
+    print(why(anatomy, Anatomy))
+}

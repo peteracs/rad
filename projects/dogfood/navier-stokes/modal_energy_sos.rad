@@ -1,0 +1,37 @@
+use "poly9.rad"
+component ModalEvidence { vertices: int = 0,quadratic_error_factor: int = 0,
+    coefficient_box_certified: bool = false,full_construction_certified: bool = false }
+entity modal_result { ModalEvidence {} }
+intent ModalChecked { key target: entity,factor: int }
+law SubmitModal(target: entity,factor: int) { propose ModalChecked { target:target,factor:factor } }
+resolver CheckModal for ModalChecked(target,proposals) {
+    let factor: int = proposals[0].factor
+    assert(factor >= 1 and factor <= 4,"energy coefficient domain")
+    let x: list<int> = monomial(100,1)
+    let y: list<int> = monomial(10,1)
+    let xx: list<int> = multiply(x,x)
+    let yy: list<int> = multiply(y,y)
+    let xy: list<int> = multiply(x,y)
+    let mut count: int = 0
+    for a in [-1,1] { for b in [-1,1] { for c in [-1,1] { for d in [-1,1] {
+        let off: int = int_div(b+c,2)
+        let magnitude: int = if off < 0 { -off } else { off }
+        let sx: int = factor-a-magnitude
+        let sy: int = factor-d-magnitude
+        assert(sx >= 0 and sy >= 0,"proposed uniform energy bound is false")
+        let quadratic: list<int> = add(add(scale(xx,factor-a),scale(xy,-b-c)),scale(yy,factor-d))
+        let linear: list<int> = add(x,scale(y,-off))
+        let sos: list<int> = add(add(scale(multiply(linear,linear),magnitude),scale(xx,sx)),scale(yy,sy))
+        assert(quadratic == sos,"sum-of-squares identity")
+        count = count+1
+    } } } }
+    assert(count == 16,"complete coefficient-box vertices")
+    next(target,ModalEvidence { vertices:count,quadratic_error_factor:factor,
+        coefficient_box_certified:true,full_construction_certified:false })
+}
+fn main() -> nil {
+    let factor: int = if len(sys_args()) > 0 { 1 } else { 2 }
+    settle { SubmitModal(modal_result,factor) }
+    print(json_stringify(require(modal_result,ModalEvidence)))
+    print(why(modal_result,ModalEvidence))
+}

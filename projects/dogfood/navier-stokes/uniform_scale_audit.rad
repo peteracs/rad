@@ -1,0 +1,68 @@
+use "poly9.rad"
+resource ScaleRequest { polynomial_degree: int = 1 }
+component ScaleEvidence { polynomial_degree: int = 0,ratio_polynomial_nonnegative: bool = false,
+    inverse_exponent_algebra: bool = false,actual_weighted_invariant_proved: bool = false }
+entity scale_trial { ScaleEvidence {} }
+entity scale_result { ScaleEvidence {} }
+pure fn poly_power(p: list<int>,n: int) -> list<int> {
+    assert(n >= 0 and n <= 6,"bounded polynomial degree")
+    let mut result: list<int> = monomial(0,1)
+    for _ in range(n) { result = multiply(result,p) }
+    return result
+}
+pure fn check_scales(request: ScaleRequest) -> ScaleEvidence {
+    let p: int = request.polynomial_degree
+    assert(p >= 1 and p <= 6,"certificate domain")
+    let x: list<int> = monomial(100,1)
+    let y: list<int> = monomial(10,1)
+    let z: list<int> = monomial(1,1)
+    // x=E+4C >=0, y=M, z=M-L/S >=0:
+    // x*M - (x/S)*L = x*z. No band index occurs in this majorant.
+    let gap: list<int> = add(multiply(x,y),scale(multiply(x,add(y,scale(z,-1))),-1))
+    assert(gap == multiply(x,z),"uniform exponent slack")
+    // x=clock>0,y=errorRate,z=length: clear the clock denominator.
+    assert(multiply(multiply(x,y),z) == multiply(multiply(y,z),x),"clock-rate/interval cancellation")
+    // For n=2p+x, x>=0, certify 2*n^p-(n+1)^p>=0.
+    let n: list<int> = add(monomial(0,2*p),x)
+    let ratio: list<int> = add(scale(poly_power(n,p),2),scale(poly_power(add(n,monomial(0,1)),p),-1))
+    for coefficient in ratio { assert(coefficient >= 0,"dyadic absorption monotonicity") }
+    return ScaleEvidence { polynomial_degree:p,ratio_polynomial_nonnegative:true,
+        inverse_exponent_algebra:true,actual_weighted_invariant_proved:false }
+}
+system CheckScales(row: mut ScaleEvidence,request: ScaleRequest) { row = check_scales(request) }
+intent ScaleChecked { key target: entity,request: ScaleRequest,evidence: ScaleEvidence }
+law SubmitScale(target: entity,request: ScaleRequest,evidence: ScaleEvidence) {
+    propose ScaleChecked { target:target,request:request,evidence:evidence }
+}
+resolver ResolveScale for ScaleChecked(target,proposals) {
+    for proposal in proposals { assert(proposal.evidence == check_scales(proposal.request),"source premise cannot be promoted to a proved invariant") }
+    next(target,ScaleEvidence { polynomial_degree:0,ratio_polynomial_nonnegative:true,
+        inverse_exponent_algebra:true,actual_weighted_invariant_proved:false })
+}
+fn main() -> nil {
+    let base: world_fork = fork()
+    let digest: str = world_digest()
+    let mut requests: list<ScaleRequest> = []
+    let mut jobs: list<world_fork> = []
+    for p in range(1,7) {
+        let request: ScaleRequest = ScaleRequest { polynomial_degree:p }
+        requests = push(requests,request)
+        jobs = push(jobs,fork_with(base,request))
+    }
+    let results: list<world_fork> = simulate_many(jobs,[system::CheckScales],1,20260909)
+    let mut rows: list<ScaleEvidence> = []
+    for i in range(len(results)) {
+        assert_only_changed(jobs[i],results[i],[ScaleEvidence])
+        let row: ScaleEvidence = peek(results[i],scale_trial,ScaleEvidence) |> unwrap
+        rows = push(rows,row)
+        print("scale",json_stringify(row))
+    }
+    assert(world_digest() == digest,"scale fork isolation")
+    if len(sys_args()) > 0 {
+        let mut row: ScaleEvidence = rows[0]
+        row.actual_weighted_invariant_proved = true
+        rows[0] = row
+    }
+    settle { for i in range(len(rows)) { SubmitScale(scale_result,requests[i],rows[i]) } }
+    print(why(scale_result,ScaleEvidence))
+}

@@ -1,0 +1,82 @@
+// Exact weighted search of the backward uncertainty graph.
+// Interval preservation gives a polynomial state encoding; no answer formula
+// is used by the search. A FIFO relaxation queue handles zero-cost letters.
+pub struct WeightedResult {
+    n: int = 0
+    a_cost: int = 0
+    b_cost: int = 0
+    cost: int = -1
+    states: int = 0
+}
+
+pub pure fn preimage(mask: int, letter: int, n: int) -> int {
+    let top: int = 1 << (n - 1)
+    if letter == 0 { return (mask >> 1) | ((mask & 1) << (n - 1)) }
+    return (mask & (top - 1)) | ((mask & 1) << (n - 1))
+}
+
+pure fn interval_id(mask: int, n: int) -> int {
+    let full: int = (1 << n) - 1
+    if mask == full { return n * (n - 1) }
+    let rotated: int = ((mask << 1) & full) | (mask >> (n - 1))
+    let starts: int = mask & (full ^ rotated)
+    assert(mask != 0 and popcount(starts) == 1, "backward set ceased to be an interval")
+    return ctz(starts) * (n - 1) + popcount(mask) - 1
+}
+
+pure fn interval_mask(id: int, n: int) -> int {
+    if id == n * (n - 1) { return (1 << n) - 1 }
+    let left: int = int_div(id, n - 1)
+    let length: int = id % (n - 1) + 1
+    if left + length <= n { return ((1 << length) - 1) << left }
+    return (((1 << (n - left)) - 1) << left) | ((1 << (length + left - n)) - 1)
+}
+
+pub pure fn weighted_search(n: int, a_cost: int, b_cost: int) -> WeightedResult {
+    assert(n >= 3 and n <= 30, "weighted search supports 3..30 states")
+    assert(a_cost >= 0 and b_cost >= 0 and a_cost + b_cost > 0, "invalid letter costs")
+    let intervals: int = n * (n - 1) + 1
+    let capacity: int = intervals * intervals
+    let mut distances: bytebuf = bytebuf_new(capacity * 4)
+    let mut queued: bytebuf = bytebuf_new(capacity)
+    let mut queue: bytebuf = bytebuf_new(capacity * 4)
+    // The pair ({0},{0}) has rank zero. Distances store cost+1, reserving zero.
+    distances = bytebuf_set_u32_le(distances, 0, 1)
+    queued = bytebuf_set_u8(queued, 0, 1)
+    let mut head: int = 0
+    let mut tail: int = 1
+    let mut pending: int = 1
+    let mut states: int = 1
+    while pending > 0 {
+        let rank: int = bytebuf_get_u32_le(queue, head * 4)
+        head = (head + 1) % capacity
+        pending = pending - 1
+        queued = bytebuf_set_u8(queued, rank, 0)
+        let outer: int = interval_mask(int_div(rank, intervals), n)
+        let inner: int = interval_mask(rank % intervals, n)
+        let distance: int = bytebuf_get_u32_le(distances, rank * 4)
+        for letter in range(2) {
+            let next_outer: int = preimage(outer, letter, n)
+            let next_inner: int = preimage(inner, letter, n) & outer
+            if next_inner != 0 {
+                assert((next_inner & next_outer) == next_inner, "backward sets lost nesting")
+                let next_rank: int = interval_id(next_outer, n) * intervals + interval_id(next_inner, n)
+                let candidate: int = distance + (if letter == 0 { a_cost } else { b_cost })
+                let old_cost: int = bytebuf_get_u32_le(distances, next_rank * 4)
+                if old_cost == 0 or candidate < old_cost {
+                    if old_cost == 0 { states = states + 1 }
+                    distances = bytebuf_set_u32_le(distances, next_rank * 4, candidate)
+                    if bytebuf_get(queued, next_rank) == 0 {
+                        assert(pending < capacity, "relaxation queue overflow")
+                        queued = bytebuf_set_u8(queued, next_rank, 1)
+                        queue = bytebuf_set_u32_le(queue, tail * 4, next_rank)
+                        tail = (tail + 1) % capacity
+                        pending = pending + 1
+                    }
+                }
+            }
+        }
+    }
+    let answer: int = bytebuf_get_u32_le(distances, (capacity - 1) * 4)
+    return WeightedResult { n: n, a_cost: a_cost, b_cost: b_cost, cost: answer - 1, states: states }
+}

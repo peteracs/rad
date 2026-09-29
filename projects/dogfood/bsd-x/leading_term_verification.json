@@ -1,0 +1,87 @@
+{
+  "abstract_forks": 400,
+  "diagnostic_witnesses": 6,
+  "independent_square_enumeration": true,
+  "worker_counts": [
+    1,
+    4
+  ],
+  "record_replay": true,
+  "forged_conclusion_rejected": true,
+  "actual_elliptic_curves_computed": 0,
+  "unconditional_X_proofs_found": 0,
+  "witnesses": [
+    {
+      "bound": 143,
+      "conditional_equality": true,
+      "divisor": 36,
+      "escape_factor": 2,
+      "inconsistent": false,
+      "next_order": 144,
+      "possible_count": 1,
+      "square_multiple": 36,
+      "target": 36,
+      "unique_order": 36
+    },
+    {
+      "bound": 144,
+      "conditional_equality": false,
+      "divisor": 36,
+      "escape_factor": 2,
+      "inconsistent": false,
+      "next_order": 144,
+      "possible_count": 2,
+      "square_multiple": 36,
+      "target": 36,
+      "unique_order": 0
+    },
+    {
+      "bound": 143,
+      "conditional_equality": false,
+      "divisor": 4,
+      "escape_factor": 2,
+      "inconsistent": false,
+      "next_order": 16,
+      "possible_count": 5,
+      "square_multiple": 4,
+      "target": 36,
+      "unique_order": 0
+    },
+    {
+      "bound": 143,
+      "conditional_equality": false,
+      "divisor": 12,
+      "escape_factor": 2,
+      "inconsistent": false,
+      "next_order": 144,
+      "possible_count": 1,
+      "square_multiple": 36,
+      "target": 12,
+      "unique_order": 36
+    },
+    {
+      "bound": 899,
+      "conditional_equality": true,
+      "divisor": 36,
+      "escape_factor": 5,
+      "inconsistent": false,
+      "next_order": 900,
+      "possible_count": 1,
+      "square_multiple": 36,
+      "target": 36,
+      "unique_order": 36
+    },
+    {
+      "bound": 900,
+      "conditional_equality": false,
+      "divisor": 36,
+      "escape_factor": 5,
+      "inconsistent": false,
+      "next_order": 900,
+      "possible_count": 2,
+      "square_multiple": 36,
+      "target": 36,
+      "unique_order": 0
+    }
+  ]
+}

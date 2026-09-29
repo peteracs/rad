@@ -1,0 +1,25 @@
+// The extension is project-owned; RAD supplies the typed, deterministic
+// execution boundary and isolated speculative worlds.
+let RANK_KERNEL: any = load_extension("projects/dogfood/native-math-kernels/out/rad_dogfood_math_kernels", 850)
+let RANK_SEARCH: pure fn(str) -> str = RANK_KERNEL["rewrite_rank_search_json"]
+
+pub pure fn native_rank_search(request: map<str, any>) -> map<str, any> {
+    return json_parse(RANK_SEARCH(json_stringify(request))) |> unwrap
+}
+
+// Each extension generation owns one serialized worker. Separate retained
+// handles let speculative lanes execute native work concurrently.
+pub fn rank_kernel_pool(count: int) -> list<any> {
+    assert(count >= 1 and count <= 16, "invalid native rank pool size")
+    let mut pool: list<any> = [RANK_KERNEL]
+    for _ in range(1, count) {
+        pool = push(pool, load_extension("projects/dogfood/native-math-kernels/out/rad_dogfood_math_kernels", 850))
+    }
+    return pool
+}
+
+pub pure fn pooled_rank_search(pool: list<any>, request: map<str, any>) -> map<str, any> {
+    let worker: int = request["seed"] % len(pool)
+    let search: pure fn(str) -> str = pool[worker]["rewrite_rank_search_json"]
+    return json_parse(search(json_stringify(request))) |> unwrap
+}

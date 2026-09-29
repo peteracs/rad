@@ -1,0 +1,29 @@
+use "signed.rad"
+
+resource Map { d: int = 1, bits: int = 18 }
+
+pub struct MapResult { d: int = 0, bits: int = 0, rows: list<ZRow> = [] }
+
+component MapEvidence { result: MapResult = MapResult {} }
+
+entity map_slot { MapEvidence {} }
+
+system Test(evidence: mut MapEvidence, m: Map) {
+    let marks: list<int> = [2 * m.bits, 3 * m.bits, 4 * m.bits, 5 * m.bits, 6 * m.bits]
+    evidence = MapEvidence { result: MapResult { d: m.d, bits: m.bits, rows: signed_test(m.bits, m.d, marks) } }
+}
+
+fn main() -> nil {
+    let base: world_fork = fork()
+    let mut jobs: list<world_fork> = []
+    for d in [1, 0 - 1] { for b in [16, 18] { jobs = push(jobs, fork_with(base, Map { d: d, bits: b })) } }
+    let done: list<world_fork> = simulate_many(jobs, [system::Test], 1, 1937)
+    for i in range(len(done)) {
+        assert_only_changed(jobs[i], done[i], [MapEvidence])
+        let r: MapResult = (peek(done[i], map_slot, MapEvidence) |> unwrap).result
+        let mut zs: list<int> = []
+        let mut obs: list<int> = []
+        for row in r.rows { zs = push(zs, row.z_x100) obs = push(obs, row.observed) }
+        print(r.d, r.bits, "z x100:", zs, "observed:", obs)
+    }
+}

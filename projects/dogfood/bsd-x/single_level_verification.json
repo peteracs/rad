@@ -1,0 +1,45 @@
+{
+  "abstract_forks": 720,
+  "diagnostic_witnesses": 3,
+  "independent_layer_counts": true,
+  "worker_counts": [
+    1,
+    4
+  ],
+  "record_replay": true,
+  "forged_conclusion_rejected": true,
+  "actual_elliptic_curves_computed": 0,
+  "universal_X_placeholders_filled": 0,
+  "witnesses": [
+    {
+      "average_floor": 2,
+      "certificate": true,
+      "exponent": 11,
+      "last_growth": 2,
+      "next_growth": 2,
+      "primary_closed": true,
+      "rank_closed": true,
+      "threshold": 12
+    },
+    {
+      "average_floor": 3,
+      "certificate": false,
+      "exponent": 12,
+      "last_growth": 3,
+      "next_growth": 3,
+      "primary_closed": false,
+      "rank_closed": false,
+      "threshold": 12
+    },
+    {
+      "average_floor": 3,
+      "certificate": false,
+      "exponent": 12,
+      "last_growth": 3,
+      "next_growth": 3,
+      "primary_closed": false,
+      "rank_closed": false,
+      "threshold": 12
+    }
+  ]
+}

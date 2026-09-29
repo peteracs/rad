@@ -1,0 +1,32 @@
+use "repair_evidence.rad"
+
+entity repair_judge { RepairEvidence {} }
+
+fn main() -> nil {
+    let args: list<str> = sys_args()
+    assert(len(args) == 2, "supply mode and control model JSON")
+    let row: map<str, any> = json_parse(read_file(args[1])) |> unwrap
+    let model: Model = Model { label: row["label"], dimension: row["dimension"], maximum: row["maximum"],
+        matrices: row["matrices"], strict_rules: row["strict_rules"], omitted: row["omitted"], complete_proof: row["complete_proof"] }
+    for word in [[0, 3], [2, 0, 1], [3]] {
+        let whole: list<list<int>> = interpret(word, model)
+        for i in range(model.dimension + 1) {
+            for j in range(model.dimension + 1) {
+                assert(rank_coefficient(model, word, i, j) == whole[i][j], "constraint coefficient differs")
+            }
+        }
+    }
+    settle {
+        if args[0] == "mismatch" { SubmitRepair(repair_judge, "bad", 0, 1, 0, false, Model {}) }
+        else if args[0] == "forged" { SubmitRepair(repair_judge, "bad", 0, 0, 0, true, model) }
+        else if args[0] == "reverse" {
+            SubmitRepair(repair_judge, "b", 2, 2, 0, false, Model {})
+            SubmitRepair(repair_judge, "a", 2, 2, 0, false, Model {})
+        }
+        else {
+            SubmitRepair(repair_judge, "a", 2, 2, 0, false, Model {})
+            SubmitRepair(repair_judge, "b", 2, 2, 0, false, Model {})
+        }
+    }
+    print(json_stringify(require(repair_judge, RepairEvidence)))
+}

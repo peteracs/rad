@@ -1,0 +1,541 @@
+{
+  "completed_utc": "2026-09-04T21:29:19.612488+00:00",
+  "source_sha256": {
+    "accept.py": "861790ce88b75c70bf748ca7b45ab2e389f5e3cd9dd5ddfcb410f1c9542f119d",
+    "backward.rad": "ede1705dec542c60a27e3f2b4156a5ffa68e39ec88e90adb72555387154c137c",
+    "backward_oracle.py": "2d81755efebc5f4fc09dbf3113b2cdce9e06274360079a790f59d6c4d426bc87",
+    "benchmark_fix.py": "d55ec8eea57d6d61175e2556b9859195bb0c1508190112c393e29dd4b4c86265",
+    "capacity_oracle.py": "d773e865c75f961e9d454da8f9ea923782988ae37f6e0f3e76d1275eefc8bf7c",
+    "main.rad": "4f379aa8493789d227c7443681f1167e4c0b5974c81354ae619e9506c89c2c1f",
+    "optimality.rad": "54039fd487cdeab88eeb4d3867e5b14e6f55fdaf0c70dece628c8818d04d67a0",
+    "oracle.py": "187c94081a87a7e5f48f6126501a2bdbfde7b6c2929f3f5f5454ca45c1e41c7e",
+    "probe.py": "93424d563426a4f1b5bb0ad44bd508db2d7b8a2eb2f515610753d1ba11405466",
+    "proof_audit.rad": "1bea778a6bd420201b8ff2a8ac2ed7e740125feba9c2b3bebc87d5fb5b88414a",
+    "rank_capacity.rad": "8fab90581c6bddf316f86dafba3a6a31a09182245d407868f8f3a107f9087a00",
+    "search.rad": "86400e449b65314304911b6584328c151768db89f2d263a5f5dadff0581570b5",
+    "single.rad": "a061cf07e05dfc43e34b2a9ae96b33ba60a2118f1a6069b90b338eeca5f13ad0",
+    "symbolic_verify.py": "8c9d5e8cb2afe7f68172ea7f19a8cb41d758d1414878501f2981ee4bf0dc38bf",
+    "test_capacity.py": "a70834e05c7d891fcd491aea91991a74b03ae63821f9f74f2103acf9067da413",
+    "test_optimality.py": "f6d86b5f44ca7b34955fc52404ce434ffe2ff0a598abd1b9f73e84670debdbcb",
+    "test_symbolic.py": "a1dc3d5e01bbc4021931d4eb7b62329bd63d45a55bd1c5f263116a63744ff28c",
+    "test_verify.py": "6a7f579c6335ac94b5c1f48e6519ac5e950123e8261e6a82dbe5579d17f770c3",
+    "verify.py": "4958f246ed2b17eed199dbf4fadeb92b2abf8ca75c5163a7e397413f56e5a7d0"
+  },
+  "mathematical_text_sha256": {
+    "RESULTS.md": "19001408e0097b7e7172cf624edf9f6cd817aa6f30c9e813fc95b7862c6e2730",
+    "OPTIMALITY.md": "d5d2568415ffff34412407889df98d2dfcdbbf47dd8aac7c215e6dd45621954c",
+    "GENERAL_BOUND.md": "dc6d9cce5d53286f845ea69f74bf6988e82839be7ec964d178501796b62c5152"
+  },
+  "binary_sha256": "4997366f760995e10d4692b7feb76457171778a80207c489fd6979aaf94ba68d",
+  "platform": "Windows-10-10.0.19045-SP0",
+  "python": "3.12.10",
+  "format": "rad-deletion-sync-evidence-v2",
+  "max_n": 10,
+  "commands": [
+    {
+      "command": [
+        "H:\\Projects\\rad-lang\\target\\release\\rad.exe",
+        "H:\\Projects\\rad-lang\\projects\\dogfood\\deletion-sync\\main.rad",
+        "--strict-types",
+        "--deny-warnings",
+        "--record",
+        "H:\\Projects\\rad-lang\\projects\\dogfood\\deletion-sync\\out\\search-1.radr",
+        "--",
+        "10"
+      ],
+      "workers": 1,
+      "elapsed_ns": 2627413900,
+      "stdout_sha256": "d79420fa4dcae26f78630085691a3985a135d41833390cd6386e2d7271953d65"
+    },
+    {
+      "command": [
+        "H:\\Projects\\rad-lang\\target\\release\\rad.exe",
+        "replay",
+        "H:\\Projects\\rad-lang\\projects\\dogfood\\deletion-sync\\out\\search-1.radr"
+      ],
+      "workers": 4,
+      "elapsed_ns": 1668947700,
+      "stdout_sha256": "d79420fa4dcae26f78630085691a3985a135d41833390cd6386e2d7271953d65"
+    },
+    {
+      "command": [
+        "H:\\Projects\\rad-lang\\target\\release\\rad.exe",
+        "H:\\Projects\\rad-lang\\projects\\dogfood\\deletion-sync\\main.rad",
+        "--strict-types",
+        "--deny-warnings",
+        "--record",
+        "H:\\Projects\\rad-lang\\projects\\dogfood\\deletion-sync\\out\\search-4.radr",
+        "--",
+        "10"
+      ],
+      "workers": 4,
+      "elapsed_ns": 1623173700,
+      "stdout_sha256": "d79420fa4dcae26f78630085691a3985a135d41833390cd6386e2d7271953d65"
+    },
+    {
+      "command": [
+        "H:\\Projects\\rad-lang\\target\\release\\rad.exe",
+        "replay",
+        "H:\\Projects\\rad-lang\\projects\\dogfood\\deletion-sync\\out\\search-4.radr"
+      ],
+      "workers": 1,
+      "elapsed_ns": 2565269100,
+      "stdout_sha256": "d79420fa4dcae26f78630085691a3985a135d41833390cd6386e2d7271953d65"
+    },
+    {
+      "command": [
+        "H:\\Projects\\rad-lang\\target\\release\\rad.exe",
+        "H:\\Projects\\rad-lang\\projects\\dogfood\\deletion-sync\\proof_audit.rad",
+        "--experimental-laws",
+        "--strict-types",
+        "--deny-warnings",
+        "--record",
+        "H:\\Projects\\rad-lang\\projects\\dogfood\\deletion-sync\\out\\proof-audit.radr"
+      ],
+      "workers": 4,
+      "elapsed_ns": 124204500,
+      "stdout_sha256": "2843e943b7291fff58f54d1a759a0eeac786d0f095a706a6c791d48741724184"
+    },
+    {
+      "command": [
+        "H:\\Projects\\rad-lang\\target\\release\\rad.exe",
+        "replay",
+        "H:\\Projects\\rad-lang\\projects\\dogfood\\deletion-sync\\out\\proof-audit.radr"
+      ],
+      "workers": 1,
+      "elapsed_ns": 95515800,
+      "stdout_sha256": "2843e943b7291fff58f54d1a759a0eeac786d0f095a706a6c791d48741724184"
+    },
+    {
+      "command": [
+        "H:\\Projects\\rad-lang\\target\\release\\rad.exe",
+        "H:\\Projects\\rad-lang\\projects\\dogfood\\deletion-sync\\optimality.rad",
+        "--strict-types",
+        "--deny-warnings",
+        "--",
+        "30"
+      ],
+      "workers": 4,
+      "elapsed_ns": 939352300,
+      "stdout_sha256": "05ec8aaa7fe24e29e25c7edced1d8786583bc10334f32499f63936afef2566d0"
+    },
+    {
+      "command": [
+        "H:\\Projects\\rad-lang\\target\\release\\rad.exe",
+        "H:\\Projects\\rad-lang\\projects\\dogfood\\deletion-sync\\rank_capacity.rad",
+        "--strict-types",
+        "--deny-warnings"
+      ],
+      "workers": 1,
+      "elapsed_ns": 2686537700,
+      "stdout_sha256": "b6f31aea4bdcd6fe02a59a8ee3f529b393dd8067a802a6a498b6d568bf603914"
+    }
+  ],
+  "additional_evidence_sha256": {
+    "optimality-evidence.json": "00b3e61fad4adf3a85916f24a95cfe2d40250512ea373699e20757fc5fbfb4b9",
+    "capacity-evidence.json": "5a687287fd04913eb65a4f2089d60271b344ed11ef3247bbbc10083fc4b39f88"
+  },
+  "trace_sha256": {
+    "search-1.radr": "43d49cc18d2643e8e7f8d2dc6a3051f470880707359fe5c54ec103dddca4ee7e",
+    "search-4.radr": "2dc7650c8f0e75fee95e20a3820b50dc4ab58c2081fad5690d38b892db8bbdda",
+    "proof-audit.radr": "64d5764f6204709b4506be9b5b9bf24a749138ac504be8847c87495173c25c71"
+  },
+  "instances": [
+    {
+      "n": 2,
+      "budget": 0,
+      "length": 1,
+      "word": "b",
+      "target": 0,
+      "discovered": 2,
+      "expanded": 1
+    },
+    {
+      "n": 2,
+      "budget": 1,
+      "length": 2,
+      "word": "bb",
+      "target": 0,
+      "discovered": 4,
+      "expanded": 3
+    },
+    {
+      "n": 2,
+      "budget": 2,
+      "length": 3,
+      "word": "bbb",
+      "target": 0,
+      "discovered": 5,
+      "expanded": 4
+    },
+    {
+      "n": 3,
+      "budget": 0,
+      "length": 4,
+      "word": "baab",
+      "target": 0,
+      "discovered": 5,
+      "expanded": 4
+    },
+    {
+      "n": 3,
+      "budget": 1,
+      "length": 9,
+      "word": "baababaab",
+      "target": 0,
+      "discovered": 13,
+      "expanded": 12
+    },
+    {
+      "n": 3,
+      "budget": 2,
+      "length": -1,
+      "word": "",
+      "target": -1,
+      "discovered": 17,
+      "expanded": 17
+    },
+    {
+      "n": 4,
+      "budget": 0,
+      "length": 9,
+      "word": "baaabaaab",
+      "target": 0,
+      "discovered": 12,
+      "expanded": 11
+    },
+    {
+      "n": 4,
+      "budget": 1,
+      "length": 16,
+      "word": "baaababaababaaab",
+      "target": 0,
+      "discovered": 39,
+      "expanded": 38
+    },
+    {
+      "n": 4,
+      "budget": 2,
+      "length": -1,
+      "word": "",
+      "target": -1,
+      "discovered": 58,
+      "expanded": 58
+    },
+    {
+      "n": 5,
+      "budget": 0,
+      "length": 16,
+      "word": "baaaabaaaabaaaab",
+      "target": 0,
+      "discovered": 27,
+      "expanded": 26
+    },
+    {
+      "n": 5,
+      "budget": 1,
+      "length": 25,
+      "word": "baaaababaaababaaababaaaab",
+      "target": 0,
+      "discovered": 112,
+      "expanded": 111
+    },
+    {
+      "n": 5,
+      "budget": 2,
+      "length": -1,
+      "word": "",
+      "target": -1,
+      "discovered": 194,
+      "expanded": 194
+    },
+    {
+      "n": 6,
+      "budget": 0,
+      "length": 25,
+      "word": "baaaaabaaaaabaaaaabaaaaab",
+      "target": 0,
+      "discovered": 58,
+      "expanded": 57
+    },
+    {
+      "n": 6,
+      "budget": 1,
+      "length": 36,
+      "word": "baaaaababaaaababaaaababaaaababaaaaab",
+      "target": 0,
+      "discovered": 313,
+      "expanded": 312
+    },
+    {
+      "n": 6,
+      "budget": 2,
+      "length": -1,
+      "word": "",
+      "target": -1,
+      "discovered": 636,
+      "expanded": 636
+    },
+    {
+      "n": 7,
+      "budget": 0,
+      "length": 36,
+      "word": "baaaaaabaaaaaabaaaaaabaaaaaabaaaaaab",
+      "target": 0,
+      "discovered": 121,
+      "expanded": 120
+    },
+    {
+      "n": 7,
+      "budget": 1,
+      "length": 49,
+      "word": "baaaaaababaaaaababaaaaababaaaaababaaaaababaaaaaab",
+      "target": 0,
+      "discovered": 859,
+      "expanded": 858
+    },
+    {
+      "n": 7,
+      "budget": 2,
+      "length": -1,
+      "word": "",
+      "target": -1,
+      "discovered": 2051,
+      "expanded": 2051
+    },
+    {
+      "n": 8,
+      "budget": 0,
+      "length": 49,
+      "word": "baaaaaaabaaaaaaabaaaaaaabaaaaaaabaaaaaaabaaaaaaab",
+      "target": 0,
+      "discovered": 248,
+      "expanded": 247
+    },
+    {
+      "n": 8,
+      "budget": 1,
+      "length": 64,
+      "word": "baaaaaaababaaaaaababaaaaaababaaaaaababaaaaaababaaaaaababaaaaaaab",
+      "target": 0,
+      "discovered": 2328,
+      "expanded": 2327
+    },
+    {
+      "n": 8,
+      "budget": 2,
+      "length": -1,
+      "word": "",
+      "target": -1,
+      "discovered": 6529,
+      "expanded": 6529
+    },
+    {
+      "n": 9,
+      "budget": 0,
+      "length": 64,
+      "word": "baaaaaaaabaaaaaaaabaaaaaaaabaaaaaaaabaaaaaaaabaaaaaaaabaaaaaaaab",
+      "target": 0,
+      "discovered": 503,
+      "expanded": 502
+    },
+    {
+      "n": 9,
+      "budget": 1,
+      "length": 81,
+      "word": "baaaaaaaababaaaaaaababaaaaaaababaaaaaaababaaaaaaababaaaaaaababaaaaaaababaaaaaaaab",
+      "target": 0,
+      "discovered": 6253,
+      "expanded": 6252
+    },
+    {
+      "n": 9,
+      "budget": 2,
+      "length": -1,
+      "word": "",
+      "target": -1,
+      "discovered": 20573,
+      "expanded": 20573
+    },
+    {
+      "n": 10,
+      "budget": 0,
+      "length": 81,
+      "word": "baaaaaaaaabaaaaaaaaabaaaaaaaaabaaaaaaaaabaaaaaaaaabaaaaaaaaabaaaaaaaaabaaaaaaaaab",
+      "target": 0,
+      "discovered": 1014,
+      "expanded": 1013
+    },
+    {
+      "n": 10,
+      "budget": 1,
+      "length": 100,
+      "word": "baaaaaaaaababaaaaaaaababaaaaaaaababaaaaaaaababaaaaaaaababaaaaaaaababaaaaaaaababaaaaaaaababaaaaaaaaab",
+      "target": 0,
+      "discovered": 16687,
+      "expanded": 16686
+    },
+    {
+      "n": 10,
+      "budget": 2,
+      "length": -1,
+      "word": "",
+      "target": -1,
+      "discovered": 64302,
+      "expanded": 64302
+    }
+  ],
+  "symbolic_verification": {
+    "z3_version": "5.0.0",
+    "obligations": [
+      {
+        "name": "prefix_zero_inclusion",
+        "result": "unsat",
+        "query_sha256": "d74a611ec6ec6f50146ae05305636e5a74077c50374b987847f1409ce7429ca7",
+        "proof_sha256": "6aba9f48c1582c0c38d079b9521faa9903c03c73ec1d57221e1d86b551047384"
+      },
+      {
+        "name": "prefix_zero_surjection",
+        "result": "unsat",
+        "query_sha256": "1eec4b61d7509d1e5698ebf0f507296edc88e389e37cfe42b8eba19d8e291400",
+        "proof_sha256": "38eb3a13315e49ae39e1f3691249607f7b693c2fddd6119f6380d54283b5fe34"
+      },
+      {
+        "name": "block_zero_inclusion",
+        "result": "unsat",
+        "query_sha256": "27d25de1597e3bd04ca640fc7cd167061fae35bb705cb1f8c0cca402d8767e8b",
+        "proof_sha256": "889f8ece46c8dd3cd3fbfb5ea059c3d5334775eca49536acb8d73ad39d59a2bb"
+      },
+      {
+        "name": "block_one_inclusion",
+        "result": "unsat",
+        "query_sha256": "b8fddeb3a35ee32254ac3b20c0af9ec8671bd64ffbe03b1d2879fbcf106c9857",
+        "proof_sha256": "1e069b6138a4e12a76226d66a05d0cdda8b1a0b3cb9ee7a7b0c219abf4d4e277"
+      },
+      {
+        "name": "block_zero_surjection",
+        "result": "unsat",
+        "query_sha256": "359048d0f02435ad0405b93ddf9ede6fd99fe753263248d5a17cf4b169206646",
+        "proof_sha256": "c6f248f75d62e6e648ab96856d63951ef9f69fdf6d341b9fb1d97f258c225357"
+      },
+      {
+        "name": "block_one_surjection",
+        "result": "unsat",
+        "query_sha256": "ce7b40b202a336ea897e704f8d5858a53ef66dddcb4d8980b0c30750bb29a692",
+        "proof_sha256": "acfab9f40739e8a8e706ca9b57c6d8e26468620f746c74cc423a8794d1d7de61"
+      },
+      {
+        "name": "delete_first_b",
+        "result": "unsat",
+        "query_sha256": "4e527619da076c5bc94132afe7d9b33e4508e507d922fdd4edb855be0eae4439",
+        "proof_sha256": "5140fbc953af36c3aa7da4ba167573f1d9df290a2b245145da8683dd6ed53f5f"
+      },
+      {
+        "name": "delete_middle_a",
+        "result": "unsat",
+        "query_sha256": "bc295f283043c79dd7d0ad6f1ad711f2f70c0704c3f5c08f8c7855ed1e3f2208",
+        "proof_sha256": "75ed06539d79c1b7c11270bf2370af3e18d2254784ccc7adc2c86ea15f14802c"
+      },
+      {
+        "name": "delete_second_b",
+        "result": "unsat",
+        "query_sha256": "a633eaa68824a1bd42409a1be25c01952f17d4e83e57ed38de7e2dff88a4adb6",
+        "proof_sha256": "a80aca2151649c943e1207490cd9033873c32b992e0f2136f79729ad8b61aba2"
+      },
+      {
+        "name": "delete_tail_a",
+        "result": "unsat",
+        "query_sha256": "b4412003c259103c02954b07360239ea716dc4696eb65cbd190d2646747d63e3",
+        "proof_sha256": "eec8d48add958cca994153cf2ffd00572600b15db2686d338245538d4439b9ba"
+      },
+      {
+        "name": "last_a_intersection",
+        "result": "unsat",
+        "query_sha256": "65c8b8fba48b8259bb17aa58d62024c86b96bb7516604663dafbb0f18906b9df",
+        "proof_sha256": "3a203f2c63cdd1fde41d66074d8007da84bb3931e0c8c929eedd5898b8f55c36"
+      },
+      {
+        "name": "general_arc_intersection",
+        "result": "unsat",
+        "query_sha256": "8e76b58baee5046bd462e8f1db6031ffc660a0a113fef626d3ab738324c5d851",
+        "proof_sha256": "624cc9fa46c62b2f99ede937d1d2be5740006fa55d7b0b362274ef7f7bf71002"
+      },
+      {
+        "name": "reset_image_avoids_arc",
+        "result": "unsat",
+        "query_sha256": "996c98aadb6f8df709f7def9964c2cca6549b304df71c53806942a84f43c2ff6",
+        "proof_sha256": "35cdb6206ac035eec3249eca56d8cd94d96e53de19603da76d779fde6edfe930"
+      },
+      {
+        "name": "interval_erosion",
+        "result": "unsat",
+        "query_sha256": "03b5833f6daa2ffea07e854fb019108f656c1b71d9a3fa81b1955e94167fc03f",
+        "proof_sha256": "ddccbbd66c5b1708f0ade6907ff74b146d8934f2de4c6eb52527d60f368b8501"
+      },
+      {
+        "name": "backward_rotation_interval",
+        "result": "unsat",
+        "query_sha256": "6b0b100c02b1f232ec6bc7f1662efc354749124177476da7c6130ca0620edd38",
+        "proof_sha256": "69c3aacbb8b506e3b908c1825e57e7d187d585f042fa7cda8f691e676c8625e2"
+      },
+      {
+        "name": "backward_merge_interval",
+        "result": "unsat",
+        "query_sha256": "c776b4adc37e91b5eb39b77c0057b41c262ba2181f35fa15edd5333d74368516",
+        "proof_sha256": "0b17d6cbd98cd28d748f86254c0e956bcfba11f7aec3480625fa7b939572c5f1"
+      },
+      {
+        "name": "backward_growth_endpoint",
+        "result": "unsat",
+        "query_sha256": "2fc685730a82132339dd6391e6b59167bdee774902c40325ed4670ac89af4014",
+        "proof_sha256": "a608e72851a1c262c3ab53e486e7348b75d7578d75c012abc470a1a577ba210a"
+      },
+      {
+        "name": "backward_shrink_endpoint",
+        "result": "unsat",
+        "query_sha256": "ee3584aaf25f16595440ae6c2afb3b17813325d72b077cf2c5485b595eba2035",
+        "proof_sha256": "94981a3cef840c45893ebaed00b802ce9126a3bfcec74c173a4af47352882e71"
+      },
+      {
+        "name": "immediate_growth_forces_stationary_rotation",
+        "result": "unsat",
+        "query_sha256": "850f489b41fd143ff373d95c27a13efb16a4d0e2d9ad71035212a8770944b864",
+        "proof_sha256": "ee459f5230b5bfada6e7f11673bedc27677c0de8beba9f37a0d15037d954e2fb"
+      },
+      {
+        "name": "rotation_bound_delayed_growth",
+        "result": "unsat",
+        "query_sha256": "e092bb6709829f56f0844315669537bc1c4aa6f2b4d2af12bdcfbf485f3e9ee6",
+        "proof_sha256": "9a275322b8d5af057d91e93eed08d6f0a1d15c75388f22973a34b85cb3504673"
+      },
+      {
+        "name": "rotation_bound_immediate_growth",
+        "result": "unsat",
+        "query_sha256": "805c83b95d7feb0c421a6e7030fbf8b4d615b72ea0d7fcd7922e41cf0316f173",
+        "proof_sha256": "f47f43ec10e8076e9c57cb668c39739435fdbb59d6141f3c83da3ea5ef170deb"
+      },
+      {
+        "name": "rotation_mutation_control",
+        "result": "sat",
+        "query_sha256": "ec06e6b0a74731f64ae4ac4fdc75fdab680e5bc35fd1673a8af3bdbab015fb95",
+        "counterexample": "[rotations = 5,\n before_growth = 3,\n n = 3,\n stationary = 0,\n growths = 2]"
+      },
+      {
+        "name": "mutation_control",
+        "result": "sat",
+        "query_sha256": "e1d82b20b71bac18233e33ce68e9abf87a38c073f51456ab1dc1ea77e1bc663c",
+        "counterexample": "[m = 1, q = 1, n = 4]"
+      }
+    ],
+    "scope": "symbolic algebraic lemmas; full arguments are in RESULTS.md and OPTIMALITY.md"
+  },
+  "scope": {
+    "finite_optimality": "2 <= n <= 10",
+    "universal_one_deletion_upper_bound": "n^2 for n >= 3; see RESULTS.md",
+    "universal_two_deletion_impossibility": "n >= 3; see RESULTS.md",
+    "universal_n_squared_optimality": "proved for n >= 3; see OPTIMALITY.md",
+    "universal_weighted_optimality": "alpha*((n-1)^2+1)+beta*(2n-2); nonnegative costs",
+    "universal_local_capacity": "n-rank(f^(k+1)); upper bound and sharpness proved in GENERAL_BOUND.md",
+    "historical_novelty": "not established"
+  }
+}

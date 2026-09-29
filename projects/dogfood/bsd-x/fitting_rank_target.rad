@@ -1,0 +1,111 @@
+// Module invariants over Q_p[[T]], taking the supplied arithmetic control as background.
+// Each list presents diag(T^a_i); a_i=0 is a unit block, not a torsion summand.
+resource ModuleRequest { analytic: int = 2,exponents: list<int> = [0,0,1,3] }
+component ModuleEvidence { selmer_dimension: int = 0,determinant_order: int = 0,
+    fitting_valuation: int = 0,unit_minor_indices: list<int> = [],
+    flattened_exponents: list<int> = [],flattened_order: int = 0,
+    rank_bound: bool = false,determinant_bound: bool = false,flat_bound: bool = false,
+    same_module: bool = false,analytic_comparison_proved: bool = false }
+entity module_trial { ModuleEvidence {} }
+entity long_blocks { ModuleEvidence {} }
+entity many_blocks { ModuleEvidence {} }
+entity one_block { ModuleEvidence {} }
+
+pure fn assess_module(c: ModuleRequest) -> ModuleEvidence {
+    assert(c.analytic>=0 and c.analytic<=10 and len(c.exponents)<=6,"module domain")
+    let n: int = len(c.exponents)
+    let mut dimension: int = 0
+    let mut length: int = 0
+    let mut flat: list<int> = []
+    for a in c.exponents {
+        assert(a>=0 and a<=20,"Smith exponent domain")
+        length=length+a
+        if a>0 { dimension=dimension+1 }
+        flat=push(flat,if a>0 { 1 } else { 0 })
+    }
+    let minor_size: int = if n>c.analytic { n-c.analytic } else { 0 }
+    let mut smallest: int = 1000
+    let mut witness: list<int> = []
+    // Enumerate all nonzero diagonal minors of the required size.
+    for mask in range(1 << n) {
+        let mut indices: list<int> = []
+        let mut valuation: int = 0
+        for i in range(n) {
+            if (mask & (1 << i))!=0 {
+                indices=push(indices,i)
+                valuation=valuation+c.exponents[i]
+            }
+        }
+        if len(indices)==minor_size and valuation<smallest {
+            smallest=valuation
+            witness=indices
+        }
+    }
+    assert((smallest==0)==(dimension<=c.analytic),"unit minor criterion is exactly the dimension bound")
+    if smallest==0 {
+        for i in witness { assert(c.exponents[i]==0,"displayed minor is a unit") }
+    } else { witness=[] }
+    assert((flat==c.exponents)==(length==dimension),"flattening preserves module iff all positive blocks have length one")
+    return ModuleEvidence { selmer_dimension:dimension,determinant_order:length,
+        fitting_valuation:smallest,unit_minor_indices:witness,flattened_exponents:flat,
+        flattened_order:dimension,rank_bound:dimension<=c.analytic,
+        determinant_bound:length<=c.analytic,flat_bound:dimension<=c.analytic,
+        same_module:flat==c.exponents,analytic_comparison_proved:false }
+}
+system ModuleStep(row: mut ModuleEvidence,c: ModuleRequest) { row=assess_module(c) }
+intent ModuleChecked { key target: entity,request: ModuleRequest,evidence: ModuleEvidence }
+law SubmitModule(target: entity,request: ModuleRequest,evidence: ModuleEvidence) {
+    propose ModuleChecked { target:target,request:request,evidence:evidence }
+}
+resolver ExplainModule for ModuleChecked(target,proposals) {
+    assert(len(proposals)==1,"one module certificate")
+    let row: ModuleEvidence = assess_module(proposals[0].request)
+    assert(row==proposals[0].evidence,"unsupported analytic comparison or module equivalence")
+    next(target,ModuleEvidence { selmer_dimension:row.selmer_dimension,determinant_order:row.determinant_order,
+        fitting_valuation:row.fitting_valuation,unit_minor_indices:row.unit_minor_indices,
+        flattened_exponents:row.flattened_exponents,flattened_order:row.flattened_order,
+        rank_bound:row.rank_bound,determinant_bound:row.determinant_bound,flat_bound:row.flat_bound,
+        same_module:row.same_module,analytic_comparison_proved:row.analytic_comparison_proved })
+}
+fn main() -> nil {
+    let base: world_fork = fork()
+    let digest: str = world_digest()
+    let mut requests: list<ModuleRequest> = []
+    let mut jobs: list<world_fork> = []
+    for m in [2,3] { for code in range(625) {
+        let mut digits: int = code
+        let mut exponents: list<int> = []
+        for _ in range(4) { exponents=push(exponents,digits%5) digits=int_div(digits,5) }
+        let c: ModuleRequest = ModuleRequest { analytic:m,exponents:exponents }
+        requests=push(requests,c)
+        jobs=push(jobs,fork_with(base,c))
+    } }
+    let results: list<world_fork> = simulate_many(jobs,[system::ModuleStep],1,20260909)
+    for i in range(len(results)) {
+        assert_only_changed(jobs[i],results[i],[ModuleEvidence])
+        let row: ModuleEvidence = peek(results[i],module_trial,ModuleEvidence) |> unwrap
+        assert(row==assess_module(requests[i]),"requested module evaluated")
+        print("request",json_stringify(requests[i]))
+        print("case",json_stringify(row))
+    }
+    assert(world_digest()==digest,"module forks preserve parent")
+    let long_case: ModuleRequest = ModuleRequest {}
+    let many_case: ModuleRequest = ModuleRequest { exponents:[1,1,1,1] }
+    let one_case: ModuleRequest = ModuleRequest { exponents:[0,0,0,4] }
+    let mut row: ModuleEvidence = assess_module(long_case)
+    if len(sys_args())>0 {
+        if sys_args()[0]=="same-module" { row.same_module=true }
+        else { row.analytic_comparison_proved=true }
+    }
+    settle {
+        SubmitModule(long_blocks,long_case,row)
+        SubmitModule(many_blocks,many_case,assess_module(many_case))
+        SubmitModule(one_block,one_case,assess_module(one_case))
+    }
+    for target in [long_blocks,many_blocks,one_block] {
+        print("witness",json_stringify(require(target,ModuleEvidence)))
+        print(why(target,ModuleEvidence))
+        print(why_field(target,ModuleEvidence,"fitting_valuation"))
+        print(why_field(target,ModuleEvidence,"same_module"))
+    }
+}

@@ -1,0 +1,68 @@
+{
+  "synthetic_matrix_forks": 729,
+  "diagnostic_witnesses": 4,
+  "independent_fraction_and_modular_elimination": true,
+  "worker_counts": [
+    1,
+    4
+  ],
+  "record_replay": true,
+  "fabricated_arithmetic_bridge_rejected": true,
+  "actual_selmer_comparison_maps_constructed": 0,
+  "universal_X_proofs_found": 0,
+  "web_search_used": false,
+  "witnesses": [
+    {
+      "arithmetic_bridge_verified": false,
+      "exact_rank": 2,
+      "injective": false,
+      "kernel": [
+        -1,
+        -1,
+        1
+      ],
+      "mod5_rank": 2,
+      "within_dimension_budget": true,
+      "x3_proved": false
+    },
+    {
+      "arithmetic_bridge_verified": false,
+      "exact_rank": 3,
+      "injective": true,
+      "kernel": [
+        0,
+        0,
+        0
+      ],
+      "mod5_rank": 3,
+      "within_dimension_budget": false,
+      "x3_proved": false
+    },
+    {
+      "arithmetic_bridge_verified": false,
+      "exact_rank": 2,
+      "injective": true,
+      "kernel": [
+        0,
+        0,
+        0
+      ],
+      "mod5_rank": 0,
+      "within_dimension_budget": true,
+      "x3_proved": false
+    },
+    {
+      "arithmetic_bridge_verified": false,
+      "exact_rank": 2,
+      "injective": true,
+      "kernel": [
+        0,
+        0,
+        0
+      ],
+      "mod5_rank": 2,
+      "within_dimension_budget": true,
+      "x3_proved": false
+    }
+  ]
+}

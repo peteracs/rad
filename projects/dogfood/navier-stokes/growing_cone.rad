@@ -1,0 +1,79 @@
+use "poly16.rad"
+use "poly16_bounds.rad"
+
+// Actual modal ODE algebra from GrowingMode.lean. Each fork covers one
+// coefficient-box vertex symbolically for every r, eps >= 0.
+resource ConeCase { corner: int = 0,edge: int = 1,omit_coupling: bool = false }
+component ConeCheck { corner: int = 0,edge: int = 0,boundary_identity: bool = false,box_majorant: bool = false }
+entity cone_trial { ConeCheck {} }
+component ConeSummary { boundary_certificates: int = 0,scale_margin_identity: bool = false }
+entity cone_result { ConeSummary {} }
+
+pure fn check_cone(c: ConeCase) -> ConeCheck {
+    assert(c.corner >= 0 and c.corner < 16 and (c.edge == 1 or c.edge == -1),"cone case domain")
+    // Variables: p,r,lambda,damping,e11,e12,e21,e22,epsilon.
+    let p: list<Term> = variable(0)
+    let r: list<Term> = variable(1)
+    let lam: list<Term> = variable(2)
+    let damp: list<Term> = variable(3)
+    let q: list<Term> = scaled(times(r,p),c.edge)
+    let pdot: list<Term> = plus(times(plus(plus(lam,damp,-1),variable(4),1),p),times(variable(5),q),1)
+    let qdot: list<Term> = plus(times(variable(6),p),times(plus(plus([],lam,-1),plus(damp,variable(7),-1),-1),q),1)
+    let barrier: list<Term> = scaled(plus(times(q,qdot),times(times(r,r),times(p,pdot)),-1),2)
+    let mut factor: list<Term> = plus(scaled(variable(6),c.edge),times(r,plus(variable(7),variable(4),-1)),1)
+    if not c.omit_coupling { factor = plus(factor,scaled(times(times(r,r),variable(5)),c.edge),-1) }
+    factor = plus(factor,scaled(times(lam,r),2),-1)
+    assert(zero(plus(barrier,scaled(times(times(r,times(p,p)),factor),2),-1)),"modal cone boundary identity")
+
+    let eps: list<Term> = variable(8)
+    let mut corner: int = c.corner
+    let mut signs: list<int> = []
+    for _ in range(4) {
+        signs = push(signs,2*(corner%2)-1)
+        corner = int_div(corner,2)
+    }
+    let error: list<Term> = times(eps,plus(plus(constant(c.edge*signs[2]),scaled(r,signs[3]-signs[0]),1),scaled(times(r,r),-c.edge*signs[1]),1))
+    let majorant: list<Term> = times(eps,times(plus(constant(1),r,1),plus(constant(1),r,1)))
+    assert(positive_coefficients(plus(majorant,error,-1)),"whole coefficient box inward majorant")
+    return ConeCheck { corner:c.corner,edge:c.edge,boundary_identity:true,box_majorant:true }
+}
+system ConeStep(row: mut ConeCheck,c: ConeCase) { row = check_cone(c) }
+intent ConeChecked { key target: entity,count: int }
+law SubmitCone(target: entity,count: int) { propose ConeChecked { target:target,count:count } }
+resolver ConcludeCone for ConeChecked(target,proposals) {
+    assert(proposals[0].count == 32,"complete two-edge coefficient box")
+    // The settlement rechecks the certificates; a supplied count is not evidence.
+    for corner in range(16) { for edge in [-1,1] {
+        let row: ConeCheck = check_cone(ConeCase { corner:corner,edge:edge })
+        assert(row.boundary_identity and row.box_majorant,"settled cone certificate")
+    } }
+    // r=4(C+1)/(lambda_min*S), 0<r<=1/2:
+    // 4*S*gap - (23*C+32) = C*(1-2r)*(5+2r) >= 0.
+    let r: list<Term> = variable(1)
+    let c: list<Term> = variable(9)
+    let margin: list<Term> = plus(scaled(plus(c,constant(1),1),8),times(c,times(plus(constant(1),r,1),plus(constant(1),r,1))),-1)
+    let lhs: list<Term> = plus(scaled(margin,4),plus(scaled(c,23),constant(32),1),-1)
+    let rhs: list<Term> = times(c,times(plus(constant(1),scaled(r,2),-1),plus(constant(5),scaled(r,2),1)))
+    assert(zero(plus(lhs,rhs,-1)),"uniform strict cone margin")
+    next(target,ConeSummary { boundary_certificates:32,scale_margin_identity:true })
+}
+fn main() -> nil {
+    let args: list<str> = sys_args()
+    let base: world_fork = fork()
+    let digest: str = world_digest()
+    let mut jobs: list<world_fork> = []
+    for corner in range(16) { for edge in [-1,1] {
+        jobs = push(jobs,fork_with(base,ConeCase { corner:corner,edge:edge,omit_coupling:len(args)>0 }))
+    } }
+    let results: list<world_fork> = simulate_many(jobs,[system::ConeStep],1,20260909)
+    for i in range(len(results)) {
+        assert_only_changed(jobs[i],results[i],[ConeCheck])
+        let row: ConeCheck = peek(results[i],cone_trial,ConeCheck) |> unwrap
+        assert(row.corner == int_div(i,2) and row.edge == 2*(i%2)-1,"fork evaluated its requested cone case")
+        assert(row.boundary_identity and row.box_majorant,"cone certificate incomplete")
+    }
+    assert(world_digest() == digest,"cone forks leave parent untouched")
+    settle { SubmitCone(cone_result,len(results)) }
+    print(json_stringify(require(cone_result,ConeSummary)))
+    print(why(cone_result,ConeSummary))
+}

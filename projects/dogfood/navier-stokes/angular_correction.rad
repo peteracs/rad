@@ -1,0 +1,114 @@
+// Coefficient certificate for an additional trace-free angular strain mode.
+// B=A^2-(14/3)I, y cross By=-A(y cross Ay).
+// psi=P/216216; arrays store ascending powers of q, degree <=4.
+pure fn checked(value: int) -> int {
+    assert(value >= -1000000000 and value <= 1000000000, "angular coefficient bound")
+    return value
+}
+pure fn product(a: list<int>, b: list<int>) -> list<int> {
+    assert(len(a) == 5 and len(b) == 5, "radial polynomial length")
+    let mut out: list<int> = [0, 0, 0, 0, 0]
+    for i in range(5) {
+        for j in range(5) {
+            let term: int = checked(a[i])*checked(b[j])
+            if term != 0 {
+                assert(i+j < 5, "radial polynomial degree overflow")
+                out[i+j] = checked(out[i+j]+term)
+            }
+        }
+    }
+    return out
+}
+pure fn cut(power: int) -> list<int> {
+    assert(power >= 0 and power <= 2, "angular power domain")
+    let mut p: list<int> = [1, 0, 0, 0, 0]
+    for _ in range(power) { p = product(p, [1, -1, 0, 0, 0]) }
+    return p
+}
+// Returns coefficients of 9*(-2ac), where a=chi+2q chi'/3,
+// c=14chi'/3+4q chi''/3. No numerical derivatives are used.
+pure fn target(power: int) -> list<int> {
+    let chi: list<int> = cut(power)
+    let mut a3: list<int> = [0, 0, 0, 0, 0]
+    let mut c3: list<int> = [0, 0, 0, 0, 0]
+    for k in range(5) {
+        a3[k] = checked((3+2*k)*chi[k])
+        if k > 0 { c3[k-1] = checked(k*(4*k+10)*chi[k]) }
+    }
+    let ac9: list<int> = product(a3, c3)
+    let mut h9: list<int> = [0, 0, 0, 0, 0]
+    for j in range(5) { h9[j] = checked(-2*ac9[j]) }
+    return h9
+}
+resource AngularSpec { power: int = 0 }
+component AngularResult { power: int = 0, psi_scale: int = 216216, psi: list<int> = [], h9: list<int> = [] }
+entity candidate { AngularResult {} }
+pure fn solve(power: int) -> AngularResult {
+    let h9: list<int> = target(power)
+    assert(h9[4] == 0, "target exceeds correction degree")
+    let mut p: list<int> = [0, 0, 0, 0, 0]
+    for j in range(4) {
+        let numerator: int = checked(216216*h9[j])
+        let denominator: int = 3*(j+1)*(14+4*j)
+        assert(numerator % denominator == 0, "inexact angular division")
+        p[j+1] = int_div(numerator, denominator)
+    }
+    return AngularResult { power: power, psi_scale: 216216, psi: p, h9: h9 }
+}
+pure fn validate(row: AngularResult) -> bool {
+    assert(row.psi_scale == 216216 and len(row.psi) == 5 and len(row.h9) == 5, "angular certificate shape")
+    assert(row.h9 == target(row.power), "angular target forgery")
+    assert(row.psi[0] == 0 and row.h9[4] == 0, "particular solution normalization")
+    // Verify the differential equation directly, without invoking solve().
+    for j in range(4) {
+        assert(checked(3*(j+1)*(14+4*j)*checked(row.psi[j+1])) == checked(216216*checked(row.h9[j])), "angular ODE mismatch")
+    }
+    return true
+}
+system EvaluateAngular(result: mut AngularResult, spec: AngularSpec) { result = solve(spec.power) }
+component AngularAudit { cases: int = 0, ode_verified: bool = false }
+entity audit { AngularAudit {} }
+intent AngularChecked { key target: entity, evidence: AngularResult }
+law SubmitAngular(target: entity, evidence: AngularResult) { propose AngularChecked { target: target, evidence: evidence } }
+resolver AssembleAngular for AngularChecked(target, proposals) {
+    assert(len(proposals) == 3, "incomplete angular portfolio")
+    let mut seen: list<bool> = [false, false, false]
+    for proposal in proposals {
+        let row: AngularResult = proposal.evidence
+        assert(validate(row), "invalid angular certificate")
+        assert(not seen[row.power], "duplicate angular case")
+        seen[row.power] = true
+    }
+    next(target, AngularAudit { cases: 3, ode_verified: true })
+}
+fn main() -> nil {
+    let args: list<str> = sys_args()
+    let live: str = world_digest()
+    let base: world_fork = fork()
+    let mut jobs: list<world_fork> = []
+    for power in range(3) { jobs = push(jobs, fork_with(base, AngularSpec { power: power })) }
+    let results: list<world_fork> = simulate_many(jobs, [system::EvaluateAngular], 1, 20260908)
+    let mut rows: list<AngularResult> = []
+    for i in range(3) {
+        assert_only_changed(jobs[i], results[i], [AngularResult])
+        let restored: world_fork = fork_from_bytes(fork_to_bytes(results[i])) |> unwrap
+        assert(world_digest(restored) == world_digest(results[i]), "angular wire roundtrip")
+        let row: AngularResult = peek(results[i], candidate, AngularResult) |> unwrap
+        print(json_stringify(row))
+        rows = push(rows, row)
+    }
+    assert(world_digest() == live, "angular fork isolation")
+    if len(args) > 0 {
+        let good: AngularResult = rows[2]
+        let mut p: list<int> = good.psi
+        if args[0] == "wrong-sign" {
+            for j in range(5) { p[j] = -p[j] }
+        } else if args[0] == "wrong-coefficient" {
+            p[4] = p[4]+1
+        } else { assert(false, "unknown angular probe") }
+        rows[2] = AngularResult { power: 2, psi: p, h9: good.h9 }
+    }
+    settle { for row in rows { SubmitAngular(audit, row) } }
+    print(why(audit, AngularAudit))
+    print("scope: cancels the identified angular term at the reference time; full nonlinear evolution unproved")
+}

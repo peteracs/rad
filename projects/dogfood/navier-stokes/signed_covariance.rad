@@ -1,0 +1,35 @@
+use "poly16.rad"
+
+// H is a GENERAL invertible 2x2 matrix, not necessarily symmetric.
+// Variables 0..3 = H entries, 4..5 = R, 6..7 = primary amplitudes.
+component CovarianceEvidence { cross_identity: bool = false, quadratic_remainder: bool = false }
+entity covariance_result { CovarianceEvidence {} }
+intent CheckCovariance { key target: entity, drop_square: bool }
+law SubmitCovariance(target: entity,drop_square: bool) {
+    propose CheckCovariance { target:target,drop_square:drop_square }
+}
+resolver CovarianceResolver for CheckCovariance(target,proposals) {
+    let det: list<Term> = plus(times(variable(0),variable(3)),times(variable(1),variable(2)),-1)
+    let z0: list<Term> = plus(times(variable(3),variable(4)),times(variable(1),variable(5)),-1)
+    let z1: list<Term> = plus(times(variable(0),variable(5)),times(variable(2),variable(4)),-1)
+    for i in range(2) {
+        let hz: list<Term> = plus(times(variable(2*i),z0),times(variable(2*i+1),z1),1)
+        assert(zero(plus(hz,times(det,variable(4+i)),-1)),"adjugate cross reconstruction")
+    }
+    // With b=adj(H)R/(2 det(H) a), 2ab=H^-1 R.
+    // Check the independent scalar identity before substituting that quotient.
+    let a: list<Term> = variable(6)
+    let b: list<Term> = variable(7)
+    let ab: list<Term> = plus(a,b,1)
+    let cross: list<Term> = plus(times(a,b),times(a,b),1)
+    let mut residual: list<Term> = plus(plus(times(ab,ab),times(a,a),-1),cross,-1)
+    if not proposals[0].drop_square { residual = plus(residual,times(b,b),-1) }
+    assert(zero(residual),"quadratic remainder cannot be discarded")
+    next(target,CovarianceEvidence { cross_identity:true,quadratic_remainder:true })
+}
+fn main() -> nil {
+    let args: list<str> = sys_args()
+    settle { SubmitCovariance(covariance_result,len(args)>0) }
+    print(json_stringify(require(covariance_result,CovarianceEvidence)))
+    print(why(covariance_result,CovarianceEvidence))
+}

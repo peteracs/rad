@@ -1,0 +1,14 @@
+{
+  "module_forks": 1024,
+  "diagnostic_witnesses": 5,
+  "independent_Jordan_matrix_checks": true,
+  "worker_counts": [
+    1,
+    4
+  ],
+  "record_replay": true,
+  "forged_transfer_rejected": true,
+  "web_search_used": false,
+  "actual_analytic_comparisons_verified": 0,
+  "universal_X_proofs_found": 0
+}

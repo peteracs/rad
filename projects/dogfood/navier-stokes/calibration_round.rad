@@ -1,0 +1,53 @@
+use "calibration_bounds.rad"
+entity calibration_trial { CalibrationEvidence {} }
+system EvaluateCalibration(row: mut CalibrationEvidence,request: CalibrationRequest) { row = assess_calibration(request) }
+component CalibrationDecision { best_p: int = 0,best_q: int = 0,best_radius: int = 0,best_method: int = 0,
+    best_time_exponent: int = 0, accepted: int = 0,total: int = 0,limiter: str = "",
+    return_map_proved: bool = false }
+entity calibration_decision { CalibrationDecision {} }
+intent CalibrationChecked { key target: entity, request: CalibrationRequest, evidence: CalibrationEvidence }
+law SubmitCalibration(target: entity,request: CalibrationRequest,evidence: CalibrationEvidence) {
+    propose CalibrationChecked { target:target,request:request,evidence:evidence }
+}
+resolver ChooseCalibration for CalibrationChecked(target,proposals) {
+    assert(len(proposals) > 0 and len(proposals) <= 48,"calibration portfolio size")
+    let mut seen: list<bool> = []
+    for _ in range(len(proposals)) { seen = push(seen,false) }
+    let mut best: CalibrationEvidence = CalibrationEvidence {}
+    let mut accepted: int = 0
+    for proposal in proposals {
+        let lane: int = proposal.request.lane
+        assert(lane >= 0 and lane < len(proposals) and not seen[lane],"calibration lane identity")
+        seen[lane] = true
+        let row: CalibrationEvidence = proposal.evidence
+        assert(row == assess_calibration(proposal.request),"forged calibrated return map")
+        if row.finite_transfer_bounds_pass { accepted = accepted+1 }
+        if calibration_better(row,best) { best = row }
+    }
+    next(target,CalibrationDecision { best_p:best.p,best_q:best.q,best_radius:best.radius_eighths,
+        best_method:best.method,best_time_exponent:best.time_exponent,accepted:accepted,total:len(proposals),
+        limiter:best.limiting_bound,return_map_proved:false })
+}
+pub fn run_calibration_round(requests: list<CalibrationRequest>,forge: bool) -> nil {
+    let base: world_fork = fork()
+    let digest: str = world_digest()
+    let mut jobs: list<world_fork> = []
+    for request in requests { jobs = push(jobs,fork_with(base,request)) }
+    let results: list<world_fork> = simulate_many(jobs,[system::EvaluateCalibration],1,20260908)
+    let mut evidence: list<CalibrationEvidence> = []
+    for i in range(len(requests)) {
+        assert_only_changed(jobs[i],results[i],[CalibrationEvidence])
+        let row: CalibrationEvidence = peek(results[i],calibration_trial,CalibrationEvidence) |> unwrap
+        evidence = push(evidence,row)
+        print("candidate",json_stringify(row))
+    }
+    assert(world_digest() == digest,"calibration fork isolation")
+    if forge {
+        let mut row: CalibrationEvidence = evidence[0]
+        row.return_map_proved = true
+        evidence[0] = row
+    }
+    settle { for i in range(len(requests)) { SubmitCalibration(calibration_decision,requests[i],evidence[i]) } }
+    print("decision",json_stringify(require(calibration_decision,CalibrationDecision)))
+    print(why(calibration_decision,CalibrationDecision))
+}

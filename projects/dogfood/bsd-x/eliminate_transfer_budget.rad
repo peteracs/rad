@@ -1,0 +1,83 @@
+// Exact symbolic elimination, not numerical sampling of elliptic curves.
+// Coefficients represent a*m+b*s+c*epsilon+d*B >= 0.
+resource EliminationRequest { source_scale: int = 1,correction_scale: int = 1 }
+component EliminationEvidence { remaining_rank_condition: list<int> = [],
+    remaining_length_condition: list<int> = [],universal_arithmetic_bound_proved: bool = false }
+entity elimination_trial { EliminationEvidence {} }
+entity exact_dependency { EliminationEvidence {} }
+
+pure fn gcd_positive(a: int,b: int) -> int {
+    let mut x: int = a
+    let mut y: int = b
+    while y!=0 { let z: int = x%y x=y y=z }
+    return x
+}
+pure fn normalize(a: list<int>) -> list<int> {
+    let mut divisor: int = 0
+    for value in a { divisor=gcd_positive(divisor,if value<0 { -value } else { value }) }
+    assert(divisor>0,"nonzero inequality")
+    let mut out: list<int> = []
+    for value in a { out=push(out,int_div(value,divisor)) }
+    return out
+}
+pure fn eliminate(positive: list<int>,negative: list<int>) -> list<int> {
+    assert(len(positive)==4 and len(negative)==4,"four symbolic variables")
+    assert(positive[3]>0 and negative[3]<0,"opposite budget coefficients")
+    let mut out: list<int> = []
+    for i in range(4) { out=push(out,(-negative[3])*positive[i]+positive[3]*negative[i]) }
+    assert(out[3]==0,"budget eliminated with nonnegative premise multipliers")
+    return normalize(out)
+}
+pure fn assess_elimination(q: EliminationRequest) -> EliminationEvidence {
+    assert(q.source_scale>=1 and q.source_scale<=10 and q.correction_scale>=1 and q.correction_scale<=10,"positive coefficient scale")
+    let a: int = q.source_scale
+    let b: int = q.correction_scale
+    // delta=s+epsilon. Source m+B-delta>=0; correction epsilon-B>=0.
+    let source: list<int> = [a,-a,-a,a]
+    let correction: list<int> = [0,0,b,-b]
+    let budget_nonnegative: list<int> = [0,0,0,1]
+    let rank_condition: list<int> = eliminate(source,correction)
+    let length_condition: list<int> = eliminate(budget_nonnegative,correction)
+    assert(rank_condition==[1,-1,0,0],"remaining condition is m-s>=0")
+    assert(length_condition==[0,0,1,0],"remaining condition is epsilon>=0")
+    return EliminationEvidence { remaining_rank_condition:rank_condition,
+        remaining_length_condition:length_condition,universal_arithmetic_bound_proved:false }
+}
+system EliminationStep(row: mut EliminationEvidence,q: EliminationRequest) { row=assess_elimination(q) }
+intent EliminationChecked { key target: entity,request: EliminationRequest,evidence: EliminationEvidence }
+law SubmitElimination(target: entity,request: EliminationRequest,evidence: EliminationEvidence) {
+    propose EliminationChecked { target:target,request:request,evidence:evidence }
+}
+resolver ExplainElimination for EliminationChecked(target,proposals) {
+    assert(len(proposals)==1,"one symbolic elimination")
+    let row: EliminationEvidence = assess_elimination(proposals[0].request)
+    assert(row==proposals[0].evidence,"eliminating a parameter did not prove the remaining arithmetic premise")
+    next(target,EliminationEvidence { remaining_rank_condition:row.remaining_rank_condition,
+        remaining_length_condition:row.remaining_length_condition,
+        universal_arithmetic_bound_proved:row.universal_arithmetic_bound_proved })
+}
+fn main() -> nil {
+    let base: world_fork = fork()
+    let digest: str = world_digest()
+    let mut jobs: list<world_fork> = []
+    let mut requests: list<EliminationRequest> = []
+    for a in range(1,5) { for b in range(1,5) {
+        let q: EliminationRequest = EliminationRequest { source_scale:a,correction_scale:b }
+        requests=push(requests,q)
+        jobs=push(jobs,fork_with(base,q))
+    } }
+    let results: list<world_fork> = simulate_many(jobs,[system::EliminationStep],1,20260909)
+    for i in range(len(results)) {
+        assert_only_changed(jobs[i],results[i],[EliminationEvidence])
+        let row: EliminationEvidence = peek(results[i],elimination_trial,EliminationEvidence) |> unwrap
+        assert(row==assess_elimination(requests[i]),"symbolic fork agreement")
+        print("case",json_stringify(row))
+    }
+    assert(world_digest()==digest,"symbolic elimination preserves parent")
+    let q: EliminationRequest = EliminationRequest {}
+    let mut row: EliminationEvidence = assess_elimination(q)
+    if len(sys_args())>0 { row.universal_arithmetic_bound_proved=true }
+    settle { SubmitElimination(exact_dependency,q,row) }
+    print(why(exact_dependency,EliminationEvidence))
+    print(why_field(exact_dependency,EliminationEvidence,"remaining_rank_condition"))
+}

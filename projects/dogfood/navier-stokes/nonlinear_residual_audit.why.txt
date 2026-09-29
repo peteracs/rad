@@ -1,0 +1,69 @@
+jet {"actual_stage_bounds_verified":false,"derivative_product_weight":1,"identity":true,"nu":1,"orders":[0,0,0,0]}
+jet {"actual_stage_bounds_verified":false,"derivative_product_weight":2,"identity":true,"nu":2,"orders":[0,0,0,1]}
+jet {"actual_stage_bounds_verified":false,"derivative_product_weight":4,"identity":true,"nu":3,"orders":[0,0,0,2]}
+jet {"actual_stage_bounds_verified":false,"derivative_product_weight":8,"identity":true,"nu":4,"orders":[0,0,0,3]}
+jet {"actual_stage_bounds_verified":false,"derivative_product_weight":2,"identity":true,"nu":2,"orders":[0,0,1,0]}
+jet {"actual_stage_bounds_verified":false,"derivative_product_weight":4,"identity":true,"nu":3,"orders":[0,0,1,1]}
+jet {"actual_stage_bounds_verified":false,"derivative_product_weight":8,"identity":true,"nu":4,"orders":[0,0,1,2]}
+jet {"actual_stage_bounds_verified":false,"derivative_product_weight":4,"identity":true,"nu":3,"orders":[0,0,2,0]}
+jet {"actual_stage_bounds_verified":false,"derivative_product_weight":8,"identity":true,"nu":4,"orders":[0,0,2,1]}
+jet {"actual_stage_bounds_verified":false,"derivative_product_weight":8,"identity":true,"nu":4,"orders":[0,0,3,0]}
+jet {"actual_stage_bounds_verified":false,"derivative_product_weight":2,"identity":true,"nu":2,"orders":[0,1,0,0]}
+jet {"actual_stage_bounds_verified":false,"derivative_product_weight":4,"identity":true,"nu":3,"orders":[0,1,0,1]}
+jet {"actual_stage_bounds_verified":false,"derivative_product_weight":8,"identity":true,"nu":4,"orders":[0,1,0,2]}
+jet {"actual_stage_bounds_verified":false,"derivative_product_weight":4,"identity":true,"nu":3,"orders":[0,1,1,0]}
+jet {"actual_stage_bounds_verified":false,"derivative_product_weight":8,"identity":true,"nu":4,"orders":[0,1,1,1]}
+jet {"actual_stage_bounds_verified":false,"derivative_product_weight":8,"identity":true,"nu":4,"orders":[0,1,2,0]}
+jet {"actual_stage_bounds_verified":false,"derivative_product_weight":4,"identity":true,"nu":3,"orders":[0,2,0,0]}
+jet {"actual_stage_bounds_verified":false,"derivative_product_weight":8,"identity":true,"nu":4,"orders":[0,2,0,1]}
+jet {"actual_stage_bounds_verified":false,"derivative_product_weight":8,"identity":true,"nu":4,"orders":[0,2,1,0]}
+jet {"actual_stage_bounds_verified":false,"derivative_product_weight":8,"identity":true,"nu":4,"orders":[0,3,0,0]}
+jet {"actual_stage_bounds_verified":false,"derivative_product_weight":2,"identity":true,"nu":2,"orders":[1,0,0,0]}
+jet {"actual_stage_bounds_verified":false,"derivative_product_weight":4,"identity":true,"nu":3,"orders":[1,0,0,1]}
+jet {"actual_stage_bounds_verified":false,"derivative_product_weight":8,"identity":true,"nu":4,"orders":[1,0,0,2]}
+jet {"actual_stage_bounds_verified":false,"derivative_product_weight":4,"identity":true,"nu":3,"orders":[1,0,1,0]}
+jet {"actual_stage_bounds_verified":false,"derivative_product_weight":8,"identity":true,"nu":4,"orders":[1,0,1,1]}
+jet {"actual_stage_bounds_verified":false,"derivative_product_weight":8,"identity":true,"nu":4,"orders":[1,0,2,0]}
+jet {"actual_stage_bounds_verified":false,"derivative_product_weight":4,"identity":true,"nu":3,"orders":[1,1,0,0]}
+jet {"actual_stage_bounds_verified":false,"derivative_product_weight":8,"identity":true,"nu":4,"orders":[1,1,0,1]}
+jet {"actual_stage_bounds_verified":false,"derivative_product_weight":8,"identity":true,"nu":4,"orders":[1,1,1,0]}
+jet {"actual_stage_bounds_verified":false,"derivative_product_weight":8,"identity":true,"nu":4,"orders":[1,2,0,0]}
+jet {"actual_stage_bounds_verified":false,"derivative_product_weight":4,"identity":true,"nu":3,"orders":[2,0,0,0]}
+jet {"actual_stage_bounds_verified":false,"derivative_product_weight":8,"identity":true,"nu":4,"orders":[2,0,0,1]}
+jet {"actual_stage_bounds_verified":false,"derivative_product_weight":8,"identity":true,"nu":4,"orders":[2,0,1,0]}
+jet {"actual_stage_bounds_verified":false,"derivative_product_weight":8,"identity":true,"nu":4,"orders":[2,1,0,0]}
+jet {"actual_stage_bounds_verified":false,"derivative_product_weight":8,"identity":true,"nu":4,"orders":[3,0,0,0]}
+JetEvidence of jet_result = { orders: [0, 0, 0, 0], nu: 1, identity: true, derivative_product_weight: 1, actual_stage_bouâ€¦   (set in frame 0)
+
+  <- resolver `ResolveJets`
+     intent: JetsChecked
+     key: jet_result
+
+     <- proposal JetsChecked { target: jet_result, request: JetRequest { orders: [0, 0, 0, 0], nu: 1 }, evidence:â€¦
+        proposed by law `SubmitJets` at line 39
+
+     <- proposal JetsChecked { target: jet_result, request: JetRequest { orders: [0, 0, 0, 1], nu: 2 }, evidence:â€¦
+        proposed by law `SubmitJets` at line 39
+
+     <- proposal JetsChecked { target: jet_result, request: JetRequest { orders: [0, 0, 1, 0], nu: 2 }, evidence:â€¦
+        proposed by law `SubmitJets` at line 39
+
+     <- proposal JetsChecked { target: jet_result, request: JetRequest { orders: [0, 1, 0, 0], nu: 2 }, evidence:â€¦
+        proposed by law `SubmitJets` at line 39
+
+     <- proposal JetsChecked { target: jet_result, request: JetRequest { orders: [1, 0, 0, 0], nu: 2 }, evidence:â€¦
+        proposed by law `SubmitJets` at line 39
+
+     <- proposal JetsChecked { target: jet_result, request: JetRequest { orders: [0, 0, 0, 2], nu: 3 }, evidence:â€¦
+        proposed by law `SubmitJets` at line 39
+
+     <- proposal JetsChecked { target: jet_result, request: JetRequest { orders: [0, 0, 1, 1], nu: 3 }, evidence:â€¦
+        proposed by law `SubmitJets` at line 39
+
+     <- proposal JetsChecked { target: jet_result, request: JetRequest { orders: [0, 0, 2, 0], nu: 3 }, evidence:â€¦
+        proposed by law `SubmitJets` at line 39
+
+     <- 8 proposals shown, 27 additional proposals omitted
+
+     settlement origin:
+  <- by top-level code

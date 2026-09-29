@@ -1,0 +1,33 @@
+use "segment_seed.rad"
+pub struct CoupledBanks { donor: list<FluidMode> = [], receiver: list<FluidMode> = [], joined: list<FluidMode> = [] }
+pub pure fn coupled_banks() -> CoupledBanks {
+    let original: list<FluidMode> = segment_seed()
+    let donor_drift: list<ForceMode> = actual_force(original,[],1)
+    let mut donor: list<FluidMode> = []
+    let mut receiver: list<FluidMode> = []
+    for mode in original {
+        let mut re: list<int> = []
+        let mut im: list<int> = []
+        for j in range(3) { re = push(re,int_div(30*mode.re[j],64))
+            im = push(im,int_div(30*mode.im[j],64)) }
+        donor = push(donor,FluidMode { k:mode.k,re:re,im:im })
+    }
+    for term in donor_drift {
+        let n: int = term.k[0]*term.k[0]+term.k[1]*term.k[1]+term.k[2]*term.k[2]
+        if n > 2 and (term.re != [0,0,0] or term.im != [0,0,0]) {
+            let mut re: list<int> = []
+            let mut im: list<int> = []
+            for j in range(3) {
+                assert((60*term.re[j])%(2048*term.denominator) == 0
+                    and (60*term.im[j])%(2048*term.denominator) == 0,"receiver exact grid")
+                re = push(re,int_div(-60*term.re[j],2048*term.denominator))
+                im = push(im,int_div(-60*term.im[j],2048*term.denominator))
+            }
+            receiver = push(receiver,FluidMode { k:term.k,re:re,im:im })
+        }
+    }
+    let mut joined: list<FluidMode> = donor
+    for mode in receiver { joined = push(joined,mode) }
+    assert(len(donor) == 10 and len(receiver) == 16 and len(joined) == 26,"coupled support")
+    return CoupledBanks { donor:donor,receiver:receiver,joined:joined }
+}

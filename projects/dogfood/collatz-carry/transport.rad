@@ -1,0 +1,150 @@
+use "carry.rad"
+
+resource Source { kind: int = 0 }
+
+pub struct Profile {
+    source: str = ""
+    samples: int = 0
+    mean_excess_x1000: int = 0      // mean of (longest chain - log2 bits), x1000
+    max_excess_x1000: int = 0
+    long_run_density_x1e6: int = 0  // alternating runs of length >= 4 per bit
+    mean_bottom_x1000: int = 0      // mean agreement with -1/3 (= nu2(3x+1) at odd steps)
+}
+
+component ProfileEvidence { result: Profile = Profile {} }
+
+entity profile_slot { ProfileEvidence {} }
+
+pub pure fn log2_x1000(n: int) -> int {
+    let mut b: int = 0
+    while (1 << (b + 1)) <= n { b = b + 1 }
+    // linear interpolation inside the octave is enough at this resolution
+    return 1000 * b + int_div(1000 * (n - (1 << b)), 1 << b)
+}
+
+pub pure fn lcg_bits(seed: int, count: int) -> list<int> {
+    let mut s: int = seed
+    let mut out: list<int> = []
+    for _ in range(count) {
+        s = (s * 1103515245 + 12345) % 2147483648
+        out = push(out, int_div(s, 65536) % 2)
+    }
+    out = set_at(out, count - 1, 1)
+    return out
+}
+
+pub pure fn profile(kind: int) -> Profile {
+    let mut samples: int = 0
+    let mut excess_total: int = 0
+    let mut excess_max: int = 0 - 1000000
+    let mut long_runs: int = 0
+    let mut bits_total: int = 0
+    let mut bottom_total: int = 0
+    if kind == 0 {
+        let mut p: list<int> = [3]
+        for _ in range(1, 601) {
+            let b: list<int> = bits_of(p)
+            let s: CarryStats = carry_stats(b)
+            let e: int = 1000 * s.longest_chain - log2_x1000(s.bits)
+            excess_total = excess_total + e
+            if e > excess_max { excess_max = e }
+            long_runs = long_runs + s.chains_ge4
+            bits_total = bits_total + s.bits
+            bottom_total = bottom_total + 1000 * s.bottom_agreement
+            samples = samples + 1
+            p = big_mul_add(p, 3, 0)
+        }
+        return Profile { source: "powers-of-3", samples: samples, mean_excess_x1000: int_div(excess_total, samples),
+            max_excess_x1000: excess_max, long_run_density_x1e6: int_div(1000000 * long_runs, bits_total),
+            mean_bottom_x1000: int_div(bottom_total, samples) }
+    }
+    if kind == 1 {
+        // Pseudo-random 1200-bit start, 300 burn-in steps, then sample odd steps.
+        let start_bits: list<int> = lcg_bits(424242, 1200)
+        let mut x: list<int> = [0]
+        let mut i: int = len(start_bits) - 1
+        while i >= 0 { x = big_mul_add(x, 2, start_bits[i]) i = i - 1 }
+        x = big_norm(x)
+        let mut steps: int = 0
+        while samples < 600 and steps < 20000 {
+            if x[0] % 2 == 1 and steps >= 300 {
+                let b: list<int> = bits_of(x)
+                let s: CarryStats = carry_stats(b)
+                let e: int = 1000 * s.longest_chain - log2_x1000(s.bits)
+                excess_total = excess_total + e
+                if e > excess_max { excess_max = e }
+                long_runs = long_runs + s.chains_ge4
+                bits_total = bits_total + s.bits
+                bottom_total = bottom_total + 1000 * s.bottom_agreement
+                samples = samples + 1
+                x = big_half(big_mul_add(x, 3, 1))
+            } else if x[0] % 2 == 1 { x = big_half(big_mul_add(x, 3, 1)) } else { x = big_half(x) }
+            steps = steps + 1
+        }
+        return Profile { source: "collatz-trajectory", samples: samples, mean_excess_x1000: int_div(excess_total, samples),
+            max_excess_x1000: excess_max, long_run_density_x1e6: int_div(1000000 * long_runs, bits_total),
+            mean_bottom_x1000: int_div(bottom_total, samples) }
+    }
+    for n in range(1, 601) {
+        // random odd numbers, lengths spread like the trajectory samples
+        let b: list<int> = set_at(lcg_bits(n * 7919 + 17, 900 + n), 0, 1)
+        let s: CarryStats = carry_stats(b)
+        let e: int = 1000 * s.longest_chain - log2_x1000(s.bits)
+        excess_total = excess_total + e
+        if e > excess_max { excess_max = e }
+        long_runs = long_runs + s.chains_ge4
+        bits_total = bits_total + s.bits
+        bottom_total = bottom_total + 1000 * s.bottom_agreement
+        samples = samples + 1
+    }
+    return Profile { source: "pseudo-random", samples: samples, mean_excess_x1000: int_div(excess_total, samples),
+        max_excess_x1000: excess_max, long_run_density_x1e6: int_div(1000000 * long_runs, bits_total),
+        mean_bottom_x1000: int_div(bottom_total, samples) }
+}
+
+system Measure(evidence: mut ProfileEvidence, source: Source) {
+    evidence = ProfileEvidence { result: profile(source.kind) }
+}
+
+component Comparison { sources: int = 0, spread_excess_x1000: int = 0, spread_density_x1e6: int = 0 }
+
+entity comparison { Comparison {} }
+
+intent Observation {
+    key target: entity
+    source: str
+    excess: int
+    density: int
+}
+
+law Record(target: entity, p: Profile) {
+    propose Observation { target: target, source: p.source, excess: p.mean_excess_x1000, density: p.long_run_density_x1e6 }
+}
+
+resolver Compare for Observation(target, proposals) {
+    let mut lo_e: int = 1000000000
+    let mut hi_e: int = 0 - 1000000000
+    let mut lo_d: int = 1000000000
+    let mut hi_d: int = 0 - 1000000000
+    for p in proposals {
+        lo_e = min(lo_e, p.excess) hi_e = max(hi_e, p.excess)
+        lo_d = min(lo_d, p.density) hi_d = max(hi_d, p.density)
+    }
+    next(target, Comparison { sources: len(proposals), spread_excess_x1000: hi_e - lo_e, spread_density_x1e6: hi_d - lo_d })
+}
+
+fn main() -> nil {
+    let base: world_fork = fork()
+    let jobs: list<world_fork> = [fork_with(base, Source { kind: 0 }), fork_with(base, Source { kind: 1 }), fork_with(base, Source { kind: 2 })]
+    let done: list<world_fork> = simulate_many(jobs, [system::Measure], 1, 1937)
+    let mut profiles: list<Profile> = []
+    for i in range(len(done)) {
+        assert_only_changed(jobs[i], done[i], [ProfileEvidence])
+        let p: Profile = (peek(done[i], profile_slot, ProfileEvidence) |> unwrap).result
+        profiles = push(profiles, p)
+        print(json_stringify(p))
+    }
+    settle { for p in profiles { Record(comparison, p) } }
+    print(json_stringify(require(comparison, Comparison)))
+    print(why(comparison, Comparison))
+}

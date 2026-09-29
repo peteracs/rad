@@ -1,0 +1,108 @@
+// Derive a pairing and higher residuals from a formal deformation matrix.
+// Synthetic exact algebra only: no arithmetic Selmer/L-function identification.
+resource Deformation { h: int = 0,k: int = 1,a: int = 1,b: int = 1,c: int = 1 }
+component DeformationEvidence { constant_corank: int = 0,first_pairing_rank: int = 0,
+    raw_second: int = 0,elimination_correction: int = 0,effective_second: int = 0,
+    determinant: list<int> = [],vanishing_order: int = 0,identically_zero: bool = false,
+    gauge_invariant: bool = false,arithmetic_identification: bool = false,x3_proved: bool = false }
+entity deformation_trial { DeformationEvidence {} }
+entity first_order_case { DeformationEvidence {} }
+entity second_order_case { DeformationEvidence {} }
+entity hidden_cancellation { DeformationEvidence {} }
+entity zero_germ { DeformationEvidence {} }
+
+pure fn multiply_poly(a: list<int>,b: list<int>) -> list<int> {
+    let mut out: list<int> = []
+    for _ in range(len(a)+len(b)-1) { out=push(out,0) }
+    for i in range(len(a)) { for j in range(len(b)) { out[i+j]=out[i+j]+a[i]*b[j] } }
+    return out
+}
+pure fn det_poly(d: Deformation) -> list<int> {
+    let zero: list<int> = [0,0,0,0]
+    let mat: list<list<int>> = [[1,0,0,0],[0,d.b,0,0],zero,
+        [0,d.c,0,0],[0,d.h,d.k,d.a],zero,zero,zero,[0,1,0,0]]
+    let perms: list<list<int>> = [[0,1,2],[0,2,1],[1,0,2],[1,2,0],[2,0,1],[2,1,0]]
+    let signs: list<int> = [1,-1,-1,1,1,-1]
+    let mut out: list<int> = [0,0,0,0,0,0,0,0,0,0]
+    for p in range(6) {
+        let term: list<int> = multiply_poly(multiply_poly(mat[perms[p][0]],mat[3+perms[p][1]]),mat[6+perms[p][2]])
+        for j in range(10) { out[j]=out[j]+signs[p]*term[j] }
+    }
+    return out
+}
+pure fn assess_deformation(d: Deformation) -> DeformationEvidence {
+    for coefficient in [d.h,d.k,d.a,d.b,d.c] { assert(coefficient>=-2 and coefficient<=2,"coefficient domain") }
+    let actual: list<int> = det_poly(d)
+    let second: int = d.k-d.b*d.c
+    assert(actual==[0,0,d.h,second,d.a,0,0,0,0,0],"full determinant equals corrected effective germ")
+    let mut order: int = -1
+    for i in range(10) { if actual[i]!=0 and order==-1 { order=i } }
+    assert(order==-1 or order>=2,"constant corank gives vanishing lower bound")
+    let pairing_rank: int = if d.h==0 { 1 } else { 2 }
+    assert((order==2)==(pairing_rank==2),"first derived pairing controls leading coefficient")
+    // Left row shear and right column shear, both identity at T=0, determinant one.
+    for left in [-1,0,1] { for right in [-1,0,1] {
+        let altered: Deformation = Deformation { h:d.h,a:d.a,b:d.b+right,c:d.c+left,
+            k:d.k+left*d.b+d.c*right+left*right }
+        assert(det_poly(altered)==actual,"formal basis shears preserve the whole determinant")
+        assert(altered.k-altered.b*altered.c==second,"corrected pairing survives basis change")
+    } }
+    return DeformationEvidence { constant_corank:2,first_pairing_rank:pairing_rank,
+        raw_second:d.k,elimination_correction:-d.b*d.c,effective_second:second,
+        determinant:actual,vanishing_order:order,identically_zero:order==-1,
+        gauge_invariant:true,arithmetic_identification:false,x3_proved:false }
+}
+system DeformationStep(row: mut DeformationEvidence,d: Deformation) { row=assess_deformation(d) }
+intent DeformationChecked { key target: entity,request: Deformation,evidence: DeformationEvidence }
+law SubmitDeformation(target: entity,request: Deformation,evidence: DeformationEvidence) {
+    propose DeformationChecked { target:target,request:request,evidence:evidence }
+}
+resolver ExplainDeformation for DeformationChecked(target,proposals) {
+    assert(len(proposals)==1,"one deformation certificate")
+    let row: DeformationEvidence = assess_deformation(proposals[0].request)
+    assert(row==proposals[0].evidence,"unsupported arithmetic vanishing identification")
+    next(target,DeformationEvidence { constant_corank:row.constant_corank,first_pairing_rank:row.first_pairing_rank,
+        raw_second:row.raw_second,elimination_correction:row.elimination_correction,effective_second:row.effective_second,
+        determinant:row.determinant,vanishing_order:row.vanishing_order,identically_zero:row.identically_zero,
+        gauge_invariant:row.gauge_invariant,arithmetic_identification:row.arithmetic_identification,x3_proved:row.x3_proved })
+}
+fn main() -> nil {
+    let base: world_fork = fork()
+    let digest: str = world_digest()
+    let mut requests: list<Deformation> = []
+    let mut jobs: list<world_fork> = []
+    for h in [-1,0,1] { for k in [-1,0,1] { for a in [-1,0,1] {
+        for b in [-1,0,1] { for c in [-1,0,1] {
+            let d: Deformation = Deformation { h:h,k:k,a:a,b:b,c:c }
+            requests=push(requests,d)
+            jobs=push(jobs,fork_with(base,d))
+        } }
+    } } }
+    let results: list<world_fork> = simulate_many(jobs,[system::DeformationStep],1,20260909)
+    for i in range(len(results)) {
+        assert_only_changed(jobs[i],results[i],[DeformationEvidence])
+        let row: DeformationEvidence = peek(results[i],deformation_trial,DeformationEvidence) |> unwrap
+        assert(row==assess_deformation(requests[i]),"requested deformation evaluated")
+        print("request",json_stringify(requests[i]))
+        print("case",json_stringify(row))
+    }
+    assert(world_digest()==digest,"deformation forks preserve parent")
+    let leading_case: Deformation = Deformation { h:1,k:0,a:0 }
+    let second: Deformation = Deformation { k:2 }
+    let cancel: Deformation = Deformation {}
+    let zero: Deformation = Deformation { a:0 }
+    let mut row: DeformationEvidence = assess_deformation(cancel)
+    if len(sys_args())>0 { row.arithmetic_identification=true row.x3_proved=true }
+    settle {
+        SubmitDeformation(first_order_case,leading_case,assess_deformation(leading_case))
+        SubmitDeformation(second_order_case,second,assess_deformation(second))
+        SubmitDeformation(hidden_cancellation,cancel,row)
+        SubmitDeformation(zero_germ,zero,assess_deformation(zero))
+    }
+    for target in [first_order_case,second_order_case,hidden_cancellation,zero_germ] {
+        print("witness",json_stringify(require(target,DeformationEvidence)))
+        print(why(target,DeformationEvidence))
+        print(why_field(target,DeformationEvidence,"effective_second"))
+        print(why_field(target,DeformationEvidence,"vanishing_order"))
+    }
+}

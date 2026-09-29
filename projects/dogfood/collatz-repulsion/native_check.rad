@@ -1,0 +1,2 @@
+use "native.rad"
+for b in [16, 18, 20] { for r in native_rows(b, 1, [2, 3, 4, 5, 6]) { print(r.bits, r.mark, r.observed, r.expected_x10, r.z_x100) } }

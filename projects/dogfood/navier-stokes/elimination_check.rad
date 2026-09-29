@@ -1,0 +1,17 @@
+use "constraint_elimination.rad"
+fn main() -> nil {
+    for multiple in range(3) {
+        let original: SmoothStage = stationary_predecessor()
+        let right: SmoothStage = target_stage(multiple)
+        let left: SmoothStage = link_predecessor(original,right)
+        let row: map<str, any> = { "case": multiple,"original": original,"left": left,"right": right }
+        print(json_stringify(row))
+    }
+    let original: SmoothStage = stationary_predecessor()
+    let mut right: SmoothStage = target_stage(1)
+    right.inverse_duration = 2
+    right.a = [right.a[0],right.a[1],fixture_bank(3)]
+    let left: SmoothStage = link_predecessor(original,right)
+    let row: map<str, any> = { "case": 3,"original": original,"left": left,"right": right }
+    print(json_stringify(row))
+}

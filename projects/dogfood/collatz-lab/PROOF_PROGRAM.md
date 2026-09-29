@@ -97,6 +97,13 @@ The prefix-slope audit gives the same complete arrays through `w=10`. The
 current records are therefore governed by multiplicative meanders, not by a
 contracting coefficient rescued by the additive remainder.
 
+The subsequent [first-contraction barrier proof](../collatz-barrier/RESULTS.md)
+now excludes that additive rescue uniformly through step 114208327603 for
+starts at or above `2^71`. Thus it justifies using coefficient contraction
+alone to prune a least-counterexample search within that horizon. The proof
+uses the first contracting prefix, not an arbitrary later contracting prefix.
+It does not supply the missing uniform support bound or certify support eleven.
+
 ## Exact support-eleven witness lower bound
 
 The counterexample-guided frontier portfolio ranks retained exact states by

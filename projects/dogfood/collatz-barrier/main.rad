@@ -1,0 +1,67 @@
+use "barrier.rad"
+use "literal.rad"
+use "rotation.rad"
+
+resource Problem { kind: int = 0 }
+
+component Evidence { result: Barrier = Barrier {} }
+
+entity certificate { Evidence {} }
+struct AuditSummary { kind: str = "exhaustive", max_depth: int = 20, odd_counts: int = 0 }
+struct Completion { kind: str = "complete", envelope_limit: int = 0 }
+resource LiteralJob { start: int = 2, end: int = 2, odds: list<int> = [] }
+
+component LiteralEvidence { result: LiteralResult = LiteralResult {} }
+
+entity trajectories { LiteralEvidence {} }
+
+system CheckLiteral(result: mut LiteralEvidence, job: LiteralJob) {
+    result = LiteralEvidence { result: literal_range(job.start, job.end, job.odds) }
+}
+
+system Certify(result: mut Evidence, problem: Problem) {
+    if problem.kind == 0 {
+        result = Evidence { result: check_barrier("least-Collatz-counterexample", 103768467013, 65470613321, 10439860591, 6586818670, npow2(71)) }
+    } else {
+        let floor_value: Natural = nmul(nat(28000000000), nat(1000000000))
+        result = Evidence { result: check_barrier("CST-with-published-starting-value-bound", 9809721694, 6189245291, 630138897, 397573379, floor_value) }
+    }
+}
+
+fn main() -> nil {
+    let args: list<str> = sys_args()
+    let limit: int = if len(args) > 0 { int(args[0]) } else { 4096 }
+    assert(limit >= 2 and limit <= 16384, "envelope limit outside 2..16384")
+    print(json_stringify(AuditSummary { odd_counts: audit_extremizer(20) }))
+    for row in rotation_rows() { print(json_stringify(row)) }
+    let base: world_fork = fork()
+    let jobs: list<world_fork> = [fork_with(base, Problem { kind: 0 }), fork_with(base, Problem { kind: 1 })]
+    let results: list<world_fork> = simulate_many(jobs, [system::Certify], 1, 1937)
+    for i in range(len(results)) {
+        assert_only_changed(jobs[i], results[i], [Evidence])
+        let result: Evidence = peek(results[i], certificate, Evidence) |> unwrap
+        print(json_stringify(result.result))
+        let restored: world_fork = fork_from_bytes(fork_to_bytes(results[i])) |> unwrap
+        assert(peek(restored, certificate, Evidence) == peek(results[i], certificate, Evidence), "certificate snapshot round trip changed evidence")
+    }
+    assert(require(certificate, Evidence).result.last_depth == 0, "proof search leaked into live world")
+    let records: list<Envelope> = envelope_records(limit)
+    for record in records { print(json_stringify(record)) }
+    let cutoff: int = records[len(records) - 1].cutoff
+    let odds: list<int> = minimum_odds(limit)
+    let mut literals: list<world_fork> = []
+    for lane in range(16) {
+        literals = push(literals, fork_with(base, LiteralJob {
+            start: 2 + int_div((cutoff - 2) * lane, 16),
+            end: 2 + int_div((cutoff - 2) * (lane + 1), 16), odds: odds,
+        }))
+    }
+    let checked: list<world_fork> = simulate_many(literals, [system::CheckLiteral], 1, 1937)
+    for lane in range(16) {
+        assert_only_changed(literals[lane], checked[lane], [LiteralEvidence])
+        let result: LiteralEvidence = peek(checked[lane], trajectories, LiteralEvidence) |> unwrap
+        print(json_stringify(result.result))
+    }
+    assert(require(trajectories, LiteralEvidence).result.tested == 0, "trajectory audit leaked into live world")
+    print(json_stringify(Completion { envelope_limit: limit }))
+}

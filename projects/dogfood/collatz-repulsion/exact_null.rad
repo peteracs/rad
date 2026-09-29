@@ -1,0 +1,47 @@
+use "control.rad"
+
+// Exact fair-coin survival: p[t][q] = P(stay trapped through step `mark` | trapped at (t, q)).
+pub pure fn survival_table(mark: int, start: int, floors: list<int>) -> list<list<float>> {
+    let mut rows: list<list<float>> = []
+    for _ in range(mark + 1) { rows = push(rows, []) }
+    let mut final_row: list<float> = []
+    for q in range(mark + 2) { final_row = push(final_row, if q >= floors[mark] { 1.0 } else { 0.0 }) }
+    rows = set_at(rows, mark, final_row)
+    let mut t: int = mark - 1
+    while t >= start {
+        let nxt: list<float> = rows[t + 1]
+        let mut cur: list<float> = []
+        for q in range(mark + 1) {
+            let v: float = if q < floors[t] { 0.0 } else { 0.5 * (nxt[q] + nxt[q + 1]) }
+            cur = push(cur, v)
+        }
+        cur = push(cur, 0.0)
+        rows = set_at(rows, t, cur)
+        t = t - 1
+    }
+    return rows
+}
+
+pub struct ZRow { mark: int = 0, observed: int = 0, expected_x10: int = 0, sd_x10: int = 0, z_x100: int = 0 }
+
+pub pure fn exact_test(bits: int, min_start: int, marks: list<int>) -> list<ZRow> {
+    let floors: list<int> = floor_table(900)
+    let states: list<list<int>> = trapped_states(bits, floors) |> filter(fn(s: list<int>) -> bool { return s[0] >= min_start })
+    let real: list<int> = continue_counts(bits, marks, min_start)
+    let mut out: list<ZRow> = []
+    for i in range(len(marks)) {
+        let table: list<list<float>> = survival_table(marks[i], bits, floors)
+        let row: list<float> = table[bits]
+        let mut mean: float = 0.0
+        let mut variance: float = 0.0
+        for s in states {
+            let p: float = row[s[1]]
+            mean = mean + p
+            variance = variance + p * (1.0 - p)
+        }
+        let sd: float = pow(variance, 0.5)
+        out = push(out, ZRow { mark: marks[i], observed: real[i], expected_x10: int(10.0 * mean), sd_x10: int(10.0 * sd),
+            z_x100: int(100.0 * (float(real[i]) - mean) / sd) })
+    }
+    return out
+}

@@ -1,0 +1,31 @@
+use "backward.rad"
+
+resource WeightedJob { n: int = 3, a_cost: int = 1, b_cost: int = 1 }
+
+component Minimum { result: WeightedResult = WeightedResult {} }
+
+entity answer { Minimum {} }
+
+system SolveWeighted(result: mut Minimum, job: WeightedJob) {
+    result = Minimum { result: weighted_search(job.n, job.a_cost, job.b_cost) }
+}
+
+fn main() -> nil {
+    let args: list<str> = sys_args()
+    let max_n: int = if len(args) > 0 { int(args[0]) } else { 20 }
+    assert(max_n >= 3 and max_n <= 30, "max_n must be in 3..30")
+    let base: world_fork = fork()
+    let mut jobs: list<world_fork> = []
+    for n in range(3, max_n + 1) {
+        jobs = push(jobs, fork_with(base, WeightedJob { n: n, a_cost: 1, b_cost: 1 }))
+        jobs = push(jobs, fork_with(base, WeightedJob { n: n, a_cost: 1, b_cost: 0 }))
+        jobs = push(jobs, fork_with(base, WeightedJob { n: n, a_cost: 0, b_cost: 1 }))
+    }
+    let futures: list<world_fork> = simulate_many(jobs, [system::SolveWeighted], 1, 1937)
+    for i in range(len(futures)) {
+        assert_only_changed(jobs[i], futures[i], [Minimum])
+        let evidence: Minimum = peek(futures[i], answer, Minimum) |> unwrap
+        print(json_stringify(evidence.result))
+    }
+    assert(require(answer, Minimum).result.n == 0, "weighted search leaked into the live world")
+}

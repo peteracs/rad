@@ -1,0 +1,194 @@
+{
+  "format": "rad-collatz-escape-v1",
+  "completed_utc": "2026-09-04T23:04:34.855635+00:00",
+  "sources": {
+    "barrier.rad": "8dcdec1f282bf47ee3cfd1ee4edef5bb05f812e179c0e2f9ba42a0f53839d3fd",
+    "escape/accept.py": "4c6f5788cf8fa20ff63d1404d77a081ffd543d4364cfcab4f80c035308854df5",
+    "escape/counting.rad": "b1779c15a13d20b934dbc3e68589575b66af73ff5c8352bfaec23e01d098883f",
+    "escape/exact.rad": "f32ae4133c45bab4700a87a15065f3370ef96affa00a1823fe0a750d894b1c71",
+    "escape/main.rad": "8e8b59a51dbb8549d3ee9ac3426a89eb755c14a39cf12036238b3f649788022f",
+    "escape/PROOF.md": "19a09eb0e9c042ae92e6ba12c4f250299da6c1eb6f1af1555366e2d894d67d39",
+    "escape/README.md": "034ba464e5f86dded70e663c8b2d93f8e174d3f25fc91d1b8c9f09ecc002a24a",
+    "escape/test_verify.py": "e6e93703114e80723af3428b60126b0b1c389495d3b528b27551546a2c2be995",
+    "escape/verify.py": "c7a9b11ca60a0de856123b5ca830451d4978d51e9dbb9c0b72fc65d2aa781d32",
+    "natural.rad": "6743de14210b437c2977fb11daf5f0651042de755a6d19a2ed3dc473fbdf44b8"
+  },
+  "artifacts": {
+    "garcia-tal.pdf": "dc2ab0a006bdc25430cd14f578439937b37eda3cda0701688be12e49d5c51dd8",
+    "garcia-tal.txt": "63b0201c6c53f46a83b5c9028e5ae593527502c610e3747e71b8fb6f310cb1a7",
+    "replay-1.stderr.txt": "9c0f3973b90ddcb7dfb4de25c145ee601f2218d5ee6003ec453d52989455694a",
+    "replay-1.txt": "64eca3bd57a82c8c7958d36a6ace72a2849bf26c55234a6b60364264fa814610",
+    "replay-4.stderr.txt": "9c0f3973b90ddcb7dfb4de25c145ee601f2218d5ee6003ec453d52989455694a",
+    "replay-4.txt": "64eca3bd57a82c8c7958d36a6ace72a2849bf26c55234a6b60364264fa814610",
+    "run-1.radr": "79e088f23caa3883152a1ea5a3d0c78cde66d7f04ab0310083b87bb76ad61cab",
+    "run-1.stderr.txt": "36436a5006c0db38a35df81c201d028d3de248ad9409212f2f4ff7d7c706d183",
+    "run-1.txt": "64eca3bd57a82c8c7958d36a6ace72a2849bf26c55234a6b60364264fa814610",
+    "run-4.radr": "7c0206e93ef78fa6f8ded8975b443709226642cedc57726f8d9dce96f747fe23",
+    "run-4.stderr.txt": "843e070607123d5a8c318d51b135358c45e0a788b8302ef8dcd44a90dade61b9",
+    "run-4.txt": "64eca3bd57a82c8c7958d36a6ace72a2849bf26c55234a6b60364264fa814610",
+    "tests.stderr.txt": "791771017f2a92cafb6c4febc9941092e9609cbedf06aa4700233bfedeb93c9f",
+    "tests.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "binary_sha256": "4997366f760995e10d4692b7feb76457171778a80207c489fd6979aaf94ba68d",
+  "commands": [
+    {
+      "command": [
+        "H:\\Projects\\rad-lang\\target\\release\\rad.exe",
+        "H:\\Projects\\rad-lang\\projects\\dogfood\\collatz-barrier\\escape\\main.rad",
+        "--strict-types",
+        "--deny-warnings",
+        "--experimental-laws",
+        "--record",
+        "H:\\Projects\\rad-lang\\projects\\dogfood\\collatz-barrier\\escape\\out\\run-1.radr"
+      ],
+      "workers": 1,
+      "elapsed_ns": 7214936400,
+      "stdout_sha256": "64eca3bd57a82c8c7958d36a6ace72a2849bf26c55234a6b60364264fa814610",
+      "stderr_sha256": "36436a5006c0db38a35df81c201d028d3de248ad9409212f2f4ff7d7c706d183"
+    },
+    {
+      "command": [
+        "H:\\Projects\\rad-lang\\target\\release\\rad.exe",
+        "replay",
+        "H:\\Projects\\rad-lang\\projects\\dogfood\\collatz-barrier\\escape\\out\\run-1.radr"
+      ],
+      "workers": 4,
+      "elapsed_ns": 5821216800,
+      "stdout_sha256": "64eca3bd57a82c8c7958d36a6ace72a2849bf26c55234a6b60364264fa814610",
+      "stderr_sha256": "9c0f3973b90ddcb7dfb4de25c145ee601f2218d5ee6003ec453d52989455694a"
+    },
+    {
+      "command": [
+        "H:\\Projects\\rad-lang\\target\\release\\rad.exe",
+        "H:\\Projects\\rad-lang\\projects\\dogfood\\collatz-barrier\\escape\\main.rad",
+        "--strict-types",
+        "--deny-warnings",
+        "--experimental-laws",
+        "--record",
+        "H:\\Projects\\rad-lang\\projects\\dogfood\\collatz-barrier\\escape\\out\\run-4.radr"
+      ],
+      "workers": 4,
+      "elapsed_ns": 5923571700,
+      "stdout_sha256": "64eca3bd57a82c8c7958d36a6ace72a2849bf26c55234a6b60364264fa814610",
+      "stderr_sha256": "843e070607123d5a8c318d51b135358c45e0a788b8302ef8dcd44a90dade61b9"
+    },
+    {
+      "command": [
+        "H:\\Projects\\rad-lang\\target\\release\\rad.exe",
+        "replay",
+        "H:\\Projects\\rad-lang\\projects\\dogfood\\collatz-barrier\\escape\\out\\run-4.radr"
+      ],
+      "workers": 1,
+      "elapsed_ns": 7742796200,
+      "stdout_sha256": "64eca3bd57a82c8c7958d36a6ace72a2849bf26c55234a6b60364264fa814610",
+      "stderr_sha256": "9c0f3973b90ddcb7dfb4de25c145ee601f2218d5ee6003ec453d52989455694a"
+    },
+    {
+      "command": [
+        "C:\\Program Files\\Python312\\python.exe",
+        "-O",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "H:\\Projects\\rad-lang\\projects\\dogfood\\collatz-barrier\\escape",
+        "-p",
+        "test_verify.py"
+      ],
+      "workers": 1,
+      "elapsed_ns": 534475500,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_sha256": "791771017f2a92cafb6c4febc9941092e9609cbedf06aa4700233bfedeb93c9f"
+    }
+  ],
+  "results": {
+    "selected_weight": "156/100",
+    "exponent_floor": 3585657,
+    "exponent_scale": 100000000,
+    "simple_exponent": "1/28",
+    "weight_jobs": 21,
+    "strip_certificates": [
+      {
+        "block_length": 1,
+        "constant": "6",
+        "linear_coefficient": "6",
+        "margin": "2",
+        "modulus": "2",
+        "width": 2,
+        "words": "2"
+      },
+      {
+        "block_length": 4,
+        "constant": "60",
+        "linear_coefficient": "15",
+        "margin": "8",
+        "modulus": "16",
+        "width": 4,
+        "words": "10"
+      },
+      {
+        "block_length": 13,
+        "constant": "93226",
+        "linear_coefficient": "92",
+        "margin": "784",
+        "modulus": "8192",
+        "width": 8,
+        "words": "2974"
+      },
+      {
+        "block_length": 28,
+        "constant": "2569012161",
+        "linear_coefficient": "154",
+        "margin": "15474256",
+        "modulus": "268435456",
+        "width": 16,
+        "words": "49364507"
+      },
+      {
+        "block_length": 48,
+        "constant": "444605679428720",
+        "linear_coefficient": "51",
+        "margin": "47310417268032",
+        "modulus": "281474976710656",
+        "width": 32,
+        "words": "24909828526998"
+      },
+      {
+        "block_length": 70,
+        "constant": "3028552709433226908314",
+        "linear_coefficient": "165",
+        "margin": "63556889637457667712",
+        "modulus": "1180591620717411303424",
+        "width": 64,
+        "words": "54347155820543378790"
+      },
+      {
+        "block_length": 95,
+        "constant": "21752240699559376825353962193",
+        "linear_coefficient": "71",
+        "margin": "4864915973505501288656995712",
+        "modulus": "39614081257132168796771975168",
+        "width": 128,
+        "words": "890447873421023477356710389"
+      },
+      {
+        "block_length": 119,
+        "constant": "104255935534938579460919608292956002",
+        "linear_coefficient": "41",
+        "margin": "138596234512163740519843653679726848",
+        "modulus": "664613997892457936451903530140172288",
+        "width": 256,
+        "words": "7247053746739101831390105221643711"
+      }
+    ],
+    "residue_cases": 131070,
+    "literal_transitions": 1966082,
+    "literal_packing": {
+      "positive_starts": 512,
+      "prefixes": 1206,
+      "capacity_checks": 16624,
+      "repeats_observed": 512
+    }
+  },
+  "scope": "Finite exact certificates and independent audits support the written all-size proof; no Collatz solution or historical-priority claim."
+}

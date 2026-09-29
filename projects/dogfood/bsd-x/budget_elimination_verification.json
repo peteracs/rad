@@ -1,0 +1,12 @@
+{
+  "symbolic_presentation_forks": 16,
+  "worker_counts": [
+    1,
+    4
+  ],
+  "record_replay": true,
+  "forged_arithmetic_claim_rejected": true,
+  "web_search_used": false,
+  "universal_arithmetic_bounds_proved": 0,
+  "conclusion": "joint source/correction existence is equivalent to s_p<=m"
+}

@@ -1,0 +1,63 @@
+// Map surgery: one odd residue class r mod 2^k uses (3n-1)/2 instead of (3n+1)/2.
+pub pure fn step(n: int, k: int, r: int) -> int {
+    if n % 2 == 0 { return int_div(n, 2) }
+    if n % (1 << k) == r { return int_div(3 * n - 1, 2) }
+    return int_div(3 * n + 1, 2)
+}
+
+pub struct Universe {
+    k: int = 0
+    r: int = 0
+    cycles: int = 0                // distinct cycles found (including trivial ones)
+    new_cycles: int = 0            // cycles other than {1, 2} and the fixed point {1}
+    smallest_new_min: int = 0      // smallest element of the smallest new cycle
+    smallest_new_len: int = 0
+    surgered_hits: int = 0         // odd steps of that cycle taken in the surgered class
+    escapes: int = 0               // trajectories exceeding the cap
+}
+
+pub pure fn explore(k: int, r: int, limit: int) -> Universe {
+    let mut mins: list<int> = []
+    let mut new_count: int = 0
+    let mut best_min: int = 0
+    let mut best_len: int = 0
+    let mut best_hits: int = 0
+    let mut escapes: int = 0
+    let cap: int = 1 << 50
+    for start in range(1, limit) {
+        let mut slow: int = start
+        let mut fast: int = start
+        let mut going: bool = true
+        let mut guard: int = 0
+        while going and guard < 3000 {
+            slow = step(slow, k, r)
+            fast = step(step(fast, k, r), k, r)
+            if fast > cap { escapes = escapes + 1 going = false }
+            else if slow == fast {
+                let mut low: int = slow
+                let mut length: int = 0
+                let mut hits: int = 0
+                let mut x: int = slow
+                let mut entering: bool = true
+                while entering or x != slow {
+                    entering = false
+                    if x < low { low = x }
+                    if x % 2 == 1 and x % (1 << k) == r { hits = hits + 1 }
+                    x = step(x, k, r)
+                    length = length + 1
+                }
+                if not contains(mins, low) {
+                    mins = push(mins, low)
+                    if low != 1 {
+                        new_count = new_count + 1
+                        if best_min == 0 or low < best_min { best_min = low best_len = length best_hits = hits }
+                    }
+                }
+                going = false
+            }
+            guard = guard + 1
+        }
+    }
+    return Universe { k: k, r: r, cycles: len(mins), new_cycles: new_count, smallest_new_min: best_min,
+        smallest_new_len: best_len, surgered_hits: best_hits, escapes: escapes }
+}

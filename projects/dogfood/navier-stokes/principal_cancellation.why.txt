@@ -1,0 +1,12 @@
+{"actual_derivative_estimates_proved":false,"full_localized_residual_zero":false,"pressure_cancelled":true,"tangency_defect_damped":true}
+PrincipalEvidence of principal_result = { pressure_cancelled: true, tangency_defect_damped: true, full_localized_residual_zero: falseâ€¦   (set in frame 0)
+
+  <- resolver `CheckPrincipal`
+     intent: PrincipalChecked
+     key: principal_result
+
+     <- proposal PrincipalChecked { target: principal_result, omit_damping: false }
+        proposed by law `SubmitPrincipal` at line 7
+
+     settlement origin:
+  <- by top-level code

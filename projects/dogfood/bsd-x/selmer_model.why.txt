@@ -1,0 +1,74 @@
+prefix_checks 90
+checked 1408
+{"analytic":4,"corank":2,"divisible":0,"eventual_growth":2,"growth":2,"level":0,"primary_finite":true,"rank":2,"residual_exponent":0,"tail_pairs":0,"x1_dimension":false,"x3_at_level":true,"x3_eventually":true}
+SelmerEvidence of lower_rank_witness = { analytic: 4, rank: 2, divisible: 0, level: 0, corank: 2, residual_exponent: 0, growth: 2, tâ€¦   (set in frame 0)
+
+  <- resolver `ExplainModel`
+     intent: ModelChecked
+     key: lower_rank_witness
+
+     <- proposal ModelChecked { target: lower_rank_witness, request: SelmerCase { analytic: 4, rank: 2, divisibleâ€¦
+        proposed by law `SubmitModel` at line 51
+
+     settlement origin:
+  <- by top-level code
+{"analytic":2,"corank":4,"divisible":0,"eventual_growth":4,"growth":4,"level":0,"primary_finite":true,"rank":4,"residual_exponent":0,"tail_pairs":0,"x1_dimension":true,"x3_at_level":false,"x3_eventually":false}
+SelmerEvidence of upper_rank_witness = { analytic: 2, rank: 4, divisible: 0, level: 0, corank: 4, residual_exponent: 0, growth: 4, tâ€¦   (set in frame 0)
+
+  <- resolver `ExplainModel`
+     intent: ModelChecked
+     key: upper_rank_witness
+
+     <- proposal ModelChecked { target: upper_rank_witness, request: SelmerCase { analytic: 2, rank: 4, divisibleâ€¦
+        proposed by law `SubmitModel` at line 51
+
+     settlement origin:
+  <- by top-level code
+{"analytic":2,"corank":4,"divisible":2,"eventual_growth":4,"growth":4,"level":3,"primary_finite":false,"rank":2,"residual_exponent":6,"tail_pairs":0,"x1_dimension":true,"x3_at_level":false,"x3_eventually":false}
+SelmerEvidence of divisible_witness = { analytic: 2, rank: 2, divisible: 2, level: 3, corank: 4, residual_exponent: 6, growth: 4, tâ€¦   (set in frame 0)
+
+  <- resolver `ExplainModel`
+     intent: ModelChecked
+     key: divisible_witness
+
+     <- proposal ModelChecked { target: divisible_witness, request: SelmerCase { analytic: 2, rank: 2, divisible:â€¦
+        proposed by law `SubmitModel` at line 51
+
+     settlement origin:
+  <- by top-level code
+{"analytic":2,"corank":2,"divisible":0,"eventual_growth":2,"growth":4,"level":2,"primary_finite":true,"rank":2,"residual_exponent":4,"tail_pairs":1,"x1_dimension":true,"x3_at_level":false,"x3_eventually":true}
+SelmerEvidence of late_certificate = { analytic: 2, rank: 2, divisible: 0, level: 2, corank: 2, residual_exponent: 4, growth: 4, tâ€¦   (set in frame 0)
+
+  <- resolver `ExplainModel`
+     intent: ModelChecked
+     key: late_certificate
+
+     <- proposal ModelChecked { target: late_certificate, request: SelmerCase { analytic: 2, rank: 2, divisible: â€¦
+        proposed by law `SubmitModel` at line 51
+
+     settlement origin:
+  <- by top-level code
+SelmerEvidence.x1_dimension of entity 1 = false
+SelmerEvidence of lower_rank_witness = { analytic: 4, rank: 2, divisible: 0, level: 0, corank: 2, residual_exponent: 0, growth: 2, tâ€¦   (set in frame 0)
+
+  <- resolver `ExplainModel`
+     intent: ModelChecked
+     key: lower_rank_witness
+
+     <- proposal ModelChecked { target: lower_rank_witness, request: SelmerCase { analytic: 4, rank: 2, divisibleâ€¦
+        proposed by law `SubmitModel` at line 51
+
+     settlement origin:
+  <- by top-level code
+SelmerEvidence.x3_eventually of entity 2 = false
+SelmerEvidence of upper_rank_witness = { analytic: 2, rank: 4, divisible: 0, level: 0, corank: 4, residual_exponent: 0, growth: 4, tâ€¦   (set in frame 0)
+
+  <- resolver `ExplainModel`
+     intent: ModelChecked
+     key: upper_rank_witness
+
+     <- proposal ModelChecked { target: upper_rank_witness, request: SelmerCase { analytic: 2, rank: 4, divisibleâ€¦
+        proposed by law `SubmitModel` at line 51
+
+     settlement origin:
+  <- by top-level code

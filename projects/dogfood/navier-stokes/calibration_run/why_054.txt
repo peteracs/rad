@@ -1,0 +1,35 @@
+decision {"accepted":5,"best_method":0,"best_p":8,"best_q":1,"best_radius":14,"best_time_exponent":54,"limiter":"H7 contraction","return_map_proved":false,"total":48}
+__priv_1__CalibrationDecision of __priv_1__calibration_decision = { best_p: 8, best_q: 1, best_radius: 14, best_method: 0, best_time_exponent: 54, accepted: 5,…   (set in frame 0)
+
+  <- resolver `__priv_1__ChooseCalibration`
+     intent: __priv_1__CalibrationChecked
+     key: __priv_1__calibration_decision
+
+     <- proposal __priv_1__CalibrationChecked { target: __priv_1__calibration_decision, request: CalibrationReque…
+        proposed by law `__priv_1__SubmitCalibration` at line 10
+
+     <- proposal __priv_1__CalibrationChecked { target: __priv_1__calibration_decision, request: CalibrationReque…
+        proposed by law `__priv_1__SubmitCalibration` at line 10
+
+     <- proposal __priv_1__CalibrationChecked { target: __priv_1__calibration_decision, request: CalibrationReque…
+        proposed by law `__priv_1__SubmitCalibration` at line 10
+
+     <- proposal __priv_1__CalibrationChecked { target: __priv_1__calibration_decision, request: CalibrationReque…
+        proposed by law `__priv_1__SubmitCalibration` at line 10
+
+     <- proposal __priv_1__CalibrationChecked { target: __priv_1__calibration_decision, request: CalibrationReque…
+        proposed by law `__priv_1__SubmitCalibration` at line 10
+
+     <- proposal __priv_1__CalibrationChecked { target: __priv_1__calibration_decision, request: CalibrationReque…
+        proposed by law `__priv_1__SubmitCalibration` at line 10
+
+     <- proposal __priv_1__CalibrationChecked { target: __priv_1__calibration_decision, request: CalibrationReque…
+        proposed by law `__priv_1__SubmitCalibration` at line 10
+
+     <- proposal __priv_1__CalibrationChecked { target: __priv_1__calibration_decision, request: CalibrationReque…
+        proposed by law `__priv_1__SubmitCalibration` at line 10
+
+     <- 8 proposals shown, 40 additional proposals omitted
+
+     settlement origin:
+  <- by top-level code

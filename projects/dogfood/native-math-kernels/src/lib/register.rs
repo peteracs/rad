@@ -223,6 +223,7 @@ pub unsafe extern "C" fn rad_extension_init(api: *const RadPluginApi) {
         6,
     );
     register(api, "affine_cycle_profile_json", affine_cycle_profile, 4);
+    register(api, "rewrite_rank_search_json", rewrite_rank_search, 1);
     register(api, "zeta_cover_lane_json", zeta_cover_lane, 3);
     register(api, "zeta_prepare_cover_json", zeta_prepare_cover, 1);
     register(

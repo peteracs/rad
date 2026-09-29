@@ -1,0 +1,17 @@
+// Native survival kernel: [states, then per mark: observed, expected x1000, variance x1000].
+pub struct NativeRow { bits: int = 0, d: int = 0, mark: int = 0, observed: int = 0, expected_x10: int = 0, z_x100: int = 0 }
+
+pub pure fn native_rows(bits: int, d: int, multiples: list<int>) -> list<NativeRow> {
+    let mut marks: list<int> = []
+    for k in multiples { marks = push(marks, k * bits) }
+    let raw: list<int> = affine_trapped_survival(bits, d, marks)
+    let mut out: list<NativeRow> = []
+    for i in range(len(marks)) {
+        let obs: int = raw[1 + 3 * i]
+        let mean: float = float(raw[2 + 3 * i]) / 1000.0
+        let sd: float = pow(float(raw[3 + 3 * i]) / 1000.0, 0.5)
+        out = push(out, NativeRow { bits: bits, d: d, mark: marks[i], observed: obs, expected_x10: int(10.0 * mean),
+            z_x100: if sd > 0.0 { int(100.0 * (float(obs) - mean) / sd) } else { 0 } })
+    }
+    return out
+}

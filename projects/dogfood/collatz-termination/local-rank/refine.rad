@@ -1,0 +1,72 @@
+use "features.rad"
+
+resource Probe { memory: int = 1, boundary: int = 1792, lane: int = 0, omitted: int = -1, denominator: int = 1, weights: map<str, int> = {} }
+
+component Counterexamples { checked: int = 0, failures: int = 0, rows: list<LinearRow> = [] }
+
+entity scratch { Counterexamples {} }
+
+pure fn inspect_row(row: LinearRow, probe: Probe, current: Counterexamples) -> Counterexamples {
+    let mut total: int = 0
+    for entry in entries(row.terms) { total = total + entry[1] * get_or(probe.weights, entry[0], 0) }
+    let mut result: Counterexamples = current
+    result.checked = result.checked + 1
+    if total < row.bound * probe.denominator {
+        result.failures = result.failures + 1
+        if len(result.rows) < 16 { result.rows = push(result.rows, row) }
+    }
+    return result
+}
+
+system Find(counterexamples: mut Counterexamples, probe: Probe) {
+    let words: list<list<int>> = contexts(probe.memory - 1)
+    let mut result: Counterexamples = Counterexamples {}
+    if probe.lane == probe.omitted { result = Counterexamples {} }
+    else if probe.lane < 11 {
+        let prefixes: list<list<int>> = if probe.lane >= 8 { [[]] } else { words }
+        let suffixes: list<list<int>> = if probe.lane < 2 { [[]] } else { words }
+        for prefix in prefixes {
+            for suffix in suffixes { result = inspect_row(rewrite_row(probe.memory, probe.boundary, probe.lane, prefix, suffix), probe, result) }
+        }
+    }
+    else {
+        for state in words {
+            if len(state) == probe.memory - 1 {
+                for symbol in [0, 1, 4, 5, 6] { result = inspect_row(lower_bound_row(probe.memory, state, symbol), probe, result) }
+            }
+        }
+    }
+    counterexamples = result
+}
+
+fn main() -> nil {
+    let args: list<str> = sys_args()
+    assert(len(args) == 1, "supply a scaled rational candidate")
+    let candidate: map<str, any> = json_parse(read_file(args[0])) |> unwrap
+    let memory: int = candidate["memory"]
+    let denominator: int = candidate["denominator"]
+    let weights: map<str, int> = candidate["weights"]
+    assert(memory >= 1 and memory <= 4 and denominator > 0 and denominator <= 1000000000, "invalid refinement arithmetic domain")
+    for entry in entries(weights) { assert(abs(entry[1]) <= 1000000000, "weight exceeds exact arithmetic budget") }
+    let base: world_fork = fork()
+    let mut jobs: list<world_fork> = []
+    let omitted: int = get_or(candidate, "omitted", -1)
+    assert(omitted >= -1 and omitted < 11, "invalid omitted rule")
+    for lane in range(12) { jobs = push(jobs, fork_with(base, Probe { memory: memory, boundary: candidate["boundary"], lane: lane, omitted: omitted, denominator: denominator, weights: weights })) }
+    let before: str = world_digest()
+    let results: list<world_fork> = simulate_many(jobs, [system::Find], 1, 1937)
+    assert(world_digest() == before, "counterexample search changed live world")
+    let mut checked: int = 0
+    let mut failures: int = 0
+    for i in range(len(results)) {
+        assert_only_changed(jobs[i], results[i], [Counterexamples])
+        let result: Counterexamples = peek(results[i], scratch, Counterexamples) |> unwrap
+        let restored: world_fork = fork_from_bytes(fork_to_bytes(results[i])) |> unwrap
+        assert(peek(restored, scratch, Counterexamples) == Some(result), "counterexample snapshot differs")
+        checked = checked + result.checked
+        failures = failures + result.failures
+        for row in result.rows { print(json_stringify(row)) }
+    }
+    let summary: map<str, any> = { "kind": "summary", "memory": memory, "checked": checked, "failures": failures, "collatz_proved": false }
+    print(json_stringify(summary))
+}

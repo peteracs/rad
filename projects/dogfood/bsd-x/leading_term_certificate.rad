@@ -1,0 +1,127 @@
+// Conditional arithmetic certificates. Inputs are NOT certified curve data.
+resource OrderRequest { target: int = 36,divisor: int = 36,bound: int = 143,exact_primes: list<int> = [] }
+component OrderEvidence { target: int = 0,divisor: int = 0,bound: int = 0,
+    square_multiple: int = 0,next_order: int = 0,possible_count: int = 0,
+    unique_order: int = 0,escape_factor: int = 0,conditional_equality: bool = false,inconsistent: bool = false }
+entity order_trial { OrderEvidence {} }
+entity exact_threshold { OrderEvidence {} }
+entity threshold_failure { OrderEvidence {} }
+entity missing_local_data { OrderEvidence {} }
+entity nonsquare_target { OrderEvidence {} }
+entity protected_threshold { OrderEvidence {} }
+entity protected_failure { OrderEvidence {} }
+
+pure fn avoids(j: int,ps: list<int>) -> bool {
+    for p in ps { if j%p == 0 { return false } }
+    return true
+}
+pure fn first_escape(ps: list<int>) -> int {
+    assert(len(ps)<=25,"exact local prime capacity")
+    for p in ps {
+        assert(p>=2 and p<=100,"exact local prime domain")
+        for d in range(2,p) { assert(p%d != 0,"local index must be prime") }
+    }
+    let mut j: int = 2
+    while not avoids(j,ps) { j=j+1 }
+    assert(j<=101,"first unprotected prime bound")
+    return j
+}
+
+pub pure fn square_multiple(n: int) -> int {
+    assert(n>=1 and n<=10000,"divisor arithmetic domain")
+    let mut rest: int = n
+    let mut square: int = 1
+    let mut p: int = 2
+    while p*p<=rest {
+        let mut power: int = 0
+        while rest%p == 0 { rest=int_div(rest,p) power=power+1 }
+        if power%2 == 1 { power=power+1 }
+        for _ in range(power) { square=square*p }
+        p=p+1
+    }
+    if rest>1 { square=square*rest*rest }
+    assert(square%n == 0 and square<=n*n,"square completion arithmetic")
+    return square
+}
+pure fn evaluate(c: OrderRequest) -> OrderEvidence {
+    assert(c.target>=1 and c.target<=10000,"target arithmetic domain")
+    let least: int = square_multiple(c.divisor)
+    if len(c.exact_primes)>0 {
+        assert(c.target == c.divisor and least == c.target,"exact local comparison requires a square target divisor")
+    }
+    let escape: int = first_escape(c.exact_primes)
+    let ceiling: int = escape*escape*(if c.target>least { c.target } else { least })
+    assert(c.bound>=0 and c.bound<=ceiling,"bound arithmetic domain")
+    // Every square integer divisible by divisor has form least*j^2.
+    // The proof of that all-integer statement is given in the companion note.
+    let mut count: int = 0
+    let mut only_order: int = 0
+    let mut j: int = 1
+    while least*j*j<=c.bound {
+        if avoids(j,c.exact_primes) {
+            count=count+1
+            only_order=least*j*j
+        }
+        j=j+1
+    }
+    if count!=1 { only_order=0 }
+    return OrderEvidence { target:c.target,divisor:c.divisor,bound:c.bound,
+        square_multiple:least,next_order:escape*escape*least,possible_count:count,unique_order:only_order,escape_factor:escape,
+        conditional_equality:count == 1 and only_order == c.target,inconsistent:count == 0 }
+}
+system OrderStep(row: mut OrderEvidence,c: OrderRequest) { row=evaluate(c) }
+intent OrderChecked { key target: entity,request: OrderRequest,evidence: OrderEvidence }
+law SubmitOrder(target: entity,request: OrderRequest,evidence: OrderEvidence) {
+    propose OrderChecked { target:target,request:request,evidence:evidence }
+}
+resolver ExplainOrder for OrderChecked(target,proposals) {
+    assert(len(proposals)==1,"one order explanation")
+    let row: OrderEvidence = evaluate(proposals[0].request)
+    assert(proposals[0].evidence == row,"unsupported leading-term equality")
+    next(target,OrderEvidence { target:row.target,divisor:row.divisor,bound:row.bound,
+        square_multiple:row.square_multiple,next_order:row.next_order,possible_count:row.possible_count,
+        unique_order:row.unique_order,escape_factor:row.escape_factor,conditional_equality:row.conditional_equality,inconsistent:row.inconsistent })
+}
+fn main() -> nil {
+    let base: world_fork = fork()
+    let digest: str = world_digest()
+    let mut jobs: list<world_fork> = []
+    let mut requests: list<OrderRequest> = []
+    for d in range(1,101) {
+        let least: int = square_multiple(d)
+        for b in [least-1,least,4*least-1,4*least] {
+            let c: OrderRequest = OrderRequest { target:d,divisor:d,bound:b }
+            requests=push(requests,c)
+            jobs=push(jobs,fork_with(base,c))
+        }
+    }
+    let results: list<world_fork> = simulate_many(jobs,[system::OrderStep],1,20260909)
+    for i in range(len(results)) {
+        assert_only_changed(jobs[i],results[i],[OrderEvidence])
+        let row: OrderEvidence = peek(results[i],order_trial,OrderEvidence) |> unwrap
+        assert(row == evaluate(requests[i]),"fork evaluated requested order data")
+        print("case",json_stringify(row))
+    }
+    assert(world_digest() == digest,"certificate forks preserve parent")
+    let exact: OrderRequest = OrderRequest {}
+    let edge: OrderRequest = OrderRequest { bound:144 }
+    let missing: OrderRequest = OrderRequest { divisor:4,bound:143 }
+    let nonsquare: OrderRequest = OrderRequest { target:12,divisor:12,bound:143 }
+    let protected: OrderRequest = OrderRequest { bound:899,exact_primes:[2,3] }
+    let protected_edge: OrderRequest = OrderRequest { bound:900,exact_primes:[2,3] }
+    let mut edge_row: OrderEvidence = evaluate(edge)
+    if len(sys_args())>0 { edge_row.conditional_equality=true }
+    settle {
+        SubmitOrder(exact_threshold,exact,evaluate(exact))
+        SubmitOrder(threshold_failure,edge,edge_row)
+        SubmitOrder(missing_local_data,missing,evaluate(missing))
+        SubmitOrder(nonsquare_target,nonsquare,evaluate(nonsquare))
+        SubmitOrder(protected_threshold,protected,evaluate(protected))
+        SubmitOrder(protected_failure,protected_edge,evaluate(protected_edge))
+    }
+    for target in [exact_threshold,threshold_failure,missing_local_data,nonsquare_target,protected_threshold,protected_failure] {
+        print("witness",json_stringify(require(target,OrderEvidence)))
+        print(why(target,OrderEvidence))
+        print(why_field(target,OrderEvidence,"conditional_equality"))
+    }
+}

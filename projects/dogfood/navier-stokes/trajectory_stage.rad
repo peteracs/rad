@@ -1,0 +1,230 @@
+use "forced_fourier.rad"
+// u(s)=A(s)+theta(s)B(s), A,B quadratic Fourier paths, physical s=h(t-t0).
+// theta is the fixed C-infinity step flat at 0 and 1 (defined in TRAJECTORY_STAGE.md).
+pub struct SmoothStage {
+    a: list<list<FluidMode>> = [], b: list<list<FluidMode>> = [],
+    inverse_duration: int = 1, viscosity: int = 1
+}
+pub struct StageForceMode {
+    k: list<int> = [], re: list<list<list<int>>> = [], im: list<list<list<int>>> = [],
+    denominator: int = 1, coefficient_l1_n: int = 0
+}
+pub struct StageBound { polynomial_l1_upper: int = 0, switch_l1_twice: int = 0,
+    force_sup_upper: int = 0, max_frequency: int = 1, start_enstrophy8: int = 0, end_enstrophy8: int = 0 }
+pure fn magnitude(x: int) -> int { return if x < 0 { -x } else { x } }
+pure fn power(x: int, n: int) -> int {
+    let mut result: int = 1
+    for _ in range(n) { result = result*x }
+    return result
+}
+pure fn check_stage(stage: SmoothStage) -> nil {
+    assert(len(stage.a) == 3 and len(stage.b) == 3,"quadratic trajectory shape")
+    assert(stage.inverse_duration >= 1 and stage.inverse_duration <= 4,"stage duration domain")
+    let count: int = len(stage.a[0])
+    assert(count > 0 and count <= 12,"trajectory mode domain")
+    for degree in range(3) {
+        assert(len(stage.a[degree]) == count and len(stage.b[degree]) == count,"trajectory common support")
+        for index in range(count) {
+            let am: FluidMode = stage.a[degree][index]
+            let bm: FluidMode = stage.b[degree][index]
+            assert(len(am.k) == 3 and len(am.re) == 3 and len(am.im) == 3 and len(bm.k) == 3 and len(bm.re) == 3 and len(bm.im) == 3,"trajectory coefficient dimensions")
+            assert(am.k == stage.a[0][index].k and bm.k == am.k,"trajectory support order")
+            for j in range(3) {
+                assert(magnitude(am.k[j]) <= 3,"trajectory frequency domain")
+                assert(magnitude(am.re[j]) <= 8 and magnitude(am.im[j]) <= 8 and magnitude(bm.re[j]) <= 8 and magnitude(bm.im[j]) <= 8,"trajectory coefficient domain")
+            }
+        }
+    }
+}
+pub pure fn stage_bank(stage: SmoothStage, s: int, z: int, derivative: bool) -> list<FluidMode> {
+    check_stage(stage)
+    assert(s >= 0 and s <= 4 and z >= 0 and z <= 2,"polynomial reconstruction domain")
+    let mut result: list<FluidMode> = []
+    for index in range(len(stage.a[0])) {
+        let mut re: list<int> = [0,0,0]
+        let mut im: list<int> = [0,0,0]
+        for degree in range(3) {
+            let multiplier: int = if derivative {
+                if degree == 0 { 0 } else { stage.inverse_duration*degree*power(s,degree-1) }
+            } else { power(s,degree) }
+            for j in range(3) {
+                re[j] = re[j]+multiplier*(stage.a[degree][index].re[j]+z*stage.b[degree][index].re[j])
+                im[j] = im[j]+multiplier*(stage.a[degree][index].im[j]+z*stage.b[degree][index].im[j])
+            }
+        }
+        result = push(result,FluidMode { k: stage.a[0][index].k,re: re,im: im })
+    }
+    return result
+}
+// Integer power coefficients multiplied by 24, from values at 0,1,2,3,4.
+pure fn interpolate4(ordinates: list<int>) -> list<int> {
+    assert(len(ordinates) == 5,"quartic interpolation shape")
+    let mut work: list<int> = ordinates
+    let mut delta: list<int> = []
+    for _ in range(5) {
+        delta = push(delta,work[0])
+        let mut smaller: list<int> = []
+        for j in range(len(work)-1) { smaller = push(smaller,work[j+1]-work[j]) }
+        work = smaller
+    }
+    return [24*delta[0],24*delta[1]-12*delta[2]+8*delta[3]-6*delta[4],
+        12*delta[2]-12*delta[3]+11*delta[4],4*delta[3]-6*delta[4],delta[4]]
+}
+// Force = G(s,theta(s)) + h theta'(s) B(s).
+// G has degree <=4 in s and <=2 in z; interpolation is exact on this space.
+pub pure fn stage_force(stage: SmoothStage) -> list<StageForceMode> {
+    check_stage(stage)
+    let mut samples: list<list<ForceMode>> = []
+    for z in range(3) {
+        for s in range(5) {
+            samples = push(samples,actual_force(stage_bank(stage,s,z,false),stage_bank(stage,s,z,true),stage.viscosity))
+        }
+    }
+    let count: int = len(samples[0])
+    for sample in samples { assert(len(sample) == count,"force support stability") }
+    let mut result: list<StageForceMode> = []
+    for index in range(count) {
+        let mut real_z: list<list<list<int>>> = []
+        let mut imag_z: list<list<list<int>>> = []
+        for z in range(3) {
+            let mut real_parts: list<list<int>> = []
+            let mut imag_parts: list<list<int>> = []
+            for j in range(3) {
+                let mut rv: list<int> = []
+                let mut iv: list<int> = []
+                for s in range(5) {
+                    let item: ForceMode = samples[5*z+s][index]
+                    assert(item.k == samples[0][index].k and item.denominator == samples[0][index].denominator,"force coefficient alignment")
+                    rv = push(rv,item.re[j])
+                    iv = push(iv,item.im[j])
+                }
+                real_parts = push(real_parts,interpolate4(rv))
+                imag_parts = push(imag_parts,interpolate4(iv))
+            }
+            real_z = push(real_z,real_parts)
+            imag_z = push(imag_z,imag_parts)
+        }
+        let mut re: list<list<list<int>>> = []
+        let mut im: list<list<list<int>>> = []
+        let mut size: int = 0
+        for degree in range(5) {
+            let mut rp: list<list<int>> = []
+            let mut ip: list<list<int>> = []
+            for zpower in range(3) {
+                let mut rr: list<int> = []
+                let mut ii: list<int> = []
+                for j in range(3) {
+                    let r0: int = real_z[0][j][degree]
+                    let r1: int = real_z[1][j][degree]
+                    let r2: int = real_z[2][j][degree]
+                    let i0: int = imag_z[0][j][degree]
+                    let i1: int = imag_z[1][j][degree]
+                    let i2: int = imag_z[2][j][degree]
+                    let rn: int = if zpower == 0 { 2*r0 } else if zpower == 1 { -3*r0+4*r1-r2 } else { r0-2*r1+r2 }
+                    let inn: int = if zpower == 0 { 2*i0 } else if zpower == 1 { -3*i0+4*i1-i2 } else { i0-2*i1+i2 }
+                    assert(magnitude(rn) < 100000000000000 and magnitude(inn) < 100000000000000,"trajectory reconstruction bound")
+                    size = size+magnitude(rn)+magnitude(inn)
+                    rr = push(rr,rn)
+                    ii = push(ii,inn)
+                }
+                rp = push(rp,rr)
+                ip = push(ip,ii)
+            }
+            re = push(re,rp)
+            im = push(im,ip)
+        }
+        result = push(result,StageForceMode { k: samples[0][index].k,re: re,im: im,
+            denominator: 48*samples[0][index].denominator,coefficient_l1_n: size })
+    }
+    return result
+}
+// theta is flat at the seam. These three jets are ALL jets of the polynomial
+// endpoint germs; matching them implies every velocity and force jet matches.
+pub pure fn stage_join(left: SmoothStage, right: SmoothStage) -> bool {
+    check_stage(left)
+    check_stage(right)
+    if left.viscosity != right.viscosity or len(left.a[0]) != len(right.a[0]) { return false }
+    for index in range(len(left.a[0])) {
+        if left.a[0][index].k != right.a[0][index].k { return false }
+        for order in range(3) {
+            for j in range(3) {
+                let mut lr: int = 0
+                let mut li: int = 0
+                for degree in range(3) {
+                    if degree >= order {
+                        let factor: int = if order == 2 { 2 } else if order == 1 { degree } else { 1 }
+                        lr = lr+factor*(left.a[degree][index].re[j]+left.b[degree][index].re[j])
+                        li = li+factor*(left.a[degree][index].im[j]+left.b[degree][index].im[j])
+                    }
+                }
+                let factorial: int = if order == 2 { 2 } else { 1 }
+                if power(left.inverse_duration,order)*lr != power(right.inverse_duration,order)*factorial*right.a[order][index].re[j] { return false }
+                if power(left.inverse_duration,order)*li != power(right.inverse_duration,order)*factorial*right.a[order][index].im[j] { return false }
+            }
+        }
+    }
+    return true
+}
+pub pure fn carry_stage(left: SmoothStage, right_b: list<list<FluidMode>>, right_inverse_duration: int) -> SmoothStage {
+    check_stage(left)
+    assert(right_inverse_duration >= 1 and right_inverse_duration <= 4,"carry duration")
+    let mut a: list<list<FluidMode>> = []
+    for order in range(3) {
+        let mut bank: list<FluidMode> = []
+        for index in range(len(left.a[0])) {
+            let mut re: list<int> = []
+            let mut im: list<int> = []
+            for j in range(3) {
+                let mut rr: int = 0
+                let mut ii: int = 0
+                for degree in range(3) {
+                    if degree >= order {
+                        let factor: int = if order == 1 { degree } else { 1 }
+                        rr = rr+factor*(left.a[degree][index].re[j]+left.b[degree][index].re[j])
+                        ii = ii+factor*(left.a[degree][index].im[j]+left.b[degree][index].im[j])
+                    }
+                }
+                let divisor: int = power(right_inverse_duration,order)
+                rr = rr*power(left.inverse_duration,order)
+                ii = ii*power(left.inverse_duration,order)
+                assert(rr%divisor == 0 and ii%divisor == 0,"carry requires finer rational coefficient grid")
+                re = push(re,int_div(rr,divisor))
+                im = push(im,int_div(ii,divisor))
+            }
+            bank = push(bank,FluidMode { k: left.a[0][index].k,re: re,im: im })
+        }
+        a = push(a,bank)
+    }
+    let right: SmoothStage = SmoothStage { a: a,b: right_b,inverse_duration: right_inverse_duration,viscosity: left.viscosity }
+    assert(stage_join(left,right),"carry closure")
+    return right
+}
+pub pure fn stage_bound(stage: SmoothStage) -> StageBound {
+    let force: list<StageForceMode> = stage_force(stage)
+    let mut total: int = 0
+    let mut switch2: int = 0
+    let mut frequency: int = 1
+    for mode in force {
+        // Round upward per mode; the exact rational coefficients are also available.
+        total = total+int_div(mode.coefficient_l1_n+mode.denominator-1,mode.denominator)
+        for k in mode.k { if magnitude(k) > frequency { frequency = magnitude(k) } }
+    }
+    for bank in stage.b {
+        for mode in bank {
+            for j in range(3) { switch2 = switch2+magnitude(mode.re[j])+magnitude(mode.im[j]) }
+        }
+    }
+    let mut endpoints: list<int> = []
+    for endpoint in [0,1] {
+        let mut e8: int = 0
+        for mode in stage_bank(stage,endpoint,endpoint,false) {
+            let norm: int = mode.k[0]*mode.k[0]+mode.k[1]*mode.k[1]+mode.k[2]*mode.k[2]
+            for j in range(3) { e8 = e8+norm*(mode.re[j]*mode.re[j]+mode.im[j]*mode.im[j]) }
+        }
+        endpoints = push(endpoints,e8)
+    }
+    // The fixed smooth step satisfies ||theta'||_infinity <=64.
+    return StageBound { polynomial_l1_upper: total,switch_l1_twice: switch2,
+        force_sup_upper: total+32*stage.inverse_duration*switch2,max_frequency: frequency,
+        start_enstrophy8: endpoints[0],end_enstrophy8: endpoints[1] }
+}

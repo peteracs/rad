@@ -1,0 +1,13 @@
+use "carry.rad"
+// Exact law check: for odd x, nu2(3x+1) equals agreement with -1/3.
+let mut ok: int = 0
+for x in range(1, 200000, 2) {
+    let b: list<int> = bits_of(big_from(x))
+    let s: CarryStats = carry_stats(b)
+    let mut y: int = 3 * x + 1
+    let mut v: int = 0
+    while y % 2 == 0 { y = int_div(y, 2) v = v + 1 }
+    assert(v == min(s.bottom_agreement, s.bits) or (s.bottom_agreement == s.bits and v >= s.bits), "nu2 law failed")
+    ok = ok + 1
+}
+print(ok)

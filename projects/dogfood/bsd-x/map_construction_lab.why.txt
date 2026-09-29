@@ -1,0 +1,556 @@
+request {"kind":0,"polynomial":[-1,-1,-1,-1],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":-4,"defect_degree":4,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[0,-1,-1,-1],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":-4,"defect_degree":4,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[1,-1,-1,-1],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":-4,"defect_degree":4,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[-1,0,-1,-1],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":-4,"defect_degree":4,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[0,0,-1,-1],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":-4,"defect_degree":4,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[1,0,-1,-1],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":-4,"defect_degree":4,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[-1,1,-1,-1],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":-4,"defect_degree":4,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[0,1,-1,-1],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":-4,"defect_degree":4,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[1,1,-1,-1],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":-4,"defect_degree":4,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[-1,-1,0,-1],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":-4,"defect_degree":4,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[0,-1,0,-1],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":-4,"defect_degree":4,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[1,-1,0,-1],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":-4,"defect_degree":4,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[-1,0,0,-1],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":-4,"defect_degree":4,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[0,0,0,-1],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":-4,"defect_degree":4,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[1,0,0,-1],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":-4,"defect_degree":4,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[-1,1,0,-1],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":-4,"defect_degree":4,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[0,1,0,-1],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":-4,"defect_degree":4,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[1,1,0,-1],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":-4,"defect_degree":4,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[-1,-1,1,-1],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":-4,"defect_degree":4,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[0,-1,1,-1],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":-4,"defect_degree":4,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[1,-1,1,-1],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":-4,"defect_degree":4,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[-1,0,1,-1],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":-4,"defect_degree":4,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[0,0,1,-1],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":-4,"defect_degree":4,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[1,0,1,-1],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":-4,"defect_degree":4,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[-1,1,1,-1],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":-4,"defect_degree":4,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[0,1,1,-1],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":-4,"defect_degree":4,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[1,1,1,-1],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":-4,"defect_degree":4,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[-1,-1,-1,0],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":-3,"defect_degree":3,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[0,-1,-1,0],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":-3,"defect_degree":3,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[1,-1,-1,0],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":-3,"defect_degree":3,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[-1,0,-1,0],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":-3,"defect_degree":3,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[0,0,-1,0],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":-3,"defect_degree":3,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[1,0,-1,0],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":-3,"defect_degree":3,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[-1,1,-1,0],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":-3,"defect_degree":3,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[0,1,-1,0],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":-3,"defect_degree":3,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[1,1,-1,0],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":-3,"defect_degree":3,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[-1,-1,0,0],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":-2,"defect_degree":2,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[0,-1,0,0],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":-2,"defect_degree":2,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[1,-1,0,0],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":-2,"defect_degree":2,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[-1,0,0,0],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[0,0,0,0],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":0,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[1,0,0,0],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[-1,1,0,0],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":2,"defect_degree":2,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[0,1,0,0],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":2,"defect_degree":2,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[1,1,0,0],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":2,"defect_degree":2,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[-1,-1,1,0],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":3,"defect_degree":3,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[0,-1,1,0],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":3,"defect_degree":3,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[1,-1,1,0],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":3,"defect_degree":3,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[-1,0,1,0],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":3,"defect_degree":3,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[0,0,1,0],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":3,"defect_degree":3,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[1,0,1,0],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":3,"defect_degree":3,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[-1,1,1,0],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":3,"defect_degree":3,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[0,1,1,0],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":3,"defect_degree":3,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[1,1,1,0],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":3,"defect_degree":3,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[-1,-1,-1,1],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":4,"defect_degree":4,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[0,-1,-1,1],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":4,"defect_degree":4,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[1,-1,-1,1],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":4,"defect_degree":4,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[-1,0,-1,1],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":4,"defect_degree":4,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[0,0,-1,1],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":4,"defect_degree":4,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[1,0,-1,1],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":4,"defect_degree":4,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[-1,1,-1,1],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":4,"defect_degree":4,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[0,1,-1,1],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":4,"defect_degree":4,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[1,1,-1,1],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":4,"defect_degree":4,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[-1,-1,0,1],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":4,"defect_degree":4,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[0,-1,0,1],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":4,"defect_degree":4,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[1,-1,0,1],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":4,"defect_degree":4,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[-1,0,0,1],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":4,"defect_degree":4,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[0,0,0,1],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":4,"defect_degree":4,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[1,0,0,1],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":4,"defect_degree":4,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[-1,1,0,1],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":4,"defect_degree":4,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[0,1,0,1],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":4,"defect_degree":4,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[1,1,0,1],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":4,"defect_degree":4,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[-1,-1,1,1],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":4,"defect_degree":4,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[0,-1,1,1],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":4,"defect_degree":4,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[1,-1,1,1],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":4,"defect_degree":4,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[-1,0,1,1],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":4,"defect_degree":4,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[0,0,1,1],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":4,"defect_degree":4,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[1,0,1,1],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":4,"defect_degree":4,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[-1,1,1,1],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":4,"defect_degree":4,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[0,1,1,1],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":4,"defect_degree":4,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":0,"polynomial":[1,1,1,1],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":4,"defect_degree":4,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+request {"kind":1,"polynomial":[1,0,0,0],"u":-2,"v":-2,"w":-2}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[2,2,1],"schur_residual":-10}
+request {"kind":1,"polynomial":[1,0,0,0],"u":-2,"v":-2,"w":-1}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[2,2,1],"schur_residual":-9}
+request {"kind":1,"polynomial":[1,0,0,0],"u":-2,"v":-2,"w":0}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[2,2,1],"schur_residual":-8}
+request {"kind":1,"polynomial":[1,0,0,0],"u":-2,"v":-2,"w":1}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[2,2,1],"schur_residual":-7}
+request {"kind":1,"polynomial":[1,0,0,0],"u":-2,"v":-2,"w":2}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[2,2,1],"schur_residual":-6}
+request {"kind":1,"polynomial":[1,0,0,0],"u":-2,"v":-1,"w":-2}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[2,1,1],"schur_residual":-7}
+request {"kind":1,"polynomial":[1,0,0,0],"u":-2,"v":-1,"w":-1}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[2,1,1],"schur_residual":-6}
+request {"kind":1,"polynomial":[1,0,0,0],"u":-2,"v":-1,"w":0}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[2,1,1],"schur_residual":-5}
+request {"kind":1,"polynomial":[1,0,0,0],"u":-2,"v":-1,"w":1}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[2,1,1],"schur_residual":-4}
+request {"kind":1,"polynomial":[1,0,0,0],"u":-2,"v":-1,"w":2}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[2,1,1],"schur_residual":-3}
+request {"kind":1,"polynomial":[1,0,0,0],"u":-2,"v":0,"w":-2}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[2,0,1],"schur_residual":-6}
+request {"kind":1,"polynomial":[1,0,0,0],"u":-2,"v":0,"w":-1}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[2,0,1],"schur_residual":-5}
+request {"kind":1,"polynomial":[1,0,0,0],"u":-2,"v":0,"w":0}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[2,0,1],"schur_residual":-4}
+request {"kind":1,"polynomial":[1,0,0,0],"u":-2,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[2,0,1],"schur_residual":-3}
+request {"kind":1,"polynomial":[1,0,0,0],"u":-2,"v":0,"w":2}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[2,0,1],"schur_residual":-2}
+request {"kind":1,"polynomial":[1,0,0,0],"u":-2,"v":1,"w":-2}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[2,-1,1],"schur_residual":-7}
+request {"kind":1,"polynomial":[1,0,0,0],"u":-2,"v":1,"w":-1}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[2,-1,1],"schur_residual":-6}
+request {"kind":1,"polynomial":[1,0,0,0],"u":-2,"v":1,"w":0}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[2,-1,1],"schur_residual":-5}
+request {"kind":1,"polynomial":[1,0,0,0],"u":-2,"v":1,"w":1}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[2,-1,1],"schur_residual":-4}
+request {"kind":1,"polynomial":[1,0,0,0],"u":-2,"v":1,"w":2}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[2,-1,1],"schur_residual":-3}
+request {"kind":1,"polynomial":[1,0,0,0],"u":-2,"v":2,"w":-2}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[2,-2,1],"schur_residual":-10}
+request {"kind":1,"polynomial":[1,0,0,0],"u":-2,"v":2,"w":-1}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[2,-2,1],"schur_residual":-9}
+request {"kind":1,"polynomial":[1,0,0,0],"u":-2,"v":2,"w":0}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[2,-2,1],"schur_residual":-8}
+request {"kind":1,"polynomial":[1,0,0,0],"u":-2,"v":2,"w":1}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[2,-2,1],"schur_residual":-7}
+request {"kind":1,"polynomial":[1,0,0,0],"u":-2,"v":2,"w":2}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[2,-2,1],"schur_residual":-6}
+request {"kind":1,"polynomial":[1,0,0,0],"u":-1,"v":-2,"w":-2}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[1,2,1],"schur_residual":-7}
+request {"kind":1,"polynomial":[1,0,0,0],"u":-1,"v":-2,"w":-1}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[1,2,1],"schur_residual":-6}
+request {"kind":1,"polynomial":[1,0,0,0],"u":-1,"v":-2,"w":0}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[1,2,1],"schur_residual":-5}
+request {"kind":1,"polynomial":[1,0,0,0],"u":-1,"v":-2,"w":1}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[1,2,1],"schur_residual":-4}
+request {"kind":1,"polynomial":[1,0,0,0],"u":-1,"v":-2,"w":2}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[1,2,1],"schur_residual":-3}
+request {"kind":1,"polynomial":[1,0,0,0],"u":-1,"v":-1,"w":-2}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[1,1,1],"schur_residual":-4}
+request {"kind":1,"polynomial":[1,0,0,0],"u":-1,"v":-1,"w":-1}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[1,1,1],"schur_residual":-3}
+request {"kind":1,"polynomial":[1,0,0,0],"u":-1,"v":-1,"w":0}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[1,1,1],"schur_residual":-2}
+request {"kind":1,"polynomial":[1,0,0,0],"u":-1,"v":-1,"w":1}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[1,1,1],"schur_residual":-1}
+request {"kind":1,"polynomial":[1,0,0,0],"u":-1,"v":-1,"w":2}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":2,"hidden_direction":[1,1,1],"schur_residual":0}
+request {"kind":1,"polynomial":[1,0,0,0],"u":-1,"v":0,"w":-2}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[1,0,1],"schur_residual":-3}
+request {"kind":1,"polynomial":[1,0,0,0],"u":-1,"v":0,"w":-1}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[1,0,1],"schur_residual":-2}
+request {"kind":1,"polynomial":[1,0,0,0],"u":-1,"v":0,"w":0}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[1,0,1],"schur_residual":-1}
+request {"kind":1,"polynomial":[1,0,0,0],"u":-1,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":2,"hidden_direction":[1,0,1],"schur_residual":0}
+request {"kind":1,"polynomial":[1,0,0,0],"u":-1,"v":0,"w":2}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[1,0,1],"schur_residual":1}
+request {"kind":1,"polynomial":[1,0,0,0],"u":-1,"v":1,"w":-2}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[1,-1,1],"schur_residual":-4}
+request {"kind":1,"polynomial":[1,0,0,0],"u":-1,"v":1,"w":-1}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[1,-1,1],"schur_residual":-3}
+request {"kind":1,"polynomial":[1,0,0,0],"u":-1,"v":1,"w":0}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[1,-1,1],"schur_residual":-2}
+request {"kind":1,"polynomial":[1,0,0,0],"u":-1,"v":1,"w":1}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[1,-1,1],"schur_residual":-1}
+request {"kind":1,"polynomial":[1,0,0,0],"u":-1,"v":1,"w":2}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":2,"hidden_direction":[1,-1,1],"schur_residual":0}
+request {"kind":1,"polynomial":[1,0,0,0],"u":-1,"v":2,"w":-2}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[1,-2,1],"schur_residual":-7}
+request {"kind":1,"polynomial":[1,0,0,0],"u":-1,"v":2,"w":-1}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[1,-2,1],"schur_residual":-6}
+request {"kind":1,"polynomial":[1,0,0,0],"u":-1,"v":2,"w":0}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[1,-2,1],"schur_residual":-5}
+request {"kind":1,"polynomial":[1,0,0,0],"u":-1,"v":2,"w":1}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[1,-2,1],"schur_residual":-4}
+request {"kind":1,"polynomial":[1,0,0,0],"u":-1,"v":2,"w":2}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[1,-2,1],"schur_residual":-3}
+request {"kind":1,"polynomial":[1,0,0,0],"u":0,"v":-2,"w":-2}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[0,2,1],"schur_residual":-6}
+request {"kind":1,"polynomial":[1,0,0,0],"u":0,"v":-2,"w":-1}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[0,2,1],"schur_residual":-5}
+request {"kind":1,"polynomial":[1,0,0,0],"u":0,"v":-2,"w":0}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[0,2,1],"schur_residual":-4}
+request {"kind":1,"polynomial":[1,0,0,0],"u":0,"v":-2,"w":1}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[0,2,1],"schur_residual":-3}
+request {"kind":1,"polynomial":[1,0,0,0],"u":0,"v":-2,"w":2}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[0,2,1],"schur_residual":-2}
+request {"kind":1,"polynomial":[1,0,0,0],"u":0,"v":-1,"w":-2}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[0,1,1],"schur_residual":-3}
+request {"kind":1,"polynomial":[1,0,0,0],"u":0,"v":-1,"w":-1}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[0,1,1],"schur_residual":-2}
+request {"kind":1,"polynomial":[1,0,0,0],"u":0,"v":-1,"w":0}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[0,1,1],"schur_residual":-1}
+request {"kind":1,"polynomial":[1,0,0,0],"u":0,"v":-1,"w":1}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":2,"hidden_direction":[0,1,1],"schur_residual":0}
+request {"kind":1,"polynomial":[1,0,0,0],"u":0,"v":-1,"w":2}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[0,1,1],"schur_residual":1}
+request {"kind":1,"polynomial":[1,0,0,0],"u":0,"v":0,"w":-2}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[0,0,1],"schur_residual":-2}
+request {"kind":1,"polynomial":[1,0,0,0],"u":0,"v":0,"w":-1}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[0,0,1],"schur_residual":-1}
+request {"kind":1,"polynomial":[1,0,0,0],"u":0,"v":0,"w":0}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":2,"hidden_direction":[0,0,1],"schur_residual":0}
+request {"kind":1,"polynomial":[1,0,0,0],"u":0,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[0,0,1],"schur_residual":1}
+request {"kind":1,"polynomial":[1,0,0,0],"u":0,"v":0,"w":2}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[0,0,1],"schur_residual":2}
+request {"kind":1,"polynomial":[1,0,0,0],"u":0,"v":1,"w":-2}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[0,-1,1],"schur_residual":-3}
+request {"kind":1,"polynomial":[1,0,0,0],"u":0,"v":1,"w":-1}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[0,-1,1],"schur_residual":-2}
+request {"kind":1,"polynomial":[1,0,0,0],"u":0,"v":1,"w":0}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[0,-1,1],"schur_residual":-1}
+request {"kind":1,"polynomial":[1,0,0,0],"u":0,"v":1,"w":1}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":2,"hidden_direction":[0,-1,1],"schur_residual":0}
+request {"kind":1,"polynomial":[1,0,0,0],"u":0,"v":1,"w":2}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[0,-1,1],"schur_residual":1}
+request {"kind":1,"polynomial":[1,0,0,0],"u":0,"v":2,"w":-2}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[0,-2,1],"schur_residual":-6}
+request {"kind":1,"polynomial":[1,0,0,0],"u":0,"v":2,"w":-1}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[0,-2,1],"schur_residual":-5}
+request {"kind":1,"polynomial":[1,0,0,0],"u":0,"v":2,"w":0}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[0,-2,1],"schur_residual":-4}
+request {"kind":1,"polynomial":[1,0,0,0],"u":0,"v":2,"w":1}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[0,-2,1],"schur_residual":-3}
+request {"kind":1,"polynomial":[1,0,0,0],"u":0,"v":2,"w":2}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[0,-2,1],"schur_residual":-2}
+request {"kind":1,"polynomial":[1,0,0,0],"u":1,"v":-2,"w":-2}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[-1,2,1],"schur_residual":-7}
+request {"kind":1,"polynomial":[1,0,0,0],"u":1,"v":-2,"w":-1}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[-1,2,1],"schur_residual":-6}
+request {"kind":1,"polynomial":[1,0,0,0],"u":1,"v":-2,"w":0}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[-1,2,1],"schur_residual":-5}
+request {"kind":1,"polynomial":[1,0,0,0],"u":1,"v":-2,"w":1}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[-1,2,1],"schur_residual":-4}
+request {"kind":1,"polynomial":[1,0,0,0],"u":1,"v":-2,"w":2}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[-1,2,1],"schur_residual":-3}
+request {"kind":1,"polynomial":[1,0,0,0],"u":1,"v":-1,"w":-2}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[-1,1,1],"schur_residual":-4}
+request {"kind":1,"polynomial":[1,0,0,0],"u":1,"v":-1,"w":-1}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[-1,1,1],"schur_residual":-3}
+request {"kind":1,"polynomial":[1,0,0,0],"u":1,"v":-1,"w":0}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[-1,1,1],"schur_residual":-2}
+request {"kind":1,"polynomial":[1,0,0,0],"u":1,"v":-1,"w":1}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[-1,1,1],"schur_residual":-1}
+request {"kind":1,"polynomial":[1,0,0,0],"u":1,"v":-1,"w":2}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":2,"hidden_direction":[-1,1,1],"schur_residual":0}
+request {"kind":1,"polynomial":[1,0,0,0],"u":1,"v":0,"w":-2}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[-1,0,1],"schur_residual":-3}
+request {"kind":1,"polynomial":[1,0,0,0],"u":1,"v":0,"w":-1}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[-1,0,1],"schur_residual":-2}
+request {"kind":1,"polynomial":[1,0,0,0],"u":1,"v":0,"w":0}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[-1,0,1],"schur_residual":-1}
+request {"kind":1,"polynomial":[1,0,0,0],"u":1,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":2,"hidden_direction":[-1,0,1],"schur_residual":0}
+request {"kind":1,"polynomial":[1,0,0,0],"u":1,"v":0,"w":2}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[-1,0,1],"schur_residual":1}
+request {"kind":1,"polynomial":[1,0,0,0],"u":1,"v":1,"w":-2}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[-1,-1,1],"schur_residual":-4}
+request {"kind":1,"polynomial":[1,0,0,0],"u":1,"v":1,"w":-1}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[-1,-1,1],"schur_residual":-3}
+request {"kind":1,"polynomial":[1,0,0,0],"u":1,"v":1,"w":0}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[-1,-1,1],"schur_residual":-2}
+request {"kind":1,"polynomial":[1,0,0,0],"u":1,"v":1,"w":1}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[-1,-1,1],"schur_residual":-1}
+request {"kind":1,"polynomial":[1,0,0,0],"u":1,"v":1,"w":2}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":2,"hidden_direction":[-1,-1,1],"schur_residual":0}
+request {"kind":1,"polynomial":[1,0,0,0],"u":1,"v":2,"w":-2}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[-1,-2,1],"schur_residual":-7}
+request {"kind":1,"polynomial":[1,0,0,0],"u":1,"v":2,"w":-1}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[-1,-2,1],"schur_residual":-6}
+request {"kind":1,"polynomial":[1,0,0,0],"u":1,"v":2,"w":0}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[-1,-2,1],"schur_residual":-5}
+request {"kind":1,"polynomial":[1,0,0,0],"u":1,"v":2,"w":1}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[-1,-2,1],"schur_residual":-4}
+request {"kind":1,"polynomial":[1,0,0,0],"u":1,"v":2,"w":2}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[-1,-2,1],"schur_residual":-3}
+request {"kind":1,"polynomial":[1,0,0,0],"u":2,"v":-2,"w":-2}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[-2,2,1],"schur_residual":-10}
+request {"kind":1,"polynomial":[1,0,0,0],"u":2,"v":-2,"w":-1}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[-2,2,1],"schur_residual":-9}
+request {"kind":1,"polynomial":[1,0,0,0],"u":2,"v":-2,"w":0}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[-2,2,1],"schur_residual":-8}
+request {"kind":1,"polynomial":[1,0,0,0],"u":2,"v":-2,"w":1}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[-2,2,1],"schur_residual":-7}
+request {"kind":1,"polynomial":[1,0,0,0],"u":2,"v":-2,"w":2}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[-2,2,1],"schur_residual":-6}
+request {"kind":1,"polynomial":[1,0,0,0],"u":2,"v":-1,"w":-2}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[-2,1,1],"schur_residual":-7}
+request {"kind":1,"polynomial":[1,0,0,0],"u":2,"v":-1,"w":-1}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[-2,1,1],"schur_residual":-6}
+request {"kind":1,"polynomial":[1,0,0,0],"u":2,"v":-1,"w":0}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[-2,1,1],"schur_residual":-5}
+request {"kind":1,"polynomial":[1,0,0,0],"u":2,"v":-1,"w":1}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[-2,1,1],"schur_residual":-4}
+request {"kind":1,"polynomial":[1,0,0,0],"u":2,"v":-1,"w":2}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[-2,1,1],"schur_residual":-3}
+request {"kind":1,"polynomial":[1,0,0,0],"u":2,"v":0,"w":-2}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[-2,0,1],"schur_residual":-6}
+request {"kind":1,"polynomial":[1,0,0,0],"u":2,"v":0,"w":-1}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[-2,0,1],"schur_residual":-5}
+request {"kind":1,"polynomial":[1,0,0,0],"u":2,"v":0,"w":0}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[-2,0,1],"schur_residual":-4}
+request {"kind":1,"polynomial":[1,0,0,0],"u":2,"v":0,"w":1}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[-2,0,1],"schur_residual":-3}
+request {"kind":1,"polynomial":[1,0,0,0],"u":2,"v":0,"w":2}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[-2,0,1],"schur_residual":-2}
+request {"kind":1,"polynomial":[1,0,0,0],"u":2,"v":1,"w":-2}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[-2,-1,1],"schur_residual":-7}
+request {"kind":1,"polynomial":[1,0,0,0],"u":2,"v":1,"w":-1}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[-2,-1,1],"schur_residual":-6}
+request {"kind":1,"polynomial":[1,0,0,0],"u":2,"v":1,"w":0}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[-2,-1,1],"schur_residual":-5}
+request {"kind":1,"polynomial":[1,0,0,0],"u":2,"v":1,"w":1}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[-2,-1,1],"schur_residual":-4}
+request {"kind":1,"polynomial":[1,0,0,0],"u":2,"v":1,"w":2}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[-2,-1,1],"schur_residual":-3}
+request {"kind":1,"polynomial":[1,0,0,0],"u":2,"v":2,"w":-2}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[-2,-2,1],"schur_residual":-10}
+request {"kind":1,"polynomial":[1,0,0,0],"u":2,"v":2,"w":-1}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[-2,-2,1],"schur_residual":-9}
+request {"kind":1,"polynomial":[1,0,0,0],"u":2,"v":2,"w":0}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[-2,-2,1],"schur_residual":-8}
+request {"kind":1,"polynomial":[1,0,0,0],"u":2,"v":2,"w":1}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[-2,-2,1],"schur_residual":-7}
+request {"kind":1,"polynomial":[1,0,0,0],"u":2,"v":2,"w":2}
+case {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[-2,-2,1],"schur_residual":-6}
+witness {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+RecipeEvidence of logarithm_recipe = { additive: true, defect_degree: 0, defect_coefficient: 0, generic_differential_rank: 1, hiddâ€¦   (set in frame 0)
+
+  <- resolver `ExplainRecipe`
+     intent: RecipeChecked
+     key: logarithm_recipe
+
+     <- proposal RecipeChecked { target: logarithm_recipe, request: Recipe { kind: 0, polynomial: [1, 0, 0, 0], uâ€¦
+        proposed by law `SubmitRecipe` at line 46
+
+     settlement origin:
+  <- by top-level code
+RecipeEvidence.hidden_direction of entity 1 = [1, -1, 0]
+RecipeEvidence of logarithm_recipe = { additive: true, defect_degree: 0, defect_coefficient: 0, generic_differential_rank: 1, hiddâ€¦   (set in frame 0)
+
+  <- resolver `ExplainRecipe`
+     intent: RecipeChecked
+     key: logarithm_recipe
+
+     <- proposal RecipeChecked { target: logarithm_recipe, request: Recipe { kind: 0, polynomial: [1, 0, 0, 0], uâ€¦
+        proposed by law `SubmitRecipe` at line 46
+
+     settlement origin:
+  <- by top-level code
+RecipeEvidence.defect_coefficient of entity 1 = 0
+RecipeEvidence of logarithm_recipe = { additive: true, defect_degree: 0, defect_coefficient: 0, generic_differential_rank: 1, hiddâ€¦   (set in frame 0)
+
+  <- resolver `ExplainRecipe`
+     intent: RecipeChecked
+     key: logarithm_recipe
+
+     <- proposal RecipeChecked { target: logarithm_recipe, request: Recipe { kind: 0, polynomial: [1, 0, 0, 0], uâ€¦
+        proposed by law `SubmitRecipe` at line 46
+
+     settlement origin:
+  <- by top-level code
+witness {"actual_arithmetic_construction":false,"additive":false,"defect_coefficient":2,"defect_degree":2,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":1,"hidden_direction":[1,-1,0],"schur_residual":0}
+RecipeEvidence of nonlinear_repair = { additive: false, defect_degree: 2, defect_coefficient: 2, generic_differential_rank: 1, hidâ€¦   (set in frame 0)
+
+  <- resolver `ExplainRecipe`
+     intent: RecipeChecked
+     key: nonlinear_repair
+
+     <- proposal RecipeChecked { target: nonlinear_repair, request: Recipe { kind: 0, polynomial: [0, 1, 0, 0], uâ€¦
+        proposed by law `SubmitRecipe` at line 46
+
+     settlement origin:
+  <- by top-level code
+RecipeEvidence.hidden_direction of entity 2 = [1, -1, 0]
+RecipeEvidence of nonlinear_repair = { additive: false, defect_degree: 2, defect_coefficient: 2, generic_differential_rank: 1, hidâ€¦   (set in frame 0)
+
+  <- resolver `ExplainRecipe`
+     intent: RecipeChecked
+     key: nonlinear_repair
+
+     <- proposal RecipeChecked { target: nonlinear_repair, request: Recipe { kind: 0, polynomial: [0, 1, 0, 0], uâ€¦
+        proposed by law `SubmitRecipe` at line 46
+
+     settlement origin:
+  <- by top-level code
+RecipeEvidence.defect_coefficient of entity 2 = 2
+RecipeEvidence of nonlinear_repair = { additive: false, defect_degree: 2, defect_coefficient: 2, generic_differential_rank: 1, hidâ€¦   (set in frame 0)
+
+  <- resolver `ExplainRecipe`
+     intent: RecipeChecked
+     key: nonlinear_repair
+
+     <- proposal RecipeChecked { target: nonlinear_repair, request: Recipe { kind: 0, polynomial: [0, 1, 0, 0], uâ€¦
+        proposed by law `SubmitRecipe` at line 46
+
+     settlement origin:
+  <- by top-level code
+witness {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":true,"generic_differential_rank":2,"hidden_direction":[0,0,1],"schur_residual":1}
+RecipeEvidence of pairing_recipe = { additive: true, defect_degree: 0, defect_coefficient: 0, generic_differential_rank: 2, hiddâ€¦   (set in frame 0)
+
+  <- resolver `ExplainRecipe`
+     intent: RecipeChecked
+     key: pairing_recipe
+
+     <- proposal RecipeChecked { target: pairing_recipe, request: Recipe { kind: 1, polynomial: [1, 0, 0, 0], u: â€¦
+        proposed by law `SubmitRecipe` at line 46
+
+     settlement origin:
+  <- by top-level code
+RecipeEvidence.hidden_direction of entity 3 = [0, 0, 1]
+RecipeEvidence of pairing_recipe = { additive: true, defect_degree: 0, defect_coefficient: 0, generic_differential_rank: 2, hiddâ€¦   (set in frame 0)
+
+  <- resolver `ExplainRecipe`
+     intent: RecipeChecked
+     key: pairing_recipe
+
+     <- proposal RecipeChecked { target: pairing_recipe, request: Recipe { kind: 1, polynomial: [1, 0, 0, 0], u: â€¦
+        proposed by law `SubmitRecipe` at line 46
+
+     settlement origin:
+  <- by top-level code
+RecipeEvidence.defect_coefficient of entity 3 = 0
+RecipeEvidence of pairing_recipe = { additive: true, defect_degree: 0, defect_coefficient: 0, generic_differential_rank: 2, hiddâ€¦   (set in frame 0)
+
+  <- resolver `ExplainRecipe`
+     intent: RecipeChecked
+     key: pairing_recipe
+
+     <- proposal RecipeChecked { target: pairing_recipe, request: Recipe { kind: 1, polynomial: [1, 0, 0, 0], u: â€¦
+        proposed by law `SubmitRecipe` at line 46
+
+     settlement origin:
+  <- by top-level code
+witness {"actual_arithmetic_construction":false,"additive":true,"defect_coefficient":0,"defect_degree":0,"full_map_injective":false,"full_pairing_nondegenerate":false,"generic_differential_rank":2,"hidden_direction":[-1,-2,1],"schur_residual":0}
+RecipeEvidence of radical_recipe = { additive: true, defect_degree: 0, defect_coefficient: 0, generic_differential_rank: 2, hiddâ€¦   (set in frame 0)
+
+  <- resolver `ExplainRecipe`
+     intent: RecipeChecked
+     key: radical_recipe
+
+     <- proposal RecipeChecked { target: radical_recipe, request: Recipe { kind: 1, polynomial: [1, 0, 0, 0], u: â€¦
+        proposed by law `SubmitRecipe` at line 46
+
+     settlement origin:
+  <- by top-level code
+RecipeEvidence.hidden_direction of entity 4 = [-1, -2, 1]
+RecipeEvidence of radical_recipe = { additive: true, defect_degree: 0, defect_coefficient: 0, generic_differential_rank: 2, hiddâ€¦   (set in frame 0)
+
+  <- resolver `ExplainRecipe`
+     intent: RecipeChecked
+     key: radical_recipe
+
+     <- proposal RecipeChecked { target: radical_recipe, request: Recipe { kind: 1, polynomial: [1, 0, 0, 0], u: â€¦
+        proposed by law `SubmitRecipe` at line 46
+
+     settlement origin:
+  <- by top-level code
+RecipeEvidence.defect_coefficient of entity 4 = 0
+RecipeEvidence of radical_recipe = { additive: true, defect_degree: 0, defect_coefficient: 0, generic_differential_rank: 2, hiddâ€¦   (set in frame 0)
+
+  <- resolver `ExplainRecipe`
+     intent: RecipeChecked
+     key: radical_recipe
+
+     <- proposal RecipeChecked { target: radical_recipe, request: Recipe { kind: 1, polynomial: [1, 0, 0, 0], u: â€¦
+        proposed by law `SubmitRecipe` at line 46
+
+     settlement origin:
+  <- by top-level code

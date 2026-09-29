@@ -1,0 +1,253 @@
+{
+  "format": "rad-collatz-ladder-v1",
+  "completed_utc": "2026-09-29T09:35:05.344478+00:00",
+  "sources": {
+    "ladder/accept.py": "b3e3d56e82860310479e0e50eb2c0a9a612ed7cea266f8bd719b270dd677e5fe",
+    "ladder/ladder.rad": "9473e889ea3d0440095c29a73396cd3bdc7b879ef98021045036500504bcc9bd",
+    "ladder/main.rad": "95b3c6f98dce45b67ed017b401ae2a3144587b88f503c78f346e3f7c8f980560",
+    "ladder/PROOF.md": "53627b2361964fc53fdc0fdcfd0905277c9204a8cebf014bf2e1dd2a670d8efd",
+    "ladder/README.md": "01c78876c5acca70243c27b0a06ce21b032bf4130910b0434b8b3cfbc6106363",
+    "ladder/records.py": "4b83b023501a2e5f8b1149abe3be73eddcb8bc3f363f4033cb1fa1b8becd1411",
+    "ladder/reference.py": "6a185e4b554261063cffdfc0795dca20575457a98385fb533aac84988ca15099",
+    "ladder/test_verify.py": "7599324ed714b2513178565b22e248af19afd0b2a83d076971c2763e4ef8f6fe",
+    "ladder/verify.py": "2525e8ad6703a4771fa54bde255dfeed186113efaa26e204e6dc22a6f4c03675"
+  },
+  "artifacts": {
+    "replay-1.stderr.txt": "9c0f3973b90ddcb7dfb4de25c145ee601f2218d5ee6003ec453d52989455694a",
+    "replay-1.txt": "9cfc966a3323a18a318a17dc5d0235fd778b05f3801c27487992af446f2e967d",
+    "replay-4.stderr.txt": "9c0f3973b90ddcb7dfb4de25c145ee601f2218d5ee6003ec453d52989455694a",
+    "replay-4.txt": "9cfc966a3323a18a318a17dc5d0235fd778b05f3801c27487992af446f2e967d",
+    "run-1.radr": "02aff4d0adc7fdd5391780b6eae1eb3c93f02ad33435e75529322fa546600208",
+    "run-1.stderr.txt": "3df07cb0d3248857cfb9d362b7a21783a3dd3639c17f4e18542350387290bf2b",
+    "run-1.txt": "9cfc966a3323a18a318a17dc5d0235fd778b05f3801c27487992af446f2e967d",
+    "run-4.radr": "be268451b8fe5bf8f8df4934b830458f7aa85f8812a6883347a28ab819db7f37",
+    "run-4.stderr.txt": "de447bafb801771a5e82be4c7ee6accf22c3e81337dd04c377413065cabb5a17",
+    "run-4.txt": "9cfc966a3323a18a318a17dc5d0235fd778b05f3801c27487992af446f2e967d",
+    "tests.stderr.txt": "921bcc10e204de3cc4118e235239857546fe210acfef928ee6cbbc9224b48d87",
+    "tests.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "binary_sha256": "4997366f760995e10d4692b7feb76457171778a80207c489fd6979aaf94ba68d",
+  "commands": [
+    {
+      "command": [
+        "H:\\Projects\\rad-lang\\target\\release\\rad.exe",
+        "H:\\Projects\\rad-lang\\projects\\dogfood\\collatz-barrier\\ladder\\main.rad",
+        "--strict-types",
+        "--deny-warnings",
+        "--experimental-laws",
+        "--record",
+        "H:\\Projects\\rad-lang\\projects\\dogfood\\collatz-barrier\\ladder\\out\\run-1.radr"
+      ],
+      "workers": 1,
+      "elapsed_ns": 73939392000,
+      "stdout_sha256": "9cfc966a3323a18a318a17dc5d0235fd778b05f3801c27487992af446f2e967d",
+      "stderr_sha256": "3df07cb0d3248857cfb9d362b7a21783a3dd3639c17f4e18542350387290bf2b"
+    },
+    {
+      "command": [
+        "H:\\Projects\\rad-lang\\target\\release\\rad.exe",
+        "replay",
+        "H:\\Projects\\rad-lang\\projects\\dogfood\\collatz-barrier\\ladder\\out\\run-1.radr"
+      ],
+      "workers": 4,
+      "elapsed_ns": 39445198600,
+      "stdout_sha256": "9cfc966a3323a18a318a17dc5d0235fd778b05f3801c27487992af446f2e967d",
+      "stderr_sha256": "9c0f3973b90ddcb7dfb4de25c145ee601f2218d5ee6003ec453d52989455694a"
+    },
+    {
+      "command": [
+        "H:\\Projects\\rad-lang\\target\\release\\rad.exe",
+        "H:\\Projects\\rad-lang\\projects\\dogfood\\collatz-barrier\\ladder\\main.rad",
+        "--strict-types",
+        "--deny-warnings",
+        "--experimental-laws",
+        "--record",
+        "H:\\Projects\\rad-lang\\projects\\dogfood\\collatz-barrier\\ladder\\out\\run-4.radr"
+      ],
+      "workers": 4,
+      "elapsed_ns": 39169698300,
+      "stdout_sha256": "9cfc966a3323a18a318a17dc5d0235fd778b05f3801c27487992af446f2e967d",
+      "stderr_sha256": "de447bafb801771a5e82be4c7ee6accf22c3e81337dd04c377413065cabb5a17"
+    },
+    {
+      "command": [
+        "H:\\Projects\\rad-lang\\target\\release\\rad.exe",
+        "replay",
+        "H:\\Projects\\rad-lang\\projects\\dogfood\\collatz-barrier\\ladder\\out\\run-4.radr"
+      ],
+      "workers": 1,
+      "elapsed_ns": 98899788400,
+      "stdout_sha256": "9cfc966a3323a18a318a17dc5d0235fd778b05f3801c27487992af446f2e967d",
+      "stderr_sha256": "9c0f3973b90ddcb7dfb4de25c145ee601f2218d5ee6003ec453d52989455694a"
+    },
+    {
+      "command": [
+        "C:\\Program Files\\Python312\\python.exe",
+        "-O",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "H:\\Projects\\rad-lang\\projects\\dogfood\\collatz-barrier\\ladder",
+        "-p",
+        "test_verify.py"
+      ],
+      "workers": 1,
+      "elapsed_ns": 25008670300,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_sha256": "921bcc10e204de3cc4118e235239857546fe210acfef928ee6cbbc9224b48d87"
+    }
+  ],
+  "results": {
+    "theorem": "For every s >= s* and q >= 0: C_q/3^q <= s q + max_v (C_v/3^v - s v), with equality at a vertex.",
+    "s_star": "756421/3145728",
+    "s_star_decimal": "0.240459760030",
+    "asymptotic_slope": "1/(6 ln 2) = 0.240449173481",
+    "vertices": [
+      0,
+      1,
+      3,
+      15,
+      27,
+      68,
+      80,
+      121,
+      133,
+      174,
+      839,
+      1504,
+      2169,
+      2834,
+      3499,
+      4164,
+      4829,
+      5494,
+      6159,
+      6824,
+      7489
+    ],
+    "gaps": [
+      1,
+      2,
+      12,
+      12,
+      41,
+      12,
+      41,
+      12,
+      41,
+      665,
+      665,
+      665,
+      665,
+      665,
+      665,
+      665,
+      665,
+      665,
+      665,
+      665
+    ],
+    "edge_slopes": [
+      "0.333333333333",
+      "0.259259259259",
+      "0.245025585108",
+      "0.241727631035",
+      "0.241602349095",
+      "0.241223398379",
+      "0.241098377771",
+      "0.240720217528",
+      "0.240595457707",
+      "0.240566507529",
+      "0.240556006041",
+      "0.240545505012",
+      "0.240535004441",
+      "0.240524504328",
+      "0.240514004674",
+      "0.240503505478",
+      "0.240493006741",
+      "0.240482508462",
+      "0.240472010641",
+      "0.240461513278"
+    ],
+    "block": 15601,
+    "block_margin": 0.14312740151581238,
+    "block_excess_upper": 2.3189811908032425,
+    "tail_start": 14943,
+    "exact_bootstrap_margin": 0.01881859117710837,
+    "convergent_probes": [
+      {
+        "block": 12,
+        "max_over_sigma_bound": 1.0353418709069862
+      },
+      {
+        "block": 41,
+        "max_over_sigma_bound": 1.0140252614902703
+      },
+      {
+        "block": 53,
+        "max_over_sigma_bound": 1.0075374547212144
+      },
+      {
+        "block": 306,
+        "max_over_sigma_bound": 1.0015975598029214
+      },
+      {
+        "block": 665,
+        "max_over_sigma_bound": 1.0004990163311722
+      }
+    ],
+    "sharp_intercepts": [
+      {
+        "slope": "1/3",
+        "slope_decimal": "0.3333333333",
+        "attained_at_q": 1,
+        "intercept": "0",
+        "intercept_decimal": "0.000000000000"
+      },
+      {
+        "slope": "1/4",
+        "slope_decimal": "0.2500000000",
+        "attained_at_q": 3,
+        "intercept": "11/108",
+        "intercept_decimal": "0.101851851852"
+      },
+      {
+        "slope": "49/200",
+        "slope_decimal": "0.2450000000",
+        "attained_at_q": 15,
+        "intercept": null,
+        "intercept_decimal": "0.117158873146"
+      },
+      {
+        "slope": "97/400",
+        "slope_decimal": "0.2425000000",
+        "attained_at_q": 15,
+        "intercept": null,
+        "intercept_decimal": "0.154658873146"
+      },
+      {
+        "slope": "241/1000",
+        "slope_decimal": "0.2410000000",
+        "attained_at_q": 121,
+        "intercept": null,
+        "intercept_decimal": "0.217301027607"
+      },
+      {
+        "slope": "481/2000",
+        "slope_decimal": "0.2405000000",
+        "attained_at_q": 4829,
+        "intercept": null,
+        "intercept_decimal": "0.447307342661"
+      },
+      {
+        "slope": "756421/3145728",
+        "slope_decimal": "0.2404597600",
+        "attained_at_q": 7489,
+        "intercept": null,
+        "intercept_decimal": "0.688175492722"
+      }
+    ]
+  },
+  "scope": "Finite exact certificates plus a written all-size proof of a sharp envelope family; no Collatz solution or historical-priority claim."
+}

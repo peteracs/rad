@@ -1,0 +1,101 @@
+// Epoch map: from x run exactly L(x) = bitlength(x) shortcut steps.
+// Within an epoch the parity word is a bijective scrambling of x's L bits
+// (Terras), so over all L-bit x the odd count q is exactly Binomial(L, 1/2).
+pub pure fn tstep(x: int) -> int { return if x % 2 == 0 { int_div(x, 2) } else { int_div(3 * x + 1, 2) } }
+
+pub pure fn bitlen(x: int) -> int {
+    let mut b: int = 0
+    while (1 << b) <= x { b = b + 1 }
+    return b
+}
+
+pub struct EpochStep { odd: int = 0, length: int = 0, next: int = 0 }
+
+pub pure fn epoch(x: int) -> EpochStep {
+    let l: int = bitlen(x)
+    let mut y: int = x
+    let mut q: int = 0
+    for _ in range(l) { if y % 2 == 1 { q = q + 1 } y = tstep(y) }
+    return EpochStep { odd: q, length: l, next: y }
+}
+
+pub struct EpochStats {
+    bits: int = 0
+    samples: int = 0
+    corr_x1000: int = 0                     // Pearson correlation of densities d1, d2
+    mean_next_after_growth_x1000: int = 0   // mean d2 when epoch 1 expanded (d1 > 0.631)
+    mean_next_after_shrink_x1000: int = 0   // mean d2 when epoch 1 contracted
+    both_expand: int = 0                    // count with d1 > 0.631 and d2 > 0.631
+    expand_first: int = 0                   // count with d1 > 0.631
+    max_d2_after_d1_ge_800: int = 0         // largest d2 (x1000) after a strongly expanding epoch
+}
+
+pub struct EpochPair { real: EpochStats = EpochStats {}, null: EpochStats = EpochStats {} }
+
+// Densities in thousandths; 631 is the growth threshold log_3 2.
+pub pure fn summarize(bits: int, pa: list<int>, pb: list<int>) -> EpochStats {
+    let n: int = len(pa)
+    let mut s1: int = 0
+    let mut s2: int = 0
+    for i in range(n) { s1 = s1 + pa[i] s2 = s2 + pb[i] }
+    let m1: int = int_div(s1, n)
+    let m2: int = int_div(s2, n)
+    let mut cov: int = 0
+    let mut v1: int = 0
+    let mut v2: int = 0
+    let mut grow_sum: int = 0
+    let mut grow_n: int = 0
+    let mut shrink_sum: int = 0
+    let mut shrink_n: int = 0
+    let mut both: int = 0
+    let mut max_after: int = 0
+    for i in range(n) {
+        let a: int = pa[i] - m1
+        let b: int = pb[i] - m2
+        cov = cov + a * b
+        v1 = v1 + a * a
+        v2 = v2 + b * b
+        if pa[i] > 631 {
+            grow_sum = grow_sum + pb[i]
+            grow_n = grow_n + 1
+            if pb[i] > 631 { both = both + 1 }
+        } else { shrink_sum = shrink_sum + pb[i] shrink_n = shrink_n + 1 }
+        if pa[i] >= 800 and pb[i] > max_after { max_after = pb[i] }
+    }
+    return EpochStats { bits: bits, samples: n, corr_x1000: int(1000.0 * float(cov) / pow(float(v1) * float(v2), 0.5)),
+        mean_next_after_growth_x1000: if grow_n > 0 { int_div(grow_sum, grow_n) } else { 0 },
+        mean_next_after_shrink_x1000: if shrink_n > 0 { int_div(shrink_sum, shrink_n) } else { 0 },
+        both_expand: both, expand_first: grow_n, max_d2_after_d1_ge_800: max_after }
+}
+
+// Real pairing, and a length-matched null that pairs each first epoch with a
+// second epoch of the same length from a different start.
+pub pure fn epoch_pair(bits: int, seed: int) -> EpochPair {
+    let mut d1s: list<int> = []
+    let mut d2s: list<int> = []
+    let mut l2s: list<int> = []
+    let mut lmin: int = 64
+    let mut lmax: int = 0
+    for x in range(1 << (bits - 1), 1 << bits) {
+        let e1: EpochStep = epoch(x)
+        let e2: EpochStep = if e1.next > 1 { epoch(e1.next) } else { EpochStep { odd: 0, length: 1, next: 1 } }
+        d1s = push(d1s, int_div(1000 * e1.odd, e1.length))
+        d2s = push(d2s, int_div(1000 * e2.odd, e2.length))
+        l2s = push(l2s, e2.length)
+        lmin = min(lmin, e2.length)
+        lmax = max(lmax, e2.length)
+    }
+    let n: int = len(d1s)
+    let mut na: list<int> = []
+    let mut nb: list<int> = []
+    for b in range(lmin, lmax + 1) {
+        let mut members: list<int> = []
+        for i in range(n) { if l2s[i] == b { members = push(members, i) } }
+        let size: int = len(members)
+        for k in range(size) {
+            na = push(na, d1s[members[k]])
+            nb = push(nb, d2s[members[(k * (2 * seed + 1) + seed) % size]])
+        }
+    }
+    return EpochPair { real: summarize(bits, d1s, d2s), null: summarize(bits, na, nb) }
+}

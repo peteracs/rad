@@ -1,0 +1,88 @@
+use "force_cost.rad"
+resource CostRequest { lane: int = 0 }
+component CostEvidence { lane: int = 0, derivative_order: int = 1, inverse_duration: int = 1,
+    background_jump_n: int = 0, residual_jump_n: int = 0, total_jump_n: int = 0,
+    lower_bound_n: int = 0, denominator: int = 1, unit_derivative_cap_impossible: bool = false,
+    max_force_jump_for_unit_cap_den: int = 1,
+    endpoint_only_necessary_test: bool = true, whole_interval_bound_proved: bool = false }
+entity cost_trial { CostEvidence {} }
+pure fn cost_evidence(request: CostRequest) -> CostEvidence {
+    assert(request.lane >= 0 and request.lane < 8,"cost request identity")
+    let boundary: ForceBoundary = actual_boundary()
+    assert(boundary.constant_entrance_germ,"force cost entrance hypothesis")
+    let configuration: int = int_div(request.lane,2)
+    let orders: list<int> = [1,1,2,4]
+    let speeds: list<int> = [1,4,4,16]
+    let order: int = orders[configuration]
+    let speed: int = speeds[configuration]
+    let total_jump: int = boundary.exit_n-boundary.entry_n
+    let background_jump: int = if request.lane%2 == 0 { 0 } else { total_jump }
+    let residual_jump: int = total_jump-background_jump
+    // The test always charges the TOTAL force, whatever the bookkeeping split.
+    assert(background_jump+residual_jump == total_jump,"force accounting")
+    let mut jets: list<int> = [boundary.entry_n]
+    for _ in range(order-1) { jets = push(jets,0) }
+    let cost: int = unavoidable_cost_n(boundary.entry_n+background_jump+residual_jump,jets,speed,order)
+    let mut zero_jets: list<int> = []
+    for _ in range(order) { zero_jets = push(zero_jets,0) }
+    let inverse_allowance: int = unavoidable_cost_n(1,zero_jets,speed,order)
+    return CostEvidence { lane: request.lane,derivative_order: order,inverse_duration: speed,
+        background_jump_n: background_jump,residual_jump_n: residual_jump,total_jump_n: total_jump,
+        lower_bound_n: cost,denominator: boundary.denominator,
+        max_force_jump_for_unit_cap_den: inverse_allowance,
+        unit_derivative_cap_impossible: cost > boundary.denominator,
+        endpoint_only_necessary_test: true,whole_interval_bound_proved: false }
+}
+system EvaluateCost(row: mut CostEvidence, request: CostRequest) { row = cost_evidence(request) }
+component CostConclusion { geometric_repairs_cannot_evade: str = "", reference_relabeling_cannot_evade: bool = false,
+    fixed_jump_shrinking_duration_has_unbounded_derivative_cost: bool = false,
+    next_constraint: str = "",
+    blowup_impossibility_proved: bool = false }
+entity cost_conclusion { CostConclusion {} }
+intent CostChecked { key target: entity, request: CostRequest, evidence: CostEvidence }
+law SubmitCost(target: entity, request: CostRequest, evidence: CostEvidence) {
+    propose CostChecked { target: target,request: request,evidence: evidence }
+}
+resolver VerifyCost for CostChecked(target, proposals) {
+    assert(len(proposals) == 8,"force cost coverage")
+    let mut seen: list<bool> = [false,false,false,false,false,false,false,false]
+    for proposal in proposals {
+        let lane: int = proposal.request.lane
+        assert(lane >= 0 and lane < 8 and not seen[lane],"force cost identity")
+        seen[lane] = true
+        assert(proposal.evidence == cost_evidence(proposal.request),"forged force cost certificate")
+        let opposite: CostEvidence = cost_evidence(CostRequest { lane: if lane%2 == 0 { lane+1 } else { lane-1 } })
+        assert(proposal.evidence.lower_bound_n == opposite.lower_bound_n,"reference accounting changed physical cost")
+    }
+    next(target,CostConclusion { geometric_repairs_cannot_evade: "Taylor remainder fixed by the force boundary data",
+        reference_relabeling_cannot_evade: true,
+        fixed_jump_shrinking_duration_has_unbounded_derivative_cost: true,
+        next_constraint: "Choose compatible total-force endpoint jets before solving for velocity corrections.",
+        blowup_impossibility_proved: false })
+}
+fn main() -> nil {
+    let base: world_fork = fork()
+    let digest: str = world_digest()
+    let mut jobs: list<world_fork> = []
+    for lane in range(8) { jobs = push(jobs,fork_with(base,CostRequest { lane: lane })) }
+    let results: list<world_fork> = simulate_many(jobs,[system::EvaluateCost],1,20260908)
+    let mut evidence: list<CostEvidence> = []
+    for i in range(8) {
+        assert_only_changed(jobs[i],results[i],[CostEvidence])
+        let row: CostEvidence = peek(results[i],cost_trial,CostEvidence) |> unwrap
+        evidence = push(evidence,row)
+        print("cost",json_stringify(row))
+    }
+    assert(world_digest() == digest,"cost fork isolation")
+    let args: list<str> = sys_args()
+    if len(args) > 0 {
+        assert(args[0] == "hide-background-cost","unknown cost probe")
+        let mut forged: CostEvidence = evidence[7]
+        forged.lower_bound_n = 0
+        forged.unit_derivative_cap_impossible = false
+        evidence[7] = forged
+    }
+    settle { for i in range(8) { SubmitCost(cost_conclusion,CostRequest { lane: i },evidence[i]) } }
+    print("conclusion",json_stringify(require(cost_conclusion,CostConclusion)))
+    print(why(cost_conclusion,CostConclusion))
+}

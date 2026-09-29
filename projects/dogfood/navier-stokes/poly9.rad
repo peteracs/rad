@@ -1,0 +1,97 @@
+// Exact integer polynomial calculations, total degree <= 9.
+// Slot 100*i+10*j+k stores x^i y^j z^k. W=3V clears denominators.
+// Every operation checks coefficient bounds before subsequent arithmetic.
+pub pure fn from_terms(terms: list<list<int>>) -> list<int> {
+    let mut result: list<int> = zero_poly()
+    for term in terms {
+        assert(len(term) == 2, "sparse term shape")
+        assert(term[0] >= 0 and term[0] < 1000 and degree(term[0]) <= 9, "sparse term degree")
+        assert(result[term[0]] == 0 and term[1] != 0, "noncanonical sparse term")
+        result[term[0]] = bounded(term[1])
+    }
+    return result
+}
+pub pure fn bounded(value: int) -> int {
+    assert(value >= -100000000 and value <= 100000000, "polynomial coefficient bound")
+    return value
+}
+pub pure fn zero_poly() -> list<int> {
+    let mut result: list<int> = []
+    for _ in range(1000) { result = push(result, 0) }
+    return result
+}
+pub pure fn monomial(slot: int, value: int) -> list<int> {
+    assert(slot >= 0 and slot < 1000, "monomial slot")
+    let mut result: list<int> = zero_poly()
+    result[slot] = bounded(value)
+    return result
+}
+pub pure fn degree(slot: int) -> int {
+    return int_div(slot, 100) + int_div(slot, 10) % 10 + slot % 10
+}
+pub pure fn scale(p: list<int>, factor: int) -> list<int> {
+    assert(len(p) == 1000, "polynomial length")
+    let k: int = bounded(factor)
+    let mut result: list<int> = zero_poly()
+    for i in range(1000) { result[i] = bounded(bounded(p[i])*k) }
+    return result
+}
+pub pure fn add(p: list<int>, q: list<int>) -> list<int> {
+    assert(len(p) == 1000 and len(q) == 1000, "polynomial length")
+    let mut result: list<int> = zero_poly()
+    for i in range(1000) { result[i] = bounded(bounded(p[i])+bounded(q[i])) }
+    return result
+}
+pub pure fn multiply(p: list<int>, q: list<int>) -> list<int> {
+    assert(len(p) == 1000 and len(q) == 1000, "polynomial length")
+    let mut result: list<int> = zero_poly()
+    for i in range(1000) {
+        let a: int = bounded(p[i])
+        if a != 0 {
+            for j in range(1000) {
+                let b: int = bounded(q[j])
+                if b != 0 {
+                    assert(degree(i)+degree(j) <= 9, "polynomial degree overflow")
+                    result[i+j] = bounded(result[i+j]+a*b)
+                }
+            }
+        }
+    }
+    return result
+}
+pub pure fn derivative(p: list<int>, axis: int) -> list<int> {
+    assert(len(p) == 1000 and axis >= 0 and axis < 3, "derivative domain")
+    let stride: int = [100, 10, 1][axis]
+    let mut result: list<int> = zero_poly()
+    for i in range(1000) {
+        let coefficient: int = bounded(p[i])
+        let power: int = int_div(i, stride) % 10
+        if power > 0 { result[i-stride] = bounded(coefficient*power) }
+    }
+    return result
+}
+pub pure fn curl(v: list<list<int>>) -> list<list<int>> {
+    assert(len(v) == 3, "vector dimension")
+    return [add(derivative(v[2], 1), scale(derivative(v[1], 2), -1)),
+            add(derivative(v[0], 2), scale(derivative(v[2], 0), -1)),
+            add(derivative(v[1], 0), scale(derivative(v[0], 1), -1))]
+}
+// Returns 512*p(1/2,1/2,z/2), for z=0 or 1, without rounding.
+pub pure fn half_point(p: list<int>, z: int) -> int {
+    assert(len(p) == 1000 and (z == 0 or z == 1), "evaluation domain")
+    let mut total: int = 0
+    for i in range(1000) {
+        let coefficient: int = bounded(p[i])
+        if coefficient != 0 {
+            assert(degree(i) <= 9, "evaluation degree")
+            if z == 1 or i % 10 == 0 {
+                let mut multiplier: int = 1
+                for _ in range(9-degree(i)) { multiplier = multiplier*2 }
+                // <= 1000*10^8*512 < 2^63 across this bounded loop.
+                total = total + coefficient*multiplier
+            }
+        }
+    }
+    return total
+}
+

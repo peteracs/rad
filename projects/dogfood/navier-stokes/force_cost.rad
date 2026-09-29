@@ -1,0 +1,61 @@
+use "constraint_elimination.rad"
+pub struct ForceBoundary { entry_n: int = 0, exit_n: int = 0, denominator: int = 1,
+    constant_entrance_germ: bool = false }
+pure fn gcd_positive(a: int, b: int) -> int {
+    let mut x: int = if a < 0 { -a } else { a }
+    let mut y: int = if b < 0 { -b } else { b }
+    while y != 0 { let remainder: int = x%y
+        x = y
+        y = remainder }
+    return x
+}
+pub pure fn actual_boundary() -> ForceBoundary {
+    let original: SmoothStage = stationary_predecessor()
+    let right: SmoothStage = target_stage(0)
+    let left: SmoothStage = link_predecessor(original,right)
+    assert(left.a[1] == fixture_bank(0) and left.a[2] == fixture_bank(0),"constant entrance germ required")
+    let mut nums: list<int> = []
+    let mut denominator: int = 0
+    for endpoint in [0,1] {
+        let f: list<ForceMode> = actual_force(stage_bank(left,endpoint,endpoint,false),
+            stage_bank(left,endpoint,endpoint,true),left.viscosity)
+        let mut found: bool = false
+        for mode in f {
+            if mode.k == [1,0,1] {
+                if denominator == 0 { denominator = mode.denominator }
+                assert(denominator == mode.denominator,"endpoint denominator")
+                nums = push(nums,mode.im[1])
+                found = true
+            }
+        }
+        assert(found,"force boundary witness missing")
+    }
+    let divisor: int = gcd_positive(gcd_positive(nums[0],nums[1]),denominator)
+    return ForceBoundary { entry_n: int_div(nums[0],divisor),exit_n: int_div(nums[1],divisor),
+        denominator: int_div(denominator,divisor),constant_entrance_germ: true }
+}
+pure fn factorial(n: int) -> int {
+    let mut result: int = 1
+    for j in range(n) { result = result*(j+1) }
+    return result
+}
+pure fn positive_power(x: int, n: int) -> int {
+    let mut result: int = 1
+    for _ in range(n) { result = result*x }
+    return result
+}
+// Taylor's integral remainder supplies the analytic lower-bound theorem.
+// jets[j] is the numerator of the physical j-th entrance derivative.
+// result/denominator <= sup |d_t^order f| for any connecting smooth path.
+pub pure fn unavoidable_cost_n(exit_n: int, jets: list<int>, inverse_duration: int, order: int) -> int {
+    assert(order >= 1 and order <= 8 and len(jets) == order,"Taylor cost order")
+    assert(inverse_duration >= 1 and inverse_duration <= 16,"Taylor cost duration")
+    assert(exit_n >= -64 and exit_n <= 64,"Taylor cost endpoint domain")
+    let fac: int = factorial(order)
+    let mut remainder: int = fac*positive_power(inverse_duration,order)*exit_n
+    for j in range(order) {
+        assert(jets[j] >= -64 and jets[j] <= 64,"Taylor cost jet domain")
+        remainder = remainder-int_div(fac,factorial(j))*positive_power(inverse_duration,order-j)*jets[j]
+    }
+    return if remainder < 0 { -remainder } else { remainder }
+}

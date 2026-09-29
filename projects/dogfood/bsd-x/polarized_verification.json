@@ -1,0 +1,14 @@
+{
+  "symbolic_matrix_forks": 25,
+  "diagnostic_witnesses": 3,
+  "independent_rational_elimination_and_finite_differences": true,
+  "worker_counts": [
+    1,
+    4
+  ],
+  "record_replay": true,
+  "forged_reciprocity_rejected": true,
+  "web_search_used": false,
+  "arithmetic_reciprocity_identities_proved": 0,
+  "universal_X_proofs_found": 0
+}

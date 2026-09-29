@@ -1,0 +1,47 @@
+use "search.rad"
+
+resource SearchJob { n: int = 3, budget: int = 1 }
+
+component Evidence {
+    n: int = 0
+    budget: int = 0
+    length: int = -2
+    word: str = ""
+    target: int = -1
+    discovered: int = 0
+    expanded: int = 0
+}
+
+component Anchor { value: int = 1937 }
+
+entity certificate { Evidence {} Anchor {} }
+
+system Explore(evidence: mut Evidence, job: SearchJob) {
+    let answer: SearchResult = exact_search(job.n, job.budget)
+    evidence = Evidence {
+        n: answer.n, budget: answer.budget, length: answer.length,
+        word: answer.word, target: answer.target,
+        discovered: answer.discovered, expanded: answer.expanded,
+    }
+}
+
+fn main() -> nil {
+    let args: list<str> = sys_args()
+    let max_n: int = if len(args) > 0 { int(args[0]) } else { 8 }
+    assert(max_n >= 2 and max_n <= 10, "max_n must be in 2..10")
+    let base: world_fork = fork()
+    let mut jobs: list<world_fork> = []
+    for n in range(2, max_n + 1) {
+        for budget in range(3) {
+            jobs = push(jobs, fork_with(base, SearchJob { n: n, budget: budget }))
+        }
+    }
+    let futures: list<world_fork> = simulate_many(jobs, [system::Explore], 1, 1937)
+    for i in range(len(futures)) {
+        assert_only_changed(jobs[i], futures[i], [Evidence])
+        let evidence: Evidence = peek(futures[i], certificate, Evidence) |> unwrap
+        print(json_stringify(evidence))
+    }
+    assert(require(certificate, Evidence).length == -2, "speculation leaked into live state")
+    assert(require(certificate, Anchor).value == 1937, "unrelated state changed")
+}

@@ -1,0 +1,30 @@
+// Exact rational boundary arithmetic for the full Fourier jet documented in
+// INVARIANT_REGION.md. The analytic jet formulas are inputs, not kernel theorems.
+fn main() -> nil {
+    for denominator in [30,32,48,64,96] {
+        // nu=1/denominator; reference K=3, E=9/2, D=15, S=1.
+        let n: int = denominator
+        assert(n >= 30 and n <= 96, "bounded rational domain")
+        let production_margin_n: int = n-30
+        // B'=S'-2nu D' = 53/4 -16nu +108nu^2.
+        let boundary_rate_n: int = 53*n*n-64*n+432
+        // Q'=4nu/27-8/81; Q=KD/E^2.
+        let shape_rate_n: int = 12-8*n
+        // (E/K)'=1/3-nu/2.
+        let frequency_rate_n: int = 2*n-3
+        // Full E''=54nu^2-10nu+53/4, including new frequencies.
+        let acceleration_n: int = 216-40*n+53*n*n
+        assert(production_margin_n >= 0, "production below twice dissipation")
+        assert(boundary_rate_n > 0 and shape_rate_n < 0, "outward boundary")
+        assert(frequency_rate_n > 0, "no frequency growth")
+        // u -> -u preserves all quadratic moments, reverses S.
+        let reversed_rate_n: int = -n-15
+        assert(reversed_rate_n < 0, "phase reversal obstruction")
+        let row: map<str, any> = { "n": n, "B_n": production_margin_n,
+            "Bdot_n": boundary_rate_n, "Bdot_d": 4*n*n,
+            "Qdot_n": shape_rate_n, "Qdot_d": 81*n,
+            "frequency_n": frequency_rate_n, "frequency_d": 6*n,
+            "Eddot_n": acceleration_n, "Eddot_d": 4*n*n }
+        print(json_stringify(row))
+    }
+}

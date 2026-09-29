@@ -1,0 +1,79 @@
+// Exact integer polynomials, total degree <=11, slot=144*i+12*j+k.
+// Products are checked BEFORE multiplication; all sums have magnitude <2e15.
+pub pure fn bounded(value: int) -> int {
+    assert(value >= -1000000000000000 and value <= 1000000000000000, "polynomial coefficient bound")
+    return value
+}
+pub pure fn times(left: int, right: int) -> int {
+    let a: int = bounded(left)
+    let b: int = bounded(right)
+    let aa: int = if a < 0 { -a } else { a }
+    let bb: int = if b < 0 { -b } else { b }
+    if bb != 0 { assert(aa <= int_div(1000000000000000, bb), "polynomial product bound") }
+    return a*b
+}
+pub pure fn degree(slot: int) -> int { return int_div(slot, 144)+int_div(slot, 12)%12+slot%12 }
+pub pure fn zero_poly() -> list<int> {
+    let mut out: list<int> = []
+    for _ in range(1728) { out = push(out, 0) }
+    return out
+}
+pub pure fn monomial(slot: int, value: int) -> list<int> {
+    assert(slot >= 0 and slot < 1728 and degree(slot) <= 11, "monomial degree")
+    let mut out: list<int> = zero_poly()
+    out[slot] = bounded(value)
+    return out
+}
+pub pure fn from_terms(terms: list<list<int>>) -> list<int> {
+    let mut out: list<int> = zero_poly()
+    for term in terms {
+        assert(len(term) == 2, "sparse term shape")
+        assert(term[0] >= 0 and term[0] < 1728 and degree(term[0]) <= 11, "sparse term degree")
+        assert(out[term[0]] == 0 and term[1] != 0, "noncanonical sparse term")
+        out[term[0]] = bounded(term[1])
+    }
+    return out
+}
+pub pure fn add(p: list<int>, q: list<int>) -> list<int> {
+    assert(len(p) == 1728 and len(q) == 1728, "polynomial length")
+    let mut out: list<int> = zero_poly()
+    for i in range(1728) { out[i] = bounded(bounded(p[i])+bounded(q[i])) }
+    return out
+}
+pub pure fn scale(p: list<int>, factor: int) -> list<int> {
+    assert(len(p) == 1728, "polynomial length")
+    let mut out: list<int> = zero_poly()
+    for i in range(1728) { out[i] = times(p[i], factor) }
+    return out
+}
+pub pure fn multiply(p: list<int>, q: list<int>) -> list<int> {
+    assert(len(p) == 1728 and len(q) == 1728, "polynomial length")
+    let mut out: list<int> = zero_poly()
+    for i in range(1728) {
+        if bounded(p[i]) != 0 {
+            for j in range(1728) {
+                if bounded(q[j]) != 0 {
+                    assert(degree(i)+degree(j) <= 11, "polynomial degree overflow")
+                    out[i+j] = bounded(out[i+j]+times(p[i], q[j]))
+                }
+            }
+        }
+    }
+    return out
+}
+pub pure fn derivative(p: list<int>, axis: int) -> list<int> {
+    assert(len(p) == 1728 and axis >= 0 and axis < 3, "derivative domain")
+    let stride: int = [144, 12, 1][axis]
+    let mut out: list<int> = zero_poly()
+    for i in range(1728) {
+        let power: int = int_div(i, stride)%12
+        if power > 0 { out[i-stride] = times(p[i], power) }
+    }
+    return out
+}
+pub pure fn curl(v: list<list<int>>) -> list<list<int>> {
+    assert(len(v) == 3, "vector dimension")
+    return [add(derivative(v[2], 1), scale(derivative(v[1], 2), -1)),
+            add(derivative(v[0], 2), scale(derivative(v[2], 0), -1)),
+            add(derivative(v[1], 0), scale(derivative(v[0], 1), -1))]
+}

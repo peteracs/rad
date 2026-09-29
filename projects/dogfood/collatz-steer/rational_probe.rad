@@ -1,0 +1,2 @@
+use "rational.rad"
+print(json_stringify(spectrum(int(sys_args()[0]))))

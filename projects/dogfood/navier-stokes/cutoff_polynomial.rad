@@ -1,0 +1,190 @@
+// Exact integer polynomial calculations, total degree <= 9.
+// Slot 100*i+10*j+k stores x^i y^j z^k. W=3V clears denominators.
+// Every operation checks coefficient bounds before subsequent arithmetic.
+pure fn bounded(value: int) -> int {
+    assert(value >= -100000000 and value <= 100000000, "polynomial coefficient bound")
+    return value
+}
+pure fn zero_poly() -> list<int> {
+    let mut result: list<int> = []
+    for _ in range(1000) { result = push(result, 0) }
+    return result
+}
+pure fn monomial(slot: int, value: int) -> list<int> {
+    assert(slot >= 0 and slot < 1000, "monomial slot")
+    let mut result: list<int> = zero_poly()
+    result[slot] = bounded(value)
+    return result
+}
+pure fn degree(slot: int) -> int {
+    return int_div(slot, 100) + int_div(slot, 10) % 10 + slot % 10
+}
+pure fn scale(p: list<int>, factor: int) -> list<int> {
+    assert(len(p) == 1000, "polynomial length")
+    let k: int = bounded(factor)
+    let mut result: list<int> = zero_poly()
+    for i in range(1000) { result[i] = bounded(bounded(p[i])*k) }
+    return result
+}
+pure fn add(p: list<int>, q: list<int>) -> list<int> {
+    assert(len(p) == 1000 and len(q) == 1000, "polynomial length")
+    let mut result: list<int> = zero_poly()
+    for i in range(1000) { result[i] = bounded(bounded(p[i])+bounded(q[i])) }
+    return result
+}
+pure fn multiply(p: list<int>, q: list<int>) -> list<int> {
+    assert(len(p) == 1000 and len(q) == 1000, "polynomial length")
+    let mut result: list<int> = zero_poly()
+    for i in range(1000) {
+        let a: int = bounded(p[i])
+        if a != 0 {
+            for j in range(1000) {
+                let b: int = bounded(q[j])
+                if b != 0 {
+                    assert(degree(i)+degree(j) <= 9, "polynomial degree overflow")
+                    result[i+j] = bounded(result[i+j]+a*b)
+                }
+            }
+        }
+    }
+    return result
+}
+pure fn derivative(p: list<int>, axis: int) -> list<int> {
+    assert(len(p) == 1000 and axis >= 0 and axis < 3, "derivative domain")
+    let stride: int = [100, 10, 1][axis]
+    let mut result: list<int> = zero_poly()
+    for i in range(1000) {
+        let coefficient: int = bounded(p[i])
+        let power: int = int_div(i, stride) % 10
+        if power > 0 { result[i-stride] = bounded(coefficient*power) }
+    }
+    return result
+}
+pure fn curl(v: list<list<int>>) -> list<list<int>> {
+    assert(len(v) == 3, "vector dimension")
+    return [add(derivative(v[2], 1), scale(derivative(v[1], 2), -1)),
+            add(derivative(v[0], 2), scale(derivative(v[2], 0), -1)),
+            add(derivative(v[1], 0), scale(derivative(v[0], 1), -1))]
+}
+// Returns 512*p(1/2,1/2,z/2), for z=0 or 1, without rounding.
+pure fn half_point(p: list<int>, z: int) -> int {
+    assert(len(p) == 1000 and (z == 0 or z == 1), "evaluation domain")
+    let mut total: int = 0
+    for i in range(1000) {
+        let coefficient: int = bounded(p[i])
+        if coefficient != 0 {
+            assert(degree(i) <= 9, "evaluation degree")
+            if z == 1 or i % 10 == 0 {
+                let mut multiplier: int = 1
+                for _ in range(9-degree(i)) { multiplier = multiplier*2 }
+                // <= 1000*10^8*512 < 2^63 across this bounded loop.
+                total = total + coefficient*multiplier
+            }
+        }
+    }
+    return total
+}
+
+resource CutoffSpec { power: int = 0 }
+component CutoffResult {
+    power: int = 0
+    curl_b27_at_z0: list<int> = []
+    diffusion_w_at_z0: list<int> = []
+    angular_advection_w: int = 0
+    angular_linear_w: int = 0
+    angular_diffusion_w: int = 0
+}
+entity candidate { CutoffResult {} }
+pure fn calculate(power: int) -> CutoffResult {
+    assert(power >= 0 and power <= 2, "cutoff power domain")
+    let positions: list<list<int>> = [monomial(100, 1), monomial(10, 1), monomial(1, 1)]
+    let q: list<int> = add(add(monomial(200, 1), monomial(20, 1)), monomial(2, 1))
+    let base: list<int> = add(monomial(0, 1), scale(q, -1))
+    let mut chi: list<int> = monomial(0, 1)
+    for _ in range(power) { chi = multiply(chi, base) }
+    // -y cross Ay for A=diag(1,2,-3), so curl(chi*potential)=W=3V.
+    let w: list<list<int>> = curl([multiply(chi, monomial(11, 5)),
+                  multiply(chi, monomial(101, -4)),
+                  multiply(chi, monomial(110, -1))])
+    assert(add(add(derivative(w[0], 0), derivative(w[1], 1)), derivative(w[2], 2)) == zero_poly(), "divergence identity")
+    let omega: list<list<int>> = curl(w)
+    let mut diffusion: list<list<int>> = []
+    let mut linear: list<list<int>> = []
+    let mut advection: list<list<int>> = []
+    for i in range(3) {
+        let mut lap: list<int> = zero_poly()
+        let mut dilate: list<int> = zero_poly()
+        let mut advect: list<int> = zero_poly()
+        for j in range(3) {
+            lap = add(lap, derivative(derivative(omega[i], j), j))
+            dilate = add(dilate, multiply(positions[j], derivative(w[i], j)))
+            advect = add(advect, multiply(w[j], derivative(w[i], j)))
+        }
+        diffusion = push(diffusion, lap)
+        linear = push(linear, add(scale(w[i], 5), scale(dilate, 4)))
+        advection = push(advection, advect)
+    }
+    let linear_curl: list<list<int>> = curl(linear)
+    let advective_curl: list<list<int>> = curl(advection)
+    let mut b_values: list<int> = []
+    let mut d_values: list<int> = []
+    for i in range(3) {
+        b_values = push(b_values, half_point(add(linear_curl[i], scale(advective_curl[i], 3)), 0))
+        d_values = push(d_values, half_point(diffusion[i], 0))
+    }
+    return CutoffResult { power: power, curl_b27_at_z0: b_values,
+        diffusion_w_at_z0: d_values,
+        angular_advection_w: 4*half_point(advective_curl[0], 1)+5*half_point(advective_curl[1], 1),
+        angular_linear_w: 4*half_point(linear_curl[0], 1)+5*half_point(linear_curl[1], 1),
+        angular_diffusion_w: 4*half_point(diffusion[0], 1)+5*half_point(diffusion[1], 1) }
+}
+system EvaluateCutoff(result: mut CutoffResult, spec: CutoffSpec) { result = calculate(spec.power) }
+component CutoffAudit { cases: int = 0, angular_obstructions: int = 0 }
+entity audit { CutoffAudit {} }
+intent CutoffChecked { key target: entity, evidence: CutoffResult }
+law SubmitCutoff(target: entity, evidence: CutoffResult) { propose CutoffChecked { target: target, evidence: evidence } }
+resolver AssembleCutoffs for CutoffChecked(target, proposals) {
+    assert(len(proposals) == 3, "incomplete cutoff portfolio")
+    let mut seen: list<bool> = [false, false, false]
+    let mut obstructions: int = 0
+    for proposal in proposals {
+        let row: CutoffResult = proposal.evidence
+        assert(row == calculate(row.power), "forged polynomial result")
+        assert(not seen[row.power], "duplicate polynomial result")
+        seen[row.power] = true
+        assert(row.angular_linear_w == 0 and row.angular_diffusion_w == 0, "radial projection identity")
+        if row.angular_advection_w != 0 { obstructions = obstructions+1 }
+    }
+    next(target, CutoffAudit { cases: 3, angular_obstructions: obstructions })
+}
+fn main() -> nil {
+    let args: list<str> = sys_args()
+    if len(args) > 0 {
+        if args[0] == "coefficient" {
+            let rejected: list<int> = scale(monomial(0, 100000000), 100000000)
+            assert(len(rejected) == 0, "coefficient corruption accepted")
+        } else if args[0] == "degree" {
+            let rejected: list<int> = multiply(monomial(900, 1), monomial(100, 1))
+            assert(len(rejected) == 0, "degree corruption accepted")
+        } else { assert(false, "unknown polynomial probe") }
+    }
+    let live: str = world_digest()
+    let base: world_fork = fork()
+    let mut jobs: list<world_fork> = []
+    for power in range(3) { jobs = push(jobs, fork_with(base, CutoffSpec { power: power })) }
+    let results: list<world_fork> = simulate_many(jobs, [system::EvaluateCutoff], 1, 20260908)
+    let mut rows: list<CutoffResult> = []
+    for i in range(3) {
+        assert_only_changed(jobs[i], results[i], [CutoffResult])
+        let restored: world_fork = fork_from_bytes(fork_to_bytes(results[i])) |> unwrap
+        assert(world_digest(restored) == world_digest(results[i]), "polynomial wire roundtrip")
+        let row: CutoffResult = peek(results[i], candidate, CutoffResult) |> unwrap
+        rows = push(rows, row)
+        print(json_stringify(row))
+    }
+    assert(world_digest() == live, "polynomial fork isolation")
+    settle { for row in rows { SubmitCutoff(audit, row) } }
+    assert(require(audit, CutoffAudit).angular_obstructions == 2, "angular obstruction count")
+    print(why(audit, CutoffAudit))
+    print("scope: exact finite polynomial identities; no PDE solution certified")
+}

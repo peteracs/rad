@@ -1,0 +1,18 @@
+use "../collatz-barrier/barrier.rad"
+
+// For a nontrivial positive cycle of length j with q odd steps, every element
+// exceeds N = 2^71 (verified convergence below 2^71), and the product identity
+// prod over odd elements (3 + 1/x) = 2^j gives
+//   0 < j - q log2 3 < q / (3 N ln 2).
+// The barrier certificate proves 3 N (c ln2 - d ln3) > d, i.e.
+// c/d - log2 3 > 1/(3 N ln 2); so j/q lies strictly inside the Farey pair
+// (a/b, c/d) with cb - ad = 1, forcing q >= b + d and j >= a + c.
+struct CycleBound { min_odd_steps: int = 0, min_length: int = 0, farey_determinant_one: bool = false, certificate: Barrier = Barrier {} }
+
+let a: int = 103768467013
+let b: int = 65470613321
+let c: int = 10439860591
+let d: int = 6586818670
+let cert: Barrier = check_barrier("cycle-product-identity", a, b, c, d, npow2(71))
+print(json_stringify(CycleBound { min_odd_steps: b + d, min_length: a + c, farey_determinant_one: true,  // asserted by check_barrier in arbitrary precision
+     certificate: cert }))

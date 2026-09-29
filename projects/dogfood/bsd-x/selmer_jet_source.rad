@@ -1,0 +1,111 @@
+// Exact squarefree second jets; arithmetic origin and nonvanishing are not assumed.
+resource JetSource { code: int = 0,rank: int = 2 }
+component JetEvidence { full_coefficient: int = 0,linear_coefficient: int = 0,
+    induced_coefficient: int = 0,higher_correction: int = 0,
+    arithmetic_source_verified: bool = false }
+entity jet_trial { JetEvidence {} }
+entity threshold { JetEvidence {} }
+entity below_threshold { JetEvidence {} }
+
+pure fn jet_multiply(a: list<int>,b: list<int>) -> list<int> {
+    let mut result: list<int> = [0,0,0,0]
+    for i in range(4) { for j in range(4) {
+        if (i & j)==0 { result[i | j]=result[i | j]+a[i]*b[j] }
+    } }
+    return result
+}
+pure fn mixed_det(a: list<int>,b: list<int>,c: list<int>,d: list<int>) -> int {
+    let mut result: int = 0
+    for p0 in range(4) { for p1 in range(4) { if p1!=p0 {
+        for p2 in range(4) { if p2!=p0 and p2!=p1 {
+            for p3 in range(4) { if p3!=p0 and p3!=p1 and p3!=p2 {
+                let perm: list<int> = [p0,p1,p2,p3]
+                let mut orientation: int = 1
+                for i in range(4) { for j in range(i+1,4) {
+                    if perm[i]>perm[j] { orientation=-orientation }
+                } }
+                let mut jet_product: list<int> = [orientation,0,0,0]
+                for i in range(4) {
+                    let pos: int = 4*i+perm[i]
+                    jet_product=jet_multiply(jet_product,[a[pos],b[pos],c[pos],d[pos]])
+                }
+                result=result+jet_product[3]
+            } }
+        } }
+    } } }
+    return result
+}
+pure fn assess_jet(q: JetSource) -> JetEvidence {
+    assert(q.code>=0 and q.code<81 and q.rank>=1 and q.rank<=3,"jet diagnostic domain")
+    let mut a: list<int> = []
+    let mut b: list<int> = []
+    let mut c: list<int> = []
+    let mut d: list<int> = []
+    let mut zero: list<int> = []
+    for pos in range(16) {
+        let row: int = int_div(pos,4)
+        a=push(a,if row==pos%4 and row<q.rank { 1 } else { 0 })
+        b=push(b,(pos+q.code)%3-1)
+        c=push(c,(2*pos+q.code)%5-2)
+        d=push(d,(3*pos+q.code)%7-3)
+        zero=push(zero,0)
+    }
+    let mut digits: int = q.code
+    for pos in [10,11,14,15] {
+        b[pos]=digits%3-1
+        digits=int_div(digits,3)
+    }
+    let full: int = mixed_det(a,b,c,d)
+    let linear: int = mixed_det(a,b,c,zero)
+    let induced: int = b[10]*c[15]+c[10]*b[15]-b[11]*c[14]-c[11]*b[14]
+    if q.rank==2 {
+        assert(full==linear and full==induced,"corank two: higher jets disappear, induced maps decide")
+    }
+    if q.rank==1 { assert(full==0 and linear==0,"corank three: every degree-two coefficient vanishes") }
+    return JetEvidence { full_coefficient:full,linear_coefficient:linear,
+        induced_coefficient:induced,higher_correction:full-linear,arithmetic_source_verified:false }
+}
+system JetStep(row: mut JetEvidence,q: JetSource) { row=assess_jet(q) }
+intent JetChecked { key target: entity,request: JetSource,evidence: JetEvidence }
+law SubmitJet(target: entity,request: JetSource,evidence: JetEvidence) {
+    propose JetChecked { target:target,request:request,evidence:evidence }
+}
+resolver ExplainJet for JetChecked(target,proposals) {
+    assert(len(proposals)==1,"one jet source audit")
+    let row: JetEvidence = assess_jet(proposals[0].request)
+    assert(row==proposals[0].evidence,"jet algebra does not certify arithmetic provenance")
+    next(target,JetEvidence { full_coefficient:row.full_coefficient,
+        linear_coefficient:row.linear_coefficient,induced_coefficient:row.induced_coefficient,
+        higher_correction:row.higher_correction,arithmetic_source_verified:row.arithmetic_source_verified })
+}
+fn main() -> nil {
+    let base: world_fork = fork()
+    let digest: str = world_digest()
+    let mut jobs: list<world_fork> = []
+    let mut requests: list<JetSource> = []
+    for rank in [1,2,3] { for code in range(81) {
+        let q: JetSource = JetSource { code:code,rank:rank }
+        requests=push(requests,q)
+        jobs=push(jobs,fork_with(base,q))
+    } }
+    let results: list<world_fork> = simulate_many(jobs,[system::JetStep],1,20260909)
+    for i in range(len(results)) {
+        assert_only_changed(jobs[i],results[i],[JetEvidence])
+        let row: JetEvidence = peek(results[i],jet_trial,JetEvidence) |> unwrap
+        assert(row==assess_jet(requests[i]),"requested jet evaluated")
+        print("request",json_stringify(requests[i]))
+        print("case",json_stringify(row))
+    }
+    assert(world_digest()==digest,"jet forks preserve parent")
+    let q: JetSource = JetSource {}
+    let mut row: JetEvidence = assess_jet(q)
+    if len(sys_args())>0 { row.arithmetic_source_verified=true }
+    settle {
+        SubmitJet(threshold,q,row)
+        SubmitJet(below_threshold,JetSource { rank:3 },assess_jet(JetSource { rank:3 }))
+    }
+    for target in [threshold,below_threshold] {
+        print(why(target,JetEvidence))
+        print(why_field(target,JetEvidence,"higher_correction"))
+    }
+}

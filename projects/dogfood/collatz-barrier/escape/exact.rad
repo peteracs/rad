@@ -1,0 +1,84 @@
+use "../natural.rad"
+use "../barrier.rad"
+
+pub struct NaturalDivision { quotient: Natural = Natural {}, remainder: Natural = Natural {} }
+
+// Generic arbitrary-natural division, with the Euclidean identity checked.
+pub pure fn ndivrem(a: Natural, b: Natural) -> NaturalDivision {
+    assert(ncmp(b, nat(0)) > 0, "division by zero")
+    let mut quotient: Natural = nat(0)
+    let mut remainder: Natural = nat(0)
+    let mut i: int = nbits(a)
+    while i > 0 {
+        i = i - 1
+        let bit: int = (a.digits[int_div(i, 15)] >> (i % 15)) & 1
+        remainder = nadd(nscale(remainder, 2), nat(bit))
+        quotient = nscale(quotient, 2)
+        if ncmp(remainder, b) >= 0 {
+            remainder = nsub(remainder, b)
+            quotient = nadd(quotient, nat(1))
+        }
+    }
+    assert(ncmp(remainder, b) < 0, "Euclidean remainder escaped")
+    assert(ncmp(nadd(nmul(quotient, b), remainder), a) == 0, "Euclidean identity failed")
+    return NaturalDivision { quotient: quotient, remainder: remainder }
+}
+
+pub pure fn nceildiv(a: Natural, b: Natural) -> Natural {
+    let result: NaturalDivision = ndivrem(a, b)
+    return if ncmp(result.remainder, nat(0)) == 0 { result.quotient } else { nadd(result.quotient, nat(1)) }
+}
+
+// Bounds 2*atanh(a/b), 0 <= a/b <= 1/3, at scale 2^192.
+// The rounded-power recurrence loses <9/8 scale units at every term;
+// term rounding plus the final factor two loses <6 units per term.
+pub pure fn rational_log(a: int, b: int) -> LogInterval {
+    assert(b > 0 and b <= 10000 and a >= 0 and a <= int_div(b, 3), "atanh argument outside certified domain")
+    let mut power: Natural = ndiv_small(nscale(npow2(192), a), b)
+    let mut total: Natural = nat(0)
+    for j in range(192) {
+        total = nadd(total, ndiv_small(power, 2 * j + 1))
+        power = ndiv_small(nscale(power, a * a), b * b)
+    }
+    let lower: Natural = nscale(total, 2)
+    return LogInterval { lower: lower, upper: nadd(lower, nat(1153)) }
+}
+
+pub struct ExponentProof {
+    numerator: int = 0
+    denominator: int = 100
+    exponent_floor: int = 0
+    exponent_scale: int = 100000000
+    lower_margin: str = ""
+    upper_margin: str = ""
+    passes_one_over_28: bool = false
+}
+
+pub pure fn exponent_proof(p: int, q: int) -> ExponentProof {
+    assert(q > 0 and q <= 2000 and p > q and p <= 2 * q, "Chernoff weight outside certified domain")
+    let l2: LogInterval = log_interval(3)
+    let l3: LogInterval = log_interval(2)
+    let lz: LogInterval = rational_log(p - q, p + q)
+    let correction: LogInterval = rational_log(p - q, p + 3 * q)
+    let ls: LogInterval = LogInterval {
+        lower: nadd(l2.lower, correction.lower), upper: nadd(l2.upper, correction.upper),
+    }
+    // gamma = U/V - 1, U=ln(2)*(ln(3)+ln(z)), V=ln(3)*ln(1+z).
+    let ulo: Natural = nmul(l2.lower, nadd(l3.lower, lz.lower))
+    let uhi: Natural = nmul(l2.upper, nadd(l3.upper, lz.upper))
+    let vlo: Natural = nmul(l3.lower, ls.lower)
+    let vhi: Natural = nmul(l3.upper, ls.upper)
+    let mut lo: int = 0
+    let mut hi: int = 10000000
+    while hi - lo > 1 {
+        let mid: int = int_div(lo + hi, 2)
+        if ncmp(nscale(ulo, 100000000), nscale(vhi, 100000000 + mid)) > 0 { lo = mid }
+        else { hi = mid }
+    }
+    let lower_margin: Natural = nsub(nscale(ulo, 100000000), nscale(vhi, 100000000 + lo))
+    let upper_margin: Natural = nsub(nscale(vlo, 100000001 + lo), nscale(uhi, 100000000))
+    assert(ncmp(lower_margin, nat(0)) > 0 and ncmp(upper_margin, nat(0)) > 0, "exponent interval did not resolve")
+    return ExponentProof { numerator: p, denominator: q, exponent_floor: lo,
+        lower_margin: ndecimal(lower_margin), upper_margin: ndecimal(upper_margin),
+        passes_one_over_28: ncmp(nscale(ulo, 28), nscale(vhi, 29)) > 0 }
+}

@@ -1,0 +1,57 @@
+use "repulsion.rad"
+
+// Trapped states at depth L, from Terras's residue tree: [r, q, x = T^L(r)].
+pub pure fn trapped_states(bits: int, floors: list<int>) -> list<list<int>> {
+    let mut out: list<list<int>> = []
+    let mut stack: list<list<int>> = [[0, 0, 0, 1, 0]]   // r, t, x, 3^q, q
+    while len(stack) > 0 {
+        let s: list<int> = stack[len(stack) - 1]
+        stack = slice(stack, 0, len(stack) - 1)
+        let r: int = s[0]
+        let t: int = s[1]
+        let x: int = s[2]
+        let p3: int = s[3]
+        let q: int = s[4]
+        if t == bits {
+            if r >= 2 { out = push(out, [r, q, x]) }
+        } else {
+            for b in [0, 1] {
+                let r2: int = r + b * (1 << t)
+                let x2: int = x + b * p3
+                let odd: int = x2 % 2
+                let q2: int = q + odd
+                if q2 >= floors[t + 1] {
+                    stack = push(stack, [r2, t + 1, tstep(x2), if odd == 1 { 3 * p3 } else { p3 }, q2])
+                }
+            }
+        }
+    }
+    return out
+}
+
+// Continue every trapped state; count how many remain trapped at each checkpoint.
+// The real Collatz dynamics from each trapped state (null worlds live in the system body).
+pub pure fn continue_counts(bits: int, marks: list<int>, min_start: int) -> list<int> {
+    let floors: list<int> = floor_table(900)
+    let states: list<list<int>> = trapped_states(bits, floors) |> filter(fn(s: list<int>) -> bool { return s[0] >= min_start })
+    let horizon: int = marks[len(marks) - 1]
+    let mut counts: list<int> = []
+    for _ in marks { counts = push(counts, 0) }
+
+    for s in states {
+        let mut x: int = s[2]
+        let mut q: int = s[1]
+        let mut t: int = bits
+        let mut alive: bool = true
+        while alive and t < horizon {
+            let mut odd: int = 0
+            odd = x % 2
+            x = tstep(x)
+            q = q + odd
+            t = t + 1
+            if q < floors[t] { alive = false }
+            if alive { for i in range(len(marks)) { if marks[i] == t { counts = set_at(counts, i, counts[i] + 1) } } }
+        }
+    }
+    return counts
+}

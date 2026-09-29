@@ -1,0 +1,15 @@
+// Exact identity at the optimum (all constraints tight, summed):
+//   lambda^2 - 1 = (lambda^(alpha+1) + lambda^alpha) r / 3,
+// r = mean(triple minima) / mean(entries). lambda -> 2 iff r -> 1.
+pure fn deficit(lambda: float) -> float {
+    let alpha: float = 1.584962500721156
+    let r: float = 3.0 * (lambda * lambda - 1.0) / (pow(lambda, alpha + 1.0) + pow(lambda, alpha))
+    return 1.0 - r
+}
+let table: list<float> = [1.3534010, 1.5275960, 1.6122870, 1.6627590, 1.6944520, 1.7201900, 1.7449630, 1.7615320, 1.7771270, 1.7922310]
+let mut last_deficit: float = 0.0
+for i in range(len(table)) {
+    let d: float = deficit(table[i])
+    print(i + 2, table[i], d, if last_deficit > 0.0 { d / last_deficit } else { 0.0 })
+    last_deficit = d
+}

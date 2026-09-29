@@ -1,0 +1,15 @@
+{
+  "polynomial_recipes": 81,
+  "pairing_recipes": 125,
+  "diagnostic_witnesses": 4,
+  "independent_algebra_checks": true,
+  "worker_counts": [
+    1,
+    4
+  ],
+  "record_replay": true,
+  "forged_map_claim_rejected": true,
+  "web_search_used": false,
+  "actual_arithmetic_maps_constructed": 0,
+  "universal_X_proofs_found": 0
+}

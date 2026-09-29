@@ -1,0 +1,114 @@
+// Strategy probes. Each is pure, bounded, and reports a signal plus whether
+// it separates 3x+1 (offset 1) from 3x-1 (offset -1).
+pub pure fn step(n: int, offset: int) -> int {
+    return if n % 2 == 0 { int_div(n, 2) } else { int_div(3 * n + offset, 2) }
+}
+
+// Steps until the orbit enters a cycle (3x+1: reaches 1; 3x-1: meets any cycle).
+pub pure fn settle_time(start: int, offset: int) -> int {
+    let cycle_points: list<int> = if offset == 1 { [1, 2] } else { [1, 5, 7, 10, 17, 25, 37, 55, 82, 41, 61, 91, 136, 68, 34] }
+    let mut n: int = start
+    let mut t: int = 0
+    while not contains(cycle_points, n) and t < 100000 {
+        n = step(n, offset)
+        t = t + 1
+    }
+    return t
+}
+
+// Rank mod p of H[u][v] = settle_time(bin "1 u v"), |u| = |v| = k.
+pub pure fn hankel_rank(k: int, offset: int) -> int {
+    let p: int = 1000003
+    let size: int = 1 << k
+    let mut rows: list<list<int>> = []
+    for u in range(size) {
+        let mut row: list<int> = []
+        for v in range(size) { row = push(row, settle_time(((1 << k) + u) * size + v, offset) % p) }
+        rows = push(rows, row)
+    }
+    let mut rank: int = 0
+    for col in range(size) {
+        let mut pivot: int = 0 - 1
+        for r in range(rank, size) { if pivot < 0 and rows[r][col] != 0 { pivot = r } }
+        if pivot >= 0 {
+            let tmp: list<int> = rows[pivot]
+            rows = set_at(set_at(rows, pivot, rows[rank]), rank, tmp)
+            let inv: int = modinv(rows[rank][col], p)
+            for r in range(size) {
+                if r != rank and rows[r][col] != 0 {
+                    let f: int = (rows[r][col] * inv) % p
+                    let mut updated: list<int> = rows[r]
+                    for c in range(col, size) { updated = set_at(updated, c, ((updated[c] - f * rows[rank][c]) % p + p) % p) }
+                    rows = set_at(rows, r, updated)
+                }
+            }
+            rank = rank + 1
+        }
+    }
+    return rank
+}
+
+pub pure fn modinv(a: int, p: int) -> int {
+    let mut result: int = 1
+    let mut base: int = a % p
+    let mut e: int = p - 2
+    while e > 0 {
+        if e % 2 == 1 { result = (result * base) % p }
+        base = (base * base) % p
+        e = int_div(e, 2)
+    }
+    return result
+}
+
+pub struct ProbeResult {
+    strategy: str = ""
+    separates: bool = false
+    leverage: int = 0          // 0..1000, meaning documented per probe
+    detail: list<int> = []
+}
+
+// Automaton route: leverage = how far below full rank the stopping-time
+// Hankel matrix stays (compressibility). Separation: ranks must differ.
+pub pure fn probe_automaton() -> ProbeResult {
+    let plus: int = hankel_rank(6, 1)
+    let minus: int = hankel_rank(6, 0 - 1)
+    return ProbeResult { strategy: "automatic-certificate", separates: plus != minus,
+        leverage: int_div(1000 * (64 - plus), 64), detail: [plus, minus] }
+}
+
+// Mirror route: settle times of 2^L - m (3x+1) for m on the 3x-1 cycles.
+// Leverage = how tightly settle time tracks L (100 * spread-free slopes).
+pub pure fn probe_mirror() -> ProbeResult {
+    let mut detail: list<int> = []
+    let mut explained: int = 0
+    let mut count: int = 0
+    for m in [1, 5, 17] {
+        for L in [16, 22, 28] {
+            let sigma: int = settle_time((1 << L) - m, 1)
+            detail = push(detail, sigma)
+            // The mirror law determines the first L steps exactly.
+            explained = explained + int_div(1000 * L, sigma)
+            count = count + 1
+        }
+    }
+    return ProbeResult { strategy: "mirror-families", separates: true, leverage: int_div(explained, count), detail: detail }
+}
+
+// Cycle arithmetic: a 3x+1 cycle with q odd steps has length j with
+// 2^j > 3^q and minimum element >= (3^q - 2^q)/(2^j - 3^q). For 3x-1 the
+// sign flips (3^q > 2^j), which admits the known cycles.
+pub pure fn probe_cycles() -> ProbeResult {
+    let mut detail: list<int> = []
+    let mut best: int = 0
+    for q in range(1, 39) {
+        let mut p3: int = 1
+        for _ in range(q) { p3 = p3 * 3 }
+        let mut j: int = 0
+        while (1 << j) <= p3 { j = j + 1 }
+        let bound: int = int_div(p3 - (1 << q), (1 << j) - p3)
+        detail = push(detail, bound)
+        if bound > best { best = bound }
+    }
+    let digits: int = len(format("{}", best))
+    return ProbeResult { strategy: "cycle-arithmetic", separates: true, leverage: 60 * digits, detail: detail }
+}

@@ -1,0 +1,70 @@
+use "matrix.rad"
+
+// Constraint-safe arithmetic: no assert, callbacks, matrix allocation,
+// native extension calls, or unpriced builtins. Callers validate dimensions.
+pub pure fn rank_coefficient(model: Model, word: list<int>, row: int, column: int) -> int {
+    let head: int = if model.reverse { word[len(word) - 1] } else { word[0] }
+    if len(word) == 1 { return model.matrices[head][row][column] }
+    let tail: int = if model.reverse { word[0] } else { word[len(word) - 1] }
+    let mut total: int = 0
+    let mut k: int = 0
+    while k <= model.dimension {
+        if len(word) == 2 {
+            total = total + model.matrices[head][row][k] * model.matrices[tail][k][column]
+        }
+        else {
+            let middle: int = word[1]
+            let mut j: int = 0
+            while j <= model.dimension {
+                total = total + model.matrices[head][row][k] * model.matrices[middle][k][j] * model.matrices[tail][j][column]
+                j = j + 1
+            }
+        }
+        k = k + 1
+    }
+    return total
+}
+
+pub pure fn certifies_complete_rank(model: Model) -> bool {
+    let d: int = model.dimension
+    if d < 1 or d > 8 or model.maximum < 1 or model.maximum > 31 or model.arctic or model.denominator != 1 { return false }
+    if model.omitted != -1 or not model.complete_proof or len(model.matrices) != 7 { return false }
+    let expected: list<int> = if model.reverse { [0, 1] } else { [8, 9, 10] }
+    if model.strict_rules != expected { return false }
+    for matrix in model.matrices {
+        if len(matrix) != d + 1 { return false }
+        let mut i: int = 0
+        while i <= d {
+            if len(matrix[i]) != d + 1 { return false }
+            let mut j: int = 0
+            while j <= d {
+                let coefficient: int = matrix[i][j]
+                if i == d {
+                    if coefficient != if j == d { 1 } else { 0 } { return false }
+                }
+                else if coefficient < 0 or coefficient > model.maximum { return false }
+                j = j + 1
+            }
+            i = i + 1
+        }
+    }
+    let lefts: list<list<int>> = [[0, 3], [1, 3], [0, 4], [0, 5], [0, 6], [1, 4], [1, 5], [1, 6], [2, 4], [2, 5], [2, 6]]
+    let rights: list<list<int>> = [[3], [6, 3], [4, 0], [4, 1], [5, 0], [5, 1], [6, 0], [6, 1], [2, 1], [2, 0, 0], [2, 0, 1]]
+    let mut rule: int = 0
+    while rule < 11 {
+        let mut i: int = 0
+        while i < d {
+            let mut j: int = 0
+            while j <= d {
+                let lhs: int = rank_coefficient(model, lefts[rule], i, j)
+                let rhs: int = rank_coefficient(model, rights[rule], i, j)
+                if lhs < rhs { return false }
+                if i == 0 and j == d and ((model.reverse and rule < 2) or (not model.reverse and rule >= 8)) and lhs == rhs { return false }
+                j = j + 1
+            }
+            i = i + 1
+        }
+        rule = rule + 1
+    }
+    return true
+}

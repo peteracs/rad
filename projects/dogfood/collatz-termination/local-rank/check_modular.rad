@@ -1,0 +1,23 @@
+use "modular.rad"
+
+fn main() -> nil {
+    let args: list<str> = sys_args()
+    assert(len(args) == 1, "supply modular obstruction")
+    let proof: map<str, any> = json_parse(read_file(args[0])) |> unwrap
+    let rows: list<map<str, any>> = proof["rows"]
+    assert(len(rows) > 0 and len(rows) <= 10000, "invalid modular obstruction size")
+    let mut totals: map<str, int> = {}
+    let mut contradiction: int = 0
+    for term in rows {
+        let multiplier: int = term["multiplier"]
+        assert(multiplier > 0 and multiplier <= 1000000000, "invalid multiplier")
+        let raw: map<str, any> = term["constraint"]
+        let row: ModularRow = modular_row(proof["modulus"], proof["boundary"], raw["rule"], raw["residue"], raw["symbol"])
+        contradiction = contradiction + multiplier * row.bound
+        for entry in entries(row.terms) { totals[entry[0]] = get_or(totals, entry[0], 0) + multiplier * entry[1] }
+    }
+    for entry in entries(totals) { assert(entry[1] == 0, "modular coefficients do not cancel") }
+    assert(contradiction > 0, "no modular contradiction")
+    let result: map<str, any> = { "modulus": proof["modulus"], "constraints": len(rows), "contradiction": contradiction, "verified": true, "collatz_proved": false }
+    print(json_stringify(result))
+}

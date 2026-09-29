@@ -1,0 +1,25 @@
+{
+  "rounds": 193,
+  "checked": 9248,
+  "remaining": 0,
+  "best": {
+    "H7_ball": 6147,
+    "actual_receiver_amplitude_power_two": -33,
+    "donor_production_n": 5,
+    "finite_transfer_bounds_pass": true,
+    "limiting_bound": "receiver relative profile error",
+    "method": 1,
+    "p": 6,
+    "profile_error_coefficient": 7188167681573952,
+    "q": -1,
+    "radius_eighths": 9,
+    "receiver_autonomous_amplification_reached": false,
+    "receiver_loss_n": 7130,
+    "receiver_production_n": 4632,
+    "return_map_proved": false,
+    "seed_H7_upper": 5464,
+    "time_exponent": 44
+  },
+  "elapsed_this_invocation_seconds": 17.422,
+  "return_map_proved": false
+}

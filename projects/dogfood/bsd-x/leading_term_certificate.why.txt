@@ -1,0 +1,544 @@
+case {"bound":0,"conditional_equality":false,"divisor":1,"escape_factor":2,"inconsistent":true,"next_order":4,"possible_count":0,"square_multiple":1,"target":1,"unique_order":0}
+case {"bound":1,"conditional_equality":true,"divisor":1,"escape_factor":2,"inconsistent":false,"next_order":4,"possible_count":1,"square_multiple":1,"target":1,"unique_order":1}
+case {"bound":3,"conditional_equality":true,"divisor":1,"escape_factor":2,"inconsistent":false,"next_order":4,"possible_count":1,"square_multiple":1,"target":1,"unique_order":1}
+case {"bound":4,"conditional_equality":false,"divisor":1,"escape_factor":2,"inconsistent":false,"next_order":4,"possible_count":2,"square_multiple":1,"target":1,"unique_order":0}
+case {"bound":3,"conditional_equality":false,"divisor":2,"escape_factor":2,"inconsistent":true,"next_order":16,"possible_count":0,"square_multiple":4,"target":2,"unique_order":0}
+case {"bound":4,"conditional_equality":false,"divisor":2,"escape_factor":2,"inconsistent":false,"next_order":16,"possible_count":1,"square_multiple":4,"target":2,"unique_order":4}
+case {"bound":15,"conditional_equality":false,"divisor":2,"escape_factor":2,"inconsistent":false,"next_order":16,"possible_count":1,"square_multiple":4,"target":2,"unique_order":4}
+case {"bound":16,"conditional_equality":false,"divisor":2,"escape_factor":2,"inconsistent":false,"next_order":16,"possible_count":2,"square_multiple":4,"target":2,"unique_order":0}
+case {"bound":8,"conditional_equality":false,"divisor":3,"escape_factor":2,"inconsistent":true,"next_order":36,"possible_count":0,"square_multiple":9,"target":3,"unique_order":0}
+case {"bound":9,"conditional_equality":false,"divisor":3,"escape_factor":2,"inconsistent":false,"next_order":36,"possible_count":1,"square_multiple":9,"target":3,"unique_order":9}
+case {"bound":35,"conditional_equality":false,"divisor":3,"escape_factor":2,"inconsistent":false,"next_order":36,"possible_count":1,"square_multiple":9,"target":3,"unique_order":9}
+case {"bound":36,"conditional_equality":false,"divisor":3,"escape_factor":2,"inconsistent":false,"next_order":36,"possible_count":2,"square_multiple":9,"target":3,"unique_order":0}
+case {"bound":3,"conditional_equality":false,"divisor":4,"escape_factor":2,"inconsistent":true,"next_order":16,"possible_count":0,"square_multiple":4,"target":4,"unique_order":0}
+case {"bound":4,"conditional_equality":true,"divisor":4,"escape_factor":2,"inconsistent":false,"next_order":16,"possible_count":1,"square_multiple":4,"target":4,"unique_order":4}
+case {"bound":15,"conditional_equality":true,"divisor":4,"escape_factor":2,"inconsistent":false,"next_order":16,"possible_count":1,"square_multiple":4,"target":4,"unique_order":4}
+case {"bound":16,"conditional_equality":false,"divisor":4,"escape_factor":2,"inconsistent":false,"next_order":16,"possible_count":2,"square_multiple":4,"target":4,"unique_order":0}
+case {"bound":24,"conditional_equality":false,"divisor":5,"escape_factor":2,"inconsistent":true,"next_order":100,"possible_count":0,"square_multiple":25,"target":5,"unique_order":0}
+case {"bound":25,"conditional_equality":false,"divisor":5,"escape_factor":2,"inconsistent":false,"next_order":100,"possible_count":1,"square_multiple":25,"target":5,"unique_order":25}
+case {"bound":99,"conditional_equality":false,"divisor":5,"escape_factor":2,"inconsistent":false,"next_order":100,"possible_count":1,"square_multiple":25,"target":5,"unique_order":25}
+case {"bound":100,"conditional_equality":false,"divisor":5,"escape_factor":2,"inconsistent":false,"next_order":100,"possible_count":2,"square_multiple":25,"target":5,"unique_order":0}
+case {"bound":35,"conditional_equality":false,"divisor":6,"escape_factor":2,"inconsistent":true,"next_order":144,"possible_count":0,"square_multiple":36,"target":6,"unique_order":0}
+case {"bound":36,"conditional_equality":false,"divisor":6,"escape_factor":2,"inconsistent":false,"next_order":144,"possible_count":1,"square_multiple":36,"target":6,"unique_order":36}
+case {"bound":143,"conditional_equality":false,"divisor":6,"escape_factor":2,"inconsistent":false,"next_order":144,"possible_count":1,"square_multiple":36,"target":6,"unique_order":36}
+case {"bound":144,"conditional_equality":false,"divisor":6,"escape_factor":2,"inconsistent":false,"next_order":144,"possible_count":2,"square_multiple":36,"target":6,"unique_order":0}
+case {"bound":48,"conditional_equality":false,"divisor":7,"escape_factor":2,"inconsistent":true,"next_order":196,"possible_count":0,"square_multiple":49,"target":7,"unique_order":0}
+case {"bound":49,"conditional_equality":false,"divisor":7,"escape_factor":2,"inconsistent":false,"next_order":196,"possible_count":1,"square_multiple":49,"target":7,"unique_order":49}
+case {"bound":195,"conditional_equality":false,"divisor":7,"escape_factor":2,"inconsistent":false,"next_order":196,"possible_count":1,"square_multiple":49,"target":7,"unique_order":49}
+case {"bound":196,"conditional_equality":false,"divisor":7,"escape_factor":2,"inconsistent":false,"next_order":196,"possible_count":2,"square_multiple":49,"target":7,"unique_order":0}
+case {"bound":15,"conditional_equality":false,"divisor":8,"escape_factor":2,"inconsistent":true,"next_order":64,"possible_count":0,"square_multiple":16,"target":8,"unique_order":0}
+case {"bound":16,"conditional_equality":false,"divisor":8,"escape_factor":2,"inconsistent":false,"next_order":64,"possible_count":1,"square_multiple":16,"target":8,"unique_order":16}
+case {"bound":63,"conditional_equality":false,"divisor":8,"escape_factor":2,"inconsistent":false,"next_order":64,"possible_count":1,"square_multiple":16,"target":8,"unique_order":16}
+case {"bound":64,"conditional_equality":false,"divisor":8,"escape_factor":2,"inconsistent":false,"next_order":64,"possible_count":2,"square_multiple":16,"target":8,"unique_order":0}
+case {"bound":8,"conditional_equality":false,"divisor":9,"escape_factor":2,"inconsistent":true,"next_order":36,"possible_count":0,"square_multiple":9,"target":9,"unique_order":0}
+case {"bound":9,"conditional_equality":true,"divisor":9,"escape_factor":2,"inconsistent":false,"next_order":36,"possible_count":1,"square_multiple":9,"target":9,"unique_order":9}
+case {"bound":35,"conditional_equality":true,"divisor":9,"escape_factor":2,"inconsistent":false,"next_order":36,"possible_count":1,"square_multiple":9,"target":9,"unique_order":9}
+case {"bound":36,"conditional_equality":false,"divisor":9,"escape_factor":2,"inconsistent":false,"next_order":36,"possible_count":2,"square_multiple":9,"target":9,"unique_order":0}
+case {"bound":99,"conditional_equality":false,"divisor":10,"escape_factor":2,"inconsistent":true,"next_order":400,"possible_count":0,"square_multiple":100,"target":10,"unique_order":0}
+case {"bound":100,"conditional_equality":false,"divisor":10,"escape_factor":2,"inconsistent":false,"next_order":400,"possible_count":1,"square_multiple":100,"target":10,"unique_order":100}
+case {"bound":399,"conditional_equality":false,"divisor":10,"escape_factor":2,"inconsistent":false,"next_order":400,"possible_count":1,"square_multiple":100,"target":10,"unique_order":100}
+case {"bound":400,"conditional_equality":false,"divisor":10,"escape_factor":2,"inconsistent":false,"next_order":400,"possible_count":2,"square_multiple":100,"target":10,"unique_order":0}
+case {"bound":120,"conditional_equality":false,"divisor":11,"escape_factor":2,"inconsistent":true,"next_order":484,"possible_count":0,"square_multiple":121,"target":11,"unique_order":0}
+case {"bound":121,"conditional_equality":false,"divisor":11,"escape_factor":2,"inconsistent":false,"next_order":484,"possible_count":1,"square_multiple":121,"target":11,"unique_order":121}
+case {"bound":483,"conditional_equality":false,"divisor":11,"escape_factor":2,"inconsistent":false,"next_order":484,"possible_count":1,"square_multiple":121,"target":11,"unique_order":121}
+case {"bound":484,"conditional_equality":false,"divisor":11,"escape_factor":2,"inconsistent":false,"next_order":484,"possible_count":2,"square_multiple":121,"target":11,"unique_order":0}
+case {"bound":35,"conditional_equality":false,"divisor":12,"escape_factor":2,"inconsistent":true,"next_order":144,"possible_count":0,"square_multiple":36,"target":12,"unique_order":0}
+case {"bound":36,"conditional_equality":false,"divisor":12,"escape_factor":2,"inconsistent":false,"next_order":144,"possible_count":1,"square_multiple":36,"target":12,"unique_order":36}
+case {"bound":143,"conditional_equality":false,"divisor":12,"escape_factor":2,"inconsistent":false,"next_order":144,"possible_count":1,"square_multiple":36,"target":12,"unique_order":36}
+case {"bound":144,"conditional_equality":false,"divisor":12,"escape_factor":2,"inconsistent":false,"next_order":144,"possible_count":2,"square_multiple":36,"target":12,"unique_order":0}
+case {"bound":168,"conditional_equality":false,"divisor":13,"escape_factor":2,"inconsistent":true,"next_order":676,"possible_count":0,"square_multiple":169,"target":13,"unique_order":0}
+case {"bound":169,"conditional_equality":false,"divisor":13,"escape_factor":2,"inconsistent":false,"next_order":676,"possible_count":1,"square_multiple":169,"target":13,"unique_order":169}
+case {"bound":675,"conditional_equality":false,"divisor":13,"escape_factor":2,"inconsistent":false,"next_order":676,"possible_count":1,"square_multiple":169,"target":13,"unique_order":169}
+case {"bound":676,"conditional_equality":false,"divisor":13,"escape_factor":2,"inconsistent":false,"next_order":676,"possible_count":2,"square_multiple":169,"target":13,"unique_order":0}
+case {"bound":195,"conditional_equality":false,"divisor":14,"escape_factor":2,"inconsistent":true,"next_order":784,"possible_count":0,"square_multiple":196,"target":14,"unique_order":0}
+case {"bound":196,"conditional_equality":false,"divisor":14,"escape_factor":2,"inconsistent":false,"next_order":784,"possible_count":1,"square_multiple":196,"target":14,"unique_order":196}
+case {"bound":783,"conditional_equality":false,"divisor":14,"escape_factor":2,"inconsistent":false,"next_order":784,"possible_count":1,"square_multiple":196,"target":14,"unique_order":196}
+case {"bound":784,"conditional_equality":false,"divisor":14,"escape_factor":2,"inconsistent":false,"next_order":784,"possible_count":2,"square_multiple":196,"target":14,"unique_order":0}
+case {"bound":224,"conditional_equality":false,"divisor":15,"escape_factor":2,"inconsistent":true,"next_order":900,"possible_count":0,"square_multiple":225,"target":15,"unique_order":0}
+case {"bound":225,"conditional_equality":false,"divisor":15,"escape_factor":2,"inconsistent":false,"next_order":900,"possible_count":1,"square_multiple":225,"target":15,"unique_order":225}
+case {"bound":899,"conditional_equality":false,"divisor":15,"escape_factor":2,"inconsistent":false,"next_order":900,"possible_count":1,"square_multiple":225,"target":15,"unique_order":225}
+case {"bound":900,"conditional_equality":false,"divisor":15,"escape_factor":2,"inconsistent":false,"next_order":900,"possible_count":2,"square_multiple":225,"target":15,"unique_order":0}
+case {"bound":15,"conditional_equality":false,"divisor":16,"escape_factor":2,"inconsistent":true,"next_order":64,"possible_count":0,"square_multiple":16,"target":16,"unique_order":0}
+case {"bound":16,"conditional_equality":true,"divisor":16,"escape_factor":2,"inconsistent":false,"next_order":64,"possible_count":1,"square_multiple":16,"target":16,"unique_order":16}
+case {"bound":63,"conditional_equality":true,"divisor":16,"escape_factor":2,"inconsistent":false,"next_order":64,"possible_count":1,"square_multiple":16,"target":16,"unique_order":16}
+case {"bound":64,"conditional_equality":false,"divisor":16,"escape_factor":2,"inconsistent":false,"next_order":64,"possible_count":2,"square_multiple":16,"target":16,"unique_order":0}
+case {"bound":288,"conditional_equality":false,"divisor":17,"escape_factor":2,"inconsistent":true,"next_order":1156,"possible_count":0,"square_multiple":289,"target":17,"unique_order":0}
+case {"bound":289,"conditional_equality":false,"divisor":17,"escape_factor":2,"inconsistent":false,"next_order":1156,"possible_count":1,"square_multiple":289,"target":17,"unique_order":289}
+case {"bound":1155,"conditional_equality":false,"divisor":17,"escape_factor":2,"inconsistent":false,"next_order":1156,"possible_count":1,"square_multiple":289,"target":17,"unique_order":289}
+case {"bound":1156,"conditional_equality":false,"divisor":17,"escape_factor":2,"inconsistent":false,"next_order":1156,"possible_count":2,"square_multiple":289,"target":17,"unique_order":0}
+case {"bound":35,"conditional_equality":false,"divisor":18,"escape_factor":2,"inconsistent":true,"next_order":144,"possible_count":0,"square_multiple":36,"target":18,"unique_order":0}
+case {"bound":36,"conditional_equality":false,"divisor":18,"escape_factor":2,"inconsistent":false,"next_order":144,"possible_count":1,"square_multiple":36,"target":18,"unique_order":36}
+case {"bound":143,"conditional_equality":false,"divisor":18,"escape_factor":2,"inconsistent":false,"next_order":144,"possible_count":1,"square_multiple":36,"target":18,"unique_order":36}
+case {"bound":144,"conditional_equality":false,"divisor":18,"escape_factor":2,"inconsistent":false,"next_order":144,"possible_count":2,"square_multiple":36,"target":18,"unique_order":0}
+case {"bound":360,"conditional_equality":false,"divisor":19,"escape_factor":2,"inconsistent":true,"next_order":1444,"possible_count":0,"square_multiple":361,"target":19,"unique_order":0}
+case {"bound":361,"conditional_equality":false,"divisor":19,"escape_factor":2,"inconsistent":false,"next_order":1444,"possible_count":1,"square_multiple":361,"target":19,"unique_order":361}
+case {"bound":1443,"conditional_equality":false,"divisor":19,"escape_factor":2,"inconsistent":false,"next_order":1444,"possible_count":1,"square_multiple":361,"target":19,"unique_order":361}
+case {"bound":1444,"conditional_equality":false,"divisor":19,"escape_factor":2,"inconsistent":false,"next_order":1444,"possible_count":2,"square_multiple":361,"target":19,"unique_order":0}
+case {"bound":99,"conditional_equality":false,"divisor":20,"escape_factor":2,"inconsistent":true,"next_order":400,"possible_count":0,"square_multiple":100,"target":20,"unique_order":0}
+case {"bound":100,"conditional_equality":false,"divisor":20,"escape_factor":2,"inconsistent":false,"next_order":400,"possible_count":1,"square_multiple":100,"target":20,"unique_order":100}
+case {"bound":399,"conditional_equality":false,"divisor":20,"escape_factor":2,"inconsistent":false,"next_order":400,"possible_count":1,"square_multiple":100,"target":20,"unique_order":100}
+case {"bound":400,"conditional_equality":false,"divisor":20,"escape_factor":2,"inconsistent":false,"next_order":400,"possible_count":2,"square_multiple":100,"target":20,"unique_order":0}
+case {"bound":440,"conditional_equality":false,"divisor":21,"escape_factor":2,"inconsistent":true,"next_order":1764,"possible_count":0,"square_multiple":441,"target":21,"unique_order":0}
+case {"bound":441,"conditional_equality":false,"divisor":21,"escape_factor":2,"inconsistent":false,"next_order":1764,"possible_count":1,"square_multiple":441,"target":21,"unique_order":441}
+case {"bound":1763,"conditional_equality":false,"divisor":21,"escape_factor":2,"inconsistent":false,"next_order":1764,"possible_count":1,"square_multiple":441,"target":21,"unique_order":441}
+case {"bound":1764,"conditional_equality":false,"divisor":21,"escape_factor":2,"inconsistent":false,"next_order":1764,"possible_count":2,"square_multiple":441,"target":21,"unique_order":0}
+case {"bound":483,"conditional_equality":false,"divisor":22,"escape_factor":2,"inconsistent":true,"next_order":1936,"possible_count":0,"square_multiple":484,"target":22,"unique_order":0}
+case {"bound":484,"conditional_equality":false,"divisor":22,"escape_factor":2,"inconsistent":false,"next_order":1936,"possible_count":1,"square_multiple":484,"target":22,"unique_order":484}
+case {"bound":1935,"conditional_equality":false,"divisor":22,"escape_factor":2,"inconsistent":false,"next_order":1936,"possible_count":1,"square_multiple":484,"target":22,"unique_order":484}
+case {"bound":1936,"conditional_equality":false,"divisor":22,"escape_factor":2,"inconsistent":false,"next_order":1936,"possible_count":2,"square_multiple":484,"target":22,"unique_order":0}
+case {"bound":528,"conditional_equality":false,"divisor":23,"escape_factor":2,"inconsistent":true,"next_order":2116,"possible_count":0,"square_multiple":529,"target":23,"unique_order":0}
+case {"bound":529,"conditional_equality":false,"divisor":23,"escape_factor":2,"inconsistent":false,"next_order":2116,"possible_count":1,"square_multiple":529,"target":23,"unique_order":529}
+case {"bound":2115,"conditional_equality":false,"divisor":23,"escape_factor":2,"inconsistent":false,"next_order":2116,"possible_count":1,"square_multiple":529,"target":23,"unique_order":529}
+case {"bound":2116,"conditional_equality":false,"divisor":23,"escape_factor":2,"inconsistent":false,"next_order":2116,"possible_count":2,"square_multiple":529,"target":23,"unique_order":0}
+case {"bound":143,"conditional_equality":false,"divisor":24,"escape_factor":2,"inconsistent":true,"next_order":576,"possible_count":0,"square_multiple":144,"target":24,"unique_order":0}
+case {"bound":144,"conditional_equality":false,"divisor":24,"escape_factor":2,"inconsistent":false,"next_order":576,"possible_count":1,"square_multiple":144,"target":24,"unique_order":144}
+case {"bound":575,"conditional_equality":false,"divisor":24,"escape_factor":2,"inconsistent":false,"next_order":576,"possible_count":1,"square_multiple":144,"target":24,"unique_order":144}
+case {"bound":576,"conditional_equality":false,"divisor":24,"escape_factor":2,"inconsistent":false,"next_order":576,"possible_count":2,"square_multiple":144,"target":24,"unique_order":0}
+case {"bound":24,"conditional_equality":false,"divisor":25,"escape_factor":2,"inconsistent":true,"next_order":100,"possible_count":0,"square_multiple":25,"target":25,"unique_order":0}
+case {"bound":25,"conditional_equality":true,"divisor":25,"escape_factor":2,"inconsistent":false,"next_order":100,"possible_count":1,"square_multiple":25,"target":25,"unique_order":25}
+case {"bound":99,"conditional_equality":true,"divisor":25,"escape_factor":2,"inconsistent":false,"next_order":100,"possible_count":1,"square_multiple":25,"target":25,"unique_order":25}
+case {"bound":100,"conditional_equality":false,"divisor":25,"escape_factor":2,"inconsistent":false,"next_order":100,"possible_count":2,"square_multiple":25,"target":25,"unique_order":0}
+case {"bound":675,"conditional_equality":false,"divisor":26,"escape_factor":2,"inconsistent":true,"next_order":2704,"possible_count":0,"square_multiple":676,"target":26,"unique_order":0}
+case {"bound":676,"conditional_equality":false,"divisor":26,"escape_factor":2,"inconsistent":false,"next_order":2704,"possible_count":1,"square_multiple":676,"target":26,"unique_order":676}
+case {"bound":2703,"conditional_equality":false,"divisor":26,"escape_factor":2,"inconsistent":false,"next_order":2704,"possible_count":1,"square_multiple":676,"target":26,"unique_order":676}
+case {"bound":2704,"conditional_equality":false,"divisor":26,"escape_factor":2,"inconsistent":false,"next_order":2704,"possible_count":2,"square_multiple":676,"target":26,"unique_order":0}
+case {"bound":80,"conditional_equality":false,"divisor":27,"escape_factor":2,"inconsistent":true,"next_order":324,"possible_count":0,"square_multiple":81,"target":27,"unique_order":0}
+case {"bound":81,"conditional_equality":false,"divisor":27,"escape_factor":2,"inconsistent":false,"next_order":324,"possible_count":1,"square_multiple":81,"target":27,"unique_order":81}
+case {"bound":323,"conditional_equality":false,"divisor":27,"escape_factor":2,"inconsistent":false,"next_order":324,"possible_count":1,"square_multiple":81,"target":27,"unique_order":81}
+case {"bound":324,"conditional_equality":false,"divisor":27,"escape_factor":2,"inconsistent":false,"next_order":324,"possible_count":2,"square_multiple":81,"target":27,"unique_order":0}
+case {"bound":195,"conditional_equality":false,"divisor":28,"escape_factor":2,"inconsistent":true,"next_order":784,"possible_count":0,"square_multiple":196,"target":28,"unique_order":0}
+case {"bound":196,"conditional_equality":false,"divisor":28,"escape_factor":2,"inconsistent":false,"next_order":784,"possible_count":1,"square_multiple":196,"target":28,"unique_order":196}
+case {"bound":783,"conditional_equality":false,"divisor":28,"escape_factor":2,"inconsistent":false,"next_order":784,"possible_count":1,"square_multiple":196,"target":28,"unique_order":196}
+case {"bound":784,"conditional_equality":false,"divisor":28,"escape_factor":2,"inconsistent":false,"next_order":784,"possible_count":2,"square_multiple":196,"target":28,"unique_order":0}
+case {"bound":840,"conditional_equality":false,"divisor":29,"escape_factor":2,"inconsistent":true,"next_order":3364,"possible_count":0,"square_multiple":841,"target":29,"unique_order":0}
+case {"bound":841,"conditional_equality":false,"divisor":29,"escape_factor":2,"inconsistent":false,"next_order":3364,"possible_count":1,"square_multiple":841,"target":29,"unique_order":841}
+case {"bound":3363,"conditional_equality":false,"divisor":29,"escape_factor":2,"inconsistent":false,"next_order":3364,"possible_count":1,"square_multiple":841,"target":29,"unique_order":841}
+case {"bound":3364,"conditional_equality":false,"divisor":29,"escape_factor":2,"inconsistent":false,"next_order":3364,"possible_count":2,"square_multiple":841,"target":29,"unique_order":0}
+case {"bound":899,"conditional_equality":false,"divisor":30,"escape_factor":2,"inconsistent":true,"next_order":3600,"possible_count":0,"square_multiple":900,"target":30,"unique_order":0}
+case {"bound":900,"conditional_equality":false,"divisor":30,"escape_factor":2,"inconsistent":false,"next_order":3600,"possible_count":1,"square_multiple":900,"target":30,"unique_order":900}
+case {"bound":3599,"conditional_equality":false,"divisor":30,"escape_factor":2,"inconsistent":false,"next_order":3600,"possible_count":1,"square_multiple":900,"target":30,"unique_order":900}
+case {"bound":3600,"conditional_equality":false,"divisor":30,"escape_factor":2,"inconsistent":false,"next_order":3600,"possible_count":2,"square_multiple":900,"target":30,"unique_order":0}
+case {"bound":960,"conditional_equality":false,"divisor":31,"escape_factor":2,"inconsistent":true,"next_order":3844,"possible_count":0,"square_multiple":961,"target":31,"unique_order":0}
+case {"bound":961,"conditional_equality":false,"divisor":31,"escape_factor":2,"inconsistent":false,"next_order":3844,"possible_count":1,"square_multiple":961,"target":31,"unique_order":961}
+case {"bound":3843,"conditional_equality":false,"divisor":31,"escape_factor":2,"inconsistent":false,"next_order":3844,"possible_count":1,"square_multiple":961,"target":31,"unique_order":961}
+case {"bound":3844,"conditional_equality":false,"divisor":31,"escape_factor":2,"inconsistent":false,"next_order":3844,"possible_count":2,"square_multiple":961,"target":31,"unique_order":0}
+case {"bound":63,"conditional_equality":false,"divisor":32,"escape_factor":2,"inconsistent":true,"next_order":256,"possible_count":0,"square_multiple":64,"target":32,"unique_order":0}
+case {"bound":64,"conditional_equality":false,"divisor":32,"escape_factor":2,"inconsistent":false,"next_order":256,"possible_count":1,"square_multiple":64,"target":32,"unique_order":64}
+case {"bound":255,"conditional_equality":false,"divisor":32,"escape_factor":2,"inconsistent":false,"next_order":256,"possible_count":1,"square_multiple":64,"target":32,"unique_order":64}
+case {"bound":256,"conditional_equality":false,"divisor":32,"escape_factor":2,"inconsistent":false,"next_order":256,"possible_count":2,"square_multiple":64,"target":32,"unique_order":0}
+case {"bound":1088,"conditional_equality":false,"divisor":33,"escape_factor":2,"inconsistent":true,"next_order":4356,"possible_count":0,"square_multiple":1089,"target":33,"unique_order":0}
+case {"bound":1089,"conditional_equality":false,"divisor":33,"escape_factor":2,"inconsistent":false,"next_order":4356,"possible_count":1,"square_multiple":1089,"target":33,"unique_order":1089}
+case {"bound":4355,"conditional_equality":false,"divisor":33,"escape_factor":2,"inconsistent":false,"next_order":4356,"possible_count":1,"square_multiple":1089,"target":33,"unique_order":1089}
+case {"bound":4356,"conditional_equality":false,"divisor":33,"escape_factor":2,"inconsistent":false,"next_order":4356,"possible_count":2,"square_multiple":1089,"target":33,"unique_order":0}
+case {"bound":1155,"conditional_equality":false,"divisor":34,"escape_factor":2,"inconsistent":true,"next_order":4624,"possible_count":0,"square_multiple":1156,"target":34,"unique_order":0}
+case {"bound":1156,"conditional_equality":false,"divisor":34,"escape_factor":2,"inconsistent":false,"next_order":4624,"possible_count":1,"square_multiple":1156,"target":34,"unique_order":1156}
+case {"bound":4623,"conditional_equality":false,"divisor":34,"escape_factor":2,"inconsistent":false,"next_order":4624,"possible_count":1,"square_multiple":1156,"target":34,"unique_order":1156}
+case {"bound":4624,"conditional_equality":false,"divisor":34,"escape_factor":2,"inconsistent":false,"next_order":4624,"possible_count":2,"square_multiple":1156,"target":34,"unique_order":0}
+case {"bound":1224,"conditional_equality":false,"divisor":35,"escape_factor":2,"inconsistent":true,"next_order":4900,"possible_count":0,"square_multiple":1225,"target":35,"unique_order":0}
+case {"bound":1225,"conditional_equality":false,"divisor":35,"escape_factor":2,"inconsistent":false,"next_order":4900,"possible_count":1,"square_multiple":1225,"target":35,"unique_order":1225}
+case {"bound":4899,"conditional_equality":false,"divisor":35,"escape_factor":2,"inconsistent":false,"next_order":4900,"possible_count":1,"square_multiple":1225,"target":35,"unique_order":1225}
+case {"bound":4900,"conditional_equality":false,"divisor":35,"escape_factor":2,"inconsistent":false,"next_order":4900,"possible_count":2,"square_multiple":1225,"target":35,"unique_order":0}
+case {"bound":35,"conditional_equality":false,"divisor":36,"escape_factor":2,"inconsistent":true,"next_order":144,"possible_count":0,"square_multiple":36,"target":36,"unique_order":0}
+case {"bound":36,"conditional_equality":true,"divisor":36,"escape_factor":2,"inconsistent":false,"next_order":144,"possible_count":1,"square_multiple":36,"target":36,"unique_order":36}
+case {"bound":143,"conditional_equality":true,"divisor":36,"escape_factor":2,"inconsistent":false,"next_order":144,"possible_count":1,"square_multiple":36,"target":36,"unique_order":36}
+case {"bound":144,"conditional_equality":false,"divisor":36,"escape_factor":2,"inconsistent":false,"next_order":144,"possible_count":2,"square_multiple":36,"target":36,"unique_order":0}
+case {"bound":1368,"conditional_equality":false,"divisor":37,"escape_factor":2,"inconsistent":true,"next_order":5476,"possible_count":0,"square_multiple":1369,"target":37,"unique_order":0}
+case {"bound":1369,"conditional_equality":false,"divisor":37,"escape_factor":2,"inconsistent":false,"next_order":5476,"possible_count":1,"square_multiple":1369,"target":37,"unique_order":1369}
+case {"bound":5475,"conditional_equality":false,"divisor":37,"escape_factor":2,"inconsistent":false,"next_order":5476,"possible_count":1,"square_multiple":1369,"target":37,"unique_order":1369}
+case {"bound":5476,"conditional_equality":false,"divisor":37,"escape_factor":2,"inconsistent":false,"next_order":5476,"possible_count":2,"square_multiple":1369,"target":37,"unique_order":0}
+case {"bound":1443,"conditional_equality":false,"divisor":38,"escape_factor":2,"inconsistent":true,"next_order":5776,"possible_count":0,"square_multiple":1444,"target":38,"unique_order":0}
+case {"bound":1444,"conditional_equality":false,"divisor":38,"escape_factor":2,"inconsistent":false,"next_order":5776,"possible_count":1,"square_multiple":1444,"target":38,"unique_order":1444}
+case {"bound":5775,"conditional_equality":false,"divisor":38,"escape_factor":2,"inconsistent":false,"next_order":5776,"possible_count":1,"square_multiple":1444,"target":38,"unique_order":1444}
+case {"bound":5776,"conditional_equality":false,"divisor":38,"escape_factor":2,"inconsistent":false,"next_order":5776,"possible_count":2,"square_multiple":1444,"target":38,"unique_order":0}
+case {"bound":1520,"conditional_equality":false,"divisor":39,"escape_factor":2,"inconsistent":true,"next_order":6084,"possible_count":0,"square_multiple":1521,"target":39,"unique_order":0}
+case {"bound":1521,"conditional_equality":false,"divisor":39,"escape_factor":2,"inconsistent":false,"next_order":6084,"possible_count":1,"square_multiple":1521,"target":39,"unique_order":1521}
+case {"bound":6083,"conditional_equality":false,"divisor":39,"escape_factor":2,"inconsistent":false,"next_order":6084,"possible_count":1,"square_multiple":1521,"target":39,"unique_order":1521}
+case {"bound":6084,"conditional_equality":false,"divisor":39,"escape_factor":2,"inconsistent":false,"next_order":6084,"possible_count":2,"square_multiple":1521,"target":39,"unique_order":0}
+case {"bound":399,"conditional_equality":false,"divisor":40,"escape_factor":2,"inconsistent":true,"next_order":1600,"possible_count":0,"square_multiple":400,"target":40,"unique_order":0}
+case {"bound":400,"conditional_equality":false,"divisor":40,"escape_factor":2,"inconsistent":false,"next_order":1600,"possible_count":1,"square_multiple":400,"target":40,"unique_order":400}
+case {"bound":1599,"conditional_equality":false,"divisor":40,"escape_factor":2,"inconsistent":false,"next_order":1600,"possible_count":1,"square_multiple":400,"target":40,"unique_order":400}
+case {"bound":1600,"conditional_equality":false,"divisor":40,"escape_factor":2,"inconsistent":false,"next_order":1600,"possible_count":2,"square_multiple":400,"target":40,"unique_order":0}
+case {"bound":1680,"conditional_equality":false,"divisor":41,"escape_factor":2,"inconsistent":true,"next_order":6724,"possible_count":0,"square_multiple":1681,"target":41,"unique_order":0}
+case {"bound":1681,"conditional_equality":false,"divisor":41,"escape_factor":2,"inconsistent":false,"next_order":6724,"possible_count":1,"square_multiple":1681,"target":41,"unique_order":1681}
+case {"bound":6723,"conditional_equality":false,"divisor":41,"escape_factor":2,"inconsistent":false,"next_order":6724,"possible_count":1,"square_multiple":1681,"target":41,"unique_order":1681}
+case {"bound":6724,"conditional_equality":false,"divisor":41,"escape_factor":2,"inconsistent":false,"next_order":6724,"possible_count":2,"square_multiple":1681,"target":41,"unique_order":0}
+case {"bound":1763,"conditional_equality":false,"divisor":42,"escape_factor":2,"inconsistent":true,"next_order":7056,"possible_count":0,"square_multiple":1764,"target":42,"unique_order":0}
+case {"bound":1764,"conditional_equality":false,"divisor":42,"escape_factor":2,"inconsistent":false,"next_order":7056,"possible_count":1,"square_multiple":1764,"target":42,"unique_order":1764}
+case {"bound":7055,"conditional_equality":false,"divisor":42,"escape_factor":2,"inconsistent":false,"next_order":7056,"possible_count":1,"square_multiple":1764,"target":42,"unique_order":1764}
+case {"bound":7056,"conditional_equality":false,"divisor":42,"escape_factor":2,"inconsistent":false,"next_order":7056,"possible_count":2,"square_multiple":1764,"target":42,"unique_order":0}
+case {"bound":1848,"conditional_equality":false,"divisor":43,"escape_factor":2,"inconsistent":true,"next_order":7396,"possible_count":0,"square_multiple":1849,"target":43,"unique_order":0}
+case {"bound":1849,"conditional_equality":false,"divisor":43,"escape_factor":2,"inconsistent":false,"next_order":7396,"possible_count":1,"square_multiple":1849,"target":43,"unique_order":1849}
+case {"bound":7395,"conditional_equality":false,"divisor":43,"escape_factor":2,"inconsistent":false,"next_order":7396,"possible_count":1,"square_multiple":1849,"target":43,"unique_order":1849}
+case {"bound":7396,"conditional_equality":false,"divisor":43,"escape_factor":2,"inconsistent":false,"next_order":7396,"possible_count":2,"square_multiple":1849,"target":43,"unique_order":0}
+case {"bound":483,"conditional_equality":false,"divisor":44,"escape_factor":2,"inconsistent":true,"next_order":1936,"possible_count":0,"square_multiple":484,"target":44,"unique_order":0}
+case {"bound":484,"conditional_equality":false,"divisor":44,"escape_factor":2,"inconsistent":false,"next_order":1936,"possible_count":1,"square_multiple":484,"target":44,"unique_order":484}
+case {"bound":1935,"conditional_equality":false,"divisor":44,"escape_factor":2,"inconsistent":false,"next_order":1936,"possible_count":1,"square_multiple":484,"target":44,"unique_order":484}
+case {"bound":1936,"conditional_equality":false,"divisor":44,"escape_factor":2,"inconsistent":false,"next_order":1936,"possible_count":2,"square_multiple":484,"target":44,"unique_order":0}
+case {"bound":224,"conditional_equality":false,"divisor":45,"escape_factor":2,"inconsistent":true,"next_order":900,"possible_count":0,"square_multiple":225,"target":45,"unique_order":0}
+case {"bound":225,"conditional_equality":false,"divisor":45,"escape_factor":2,"inconsistent":false,"next_order":900,"possible_count":1,"square_multiple":225,"target":45,"unique_order":225}
+case {"bound":899,"conditional_equality":false,"divisor":45,"escape_factor":2,"inconsistent":false,"next_order":900,"possible_count":1,"square_multiple":225,"target":45,"unique_order":225}
+case {"bound":900,"conditional_equality":false,"divisor":45,"escape_factor":2,"inconsistent":false,"next_order":900,"possible_count":2,"square_multiple":225,"target":45,"unique_order":0}
+case {"bound":2115,"conditional_equality":false,"divisor":46,"escape_factor":2,"inconsistent":true,"next_order":8464,"possible_count":0,"square_multiple":2116,"target":46,"unique_order":0}
+case {"bound":2116,"conditional_equality":false,"divisor":46,"escape_factor":2,"inconsistent":false,"next_order":8464,"possible_count":1,"square_multiple":2116,"target":46,"unique_order":2116}
+case {"bound":8463,"conditional_equality":false,"divisor":46,"escape_factor":2,"inconsistent":false,"next_order":8464,"possible_count":1,"square_multiple":2116,"target":46,"unique_order":2116}
+case {"bound":8464,"conditional_equality":false,"divisor":46,"escape_factor":2,"inconsistent":false,"next_order":8464,"possible_count":2,"square_multiple":2116,"target":46,"unique_order":0}
+case {"bound":2208,"conditional_equality":false,"divisor":47,"escape_factor":2,"inconsistent":true,"next_order":8836,"possible_count":0,"square_multiple":2209,"target":47,"unique_order":0}
+case {"bound":2209,"conditional_equality":false,"divisor":47,"escape_factor":2,"inconsistent":false,"next_order":8836,"possible_count":1,"square_multiple":2209,"target":47,"unique_order":2209}
+case {"bound":8835,"conditional_equality":false,"divisor":47,"escape_factor":2,"inconsistent":false,"next_order":8836,"possible_count":1,"square_multiple":2209,"target":47,"unique_order":2209}
+case {"bound":8836,"conditional_equality":false,"divisor":47,"escape_factor":2,"inconsistent":false,"next_order":8836,"possible_count":2,"square_multiple":2209,"target":47,"unique_order":0}
+case {"bound":143,"conditional_equality":false,"divisor":48,"escape_factor":2,"inconsistent":true,"next_order":576,"possible_count":0,"square_multiple":144,"target":48,"unique_order":0}
+case {"bound":144,"conditional_equality":false,"divisor":48,"escape_factor":2,"inconsistent":false,"next_order":576,"possible_count":1,"square_multiple":144,"target":48,"unique_order":144}
+case {"bound":575,"conditional_equality":false,"divisor":48,"escape_factor":2,"inconsistent":false,"next_order":576,"possible_count":1,"square_multiple":144,"target":48,"unique_order":144}
+case {"bound":576,"conditional_equality":false,"divisor":48,"escape_factor":2,"inconsistent":false,"next_order":576,"possible_count":2,"square_multiple":144,"target":48,"unique_order":0}
+case {"bound":48,"conditional_equality":false,"divisor":49,"escape_factor":2,"inconsistent":true,"next_order":196,"possible_count":0,"square_multiple":49,"target":49,"unique_order":0}
+case {"bound":49,"conditional_equality":true,"divisor":49,"escape_factor":2,"inconsistent":false,"next_order":196,"possible_count":1,"square_multiple":49,"target":49,"unique_order":49}
+case {"bound":195,"conditional_equality":true,"divisor":49,"escape_factor":2,"inconsistent":false,"next_order":196,"possible_count":1,"square_multiple":49,"target":49,"unique_order":49}
+case {"bound":196,"conditional_equality":false,"divisor":49,"escape_factor":2,"inconsistent":false,"next_order":196,"possible_count":2,"square_multiple":49,"target":49,"unique_order":0}
+case {"bound":99,"conditional_equality":false,"divisor":50,"escape_factor":2,"inconsistent":true,"next_order":400,"possible_count":0,"square_multiple":100,"target":50,"unique_order":0}
+case {"bound":100,"conditional_equality":false,"divisor":50,"escape_factor":2,"inconsistent":false,"next_order":400,"possible_count":1,"square_multiple":100,"target":50,"unique_order":100}
+case {"bound":399,"conditional_equality":false,"divisor":50,"escape_factor":2,"inconsistent":false,"next_order":400,"possible_count":1,"square_multiple":100,"target":50,"unique_order":100}
+case {"bound":400,"conditional_equality":false,"divisor":50,"escape_factor":2,"inconsistent":false,"next_order":400,"possible_count":2,"square_multiple":100,"target":50,"unique_order":0}
+case {"bound":2600,"conditional_equality":false,"divisor":51,"escape_factor":2,"inconsistent":true,"next_order":10404,"possible_count":0,"square_multiple":2601,"target":51,"unique_order":0}
+case {"bound":2601,"conditional_equality":false,"divisor":51,"escape_factor":2,"inconsistent":false,"next_order":10404,"possible_count":1,"square_multiple":2601,"target":51,"unique_order":2601}
+case {"bound":10403,"conditional_equality":false,"divisor":51,"escape_factor":2,"inconsistent":false,"next_order":10404,"possible_count":1,"square_multiple":2601,"target":51,"unique_order":2601}
+case {"bound":10404,"conditional_equality":false,"divisor":51,"escape_factor":2,"inconsistent":false,"next_order":10404,"possible_count":2,"square_multiple":2601,"target":51,"unique_order":0}
+case {"bound":675,"conditional_equality":false,"divisor":52,"escape_factor":2,"inconsistent":true,"next_order":2704,"possible_count":0,"square_multiple":676,"target":52,"unique_order":0}
+case {"bound":676,"conditional_equality":false,"divisor":52,"escape_factor":2,"inconsistent":false,"next_order":2704,"possible_count":1,"square_multiple":676,"target":52,"unique_order":676}
+case {"bound":2703,"conditional_equality":false,"divisor":52,"escape_factor":2,"inconsistent":false,"next_order":2704,"possible_count":1,"square_multiple":676,"target":52,"unique_order":676}
+case {"bound":2704,"conditional_equality":false,"divisor":52,"escape_factor":2,"inconsistent":false,"next_order":2704,"possible_count":2,"square_multiple":676,"target":52,"unique_order":0}
+case {"bound":2808,"conditional_equality":false,"divisor":53,"escape_factor":2,"inconsistent":true,"next_order":11236,"possible_count":0,"square_multiple":2809,"target":53,"unique_order":0}
+case {"bound":2809,"conditional_equality":false,"divisor":53,"escape_factor":2,"inconsistent":false,"next_order":11236,"possible_count":1,"square_multiple":2809,"target":53,"unique_order":2809}
+case {"bound":11235,"conditional_equality":false,"divisor":53,"escape_factor":2,"inconsistent":false,"next_order":11236,"possible_count":1,"square_multiple":2809,"target":53,"unique_order":2809}
+case {"bound":11236,"conditional_equality":false,"divisor":53,"escape_factor":2,"inconsistent":false,"next_order":11236,"possible_count":2,"square_multiple":2809,"target":53,"unique_order":0}
+case {"bound":323,"conditional_equality":false,"divisor":54,"escape_factor":2,"inconsistent":true,"next_order":1296,"possible_count":0,"square_multiple":324,"target":54,"unique_order":0}
+case {"bound":324,"conditional_equality":false,"divisor":54,"escape_factor":2,"inconsistent":false,"next_order":1296,"possible_count":1,"square_multiple":324,"target":54,"unique_order":324}
+case {"bound":1295,"conditional_equality":false,"divisor":54,"escape_factor":2,"inconsistent":false,"next_order":1296,"possible_count":1,"square_multiple":324,"target":54,"unique_order":324}
+case {"bound":1296,"conditional_equality":false,"divisor":54,"escape_factor":2,"inconsistent":false,"next_order":1296,"possible_count":2,"square_multiple":324,"target":54,"unique_order":0}
+case {"bound":3024,"conditional_equality":false,"divisor":55,"escape_factor":2,"inconsistent":true,"next_order":12100,"possible_count":0,"square_multiple":3025,"target":55,"unique_order":0}
+case {"bound":3025,"conditional_equality":false,"divisor":55,"escape_factor":2,"inconsistent":false,"next_order":12100,"possible_count":1,"square_multiple":3025,"target":55,"unique_order":3025}
+case {"bound":12099,"conditional_equality":false,"divisor":55,"escape_factor":2,"inconsistent":false,"next_order":12100,"possible_count":1,"square_multiple":3025,"target":55,"unique_order":3025}
+case {"bound":12100,"conditional_equality":false,"divisor":55,"escape_factor":2,"inconsistent":false,"next_order":12100,"possible_count":2,"square_multiple":3025,"target":55,"unique_order":0}
+case {"bound":783,"conditional_equality":false,"divisor":56,"escape_factor":2,"inconsistent":true,"next_order":3136,"possible_count":0,"square_multiple":784,"target":56,"unique_order":0}
+case {"bound":784,"conditional_equality":false,"divisor":56,"escape_factor":2,"inconsistent":false,"next_order":3136,"possible_count":1,"square_multiple":784,"target":56,"unique_order":784}
+case {"bound":3135,"conditional_equality":false,"divisor":56,"escape_factor":2,"inconsistent":false,"next_order":3136,"possible_count":1,"square_multiple":784,"target":56,"unique_order":784}
+case {"bound":3136,"conditional_equality":false,"divisor":56,"escape_factor":2,"inconsistent":false,"next_order":3136,"possible_count":2,"square_multiple":784,"target":56,"unique_order":0}
+case {"bound":3248,"conditional_equality":false,"divisor":57,"escape_factor":2,"inconsistent":true,"next_order":12996,"possible_count":0,"square_multiple":3249,"target":57,"unique_order":0}
+case {"bound":3249,"conditional_equality":false,"divisor":57,"escape_factor":2,"inconsistent":false,"next_order":12996,"possible_count":1,"square_multiple":3249,"target":57,"unique_order":3249}
+case {"bound":12995,"conditional_equality":false,"divisor":57,"escape_factor":2,"inconsistent":false,"next_order":12996,"possible_count":1,"square_multiple":3249,"target":57,"unique_order":3249}
+case {"bound":12996,"conditional_equality":false,"divisor":57,"escape_factor":2,"inconsistent":false,"next_order":12996,"possible_count":2,"square_multiple":3249,"target":57,"unique_order":0}
+case {"bound":3363,"conditional_equality":false,"divisor":58,"escape_factor":2,"inconsistent":true,"next_order":13456,"possible_count":0,"square_multiple":3364,"target":58,"unique_order":0}
+case {"bound":3364,"conditional_equality":false,"divisor":58,"escape_factor":2,"inconsistent":false,"next_order":13456,"possible_count":1,"square_multiple":3364,"target":58,"unique_order":3364}
+case {"bound":13455,"conditional_equality":false,"divisor":58,"escape_factor":2,"inconsistent":false,"next_order":13456,"possible_count":1,"square_multiple":3364,"target":58,"unique_order":3364}
+case {"bound":13456,"conditional_equality":false,"divisor":58,"escape_factor":2,"inconsistent":false,"next_order":13456,"possible_count":2,"square_multiple":3364,"target":58,"unique_order":0}
+case {"bound":3480,"conditional_equality":false,"divisor":59,"escape_factor":2,"inconsistent":true,"next_order":13924,"possible_count":0,"square_multiple":3481,"target":59,"unique_order":0}
+case {"bound":3481,"conditional_equality":false,"divisor":59,"escape_factor":2,"inconsistent":false,"next_order":13924,"possible_count":1,"square_multiple":3481,"target":59,"unique_order":3481}
+case {"bound":13923,"conditional_equality":false,"divisor":59,"escape_factor":2,"inconsistent":false,"next_order":13924,"possible_count":1,"square_multiple":3481,"target":59,"unique_order":3481}
+case {"bound":13924,"conditional_equality":false,"divisor":59,"escape_factor":2,"inconsistent":false,"next_order":13924,"possible_count":2,"square_multiple":3481,"target":59,"unique_order":0}
+case {"bound":899,"conditional_equality":false,"divisor":60,"escape_factor":2,"inconsistent":true,"next_order":3600,"possible_count":0,"square_multiple":900,"target":60,"unique_order":0}
+case {"bound":900,"conditional_equality":false,"divisor":60,"escape_factor":2,"inconsistent":false,"next_order":3600,"possible_count":1,"square_multiple":900,"target":60,"unique_order":900}
+case {"bound":3599,"conditional_equality":false,"divisor":60,"escape_factor":2,"inconsistent":false,"next_order":3600,"possible_count":1,"square_multiple":900,"target":60,"unique_order":900}
+case {"bound":3600,"conditional_equality":false,"divisor":60,"escape_factor":2,"inconsistent":false,"next_order":3600,"possible_count":2,"square_multiple":900,"target":60,"unique_order":0}
+case {"bound":3720,"conditional_equality":false,"divisor":61,"escape_factor":2,"inconsistent":true,"next_order":14884,"possible_count":0,"square_multiple":3721,"target":61,"unique_order":0}
+case {"bound":3721,"conditional_equality":false,"divisor":61,"escape_factor":2,"inconsistent":false,"next_order":14884,"possible_count":1,"square_multiple":3721,"target":61,"unique_order":3721}
+case {"bound":14883,"conditional_equality":false,"divisor":61,"escape_factor":2,"inconsistent":false,"next_order":14884,"possible_count":1,"square_multiple":3721,"target":61,"unique_order":3721}
+case {"bound":14884,"conditional_equality":false,"divisor":61,"escape_factor":2,"inconsistent":false,"next_order":14884,"possible_count":2,"square_multiple":3721,"target":61,"unique_order":0}
+case {"bound":3843,"conditional_equality":false,"divisor":62,"escape_factor":2,"inconsistent":true,"next_order":15376,"possible_count":0,"square_multiple":3844,"target":62,"unique_order":0}
+case {"bound":3844,"conditional_equality":false,"divisor":62,"escape_factor":2,"inconsistent":false,"next_order":15376,"possible_count":1,"square_multiple":3844,"target":62,"unique_order":3844}
+case {"bound":15375,"conditional_equality":false,"divisor":62,"escape_factor":2,"inconsistent":false,"next_order":15376,"possible_count":1,"square_multiple":3844,"target":62,"unique_order":3844}
+case {"bound":15376,"conditional_equality":false,"divisor":62,"escape_factor":2,"inconsistent":false,"next_order":15376,"possible_count":2,"square_multiple":3844,"target":62,"unique_order":0}
+case {"bound":440,"conditional_equality":false,"divisor":63,"escape_factor":2,"inconsistent":true,"next_order":1764,"possible_count":0,"square_multiple":441,"target":63,"unique_order":0}
+case {"bound":441,"conditional_equality":false,"divisor":63,"escape_factor":2,"inconsistent":false,"next_order":1764,"possible_count":1,"square_multiple":441,"target":63,"unique_order":441}
+case {"bound":1763,"conditional_equality":false,"divisor":63,"escape_factor":2,"inconsistent":false,"next_order":1764,"possible_count":1,"square_multiple":441,"target":63,"unique_order":441}
+case {"bound":1764,"conditional_equality":false,"divisor":63,"escape_factor":2,"inconsistent":false,"next_order":1764,"possible_count":2,"square_multiple":441,"target":63,"unique_order":0}
+case {"bound":63,"conditional_equality":false,"divisor":64,"escape_factor":2,"inconsistent":true,"next_order":256,"possible_count":0,"square_multiple":64,"target":64,"unique_order":0}
+case {"bound":64,"conditional_equality":true,"divisor":64,"escape_factor":2,"inconsistent":false,"next_order":256,"possible_count":1,"square_multiple":64,"target":64,"unique_order":64}
+case {"bound":255,"conditional_equality":true,"divisor":64,"escape_factor":2,"inconsistent":false,"next_order":256,"possible_count":1,"square_multiple":64,"target":64,"unique_order":64}
+case {"bound":256,"conditional_equality":false,"divisor":64,"escape_factor":2,"inconsistent":false,"next_order":256,"possible_count":2,"square_multiple":64,"target":64,"unique_order":0}
+case {"bound":4224,"conditional_equality":false,"divisor":65,"escape_factor":2,"inconsistent":true,"next_order":16900,"possible_count":0,"square_multiple":4225,"target":65,"unique_order":0}
+case {"bound":4225,"conditional_equality":false,"divisor":65,"escape_factor":2,"inconsistent":false,"next_order":16900,"possible_count":1,"square_multiple":4225,"target":65,"unique_order":4225}
+case {"bound":16899,"conditional_equality":false,"divisor":65,"escape_factor":2,"inconsistent":false,"next_order":16900,"possible_count":1,"square_multiple":4225,"target":65,"unique_order":4225}
+case {"bound":16900,"conditional_equality":false,"divisor":65,"escape_factor":2,"inconsistent":false,"next_order":16900,"possible_count":2,"square_multiple":4225,"target":65,"unique_order":0}
+case {"bound":4355,"conditional_equality":false,"divisor":66,"escape_factor":2,"inconsistent":true,"next_order":17424,"possible_count":0,"square_multiple":4356,"target":66,"unique_order":0}
+case {"bound":4356,"conditional_equality":false,"divisor":66,"escape_factor":2,"inconsistent":false,"next_order":17424,"possible_count":1,"square_multiple":4356,"target":66,"unique_order":4356}
+case {"bound":17423,"conditional_equality":false,"divisor":66,"escape_factor":2,"inconsistent":false,"next_order":17424,"possible_count":1,"square_multiple":4356,"target":66,"unique_order":4356}
+case {"bound":17424,"conditional_equality":false,"divisor":66,"escape_factor":2,"inconsistent":false,"next_order":17424,"possible_count":2,"square_multiple":4356,"target":66,"unique_order":0}
+case {"bound":4488,"conditional_equality":false,"divisor":67,"escape_factor":2,"inconsistent":true,"next_order":17956,"possible_count":0,"square_multiple":4489,"target":67,"unique_order":0}
+case {"bound":4489,"conditional_equality":false,"divisor":67,"escape_factor":2,"inconsistent":false,"next_order":17956,"possible_count":1,"square_multiple":4489,"target":67,"unique_order":4489}
+case {"bound":17955,"conditional_equality":false,"divisor":67,"escape_factor":2,"inconsistent":false,"next_order":17956,"possible_count":1,"square_multiple":4489,"target":67,"unique_order":4489}
+case {"bound":17956,"conditional_equality":false,"divisor":67,"escape_factor":2,"inconsistent":false,"next_order":17956,"possible_count":2,"square_multiple":4489,"target":67,"unique_order":0}
+case {"bound":1155,"conditional_equality":false,"divisor":68,"escape_factor":2,"inconsistent":true,"next_order":4624,"possible_count":0,"square_multiple":1156,"target":68,"unique_order":0}
+case {"bound":1156,"conditional_equality":false,"divisor":68,"escape_factor":2,"inconsistent":false,"next_order":4624,"possible_count":1,"square_multiple":1156,"target":68,"unique_order":1156}
+case {"bound":4623,"conditional_equality":false,"divisor":68,"escape_factor":2,"inconsistent":false,"next_order":4624,"possible_count":1,"square_multiple":1156,"target":68,"unique_order":1156}
+case {"bound":4624,"conditional_equality":false,"divisor":68,"escape_factor":2,"inconsistent":false,"next_order":4624,"possible_count":2,"square_multiple":1156,"target":68,"unique_order":0}
+case {"bound":4760,"conditional_equality":false,"divisor":69,"escape_factor":2,"inconsistent":true,"next_order":19044,"possible_count":0,"square_multiple":4761,"target":69,"unique_order":0}
+case {"bound":4761,"conditional_equality":false,"divisor":69,"escape_factor":2,"inconsistent":false,"next_order":19044,"possible_count":1,"square_multiple":4761,"target":69,"unique_order":4761}
+case {"bound":19043,"conditional_equality":false,"divisor":69,"escape_factor":2,"inconsistent":false,"next_order":19044,"possible_count":1,"square_multiple":4761,"target":69,"unique_order":4761}
+case {"bound":19044,"conditional_equality":false,"divisor":69,"escape_factor":2,"inconsistent":false,"next_order":19044,"possible_count":2,"square_multiple":4761,"target":69,"unique_order":0}
+case {"bound":4899,"conditional_equality":false,"divisor":70,"escape_factor":2,"inconsistent":true,"next_order":19600,"possible_count":0,"square_multiple":4900,"target":70,"unique_order":0}
+case {"bound":4900,"conditional_equality":false,"divisor":70,"escape_factor":2,"inconsistent":false,"next_order":19600,"possible_count":1,"square_multiple":4900,"target":70,"unique_order":4900}
+case {"bound":19599,"conditional_equality":false,"divisor":70,"escape_factor":2,"inconsistent":false,"next_order":19600,"possible_count":1,"square_multiple":4900,"target":70,"unique_order":4900}
+case {"bound":19600,"conditional_equality":false,"divisor":70,"escape_factor":2,"inconsistent":false,"next_order":19600,"possible_count":2,"square_multiple":4900,"target":70,"unique_order":0}
+case {"bound":5040,"conditional_equality":false,"divisor":71,"escape_factor":2,"inconsistent":true,"next_order":20164,"possible_count":0,"square_multiple":5041,"target":71,"unique_order":0}
+case {"bound":5041,"conditional_equality":false,"divisor":71,"escape_factor":2,"inconsistent":false,"next_order":20164,"possible_count":1,"square_multiple":5041,"target":71,"unique_order":5041}
+case {"bound":20163,"conditional_equality":false,"divisor":71,"escape_factor":2,"inconsistent":false,"next_order":20164,"possible_count":1,"square_multiple":5041,"target":71,"unique_order":5041}
+case {"bound":20164,"conditional_equality":false,"divisor":71,"escape_factor":2,"inconsistent":false,"next_order":20164,"possible_count":2,"square_multiple":5041,"target":71,"unique_order":0}
+case {"bound":143,"conditional_equality":false,"divisor":72,"escape_factor":2,"inconsistent":true,"next_order":576,"possible_count":0,"square_multiple":144,"target":72,"unique_order":0}
+case {"bound":144,"conditional_equality":false,"divisor":72,"escape_factor":2,"inconsistent":false,"next_order":576,"possible_count":1,"square_multiple":144,"target":72,"unique_order":144}
+case {"bound":575,"conditional_equality":false,"divisor":72,"escape_factor":2,"inconsistent":false,"next_order":576,"possible_count":1,"square_multiple":144,"target":72,"unique_order":144}
+case {"bound":576,"conditional_equality":false,"divisor":72,"escape_factor":2,"inconsistent":false,"next_order":576,"possible_count":2,"square_multiple":144,"target":72,"unique_order":0}
+case {"bound":5328,"conditional_equality":false,"divisor":73,"escape_factor":2,"inconsistent":true,"next_order":21316,"possible_count":0,"square_multiple":5329,"target":73,"unique_order":0}
+case {"bound":5329,"conditional_equality":false,"divisor":73,"escape_factor":2,"inconsistent":false,"next_order":21316,"possible_count":1,"square_multiple":5329,"target":73,"unique_order":5329}
+case {"bound":21315,"conditional_equality":false,"divisor":73,"escape_factor":2,"inconsistent":false,"next_order":21316,"possible_count":1,"square_multiple":5329,"target":73,"unique_order":5329}
+case {"bound":21316,"conditional_equality":false,"divisor":73,"escape_factor":2,"inconsistent":false,"next_order":21316,"possible_count":2,"square_multiple":5329,"target":73,"unique_order":0}
+case {"bound":5475,"conditional_equality":false,"divisor":74,"escape_factor":2,"inconsistent":true,"next_order":21904,"possible_count":0,"square_multiple":5476,"target":74,"unique_order":0}
+case {"bound":5476,"conditional_equality":false,"divisor":74,"escape_factor":2,"inconsistent":false,"next_order":21904,"possible_count":1,"square_multiple":5476,"target":74,"unique_order":5476}
+case {"bound":21903,"conditional_equality":false,"divisor":74,"escape_factor":2,"inconsistent":false,"next_order":21904,"possible_count":1,"square_multiple":5476,"target":74,"unique_order":5476}
+case {"bound":21904,"conditional_equality":false,"divisor":74,"escape_factor":2,"inconsistent":false,"next_order":21904,"possible_count":2,"square_multiple":5476,"target":74,"unique_order":0}
+case {"bound":224,"conditional_equality":false,"divisor":75,"escape_factor":2,"inconsistent":true,"next_order":900,"possible_count":0,"square_multiple":225,"target":75,"unique_order":0}
+case {"bound":225,"conditional_equality":false,"divisor":75,"escape_factor":2,"inconsistent":false,"next_order":900,"possible_count":1,"square_multiple":225,"target":75,"unique_order":225}
+case {"bound":899,"conditional_equality":false,"divisor":75,"escape_factor":2,"inconsistent":false,"next_order":900,"possible_count":1,"square_multiple":225,"target":75,"unique_order":225}
+case {"bound":900,"conditional_equality":false,"divisor":75,"escape_factor":2,"inconsistent":false,"next_order":900,"possible_count":2,"square_multiple":225,"target":75,"unique_order":0}
+case {"bound":1443,"conditional_equality":false,"divisor":76,"escape_factor":2,"inconsistent":true,"next_order":5776,"possible_count":0,"square_multiple":1444,"target":76,"unique_order":0}
+case {"bound":1444,"conditional_equality":false,"divisor":76,"escape_factor":2,"inconsistent":false,"next_order":5776,"possible_count":1,"square_multiple":1444,"target":76,"unique_order":1444}
+case {"bound":5775,"conditional_equality":false,"divisor":76,"escape_factor":2,"inconsistent":false,"next_order":5776,"possible_count":1,"square_multiple":1444,"target":76,"unique_order":1444}
+case {"bound":5776,"conditional_equality":false,"divisor":76,"escape_factor":2,"inconsistent":false,"next_order":5776,"possible_count":2,"square_multiple":1444,"target":76,"unique_order":0}
+case {"bound":5928,"conditional_equality":false,"divisor":77,"escape_factor":2,"inconsistent":true,"next_order":23716,"possible_count":0,"square_multiple":5929,"target":77,"unique_order":0}
+case {"bound":5929,"conditional_equality":false,"divisor":77,"escape_factor":2,"inconsistent":false,"next_order":23716,"possible_count":1,"square_multiple":5929,"target":77,"unique_order":5929}
+case {"bound":23715,"conditional_equality":false,"divisor":77,"escape_factor":2,"inconsistent":false,"next_order":23716,"possible_count":1,"square_multiple":5929,"target":77,"unique_order":5929}
+case {"bound":23716,"conditional_equality":false,"divisor":77,"escape_factor":2,"inconsistent":false,"next_order":23716,"possible_count":2,"square_multiple":5929,"target":77,"unique_order":0}
+case {"bound":6083,"conditional_equality":false,"divisor":78,"escape_factor":2,"inconsistent":true,"next_order":24336,"possible_count":0,"square_multiple":6084,"target":78,"unique_order":0}
+case {"bound":6084,"conditional_equality":false,"divisor":78,"escape_factor":2,"inconsistent":false,"next_order":24336,"possible_count":1,"square_multiple":6084,"target":78,"unique_order":6084}
+case {"bound":24335,"conditional_equality":false,"divisor":78,"escape_factor":2,"inconsistent":false,"next_order":24336,"possible_count":1,"square_multiple":6084,"target":78,"unique_order":6084}
+case {"bound":24336,"conditional_equality":false,"divisor":78,"escape_factor":2,"inconsistent":false,"next_order":24336,"possible_count":2,"square_multiple":6084,"target":78,"unique_order":0}
+case {"bound":6240,"conditional_equality":false,"divisor":79,"escape_factor":2,"inconsistent":true,"next_order":24964,"possible_count":0,"square_multiple":6241,"target":79,"unique_order":0}
+case {"bound":6241,"conditional_equality":false,"divisor":79,"escape_factor":2,"inconsistent":false,"next_order":24964,"possible_count":1,"square_multiple":6241,"target":79,"unique_order":6241}
+case {"bound":24963,"conditional_equality":false,"divisor":79,"escape_factor":2,"inconsistent":false,"next_order":24964,"possible_count":1,"square_multiple":6241,"target":79,"unique_order":6241}
+case {"bound":24964,"conditional_equality":false,"divisor":79,"escape_factor":2,"inconsistent":false,"next_order":24964,"possible_count":2,"square_multiple":6241,"target":79,"unique_order":0}
+case {"bound":399,"conditional_equality":false,"divisor":80,"escape_factor":2,"inconsistent":true,"next_order":1600,"possible_count":0,"square_multiple":400,"target":80,"unique_order":0}
+case {"bound":400,"conditional_equality":false,"divisor":80,"escape_factor":2,"inconsistent":false,"next_order":1600,"possible_count":1,"square_multiple":400,"target":80,"unique_order":400}
+case {"bound":1599,"conditional_equality":false,"divisor":80,"escape_factor":2,"inconsistent":false,"next_order":1600,"possible_count":1,"square_multiple":400,"target":80,"unique_order":400}
+case {"bound":1600,"conditional_equality":false,"divisor":80,"escape_factor":2,"inconsistent":false,"next_order":1600,"possible_count":2,"square_multiple":400,"target":80,"unique_order":0}
+case {"bound":80,"conditional_equality":false,"divisor":81,"escape_factor":2,"inconsistent":true,"next_order":324,"possible_count":0,"square_multiple":81,"target":81,"unique_order":0}
+case {"bound":81,"conditional_equality":true,"divisor":81,"escape_factor":2,"inconsistent":false,"next_order":324,"possible_count":1,"square_multiple":81,"target":81,"unique_order":81}
+case {"bound":323,"conditional_equality":true,"divisor":81,"escape_factor":2,"inconsistent":false,"next_order":324,"possible_count":1,"square_multiple":81,"target":81,"unique_order":81}
+case {"bound":324,"conditional_equality":false,"divisor":81,"escape_factor":2,"inconsistent":false,"next_order":324,"possible_count":2,"square_multiple":81,"target":81,"unique_order":0}
+case {"bound":6723,"conditional_equality":false,"divisor":82,"escape_factor":2,"inconsistent":true,"next_order":26896,"possible_count":0,"square_multiple":6724,"target":82,"unique_order":0}
+case {"bound":6724,"conditional_equality":false,"divisor":82,"escape_factor":2,"inconsistent":false,"next_order":26896,"possible_count":1,"square_multiple":6724,"target":82,"unique_order":6724}
+case {"bound":26895,"conditional_equality":false,"divisor":82,"escape_factor":2,"inconsistent":false,"next_order":26896,"possible_count":1,"square_multiple":6724,"target":82,"unique_order":6724}
+case {"bound":26896,"conditional_equality":false,"divisor":82,"escape_factor":2,"inconsistent":false,"next_order":26896,"possible_count":2,"square_multiple":6724,"target":82,"unique_order":0}
+case {"bound":6888,"conditional_equality":false,"divisor":83,"escape_factor":2,"inconsistent":true,"next_order":27556,"possible_count":0,"square_multiple":6889,"target":83,"unique_order":0}
+case {"bound":6889,"conditional_equality":false,"divisor":83,"escape_factor":2,"inconsistent":false,"next_order":27556,"possible_count":1,"square_multiple":6889,"target":83,"unique_order":6889}
+case {"bound":27555,"conditional_equality":false,"divisor":83,"escape_factor":2,"inconsistent":false,"next_order":27556,"possible_count":1,"square_multiple":6889,"target":83,"unique_order":6889}
+case {"bound":27556,"conditional_equality":false,"divisor":83,"escape_factor":2,"inconsistent":false,"next_order":27556,"possible_count":2,"square_multiple":6889,"target":83,"unique_order":0}
+case {"bound":1763,"conditional_equality":false,"divisor":84,"escape_factor":2,"inconsistent":true,"next_order":7056,"possible_count":0,"square_multiple":1764,"target":84,"unique_order":0}
+case {"bound":1764,"conditional_equality":false,"divisor":84,"escape_factor":2,"inconsistent":false,"next_order":7056,"possible_count":1,"square_multiple":1764,"target":84,"unique_order":1764}
+case {"bound":7055,"conditional_equality":false,"divisor":84,"escape_factor":2,"inconsistent":false,"next_order":7056,"possible_count":1,"square_multiple":1764,"target":84,"unique_order":1764}
+case {"bound":7056,"conditional_equality":false,"divisor":84,"escape_factor":2,"inconsistent":false,"next_order":7056,"possible_count":2,"square_multiple":1764,"target":84,"unique_order":0}
+case {"bound":7224,"conditional_equality":false,"divisor":85,"escape_factor":2,"inconsistent":true,"next_order":28900,"possible_count":0,"square_multiple":7225,"target":85,"unique_order":0}
+case {"bound":7225,"conditional_equality":false,"divisor":85,"escape_factor":2,"inconsistent":false,"next_order":28900,"possible_count":1,"square_multiple":7225,"target":85,"unique_order":7225}
+case {"bound":28899,"conditional_equality":false,"divisor":85,"escape_factor":2,"inconsistent":false,"next_order":28900,"possible_count":1,"square_multiple":7225,"target":85,"unique_order":7225}
+case {"bound":28900,"conditional_equality":false,"divisor":85,"escape_factor":2,"inconsistent":false,"next_order":28900,"possible_count":2,"square_multiple":7225,"target":85,"unique_order":0}
+case {"bound":7395,"conditional_equality":false,"divisor":86,"escape_factor":2,"inconsistent":true,"next_order":29584,"possible_count":0,"square_multiple":7396,"target":86,"unique_order":0}
+case {"bound":7396,"conditional_equality":false,"divisor":86,"escape_factor":2,"inconsistent":false,"next_order":29584,"possible_count":1,"square_multiple":7396,"target":86,"unique_order":7396}
+case {"bound":29583,"conditional_equality":false,"divisor":86,"escape_factor":2,"inconsistent":false,"next_order":29584,"possible_count":1,"square_multiple":7396,"target":86,"unique_order":7396}
+case {"bound":29584,"conditional_equality":false,"divisor":86,"escape_factor":2,"inconsistent":false,"next_order":29584,"possible_count":2,"square_multiple":7396,"target":86,"unique_order":0}
+case {"bound":7568,"conditional_equality":false,"divisor":87,"escape_factor":2,"inconsistent":true,"next_order":30276,"possible_count":0,"square_multiple":7569,"target":87,"unique_order":0}
+case {"bound":7569,"conditional_equality":false,"divisor":87,"escape_factor":2,"inconsistent":false,"next_order":30276,"possible_count":1,"square_multiple":7569,"target":87,"unique_order":7569}
+case {"bound":30275,"conditional_equality":false,"divisor":87,"escape_factor":2,"inconsistent":false,"next_order":30276,"possible_count":1,"square_multiple":7569,"target":87,"unique_order":7569}
+case {"bound":30276,"conditional_equality":false,"divisor":87,"escape_factor":2,"inconsistent":false,"next_order":30276,"possible_count":2,"square_multiple":7569,"target":87,"unique_order":0}
+case {"bound":1935,"conditional_equality":false,"divisor":88,"escape_factor":2,"inconsistent":true,"next_order":7744,"possible_count":0,"square_multiple":1936,"target":88,"unique_order":0}
+case {"bound":1936,"conditional_equality":false,"divisor":88,"escape_factor":2,"inconsistent":false,"next_order":7744,"possible_count":1,"square_multiple":1936,"target":88,"unique_order":1936}
+case {"bound":7743,"conditional_equality":false,"divisor":88,"escape_factor":2,"inconsistent":false,"next_order":7744,"possible_count":1,"square_multiple":1936,"target":88,"unique_order":1936}
+case {"bound":7744,"conditional_equality":false,"divisor":88,"escape_factor":2,"inconsistent":false,"next_order":7744,"possible_count":2,"square_multiple":1936,"target":88,"unique_order":0}
+case {"bound":7920,"conditional_equality":false,"divisor":89,"escape_factor":2,"inconsistent":true,"next_order":31684,"possible_count":0,"square_multiple":7921,"target":89,"unique_order":0}
+case {"bound":7921,"conditional_equality":false,"divisor":89,"escape_factor":2,"inconsistent":false,"next_order":31684,"possible_count":1,"square_multiple":7921,"target":89,"unique_order":7921}
+case {"bound":31683,"conditional_equality":false,"divisor":89,"escape_factor":2,"inconsistent":false,"next_order":31684,"possible_count":1,"square_multiple":7921,"target":89,"unique_order":7921}
+case {"bound":31684,"conditional_equality":false,"divisor":89,"escape_factor":2,"inconsistent":false,"next_order":31684,"possible_count":2,"square_multiple":7921,"target":89,"unique_order":0}
+case {"bound":899,"conditional_equality":false,"divisor":90,"escape_factor":2,"inconsistent":true,"next_order":3600,"possible_count":0,"square_multiple":900,"target":90,"unique_order":0}
+case {"bound":900,"conditional_equality":false,"divisor":90,"escape_factor":2,"inconsistent":false,"next_order":3600,"possible_count":1,"square_multiple":900,"target":90,"unique_order":900}
+case {"bound":3599,"conditional_equality":false,"divisor":90,"escape_factor":2,"inconsistent":false,"next_order":3600,"possible_count":1,"square_multiple":900,"target":90,"unique_order":900}
+case {"bound":3600,"conditional_equality":false,"divisor":90,"escape_factor":2,"inconsistent":false,"next_order":3600,"possible_count":2,"square_multiple":900,"target":90,"unique_order":0}
+case {"bound":8280,"conditional_equality":false,"divisor":91,"escape_factor":2,"inconsistent":true,"next_order":33124,"possible_count":0,"square_multiple":8281,"target":91,"unique_order":0}
+case {"bound":8281,"conditional_equality":false,"divisor":91,"escape_factor":2,"inconsistent":false,"next_order":33124,"possible_count":1,"square_multiple":8281,"target":91,"unique_order":8281}
+case {"bound":33123,"conditional_equality":false,"divisor":91,"escape_factor":2,"inconsistent":false,"next_order":33124,"possible_count":1,"square_multiple":8281,"target":91,"unique_order":8281}
+case {"bound":33124,"conditional_equality":false,"divisor":91,"escape_factor":2,"inconsistent":false,"next_order":33124,"possible_count":2,"square_multiple":8281,"target":91,"unique_order":0}
+case {"bound":2115,"conditional_equality":false,"divisor":92,"escape_factor":2,"inconsistent":true,"next_order":8464,"possible_count":0,"square_multiple":2116,"target":92,"unique_order":0}
+case {"bound":2116,"conditional_equality":false,"divisor":92,"escape_factor":2,"inconsistent":false,"next_order":8464,"possible_count":1,"square_multiple":2116,"target":92,"unique_order":2116}
+case {"bound":8463,"conditional_equality":false,"divisor":92,"escape_factor":2,"inconsistent":false,"next_order":8464,"possible_count":1,"square_multiple":2116,"target":92,"unique_order":2116}
+case {"bound":8464,"conditional_equality":false,"divisor":92,"escape_factor":2,"inconsistent":false,"next_order":8464,"possible_count":2,"square_multiple":2116,"target":92,"unique_order":0}
+case {"bound":8648,"conditional_equality":false,"divisor":93,"escape_factor":2,"inconsistent":true,"next_order":34596,"possible_count":0,"square_multiple":8649,"target":93,"unique_order":0}
+case {"bound":8649,"conditional_equality":false,"divisor":93,"escape_factor":2,"inconsistent":false,"next_order":34596,"possible_count":1,"square_multiple":8649,"target":93,"unique_order":8649}
+case {"bound":34595,"conditional_equality":false,"divisor":93,"escape_factor":2,"inconsistent":false,"next_order":34596,"possible_count":1,"square_multiple":8649,"target":93,"unique_order":8649}
+case {"bound":34596,"conditional_equality":false,"divisor":93,"escape_factor":2,"inconsistent":false,"next_order":34596,"possible_count":2,"square_multiple":8649,"target":93,"unique_order":0}
+case {"bound":8835,"conditional_equality":false,"divisor":94,"escape_factor":2,"inconsistent":true,"next_order":35344,"possible_count":0,"square_multiple":8836,"target":94,"unique_order":0}
+case {"bound":8836,"conditional_equality":false,"divisor":94,"escape_factor":2,"inconsistent":false,"next_order":35344,"possible_count":1,"square_multiple":8836,"target":94,"unique_order":8836}
+case {"bound":35343,"conditional_equality":false,"divisor":94,"escape_factor":2,"inconsistent":false,"next_order":35344,"possible_count":1,"square_multiple":8836,"target":94,"unique_order":8836}
+case {"bound":35344,"conditional_equality":false,"divisor":94,"escape_factor":2,"inconsistent":false,"next_order":35344,"possible_count":2,"square_multiple":8836,"target":94,"unique_order":0}
+case {"bound":9024,"conditional_equality":false,"divisor":95,"escape_factor":2,"inconsistent":true,"next_order":36100,"possible_count":0,"square_multiple":9025,"target":95,"unique_order":0}
+case {"bound":9025,"conditional_equality":false,"divisor":95,"escape_factor":2,"inconsistent":false,"next_order":36100,"possible_count":1,"square_multiple":9025,"target":95,"unique_order":9025}
+case {"bound":36099,"conditional_equality":false,"divisor":95,"escape_factor":2,"inconsistent":false,"next_order":36100,"possible_count":1,"square_multiple":9025,"target":95,"unique_order":9025}
+case {"bound":36100,"conditional_equality":false,"divisor":95,"escape_factor":2,"inconsistent":false,"next_order":36100,"possible_count":2,"square_multiple":9025,"target":95,"unique_order":0}
+case {"bound":575,"conditional_equality":false,"divisor":96,"escape_factor":2,"inconsistent":true,"next_order":2304,"possible_count":0,"square_multiple":576,"target":96,"unique_order":0}
+case {"bound":576,"conditional_equality":false,"divisor":96,"escape_factor":2,"inconsistent":false,"next_order":2304,"possible_count":1,"square_multiple":576,"target":96,"unique_order":576}
+case {"bound":2303,"conditional_equality":false,"divisor":96,"escape_factor":2,"inconsistent":false,"next_order":2304,"possible_count":1,"square_multiple":576,"target":96,"unique_order":576}
+case {"bound":2304,"conditional_equality":false,"divisor":96,"escape_factor":2,"inconsistent":false,"next_order":2304,"possible_count":2,"square_multiple":576,"target":96,"unique_order":0}
+case {"bound":9408,"conditional_equality":false,"divisor":97,"escape_factor":2,"inconsistent":true,"next_order":37636,"possible_count":0,"square_multiple":9409,"target":97,"unique_order":0}
+case {"bound":9409,"conditional_equality":false,"divisor":97,"escape_factor":2,"inconsistent":false,"next_order":37636,"possible_count":1,"square_multiple":9409,"target":97,"unique_order":9409}
+case {"bound":37635,"conditional_equality":false,"divisor":97,"escape_factor":2,"inconsistent":false,"next_order":37636,"possible_count":1,"square_multiple":9409,"target":97,"unique_order":9409}
+case {"bound":37636,"conditional_equality":false,"divisor":97,"escape_factor":2,"inconsistent":false,"next_order":37636,"possible_count":2,"square_multiple":9409,"target":97,"unique_order":0}
+case {"bound":195,"conditional_equality":false,"divisor":98,"escape_factor":2,"inconsistent":true,"next_order":784,"possible_count":0,"square_multiple":196,"target":98,"unique_order":0}
+case {"bound":196,"conditional_equality":false,"divisor":98,"escape_factor":2,"inconsistent":false,"next_order":784,"possible_count":1,"square_multiple":196,"target":98,"unique_order":196}
+case {"bound":783,"conditional_equality":false,"divisor":98,"escape_factor":2,"inconsistent":false,"next_order":784,"possible_count":1,"square_multiple":196,"target":98,"unique_order":196}
+case {"bound":784,"conditional_equality":false,"divisor":98,"escape_factor":2,"inconsistent":false,"next_order":784,"possible_count":2,"square_multiple":196,"target":98,"unique_order":0}
+case {"bound":1088,"conditional_equality":false,"divisor":99,"escape_factor":2,"inconsistent":true,"next_order":4356,"possible_count":0,"square_multiple":1089,"target":99,"unique_order":0}
+case {"bound":1089,"conditional_equality":false,"divisor":99,"escape_factor":2,"inconsistent":false,"next_order":4356,"possible_count":1,"square_multiple":1089,"target":99,"unique_order":1089}
+case {"bound":4355,"conditional_equality":false,"divisor":99,"escape_factor":2,"inconsistent":false,"next_order":4356,"possible_count":1,"square_multiple":1089,"target":99,"unique_order":1089}
+case {"bound":4356,"conditional_equality":false,"divisor":99,"escape_factor":2,"inconsistent":false,"next_order":4356,"possible_count":2,"square_multiple":1089,"target":99,"unique_order":0}
+case {"bound":99,"conditional_equality":false,"divisor":100,"escape_factor":2,"inconsistent":true,"next_order":400,"possible_count":0,"square_multiple":100,"target":100,"unique_order":0}
+case {"bound":100,"conditional_equality":true,"divisor":100,"escape_factor":2,"inconsistent":false,"next_order":400,"possible_count":1,"square_multiple":100,"target":100,"unique_order":100}
+case {"bound":399,"conditional_equality":true,"divisor":100,"escape_factor":2,"inconsistent":false,"next_order":400,"possible_count":1,"square_multiple":100,"target":100,"unique_order":100}
+case {"bound":400,"conditional_equality":false,"divisor":100,"escape_factor":2,"inconsistent":false,"next_order":400,"possible_count":2,"square_multiple":100,"target":100,"unique_order":0}
+witness {"bound":143,"conditional_equality":true,"divisor":36,"escape_factor":2,"inconsistent":false,"next_order":144,"possible_count":1,"square_multiple":36,"target":36,"unique_order":36}
+OrderEvidence of exact_threshold = { target: 36, divisor: 36, bound: 143, square_multiple: 36, next_order: 144, possible_count: â€¦   (set in frame 0)
+
+  <- resolver `ExplainOrder`
+     intent: OrderChecked
+     key: exact_threshold
+
+     <- proposal OrderChecked { target: exact_threshold, request: OrderRequest { target: 36, divisor: 36, bound: â€¦
+        proposed by law `SubmitOrder` at line 75
+
+     settlement origin:
+  <- by top-level code
+OrderEvidence.conditional_equality of entity 1 = true
+OrderEvidence of exact_threshold = { target: 36, divisor: 36, bound: 143, square_multiple: 36, next_order: 144, possible_count: â€¦   (set in frame 0)
+
+  <- resolver `ExplainOrder`
+     intent: OrderChecked
+     key: exact_threshold
+
+     <- proposal OrderChecked { target: exact_threshold, request: OrderRequest { target: 36, divisor: 36, bound: â€¦
+        proposed by law `SubmitOrder` at line 75
+
+     settlement origin:
+  <- by top-level code
+witness {"bound":144,"conditional_equality":false,"divisor":36,"escape_factor":2,"inconsistent":false,"next_order":144,"possible_count":2,"square_multiple":36,"target":36,"unique_order":0}
+OrderEvidence of threshold_failure = { target: 36, divisor: 36, bound: 144, square_multiple: 36, next_order: 144, possible_count: â€¦   (set in frame 0)
+
+  <- resolver `ExplainOrder`
+     intent: OrderChecked
+     key: threshold_failure
+
+     <- proposal OrderChecked { target: threshold_failure, request: OrderRequest { target: 36, divisor: 36, boundâ€¦
+        proposed by law `SubmitOrder` at line 75
+
+     settlement origin:
+  <- by top-level code
+OrderEvidence.conditional_equality of entity 2 = false
+OrderEvidence of threshold_failure = { target: 36, divisor: 36, bound: 144, square_multiple: 36, next_order: 144, possible_count: â€¦   (set in frame 0)
+
+  <- resolver `ExplainOrder`
+     intent: OrderChecked
+     key: threshold_failure
+
+     <- proposal OrderChecked { target: threshold_failure, request: OrderRequest { target: 36, divisor: 36, boundâ€¦
+        proposed by law `SubmitOrder` at line 75
+
+     settlement origin:
+  <- by top-level code
+witness {"bound":143,"conditional_equality":false,"divisor":4,"escape_factor":2,"inconsistent":false,"next_order":16,"possible_count":5,"square_multiple":4,"target":36,"unique_order":0}
+OrderEvidence of missing_local_data = { target: 36, divisor: 4, bound: 143, square_multiple: 4, next_order: 16, possible_count: 5, â€¦   (set in frame 0)
+
+  <- resolver `ExplainOrder`
+     intent: OrderChecked
+     key: missing_local_data
+
+     <- proposal OrderChecked { target: missing_local_data, request: OrderRequest { target: 36, divisor: 4, boundâ€¦
+        proposed by law `SubmitOrder` at line 75
+
+     settlement origin:
+  <- by top-level code
+OrderEvidence.conditional_equality of entity 3 = false
+OrderEvidence of missing_local_data = { target: 36, divisor: 4, bound: 143, square_multiple: 4, next_order: 16, possible_count: 5, â€¦   (set in frame 0)
+
+  <- resolver `ExplainOrder`
+     intent: OrderChecked
+     key: missing_local_data
+
+     <- proposal OrderChecked { target: missing_local_data, request: OrderRequest { target: 36, divisor: 4, boundâ€¦
+        proposed by law `SubmitOrder` at line 75
+
+     settlement origin:
+  <- by top-level code
+witness {"bound":143,"conditional_equality":false,"divisor":12,"escape_factor":2,"inconsistent":false,"next_order":144,"possible_count":1,"square_multiple":36,"target":12,"unique_order":36}
+OrderEvidence of nonsquare_target = { target: 12, divisor: 12, bound: 143, square_multiple: 36, next_order: 144, possible_count: â€¦   (set in frame 0)
+
+  <- resolver `ExplainOrder`
+     intent: OrderChecked
+     key: nonsquare_target
+
+     <- proposal OrderChecked { target: nonsquare_target, request: OrderRequest { target: 12, divisor: 12, bound:â€¦
+        proposed by law `SubmitOrder` at line 75
+
+     settlement origin:
+  <- by top-level code
+OrderEvidence.conditional_equality of entity 4 = false
+OrderEvidence of nonsquare_target = { target: 12, divisor: 12, bound: 143, square_multiple: 36, next_order: 144, possible_count: â€¦   (set in frame 0)
+
+  <- resolver `ExplainOrder`
+     intent: OrderChecked
+     key: nonsquare_target
+
+     <- proposal OrderChecked { target: nonsquare_target, request: OrderRequest { target: 12, divisor: 12, bound:â€¦
+        proposed by law `SubmitOrder` at line 75
+
+     settlement origin:
+  <- by top-level code
+witness {"bound":899,"conditional_equality":true,"divisor":36,"escape_factor":5,"inconsistent":false,"next_order":900,"possible_count":1,"square_multiple":36,"target":36,"unique_order":36}
+OrderEvidence of protected_threshold = { target: 36, divisor: 36, bound: 899, square_multiple: 36, next_order: 900, possible_count: â€¦   (set in frame 0)
+
+  <- resolver `ExplainOrder`
+     intent: OrderChecked
+     key: protected_threshold
+
+     <- proposal OrderChecked { target: protected_threshold, request: OrderRequest { target: 36, divisor: 36, bouâ€¦
+        proposed by law `SubmitOrder` at line 75
+
+     settlement origin:
+  <- by top-level code
+OrderEvidence.conditional_equality of entity 5 = true
+OrderEvidence of protected_threshold = { target: 36, divisor: 36, bound: 899, square_multiple: 36, next_order: 900, possible_count: â€¦   (set in frame 0)
+
+  <- resolver `ExplainOrder`
+     intent: OrderChecked
+     key: protected_threshold
+
+     <- proposal OrderChecked { target: protected_threshold, request: OrderRequest { target: 36, divisor: 36, bouâ€¦
+        proposed by law `SubmitOrder` at line 75
+
+     settlement origin:
+  <- by top-level code
+witness {"bound":900,"conditional_equality":false,"divisor":36,"escape_factor":5,"inconsistent":false,"next_order":900,"possible_count":2,"square_multiple":36,"target":36,"unique_order":0}
+OrderEvidence of protected_failure = { target: 36, divisor: 36, bound: 900, square_multiple: 36, next_order: 900, possible_count: â€¦   (set in frame 0)
+
+  <- resolver `ExplainOrder`
+     intent: OrderChecked
+     key: protected_failure
+
+     <- proposal OrderChecked { target: protected_failure, request: OrderRequest { target: 36, divisor: 36, boundâ€¦
+        proposed by law `SubmitOrder` at line 75
+
+     settlement origin:
+  <- by top-level code
+OrderEvidence.conditional_equality of entity 6 = false
+OrderEvidence of protected_failure = { target: 36, divisor: 36, bound: 900, square_multiple: 36, next_order: 900, possible_count: â€¦   (set in frame 0)
+
+  <- resolver `ExplainOrder`
+     intent: OrderChecked
+     key: protected_failure
+
+     <- proposal OrderChecked { target: protected_failure, request: OrderRequest { target: 36, divisor: 36, boundâ€¦
+        proposed by law `SubmitOrder` at line 75
+
+     settlement origin:
+  <- by top-level code

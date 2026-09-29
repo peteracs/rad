@@ -1,0 +1,54 @@
+use "abstract.rad"
+
+// Requirement ledger: each refutation is an intent; the resolver keeps the chain.
+component Requirement { rounds: int = 0, last_parity: str = "", last_point: str = "", last_mean_micro: int = 0, integer_points: list<int> = [] }
+
+entity spec { Requirement {} }
+
+intent Refuted {
+    key target: entity
+    round: int
+    parity: str
+    point: str
+    mean: int
+    integer: bool
+    value: int
+}
+
+law Witnessed(target: entity, idx: int, w: Witness) {
+    propose Refuted { target: target, round: idx, parity: w.parity, point: format("{}/{}", w.point_num, w.point_den),
+        mean: w.mean_growth_micro, integer: w.point_den == 1, value: w.point_num }
+}
+
+resolver Chain for Refuted(target, proposals) {
+    let mut last_round: int = 0 - 1
+    let mut parity: str = ""
+    let mut point: str = ""
+    let mut mean: int = 0
+    let mut ints: list<int> = []
+    for p in proposals {
+        if p.integer and not contains(ints, p.value) { ints = push(ints, p.value) }
+        if p.round > last_round { last_round = p.round parity = p.parity point = p.point mean = p.mean }
+    }
+    next(target, Requirement { rounds: last_round + 1, last_parity: parity, last_point: point, last_mean_micro: mean, integer_points: ints })
+}
+
+fn main() -> nil {
+    let k: int = int(sys_args()[0])
+    let rounds: int = int(sys_args()[1])
+    let mut succ: list<list<int>> = graph(k)
+    let mut witnesses: list<Witness> = []
+    let mut going: bool = true
+    let mut r: int = 0
+    while going and r < rounds {
+        let w: Witness = karp(k, succ)
+        if w.template_ok { going = false } else {
+            witnesses = push(witnesses, w)
+            print(r, w.parity, format("{}/{}", w.point_num, w.point_den), w.mean_growth_micro)
+            succ = remove_cycle(succ, w.cycle)
+            r = r + 1
+        }
+    }
+    settle { for i in range(len(witnesses)) { Witnessed(spec, i, witnesses[i]) } }
+    print(json_stringify(require(spec, Requirement)))
+}

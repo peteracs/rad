@@ -1,0 +1,8 @@
+use "residual_jets.rad"
+fn main() -> nil {
+    for comp in range(3) {
+        let mut p: list<JetTerm> = combine(residual(comp,true,3),residual(comp,false,3),-1)
+        for axis in [0,1,3] { p = differentiate(p,axis) }
+        print("terms",json_stringify(p))
+    }
+}

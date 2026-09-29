@@ -1,0 +1,6 @@
+{
+  "symbolic_forks": 6,
+  "record_replay": true,
+  "forged_invariant_rejected": true,
+  "actual_weighted_invariant_proved": false
+}

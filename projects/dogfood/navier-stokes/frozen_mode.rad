@@ -1,0 +1,54 @@
+// Exact finite arithmetic for the model in VISCOSITY_AUDIT.md, Section 4.
+// No PDE theorem, profile existence, or blowup is asserted here.
+
+resource ModeInput { frequency: int = 1 }
+component ModeEvidence {
+    frequency: int = 0
+    damping_numerator: int = 0
+    damping_denominator: int = 1000000
+    growth_margin: int = 0
+    positive_eigenvalue: bool = false
+    neutral: bool = false
+}
+entity mode { ModeEvidence {} }
+
+// Fixed b=4, c=9, q_nu=1, nu=1/1000000. Then bc=36.
+// With N<=4096, every product below fits signed 64-bit integers.
+pure fn evaluate(n: int) -> ModeEvidence {
+    assert(n >= 1 and n <= 4096, "frequency outside audited integer domain")
+    let numerator: int = n * n
+    let margin: int = 36 * 1000000 * 1000000 - numerator * numerator
+    return ModeEvidence {
+        frequency: n, damping_numerator: numerator,
+        growth_margin: margin, positive_eigenvalue: margin > 0,
+        neutral: margin == 0,
+    }
+}
+
+system Evaluate(result: mut ModeEvidence, spec: ModeInput) {
+    result = evaluate(spec.frequency)
+}
+
+fn main() -> nil {
+    let before: str = world_digest()
+    let base: world_fork = fork()
+    let frequencies: list<int> = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 2449, 2450, 4096]
+    let mut candidates: list<world_fork> = []
+    for n in frequencies {
+        candidates = push(candidates, fork_with(base, ModeInput { frequency: n }))
+    }
+    let results: list<world_fork> = simulate_many(candidates, [system::Evaluate], 1, 20260908)
+    assert(len(results) == len(frequencies), "missing mode result")
+    for i in range(len(results)) {
+        assert_only_changed(candidates[i], results[i], [ModeEvidence])
+        let result: ModeEvidence = peek(results[i], mode, ModeEvidence) |> unwrap
+        assert(result == evaluate(frequencies[i]), "serial/parallel disagreement")
+        let restored: world_fork = fork_from_bytes(fork_to_bytes(results[i])) |> unwrap
+        assert(world_digest(restored) == world_digest(results[i]), "wire round trip changed evidence")
+        print(json_stringify(result))
+    }
+    assert(evaluate(2449).positive_eigenvalue, "lower threshold boundary rejected")
+    assert(not evaluate(2450).positive_eigenvalue, "upper threshold boundary accepted")
+    assert(world_digest() == before, "speculation changed live world")
+    print("scope: frozen Fourier-mode arithmetic only; no Navier-Stokes blowup proof")
+}

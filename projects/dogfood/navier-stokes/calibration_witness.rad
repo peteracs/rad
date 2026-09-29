@@ -1,0 +1,53 @@
+use "forced_fourier.rad"
+fn main() -> nil {
+    let waves: list<list<int>> = [[1,0,0],[0,1,0],[1,1,0],[0,0,1],[0,1,1]]
+    // Selected polarizations p=3/2 and q=-1/4, physical amplitude64.
+    let coefficients: list<list<int>> = [[0,64,64],[64,0,64],[64,-64,96],[64,64,0],[-16,64,-64]]
+    let mut donor: list<FluidMode> = []
+    for i in range(5) { for polarity in [-1,1] {
+        let mut k: list<int> = []
+        let mut re: list<int> = []
+        let mut im: list<int> = []
+        for j in range(3) {
+            k = push(k,polarity*waves[i][j])
+            re = push(re,if i == 2 or i == 4 { 0 } else { coefficients[i][j] })
+            im = push(im,if i == 2 or i == 4 { -polarity*coefficients[i][j] } else { 0 })
+        }
+        donor = push(donor,FluidMode { k:k,re:re,im:im })
+    } }
+    let drift: list<ForceMode> = actual_force(donor,[],1)
+    let mut receiver: list<FluidMode> = []
+    for term in drift {
+        let n: int = term.k[0]*term.k[0]+term.k[1]*term.k[1]+term.k[2]*term.k[2]
+        if n > 2 and (term.re != [0,0,0] or term.im != [0,0,0]) {
+            let mut re: list<int> = []
+            let mut im: list<int> = []
+            for j in range(3) {
+                assert((960*term.re[j])%(2048*term.denominator) == 0
+                    and (960*term.im[j])%(2048*term.denominator) == 0,"calibrated receiver rational grid")
+                re = push(re,int_div(-960*term.re[j],2048*term.denominator))
+                im = push(im,int_div(-960*term.im[j],2048*term.denominator))
+            }
+            receiver = push(receiver,FluidMode { k:term.k,re:re,im:im })
+        }
+    }
+    let receiver_drift: list<ForceMode> = actual_force_scaled(receiver,[],1,480)
+    let mut rate_n: int = 0
+    let mut loss_n: int = 0
+    for mode in receiver {
+        print("receiver",json_stringify(mode))
+        let n: int = mode.k[0]*mode.k[0]+mode.k[1]*mode.k[1]+mode.k[2]*mode.k[2]
+        for j in range(3) { loss_n = loss_n+n*n*(mode.re[j]*mode.re[j]+mode.im[j]*mode.im[j]) }
+        for term in receiver_drift { if term.k == mode.k {
+            assert(term.denominator == 921600*n,"calibrated receiver moment denominator")
+            for j in range(3) { rate_n = rate_n-mode.re[j]*term.re[j]-mode.im[j]*term.im[j] }
+        } }
+    }
+    assert(loss_n*16 == 3565*921600,"calibrated receiver dissipation")
+    assert(160*(rate_n+960*loss_n) == 193*884736000,"calibrated receiver nonlinear production")
+    for mode in receiver_drift { print("drift",json_stringify(mode)) }
+    let result: map<str, any> = { "receiver_production_n":193,"receiver_production_d":160,
+        "receiver_loss_n":3565,"receiver_loss_d":16,"activation_amplitude_n":35650,"activation_amplitude_d":193,
+        "return_map_proved":false }
+    print("witness",json_stringify(result))
+}

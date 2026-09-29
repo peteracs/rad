@@ -1,0 +1,80 @@
+use "exact.rad"
+
+pub struct StripCertificate {
+    width: int = 0
+    block_length: int = 0
+    words: str = ""
+    modulus: str = ""
+    margin: str = ""
+    linear_coefficient: str = ""
+    constant: str = ""
+}
+
+pub pure fn strip_certificate(width: int, limit: int) -> StripCertificate {
+    assert(width >= 2 and width <= 256, "spread width outside 2..256")
+    let mut frontier: list<Natural> = [nat(1)]
+    let mut powers: list<Natural> = [nat(1)]
+    for k in range(1, limit + 1) {
+        powers = push(powers, nscale(powers[len(powers) - 1], 3))
+        let modulus: Natural = npow2(k)
+        let mut after: list<Natural> = []
+        let mut words: Natural = nat(0)
+        for q in range(k + 1) {
+            let mut ways: Natural = nat(0)
+            if ncmp(nscale(powers[q], width), modulus) >= 0 and ncmp(powers[q], nscale(modulus, width)) <= 0 {
+                if q < len(frontier) { ways = nadd(ways, frontier[q]) }
+                if q > 0 { ways = nadd(ways, frontier[q - 1]) }
+            }
+            after = push(after, ways)
+            words = nadd(words, ways)
+        }
+        frontier = after
+        let weighted: Natural = nscale(words, width)
+        if ncmp(nscale(modulus, 3), weighted) > 0 {
+            let margin: Natural = nsub(nscale(modulus, 3), weighted)
+            let linear: Natural = nceildiv(nscale(weighted, 3), margin)
+            let constant: Natural = nceildiv(nscale(nmul(words, modulus), 3), margin)
+            return StripCertificate { width: width, block_length: k, words: ndecimal(words),
+                modulus: ndecimal(modulus), margin: ndecimal(margin),
+                linear_coefficient: ndecimal(linear), constant: ndecimal(constant) }
+        }
+    }
+    assert(false, "strip search exhausted its horizon without a certificate")
+    return StripCertificate {}
+}
+
+pub struct ResidueAudit { depth: int = 0, residues: int = 0, transitions: int = 0, counts: list<int> = [] }
+
+// Literal trajectories, not parity-word generation: prove the finite bijection
+// and count the same normalized strips in an independent representation.
+pub pure fn audit_residues(depth: int) -> ResidueAudit {
+    assert(depth >= 1 and depth <= 16, "residue audit outside 1..16")
+    let widths: list<int> = [2, 4, 8, 16]
+    let mut counts: list<int> = [0, 0, 0, 0]
+    let mut seen: bytebuf = bytebuf_new(1 << depth)
+    for start in range(1 << depth) {
+        let mut value: int = start
+        let mut power3: int = 1
+        let mut power2: int = 1
+        let mut word: int = 0
+        let mut live: int = 15
+        for j in range(depth) {
+            let bit: int = value % 2
+            word = word | (bit << j)
+            if bit == 1 {
+                value = int_div(3 * value + 1, 2)
+                power3 = 3 * power3
+            } else { value = int_div(value, 2) }
+            power2 = 2 * power2
+            for lane in range(4) {
+                if power3 * widths[lane] < power2 or power3 > power2 * widths[lane] {
+                    live = live & (15 ^ (1 << lane))
+                }
+            }
+        }
+        assert(bytebuf_get(seen, word) == 0, "two residues produced the same parity word")
+        seen = bytebuf_set_u8(seen, word, 1)
+        for lane in range(4) { if (live & (1 << lane)) != 0 { counts = set_at(counts, lane, counts[lane] + 1) } }
+    }
+    return ResidueAudit { depth: depth, residues: 1 << depth, transitions: depth * (1 << depth), counts: counts }
+}

@@ -1,0 +1,75 @@
+// Full-NS instantaneous enstrophy formulas from build_amplification.py.
+// Domain bounds keep every integer expression below signed 64-bit limits.
+resource AmpSpec { a: int = 64, b: int = 64, c: int = 64, d: int = 64, e: int = 64, f: int = 0, lane: int = 0 }
+component AmpResult { lane: int = 0, e4: int = 0, rate4: int = 0, lower_bound: bool = false }
+entity candidate { AmpResult {} }
+pure fn canonical(lane: int) -> AmpSpec {
+    assert(lane >= 0 and lane < 225, "amplification lane domain")
+    if lane >= 96 { return AmpSpec { lane: lane, f: lane-96 } }
+    let bits: int = int_div(lane, 3)
+    return AmpSpec { lane: lane, a: 64+16*(int_div(bits, 16)%2), b: 64+16*(int_div(bits, 8)%2),
+        c: 64+16*(int_div(bits, 4)%2), d: 64+16*(int_div(bits, 2)%2), e: 64+16*(bits%2), f: -16+16*(lane%3) }
+}
+pure fn evaluate(p: AmpSpec) -> AmpResult {
+    assert(p.a >= 64 and p.a <= 80 and p.b >= 64 and p.b <= 80 and p.c >= 64 and p.c <= 80 and p.d >= 64 and p.d <= 80 and p.e >= 64 and p.e <= 80 and p.f >= -128 and p.f <= 128, "amplification arithmetic domain")
+    let e4: int = 2*(p.a*p.a+p.b*p.b+3*p.c*p.c+p.d*p.d+3*p.e*p.e)+25*p.f*p.f
+    let rate4: int = 2*p.a*p.b*p.c+2*p.b*p.d*p.e-p.d*p.e*p.f
+        -4*(p.a*p.a+p.b*p.b+6*p.c*p.c+p.d*p.d+6*p.e*p.e)-250*p.f*p.f
+    assert(e4 >= 0 and e4 <= 600000 and rate4 >= -8000000 and rate4 <= 8000000, "amplification intermediate bound")
+    let holds: bool = rate4 >= 0 and rate4*rate4*16384 >= e4*e4*e4
+    return AmpResult { lane: p.lane, e4: e4, rate4: rate4, lower_bound: holds }
+}
+system CheckAmplification(result: mut AmpResult, spec: AmpSpec) { result = evaluate(spec) }
+component AmpAudit { checked: int = 0, cone_passes: int = 0, first_remainder_failure: int = -1 }
+entity audit { AmpAudit {} }
+intent AmpChecked { key target: entity, spec: AmpSpec, evidence: AmpResult }
+law SubmitAmp(target: entity, spec: AmpSpec, evidence: AmpResult) { propose AmpChecked { target: target, spec: spec, evidence: evidence } }
+resolver AssembleAmp for AmpChecked(target, proposals) {
+    assert(len(proposals) == 225, "incomplete amplification portfolio")
+    let mut seen: list<bool> = []
+    for _ in range(225) { seen = push(seen, false) }
+    let mut passes: int = 0
+    let mut minimum_failure: int = 129
+    for proposal in proposals {
+        let row: AmpResult = proposal.evidence
+        assert(proposal.spec == canonical(row.lane), "noncanonical amplification candidate")
+        assert(row == evaluate(proposal.spec), "forged amplification evidence")
+        assert(row.lane >= 0 and row.lane < 225 and not seen[row.lane], "duplicate amplification evidence")
+        seen[row.lane] = true
+        if row.lane < 96 {
+            assert(row.lower_bound, "robust-cone corner failed")
+            passes = passes+1
+        } else if not row.lower_bound {
+            if proposal.spec.f < minimum_failure { minimum_failure = proposal.spec.f }
+        }
+    }
+    assert(minimum_failure < 129, "no counterexample found in requested remainder scan")
+    next(target, AmpAudit { checked: 225, cone_passes: passes, first_remainder_failure: minimum_failure })
+}
+fn main() -> nil {
+    let base: world_fork = fork()
+    let live: str = world_digest()
+    let mut jobs: list<world_fork> = []
+    for lane in range(225) { jobs = push(jobs, fork_with(base, canonical(lane))) }
+    let results: list<world_fork> = simulate_many(jobs, [system::CheckAmplification], 1, 20260908)
+    let mut evidence: list<AmpResult> = []
+    let mut specs: list<AmpSpec> = []
+    for i in range(225) {
+        assert_only_changed(jobs[i], results[i], [AmpResult])
+        let row: AmpResult = peek(results[i], candidate, AmpResult) |> unwrap
+        evidence = push(evidence, row)
+        specs = push(specs, peek_resource(jobs[i], AmpSpec) |> unwrap)
+        print(json_stringify(row))
+    }
+    assert(world_digest() == live, "amplification fork isolation")
+    let args: list<str> = sys_args()
+    if len(args) > 0 {
+        assert(args[0] == "hide-counterexample", "unknown amplification probe")
+        let tail_row: AmpResult = evidence[224]
+        evidence[224] = AmpResult { lane: tail_row.lane, e4: tail_row.e4, rate4: tail_row.rate4, lower_bound: true }
+    }
+    settle { for i in range(225) { SubmitAmp(audit, specs[i], evidence[i]) } }
+    print("audit", json_stringify(require(audit, AmpAudit)))
+    print(why(audit, AmpAudit))
+    print("scope: instantaneous lower bound and counterexamples; invariance and finite-time blowup unproved")
+}

@@ -1,0 +1,117 @@
+use "repair_reference.rad"
+use "repair_native.rad"
+use "repair_evidence.rad"
+
+let RANK_WORKERS: list<any> = rank_kernel_pool(4)
+
+resource RepairLane { label: str = "", request: map<str, any> = {}, omitted: int = -1 }
+
+component RepairCandidate { report: map<str, any> = {}, independent: RankScore = RankScore {} }
+
+entity repair_worker { RepairCandidate {} }
+
+entity repair_judge { RepairEvidence {} }
+
+system ExploreRepair(candidate: mut RepairCandidate, lane: RepairLane) {
+    let report: map<str, any> = pooled_rank_search(RANK_WORKERS, lane.request)
+    let independent: RankScore = reference_score(lane.request, report["matrices"])
+    assert(independent.total == report["best"]["total"] and independent.weak == report["best"]["weak"] and
+        independent.strict == report["best"]["strict"], "native candidate fails RAD rescore")
+    candidate = RepairCandidate { report: report, independent: independent }
+}
+
+pure fn model_for(lane: RepairLane, report: map<str, any>) -> Model {
+    let request: map<str, any> = lane.request
+    let mut model: Model = Model { label: lane.label, dimension: request["dimension"], maximum: request["maximum"],
+        reverse: request["reverse"], omitted: lane.omitted, matrices: report["matrices"] }
+    let rules: list<list<list<int>>> = request["rules"]
+    let mut boundary_count: int = 0
+    for i in range(len(rules)) {
+        if ((model.reverse and i < 2) or (not model.reverse and i >= 8)) and i != lane.omitted {
+            boundary_count = boundary_count + 1
+            let lhs: list<list<int>> = interpret(rules[i][0], model)
+            let rhs: list<list<int>> = interpret(rules[i][1], model)
+            if lhs[0][model.dimension] > rhs[0][model.dimension] { model.strict_rules = push(model.strict_rules, i) }
+        }
+    }
+    model.complete_proof = model.omitted == -1 and len(model.strict_rules) == boundary_count
+    return model
+}
+
+fn main() -> nil {
+    let args: list<str> = sys_args()
+    assert(len(args) == 1, "supply repair campaign JSON")
+    let config: map<str, any> = json_parse(read_file(args[0])) |> unwrap
+    let rows: list<map<str, any>> = config["lanes"]
+    let canonical_rules: list<list<list<int>>> = [
+        [[0, 3], [3]], [[1, 3], [6, 3]], [[0, 4], [4, 0]], [[0, 5], [4, 1]],
+        [[0, 6], [5, 0]], [[1, 4], [5, 1]], [[1, 5], [6, 0]], [[1, 6], [6, 1]],
+        [[2, 4], [2, 1]], [[2, 5], [2, 0, 0]], [[2, 6], [2, 0, 1]],
+    ]
+    let mut lanes: list<RepairLane> = []
+    let mut full_lanes: int = 0
+    for row in rows {
+        let request: map<str, any> = row["request"]
+        let omitted: int = row["omitted"]
+        if omitted == -1 { full_lanes = full_lanes + 1 }
+        assert(omitted >= -1 and omitted < 11, "invalid omitted rule")
+        assert(request["rules"] == canonical_rules, "campaign changed Collatz rewriting rules")
+        assert(request["active_mask"] == if omitted == -1 { 2047 } else { 2047 - (1 << omitted) }, "campaign silently omitted a rule")
+        let boundary: int = if request["reverse"] { 3 } else { 1792 }
+        assert(request["strict_mask"] > 0 and (request["strict_mask"] & boundary) == request["strict_mask"], "strict rules must occur at the left boundary")
+        lanes = push(lanes, RepairLane { label: row["label"], request: request, omitted: omitted })
+    }
+    assert(full_lanes > 0, "campaign must search the complete system")
+    let mut evaluated: int = 0
+    let mut complete: bool = false
+    for generation in range(config["rounds"]) {
+        let base: world_fork = fork()
+        let mut jobs: list<world_fork> = []
+        for lane in lanes { jobs = push(jobs, fork_with(base, lane)) }
+        let live_before: str = world_digest()
+        let futures: list<world_fork> = simulate_many(jobs, [system::ExploreRepair], 1, 1937 + generation)
+        assert(world_digest() == live_before, "speculative search changed live world")
+        let mut complete_flags: list<bool> = []
+        let mut proof_models: list<Model> = []
+        for i in range(len(futures)) {
+            assert_only_changed(jobs[i], futures[i], [RepairCandidate])
+            let candidate: RepairCandidate = peek(futures[i], repair_worker, RepairCandidate) |> unwrap
+            let restored: world_fork = fork_from_bytes(fork_to_bytes(futures[i])) |> unwrap
+            assert(peek(restored, repair_worker, RepairCandidate) == Some(candidate), "candidate snapshot differs")
+            evaluated = evaluated + candidate.report["evaluated"]
+            let mut proven: bool = false
+            let mut proof_model: Model = Model {}
+            if candidate.independent.total == 0 {
+                let model: Model = model_for(lanes[i], candidate.report)
+                let checked: CheckedModel = check_model(model)
+                proof_model = model
+                proven = checked.complete_proof
+                let certificate: map<str, any> = { "kind": "certificate", "model": model, "checked": checked }
+                print(json_stringify(certificate))
+            }
+            complete_flags = push(complete_flags, proven)
+            proof_models = push(proof_models, proof_model)
+            complete = complete or proven
+            let output: map<str, any> = { "kind": "lane", "round": generation, "label": lanes[i].label,
+                "omitted": lanes[i].omitted, "request": lanes[i].request, "report": candidate.report }
+            print(json_stringify(output))
+            let mut request: map<str, any> = lanes[i].request
+            request["matrices"] = candidate.report["matrices"]
+            request["seed"] = candidate.report["seed"]
+            lanes[i] = RepairLane { label: lanes[i].label, request: request, omitted: lanes[i].omitted }
+        }
+        settle {
+            for i in range(len(futures)) {
+                let candidate: RepairCandidate = peek(futures[i], repair_worker, RepairCandidate) |> unwrap
+                if lanes[i].omitted == -1 {
+                    SubmitRepair(repair_judge, lanes[i].label, candidate.report["best"]["total"],
+                        candidate.independent.total, evaluated, complete_flags[i], proof_models[i])
+                }
+            }
+        }
+        let summary: map<str, any> = { "kind": "round", "round": generation, "evaluated": evaluated,
+            "complete_proof": complete, "selected": require(repair_judge, RepairEvidence) }
+        print(json_stringify(summary))
+        if complete { break }
+    }
+}

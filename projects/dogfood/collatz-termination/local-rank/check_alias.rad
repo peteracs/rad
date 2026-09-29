@@ -1,0 +1,30 @@
+use "features.rad"
+
+fn main() -> nil {
+    let args: list<str> = sys_args()
+    assert(len(args) == 1, "supply an orbit alias")
+    let witness: map<str, any> = json_parse(read_file(args[0])) |> unwrap
+    let start: int = witness["left"]
+    let end: int = witness["right"]
+    let steps: int = witness["steps"]
+    let memory: int = witness["memory"]
+    let modulus: int = get_or(witness, "modulus", 1)
+    assert(start > 1 and end > 0 and start != end and steps > 0 and steps <= 10000 and modulus > 0, "invalid alias domain")
+    let mut value: int = start
+    let mut odds: int = 0
+    for _ in range(steps) {
+        assert(value > 1, "alias passes through the terminal state")
+        if value % 2 == 0 { value = int_div(value, 2) }
+        else {
+            assert(value <= 3074457345618258602, "alias arithmetic domain exceeded")
+            value = int_div(3 * value + 1, 2)
+            odds = odds + 1
+        }
+    }
+    assert(value == end and odds > 0 and odds == witness["odds"], "literal trajectory differs")
+    assert(factor_counts(binary_word(start), memory) == factor_counts(binary_word(end), memory), "factor counts differ")
+    assert(start % modulus == end % modulus, "endpoint residues differ")
+    let result: map<str, any> = { "left": start, "right": end, "steps": steps, "odds": odds,
+        "memory": memory, "modulus": modulus, "verified": true, "collatz_proved": false }
+    print(json_stringify(result))
+}

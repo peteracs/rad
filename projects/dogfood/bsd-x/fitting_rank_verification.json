@@ -1,0 +1,15 @@
+{
+  "module_forks": 1250,
+  "same_determinant_witnesses": 3,
+  "independent_invariant_factor_checks": true,
+  "worker_counts": [
+    1,
+    4
+  ],
+  "record_replay": true,
+  "forged_comparison_rejected": true,
+  "forged_module_equivalence_rejected": true,
+  "web_search_used": false,
+  "arithmetic_background": "supplied by user, not reverified",
+  "universal_X_proofs_found": 0
+}

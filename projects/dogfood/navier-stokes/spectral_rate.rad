@@ -1,0 +1,127 @@
+// Direct complex Fourier convolution and Leray projection in exact integers.
+// Input Fourier coefficients are (re+i*im)/2; derivative coefficients use /4|k|^2.
+struct Mode { k: list<int> = [], re: list<int> = [], im: list<int> = [] }
+pure fn bank(amplitudes: list<int>) -> list<Mode> {
+    assert(len(amplitudes) == 6, "spectral amplitude dimension")
+    let waves: list<list<int>> = [[1,0,0],[0,1,0],[1,1,0],[0,0,1],[0,1,1],[0,1,2]]
+    let polar: list<list<int>> = [[0,1,1],[1,0,1],[1,-1,1],[1,1,0],[1,1,-1],[0,-2,1]]
+    let mut modes: list<Mode> = []
+    for i in range(6) {
+        assert(amplitudes[i] >= -128 and amplitudes[i] <= 128, "spectral amplitude bound")
+        for polarity in [-1,1] {
+            let mut k: list<int> = []
+            let mut re: list<int> = []
+            let mut im: list<int> = []
+            for j in range(3) {
+                k = push(k, polarity*waves[i][j])
+                re = push(re, if i == 2 or i == 4 { 0 } else { amplitudes[i]*polar[i][j] })
+                im = push(im, if i == 2 or i == 4 { -polarity*amplitudes[i]*polar[i][j] } else { 0 })
+            }
+            assert(k[0]*re[0]+k[1]*re[1]+k[2]*re[2] == 0 and k[0]*im[0]+k[1]*im[1]+k[2]*im[2] == 0, "spectral incompressibility")
+            modes = push(modes, Mode { k: k, re: re, im: im })
+        }
+    }
+    return modes
+}
+pure fn rate_at(k: list<int>, modes: list<Mode>) -> Mode {
+    assert(len(k) == 3 and len(modes) == 12, "spectral derivative shape")
+    let norm: int = k[0]*k[0]+k[1]*k[1]+k[2]*k[2]
+    assert(norm > 0 and norm <= 20, "spectral derivative frequency domain")
+    let mut nr: list<int> = [0,0,0]
+    let mut ni: list<int> = [0,0,0]
+    let mut original_re: list<int> = [0,0,0]
+    let mut original_im: list<int> = [0,0,0]
+    for p in modes {
+        if p.k == k {
+            original_re = p.re
+            original_im = p.im
+        }
+        for q in modes {
+            if p.k[0]+q.k[0] == k[0] and p.k[1]+q.k[1] == k[1] and p.k[2]+q.k[2] == k[2] {
+                let dr: int = p.re[0]*q.k[0]+p.re[1]*q.k[1]+p.re[2]*q.k[2]
+                let di: int = p.im[0]*q.k[0]+p.im[1]*q.k[1]+p.im[2]*q.k[2]
+                for j in range(3) {
+                    nr[j] = nr[j]+dr*q.re[j]-di*q.im[j]
+                    ni[j] = ni[j]+dr*q.im[j]+di*q.re[j]
+                }
+            }
+        }
+    }
+    let kr: int = k[0]*nr[0]+k[1]*nr[1]+k[2]*nr[2]
+    let ki: int = k[0]*ni[0]+k[1]*ni[1]+k[2]*ni[2]
+    let mut re: list<int> = []
+    let mut im: list<int> = []
+    for j in range(3) {
+        re = push(re, norm*ni[j]-k[j]*ki-2*norm*norm*original_re[j])
+        im = push(im, -norm*nr[j]+k[j]*kr-2*norm*norm*original_im[j])
+    }
+    assert(k[0]*re[0]+k[1]*re[1]+k[2]*re[2] == 0 and k[0]*im[0]+k[1]*im[1]+k[2]*im[2] == 0, "Leray projection failure")
+    return Mode { k: k, re: re, im: im }
+}
+fn check_outward_boundary(amplitude: int) -> nil {
+    // nu=1, a=b=d=amplitude, c=e=amplitude/2, f=0. Full-vector-field
+    // derivatives of quadratic moments only require occupied test modes.
+    assert(amplitude == 24 or amplitude == 30, "counterexample amplitude domain")
+    let half: int = int_div(amplitude,2)
+    let modes: list<Mode> = bank([amplitude,amplitude,half,amplitude,half,0])
+    let mut k8: int = 0
+    let mut e8: int = 0
+    let mut d4: int = 0
+    let mut kdot80: int = 0
+    let mut rate8: int = 0
+    let mut ddot4: int = 0
+    for mode in modes {
+        let norm: int = mode.k[0]*mode.k[0]+mode.k[1]*mode.k[1]+mode.k[2]*mode.k[2]
+        assert(10%norm == 0, "exact moment denominator")
+        let derivative: Mode = rate_at(mode.k, modes)
+        for j in range(3) {
+            let square: int = mode.re[j]*mode.re[j]+mode.im[j]*mode.im[j]
+            let pairing: int = mode.re[j]*derivative.re[j]+mode.im[j]*derivative.im[j]
+            k8 = k8+square
+            e8 = e8+norm*square
+            d4 = d4+norm*norm*square
+            kdot80 = kdot80+int_div(10,norm)*pairing
+            rate8 = rate8+pairing
+            ddot4 = ddot4+norm*pairing
+        }
+    }
+    assert(kdot80 == -20*e8, "full energy identity")
+    assert(rate8 >= 2*d4, "production constraint S>=2nu D")
+    if amplitude == 24 { assert(rate8 == 2*d4, "shared boundary") }
+    if amplitude == 30 { assert(rate8 > 2*d4, "strict production interior") }
+    assert(18*k8*d4 == 20*e8*e8, "shape boundary Q=20/9")
+    let outward_n: int = (kdot80*d4+10*k8*ddot4)*e8-20*k8*d4*rate8
+    let outward_d: int = 5*e8*e8*e8
+    assert(outward_n > 0, "expected outward counterexample")
+    let generated: Mode = rate_at([1,0,1], modes)
+    let row: map<str, any> = { "amplitude": amplitude, "k8": k8, "e8": e8, "d4": d4,
+        "kdot80": kdot80, "rate8": rate8, "ddot4": ddot4,
+        "Qdot_n": outward_n, "Qdot_d": outward_d,
+        "generated_im": generated.im }
+    print(json_stringify(row))
+}
+fn main() -> nil {
+    let args: list<str> = sys_args()
+    if len(args) == 1 and args[0] == "outward-boundary" {
+        check_outward_boundary(24)
+        check_outward_boundary(30)
+        return nil
+    }
+    for f in [0,16,128] {
+        let modes: list<Mode> = bank([64,64,64,64,64,f])
+        let mut e8: int = 0
+        let mut rate8: int = 0
+        for mode in modes {
+            let norm: int = mode.k[0]*mode.k[0]+mode.k[1]*mode.k[1]+mode.k[2]*mode.k[2]
+            let derivative: Mode = rate_at(mode.k, modes)
+            for j in range(3) {
+                e8 = e8+norm*(mode.re[j]*mode.re[j]+mode.im[j]*mode.im[j])
+                rate8 = rate8+mode.re[j]*derivative.re[j]+mode.im[j]*derivative.im[j]
+            }
+        }
+        let generated: Mode = rate_at([1,0,1], modes)
+        let record: map<str, any> = { "f": f, "e8": e8, "rate8": rate8,
+            "generated_re": generated.re, "generated_im": generated.im, "generated_denominator": 8 }
+        print(json_stringify(record))
+    }
+}

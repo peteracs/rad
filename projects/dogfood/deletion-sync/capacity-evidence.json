@@ -1,0 +1,132 @@
+{
+  "completed_utc": "2026-09-04T21:29:19.612488+00:00",
+  "source_sha256": {
+    "accept.py": "861790ce88b75c70bf748ca7b45ab2e389f5e3cd9dd5ddfcb410f1c9542f119d",
+    "backward.rad": "ede1705dec542c60a27e3f2b4156a5ffa68e39ec88e90adb72555387154c137c",
+    "backward_oracle.py": "2d81755efebc5f4fc09dbf3113b2cdce9e06274360079a790f59d6c4d426bc87",
+    "benchmark_fix.py": "d55ec8eea57d6d61175e2556b9859195bb0c1508190112c393e29dd4b4c86265",
+    "capacity_oracle.py": "d773e865c75f961e9d454da8f9ea923782988ae37f6e0f3e76d1275eefc8bf7c",
+    "main.rad": "4f379aa8493789d227c7443681f1167e4c0b5974c81354ae619e9506c89c2c1f",
+    "optimality.rad": "54039fd487cdeab88eeb4d3867e5b14e6f55fdaf0c70dece628c8818d04d67a0",
+    "oracle.py": "187c94081a87a7e5f48f6126501a2bdbfde7b6c2929f3f5f5454ca45c1e41c7e",
+    "probe.py": "93424d563426a4f1b5bb0ad44bd508db2d7b8a2eb2f515610753d1ba11405466",
+    "proof_audit.rad": "1bea778a6bd420201b8ff2a8ac2ed7e740125feba9c2b3bebc87d5fb5b88414a",
+    "rank_capacity.rad": "8fab90581c6bddf316f86dafba3a6a31a09182245d407868f8f3a107f9087a00",
+    "search.rad": "86400e449b65314304911b6584328c151768db89f2d263a5f5dadff0581570b5",
+    "single.rad": "a061cf07e05dfc43e34b2a9ae96b33ba60a2118f1a6069b90b338eeca5f13ad0",
+    "symbolic_verify.py": "8c9d5e8cb2afe7f68172ea7f19a8cb41d758d1414878501f2981ee4bf0dc38bf",
+    "test_capacity.py": "a70834e05c7d891fcd491aea91991a74b03ae63821f9f74f2103acf9067da413",
+    "test_optimality.py": "f6d86b5f44ca7b34955fc52404ce434ffe2ff0a598abd1b9f73e84670debdbcb",
+    "test_symbolic.py": "a1dc3d5e01bbc4021931d4eb7b62329bd63d45a55bd1c5f263116a63744ff28c",
+    "test_verify.py": "6a7f579c6335ac94b5c1f48e6519ac5e950123e8261e6a82dbe5579d17f770c3",
+    "verify.py": "4958f246ed2b17eed199dbf4fadeb92b2abf8ca75c5163a7e397413f56e5a7d0"
+  },
+  "mathematical_text_sha256": {
+    "RESULTS.md": "19001408e0097b7e7172cf624edf9f6cd817aa6f30c9e813fc95b7862c6e2730",
+    "OPTIMALITY.md": "d5d2568415ffff34412407889df98d2dfcdbbf47dd8aac7c215e6dd45621954c",
+    "GENERAL_BOUND.md": "dc6d9cce5d53286f845ea69f74bf6988e82839be7ec964d178501796b62c5152"
+  },
+  "binary_sha256": "4997366f760995e10d4692b7feb76457171778a80207c489fd6979aaf94ba68d",
+  "platform": "Windows-10-10.0.19045-SP0",
+  "python": "3.12.10",
+  "format": "rad-general-capacity-v1",
+  "command": {
+    "command": [
+      "H:\\Projects\\rad-lang\\target\\release\\rad.exe",
+      "H:\\Projects\\rad-lang\\projects\\dogfood\\deletion-sync\\rank_capacity.rad",
+      "--strict-types",
+      "--deny-warnings"
+    ],
+    "workers": 1,
+    "elapsed_ns": 2686537700,
+    "stdout_sha256": "b6f31aea4bdcd6fe02a59a8ee3f529b393dd8067a802a6a498b6d568bf603914"
+  },
+  "instances": [
+    {
+      "n": 2,
+      "budget": 0,
+      "maps": 4,
+      "chains_per_map": 4,
+      "checks": 16
+    },
+    {
+      "n": 2,
+      "budget": 1,
+      "maps": 4,
+      "chains_per_map": 9,
+      "checks": 36
+    },
+    {
+      "n": 2,
+      "budget": 2,
+      "maps": 4,
+      "chains_per_map": 16,
+      "checks": 64
+    },
+    {
+      "n": 2,
+      "budget": 3,
+      "maps": 4,
+      "chains_per_map": 25,
+      "checks": 100
+    },
+    {
+      "n": 3,
+      "budget": 0,
+      "maps": 27,
+      "chains_per_map": 8,
+      "checks": 216
+    },
+    {
+      "n": 3,
+      "budget": 1,
+      "maps": 27,
+      "chains_per_map": 27,
+      "checks": 729
+    },
+    {
+      "n": 3,
+      "budget": 2,
+      "maps": 27,
+      "chains_per_map": 64,
+      "checks": 1728
+    },
+    {
+      "n": 3,
+      "budget": 3,
+      "maps": 27,
+      "chains_per_map": 125,
+      "checks": 3375
+    },
+    {
+      "n": 4,
+      "budget": 0,
+      "maps": 256,
+      "chains_per_map": 16,
+      "checks": 4096
+    },
+    {
+      "n": 4,
+      "budget": 1,
+      "maps": 256,
+      "chains_per_map": 81,
+      "checks": 20736
+    },
+    {
+      "n": 4,
+      "budget": 2,
+      "maps": 256,
+      "chains_per_map": 256,
+      "checks": 65536
+    },
+    {
+      "n": 4,
+      "budget": 3,
+      "maps": 256,
+      "chains_per_map": 625,
+      "checks": 160000
+    }
+  ],
+  "total_chain_cases": 256632,
+  "scope": "All maps n=2..4, k=0..3, all nested chains; general proof is GENERAL_BOUND.md"
+}

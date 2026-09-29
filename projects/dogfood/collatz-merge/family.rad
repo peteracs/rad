@@ -1,0 +1,79 @@
+use "merge.rad"
+
+pub pure fn tstep(x: int) -> int { return if x % 2 == 0 { int_div(x, 2) } else { int_div(3 * x + 1, 2) } }
+
+struct Dominated { length: int = 0, word: str = "", residue: int = 0, partner_word: str = "", offset_d: int = 0, verified_merges: int = 0 }
+
+// Rebuild the dominated trapped prefix at each length together with its partner.
+pure fn find(depth: int) -> list<Dominated> {
+    let mut classes: map<int, list<int>> = {}   // key -> [C, word bits]
+    let mut stack: list<list<int>> = [[0, 0, 0, 0]]
+    while len(stack) > 0 {
+        let s: list<int> = stack[len(stack) - 1]
+        stack = slice(stack, 0, len(stack) - 1)
+        let a: int = s[0]
+        let q: int = s[1]
+        let c: int = s[2]
+        let bits: int = s[3]
+        if a >= 1 {
+            let k: int = key(a, q, c)
+            if not contains(classes, k) or c > classes[k][0] { classes = set_at(classes, k, [c, bits]) }
+        }
+        if a < depth {
+            stack = push(stack, [a + 1, q, c, bits])
+            stack = push(stack, [a + 1, q + 1, 3 * c + (1 << a), bits | (1 << a)])
+        }
+    }
+    let mut out: list<Dominated> = []
+    let mut walk: list<list<int>> = [[0, 0, 0, 1, 0, 0]]
+    while len(walk) > 0 {
+        let s: list<int> = walk[len(walk) - 1]
+        walk = slice(walk, 0, len(walk) - 1)
+        let a: int = s[0]
+        let q: int = s[1]
+        let c: int = s[2]
+        let p3: int = s[3]
+        let bits: int = s[4]
+        let residue: int = s[5]
+        if a < depth {
+            for b in [0, 1] {
+                let a2: int = a + 1
+                let p3b: int = if b == 1 { 3 * p3 } else { p3 }
+                if p3b >= (1 << a2) {
+                    let c2: int = if b == 1 { 3 * c + (1 << a) } else { c }
+                    let q2: int = q + b
+                    let k2: int = key(a2, q2, c2)
+                    let bits2: int = bits | (b << a)
+                    if contains(classes, k2) and classes[k2][0] > c2 {
+                        let d: int = int_div(classes[k2][0] - c2, pow3(q2))
+                        // Residue of the word: unique r mod 2^a2 with 3^q r + C = 0 mod 2^a2.
+                        let mut r: int = 0
+                        while ((pow3(q2) * r + c2) % (1 << a2)) != 0 { r = r + 1 }
+                        // Verify on actual integers n = r + 2^a2 u: T^a2(n) == T^a2(n - d).
+                        let mut ok: int = 0
+                        for u in range(1, 200) {
+                            let n: int = r + (1 << a2) * u
+                            let mut x: int = n
+                            let mut y: int = n - d
+                            for _ in range(a2) { x = tstep(x) y = tstep(y) }
+                            if x == y { ok = ok + 1 }
+                        }
+                        out = push(out, Dominated { length: a2, word: word_string(bits2, a2), residue: r,
+                            partner_word: word_string(classes[k2][1], a2), offset_d: d, verified_merges: ok })
+                    } else {
+                        walk = push(walk, [a2, q2, c2, p3b, bits2, 0])
+                    }
+                }
+            }
+        }
+    }
+    return out
+}
+
+pure fn word_string(bits: int, n: int) -> str {
+    let mut s: str = ""
+    for i in range(n) { s = s + (if ((bits >> i) & 1) == 1 { "o" } else { "e" }) }
+    return s
+}
+
+for row in find(14) { print(json_stringify(row)) }

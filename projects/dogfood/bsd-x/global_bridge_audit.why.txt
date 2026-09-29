@@ -1,0 +1,27 @@
+case {"divisible_corank":[2,0,2],"missing_comparison":[2,0,2],"premises_hold":true,"rank_excess":[0,0,0],"universal_failure":true}
+case {"divisible_corank":[2,0,2],"missing_comparison":[2,0,2],"premises_hold":true,"rank_excess":[0,0,0],"universal_failure":true}
+case {"divisible_corank":[0,0,0],"missing_comparison":[2,0,2],"premises_hold":true,"rank_excess":[2,0,2],"universal_failure":true}
+case {"divisible_corank":[0,0,0],"missing_comparison":[2,0,2],"premises_hold":true,"rank_excess":[2,0,2],"universal_failure":true}
+BridgeEvidence of strongest_bridge = { premises_hold: true, universal_failure: true, missing_comparison: [2, 0, 2], rank_excess: [â€¦   (set in frame 0)
+
+  <- resolver `ExplainBridge`
+     intent: BridgeChecked
+     key: strongest_bridge
+
+     <- proposal BridgeChecked { target: strongest_bridge, request: BridgeRequest { primary_finite: true, padic_eâ€¦
+        proposed by law `SubmitBridge` at line 44
+
+     settlement origin:
+  <- by top-level code
+BridgeEvidence.missing_comparison of entity 1 = [2, 0, 2]
+BridgeEvidence of strongest_bridge = { premises_hold: true, universal_failure: true, missing_comparison: [2, 0, 2], rank_excess: [â€¦   (set in frame 0)
+
+  <- resolver `ExplainBridge`
+     intent: BridgeChecked
+     key: strongest_bridge
+
+     <- proposal BridgeChecked { target: strongest_bridge, request: BridgeRequest { primary_finite: true, padic_eâ€¦
+        proposed by law `SubmitBridge` at line 44
+
+     settlement origin:
+  <- by top-level code

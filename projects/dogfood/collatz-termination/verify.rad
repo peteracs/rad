@@ -1,0 +1,62 @@
+use "polynomial.rad"
+use "newton.rad"
+
+resource Candidate { model: Model = Model {}, polynomial: PolynomialModel = PolynomialModel {}, newton: NewtonModel = NewtonModel {}, kind: int = 0 }
+
+component Certificate { checked: CheckedModel = CheckedModel {} }
+
+entity verifier { Certificate {} }
+
+system Check(result: mut Certificate, job: Candidate) {
+    result = Certificate { checked: if job.kind == 2 { check_newton(job.newton) } else if job.kind == 1 { check_polynomial(job.polynomial) } else { check_model(job.model) } }
+}
+
+fn main() -> nil {
+    let args: list<str> = sys_args()
+    assert(len(args) == 1, "supply a JSON array of solver results")
+    let rows: list = json_parse(read_file(args[0])) |> unwrap
+    let base: world_fork = fork()
+    let mut jobs: list<world_fork> = []
+    let mut unresolved: int = 0
+    for row in rows {
+        if row["status"] == "sat" {
+            if row["semiring"] == "newton" {
+                let model: NewtonModel = NewtonModel { label: row["label"], degree: row["degree"],
+                    maximum: row["maximum"], tail: row["tail"], reverse: row["reverse"], omitted: row["omitted"],
+                    polynomials: row["polynomials"], strict_rules: row["strict_rules"], complete_proof: row["complete_proof"] }
+                jobs = push(jobs, fork_with(base, Candidate { newton: model, kind: 2 }))
+            }
+            else if row["semiring"] == "polynomial" {
+                let model: PolynomialModel = PolynomialModel { label: row["label"], degree: row["degree"],
+                    maximum: row["maximum"], reverse: row["reverse"], omitted: row["omitted"],
+                    polynomials: row["polynomials"], strict_rules: row["strict_rules"], complete_proof: row["complete_proof"] }
+                jobs = push(jobs, fork_with(base, Candidate { polynomial: model, kind: 1 }))
+            }
+            else {
+                assert(row["semiring"] == "natural" or row["semiring"] == "arctic", "unknown semiring")
+                let model: Model = Model { label: row["label"], dimension: row["dimension"],
+                    maximum: row["maximum"], denominator: row["denominator"], reverse: row["reverse"], arctic: row["semiring"] == "arctic",
+                    omitted: row["omitted"], matrices: row["matrices"],
+                    strict_rules: row["strict_rules"], complete_proof: row["complete_proof"] }
+                jobs = push(jobs, fork_with(base, Candidate { model: model }))
+            }
+        }
+        else {
+            assert(row["status"] == "unsat" or row["status"] == "unknown", "unrecognized solver status")
+            assert(not row["complete_proof"], "absence of a model is not a termination proof")
+            unresolved = unresolved + 1
+        }
+    }
+    let results: list<world_fork> = simulate_many(jobs, [system::Check], 1, 1937)
+    let mut complete: int = 0
+    for i in range(len(results)) {
+        assert_only_changed(jobs[i], results[i], [Certificate])
+        let certificate: Certificate = peek(results[i], verifier, Certificate) |> unwrap
+        let restored: world_fork = fork_from_bytes(fork_to_bytes(results[i])) |> unwrap
+        assert(peek(restored, verifier, Certificate) == peek(results[i], verifier, Certificate), "certificate snapshot differs")
+        if certificate.checked.complete_proof { complete = complete + 1 }
+        print(json_stringify(certificate.checked))
+    }
+    assert(require(verifier, Certificate).checked.active_rules == 0, "search changed live world")
+    print(json_stringify( { "checked_models": len(results), "unresolved_searches": unresolved, "complete_proofs": complete }))
+}

@@ -1,0 +1,249 @@
+{
+  "format": "rad-collatz-barrier-v1",
+  "completed_utc": "2026-09-04T23:37:17.883669+00:00",
+  "python": "3.12.10",
+  "platform": "Windows-10-10.0.19045-SP0",
+  "binary_sha256": "4997366f760995e10d4692b7feb76457171778a80207c489fd6979aaf94ba68d",
+  "sources": {
+    "accept.py": "8128573f663bb48da065a55b47c4fcc3c39d8c6a4c1496a6ffe5fe1a2aeef3e4",
+    "barrier.rad": "8dcdec1f282bf47ee3cfd1ee4edef5bb05f812e179c0e2f9ba42a0f53839d3fd",
+    "literal.rad": "c59da23a8e10234c0c3726ece3b7701a60fa3fdf3e3ef87d133acf3a4fd79939",
+    "main.rad": "d914924438fc3e3081239b7cb1b0a2f59c822a937d323c9d87043122460a4e48",
+    "natural.rad": "6743de14210b437c2977fb11daf5f0651042de755a6d19a2ed3dc473fbdf44b8",
+    "README.md": "88515608e544db214bab6206ea1191658058f4e48b2a897c8a206e2f125905b1",
+    "RESULTS.md": "96a88f6f52391a01fe0e34298fba6c6bd782aa64042d98aeaa060821a4dee4fb",
+    "rotation.rad": "d54f853be23af2439d155af69fb12d02613f7a54c11b6e9317489025a070dbac",
+    "test_verify.py": "627cb7109df42a6d00b3c3582a44e61c0ac574003817fde3c717ad8b334a5df2",
+    "verify.py": "937505d8be9daf243b4ee54c74a4d2e7da620da8300076216c6969d56f78a765"
+  },
+  "artifacts": {
+    "replay-1.stderr.txt": "da77f3b48ab0074c0cda504f0abf04bf3583c191d77964618a7748a21f9e6334",
+    "replay-1.txt": "8b5060f41598e0243f41c8ad7ad6f0dbde495d0b9fa556cf623ab4dc584c2da2",
+    "replay-4.stderr.txt": "da77f3b48ab0074c0cda504f0abf04bf3583c191d77964618a7748a21f9e6334",
+    "replay-4.txt": "8b5060f41598e0243f41c8ad7ad6f0dbde495d0b9fa556cf623ab4dc584c2da2",
+    "run-1.jsonl": "8b5060f41598e0243f41c8ad7ad6f0dbde495d0b9fa556cf623ab4dc584c2da2",
+    "run-1.radr": "15f9b8899fdd61271dd23c0a8fc9804ba6096fa9c8ad919ed844829bd543d449",
+    "run-1.stderr.txt": "38e9450b398ec35afaad9b552a0b7842aea8f8ab2922ef2062baf7a79d035da8",
+    "run-4.jsonl": "8b5060f41598e0243f41c8ad7ad6f0dbde495d0b9fa556cf623ab4dc584c2da2",
+    "run-4.radr": "2709e6dfd82d7da9392d1e9f8f1fc52cf5ce0f5be26bf1ca67accb876d209cd8",
+    "run-4.stderr.txt": "baf7ed443562c7d3904c232176f4c4e5414edf7bd44ec37c268ca4841f7f046a"
+  },
+  "commands": [
+    {
+      "command": [
+        "H:\\Projects\\rad-lang\\target\\release\\rad.exe",
+        "H:\\Projects\\rad-lang\\projects\\dogfood\\collatz-barrier\\main.rad",
+        "--strict-types",
+        "--deny-warnings",
+        "--record",
+        "H:\\Projects\\rad-lang\\projects\\dogfood\\collatz-barrier\\out\\run-1.radr",
+        "--",
+        "4096"
+      ],
+      "workers": 1,
+      "elapsed_ns": 13290735300,
+      "stdout_sha256": "8b5060f41598e0243f41c8ad7ad6f0dbde495d0b9fa556cf623ab4dc584c2da2",
+      "stderr_sha256": "38e9450b398ec35afaad9b552a0b7842aea8f8ab2922ef2062baf7a79d035da8"
+    },
+    {
+      "command": [
+        "H:\\Projects\\rad-lang\\target\\release\\rad.exe",
+        "replay",
+        "H:\\Projects\\rad-lang\\projects\\dogfood\\collatz-barrier\\out\\run-1.radr"
+      ],
+      "workers": 4,
+      "elapsed_ns": 12862632600,
+      "stdout_sha256": "8b5060f41598e0243f41c8ad7ad6f0dbde495d0b9fa556cf623ab4dc584c2da2",
+      "stderr_sha256": "da77f3b48ab0074c0cda504f0abf04bf3583c191d77964618a7748a21f9e6334"
+    },
+    {
+      "command": [
+        "H:\\Projects\\rad-lang\\target\\release\\rad.exe",
+        "H:\\Projects\\rad-lang\\projects\\dogfood\\collatz-barrier\\main.rad",
+        "--strict-types",
+        "--deny-warnings",
+        "--record",
+        "H:\\Projects\\rad-lang\\projects\\dogfood\\collatz-barrier\\out\\run-4.radr",
+        "--",
+        "4096"
+      ],
+      "workers": 4,
+      "elapsed_ns": 13723109400,
+      "stdout_sha256": "8b5060f41598e0243f41c8ad7ad6f0dbde495d0b9fa556cf623ab4dc584c2da2",
+      "stderr_sha256": "baf7ed443562c7d3904c232176f4c4e5414edf7bd44ec37c268ca4841f7f046a"
+    },
+    {
+      "command": [
+        "H:\\Projects\\rad-lang\\target\\release\\rad.exe",
+        "replay",
+        "H:\\Projects\\rad-lang\\projects\\dogfood\\collatz-barrier\\out\\run-4.radr"
+      ],
+      "workers": 1,
+      "elapsed_ns": 11950754600,
+      "stdout_sha256": "8b5060f41598e0243f41c8ad7ad6f0dbde495d0b9fa556cf623ab4dc584c2da2",
+      "stderr_sha256": "da77f3b48ab0074c0cda504f0abf04bf3583c191d77964618a7748a21f9e6334"
+    }
+  ],
+  "results": {
+    "barriers": [
+      {
+        "label": "least-Collatz-counterexample",
+        "floor": "2361183241434822606848",
+        "last_depth": 114208327603
+      },
+      {
+        "label": "CST-with-published-starting-value-bound",
+        "floor": "28000000000000000000",
+        "last_depth": 10439860590
+      }
+    ],
+    "envelope_limit": 4096,
+    "envelope_cutoff": 620859,
+    "envelope_records": [
+      {
+        "depth": 2,
+        "odd_steps": 1,
+        "cutoff": 2
+      },
+      {
+        "depth": 5,
+        "odd_steps": 3,
+        "cutoff": 5
+      },
+      {
+        "depth": 8,
+        "odd_steps": 5,
+        "cutoff": 25
+      },
+      {
+        "depth": 27,
+        "odd_steps": 17,
+        "cutoff": 109
+      },
+      {
+        "depth": 46,
+        "odd_steps": 29,
+        "cutoff": 282
+      },
+      {
+        "depth": 65,
+        "odd_steps": 41,
+        "cutoff": 868
+      },
+      {
+        "depth": 149,
+        "odd_steps": 94,
+        "cutoff": 2420
+      },
+      {
+        "depth": 233,
+        "odd_steps": 147,
+        "cutoff": 4863
+      },
+      {
+        "depth": 317,
+        "odd_steps": 200,
+        "cutoff": 9267
+      },
+      {
+        "depth": 401,
+        "odd_steps": 253,
+        "cutoff": 19585
+      },
+      {
+        "depth": 485,
+        "odd_steps": 306,
+        "cutoff": 72059
+      },
+      {
+        "depth": 1539,
+        "odd_steps": 971,
+        "cutoff": 238671
+      },
+      {
+        "depth": 2593,
+        "odd_steps": 1636,
+        "cutoff": 420842
+      },
+      {
+        "depth": 3647,
+        "odd_steps": 2301,
+        "cutoff": 620859
+      }
+    ],
+    "literal_starts": 620857,
+    "literal_steps": 2165601,
+    "literal_max_tau": 173,
+    "literal_peak": 12324038948,
+    "literal_censored": 0,
+    "rotation_phases": 78,
+    "rotation_blocks": [
+      {
+        "length": 1,
+        "maximum": "1",
+        "phase": 0
+      },
+      {
+        "length": 2,
+        "maximum": "7/4",
+        "phase": 1
+      },
+      {
+        "length": 3,
+        "maximum": "23/9",
+        "phase": 0
+      },
+      {
+        "length": 4,
+        "maximum": "119/36",
+        "phase": 1
+      },
+      {
+        "length": 5,
+        "maximum": "319/81",
+        "phase": 0
+      },
+      {
+        "length": 6,
+        "maximum": "1213/256",
+        "phase": 5
+      },
+      {
+        "length": 7,
+        "maximum": "5581/1024",
+        "phase": 6
+      },
+      {
+        "length": 8,
+        "maximum": "14501/2304",
+        "phase": 5
+      },
+      {
+        "length": 9,
+        "maximum": "64565/9216",
+        "phase": 6
+      },
+      {
+        "length": 10,
+        "maximum": "159181/20736",
+        "phase": 5
+      },
+      {
+        "length": 11,
+        "maximum": "695773/82944",
+        "phase": 6
+      },
+      {
+        "length": 12,
+        "maximum": "2349463/262144",
+        "phase": 11
+      }
+    ],
+    "independent_parity_dp": {
+      "depth": 256,
+      "odd_counts": 161,
+      "first_contraction_words": "3095954073384973337046191099424240610213799563581670366584275248697621"
+    }
+  },
+  "scope": "Exact executable certificates plus written proofs; the two large-horizon corollaries use explicitly cited external computational bounds. No Collatz proof or priority claim."
+}

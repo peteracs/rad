@@ -1,0 +1,104 @@
+// Tests independently proposed map recipes, not actual Selmer or height data.
+resource Recipe { kind: int = 0,polynomial: list<int> = [1,0,0,0],u: int = 0,v: int = 0,w: int = 1 }
+component RecipeEvidence { additive: bool = false,defect_degree: int = 0,defect_coefficient: int = 0,
+    generic_differential_rank: int = 0,hidden_direction: list<int> = [],schur_residual: int = 0,
+    full_pairing_nondegenerate: bool = false,full_map_injective: bool = false,
+    actual_arithmetic_construction: bool = false }
+entity recipe_trial { RecipeEvidence {} }
+entity logarithm_recipe { RecipeEvidence {} }
+entity nonlinear_repair { RecipeEvidence {} }
+entity pairing_recipe { RecipeEvidence {} }
+entity radical_recipe { RecipeEvidence {} }
+
+pure fn assess_recipe(c: Recipe) -> RecipeEvidence {
+    assert(c.kind==0 or c.kind==1,"known candidate recipe")
+    if c.kind==0 {
+        assert(len(c.polynomial)==4,"four polynomial coefficients; zero constant")
+        let mut degree: int = 0
+        for i in range(4) {
+            assert(c.polynomial[i]>=-5 and c.polynomial[i]<=5,"coefficient domain")
+            if c.polynomial[i]!=0 { degree=i+1 }
+        }
+        let coefficient: int = if degree>=2 { degree*c.polynomial[degree-1] } else { 0 }
+        // Coefficient of x^(degree-1)*y in F(x+y)-F(x)-F(y).
+        assert((coefficient==0)==(degree<=1),"exact additive-polynomial identity")
+        let rank_bound: int = if degree==0 { 0 } else { 1 }
+        return RecipeEvidence { additive:degree<=1,defect_degree:if degree>=2 { degree } else { 0 },
+            defect_coefficient:coefficient,generic_differential_rank:rank_bound,hidden_direction:[1,-1,0],
+            schur_residual:0,full_pairing_nondegenerate:false,full_map_injective:false,
+            actual_arithmetic_construction:false }
+    }
+    for coordinate in [c.u,c.v,c.w] { assert(coordinate>=-5 and coordinate<=5,"pairing domain") }
+    // H=[[1,0,u],[0,1,v],[u,v,w]], observation map is the first two rows.
+    let k: list<int> = [-c.u,-c.v,1]
+    let residual: int = c.w-c.u*c.u-c.v*c.v
+    assert(k[0]+c.u*k[2]==0 and k[1]+c.v*k[2]==0,"constructed orthogonal direction")
+    assert(c.u*k[0]+c.v*k[1]+c.w*k[2]==residual,"Schur complement identity")
+    assert(k[2]!=0,"kernel direction cannot be discarded")
+    return RecipeEvidence { additive:true,defect_degree:0,defect_coefficient:0,
+        generic_differential_rank:2,hidden_direction:k,schur_residual:residual,
+        full_pairing_nondegenerate:residual!=0,full_map_injective:false,
+        actual_arithmetic_construction:false }
+}
+system RecipeStep(row: mut RecipeEvidence,c: Recipe) { row=assess_recipe(c) }
+intent RecipeChecked { key target: entity,request: Recipe,evidence: RecipeEvidence }
+law SubmitRecipe(target: entity,request: Recipe,evidence: RecipeEvidence) {
+    propose RecipeChecked { target:target,request:request,evidence:evidence }
+}
+resolver ExplainRecipe for RecipeChecked(target,proposals) {
+    assert(len(proposals)==1,"one recipe explanation")
+    let row: RecipeEvidence = assess_recipe(proposals[0].request)
+    assert(row==proposals[0].evidence,"unsupported arithmetic map construction")
+    next(target,RecipeEvidence { additive:row.additive,defect_degree:row.defect_degree,
+        defect_coefficient:row.defect_coefficient,generic_differential_rank:row.generic_differential_rank,
+        hidden_direction:row.hidden_direction,schur_residual:row.schur_residual,
+        full_pairing_nondegenerate:row.full_pairing_nondegenerate,
+        full_map_injective:row.full_map_injective,actual_arithmetic_construction:row.actual_arithmetic_construction })
+}
+fn main() -> nil {
+    let base: world_fork = fork()
+    let digest: str = world_digest()
+    let mut requests: list<Recipe> = []
+    let mut jobs: list<world_fork> = []
+    for code in range(81) {
+        let mut digits: int = code
+        let mut coefficients: list<int> = [0,0,0,0]
+        for i in range(4) { coefficients[i]=digits%3-1 digits=int_div(digits,3) }
+        let c: Recipe = Recipe { polynomial:coefficients }
+        requests=push(requests,c)
+        jobs=push(jobs,fork_with(base,c))
+    }
+    // Change the construction mechanism after polynomial postprocessing.
+    for u in range(-2,3) { for v in range(-2,3) { for w in range(-2,3) {
+        let c: Recipe = Recipe { kind:1,u:u,v:v,w:w }
+        requests=push(requests,c)
+        jobs=push(jobs,fork_with(base,c))
+    } } }
+    let results: list<world_fork> = simulate_many(jobs,[system::RecipeStep],1,20260909)
+    for i in range(len(results)) {
+        assert_only_changed(jobs[i],results[i],[RecipeEvidence])
+        let row: RecipeEvidence = peek(results[i],recipe_trial,RecipeEvidence) |> unwrap
+        assert(row==assess_recipe(requests[i]),"requested map recipe evaluated")
+        print("request",json_stringify(requests[i]))
+        print("case",json_stringify(row))
+    }
+    assert(world_digest()==digest,"recipe search preserves parent")
+    let log_case: Recipe = Recipe {}
+    let power_case: Recipe = Recipe { polynomial:[0,1,0,0] }
+    let height_case: Recipe = Recipe { kind:1 }
+    let radical_case: Recipe = Recipe { kind:1,u:1,v:2,w:5 }
+    let mut row: RecipeEvidence = assess_recipe(height_case)
+    if len(sys_args())>0 { row.full_map_injective=true row.actual_arithmetic_construction=true }
+    settle {
+        SubmitRecipe(logarithm_recipe,log_case,assess_recipe(log_case))
+        SubmitRecipe(nonlinear_repair,power_case,assess_recipe(power_case))
+        SubmitRecipe(pairing_recipe,height_case,row)
+        SubmitRecipe(radical_recipe,radical_case,assess_recipe(radical_case))
+    }
+    for target in [logarithm_recipe,nonlinear_repair,pairing_recipe,radical_recipe] {
+        print("witness",json_stringify(require(target,RecipeEvidence)))
+        print(why(target,RecipeEvidence))
+        print(why_field(target,RecipeEvidence,"hidden_direction"))
+        print(why_field(target,RecipeEvidence,"defect_coefficient"))
+    }
+}

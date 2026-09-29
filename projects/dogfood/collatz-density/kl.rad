@@ -1,0 +1,125 @@
+// Krasikov–Lagarias linear program L_k^NT(lambda), as packed word buffers.
+//
+// Principal variables c^m for m in [3^k] = {m mod 3^k : m = 2 mod 3} are
+// stored at index i = (m - 2) / 3, 0 <= i < N = 3^(k-1). The constraints are
+//   m = 2 (mod 9):  c^m <= lambda^-2 c^{4m} + lambda^(alpha-2) cbar^{(4m-2)/3}
+//   m = 5 (mod 9):  c^m <= lambda^-2 c^{4m}
+//   m = 8 (mod 9):  c^m <= lambda^-2 c^{4m} + lambda^(alpha-1) cbar^{(2m-1)/3}
+// with cbar^{m'} = min_j c^{m' + j 3^(k-1)} and c^m >= 1.
+// In index form (n1 = N/3):
+//   4m mod 3^k             -> (4i + 2) mod N
+//   i = 3t   (m = 2 mod 9) -> cbar index (4t) mod n1
+//   i = 3t+2 (m = 8 mod 9) -> cbar index (2t + 1) mod n1
+//   cbar[j] = min(c[j], c[j + n1], c[j + 2 n1])
+// Every coefficient is a Q32 fixed-point lower bound, and every product is
+// floored, so F below never exceeds the true right-hand side.
+
+pub struct Coefficients {
+    a: int = 0      // floor(2^32 lambda^-2)
+    b2: int = 0     // floor(2^32 lambda^(alpha-2))
+    b8: int = 0     // floor(2^32 lambda^(alpha-1))
+}
+
+pub pure fn level_size(k: int) -> int {
+    assert(k >= 2 and k <= 21, "level outside 2..21")
+    let mut n: int = 1
+    for _ in range(k - 1) { n = n * 3 }
+    return n
+}
+
+pub pure fn words_part(c: bytebuf, start: int, count: int) -> bytebuf {
+    return bytebuf_slice(c, 4 * start, 4 * (start + count))
+}
+
+pub pure fn apply_operator(c: bytebuf, n: int, coef: Coefficients) -> bytebuf {
+    let n1: int = int_div(n, 3)
+    let cbar: bytebuf = words_min(words_min(words_part(c, 0, n1), words_part(c, n1, n1)), words_part(c, 2 * n1, n1))
+    let advanced: bytebuf = words_scale(words_gather(c, n, 4, 2, n), coef.a, 32)
+    let two: bytebuf = words_scale(words_gather(cbar, n1, 4, 0, n1), coef.b2, 32)
+    let eight: bytebuf = words_scale(words_gather(cbar, n1, 2, 1, n1), coef.b8, 32)
+    return words_add_strided(words_add_strided(advanced, two, 0, 3), eight, 2, 3)
+}
+
+// Rescale so the largest word is exactly `top` (floor rounding elsewhere).
+pub pure fn normalize(c: bytebuf, top: int) -> bytebuf {
+    let peak: int = words_max_value(c)
+    assert(peak > 0, "vector vanished")
+    return words_scale(c, int_div(top << 32, peak), 32)
+}
+
+pub struct Estimate {
+    vector: bytebuf = words_new(1, 1)
+    ratio_lo: int = 0   // min_i F(c)_i / c_i, scaled by 2^30
+    ratio_hi: int = 0   // max_i F(c)_i / c_i, scaled by 2^30
+    iterations: int = 0
+}
+
+// Damped power iteration c <- normalize(c + F(c)); damping removes the
+// periodicity that stalls the undamped iteration (for example at k = 3).
+pub pure fn power_iterate(start: bytebuf, n: int, coef: Coefficients, iterations: int) -> Estimate {
+    let mut c: bytebuf = normalize(start, 1 << 30)
+    for _ in range(iterations) {
+        c = normalize(words_add(c, apply_operator(c, n, coef)), 1 << 30)
+    }
+    let image: bytebuf = apply_operator(c, n, coef)
+    return Estimate { vector: c, ratio_lo: words_min_ratio(image, c, 30),
+        ratio_hi: words_max_ratio(image, c, 30), iterations: iterations }
+}
+
+// Lift a level-(k-1) vector to level k: c_k^{m + j 3^(k-1)} = c_{k-1}^m.
+// This is exactly feasible at the lower level's lambda (Krasikov–Lagarias §6).
+pub pure fn lift(c: bytebuf, n_lower: int) -> bytebuf {
+    return words_gather(c, 3 * n_lower, 1, 0, n_lower)
+}
+
+// Q32 coefficients for lambda = 2^gamma from floating point. Search only:
+// certificates use the exact integer-root coefficients in coefficients.rad.
+pub pure fn float_coefficients(gamma: float) -> Coefficients {
+    let alpha: float = 1.584962500721156
+    let q32: float = 4294967296.0
+    return Coefficients {
+        a: int(pow(2.0, -2.0 * gamma) * q32),
+        b2: int(pow(2.0, gamma * (alpha - 2.0)) * q32),
+        b8: int(pow(2.0, gamma * (alpha - 1.0)) * q32),
+    }
+}
+
+pub struct LevelSearch {
+    k: int = 0
+    gamma_lo: float = 0.0
+    gamma_hi: float = 1.0
+    lambda_lo: float = 1.0
+    evaluations: int = 0
+    vector: bytebuf = words_new(1, 1)
+}
+
+// Bisection on gamma = log2 lambda. A gamma is accepted when the damped
+// iteration reaches min ratio >= 1 and rejected when max ratio < 1
+// (Collatz–Wielandt bounds); undecided points get more iterations.
+pub pure fn search_level(k: int, start: bytebuf, gamma_lo: float, gamma_hi: float, steps: int, iterations: int) -> LevelSearch {
+    let n: int = level_size(k)
+    let one: int = 1 << 30
+    let mut lo: float = gamma_lo
+    let mut hi: float = gamma_hi
+    let mut best: bytebuf = start
+    let mut evaluations: int = 0
+    for _ in range(steps) {
+        let mid: float = (lo + hi) / 2.0
+        let coef: Coefficients = float_coefficients(mid)
+        let mut estimate: Estimate = power_iterate(best, n, coef, iterations)
+        let mut rounds: int = 1
+        while estimate.ratio_lo < one and estimate.ratio_hi >= one and rounds < 8 {
+            estimate = power_iterate(estimate.vector, n, coef, iterations)
+            rounds = rounds + 1
+        }
+        evaluations = evaluations + rounds
+        if estimate.ratio_lo >= one {
+            lo = mid
+            best = estimate.vector
+        } else {
+            hi = mid
+        }
+    }
+    return LevelSearch { k: k, gamma_lo: lo, gamma_hi: hi, lambda_lo: pow(2.0, lo),
+        evaluations: evaluations, vector: best }
+}

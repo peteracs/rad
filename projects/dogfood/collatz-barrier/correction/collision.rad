@@ -1,0 +1,165 @@
+use "../escape/exact.rad"
+
+pub struct MergeWitness {
+    start: int = 0
+    smaller: int = 0
+    odds: int = 0
+    endpoint: int = 0
+}
+
+pub struct CollisionProfile {
+    depth: int = 0
+    inputs: int = 0
+    classes: int = 0
+    odd_classes: int = 0
+    by_odds: list<int> = []
+    odd_by_odds: list<int> = []
+    translation_checks: int = 0
+    coefficient_survivors: int = 0
+    merged_survivors: list<MergeWitness> = []
+}
+
+// Two representatives collide in every translated input block only when
+// BOTH their odd counts and their terminal integers agree.
+pub pure fn collision_profile(depth: int) -> CollisionProfile {
+    assert(depth >= 1 and depth <= 18, "literal collision depth outside 1..18")
+    let size: int = 1 << depth
+    let mut powers: list<int> = [1]
+    for _ in range(depth) { powers = push(powers, powers[len(powers) - 1] * 3) }
+    let scale: int = powers[depth]
+    let unique mut collision_keys: list<int> = []
+    let unique mut odd_keys: list<int> = []
+    let mut checks: int = 0
+    let mut survivors: int = 0
+    for start in range(size) {
+        let mut value: int = start
+        let mut odds: int = 0
+        let mut survives: bool = true
+        for j in range(1, depth + 1) {
+            if value % 2 == 1 {
+                odds = odds + 1
+                value = int_div(3 * value + 1, 2)
+            }
+            else { value = int_div(value, 2) }
+            if powers[odds] < (1 << j) { survives = false }
+        }
+        assert(value < powers[odds], "terminal representative escaped 0..3^q-1")
+        if odds > 0 { assert(value % 3 != 0, "an odd step produced a multiple of three") }
+        let key: int = odds * scale + value
+        // Sort by affine image, then by input. The final bit retains the
+        // independently checked no-coefficient-contraction condition.
+        collision_keys = push(collision_keys, 2 * (key * size + start) + if survives { 1 } else { 0 })
+        if survives { survivors = survivors + 1 }
+        if start % 2 == 1 { odd_keys = push(odd_keys, key) }
+        if start < 16 or start >= size - 16 {
+            let mut translated: int = start + 3 * size
+            for _ in range(depth) {
+                translated = if translated % 2 == 1 { int_div(3 * translated + 1, 2) } else { int_div(translated, 2) }
+            }
+            assert(translated == value + 3 * powers[odds], "translated affine identity failed")
+            checks = checks + 1
+        }
+    }
+    let mut all_counts: list<int> = []
+    let mut odd_counts: list<int> = []
+    for _ in range(depth + 1) {
+        all_counts = push(all_counts, 0)
+        odd_counts = push(odd_counts, 0)
+    }
+    let mut previous_key: int = -1
+    let mut classes: int = 0
+    let mut representative: int = 0
+    let mut merges: list<MergeWitness> = []
+    collision_keys = sort(collision_keys)
+    for packed in collision_keys {
+        let key: int = int_div(packed, 2 * size)
+        let start: int = int_div(packed, 2) % size
+        if key != previous_key {
+            let q: int = int_div(key, scale)
+            all_counts = set_at(all_counts, q, all_counts[q] + 1)
+            classes = classes + 1
+            representative = start
+        }
+        else if packed % 2 == 1 {
+            assert(representative > 0 and representative < start, "invalid induction reduction")
+            merges = push(merges, MergeWitness { start: start, smaller: representative,
+                odds: int_div(key, scale), endpoint: key % scale })
+        }
+        previous_key = key
+    }
+    previous_key = -1
+    let mut odd_classes: int = 0
+    odd_keys = sort(odd_keys)
+    for key in odd_keys {
+        if key != previous_key {
+            let q: int = int_div(key, scale)
+            odd_counts = set_at(odd_counts, q, odd_counts[q] + 1)
+            odd_classes = odd_classes + 1
+        }
+        previous_key = key
+    }
+    return CollisionProfile { depth: depth, inputs: size, classes: classes, odd_classes: odd_classes,
+        by_odds: all_counts, odd_by_odds: odd_counts, translation_checks: checks,
+        coefficient_survivors: survivors, merged_survivors: merges }
+}
+
+pub pure fn natural_power(base: int, exponent: int) -> Natural {
+    assert(base >= 0 and base <= 10000 and exponent >= 0, "natural power domain")
+    let mut result: Natural = nat(1)
+    for _ in range(exponent) { result = nscale(result, base) }
+    return result
+}
+
+pub struct CorrectionBound {
+    limit: int = 0
+    minimum_bits: int = 0
+    dyadic_numerator: str = ""
+    sum_numerator: str = ""
+    sum_denominator: str = ""
+    correction_bits: int = 0
+    logarithm_margin: str = ""
+    geometric_margin: str = ""
+}
+
+// Bound odd reciprocal mass with exact binomial/image capacities through
+// `limit`, and a certified geometric tail at ALL larger depths.
+pub pure fn correction_bound(limit: int, minimum_bits: int) -> CorrectionBound {
+    assert(limit >= 1 and limit <= 512 and minimum_bits >= 0 and minimum_bits <= limit, "correction domain")
+    let exponent: ExponentProof = exponent_proof(156, 100)
+    assert(exponent.passes_one_over_28, "capacity exponent not certified")
+    let geometric_margin: Natural = nsub(nscale(natural_power(42, 29), 2), natural_power(43, 29))
+    assert(ncmp(geometric_margin, nat(0)) > 0, "geometric tail ratio invalid")
+    let mut row: list<Natural> = [nat(1)]
+    let mut cumulative: Natural = if minimum_bits == 0 { nat(1) } else { nat(0) }
+    for k in range(1, limit + 1) {
+        let mut bound: Natural = nat(0)
+        let mut images: Natural = nat(2)
+        for q in range(1, k + 1) {
+            bound = nadd(bound, if ncmp(row[q - 1], images) < 0 { row[q - 1] } else { images })
+            images = nscale(images, 3)
+        }
+        cumulative = nscale(cumulative, 2)
+        if k >= minimum_bits { cumulative = nadd(cumulative, bound) }
+        let mut after: list<Natural> = [nat(1)]
+        for q in range(1, len(row)) { after = push(after, nadd(row[q - 1], row[q])) }
+        row = push(after, nat(1))
+    }
+    // S_h <= sum B_odd(k)/2^k + 2(h+1)/2^h + (4429/64)*(42/43)^(limit+1).
+    let tail_denominator: Natural = nscale(natural_power(43, limit + 1), 64)
+    let dyadic_and_boundary: Natural = nadd(cumulative, nscale(npow2(limit - minimum_bits), 2 * (minimum_bits + 1)))
+    let numerator: Natural = nadd(nmul(dyadic_and_boundary, tail_denominator),
+        nscale(nmul(natural_power(42, limit + 1), npow2(limit)), 4429))
+    let denominator: Natural = nmul(npow2(limit), tail_denominator)
+    let logarithm: LogInterval = log_interval(3)
+    let rhs: Natural = nmul(numerator, npow2(192))
+    let unit: Natural = nscale(nmul(denominator, logarithm.lower), 3)
+    let mut bits: int = 1
+    while ncmp(nscale(unit, bits), rhs) <= 0 {
+        bits = bits + 1
+        assert(bits <= 128, "correction bound unexpectedly large")
+    }
+    return CorrectionBound { limit: limit, minimum_bits: minimum_bits,
+        dyadic_numerator: ndecimal(cumulative), sum_numerator: ndecimal(numerator), sum_denominator: ndecimal(denominator),
+        correction_bits: bits, logarithm_margin: ndecimal(nsub(nscale(unit, bits), rhs)),
+        geometric_margin: ndecimal(geometric_margin) }
+}

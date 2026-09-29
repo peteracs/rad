@@ -1,0 +1,122 @@
+[
+  {
+    "file": "m1-b1792.csv",
+    "model": "factors",
+    "memory": 1,
+    "boundary": 1792
+  },
+  {
+    "file": "m2-b1792.csv",
+    "model": "factors",
+    "memory": 2,
+    "boundary": 1792
+  },
+  {
+    "file": "m2-b1.csv",
+    "model": "factors",
+    "memory": 2,
+    "boundary": 1
+  },
+  {
+    "file": "m2-b2.csv",
+    "model": "factors",
+    "memory": 2,
+    "boundary": 2
+  },
+  {
+    "file": "m2-b256.csv",
+    "model": "factors",
+    "memory": 2,
+    "boundary": 256
+  },
+  {
+    "file": "m2-b512.csv",
+    "model": "factors",
+    "memory": 2,
+    "boundary": 512
+  },
+  {
+    "file": "m2-b1024.csv",
+    "model": "factors",
+    "memory": 2,
+    "boundary": 1024
+  },
+  {
+    "file": "m3-b1792.csv",
+    "model": "factors",
+    "memory": 3,
+    "boundary": 1792
+  },
+  {
+    "file": "m3-b1.csv",
+    "model": "factors",
+    "memory": 3,
+    "boundary": 1
+  },
+  {
+    "file": "m3-b2.csv",
+    "model": "factors",
+    "memory": 3,
+    "boundary": 2
+  },
+  {
+    "file": "m3-b256.csv",
+    "model": "factors",
+    "memory": 3,
+    "boundary": 256
+  },
+  {
+    "file": "m3-b512.csv",
+    "model": "factors",
+    "memory": 3,
+    "boundary": 512
+  },
+  {
+    "file": "m3-b1024.csv",
+    "model": "factors",
+    "memory": 3,
+    "boundary": 1024
+  },
+  {
+    "file": "literal.csv",
+    "model": "factors",
+    "memory": 4,
+    "boundary": 1792
+  },
+  {
+    "file": "modular-2-b1792.csv",
+    "model": "prefix-modulus",
+    "modulus": 2,
+    "boundary": 1792
+  },
+  {
+    "file": "modular-3-b1792.csv",
+    "model": "prefix-modulus",
+    "modulus": 3,
+    "boundary": 1792
+  },
+  {
+    "file": "modular-5-b1792.csv",
+    "model": "prefix-modulus",
+    "modulus": 5,
+    "boundary": 1792
+  },
+  {
+    "file": "modular-7-b1792.csv",
+    "model": "prefix-modulus",
+    "modulus": 7,
+    "boundary": 1792
+  },
+  {
+    "file": "modular-15-b1792.csv",
+    "model": "prefix-modulus",
+    "modulus": 15,
+    "boundary": 1792
+  },
+  {
+    "file": "modular-31-b1792.csv",
+    "model": "prefix-modulus",
+    "modulus": 31,
+    "boundary": 1792
+  }
+]

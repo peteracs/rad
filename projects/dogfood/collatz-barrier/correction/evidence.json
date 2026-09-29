@@ -1,0 +1,151 @@
+{
+  "format": "rad-collatz-correction-v1",
+  "completed_utc": "2026-09-04T23:37:32.088452+00:00",
+  "sources": {
+    "barrier.rad": "8dcdec1f282bf47ee3cfd1ee4edef5bb05f812e179c0e2f9ba42a0f53839d3fd",
+    "correction/accept.py": "1b1ead82a4a5fa5ea4f89869d6471a096830a1168df9f75c8370a8b17a266254",
+    "correction/collision.rad": "4281715a0baf90489b9ddfe72a4fc7f24ae24bef77096983da0e3e1625e15042",
+    "correction/main.rad": "3ca86bc30be5b80769a62d25b09bb8a02ad2d8df417ee601fe6fc52d8b67dca5",
+    "correction/PROOF.md": "f6f5e1d8758c78ff404f12a6276b8b989b3723ec6288191d5c6169b686876a3d",
+    "correction/README.md": "f4c244fc0a0d4364b369aeaa3a6c4dd90472382f49a903dbd181783986c15141",
+    "correction/test_verify.py": "f0b44507342d241d840f0478f957beaec928d991ab7285237df217d1e8419b4a",
+    "correction/verify.py": "a1c43e4a7032261864578c7e03ad98d4a95666f4b10f0b36a171617bb489832b",
+    "escape/exact.rad": "f32ae4133c45bab4700a87a15065f3370ef96affa00a1823fe0a750d894b1c71",
+    "escape/verify.py": "c7a9b11ca60a0de856123b5ca830451d4978d51e9dbb9c0b72fc65d2aa781d32",
+    "natural.rad": "6743de14210b437c2977fb11daf5f0651042de755a6d19a2ed3dc473fbdf44b8"
+  },
+  "artifacts": {
+    "replay-1.stderr.txt": "9c0f3973b90ddcb7dfb4de25c145ee601f2218d5ee6003ec453d52989455694a",
+    "replay-1.txt": "849c286a229ecf933cd206aee41a56e679089a0d8f5f1b73bf3ddefe4c14bcc6",
+    "replay-4.stderr.txt": "9c0f3973b90ddcb7dfb4de25c145ee601f2218d5ee6003ec453d52989455694a",
+    "replay-4.txt": "849c286a229ecf933cd206aee41a56e679089a0d8f5f1b73bf3ddefe4c14bcc6",
+    "run-1.jsonl": "849c286a229ecf933cd206aee41a56e679089a0d8f5f1b73bf3ddefe4c14bcc6",
+    "run-1.radr": "6466968d993afdb7c1a75de71016a565f66095af20a819bebfaab2580bb833f8",
+    "run-1.stderr.txt": "42c86c1ff59ee0f13f45bd597b517c647a0bf4bdeae312a8c9bb20728b5a42b4",
+    "run-4.jsonl": "849c286a229ecf933cd206aee41a56e679089a0d8f5f1b73bf3ddefe4c14bcc6",
+    "run-4.radr": "63e09dbd2383d6696898505bcfb5d970296267cfc6db921af9eab54918d5d27c",
+    "run-4.stderr.txt": "3c033af918eeff1bf9a46463d33abdcb3a3fef4d1c169fc889579aaf287230d0",
+    "tests.stderr.txt": "99afd8f96ac35d2abde2e17fc3c98f670e7907419e357d9f3b337febfb00300b",
+    "tests.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "binary_sha256": "4997366f760995e10d4692b7feb76457171778a80207c489fd6979aaf94ba68d",
+  "commands": [
+    {
+      "command": [
+        "H:\\Projects\\rad-lang\\target\\release\\rad.exe",
+        "H:\\Projects\\rad-lang\\projects\\dogfood\\collatz-barrier\\correction\\main.rad",
+        "--strict-types",
+        "--deny-warnings",
+        "--record",
+        "H:\\Projects\\rad-lang\\projects\\dogfood\\collatz-barrier\\correction\\out\\run-1.radr"
+      ],
+      "workers": 1,
+      "elapsed_ns": 24256633500,
+      "stdout_sha256": "849c286a229ecf933cd206aee41a56e679089a0d8f5f1b73bf3ddefe4c14bcc6",
+      "stderr_sha256": "42c86c1ff59ee0f13f45bd597b517c647a0bf4bdeae312a8c9bb20728b5a42b4"
+    },
+    {
+      "command": [
+        "H:\\Projects\\rad-lang\\target\\release\\rad.exe",
+        "replay",
+        "H:\\Projects\\rad-lang\\projects\\dogfood\\collatz-barrier\\correction\\out\\run-1.radr"
+      ],
+      "workers": 4,
+      "elapsed_ns": 9890758100,
+      "stdout_sha256": "849c286a229ecf933cd206aee41a56e679089a0d8f5f1b73bf3ddefe4c14bcc6",
+      "stderr_sha256": "9c0f3973b90ddcb7dfb4de25c145ee601f2218d5ee6003ec453d52989455694a"
+    },
+    {
+      "command": [
+        "H:\\Projects\\rad-lang\\target\\release\\rad.exe",
+        "H:\\Projects\\rad-lang\\projects\\dogfood\\collatz-barrier\\correction\\main.rad",
+        "--strict-types",
+        "--deny-warnings",
+        "--record",
+        "H:\\Projects\\rad-lang\\projects\\dogfood\\collatz-barrier\\correction\\out\\run-4.radr"
+      ],
+      "workers": 4,
+      "elapsed_ns": 9037948200,
+      "stdout_sha256": "849c286a229ecf933cd206aee41a56e679089a0d8f5f1b73bf3ddefe4c14bcc6",
+      "stderr_sha256": "3c033af918eeff1bf9a46463d33abdcb3a3fef4d1c169fc889579aaf287230d0"
+    },
+    {
+      "command": [
+        "H:\\Projects\\rad-lang\\target\\release\\rad.exe",
+        "replay",
+        "H:\\Projects\\rad-lang\\projects\\dogfood\\collatz-barrier\\correction\\out\\run-4.radr"
+      ],
+      "workers": 1,
+      "elapsed_ns": 21306139900,
+      "stdout_sha256": "849c286a229ecf933cd206aee41a56e679089a0d8f5f1b73bf3ddefe4c14bcc6",
+      "stderr_sha256": "9c0f3973b90ddcb7dfb4de25c145ee601f2218d5ee6003ec453d52989455694a"
+    },
+    {
+      "command": [
+        "C:\\Program Files\\Python312\\python.exe",
+        "-O",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "H:\\Projects\\rad-lang\\projects\\dogfood\\collatz-barrier\\correction",
+        "-p",
+        "test_verify.py"
+      ],
+      "workers": 1,
+      "elapsed_ns": 576083700,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_sha256": "99afd8f96ac35d2abde2e17fc3c98f670e7907419e357d9f3b337febfb00300b"
+    }
+  ],
+  "results": {
+    "collision_inputs": 524286,
+    "collision_depth": 18,
+    "classes_at_18": 68835,
+    "odd_classes_at_18": 68829,
+    "coefficient_survivors_at_18": 7495,
+    "merged_survivors_at_18": 1391,
+    "merge_certificates": 3125,
+    "correction_constant": 2048,
+    "bounds": [
+      {
+        "minimum_bits": 0,
+        "correction_bits": 11
+      },
+      {
+        "minimum_bits": 16,
+        "correction_bits": 6
+      },
+      {
+        "minimum_bits": 32,
+        "correction_bits": 4
+      },
+      {
+        "minimum_bits": 64,
+        "correction_bits": 2
+      },
+      {
+        "minimum_bits": 71,
+        "correction_bits": 2
+      },
+      {
+        "minimum_bits": 128,
+        "correction_bits": 1
+      },
+      {
+        "minimum_bits": 256,
+        "correction_bits": 1
+      }
+    ],
+    "literal_orbits": {
+      "starts": 2053,
+      "max_input_bits": 1024,
+      "transitions": 109603,
+      "censored": 0,
+      "shell_checks": 17196,
+      "maximum_ratio": "4/3",
+      "maximum_start": "1"
+    }
+  },
+  "scope": "Exact finite arithmetic supports the written uniform correction theorem. Pairwise-distinct states are required. This does not certify a Collatz proof or historical priority."
+}

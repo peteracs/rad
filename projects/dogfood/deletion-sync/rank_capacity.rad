@@ -1,0 +1,95 @@
+// Exhaustive local audit of the general power-rank theorem, in RAD bytecode.
+struct CapacityAudit {
+    n: int = 0
+    budget: int = 0
+    maps: int = 0
+    chains_per_map: int = 0
+    checks: int = 0
+}
+
+pure fn packed_digits(code: int, base: int, n: int) -> int {
+    let mut remaining: int = code
+    let mut packed: int = 0
+    for q in range(n) {
+        packed = packed | ((remaining % base) << (3 * q))
+        remaining = int_div(remaining, base)
+    }
+    return packed
+}
+
+pure fn power_image(mapping: int, n: int, power: int) -> int {
+    let mut image: int = 0
+    for initial in range(n) {
+        let mut q: int = initial
+        for _ in range(power) { q = (mapping >> (3 * q)) & 7 }
+        image = image | (1 << q)
+    }
+    return image
+}
+
+pure fn potential_drop(mapping: int, thresholds: int, n: int, budget: int) -> int {
+    let mut after: int = 0
+    let mut before_sum: int = 0
+    for q in range(n) {
+        let threshold: int = (thresholds >> (3 * q)) & 7
+        before_sum = before_sum + threshold
+        after = after | (min(budget + 1, threshold + 1) << (3 * q))
+    }
+    let full: int = (1 << (3 * n)) - 1
+    for q in range(n) {
+        let destination: int = (mapping >> (3 * q)) & 7
+        let incoming: int = (thresholds >> (3 * q)) & 7
+        let incumbent: int = (after >> (3 * destination)) & 7
+        after = (after & (full ^ (7 << (3 * destination)))) | (min(incoming, incumbent) << (3 * destination))
+    }
+    let mut after_sum: int = 0
+    for q in range(n) { after_sum = after_sum + ((after >> (3 * q)) & 7) }
+    // Phi = (k+1)n - sum of thresholds, so the sign reverses.
+    return after_sum - before_sum
+}
+
+pure fn audit_capacity(n: int, budget: int) -> CapacityAudit {
+    let mut map_count: int = 1
+    let mut chain_count: int = 1
+    for _ in range(n) {
+        map_count = map_count * n
+        chain_count = chain_count * (budget + 2)
+    }
+    for code in range(map_count) {
+        let mapping: int = packed_digits(code, n, n)
+        let capacity: int = n - popcount(power_image(mapping, n, budget + 1))
+        let mut maximum: int = 0
+        for chain in range(chain_count) {
+            let thresholds: int = packed_digits(chain, budget + 2, n)
+            let drop: int = potential_drop(mapping, thresholds, n, budget)
+            assert(drop <= capacity, "power-rank upper bound falsified")
+            maximum = max(maximum, drop)
+        }
+        assert(maximum == capacity, "claimed exact local capacity was not attained")
+        let mut witness: int = 0
+        for q in range(n) {
+            let mut threshold: int = budget + 1
+            for level in range(budget + 1) {
+                if (power_image(mapping, n, budget - level) & (1 << q)) != 0 {
+                    threshold = min(threshold, level)
+                }
+            }
+            witness = witness | (threshold << (3 * q))
+        }
+        assert(potential_drop(mapping, witness, n, budget) == capacity, "image-power witness failed")
+    }
+    return CapacityAudit {
+        n: n, budget: budget, maps: map_count, chains_per_map: chain_count,
+        checks: map_count * chain_count,
+    }
+}
+
+fn main() -> nil {
+    for n in range(2, 5) {
+        for budget in range(4) { print(json_stringify(audit_capacity(n, budget))) }
+    }
+    // Rank(f) alone gives the false bound 1; the correct power-rank bound is 2.
+    let mapping: int = (1 << 6)
+    let thresholds: int = (1 << 6)
+    assert(potential_drop(mapping, thresholds, 3, 1) == 2, "mutation control did not refute rank(f)")
+}

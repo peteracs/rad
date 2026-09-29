@@ -1,0 +1,97 @@
+use "poly11.rad"
+use "coupled_jet_data.rad"
+
+pure fn lap(p: list<int>) -> list<int> {
+    return add(add(derivative(derivative(p, 0), 0), derivative(derivative(p, 1), 1)), derivative(derivative(p, 2), 2))
+}
+pure fn div(v: list<list<int>>) -> list<int> {
+    assert(len(v) == 3, "jet vector dimension")
+    return add(add(derivative(v[0], 0), derivative(v[1], 1)), derivative(v[2], 2))
+}
+pure fn advect(v: list<list<int>>, w: list<list<int>>, part: int) -> list<int> {
+    assert(len(v) == 3 and len(w) == 3 and part >= 0 and part < 3, "advection domain")
+    let mut result: list<int> = zero_poly()
+    for j in range(3) { result = add(result, multiply(v[j], derivative(w[part], j))) }
+    return result
+}
+pure fn initial() -> list<list<int>> {
+    let chi: list<int> = from_terms([[0, 1], [288, -1], [24, -1], [2, -1]])
+    return curl([multiply(chi, monomial(13, 5)), multiply(chi, monomial(145, -4)), multiply(chi, monomial(156, -1))])
+}
+resource JetSpec { nu: int = 1, corrupt: int = 0 }
+component JetResult { nu: int = 0, divergence_checked: int = 0, momentum_orders: int = 0 }
+entity candidate { JetResult {} }
+pure fn verify_jet(nu: int, corrupt: int) -> JetResult {
+    let u0: list<list<int>> = [jet_field(nu, 0), jet_field(nu, 1), jet_field(nu, 2)]
+    let u1: list<list<int>> = [jet_field(nu, 3), jet_field(nu, 4), jet_field(nu, 5)]
+    let u2: list<list<int>> = [jet_field(nu, 6), jet_field(nu, 7), jet_field(nu, 8)]
+    let u3: list<list<int>> = [jet_field(nu, 11), jet_field(nu, 12), jet_field(nu, 13)]
+    let mut p0: list<int> = jet_field(nu, 9)
+    let mut p1: list<int> = jet_field(nu, 10)
+    let mut p2: list<int> = jet_field(nu, 14)
+    if corrupt == 1 { p0 = add(p0, monomial(144, 1)) }
+    if corrupt == 2 { p1 = add(p1, monomial(144, 1)) }
+    if corrupt == 3 { p2 = add(p2, monomial(144, 1)) }
+    assert(u0 == initial(), "jet initial data mismatch")
+    assert(div(u0) == zero_poly() and div(u1) == zero_poly() and div(u2) == zero_poly() and div(u3) == zero_poly(), "jet divergence mismatch")
+    for i in range(3) {
+        // Common denominator 135: U0=u0/3, U1=u1/45, P0=p0/135.
+        let r0: list<int> = add(add(scale(u1[i], 3), scale(advect(u0, u0, i), 15)),
+            add(scale(lap(u0[i]), -45*nu), derivative(p0, i)))
+        assert(r0 == zero_poly(), "jet momentum order zero mismatch")
+        // Common denominator 810: U2=u2/405, P1=p1/810.
+        let r1: list<int> = add(add(scale(u2[i], 4), scale(add(advect(u0, u1, i), advect(u1, u0, i)), 6)),
+            add(scale(lap(u1[i]), -18*nu), derivative(p1, i)))
+        assert(r1 == zero_poly(), "jet momentum order one mismatch")
+        // Common denominator 2296350. U3=u3/229635; P2=p2/765450.
+        let cross02: list<int> = add(advect(u0, u2, i), advect(u2, u0, i))
+        let r2: list<int> = add(add(scale(u3[i], 30), scale(cross02, 1890)),
+            add(scale(advect(u1, u1, i), 1134), add(scale(lap(u2[i]), -5670*nu), scale(derivative(p2, i), 3))))
+        assert(r2 == zero_poly(), "jet momentum order two mismatch")
+    }
+    return JetResult { nu: nu, divergence_checked: 4, momentum_orders: 3 }
+}
+system CheckCoupledJet(result: mut JetResult, spec: JetSpec) { result = verify_jet(spec.nu, spec.corrupt) }
+component JetAudit { cases: int = 0, verified_orders: int = 0 }
+entity audit { JetAudit {} }
+intent JetChecked { key target: entity, evidence: JetResult }
+law SubmitJet(target: entity, evidence: JetResult) { propose JetChecked { target: target, evidence: evidence } }
+resolver AssembleJets for JetChecked(target, proposals) {
+    assert(len(proposals) == 2, "incomplete jet portfolio")
+    let mut seen: list<bool> = [false, false]
+    for proposal in proposals {
+        let row: JetResult = proposal.evidence
+        assert(row == verify_jet(row.nu, 0), "forged jet result")
+        assert(not seen[row.nu-1], "duplicate jet result")
+        seen[row.nu-1] = true
+    }
+    next(target, JetAudit { cases: 2, verified_orders: 3 })
+}
+fn main() -> nil {
+    let args: list<str> = sys_args()
+    let mut corrupt: int = 0
+    if len(args) > 0 {
+        if args[0] == "pressure-zero" { corrupt = 1 }
+        else if args[0] == "pressure-one" { corrupt = 2 }
+        else if args[0] == "pressure-two" { corrupt = 3 }
+        else if args[0] == "product-overflow" { assert(times(1000000000000000, 1000000000000000) == 0, "overflow accepted") }
+        else { assert(false, "unknown jet probe") }
+    }
+    let live: str = world_digest()
+    let base: world_fork = fork()
+    let jobs: list<world_fork> = [fork_with(base, JetSpec { nu: 1, corrupt: corrupt }), fork_with(base, JetSpec { nu: 2, corrupt: corrupt })]
+    let results: list<world_fork> = simulate_many(jobs, [system::CheckCoupledJet], 1, 20260908)
+    let mut rows: list<JetResult> = []
+    for i in range(2) {
+        assert_only_changed(jobs[i], results[i], [JetResult])
+        let restored: world_fork = fork_from_bytes(fork_to_bytes(results[i])) |> unwrap
+        assert(world_digest(restored) == world_digest(results[i]), "jet wire roundtrip")
+        let row: JetResult = peek(results[i], candidate, JetResult) |> unwrap
+        rows = push(rows, row)
+        print(json_stringify(row))
+    }
+    assert(world_digest() == live, "jet fork isolation")
+    settle { for row in rows { SubmitJet(audit, row) } }
+    print(why(audit, JetAudit))
+    print("scope: local polynomial time jet through momentum order two; global matching is a separate analytic construction")
+}

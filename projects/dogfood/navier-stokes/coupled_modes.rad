@@ -1,0 +1,93 @@
+use "coupled_basis.rad"
+// All inputs below represent coefficients /60. Return <test,N(state)> *6480000.
+pure fn nonlinear_pair(test: list<FluidMode>, state: list<FluidMode>) -> int {
+    let drift: list<ForceMode> = actual_force_scaled(state,[],1,30)
+    let mut result: int = 0
+    for mode in test {
+        let n: int = mode.k[0]*mode.k[0]+mode.k[1]*mode.k[1]+mode.k[2]*mode.k[2]
+        assert(n > 0 and 30%n == 0,"pairing frequency grid")
+        let mut re: list<int> = [0,0,0]
+        let mut im: list<int> = [0,0,0]
+        for source in state { if source.k == mode.k { re = source.re
+            im = source.im } }
+        for term in drift { if term.k == mode.k {
+            assert(term.denominator == 3600*n,"pairing denominator")
+            for j in range(3) {
+                result = result+int_div(30,n)*(mode.re[j]*(-term.re[j]+60*n*n*re[j])
+                    +mode.im[j]*(-term.im[j]+60*n*n*im[j]))
+            }
+        } }
+    }
+    return result
+}
+component CoupledEvidence {
+    donor_to_receiver_pair_n: int = 0, donor_to_receiver_pair_d: int = 5,
+    receiver_to_donor_pair_n: int = 0, receiver_to_donor_pair_d: int = 3,
+    amplitude_remainder_bound_power_two: int = 61,
+    time_horizon_negative_power_two: int = 98,
+    receiver_amplitude_rate_lower: int = 1024,
+    donor_amplitude_decreases: bool = false,
+    exact_projection_with_remainders: bool = false,
+    finite_mode_invariance: bool = false, repeatable_cascade_proved: bool = false,
+    explanation: str = ""
+}
+entity coupled_result { CoupledEvidence {} }
+pure fn certify_coupling() -> CoupledEvidence {
+    let banks: CoupledBanks = coupled_banks()
+    let donor: list<FluidMode> = banks.donor
+    let receiver: list<FluidMode> = banks.receiver
+    let joined: list<FluidMode> = banks.joined
+    let rd: int = nonlinear_pair(receiver,donor)
+    let dr: int = nonlinear_pair(donor,receiver)
+    assert(10*rd == 117*6480000 and 6*dr == 6480000,"cross transfer coefficients")
+    assert(nonlinear_pair(donor,donor) == 0 and nonlinear_pair(receiver,receiver) == 0,"self energy conservation")
+    assert(nonlinear_pair(receiver,joined)-rd == -dr,"receiver polarized feedback")
+    assert(nonlinear_pair(donor,joined)-dr == -rd,"donor polarized feedback")
+    // Scalar coefficients for the original v=64*d and r=Q/2048.
+    assert(4096*117 == 2*239616 and 64 == 2*32,"unscaled coupling")
+    // All omitted modes remain in an exact remainder, not set to zero.
+    assert(8+216*32768 < 16777216,"projected remainder constant <2^24")
+    assert(24+37 == 61 and 61-98 == -37,"remainder endpoint bound")
+    // a in [3/4,5/4], |b|<=1/16, |R|<=2^-37.
+    // b' >=1152 - 1 - 1 - 1 >1024; a'<-9/8+1+1/32+1/32<0 after b>=0.
+    assert(2048*9 == 1152*16 and 1152-3 > 1024,"receiver derivative lower")
+    assert(485 < 117*16 and 160*5 < 351*4*16,"receiver loss margins")
+    assert(-36+32+1+1 < 0,"donor derivative upper")
+    return CoupledEvidence { donor_to_receiver_pair_n:239616,donor_to_receiver_pair_d:5,
+        receiver_to_donor_pair_n:32,receiver_to_donor_pair_d:3,
+        amplitude_remainder_bound_power_two:61,time_horizon_negative_power_two:98,
+        receiver_amplitude_rate_lower:1024,donor_amplitude_decreases:true,
+        exact_projection_with_remainders:true,finite_mode_invariance:false,repeatable_cascade_proved:false,
+        explanation:"polarized nonlinear interaction feeds receiver while donor amplitude decreases; exact projected equations retain all omitted modes in remainders <=2^61*t; positive coupled growth is proved only through 2^-98, not an invariant two-mode system or repeated cascade" }
+}
+intent CoupledChecked { key target: entity, evidence: CoupledEvidence }
+law SubmitCoupled(target: entity,evidence: CoupledEvidence) {
+    propose CoupledChecked { target:target,evidence:evidence }
+}
+resolver CheckCoupled for CoupledChecked(target,proposals) {
+    assert(len(proposals) == 1,"one coupled certificate")
+    let row: CoupledEvidence = proposals[0].evidence
+    assert(row == certify_coupling(),"forged coupled closure")
+    next(target,CoupledEvidence { donor_to_receiver_pair_n:row.donor_to_receiver_pair_n,
+        donor_to_receiver_pair_d:row.donor_to_receiver_pair_d,
+        receiver_to_donor_pair_n:row.receiver_to_donor_pair_n,receiver_to_donor_pair_d:row.receiver_to_donor_pair_d,
+        amplitude_remainder_bound_power_two:row.amplitude_remainder_bound_power_two,
+        time_horizon_negative_power_two:row.time_horizon_negative_power_two,
+        receiver_amplitude_rate_lower:row.receiver_amplitude_rate_lower,
+        donor_amplitude_decreases:row.donor_amplitude_decreases,
+        exact_projection_with_remainders:row.exact_projection_with_remainders,
+        finite_mode_invariance:row.finite_mode_invariance,repeatable_cascade_proved:row.repeatable_cascade_proved,
+        explanation:row.explanation })
+}
+fn main() -> nil {
+    let mut row: CoupledEvidence = certify_coupling()
+    let args: list<str> = sys_args()
+    if len(args) > 0 {
+        if args[0] == "forge-truncation" { row.finite_mode_invariance = true }
+        else { assert(args[0] == "forge-repeat","unknown mutation")
+            row.repeatable_cascade_proved = true }
+    }
+    settle { SubmitCoupled(coupled_result,row) }
+    print("coupled",json_stringify(require(coupled_result,CoupledEvidence)))
+    print(why(coupled_result,CoupledEvidence))
+}

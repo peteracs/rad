@@ -1,0 +1,44 @@
+use "excursion.rad"
+
+resource Range { lo: int = 3, hi: int = 4 }
+
+pub struct Leaders { best_ratio: list<Excursion> = [], deepest: Excursion = Excursion {}, longest_run: Excursion = Excursion {} }
+
+component RangeEvidence { result: Leaders = Leaders {} }
+
+entity range_slot { RangeEvidence {} }
+
+// Record holders of D/L within the range (running maximum only).
+system Scan(evidence: mut RangeEvidence, span: Range) {
+    let table: list<int> = mantissa_table()
+    let mut leaders: list<Excursion> = []
+    let mut best: int = 0
+    let mut deepest: Excursion = Excursion {}
+    let mut longest: Excursion = Excursion {}
+    for n in range(span.lo, span.hi) {
+        let e: Excursion = excursion(n, table)
+        if e.ratio_x1000 > best { best = e.ratio_x1000 leaders = push(leaders, e) }
+        if e.depth_micro > deepest.depth_micro { deepest = e }
+        if e.odd_run_after_horizon > longest.odd_run_after_horizon { longest = e }
+    }
+    evidence = RangeEvidence { result: Leaders { best_ratio: leaders, deepest: deepest, longest_run: longest } }
+}
+
+fn main() -> nil {
+    let base: world_fork = fork()
+    let top: int = 1 << 18
+    let mut jobs: list<world_fork> = []
+    let edges: list<int> = [3, 64, 1024, 8192, 32768, 65536, 131072, 196608, top]
+    for i in range(len(edges) - 1) { jobs = push(jobs, fork_with(base, Range { lo: edges[i], hi: edges[i + 1] })) }
+    let done: list<world_fork> = simulate_many(jobs, [system::Scan], 1, 1937)
+    for i in range(len(done)) {
+        assert_only_changed(jobs[i], done[i], [RangeEvidence])
+        let l: Leaders = (peek(done[i], range_slot, RangeEvidence) |> unwrap).result
+        let head: Excursion = l.best_ratio[len(l.best_ratio) - 1]
+        print(json_stringify(RangeSummary { lo: edges[i], hi: edges[i + 1], best_ratio_n: head.n, best_ratio_x1000: head.ratio_x1000,
+            deepest_n: l.deepest.n, deepest_bits_x1000: int_div(l.deepest.depth_micro, 1000), deepest_ratio_x1000: l.deepest.ratio_x1000,
+            longest_run_n: l.longest_run.n, longest_run: l.longest_run.odd_run_after_horizon }))
+    }
+}
+
+struct RangeSummary { lo: int = 0, hi: int = 0, best_ratio_n: int = 0, best_ratio_x1000: int = 0, deepest_n: int = 0, deepest_bits_x1000: int = 0, deepest_ratio_x1000: int = 0, longest_run_n: int = 0, longest_run: int = 0 }

@@ -1,0 +1,79 @@
+// Eliminate the error radius from a CONDITIONAL return-map design.
+// theta(e)=theta0-e; frequency ratio=2; rho=rho_quarters/4.
+// theta0, defect and e are measured in units of 1/64.
+struct ReturnDesign {
+    theta0_units: int = 32, rho_quarters: int = 2, defect_units: int = 4,
+    time_ratio_n: int = 1, time_ratio_d: int = 4
+}
+component RepetitionEvidence {
+    scalar_design_feasible: bool = false, error_radius_n: int = 0, error_radius_d: int = 1,
+    energy_retention_n: int = 0, energy_retention_d: int = 1,
+    enstrophy_factor_n: int = 0, enstrophy_factor_d: int = 1,
+    actual_solution_map_proved: bool = false, blowup_proved: bool = false,
+    explanation: str = ""
+}
+entity repetition_result { RepetitionEvidence {} }
+pure fn assess_return_design(design: ReturnDesign) -> RepetitionEvidence {
+    assert(design.theta0_units >= 0 and design.theta0_units <= 64,"energy retention range")
+    assert(design.rho_quarters >= 0 and design.rho_quarters <= 4,"contraction range")
+    assert(design.defect_units > 0 and design.defect_units <= 64,"positive defect range")
+    assert(design.time_ratio_n > 0 and design.time_ratio_d > 0
+        and design.time_ratio_n <= 16 and design.time_ratio_d <= 16,"time ratio range")
+    let gap: int = design.theta0_units-16
+    let contraction_gap: int = 4-design.rho_quarters
+    if gap <= 0 or contraction_gap <= 0 or 4*design.defect_units >= contraction_gap*gap {
+        return RepetitionEvidence { explanation:"no error radius can satisfy both this contraction/defect estimate and a strict enstrophy-growth factor; this rejects the proposed estimates, not the PDE" }
+    }
+    if design.time_ratio_n >= design.time_ratio_d {
+        return RepetitionEvidence { explanation:"these stage-duration upper bounds are not summable; finite-time accumulation is not certified" }
+    }
+    // Choose the midpoint between defect/(1-rho) and theta0-1/4.
+    let unit_n: int = 4*design.defect_units+contraction_gap*gap
+    let unit_d: int = 2*contraction_gap
+    assert(design.rho_quarters*unit_n+4*design.defect_units*unit_d < 4*unit_n,"strict error closure margin")
+    let retention_n: int = design.theta0_units*unit_d-unit_n
+    let retention_d: int = 64*unit_d
+    assert(4*retention_n > retention_d and retention_n < retention_d,"growing enstrophy with decreasing energy allowance")
+    return RepetitionEvidence { scalar_design_feasible:true,error_radius_n:unit_n,error_radius_d:64*unit_d,
+        energy_retention_n:retention_n,energy_retention_d:retention_d,
+        enstrophy_factor_n:4*retention_n,enstrophy_factor_d:retention_d,
+        actual_solution_map_proved:false,blowup_proved:false,
+        explanation:"conditional scalar gate passes: actual force-preserving solution-map inclusion, scale-uniform estimates, initial membership and band-energy lower bound are still missing; numerical feasibility cannot certify them" }
+}
+intent ReturnDesignChecked { key target: entity, design: ReturnDesign, evidence: RepetitionEvidence }
+law SubmitReturnDesign(target: entity,design: ReturnDesign,evidence: RepetitionEvidence) {
+    propose ReturnDesignChecked { target:target,design:design,evidence:evidence }
+}
+resolver CheckReturnDesign for ReturnDesignChecked(target,proposals) {
+    assert(len(proposals) == 1,"one return design")
+    let row: RepetitionEvidence = proposals[0].evidence
+    assert(row == assess_return_design(proposals[0].design),"forged solution-map proof")
+    next(target,RepetitionEvidence { scalar_design_feasible:row.scalar_design_feasible,
+        error_radius_n:row.error_radius_n,error_radius_d:row.error_radius_d,
+        energy_retention_n:row.energy_retention_n,energy_retention_d:row.energy_retention_d,
+        enstrophy_factor_n:row.enstrophy_factor_n,enstrophy_factor_d:row.enstrophy_factor_d,
+        actual_solution_map_proved:row.actual_solution_map_proved,blowup_proved:row.blowup_proved,
+        explanation:row.explanation })
+}
+fn main() -> nil {
+    for theta in [16,24,32,48] { for rho in [0,1,2,3,4] { for defect in [1,4,8,16] {
+        let design: ReturnDesign = ReturnDesign { theta0_units:theta,rho_quarters:rho,defect_units:defect }
+        let row: RepetitionEvidence = assess_return_design(design)
+        let record: map<str, any> = { "theta":theta,"rho":rho,"defect":defect,"evidence":row }
+        print("audit",json_stringify(record))
+    } } }
+    let nonsummable: RepetitionEvidence = assess_return_design(ReturnDesign { time_ratio_n:1,time_ratio_d:1 })
+    assert(not nonsummable.scalar_design_feasible,"finite-time criterion")
+    let design: ReturnDesign = ReturnDesign {}
+    let mut row: RepetitionEvidence = assess_return_design(design)
+    assert(row.scalar_design_feasible,"worked conditional example")
+    let args: list<str> = sys_args()
+    if len(args) > 0 {
+        assert(args[0] == "forge-map","unknown mutation")
+        row.actual_solution_map_proved = true
+        row.blowup_proved = true
+    }
+    settle { SubmitReturnDesign(repetition_result,design,row) }
+    print("gate",json_stringify(require(repetition_result,RepetitionEvidence)))
+    print(why(repetition_result,RepetitionEvidence))
+}

@@ -1,0 +1,61 @@
+// A posteriori closure audit of EVOLVING_TRANSFER.md, not a PDE proof kernel.
+component ClosureEvidence {
+    high_energy_upper_negative_power_two: int = 43,
+    high_fraction_upper_negative_power_two: int = 56,
+    whole_error_to_signal_upper_power_two: int = 39,
+    projected_error_ratio_n: int = 3, projected_error_ratio_d: int = 65536,
+    half_energy_handoff_excluded: bool = false,
+    full_new_profile_relative_error_certified: bool = false,
+    repeatable_cascade_proved: bool = false, explanation: str = ""
+}
+entity closure_result { ClosureEvidence {} }
+pure fn audit_transfer_closure() -> ClosureEvidence {
+    // Every integer wave outside |k|^2<=2 has H3 weight >= (1+3)^3=64.
+    assert(4*4*4 == 64,"high-band weight")
+    assert(2*18+7 == 43,"K_high <= delta^2/(2*64)")
+    // ||v||_2 > 313/2 and delta<1/2 imply ||u||_2>156.
+    assert(4*24576 > 313*313,"seed lower norm")
+    assert(156*156 > 2*8192,"total energy > 2^13")
+    assert(43+13 == 56,"high energy fraction < 2^-56")
+    // At T=2^-98, a>=2^10*T; H3 error <=2^49*T.
+    assert(49-10 == 39,"whole-profile estimate cannot certify small relative error")
+    // Sharper modal error (3/64)*T versus amplitude >=1024*T.
+    assert(64*1024 == 65536 and 3*10000 < 65536,"one coefficient has small relative error")
+    // Necessary inequality for a requested half-energy handoff is contradicted.
+    assert(56 > 1,"half-energy handoff outside certified endpoint")
+    return ClosureEvidence { high_energy_upper_negative_power_two:43,
+        high_fraction_upper_negative_power_two:56,whole_error_to_signal_upper_power_two:39,
+        projected_error_ratio_n:3,projected_error_ratio_d:65536,
+        half_energy_handoff_excluded:true,full_new_profile_relative_error_certified:false,
+        repeatable_cascade_proved:false,
+        explanation:"actual high-band fraction < 2^-56; half-energy handoff impossible on this interval; one projected coefficient is accurate but the available whole-profile relative-error bound is 2^39; this large upper bound does not prove actual error is large; no next-scale invariant profile certified" }
+}
+intent ClosureChecked { key target: entity, evidence: ClosureEvidence }
+law SubmitClosure(target: entity,evidence: ClosureEvidence) {
+    propose ClosureChecked { target:target,evidence:evidence }
+}
+resolver CheckClosure for ClosureChecked(target,proposals) {
+    assert(len(proposals) == 1,"one closure audit")
+    let row: ClosureEvidence = proposals[0].evidence
+    assert(row == audit_transfer_closure(),"forged next-scale closure")
+    next(target,ClosureEvidence {
+        high_energy_upper_negative_power_two:row.high_energy_upper_negative_power_two,
+        high_fraction_upper_negative_power_two:row.high_fraction_upper_negative_power_two,
+        whole_error_to_signal_upper_power_two:row.whole_error_to_signal_upper_power_two,
+        projected_error_ratio_n:row.projected_error_ratio_n,projected_error_ratio_d:row.projected_error_ratio_d,
+        half_energy_handoff_excluded:row.half_energy_handoff_excluded,
+        full_new_profile_relative_error_certified:row.full_new_profile_relative_error_certified,
+        repeatable_cascade_proved:row.repeatable_cascade_proved,explanation:row.explanation })
+}
+fn main() -> nil {
+    let mut row: ClosureEvidence = audit_transfer_closure()
+    let args: list<str> = sys_args()
+    if len(args) > 0 {
+        if args[0] == "forge-profile" { row.full_new_profile_relative_error_certified = true }
+        else { assert(args[0] == "forge-repeat","unknown mutation")
+            row.repeatable_cascade_proved = true }
+    }
+    settle { SubmitClosure(closure_result,row) }
+    print("closure",json_stringify(require(closure_result,ClosureEvidence)))
+    print(why(closure_result,ClosureEvidence))
+}

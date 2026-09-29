@@ -1,0 +1,90 @@
+use "counting.rad"
+
+resource Weight { numerator: int = 150, denominator: int = 100 }
+
+component WeightEvidence { result: ExponentProof = ExponentProof {} }
+
+entity candidate { WeightEvidence {} }
+resource Strip { width: int = 2 }
+
+component StripEvidence { result: StripCertificate = StripCertificate {} }
+
+entity strip { StripEvidence {} }
+
+system EvaluateWeight(evidence: mut WeightEvidence, weight: Weight) {
+    evidence = WeightEvidence { result: exponent_proof(weight.numerator, weight.denominator) }
+}
+
+system EvaluateStrip(evidence: mut StripEvidence, spec: Strip) {
+    evidence = StripEvidence { result: strip_certificate(spec.width, 256) }
+}
+
+component Selection { numerator: int = 0, exponent_floor: int = 0, proposals: int = 0 }
+
+entity forward { Selection {} }
+
+entity reversed { Selection {} }
+
+intent VerifiedWeight {
+    key target: entity
+    numerator: int
+    exponent_floor: int
+    passes_one_over_28: bool
+}
+
+law Submit(target: entity, proof: ExponentProof) {
+    propose VerifiedWeight { target: target, numerator: proof.numerator,
+        exponent_floor: proof.exponent_floor, passes_one_over_28: proof.passes_one_over_28 }
+}
+
+resolver Choose for VerifiedWeight(target, proposals) {
+    let mut numerator: int = proposals[0].numerator
+    let mut exponent: int = proposals[0].exponent_floor
+    let mut certified: bool = proposals[0].passes_one_over_28
+    for proposal in proposals {
+        if proposal.exponent_floor > exponent or (proposal.exponent_floor == exponent and proposal.numerator < numerator) {
+            numerator = proposal.numerator
+            exponent = proposal.exponent_floor
+            certified = proposal.passes_one_over_28
+        }
+    }
+    assert(certified, "no portfolio member certifies exponent 1/28")
+    next(target, Selection { numerator: numerator, exponent_floor: exponent, proposals: len(proposals) })
+}
+
+constraint CertifiedImprovement for Selection(subject, proposed) {
+    require proposed.proposals == 21 else "escape.incomplete_portfolio"
+    require 28 * proposed.exponent_floor > 100000000 else "escape.insufficient_exponent"
+}
+
+fn main() -> nil {
+    let base: world_fork = fork()
+    let mut weights: list<world_fork> = []
+    for p in range(150, 171) { weights = push(weights, fork_with(base, Weight { numerator: p })) }
+    let results: list<world_fork> = simulate_many(weights, [system::EvaluateWeight], 1, 1937)
+    let mut proofs: list<ExponentProof> = []
+    for i in range(len(results)) {
+        assert_only_changed(weights[i], results[i], [WeightEvidence])
+        let evidence: WeightEvidence = peek(results[i], candidate, WeightEvidence) |> unwrap
+        proofs = push(proofs, evidence.result)
+        print(json_stringify(evidence.result))
+    }
+    settle { for proof in proofs { Submit(forward, proof) } }
+    settle { for i in range(len(proofs)) { Submit(reversed, proofs[len(proofs) - i - 1]) } }
+    assert(require(forward, Selection) == require(reversed, Selection), "proposal order changed certified exponent")
+    print(json_stringify(require(forward, Selection)))
+    let mut jobs: list<world_fork> = []
+    for width in [2, 4, 8, 16, 32, 64, 128, 256] { jobs = push(jobs, fork_with(base, Strip { width: width })) }
+    let strips: list<world_fork> = simulate_many(jobs, [system::EvaluateStrip], 1, 1937)
+    for i in range(len(strips)) {
+        assert_only_changed(jobs[i], strips[i], [StripEvidence])
+        let evidence: StripEvidence = peek(strips[i], strip, StripEvidence) |> unwrap
+        let restored: world_fork = fork_from_bytes(fork_to_bytes(strips[i])) |> unwrap
+        assert(peek(restored, strip, StripEvidence) == peek(strips[i], strip, StripEvidence), "serialized strip certificate changed")
+        print(json_stringify(evidence.result))
+    }
+    assert(require(candidate, WeightEvidence).result.numerator == 0, "weight jobs modified live world")
+    assert(require(strip, StripEvidence).result.width == 0, "strip jobs modified live world")
+    for depth in range(1, 17) { print(json_stringify(audit_residues(depth))) }
+    print(why(forward, Selection))
+}

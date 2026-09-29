@@ -1,0 +1,10 @@
+  Error: Declaration 'calibration_trial' is private
+
+  --> \\?\H:\Projects\rad-lang\projects\dogfood\navier-stokes\calibration_round.rad:39:56
+   |
+     38 |         assert_only_changed(jobs[i],results[i],[CalibrationEvidence])
+>>   39 |         let row: CalibrationEvidence = peek(results[i],calibration_trial,CalibrationEvidence) |> unwrap
+                                                                 ^
+     40 |         evidence = push(evidence,row)
+
+  hint: Add `pub` to the declaration of 'calibration_trial'

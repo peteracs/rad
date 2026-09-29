@@ -1,0 +1,58 @@
+use "surgery.rad"
+
+resource Surgery { k: int = 3, r: int = 1 }
+
+component UniverseEvidence { result: Universe = Universe {} }
+
+entity universe_slot { UniverseEvidence {} }
+
+system Explore(evidence: mut UniverseEvidence, s: Surgery) {
+    evidence = UniverseEvidence { result: explore(s.k, s.r, 3000) }
+}
+
+component Atlas { universes: int = 0, broken: int = 0, harmless: int = 0, every_cycle_uses_surgery: bool = true }
+
+entity atlas { Atlas {} }
+
+intent Outcome {
+    key target: entity
+    k: int
+    r: int
+    new_cycles: int
+    hits: int
+}
+
+law Record(target: entity, u: Universe) {
+    propose Outcome { target: target, k: u.k, r: u.r, new_cycles: u.new_cycles, hits: u.surgered_hits }
+}
+
+resolver Map for Outcome(target, proposals) {
+    let mut broken: int = 0
+    let mut harmless: int = 0
+    let mut every: bool = true
+    for p in proposals {
+        if p.new_cycles > 0 {
+            broken = broken + 1
+            if p.hits == 0 { every = false }
+        } else { harmless = harmless + 1 }
+    }
+    next(target, Atlas { universes: len(proposals), broken: broken, harmless: harmless, every_cycle_uses_surgery: every })
+}
+
+fn main() -> nil {
+    let base: world_fork = fork()
+    let mut jobs: list<world_fork> = []
+    for k in [3, 4, 5] {
+        for r in range(1, 1 << k, 2) { jobs = push(jobs, fork_with(base, Surgery { k: k, r: r })) }
+    }
+    let done: list<world_fork> = simulate_many(jobs, [system::Explore], 1, 1937)
+    let mut universes: list<Universe> = []
+    for i in range(len(done)) {
+        assert_only_changed(jobs[i], done[i], [UniverseEvidence])
+        let u: Universe = (peek(done[i], universe_slot, UniverseEvidence) |> unwrap).result
+        universes = push(universes, u)
+        print(json_stringify(u))
+    }
+    settle { for u in universes { Record(atlas, u) } }
+    print(json_stringify(require(atlas, Atlas)))
+}

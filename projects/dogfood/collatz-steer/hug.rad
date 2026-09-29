@@ -1,0 +1,27 @@
+use "delay.rad"
+
+// How closely does each walk hug the barrier W = 0 from below while trapped?
+pub struct Hug { n: int = 0, tau: int = 0, closest_micro: int = 0, deepest_micro: int = 0, mean_micro: int = 0 }
+
+pub pure fn hug(n: int) -> Hug {
+    let mut x: int = n
+    let mut w: int = 0
+    let mut t: int = 0
+    let mut closest: int = 0 - 1000000000
+    let mut deepest: int = 0
+    let mut total: int = 0
+    let mut escaped: bool = false
+    while not escaped {
+        if x % 2 == 1 { w = w + 1000000 - 1584963 } else { w = w + 1000000 }
+        x = tstep(x)
+        t = t + 1
+        if w > 0 { escaped = true } else {
+            if w > closest { closest = w }
+            if w < deepest { deepest = w }
+            total = total + w
+        }
+    }
+    return Hug { n: n, tau: t, closest_micro: closest, deepest_micro: deepest, mean_micro: int_div(total, max(1, t - 1)) }
+}
+
+for n in [27, 703, 10087, 35655, 270271, 1023, 65535, 262143, 262139] { print(json_stringify(hug(n))) }

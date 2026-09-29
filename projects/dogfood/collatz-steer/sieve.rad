@@ -1,0 +1,86 @@
+// The trapped set S = {x in Z_2 : W_t(x) <= 0 for all t}, W_t = t - q_t log2 3.
+// Its depth-K cylinders are the parity words whose every prefix keeps
+// 3^q >= 2^t; by Terras these are in bijection with residues mod 2^K.
+
+// Smallest q with 3^q >= 2^t, exactly, for t <= 60 (integers) ...
+pub pure fn qmin_exact(t: int) -> int {
+    let mut q: int = 0
+    let mut p: int = 1
+    while p < (1 << t) { p = p * 3 q = q + 1 }
+    return q
+}
+
+// ... and for larger t via log_3 2 = 0.630929753571457437..., safe because
+// t/log2(3) stays at least 1e-6 away from an integer for t <= 4000.
+pub pure fn qmin(t: int) -> int {
+    if t <= 60 { return qmin_exact(t) }
+    let x: float = float(t) * 0.6309297535714574
+    let f: int = int(x)
+    return if float(f) >= x { f } else { f + 1 }
+}
+
+pub struct Survival {
+    exact_counts: list<int> = []     // |S_K| for K = 1..60 (exact)
+    log2_mu_x1e6: list<int> = []     // 1e6 * log2 mu(K) for K = 100, 200, ...
+    prefactor_x1e6: list<int> = []   // 1e6 * mu(K) * 2^(eta K) * K^(3/2)
+    checkpoints: list<int> = []
+}
+
+pub pure fn survival(kmax: int) -> Survival {
+    let eta: float = 1.0 - 0.9499572    // 1 - H(log_3 2), H binary entropy in bits
+    // Exact integer DP up to 60; float DP (scaled by 1/2 per step) beyond.
+    let mut exact: list<int> = [1]           // ways[q] after 0 steps
+    let mut counts: list<int> = []
+    let mut prob: list<float> = [1.0]
+    let mut logs: list<int> = []
+    let mut pref: list<int> = []
+    let mut marks: list<int> = []
+    let mut log_scale: float = 0.0          // prob stored scaled by 2^log_scale
+    for t in range(1, kmax + 1) {
+        let floor_q: int = qmin(t)
+        if t <= 60 {
+            let mut next_exact: list<int> = []
+            for q in range(t + 1) {
+                let even: int = if q < len(exact) { exact[q] } else { 0 }
+                let odd: int = if q >= 1 and q - 1 < len(exact) { exact[q - 1] } else { 0 }
+                next_exact = push(next_exact, if q >= floor_q { even + odd } else { 0 })
+            }
+            exact = next_exact
+            let mut total: int = 0
+            for v in exact { total = total + v }
+            counts = push(counts, total)
+        }
+        let mut next_prob: list<float> = []
+        let mut mass: float = 0.0
+        for q in range(t + 1) {
+            let even: float = if q < len(prob) { prob[q] } else { 0.0 }
+            let odd: float = if q >= 1 and q - 1 < len(prob) { prob[q - 1] } else { 0.0 }
+            let v: float = if q >= floor_q { 0.5 * (even + odd) } else { 0.0 }
+            next_prob = push(next_prob, v)
+            mass = mass + v
+        }
+        // Renormalize to avoid underflow; track the scale in log2.
+        let mut renorm: list<float> = []
+        for v in next_prob { renorm = push(renorm, v / mass) }
+        prob = renorm
+        log_scale = log_scale + log2f(mass)
+        if t % 100 == 0 {
+            marks = push(marks, t)
+            logs = push(logs, int(1000000.0 * log_scale))
+            let kf: float = float(t)
+            pref = push(pref, int(1000000.0 * pow(2.0, log_scale + eta * kf) * pow(kf, 1.5)))
+        }
+    }
+    return Survival { exact_counts: counts, log2_mu_x1e6: logs, prefactor_x1e6: pref, checkpoints: marks }
+}
+
+// log2 of a positive float by bisection on pow (the VM exposes pow only).
+pub pure fn log2f(x: float) -> float {
+    let mut lo: float = -64.0
+    let mut hi: float = 64.0
+    for _ in range(60) {
+        let mid: float = (lo + hi) / 2.0
+        if pow(2.0, mid) > x { hi = mid } else { lo = mid }
+    }
+    return lo
+}

@@ -1,0 +1,15 @@
+{
+  "synthetic_deformations": 243,
+  "rad_basis_shear_checks": 2187,
+  "exact_interpolation_checks": 2430,
+  "independent_shear_checks": 2430,
+  "worker_counts": [
+    1,
+    4
+  ],
+  "record_replay": true,
+  "forged_identification_rejected": true,
+  "web_search_used": false,
+  "arithmetic_deformations_constructed": 0,
+  "universal_X_proofs_found": 0
+}

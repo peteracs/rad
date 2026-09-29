@@ -1,0 +1,3 @@
+use "merge.rad"
+let k: int = int(sys_args()[0])
+print(json_stringify(sieve(k)))

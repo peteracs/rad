@@ -1,0 +1,77 @@
+// Inverse metric design for the independently checked coupled amplitude equations.
+// This proves a finite projected-system estimate, not stability of all PDE modes.
+struct BoundHole { symbol: str = "", definition: str = "", proof_status: str = "unproved" }
+component MapHoleEvidence {
+    metric_donor_weight: int = 0, metric_receiver_weight_n: int = 0,
+    metric_receiver_weight_d: int = 5, projected_decay_rate: int = 0,
+    euclidean_expansion_witness: bool = false,
+    finite_projection_error_power_two: int = 68,
+    open_bounds: list<BoundHole> = [], return_condition: str = "",
+    full_PDE_return_map_proved: bool = false, explanation: str = ""
+}
+entity map_hole_result { MapHoleEvidence {} }
+pure fn expose_map_holes() -> MapHoleEvidence {
+    // J12=-39*a/20+b/1152; J21=4096*a-160*b/351.
+    // Solve p*39/20=q*4096 exactly, choosing q=117/5.
+    let q_n: int = 117
+    let q_d: int = 5
+    assert((20*4096*q_n)%(39*q_d) == 0,"metric inverse solve exact")
+    let p: int = int_div(20*4096*q_n,39*q_d)
+    assert(p == 49152,"derived donor error weight")
+    assert(39*p*q_d == 20*4096*q_n,"cancel leading mixed sensitivity")
+    // Remaining off-diagonal in P*J+J^T*P is 32*b.
+    assert(3*p == 128*1152 and 3*160*q_n == 32*351*q_d,"remaining b sensitivity")
+    // On a in [3/4,5/4], b in [0,1/16], J11<=-3/2 and J22<-4.
+    // P*J+J^T*P+2P has diagonals <=-p,-6q and off-diagonal <=2.
+    assert(485 > 4*117 and 32 == 2*16,"uniform rectangle bounds")
+    assert(p*6*q_n > 4*q_d,"negative-definite comparison form")
+    // The unweighted norm expands in direction (1,1) at a=1,b=0.
+    assert(4096*7020-3*3510-39*351-1615*20 > 0,"Euclidean expansion witness")
+    // sqrt(p+q)<256, so |R|P <=2^69*t and integrated error <=2^68*t^2.
+    assert(p*q_d+q_n < 256*256*q_d,"weighted remainder norm")
+    assert(8+61-1 == 68,"finite projected error coefficient")
+    let holes: list<BoundHole> = [
+        BoundHole { symbol:"Gamma",definition:"decay rate for a FULL error norm including all Fourier tails, uniform across stages; projected rate 1 does not supply this" },
+        BoundHole { symbol:"eta",definition:"weighted time integral of the actual prescribed-force trajectory residual, uniform in normalized stage coordinates" },
+        BoundHole { symbol:"kappa",definition:"operator bound for the actual endpoint-to-next-profile coordinate change, including retained original modes" },
+        BoundHole { symbol:"zeta",definition:"mismatch of the evolved central profile with the next central profile, in the next-stage norm" },
+        BoundHole { symbol:"theta0_and_L",definition:"actual band-energy retention lower bound theta0-L*e for the same solution-map family" },
+        BoundHole { symbol:"all_stage_inclusion",definition:"initial membership, valid stage evolution, preserved force, and the same verified estimates at every scale" }
+    ]
+    return MapHoleEvidence { metric_donor_weight:p,metric_receiver_weight_n:q_n,metric_receiver_weight_d:q_d,
+        projected_decay_rate:1,euclidean_expansion_witness:true,finite_projection_error_power_two:68,
+        open_bounds:holes,
+        return_condition:"rho=kappa*exp(-Gamma*tau); d=kappa*eta+zeta; require rho<1 and L*d<(1-rho)*(theta0-lambda^(-2)), plus summable stage times and actual all-stage inclusion",
+        full_PDE_return_map_proved:false,
+        explanation:"inverse metric solve proves contraction of the known projected equations; unresolved full-tail stability, residual transport and profile-reset estimates stay as named proof holes instead of invented numerical values" }
+}
+intent MapHolesChecked { key target: entity, evidence: MapHoleEvidence }
+law SubmitMapHoles(target: entity,evidence: MapHoleEvidence) {
+    propose MapHolesChecked { target:target,evidence:evidence }
+}
+resolver CheckMapHoles for MapHolesChecked(target,proposals) {
+    assert(len(proposals) == 1,"one inverse-metric diagnosis")
+    let row: MapHoleEvidence = proposals[0].evidence
+    assert(row == expose_map_holes(),"unproved return bound promoted to proof")
+    next(target,MapHoleEvidence { metric_donor_weight:row.metric_donor_weight,
+        metric_receiver_weight_n:row.metric_receiver_weight_n,metric_receiver_weight_d:row.metric_receiver_weight_d,
+        projected_decay_rate:row.projected_decay_rate,euclidean_expansion_witness:row.euclidean_expansion_witness,
+        finite_projection_error_power_two:row.finite_projection_error_power_two,open_bounds:row.open_bounds,
+        return_condition:row.return_condition,full_PDE_return_map_proved:row.full_PDE_return_map_proved,
+        explanation:row.explanation })
+}
+fn main() -> nil {
+    let mut row: MapHoleEvidence = expose_map_holes()
+    let args: list<str> = sys_args()
+    if len(args) > 0 {
+        if args[0] == "forge-tail" {
+            let mut hole: BoundHole = row.open_bounds[0]
+            hole.proof_status = "proved"
+            row.open_bounds[0] = hole
+        } else { assert(args[0] == "forge-map","unknown mutation")
+            row.full_PDE_return_map_proved = true }
+    }
+    settle { SubmitMapHoles(map_hole_result,row) }
+    print("holes",json_stringify(require(map_hole_result,MapHoleEvidence)))
+    print(why(map_hole_result,MapHoleEvidence))
+}

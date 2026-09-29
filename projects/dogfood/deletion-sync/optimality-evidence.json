@@ -1,0 +1,638 @@
+{
+  "completed_utc": "2026-09-04T21:29:19.612488+00:00",
+  "source_sha256": {
+    "accept.py": "861790ce88b75c70bf748ca7b45ab2e389f5e3cd9dd5ddfcb410f1c9542f119d",
+    "backward.rad": "ede1705dec542c60a27e3f2b4156a5ffa68e39ec88e90adb72555387154c137c",
+    "backward_oracle.py": "2d81755efebc5f4fc09dbf3113b2cdce9e06274360079a790f59d6c4d426bc87",
+    "benchmark_fix.py": "d55ec8eea57d6d61175e2556b9859195bb0c1508190112c393e29dd4b4c86265",
+    "capacity_oracle.py": "d773e865c75f961e9d454da8f9ea923782988ae37f6e0f3e76d1275eefc8bf7c",
+    "main.rad": "4f379aa8493789d227c7443681f1167e4c0b5974c81354ae619e9506c89c2c1f",
+    "optimality.rad": "54039fd487cdeab88eeb4d3867e5b14e6f55fdaf0c70dece628c8818d04d67a0",
+    "oracle.py": "187c94081a87a7e5f48f6126501a2bdbfde7b6c2929f3f5f5454ca45c1e41c7e",
+    "probe.py": "93424d563426a4f1b5bb0ad44bd508db2d7b8a2eb2f515610753d1ba11405466",
+    "proof_audit.rad": "1bea778a6bd420201b8ff2a8ac2ed7e740125feba9c2b3bebc87d5fb5b88414a",
+    "rank_capacity.rad": "8fab90581c6bddf316f86dafba3a6a31a09182245d407868f8f3a107f9087a00",
+    "search.rad": "86400e449b65314304911b6584328c151768db89f2d263a5f5dadff0581570b5",
+    "single.rad": "a061cf07e05dfc43e34b2a9ae96b33ba60a2118f1a6069b90b338eeca5f13ad0",
+    "symbolic_verify.py": "8c9d5e8cb2afe7f68172ea7f19a8cb41d758d1414878501f2981ee4bf0dc38bf",
+    "test_capacity.py": "a70834e05c7d891fcd491aea91991a74b03ae63821f9f74f2103acf9067da413",
+    "test_optimality.py": "f6d86b5f44ca7b34955fc52404ce434ffe2ff0a598abd1b9f73e84670debdbcb",
+    "test_symbolic.py": "a1dc3d5e01bbc4021931d4eb7b62329bd63d45a55bd1c5f263116a63744ff28c",
+    "test_verify.py": "6a7f579c6335ac94b5c1f48e6519ac5e950123e8261e6a82dbe5579d17f770c3",
+    "verify.py": "4958f246ed2b17eed199dbf4fadeb92b2abf8ca75c5163a7e397413f56e5a7d0"
+  },
+  "mathematical_text_sha256": {
+    "RESULTS.md": "19001408e0097b7e7172cf624edf9f6cd817aa6f30c9e813fc95b7862c6e2730",
+    "OPTIMALITY.md": "d5d2568415ffff34412407889df98d2dfcdbbf47dd8aac7c215e6dd45621954c",
+    "GENERAL_BOUND.md": "dc6d9cce5d53286f845ea69f74bf6988e82839be7ec964d178501796b62c5152"
+  },
+  "binary_sha256": "4997366f760995e10d4692b7feb76457171778a80207c489fd6979aaf94ba68d",
+  "platform": "Windows-10-10.0.19045-SP0",
+  "python": "3.12.10",
+  "format": "rad-weighted-optimality-v1",
+  "max_n": 30,
+  "command": {
+    "command": [
+      "H:\\Projects\\rad-lang\\target\\release\\rad.exe",
+      "H:\\Projects\\rad-lang\\projects\\dogfood\\deletion-sync\\optimality.rad",
+      "--strict-types",
+      "--deny-warnings",
+      "--",
+      "30"
+    ],
+    "workers": 4,
+    "elapsed_ns": 939352300,
+    "stdout_sha256": "05ec8aaa7fe24e29e25c7edced1d8786583bc10334f32499f63936afef2566d0"
+  },
+  "instances": [
+    {
+      "a_cost": 1,
+      "b_cost": 1,
+      "cost": 9,
+      "n": 3,
+      "states": 12
+    },
+    {
+      "a_cost": 1,
+      "b_cost": 0,
+      "cost": 5,
+      "n": 3,
+      "states": 12
+    },
+    {
+      "a_cost": 0,
+      "b_cost": 1,
+      "cost": 4,
+      "n": 3,
+      "states": 12
+    },
+    {
+      "a_cost": 1,
+      "b_cost": 1,
+      "cost": 16,
+      "n": 4,
+      "states": 28
+    },
+    {
+      "a_cost": 1,
+      "b_cost": 0,
+      "cost": 10,
+      "n": 4,
+      "states": 28
+    },
+    {
+      "a_cost": 0,
+      "b_cost": 1,
+      "cost": 6,
+      "n": 4,
+      "states": 28
+    },
+    {
+      "a_cost": 1,
+      "b_cost": 1,
+      "cost": 25,
+      "n": 5,
+      "states": 55
+    },
+    {
+      "a_cost": 1,
+      "b_cost": 0,
+      "cost": 17,
+      "n": 5,
+      "states": 55
+    },
+    {
+      "a_cost": 0,
+      "b_cost": 1,
+      "cost": 8,
+      "n": 5,
+      "states": 55
+    },
+    {
+      "a_cost": 1,
+      "b_cost": 1,
+      "cost": 36,
+      "n": 6,
+      "states": 96
+    },
+    {
+      "a_cost": 1,
+      "b_cost": 0,
+      "cost": 26,
+      "n": 6,
+      "states": 96
+    },
+    {
+      "a_cost": 0,
+      "b_cost": 1,
+      "cost": 10,
+      "n": 6,
+      "states": 96
+    },
+    {
+      "a_cost": 1,
+      "b_cost": 1,
+      "cost": 49,
+      "n": 7,
+      "states": 154
+    },
+    {
+      "a_cost": 1,
+      "b_cost": 0,
+      "cost": 37,
+      "n": 7,
+      "states": 154
+    },
+    {
+      "a_cost": 0,
+      "b_cost": 1,
+      "cost": 12,
+      "n": 7,
+      "states": 154
+    },
+    {
+      "a_cost": 1,
+      "b_cost": 1,
+      "cost": 64,
+      "n": 8,
+      "states": 232
+    },
+    {
+      "a_cost": 1,
+      "b_cost": 0,
+      "cost": 50,
+      "n": 8,
+      "states": 232
+    },
+    {
+      "a_cost": 0,
+      "b_cost": 1,
+      "cost": 14,
+      "n": 8,
+      "states": 232
+    },
+    {
+      "a_cost": 1,
+      "b_cost": 1,
+      "cost": 81,
+      "n": 9,
+      "states": 333
+    },
+    {
+      "a_cost": 1,
+      "b_cost": 0,
+      "cost": 65,
+      "n": 9,
+      "states": 333
+    },
+    {
+      "a_cost": 0,
+      "b_cost": 1,
+      "cost": 16,
+      "n": 9,
+      "states": 333
+    },
+    {
+      "a_cost": 1,
+      "b_cost": 1,
+      "cost": 100,
+      "n": 10,
+      "states": 460
+    },
+    {
+      "a_cost": 1,
+      "b_cost": 0,
+      "cost": 82,
+      "n": 10,
+      "states": 460
+    },
+    {
+      "a_cost": 0,
+      "b_cost": 1,
+      "cost": 18,
+      "n": 10,
+      "states": 460
+    },
+    {
+      "a_cost": 1,
+      "b_cost": 1,
+      "cost": 121,
+      "n": 11,
+      "states": 616
+    },
+    {
+      "a_cost": 1,
+      "b_cost": 0,
+      "cost": 101,
+      "n": 11,
+      "states": 616
+    },
+    {
+      "a_cost": 0,
+      "b_cost": 1,
+      "cost": 20,
+      "n": 11,
+      "states": 616
+    },
+    {
+      "a_cost": 1,
+      "b_cost": 1,
+      "cost": 144,
+      "n": 12,
+      "states": 804
+    },
+    {
+      "a_cost": 1,
+      "b_cost": 0,
+      "cost": 122,
+      "n": 12,
+      "states": 804
+    },
+    {
+      "a_cost": 0,
+      "b_cost": 1,
+      "cost": 22,
+      "n": 12,
+      "states": 804
+    },
+    {
+      "a_cost": 1,
+      "b_cost": 1,
+      "cost": 169,
+      "n": 13,
+      "states": 1027
+    },
+    {
+      "a_cost": 1,
+      "b_cost": 0,
+      "cost": 145,
+      "n": 13,
+      "states": 1027
+    },
+    {
+      "a_cost": 0,
+      "b_cost": 1,
+      "cost": 24,
+      "n": 13,
+      "states": 1027
+    },
+    {
+      "a_cost": 1,
+      "b_cost": 1,
+      "cost": 196,
+      "n": 14,
+      "states": 1288
+    },
+    {
+      "a_cost": 1,
+      "b_cost": 0,
+      "cost": 170,
+      "n": 14,
+      "states": 1288
+    },
+    {
+      "a_cost": 0,
+      "b_cost": 1,
+      "cost": 26,
+      "n": 14,
+      "states": 1288
+    },
+    {
+      "a_cost": 1,
+      "b_cost": 1,
+      "cost": 225,
+      "n": 15,
+      "states": 1590
+    },
+    {
+      "a_cost": 1,
+      "b_cost": 0,
+      "cost": 197,
+      "n": 15,
+      "states": 1590
+    },
+    {
+      "a_cost": 0,
+      "b_cost": 1,
+      "cost": 28,
+      "n": 15,
+      "states": 1590
+    },
+    {
+      "a_cost": 1,
+      "b_cost": 1,
+      "cost": 256,
+      "n": 16,
+      "states": 1936
+    },
+    {
+      "a_cost": 1,
+      "b_cost": 0,
+      "cost": 226,
+      "n": 16,
+      "states": 1936
+    },
+    {
+      "a_cost": 0,
+      "b_cost": 1,
+      "cost": 30,
+      "n": 16,
+      "states": 1936
+    },
+    {
+      "a_cost": 1,
+      "b_cost": 1,
+      "cost": 289,
+      "n": 17,
+      "states": 2329
+    },
+    {
+      "a_cost": 1,
+      "b_cost": 0,
+      "cost": 257,
+      "n": 17,
+      "states": 2329
+    },
+    {
+      "a_cost": 0,
+      "b_cost": 1,
+      "cost": 32,
+      "n": 17,
+      "states": 2329
+    },
+    {
+      "a_cost": 1,
+      "b_cost": 1,
+      "cost": 324,
+      "n": 18,
+      "states": 2772
+    },
+    {
+      "a_cost": 1,
+      "b_cost": 0,
+      "cost": 290,
+      "n": 18,
+      "states": 2772
+    },
+    {
+      "a_cost": 0,
+      "b_cost": 1,
+      "cost": 34,
+      "n": 18,
+      "states": 2772
+    },
+    {
+      "a_cost": 1,
+      "b_cost": 1,
+      "cost": 361,
+      "n": 19,
+      "states": 3268
+    },
+    {
+      "a_cost": 1,
+      "b_cost": 0,
+      "cost": 325,
+      "n": 19,
+      "states": 3268
+    },
+    {
+      "a_cost": 0,
+      "b_cost": 1,
+      "cost": 36,
+      "n": 19,
+      "states": 3268
+    },
+    {
+      "a_cost": 1,
+      "b_cost": 1,
+      "cost": 400,
+      "n": 20,
+      "states": 3820
+    },
+    {
+      "a_cost": 1,
+      "b_cost": 0,
+      "cost": 362,
+      "n": 20,
+      "states": 3820
+    },
+    {
+      "a_cost": 0,
+      "b_cost": 1,
+      "cost": 38,
+      "n": 20,
+      "states": 3820
+    },
+    {
+      "a_cost": 1,
+      "b_cost": 1,
+      "cost": 441,
+      "n": 21,
+      "states": 4431
+    },
+    {
+      "a_cost": 1,
+      "b_cost": 0,
+      "cost": 401,
+      "n": 21,
+      "states": 4431
+    },
+    {
+      "a_cost": 0,
+      "b_cost": 1,
+      "cost": 40,
+      "n": 21,
+      "states": 4431
+    },
+    {
+      "a_cost": 1,
+      "b_cost": 1,
+      "cost": 484,
+      "n": 22,
+      "states": 5104
+    },
+    {
+      "a_cost": 1,
+      "b_cost": 0,
+      "cost": 442,
+      "n": 22,
+      "states": 5104
+    },
+    {
+      "a_cost": 0,
+      "b_cost": 1,
+      "cost": 42,
+      "n": 22,
+      "states": 5104
+    },
+    {
+      "a_cost": 1,
+      "b_cost": 1,
+      "cost": 529,
+      "n": 23,
+      "states": 5842
+    },
+    {
+      "a_cost": 1,
+      "b_cost": 0,
+      "cost": 485,
+      "n": 23,
+      "states": 5842
+    },
+    {
+      "a_cost": 0,
+      "b_cost": 1,
+      "cost": 44,
+      "n": 23,
+      "states": 5842
+    },
+    {
+      "a_cost": 1,
+      "b_cost": 1,
+      "cost": 576,
+      "n": 24,
+      "states": 6648
+    },
+    {
+      "a_cost": 1,
+      "b_cost": 0,
+      "cost": 530,
+      "n": 24,
+      "states": 6648
+    },
+    {
+      "a_cost": 0,
+      "b_cost": 1,
+      "cost": 46,
+      "n": 24,
+      "states": 6648
+    },
+    {
+      "a_cost": 1,
+      "b_cost": 1,
+      "cost": 625,
+      "n": 25,
+      "states": 7525
+    },
+    {
+      "a_cost": 1,
+      "b_cost": 0,
+      "cost": 577,
+      "n": 25,
+      "states": 7525
+    },
+    {
+      "a_cost": 0,
+      "b_cost": 1,
+      "cost": 48,
+      "n": 25,
+      "states": 7525
+    },
+    {
+      "a_cost": 1,
+      "b_cost": 1,
+      "cost": 676,
+      "n": 26,
+      "states": 8476
+    },
+    {
+      "a_cost": 1,
+      "b_cost": 0,
+      "cost": 626,
+      "n": 26,
+      "states": 8476
+    },
+    {
+      "a_cost": 0,
+      "b_cost": 1,
+      "cost": 50,
+      "n": 26,
+      "states": 8476
+    },
+    {
+      "a_cost": 1,
+      "b_cost": 1,
+      "cost": 729,
+      "n": 27,
+      "states": 9504
+    },
+    {
+      "a_cost": 1,
+      "b_cost": 0,
+      "cost": 677,
+      "n": 27,
+      "states": 9504
+    },
+    {
+      "a_cost": 0,
+      "b_cost": 1,
+      "cost": 52,
+      "n": 27,
+      "states": 9504
+    },
+    {
+      "a_cost": 1,
+      "b_cost": 1,
+      "cost": 784,
+      "n": 28,
+      "states": 10612
+    },
+    {
+      "a_cost": 1,
+      "b_cost": 0,
+      "cost": 730,
+      "n": 28,
+      "states": 10612
+    },
+    {
+      "a_cost": 0,
+      "b_cost": 1,
+      "cost": 54,
+      "n": 28,
+      "states": 10612
+    },
+    {
+      "a_cost": 1,
+      "b_cost": 1,
+      "cost": 841,
+      "n": 29,
+      "states": 11803
+    },
+    {
+      "a_cost": 1,
+      "b_cost": 0,
+      "cost": 785,
+      "n": 29,
+      "states": 11803
+    },
+    {
+      "a_cost": 0,
+      "b_cost": 1,
+      "cost": 56,
+      "n": 29,
+      "states": 11803
+    },
+    {
+      "a_cost": 1,
+      "b_cost": 1,
+      "cost": 900,
+      "n": 30,
+      "states": 13080
+    },
+    {
+      "a_cost": 1,
+      "b_cost": 0,
+      "cost": 842,
+      "n": 30,
+      "states": 13080
+    },
+    {
+      "a_cost": 0,
+      "b_cost": 1,
+      "cost": 58,
+      "n": 30,
+      "states": 13080
+    }
+  ],
+  "scope": "Finite weighted searches; all-size proof is OPTIMALITY.md; priority unverified"
+}

@@ -1,0 +1,95 @@
+use "endpoint_diagnosis.rad"
+// Eliminate entrance-invisible variables, then solve the affine jet block.
+// No optimizer, random proposal or inverse-problem oracle is used.
+resource JetRequest { background_multiple: int = 0 }
+component JetSolution { background_multiple: int = 0, endpoint_equation_solved: bool = false,
+    prior_initial_germ_preserved: bool = false, shared_velocity_preserved: bool = false,
+    all_order_join_closed: bool = false, left_force_bound: int = 0, right_force_bound: int = 0,
+    whole_interval_small_force_proved: bool = false }
+entity jet_trial { JetSolution {} }
+pub pure fn target_stage(multiple: int) -> SmoothStage {
+    assert(multiple >= 0 and multiple <= 2,"reference multiplier domain")
+    let base: SmoothStage = fixture_stage()
+    let zero_force: SmoothStage = repair_endpoint_jet(base)
+    let mut derivative: list<FluidMode> = []
+    for mode in zero_force.a[1] {
+        let mut re: list<int> = []
+        let mut im: list<int> = []
+        for j in range(3) { re = push(re,(1-multiple)*mode.re[j])
+            im = push(im,(1-multiple)*mode.im[j]) }
+        derivative = push(derivative,FluidMode { k: mode.k,re: re,im: im })
+    }
+    let mut result: SmoothStage = base
+    result.a = [base.a[0],derivative,base.a[2]]
+    // The reference is multiple times the actual stationary background force.
+    let stationary: list<ForceMode> = actual_force(base.a[0],[],1)
+    let actual: list<ForceMode> = actual_force(base.a[0],derivative,1)
+    assert(len(stationary) == len(actual),"endpoint force support")
+    for i in range(len(actual)) {
+        assert(actual[i].k == stationary[i].k and actual[i].denominator == stationary[i].denominator,"endpoint force alignment")
+        for j in range(3) {
+            assert(actual[i].re[j] == multiple*stationary[i].re[j] and actual[i].im[j] == multiple*stationary[i].im[j],"exact reference force equation")
+        }
+    }
+    return result
+}
+pure fn solve_jet(request: JetRequest) -> JetSolution {
+    let original_left: SmoothStage = stationary_predecessor()
+    let right: SmoothStage = target_stage(request.background_multiple)
+    let left: SmoothStage = link_predecessor(original_left,right)
+    let lb: StageBound = stage_bound(left)
+    let rb: StageBound = stage_bound(right)
+    return JetSolution { background_multiple: request.background_multiple,endpoint_equation_solved: true,
+        prior_initial_germ_preserved: left.a == original_left.a,
+        shared_velocity_preserved: stage_bank(left,1,1,false) == stage_bank(original_left,1,1,false),
+        all_order_join_closed: stage_join(left,right),left_force_bound: lb.force_sup_upper,
+        right_force_bound: rb.force_sup_upper,whole_interval_small_force_proved: false }
+}
+system SolveJet(row: mut JetSolution, request: JetRequest) { row = solve_jet(request) }
+component EliminationResult { invisible_block: str = "", solved_block: str = "",
+    solved_requests: int = 0, initial_data_changed: bool = false, blowup_proved: bool = false }
+entity elimination { EliminationResult {} }
+intent JetSolved { key target: entity, request: JetRequest, evidence: JetSolution }
+law SubmitJetSolution(target: entity, request: JetRequest, evidence: JetSolution) {
+    propose JetSolved { target: target,request: request,evidence: evidence }
+}
+resolver VerifyElimination for JetSolved(target, proposals) {
+    assert(len(proposals) == 3,"reference request coverage")
+    let mut seen: list<bool> = [false,false,false]
+    for proposal in proposals {
+        let index: int = proposal.request.background_multiple
+        assert(index >= 0 and index <= 2 and not seen[index],"reference identity")
+        seen[index] = true
+        assert(proposal.evidence == solve_jet(proposal.request),"forged elimination certificate")
+        assert(proposal.evidence.endpoint_equation_solved and proposal.evidence.prior_initial_germ_preserved
+            and proposal.evidence.shared_velocity_preserved and proposal.evidence.all_order_join_closed,"unsolved jet constraint")
+    }
+    next(target,EliminationResult { invisible_block: "current-stage flat switch: zero entrance influence",
+        solved_block: "velocity derivative plus predecessor exit jet: exact triangular solve",
+        solved_requests: 3,initial_data_changed: false,blowup_proved: false })
+}
+fn main() -> nil {
+    let base: world_fork = fork()
+    let digest: str = world_digest()
+    let mut jobs: list<world_fork> = []
+    for multiple in range(3) { jobs = push(jobs,fork_with(base,JetRequest { background_multiple: multiple })) }
+    let results: list<world_fork> = simulate_many(jobs,[system::SolveJet],1,20260908)
+    let mut evidence: list<JetSolution> = []
+    for i in range(3) {
+        assert_only_changed(jobs[i],results[i],[JetSolution])
+        let row: JetSolution = peek(results[i],jet_trial,JetSolution) |> unwrap
+        evidence = push(evidence,row)
+        print("solution",json_stringify(row))
+    }
+    assert(world_digest() == digest,"elimination fork isolation")
+    let args: list<str> = sys_args()
+    if len(args) > 0 {
+        assert(args[0] == "forge-small-force","unknown elimination probe")
+        let mut forged: JetSolution = evidence[0]
+        forged.whole_interval_small_force_proved = true
+        evidence[0] = forged
+    }
+    settle { for i in range(3) { SubmitJetSolution(elimination,JetRequest { background_multiple: i },evidence[i]) } }
+    print("result",json_stringify(require(elimination,EliminationResult)))
+    print(why(elimination,EliminationResult))
+}

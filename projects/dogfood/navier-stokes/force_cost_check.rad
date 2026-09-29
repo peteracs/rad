@@ -1,0 +1,24 @@
+use "force_cost.rad"
+fn main() -> nil {
+    print("boundary",json_stringify(actual_boundary()))
+    for order in range(8) {
+        let m: int = order+1
+        let mut jets: list<int> = [1]
+        for _ in range(m-1) { jets = push(jets,0) }
+        for speed in [1,2,4,8,16] {
+            let row: map<str, any> = { "order": m,"speed": speed,
+                "cost_n": unavoidable_cost_n(0,jets,speed,m),"denominator": 2 }
+            print("flat",json_stringify(row))
+        }
+    }
+    // Nonconstant force germ: F(t)=(1+t+t^2)/16 on [0,1/4].
+    // Common denominator 256: F(end)=21, jets=(16,16,32).
+    let all_jets: list<int> = [16,16,32]
+    let mut jets: list<int> = []
+    for order in range(3) {
+        jets = push(jets,all_jets[order])
+        let row: map<str, any> = { "order": order+1,
+            "cost_n": unavoidable_cost_n(21,jets,4,order+1),"denominator": 256 }
+        print("polynomial",json_stringify(row))
+    }
+}

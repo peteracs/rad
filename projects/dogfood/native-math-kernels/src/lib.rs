@@ -9,6 +9,7 @@ mod affine_frontier;
 mod affine_parity;
 mod boolean_lattice;
 mod column_quotient;
+mod rewrite_rank;
 mod sparse_slope;
 mod zeta_cover;
 
@@ -83,4 +84,5 @@ include!("lib/lattice_bindings.rs");
 include!("lib/quotient_bindings.rs");
 include!("lib/affine_bindings.rs");
 include!("lib/zeta_bindings.rs");
+include!("lib/rewrite_bindings.rs");
 include!("lib/register.rs");

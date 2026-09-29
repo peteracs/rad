@@ -1,0 +1,118 @@
+// Exact big-integer Collatz walk from the mirror exit state 3^(kq) - m.
+// Little-endian limbs in base 2^24.
+pub pure fn limb_base() -> int { return 1 << 24 }
+
+pub pure fn big_from(x: int) -> list<int> {
+    let mut out: list<int> = []
+    let mut y: int = x
+    while y > 0 { out = push(out, y % limb_base()) y = int_div(y, limb_base()) }
+    return out
+}
+
+pub pure fn big_norm(a: list<int>) -> list<int> {
+    let mut n: int = len(a)
+    while n > 0 and a[n - 1] == 0 { n = n - 1 }
+    let mut out: list<int> = []
+    for i in range(n) { out = push(out, a[i]) }
+    return out
+}
+
+pub pure fn big_mul_add(a: list<int>, f: int, add: int) -> list<int> {
+    let mut out: list<int> = []
+    let mut carry: int = add
+    for limb in a {
+        let v: int = limb * f + carry
+        out = push(out, v % limb_base())
+        carry = int_div(v, limb_base())
+    }
+    while carry > 0 { out = push(out, carry % limb_base()) carry = int_div(carry, limb_base()) }
+    return out
+}
+
+pub pure fn big_sub_small(a: list<int>, s: int) -> list<int> {
+    let mut out: list<int> = a
+    let mut borrow: int = s
+    let mut i: int = 0
+    while borrow > 0 {
+        let v: int = out[i] - borrow
+        if v >= 0 { out = set_at(out, i, v) borrow = 0 }
+        else {
+            let need: int = int_div(0 - v + limb_base() - 1, limb_base())
+            out = set_at(out, i, v + need * limb_base())
+            borrow = need
+        }
+        i = i + 1
+    }
+    return big_norm(out)
+}
+
+pub pure fn big_half(a: list<int>) -> list<int> {
+    let mut out: list<int> = []
+    for i in range(len(a)) {
+        let high: int = if i + 1 < len(a) { a[i + 1] % 2 } else { 0 }
+        out = push(out, int_div(a[i], 2) + high * int_div(limb_base(), 2))
+    }
+    return big_norm(out)
+}
+
+pub pure fn big_less(a: list<int>, b: list<int>) -> bool {
+    if len(a) != len(b) { return len(a) < len(b) }
+    let mut i: int = len(a) - 1
+    while i >= 0 {
+        if a[i] != b[i] { return a[i] < b[i] }
+        i = i - 1
+    }
+    return false
+}
+
+pub pure fn big_pow(b: int, e: int) -> list<int> {
+    let mut out: list<int> = [1]
+    for _ in range(e) { out = big_mul_add(out, b, 0) }
+    return out
+}
+
+pub pure fn big_pow2(e: int) -> list<int> {
+    let mut out: list<int> = [1]
+    for _ in range(e) { out = big_mul_add(out, 2, 0) }
+    return out
+}
+
+pub struct Passage {
+    m: int = 0
+    k: int = 0
+    excess_micro: int = 0        // E = k(q log2 3 - j) in micro-bits
+    passage_odd: int = 0         // first odd-step count t with W_t > E
+    passage_steps: int = 0       // T-steps at that moment
+    descent_steps: int = 0       // T-steps until the value is below 2^(kj) - m
+    min_walk_micro: int = 0      // min_t W_t (deepest dip)
+    halving_rate_x1000: int = 0  // 1000 * V / t at first passage
+    agree: bool = false          // descent step equals the coefficient-passage step
+}
+
+// W = V log2 2 - t log2 3 in micro-bits; log2 3 = 1.584962500721...
+pub pure fn walk(m: int, q: int, j: int, k: int) -> Passage {
+    let target: list<int> = big_sub_small(big_pow2(k * j), m)
+    let mut x: list<int> = big_sub_small(big_pow(3, k * q), m)
+    let excess: int = k * (1584963 * q - 1000000 * j)
+    let mut v: int = 0
+    let mut t: int = 0
+    let mut steps: int = 0
+    let mut w: int = 0
+    let mut minimum: int = 0
+    let mut passage_t: int = 0 - 1
+    let mut passage_s: int = 0 - 1
+    let mut rate: int = 0
+    let mut descent: int = 0 - 1
+    while descent < 0 or passage_t < 0 {
+        if x[0] % 2 == 1 { x = big_half(big_mul_add(x, 3, 1)) t = t + 1 } else { x = big_half(x) }
+        v = v + 1
+        steps = steps + 1
+        w = 1000000 * v - 1584963 * t
+        if w < minimum { minimum = w }
+        if passage_t < 0 and w > excess { passage_t = t passage_s = steps rate = if t > 0 { int_div(1000 * v, t) } else { 0 } }
+        if descent < 0 and big_less(x, target) { descent = steps }
+        assert(steps < 200000, "walk did not settle")
+    }
+    return Passage { m: m, k: k, excess_micro: excess, passage_odd: passage_t, passage_steps: passage_s,
+        descent_steps: descent, min_walk_micro: minimum, halving_rate_x1000: rate, agree: descent == passage_s }
+}

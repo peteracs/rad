@@ -1,0 +1,21 @@
+use "trajectory_fixture.rad"
+fn main() -> nil {
+    let left: SmoothStage = fixture_stage()
+    let right: SmoothStage = carry_stage(left,left.b,1)
+    assert(stage_join(left,right),"full seam closure")
+    let mut broken: SmoothStage = right
+    broken.inverse_duration = 2
+    assert(not stage_join(left,broken),"physical derivative mismatch missed")
+    let mut faster: SmoothStage = left
+    faster.inverse_duration = 2
+    let duration_change: SmoothStage = carry_stage(faster,left.b,1)
+    assert(stage_join(faster,duration_change),"duration-aware closure")
+    let stages: list<SmoothStage> = [left,right,faster,duration_change]
+    for index in range(4) {
+        print("stage",json_stringify(stages[index]))
+        for mode in stage_force(stages[index]) {
+            let row: map<str, any> = { "stage": index,"force": mode }
+            print("force",json_stringify(row))
+        }
+    }
+}

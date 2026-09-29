@@ -1,0 +1,44 @@
+use "collision.rad"
+
+resource ProfileJob { depth: int = 1 }
+
+component ProfileResult { profile: CollisionProfile = CollisionProfile {} }
+
+entity profile_target { ProfileResult {} }
+resource BoundJob { limit: int = 256, minimum_bits: int = 0 }
+
+component BoundResult { bound: CorrectionBound = CorrectionBound {} }
+
+entity bound_target { BoundResult {} }
+
+system ComputeProfile(result: mut ProfileResult, job: ProfileJob) {
+    result = ProfileResult { profile: collision_profile(job.depth) }
+}
+
+system ComputeBound(result: mut BoundResult, job: BoundJob) {
+    result = BoundResult { bound: correction_bound(job.limit, job.minimum_bits) }
+}
+
+fn main() -> nil {
+    let base: world_fork = fork()
+    let mut jobs: list<world_fork> = []
+    for depth in range(1, 19) { jobs = push(jobs, fork_with(base, ProfileJob { depth: depth })) }
+    let profiles: list<world_fork> = simulate_many(jobs, [system::ComputeProfile], 1, 1937)
+    for i in range(len(profiles)) {
+        assert_only_changed(jobs[i], profiles[i], [ProfileResult])
+        let result: ProfileResult = peek(profiles[i], profile_target, ProfileResult) |> unwrap
+        print(json_stringify(result.profile))
+    }
+    let mut bound_jobs: list<world_fork> = []
+    for h in [0, 16, 32, 64, 71, 128, 256] { bound_jobs = push(bound_jobs, fork_with(base, BoundJob { minimum_bits: h })) }
+    let bounds: list<world_fork> = simulate_many(bound_jobs, [system::ComputeBound], 1, 1937)
+    for i in range(len(bounds)) {
+        assert_only_changed(bound_jobs[i], bounds[i], [BoundResult])
+        let result: BoundResult = peek(bounds[i], bound_target, BoundResult) |> unwrap
+        let restored: world_fork = fork_from_bytes(fork_to_bytes(bounds[i])) |> unwrap
+        assert(peek(restored, bound_target, BoundResult) == peek(bounds[i], bound_target, BoundResult), "correction snapshot differs")
+        print(json_stringify(result.bound))
+    }
+    assert(require(profile_target, ProfileResult).profile.depth == 0, "profile job changed live world")
+    assert(require(bound_target, BoundResult).bound.limit == 0, "bound job changed live world")
+}

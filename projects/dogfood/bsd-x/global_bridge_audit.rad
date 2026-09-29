@@ -1,0 +1,77 @@
+// Symbolic audit of an explicitly limited inference system, not curve models.
+// An affine list [a,b,c] denotes a+b*u+c*v for ALL nonnegative integers u,v.
+resource BridgeRequest { primary_finite: bool = false,padic_equal: bool = true }
+component BridgeEvidence { premises_hold: bool = false,universal_failure: bool = false,
+    missing_comparison: list<int> = [],rank_excess: list<int> = [],divisible_corank: list<int> = [] }
+entity bridge_trial { BridgeEvidence {} }
+entity strongest_bridge { BridgeEvidence {} }
+
+pure fn combine(a: list<int>,b: list<int>,scale: int) -> list<int> {
+    assert(len(a)==3 and len(b)==3,"affine coefficient dimensions")
+    return [a[0]+scale*b[0],a[1]+scale*b[1],a[2]+scale*b[2]]
+}
+pure fn nonnegative(a: list<int>) -> bool {
+    assert(len(a)==3,"affine coefficient dimensions")
+    // This criterion is proved for the whole quadrant in the companion note.
+    return a[0]>=0 and a[1]>=0 and a[2]>=0
+}
+pure fn identically_zero(a: list<int>) -> bool { return a==[0,0,0] }
+pure fn assess_bridge(c: BridgeRequest) -> BridgeEvidence {
+    let m: list<int> = [2,1,0]
+    let excess: list<int> = [2,0,2]
+    let s: list<int> = combine(m,excess,1)
+    let r: list<int> = if c.primary_finite { s } else { m }
+    let t: list<int> = if c.primary_finite { [0,0,0] } else { excess }
+    let delta_order: list<int> = s
+    let padic_order: list<int> = if c.padic_equal { s } else { combine(s,excess,1) }
+    let rank_excess: list<int> = combine(r,m,-1)
+    let missing: list<int> = combine(delta_order,m,-1)
+    let mut parity: bool = true
+    for coefficient in combine(s,m,-1) { if coefficient%2!=0 { parity=false } }
+    let premises: bool = nonnegative(combine(m,[2,0,0],-1)) and nonnegative(t)
+        and nonnegative(rank_excess) and identically_zero(combine(s,combine(r,t,1),-1))
+        and identically_zero(combine(delta_order,s,-1)) and nonnegative(combine(padic_order,s,-1))
+        and parity and (not c.primary_finite or identically_zero(t))
+        and (not c.padic_equal or identically_zero(combine(padic_order,s,-1)))
+    let failure: bool = nonnegative(missing) and missing[0]>0
+    assert(premises and failure,"all symbolic premises hold while target fails universally")
+    return BridgeEvidence { premises_hold:premises,universal_failure:failure,
+        missing_comparison:missing,rank_excess:rank_excess,divisible_corank:t }
+}
+system BridgeStep(row: mut BridgeEvidence,c: BridgeRequest) { row=assess_bridge(c) }
+intent BridgeChecked { key target: entity,request: BridgeRequest,evidence: BridgeEvidence }
+law SubmitBridge(target: entity,request: BridgeRequest,evidence: BridgeEvidence) {
+    propose BridgeChecked { target:target,request:request,evidence:evidence }
+}
+resolver ExplainBridge for BridgeChecked(target,proposals) {
+    assert(len(proposals)==1,"one symbolic audit")
+    let row: BridgeEvidence = assess_bridge(proposals[0].request)
+    assert(row==proposals[0].evidence,"unsupported universal bridge conclusion")
+    next(target,BridgeEvidence { premises_hold:row.premises_hold,universal_failure:row.universal_failure,
+        missing_comparison:row.missing_comparison,rank_excess:row.rank_excess,divisible_corank:row.divisible_corank })
+}
+fn main() -> nil {
+    let base: world_fork = fork()
+    let digest: str = world_digest()
+    let mut jobs: list<world_fork> = []
+    let mut requests: list<BridgeRequest> = []
+    for finite in [false,true] { for equal in [false,true] {
+        let c: BridgeRequest = BridgeRequest { primary_finite:finite,padic_equal:equal }
+        requests=push(requests,c)
+        jobs=push(jobs,fork_with(base,c))
+    } }
+    let results: list<world_fork> = simulate_many(jobs,[system::BridgeStep],1,20260909)
+    for i in range(len(results)) {
+        assert_only_changed(jobs[i],results[i],[BridgeEvidence])
+        let row: BridgeEvidence = peek(results[i],bridge_trial,BridgeEvidence) |> unwrap
+        assert(row==assess_bridge(requests[i]),"symbolic fork agreement")
+        print("case",json_stringify(row))
+    }
+    assert(world_digest()==digest,"symbolic forks preserve parent")
+    let strongest: BridgeRequest = BridgeRequest { primary_finite:true,padic_equal:true }
+    let mut row: BridgeEvidence = assess_bridge(strongest)
+    if len(sys_args())>0 { row.universal_failure=false }
+    settle { SubmitBridge(strongest_bridge,strongest,row) }
+    print(why(strongest_bridge,BridgeEvidence))
+    print(why_field(strongest_bridge,BridgeEvidence,"missing_comparison"))
+}

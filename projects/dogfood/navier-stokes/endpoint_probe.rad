@@ -1,0 +1,13 @@
+use "endpoint_diagnosis.rad"
+fn main() -> nil {
+    let original: SmoothStage = fixture_stage()
+    let repaired: SmoothStage = repair_endpoint_jet(original)
+    assert(not stage_join(stationary_predecessor(),repaired),"jet change must propagate upstream")
+    let upstream: SmoothStage = backpropagate_jet(repaired)
+    assert(stage_join(upstream,repaired),"upstream closure")
+    for mode in stage_force(repaired) {
+        if mode.k == [1,0,1] or mode.k == [1,0,0] {
+            print(json_stringify(mode))
+        }
+    }
+}

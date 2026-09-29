@@ -1,0 +1,92 @@
+use "forced_fourier.rad"
+// Provenance-guided local repair demonstration. No stage theorem is inferred.
+resource RepairSpec { lane: int = 0 }
+component RepairEvidence {
+    lane: int = 0, time_n: int = 0, transport_n: int = 16,
+    residual_n: int = 16, denominator: int = 8,
+    nonzero_force_modes: int = 0, cleared: bool = false,
+    trajectory_proved: bool = false, repeatability_proved: bool = false
+}
+entity trial { RepairEvidence {} }
+pure fn diagnose(spec: RepairSpec) -> RepairEvidence {
+    assert(spec.lane == 0 or spec.lane == 1,"repair lane")
+    let u: list<FluidMode> = [FluidMode { k: [1,0,0], re: [0,2,2], im: [0,0,0] },
+        FluidMode { k: [-1,0,0], re: [0,2,2], im: [0,0,0] },
+        FluidMode { k: [0,0,1], re: [2,2,0], im: [0,0,0] },
+        FluidMode { k: [0,0,-1], re: [2,2,0], im: [0,0,0] }]
+    // Local correction selected from the baseline's exact force coefficient.
+    let baseline: list<ForceMode> = actual_force(u,[],1)
+    let mut transport_n: int = 0
+    for mode in baseline {
+        if mode.k == [1,0,1] {
+            assert(mode.denominator == 8 and mode.re == [0,0,0],"witness normalization")
+            transport_n = mode.im[1]
+        }
+    }
+    assert(transport_n%4 == 0,"representable derivative correction")
+    let correction: int = -spec.lane*int_div(transport_n,4)
+    let ut: list<FluidMode> = [FluidMode { k: [1,0,1], re: [0,0,0], im: [0,correction,0] },
+        FluidMode { k: [-1,0,-1], re: [0,0,0], im: [0,-correction,0] }]
+    let force: list<ForceMode> = actual_force(u,ut,1)
+    let mut residual_n: int = 0
+    let mut nonzero: int = 0
+    for mode in force {
+        if mode.k == [1,0,1] { assert(mode.denominator == 8,"repair normalization")
+            residual_n = mode.im[1] }
+        if mode.re != [0,0,0] or mode.im != [0,0,0] { nonzero = nonzero+1 }
+    }
+    assert(residual_n == transport_n+4*correction,"residual attribution")
+    return RepairEvidence { lane: spec.lane, time_n: 4*correction,
+        transport_n: transport_n, residual_n: residual_n, denominator: 8,
+        nonzero_force_modes: nonzero, cleared: residual_n == 0 }
+}
+system EvaluateRepair(evidence: mut RepairEvidence, spec: RepairSpec) { evidence = diagnose(spec) }
+component RepairDecision { selected_lane: int = -1, remaining_force_modes: int = 0,
+    local_coefficient_cleared: bool = false, stage_certified: bool = false }
+entity decision { RepairDecision {} }
+intent RepairChecked { key target: entity, spec: RepairSpec, evidence: RepairEvidence }
+law SubmitRepair(target: entity, spec: RepairSpec, evidence: RepairEvidence) {
+    propose RepairChecked { target: target, spec: spec, evidence: evidence }
+}
+resolver ChooseRepair for RepairChecked(target, proposals) {
+    assert(len(proposals) == 2,"repair portfolio coverage")
+    let mut seen: list<bool> = [false,false]
+    let mut selected: int = -1
+    let mut remaining: int = 0
+    for proposal in proposals {
+        let row: RepairEvidence = proposal.evidence
+        assert(proposal.spec.lane >= 0 and proposal.spec.lane < 2,"invalid repair identity")
+        assert(not seen[proposal.spec.lane],"duplicate repair")
+        seen[proposal.spec.lane] = true
+        assert(row == diagnose(proposal.spec),"forged repair diagnosis")
+        if row.cleared { selected = row.lane
+            remaining = row.nonzero_force_modes }
+    }
+    assert(selected == 1 and remaining == 4,"repair selection")
+    next(target,RepairDecision { selected_lane: selected, remaining_force_modes: remaining,
+        local_coefficient_cleared: true, stage_certified: false })
+}
+fn main() -> nil {
+    let base: world_fork = fork()
+    let digest: str = world_digest()
+    let jobs: list<world_fork> = [fork_with(base,RepairSpec { lane: 0 }),fork_with(base,RepairSpec { lane: 1 })]
+    let results: list<world_fork> = simulate_many(jobs,[system::EvaluateRepair],1,20260908)
+    let mut evidence: list<RepairEvidence> = []
+    for i in range(2) {
+        assert_only_changed(jobs[i],results[i],[RepairEvidence])
+        let row: RepairEvidence = peek(results[i],trial,RepairEvidence) |> unwrap
+        evidence = push(evidence,row)
+        print("evidence",json_stringify(row))
+    }
+    assert(world_digest() == digest,"repair fork isolation")
+    let args: list<str> = sys_args()
+    if len(args) > 0 {
+        assert(args[0] == "forge-stage","unknown repair probe")
+        let mut forged: RepairEvidence = evidence[1]
+        forged.repeatability_proved = true
+        evidence[1] = forged
+    }
+    settle { for i in range(2) { SubmitRepair(decision,RepairSpec { lane: i },evidence[i]) } }
+    print("decision",json_stringify(require(decision,RepairDecision)))
+    print(why(decision,RepairDecision))
+}

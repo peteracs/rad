@@ -1,0 +1,45 @@
+pub struct ModularRow { rule: int = -1, residue: int = 0, symbol: int = -1, terms: map<str, int> = {}, bound: int = 0 }
+struct Cost { terms: map<str, int> = {}, residue: int = 0 }
+
+pure fn advance(residue: int, symbol: int, modulus: int) -> int {
+    assert(symbol == 0 or symbol == 1 or (symbol >= 4 and symbol <= 6), "invalid modular digit")
+    return if symbol < 2 { (2 * residue + symbol) % modulus } else { (3 * residue + symbol - 4) % modulus }
+}
+
+pure fn edge_key(residue: int, symbol: int) -> str { return "w:" + str(residue) + ":" + str(symbol) }
+
+pure fn cost(word: list<int>, residue: int, modulus: int) -> Cost {
+    let mut state: int = residue
+    let mut terms: map<str, int> = {}
+    for symbol in word {
+        let key: str = edge_key(state, symbol)
+        terms[key] = get_or(terms, key, 0) + 1
+        state = advance(state, symbol, modulus)
+    }
+    terms["t:" + str(state)] = 1
+    return Cost { terms: terms, residue: state }
+}
+
+pub pure fn modular_row(modulus: int, boundary: int, rule: int, residue: int, symbol: int) -> ModularRow {
+    assert(modulus >= 1 and modulus <= 256 and residue >= 0 and residue < modulus, "invalid modular state")
+    assert(boundary > 0 and boundary < 2048 and rule >= -1 and rule < 11, "invalid modular rule")
+    let mut terms: map<str, int> = {}
+    if rule == -1 {
+        let target: int = advance(residue, symbol, modulus)
+        terms[edge_key(residue, symbol)] = 1
+        terms["h:" + str(residue)] = get_or(terms, "h:" + str(residue), 0) + 1
+        terms["h:" + str(target)] = get_or(terms, "h:" + str(target), 0) - 1
+    }
+    else {
+        assert(rule < 8 or residue == 1 % modulus, "leading rule has wrong prefix state")
+        let lefts: list<list<int>> = [[0], [1], [0, 4], [0, 5], [0, 6], [1, 4], [1, 5], [1, 6], [4], [5], [6]]
+        let rights: list<list<int>> = [[], [6], [4, 0], [4, 1], [5, 0], [5, 1], [6, 0], [6, 1], [1], [0, 0], [0, 1]]
+        let lhs: Cost = cost(lefts[rule], residue, modulus)
+        let rhs: Cost = cost(rights[rule], residue, modulus)
+        assert(rule < 2 or lhs.residue == rhs.residue, "base conversion did not preserve residue")
+        terms = lhs.terms
+        for entry in entries(rhs.terms) { terms[entry[0]] = get_or(terms, entry[0], 0) - entry[1] }
+    }
+    return ModularRow { rule: rule, residue: residue, symbol: symbol, terms: terms,
+        bound: if rule >= 0 and (boundary & (1 << rule)) != 0 { 1 } else { 0 } }
+}

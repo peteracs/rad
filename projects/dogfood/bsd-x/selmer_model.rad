@@ -1,0 +1,113 @@
+// Abstract groups only. No row is asserted to come from an elliptic curve.
+resource SelmerCase { analytic: int = 2,rank: int = 2,divisible: int = 0,level: int = 0,spectrum: list<int> = [] }
+component SelmerEvidence { analytic: int = 0,rank: int = 0,divisible: int = 0,level: int = 0,
+    corank: int = 0,residual_exponent: int = 0,growth: int = 0,tail_pairs: int = 0,
+    eventual_growth: int = 0,x1_dimension: bool = false,x3_at_level: bool = false,
+    x3_eventually: bool = false,primary_finite: bool = false }
+entity model_trial { SelmerEvidence {} }
+entity lower_rank_witness { SelmerEvidence {} }
+entity upper_rank_witness { SelmerEvidence {} }
+entity divisible_witness { SelmerEvidence {} }
+entity late_certificate { SelmerEvidence {} }
+
+pure fn assess(c: SelmerCase) -> SelmerEvidence {
+    assert(c.analytic>=0 and c.analytic<=100 and c.rank>=0 and c.rank<=100,"rank arithmetic domain")
+    assert(c.divisible>=0 and c.divisible<=100 and c.level>=0 and c.level<=100,"module arithmetic domain")
+    assert(len(c.spectrum)<=100,"finite quotient capacity")
+    let s: int = c.rank+c.divisible
+    assert(s%2 == c.analytic%2,"p parity premise")
+    let mut residual: int = c.level*c.divisible
+    let mut tail: int = 0
+    let mut exponent_next: int = (c.level+1)*c.divisible
+    let mut final_level: int = 0
+    for a in c.spectrum {
+        assert(a>=1 and a<=100,"paired finite cyclic exponent")
+        residual = residual+2*(if a<c.level { a } else { c.level })
+        exponent_next = exponent_next+2*(if a<c.level+1 { a } else { c.level+1 })
+        if a>c.level { tail = tail+1 }
+        if a>final_level { final_level = a }
+    }
+    let g: int = c.rank+exponent_next-residual
+    assert(g == s+2*tail,"exact Selmer growth exponent")
+    assert(g%2 == c.analytic%2,"growth parity")
+    let mut final_tail: int = 0
+    for a in c.spectrum { if a>final_level { final_tail=final_tail+1 } }
+    assert(final_tail == 0,"finite quotient saturation")
+    // Check the user's finite-certificate implication on every d in this row.
+    for d in range(c.rank+1) {
+        if d%2 == c.analytic%2 and g<=d+1 {
+            assert(c.rank == d and c.divisible == 0 and tail == 0,"strengthened finite certificate")
+        }
+    }
+    assert((s<=c.analytic+1) == (s<=c.analytic),"parity removes one-unit slack")
+    return SelmerEvidence { analytic:c.analytic,rank:c.rank,divisible:c.divisible,level:c.level,
+        corank:s,residual_exponent:residual,growth:g,tail_pairs:tail,eventual_growth:s,
+        x1_dimension:s>=c.analytic,x3_at_level:g<=c.analytic+1,
+        x3_eventually:s<=c.analytic,primary_finite:c.divisible == 0 }
+}
+system ModelStep(row: mut SelmerEvidence,c: SelmerCase) { row=assess(c) }
+intent ModelChecked { key target: entity,request: SelmerCase,evidence: SelmerEvidence }
+law SubmitModel(target: entity,request: SelmerCase,evidence: SelmerEvidence) {
+    propose ModelChecked { target:target,request:request,evidence:evidence }
+}
+resolver ExplainModel for ModelChecked(target,proposals) {
+    assert(len(proposals)==1,"one explanation per abstract witness")
+    let verified: SelmerEvidence = assess(proposals[0].request)
+    assert(proposals[0].evidence == verified,"unproved X claim in submitted evidence")
+    next(target,SelmerEvidence { analytic:verified.analytic,rank:verified.rank,divisible:verified.divisible,
+        level:verified.level,corank:verified.corank,residual_exponent:verified.residual_exponent,
+        growth:verified.growth,tail_pairs:verified.tail_pairs,eventual_growth:verified.eventual_growth,
+        x1_dimension:verified.x1_dimension,x3_at_level:verified.x3_at_level,
+        x3_eventually:verified.x3_eventually,primary_finite:verified.primary_finite })
+}
+fn main() -> nil {
+    // Arbitrarily long prefixes can agree while divisible parts differ.
+    let mut prefix_checks: int = 0
+    for cutoff in range(1,13) { for k in range(cutoff+1) {
+        let infinite: SelmerEvidence = assess(SelmerCase { analytic:2,rank:2,divisible:2,level:k })
+        let finite: SelmerEvidence = assess(SelmerCase { analytic:2,rank:2,level:k,spectrum:[cutoff] })
+        assert(infinite.residual_exponent == finite.residual_exponent,"identical finite torsion prefix")
+        assert(not infinite.primary_finite and finite.primary_finite,"different primary finiteness")
+        prefix_checks=prefix_checks+1
+    } }
+    print("prefix_checks",prefix_checks)
+    let base: world_fork = fork()
+    let digest: str = world_digest()
+    let mut requests: list<SelmerCase> = []
+    let mut jobs: list<world_fork> = []
+    for m in [2,3,4,5,6] { for r in range(7) { for t in range(5) {
+        if (r+t)%2 == m%2 {
+            for k in range(4) { for spectrum in [[],[1],[3],[1,3]] {
+                let request: SelmerCase = SelmerCase { analytic:m,rank:r,divisible:t,level:k,spectrum:spectrum }
+                requests=push(requests,request)
+                jobs=push(jobs,fork_with(base,request))
+            } }
+        }
+    } } }
+    let results: list<world_fork> = simulate_many(jobs,[system::ModelStep],1,20260909)
+    for i in range(len(results)) {
+        assert_only_changed(jobs[i],results[i],[SelmerEvidence])
+        let actual: SelmerEvidence = peek(results[i],model_trial,SelmerEvidence) |> unwrap
+        assert(actual == assess(requests[i]),"fork request and result agree")
+    }
+    assert(world_digest() == digest,"abstract search leaves parent unchanged")
+    print("checked",len(results))
+    let low: SelmerCase = SelmerCase { analytic:4,rank:2 }
+    let high: SelmerCase = SelmerCase { analytic:2,rank:4 }
+    let div: SelmerCase = SelmerCase { analytic:2,rank:2,divisible:2,level:3 }
+    let late: SelmerCase = SelmerCase { analytic:2,rank:2,level:2,spectrum:[3] }
+    let mut low_row: SelmerEvidence = assess(low)
+    if len(sys_args())>0 { low_row.x1_dimension=true }
+    settle {
+        SubmitModel(lower_rank_witness,low,low_row)
+        SubmitModel(upper_rank_witness,high,assess(high))
+        SubmitModel(divisible_witness,div,assess(div))
+        SubmitModel(late_certificate,late,assess(late))
+    }
+    for target in [lower_rank_witness,upper_rank_witness,divisible_witness,late_certificate] {
+        print(json_stringify(require(target,SelmerEvidence)))
+        print(why(target,SelmerEvidence))
+    }
+    print(why_field(lower_rank_witness,SelmerEvidence,"x1_dimension"))
+    print(why_field(upper_rank_witness,SelmerEvidence,"x3_eventually"))
+}

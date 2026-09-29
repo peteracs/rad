@@ -1,0 +1,40 @@
+// Sufficient majorant audit, NOT a PDE existence or blowup certificate.
+// Assumed actual force-stage estimate:
+// ||d_x^a d_t^m f_q|| <= C_(a,m) 2^(-q^2+d*q),
+// d=max(carrier_exponent,envelope_exponent)*a+time_exponent*m.
+// For q>=d+1: q^2-d*q >= q. Summed tail <= C_(a,m)*2^(1-Q).
+fn main() -> nil {
+    let carrier: int = 3
+    let envelope: int = 1
+    let time_scale: int = 4
+    let spatial: int = if carrier > envelope { carrier } else { envelope }
+    let mut checks: int = 0
+    for a in range(13) {
+        for m in range(13) {
+            let d: int = spatial*a+time_scale*m
+            let threshold: int = d+1
+            for offset in [0,1,2,16,64] {
+                let q: int = threshold+offset
+                let margin: int = q*q-d*q-q
+                assert(margin == q*offset and margin >= 0, "invalid summability majorant")
+                checks = checks+1
+            }
+        }
+    }
+    // A finite algebraic upper bound cannot certify every derivative order.
+    // This means the estimate is insufficient, not necessarily the force bad.
+    let decay_order: int = 40
+    let defeating_order: int = int_div(decay_order,spatial)+1
+    assert(spatial*defeating_order-decay_order > 0, "finite-order budget diagnostic")
+    let core_exposure: int = 2*envelope-time_scale
+    let carrier_exposure: int = 2*carrier-time_scale
+    assert(core_exposure < 0 and carrier_exposure > 0, "distinct scale diagnostic")
+    let row: map<str, any> = { "checks": checks,
+        "finite_decay_order": decay_order, "uncontrolled_spatial_order": defeating_order,
+        "core_exposure_exponent": core_exposure,
+        "carrier_exposure_exponent": carrier_exposure,
+        "actual_force_bound_supplied": false,
+        "repeatable_transfer_proved": false,
+        "blowup_proved": false }
+    print(json_stringify(row))
+}

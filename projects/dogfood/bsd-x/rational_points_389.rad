@@ -1,0 +1,115 @@
+// Actual rational points on y^2+y=x^3+x^2-2x.
+// The bridge from reductions to rational independence is proved in POINTS_389.md.
+resource PairRequest { px: int = 0,py: int = 0,qx: int = 1,qy: int = 0 }
+component PairEvidence { order5: int = 0,order11: int = 0,double_count: int = 0,
+    parity_mask: int = 0,independent: bool = false }
+entity pair_trial { PairEvidence {} }
+entity rational_pair { PairEvidence {} }
+entity duplicate_pair { PairEvidence {} }
+
+pure fn residue(a: int,p: int) -> int { return ((a%p)+p)%p }
+pure fn point_id(x: int,y: int,p: int) -> int { return 1+residue(x,p)*p+residue(y,p) }
+pure fn invert(a: int,p: int) -> int {
+    for j in range(1,p) { if residue(a*j,p)==1 { return j } }
+    assert(false,"nonzero denominator required")
+    return 0
+}
+pure fn curve_point(z: int,p: int) -> bool {
+    if z==0 { return true }
+    let x: int = int_div(z-1,p)
+    let y: int = (z-1)%p
+    return residue(y*y+y-x*x*x-x*x+2*x,p)==0
+}
+pure fn plus_point(a: int,b: int,p: int) -> int {
+    if a==0 { return b }
+    if b==0 { return a }
+    let x: int = int_div(a-1,p)
+    let y: int = (a-1)%p
+    let u: int = int_div(b-1,p)
+    let v: int = (b-1)%p
+    if x==u and residue(y+v+1,p)==0 { return 0 }
+    let slope: int = if x!=u { residue((v-y)*invert(u-x,p),p) }
+        else { residue((3*x*x+2*x-2)*invert(2*y+1,p),p) }
+    let z: int = residue(slope*slope-1-x-u,p)
+    let result: int = point_id(z,-y-1+slope*(x-z),p)
+    assert(curve_point(result,p),"addition stays on reduced curve")
+    return result
+}
+pure fn member(value: int,values: list<int>) -> bool {
+    for item in values { if item==value { return true } }
+    return false
+}
+pure fn all_points(p: int) -> list<int> {
+    let mut values: list<int> = [0]
+    for z in range(1,p*p+1) { if curve_point(z,p) { values=push(values,z) } }
+    return values
+}
+pure fn assess_pair(c: PairRequest) -> PairEvidence {
+    for x in [c.px,c.py,c.qx,c.qy] { assert(x>=-20 and x<=20,"integer input domain") }
+    assert(c.py*c.py+c.py==c.px*c.px*c.px+c.px*c.px-2*c.px,"first rational point")
+    assert(c.qy*c.qy+c.qy==c.qx*c.qx*c.qx+c.qx*c.qx-2*c.qx,"second rational point")
+    assert(389%5!=0 and 389%11!=0,"good reduction discriminant")
+    let order5: int = len(all_points(5))
+    let pts: list<int> = all_points(11)
+    let mut doubles: list<int> = []
+    for z in pts {
+        let twice: int = plus_point(z,z,11)
+        if not member(twice,doubles) { doubles=push(doubles,twice) }
+    }
+    let P: int = point_id(c.px,c.py,11)
+    let Q: int = point_id(c.qx,c.qy,11)
+    let mut mask: int = 0
+    if not member(P,doubles) { mask=mask+1 }
+    if not member(Q,doubles) { mask=mask+2 }
+    if not member(plus_point(P,Q,11),doubles) { mask=mask+4 }
+    return PairEvidence { order5:order5,order11:len(pts),double_count:len(doubles),
+        parity_mask:mask,independent:order5%2==1 and mask==7 }
+}
+system PairStep(row: mut PairEvidence,c: PairRequest) { row=assess_pair(c) }
+intent PairChecked { key target: entity,request: PairRequest,evidence: PairEvidence }
+law SubmitPair(target: entity,request: PairRequest,evidence: PairEvidence) {
+    propose PairChecked { target:target,request:request,evidence:evidence }
+}
+resolver ExplainPair for PairChecked(target,proposals) {
+    assert(len(proposals)==1,"one rational pair certificate")
+    let row: PairEvidence = assess_pair(proposals[0].request)
+    assert(row==proposals[0].evidence,"unsupported rational independence certificate")
+    next(target,PairEvidence { order5:row.order5,order11:row.order11,double_count:row.double_count,
+        parity_mask:row.parity_mask,independent:row.independent })
+}
+fn main() -> nil {
+    let base: world_fork = fork()
+    let digest: str = world_digest()
+    let mut jobs: list<world_fork> = []
+    let mut requests: list<PairRequest> = []
+    // All integral receiving points in this explicitly bounded box.
+    for x in range(-3,5) { for y in range(-10,11) {
+        if y*y+y==x*x*x+x*x-2*x {
+            let c: PairRequest = PairRequest { qx:x,qy:y }
+            requests=push(requests,c)
+            jobs=push(jobs,fork_with(base,c))
+        }
+    } }
+    let results: list<world_fork> = simulate_many(jobs,[system::PairStep],1,20260909)
+    for i in range(len(results)) {
+        assert_only_changed(jobs[i],results[i],[PairEvidence])
+        let row: PairEvidence = peek(results[i],pair_trial,PairEvidence) |> unwrap
+        assert(row==assess_pair(requests[i]),"requested pair evaluated")
+        print("request",json_stringify(requests[i]))
+        print("case",json_stringify(row))
+    }
+    assert(world_digest()==digest,"point forks preserve parent")
+    let good: PairRequest = PairRequest {}
+    let duplicate: PairRequest = PairRequest { qx:0,qy:0 }
+    let mut bad: PairEvidence = assess_pair(duplicate)
+    if len(sys_args())>0 { bad.independent=true }
+    settle {
+        SubmitPair(rational_pair,good,assess_pair(good))
+        SubmitPair(duplicate_pair,duplicate,bad)
+    }
+    for target in [rational_pair,duplicate_pair] {
+        print("witness",json_stringify(require(target,PairEvidence)))
+        print(why(target,PairEvidence))
+        print(why_field(target,PairEvidence,"independent"))
+    }
+}

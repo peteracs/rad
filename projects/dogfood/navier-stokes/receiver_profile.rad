@@ -1,0 +1,94 @@
+use "segment_seed.rad"
+component ReceiverEvidence {
+    receiver_modes: int = 0, H7_ball: int = 16384,
+    normalized_error_bound_negative_power_two: int = 50,
+    receiver_self_production: int = 0, receiver_dissipation: int = 0,
+    receiver_standalone_rate: int = 0,
+    normalized_profile_proved_by_written_lemmas: bool = false,
+    autonomous_amplifying_seed: bool = false, repeatable_cascade_proved: bool = false,
+    explanation: str = ""
+}
+entity receiver_result { ReceiverEvidence {} }
+pure fn receiver_certificate() -> ReceiverEvidence {
+    let seed: list<FluidMode> = segment_seed()
+    let drift: list<ForceMode> = actual_force(seed,[],1)
+    let mut receiver: list<FluidMode> = []
+    for term in drift {
+        let n: int = term.k[0]*term.k[0]+term.k[1]*term.k[1]+term.k[2]*term.k[2]
+        if n > 2 and (term.re != [0,0,0] or term.im != [0,0,0]) {
+            let mut re: list<int> = []
+            let mut im: list<int> = []
+            for j in range(3) {
+                assert((60*term.re[j])%(2048*term.denominator) == 0
+                    and (60*term.im[j])%(2048*term.denominator) == 0,"receiver exact grid")
+                re = push(re,int_div(-60*term.re[j],2048*term.denominator))
+                im = push(im,int_div(-60*term.im[j],2048*term.denominator))
+            }
+            receiver = push(receiver,FluidMode { k:term.k,re:re,im:im })
+        }
+    }
+    assert(len(receiver) == 16,"complete receiver support")
+    let self_drift: list<ForceMode> = actual_force_scaled(receiver,[],1,30)
+    let mut rate216000: int = 0
+    let mut loss3600: int = 0
+    for mode in receiver {
+        let n: int = mode.k[0]*mode.k[0]+mode.k[1]*mode.k[1]+mode.k[2]*mode.k[2]
+        for j in range(3) { loss3600 = loss3600+n*n*(mode.re[j]*mode.re[j]+mode.im[j]*mode.im[j]) }
+        for term in self_drift { if term.k == mode.k {
+            assert(term.denominator == 3600*n,"receiver rate denominator")
+            for j in range(3) { rate216000 = rate216000-mode.re[j]*term.re[j]-mode.im[j]*term.im[j] }
+        } }
+    }
+    assert(loss3600 == 443*3600,"receiver viscous loss")
+    assert(rate216000+60*loss3600 == -7*216000,"receiver nonlinear production is negative")
+    assert(rate216000 == -450*216000,"receiver standalone derivative")
+    let mut h7square4: int = 0
+    for mode in seed {
+        let n: int = mode.k[0]*mode.k[0]+mode.k[1]*mode.k[1]+mode.k[2]*mode.k[2]
+        let w: int = 1+n
+        for j in range(3) {
+            h7square4 = h7square4+w*w*w*w*w*w*w*(mode.re[j]*mode.re[j]+mode.im[j]*mode.im[j])
+        }
+    }
+    assert(h7square4 == 4*6945*4096 and h7square4 < 4*8192*8192,"H7 datum")
+    // H7 Picard: 2048 sqrt(T) B^2 = 2^-10, contraction = 2^-23.
+    assert(11+28-49 == -10 and 1+11+14-49 == -23,"H7 existence arithmetic")
+    // H4 displacement <=2^37*t; H3 profile error <=2^58*t^2.
+    assert(256*16384*16384+16384+32768 < 137438953472,"H4 derivative bound")
+    assert(7+15+37-1 == 58,"integrated profile defect")
+    // ||Q||H3 >=2048; ||u_high-tQ||H3 <=2^59*t^2.
+    assert(59-11-98 == -50,"normalized complete receiver profile error")
+    return ReceiverEvidence { receiver_modes:16,H7_ball:16384,normalized_error_bound_negative_power_two:50,
+        receiver_self_production:-7,receiver_dissipation:443,receiver_standalone_rate:-450,
+        normalized_profile_proved_by_written_lemmas:true,autonomous_amplifying_seed:false,
+        repeatable_cascade_proved:false,
+        explanation:"higher regularity proves the entire newborn profile, relative H3 error <=2^-50; its normalized standalone nonlinear production is -7, so repeating it as an autonomous amplifying seed fails; growth depends on the retained donor/background interaction" }
+}
+intent ReceiverChecked { key target: entity, evidence: ReceiverEvidence }
+law SubmitReceiver(target: entity,evidence: ReceiverEvidence) {
+    propose ReceiverChecked { target:target,evidence:evidence }
+}
+resolver CheckReceiver for ReceiverChecked(target,proposals) {
+    assert(len(proposals) == 1,"one receiver certificate")
+    let row: ReceiverEvidence = proposals[0].evidence
+    assert(row == receiver_certificate(),"forged receiver repeatability")
+    next(target,ReceiverEvidence { receiver_modes:row.receiver_modes,H7_ball:row.H7_ball,
+        normalized_error_bound_negative_power_two:row.normalized_error_bound_negative_power_two,
+        receiver_self_production:row.receiver_self_production,receiver_dissipation:row.receiver_dissipation,
+        receiver_standalone_rate:row.receiver_standalone_rate,
+        normalized_profile_proved_by_written_lemmas:row.normalized_profile_proved_by_written_lemmas,
+        autonomous_amplifying_seed:row.autonomous_amplifying_seed,
+        repeatable_cascade_proved:row.repeatable_cascade_proved,explanation:row.explanation })
+}
+fn main() -> nil {
+    let mut row: ReceiverEvidence = receiver_certificate()
+    let args: list<str> = sys_args()
+    if len(args) > 0 {
+        if args[0] == "forge-production" { row.receiver_self_production = 7 }
+        else { assert(args[0] == "forge-repeat","unknown mutation")
+            row.repeatable_cascade_proved = true }
+    }
+    settle { SubmitReceiver(receiver_result,row) }
+    print("receiver",json_stringify(require(receiver_result,ReceiverEvidence)))
+    print(why(receiver_result,ReceiverEvidence))
+}

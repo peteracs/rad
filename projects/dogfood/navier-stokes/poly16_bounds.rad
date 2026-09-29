@@ -1,0 +1,14 @@
+use "poly16.rad"
+
+pub pure fn constant(c: int) -> list<Term> {
+    assert(c >= -1000 and c <= 1000,"constant capacity")
+    return [Term { key:0,c:c }]
+}
+pub pure fn scaled(p: list<Term>,c: int) -> list<Term> {
+    return times(p,constant(c))
+}
+// Sufficient certificate on the nonnegative orthant, not a complete solver.
+pub pure fn positive_coefficients(p: list<Term>) -> bool {
+    for t in p { if t.c < 0 { return false } }
+    return true
+}

@@ -1,0 +1,50 @@
+use "features.rad"
+
+resource Question { memory: int = 1, depth: int = 0, boundary: int = 1792, lane: int = 0 }
+
+component Inequalities { rows: list<LinearRow> = [] }
+
+entity scratch { Inequalities {} }
+
+system Derive(rows: mut Inequalities, question: Question) {
+    let unique mut result: list<LinearRow> = []
+    if question.lane < 11 {
+        let words: list<list<int>> = contexts(question.depth)
+        let prefixes: list<list<int>> = if question.lane >= 8 { [[]] } else { words }
+        let suffixes: list<list<int>> = if question.lane < 2 { [[]] } else { words }
+        for prefix in prefixes {
+            for suffix in suffixes { result = push(result, rewrite_row(question.memory, question.boundary, question.lane, prefix, suffix)) }
+        }
+    }
+    else {
+        let words: list<list<int>> = contexts(question.memory - 1)
+        for state in words {
+            if len(state) == question.memory - 1 {
+                for symbol in [0, 1, 4, 5, 6] { result = push(result, lower_bound_row(question.memory, state, symbol)) }
+            }
+        }
+    }
+    rows = Inequalities { rows: result }
+}
+
+fn main() -> nil {
+    let args: list<str> = sys_args()
+    assert(len(args) == 2 or len(args) == 3, "supply memory, strict-rule mask, and optional context depth")
+    let memory: int = int(args[0])
+    let boundary: int = int(args[1])
+    let depth: int = if len(args) == 3 { int(args[2]) } else { memory - 1 }
+    assert(memory >= 1 and memory <= 6 and depth >= 0 and depth <= 3 and depth < memory, "generator memory/context limit")
+    let base: world_fork = fork()
+    let mut jobs: list<world_fork> = []
+    for lane in range(12) { jobs = push(jobs, fork_with(base, Question { memory: memory, depth: depth, boundary: boundary, lane: lane })) }
+    let before: str = world_digest()
+    let results: list<world_fork> = simulate_many(jobs, [system::Derive], 1, 1937)
+    assert(world_digest() == before, "derivation changed live world")
+    for i in range(len(results)) {
+        assert_only_changed(jobs[i], results[i], [Inequalities])
+        let derived: Inequalities = peek(results[i], scratch, Inequalities) |> unwrap
+        let restored: world_fork = fork_from_bytes(fork_to_bytes(results[i])) |> unwrap
+        assert(peek(restored, scratch, Inequalities) == Some(derived), "derivation snapshot differs")
+        for row in derived.rows { print(json_stringify(row)) }
+    }
+}

@@ -1,0 +1,102 @@
+use "poly9.rad"
+
+// Symbolic polynomial variables: a, z, v. No real-number sampling.
+pure fn check_heat_kernel() -> nil {
+    let one: list<int> = monomial(0,1)
+    let a: list<int> = monomial(100,1)
+    let z: list<int> = monomial(10,1)
+    let v: list<int> = monomial(1,1)
+    let am1: list<int> = add(a,scale(one,-1))
+    let base: list<int> = add(one,multiply(z,v))
+    // K=e^-v v^(a-1)(1+zv)^(1-a), clearing (1+zv)^2.
+    // z^2 K_zz + (1+2az)K_z + a(a-1)K.
+    let ode: list<int> = add(add(
+        multiply(multiply(a,am1),multiply(multiply(z,z),multiply(v,v))),
+        scale(multiply(multiply(add(one,scale(multiply(a,z),2)),am1),multiply(v,base)),-1)),
+        multiply(multiply(a,am1),multiply(base,base)))
+    // G=e^-v v^a(1+zv)^(-a), G'/K times the same denominator.
+    let flux: list<int> = add(add(multiply(add(a,scale(v,-1)),base),
+        scale(multiply(multiply(a,z),v),-1)),zero_poly())
+    assert(ode == multiply(am1,flux),"heat ODE integrand is an exact total derivative")
+    assert(flux == add(add(a,scale(v,-1)),scale(multiply(z,multiply(v,v)),-1)),"flux normal form")
+    // b=1/2-a; radial Laplacian coefficient of F is b^2-1/4.
+    let twice_b: list<int> = add(one,scale(a,-2))
+    assert(add(multiply(twice_b,twice_b),scale(one,-1)) == scale(multiply(a,am1),4),"radial heat zeroth coefficient")
+    assert(add(one,scale(twice_b,-1)) == scale(a,2),"radial heat first coefficient")
+}
+
+resource SourceCase { stage: int = 0, kappa_units: int = 1 }
+component SourceEvidence { stage: int = 0,kappa_units: int = 0,
+    particular_margin: int = 0,signed_margin: int = 0,bar_margin: int = 0,
+    mean_margin: int = 0,defect_margin: int = 0,all_margins: bool = false,
+    physical_estimates_verified: bool = false,blowup_proved: bool = false }
+entity source_trial { SourceEvidence {} }
+entity source_result { SourceEvidence {} }
+pure fn lesser(a: int,b: int) -> int { return if a < b { a } else { b } }
+pure fn assess_source(c: SourceCase) -> SourceEvidence {
+    assert(c.stage >= 0 and c.stage <= 10000,"stage arithmetic bound")
+    assert(c.kappa_units >= 0 and c.kappa_units <= 5000,"sensitivity domain")
+    let s: int = 20000+10000*c.stage
+    let k: int = c.kappa_units
+    let wave: int = 50000+s
+    let p: int = lesser(lesser(lesser(50000-3*k,50000-k),wave-k),40000)-10000
+    let signed: int = lesser(lesser(lesser(50000-4*k,40000-k),50000-2*k),wave-3*k)-10000
+    let bar: int = lesser(lesser(lesser(lesser(18000-2*k,50000-3*k),s-3*k),100000-k),100000-2*k)-17000
+    let mean: int = lesser(17000,100000-4*k)-10000
+    let defect: int = 90000-4*k-10000
+    return SourceEvidence { stage:c.stage,kappa_units:k,particular_margin:p,
+        signed_margin:signed,bar_margin:bar,mean_margin:mean,defect_margin:defect,
+        all_margins:p > 0 and signed > 0 and bar > 0 and mean > 0 and defect > 0,
+        physical_estimates_verified:false,blowup_proved:false }
+}
+system SourceStep(row: mut SourceEvidence,c: SourceCase) { row = assess_source(c) }
+intent SourceChecked { key target: entity, request: SourceCase, evidence: SourceEvidence }
+law SubmitSource(target: entity,request: SourceCase,evidence: SourceEvidence) {
+    propose SourceChecked { target:target,request:request,evidence:evidence }
+}
+resolver CheckSource for SourceChecked(target,proposals) {
+    let mut selected: SourceEvidence = assess_source(SourceCase {})
+    for proposal in proposals {
+        assert(proposal.evidence == assess_source(proposal.request),"unproved analytic estimate promoted to theorem")
+        if proposal.request.stage == 0 and proposal.request.kappa_units == 1 {
+            selected = proposal.evidence
+        }
+    }
+    next(target,SourceEvidence { stage:selected.stage,kappa_units:selected.kappa_units,
+        particular_margin:selected.particular_margin,signed_margin:selected.signed_margin,
+        bar_margin:selected.bar_margin,mean_margin:selected.mean_margin,defect_margin:selected.defect_margin,
+        all_margins:selected.all_margins,physical_estimates_verified:false,blowup_proved:false })
+}
+fn main() -> nil {
+    check_heat_kernel()
+    let base: world_fork = fork()
+    let digest: str = world_digest()
+    let mut requests: list<SourceCase> = []
+    let mut jobs: list<world_fork> = []
+    for stage in [0,1,2,10,100,10000] { for k in [0,1,499,500,501,5000] {
+        let request: SourceCase = SourceCase { stage:stage,kappa_units:k }
+        requests = push(requests,request)
+        jobs = push(jobs,fork_with(base,request))
+    } }
+    let results: list<world_fork> = simulate_many(jobs,[system::SourceStep],1,20260909)
+    let mut rows: list<SourceEvidence> = []
+    for i in range(len(results)) {
+        assert_only_changed(jobs[i],results[i],[SourceEvidence])
+        let row: SourceEvidence = peek(results[i],source_trial,SourceEvidence) |> unwrap
+        rows = push(rows,row)
+        assert(row.all_margins == (requests[i].kappa_units < 500),"sharp strict bar-ledger threshold")
+        print("source",json_stringify(row))
+    }
+    assert(world_digest() == digest,"forks do not alter the parent")
+    let args: list<str> = sys_args()
+    if len(args) > 0 {
+        assert(args[0] == "forge","mutation name")
+        let mut row: SourceEvidence = rows[0]
+        row.physical_estimates_verified = true
+        row.blowup_proved = true
+        rows[0] = row
+    }
+    settle { for i in range(len(rows)) { SubmitSource(source_result,requests[i],rows[i]) } }
+    print("selected",json_stringify(require(source_result,SourceEvidence)))
+    print(why(source_result,SourceEvidence))
+}

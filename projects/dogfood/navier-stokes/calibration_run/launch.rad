@@ -1,0 +1,38 @@
+use "../calibration_round.rad"
+fn main() -> nil {
+    let requests: list<CalibrationRequest> = [
+        CalibrationRequest { round:193,lane:0,p:-3,q:8,radius_eighths:13,method:0 },
+        CalibrationRequest { round:193,lane:1,p:-3,q:8,radius_eighths:14,method:0 },
+        CalibrationRequest { round:193,lane:2,p:-3,q:8,radius_eighths:15,method:0 },
+        CalibrationRequest { round:193,lane:3,p:-3,q:8,radius_eighths:16,method:0 },
+        CalibrationRequest { round:193,lane:4,p:-3,q:8,radius_eighths:17,method:0 },
+        CalibrationRequest { round:193,lane:5,p:-3,q:8,radius_eighths:18,method:0 },
+        CalibrationRequest { round:193,lane:6,p:-3,q:8,radius_eighths:19,method:0 },
+        CalibrationRequest { round:193,lane:7,p:-3,q:8,radius_eighths:20,method:0 },
+        CalibrationRequest { round:193,lane:8,p:-3,q:8,radius_eighths:21,method:0 },
+        CalibrationRequest { round:193,lane:9,p:-3,q:8,radius_eighths:22,method:0 },
+        CalibrationRequest { round:193,lane:10,p:-3,q:8,radius_eighths:23,method:0 },
+        CalibrationRequest { round:193,lane:11,p:-3,q:8,radius_eighths:24,method:0 },
+        CalibrationRequest { round:193,lane:12,p:-4,q:8,radius_eighths:9,method:1 },
+        CalibrationRequest { round:193,lane:13,p:-4,q:8,radius_eighths:10,method:1 },
+        CalibrationRequest { round:193,lane:14,p:-4,q:8,radius_eighths:11,method:1 },
+        CalibrationRequest { round:193,lane:15,p:-4,q:8,radius_eighths:12,method:1 },
+        CalibrationRequest { round:193,lane:16,p:-4,q:8,radius_eighths:13,method:1 },
+        CalibrationRequest { round:193,lane:17,p:-4,q:8,radius_eighths:14,method:1 },
+        CalibrationRequest { round:193,lane:18,p:-4,q:8,radius_eighths:15,method:1 },
+        CalibrationRequest { round:193,lane:19,p:-4,q:8,radius_eighths:16,method:1 },
+        CalibrationRequest { round:193,lane:20,p:-4,q:8,radius_eighths:17,method:1 },
+        CalibrationRequest { round:193,lane:21,p:-4,q:8,radius_eighths:18,method:1 },
+        CalibrationRequest { round:193,lane:22,p:-4,q:8,radius_eighths:19,method:1 },
+        CalibrationRequest { round:193,lane:23,p:-4,q:8,radius_eighths:20,method:1 },
+        CalibrationRequest { round:193,lane:24,p:-4,q:8,radius_eighths:21,method:1 },
+        CalibrationRequest { round:193,lane:25,p:-4,q:8,radius_eighths:22,method:1 },
+        CalibrationRequest { round:193,lane:26,p:-4,q:8,radius_eighths:23,method:1 },
+        CalibrationRequest { round:193,lane:27,p:-4,q:8,radius_eighths:24,method:1 },
+        CalibrationRequest { round:193,lane:28,p:-4,q:8,radius_eighths:21,method:0 },
+        CalibrationRequest { round:193,lane:29,p:-4,q:8,radius_eighths:22,method:0 },
+        CalibrationRequest { round:193,lane:30,p:-4,q:8,radius_eighths:23,method:0 },
+        CalibrationRequest { round:193,lane:31,p:-4,q:8,radius_eighths:24,method:0 }
+    ]
+    run_calibration_round(requests,false)
+}

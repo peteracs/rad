@@ -1,0 +1,30 @@
+use "check.rad"
+
+// Walk the argmax provenance back from coordinate 0 of the final vector.
+pure fn path_of(word: list<int>) -> str {
+    let ev: Evaluation = evaluate(word)
+    let mut state: int = 0
+    let mut parts: list<str> = []
+    let mut i: int = len(word) - 1
+    let mut open: bool = true
+    while open and i >= 0 {
+        let src: Source = ev.trail[i][state]
+        let names: list<str> = ["a", "b", "e", "f", "g", "c", "d"]
+        if src.restart {
+            parts = push(parts, format("{}@{}:start{}", names[word[i]], state, src.weight))
+            open = false
+        } else {
+            parts = push(parts, format("{}@{}<-{}(+{})", names[word[i]], state, src.from_state, src.weight))
+            state = src.from_state
+        }
+        i = i - 1
+    }
+    return join(parts, " ")
+}
+
+fn main() -> nil {
+    for n in [5, 7, 8, 11, 17, 26, 27, 40, 41, 80, 121, 242] {
+        let w: list<int> = ternary_word(n)
+        print(n, rank(w), path_of(w))
+    }
+}

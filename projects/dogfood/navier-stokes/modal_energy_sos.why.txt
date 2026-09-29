@@ -1,0 +1,12 @@
+{"coefficient_box_certified":true,"full_construction_certified":false,"quadratic_error_factor":2,"vertices":16}
+ModalEvidence of modal_result = { vertices: 16, quadratic_error_factor: 2, coefficient_box_certified: true, full_constructionâ€¦   (set in frame 0)
+
+  <- resolver `CheckModal`
+     intent: ModalChecked
+     key: modal_result
+
+     <- proposal ModalChecked { target: modal_result, factor: 2 }
+        proposed by law `SubmitModal` at line 6
+
+     settlement origin:
+  <- by top-level code

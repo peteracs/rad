@@ -1,0 +1,81 @@
+use "segment_seed.rad"
+component SegmentEvidence {
+    stages: int = 0, duration_negative_power_two: int = 99,
+    radius_unit_negative_power_two: int = 19, entrance_radius_units: int = 0,
+    endpoint_radius_units: int = 0, nonlinear_lower_bound: int = 0,
+    total_rate_lower_bound: int = 0, gain_negative_power_two: int = 82,
+    analytic_lemmas_required: bool = true, same_region_closed: bool = false,
+    blowup_proved: bool = false, explanation: str = ""
+}
+entity segment_result { SegmentEvidence {} }
+pure fn segment_certificate() -> SegmentEvidence {
+    let seed: list<FluidMode> = segment_seed()
+    let drift: list<ForceMode> = actual_force(seed,[],1)
+    let mut rate8: int = 0
+    let mut dissipation4: int = 0
+    let mut h3square4: int = 0
+    let mut h5square4: int = 0
+    for mode in seed {
+        let n: int = mode.k[0]*mode.k[0]+mode.k[1]*mode.k[1]+mode.k[2]*mode.k[2]
+        let w: int = 1+n
+        for j in range(3) {
+            let sq: int = mode.re[j]*mode.re[j]+mode.im[j]*mode.im[j]
+            dissipation4 = dissipation4+n*n*sq
+            h3square4 = h3square4+w*w*w*sq
+            h5square4 = h5square4+w*w*w*w*w*sq
+        }
+        for term in drift { if term.k == mode.k {
+            assert(term.denominator == 4*n,"full Fourier denominator")
+            for j in range(3) { rate8 = rate8-mode.re[j]*term.re[j]-mode.im[j]*term.im[j] }
+        } }
+    }
+    assert(rate8 == 8*200704 and dissipation4 == 4*61440,"full seed rate")
+    assert(rate8+2*dissipation4 == 8*262144,"nonlinear seed production")
+    assert(h3square4 == 4*105*4096 and h3square4 < 4*1024*1024,"H3 seed")
+    assert(h5square4 == 4*825*4096 and h5square4 < 4*4096*4096,"H5 seed")
+    // Analytic semigroup bounds are proved in SOLUTION_SEGMENT.md.
+    // sqrt(2^-99) <= 2^-49. Products below stay in int64.
+    let sqrt_den: int = 562949953421312
+    assert(128*2048*2048 < sqrt_den,"Picard ball margin")
+    assert(2*128*2048*2 < sqrt_den,"Picard contraction")
+    // Drift budget: 4352*2^-99 + 2^29*2^-49 < 2^-19.
+    assert(4352 < sqrt_den and 536870912+1 < 1073741824,"per-stage displacement budget")
+    // At radius 2*2^-19, production error <= 384, loss error < 1.
+    assert(24*2048*2048*2 == 384*524288,"production continuity")
+    assert(2*2048*2 < 524288,"dissipation continuity")
+    assert(262144-384-61440-1-2048 > 131072,"net positive gain")
+    return SegmentEvidence { stages:2,duration_negative_power_two:99,
+        radius_unit_negative_power_two:19,entrance_radius_units:0,endpoint_radius_units:2,
+        nonlinear_lower_bound:261760,total_rate_lower_bound:131072,gain_negative_power_two:82,
+        analytic_lemmas_required:true,same_region_closed:false,blowup_proved:false,
+        explanation:"actual mild solution: radius 0 -> 1 -> 2; endpoint enters the next enlarged tube; no error-budget reset or frequency transfer proved" }
+}
+intent SegmentChecked { key target: entity, evidence: SegmentEvidence }
+law SubmitSegment(target: entity,evidence: SegmentEvidence) {
+    propose SegmentChecked { target:target,evidence:evidence }
+}
+resolver CheckSegment for SegmentChecked(target,proposals) {
+    assert(len(proposals) == 1,"one segment certificate")
+    let row: SegmentEvidence = proposals[0].evidence
+    assert(row == segment_certificate(),"forged segment closure certificate")
+    next(target,SegmentEvidence { stages:row.stages,
+        duration_negative_power_two:row.duration_negative_power_two,
+        radius_unit_negative_power_two:row.radius_unit_negative_power_two,
+        entrance_radius_units:row.entrance_radius_units,endpoint_radius_units:row.endpoint_radius_units,
+        nonlinear_lower_bound:row.nonlinear_lower_bound,total_rate_lower_bound:row.total_rate_lower_bound,
+        gain_negative_power_two:row.gain_negative_power_two,
+        analytic_lemmas_required:row.analytic_lemmas_required,same_region_closed:row.same_region_closed,
+        blowup_proved:row.blowup_proved,explanation:row.explanation })
+}
+fn main() -> nil {
+    let mut row: SegmentEvidence = segment_certificate()
+    let args: list<str> = sys_args()
+    if len(args) > 0 {
+        if args[0] == "forge-reset" { row.same_region_closed = true }
+        else { assert(args[0] == "forge-gain","unknown mutation")
+            row.total_rate_lower_bound = 262144 }
+    }
+    settle { SubmitSegment(segment_result,row) }
+    print("segment",json_stringify(require(segment_result,SegmentEvidence)))
+    print(why(segment_result,SegmentEvidence))
+}

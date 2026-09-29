@@ -1,0 +1,13 @@
+{
+  "mixed_multiindices": 35,
+  "component_identities": 105,
+  "independent_spacetime_polynomial_check": true,
+  "record_replay": true,
+  "deterministic_workers": [
+    1,
+    4
+  ],
+  "omitted_cross_term_rejected": true,
+  "forged_stage_bound_rejected": true,
+  "actual_stage_bounds_verified": false
+}

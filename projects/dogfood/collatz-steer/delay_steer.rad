@@ -1,0 +1,49 @@
+use "delay.rad"
+
+resource Depth { k: int = 10 }
+
+component DelayEvidence { result: DelayReport = DelayReport {} }
+
+entity delay_slot { DelayEvidence {} }
+
+system Measure(evidence: mut DelayEvidence, depth: Depth) {
+    evidence = DelayEvidence { result: delays(depth.k) }
+}
+
+component Verdict { depths: int = 0, shadow_wins: int = 0, rogue_wins: int = 0 }
+
+entity verdict { Verdict {} }
+
+intent Winner {
+    key target: entity
+    k: int
+    shadow: str
+}
+
+law Report(target: entity, r: DelayReport) {
+    propose Winner { target: target, k: r.k, shadow: r.shadow }
+}
+
+resolver Tally for Winner(target, proposals) {
+    let mut shadow: int = 0
+    let mut rogue: int = 0
+    for p in proposals { if p.shadow == "rogue" { rogue = rogue + 1 } else { shadow = shadow + 1 } }
+    next(target, Verdict { depths: len(proposals), shadow_wins: shadow, rogue_wins: rogue })
+}
+
+fn main() -> nil {
+    let base: world_fork = fork()
+    let mut jobs: list<world_fork> = []
+    for k in [10, 12, 14, 16, 18] { jobs = push(jobs, fork_with(base, Depth { k: k })) }
+    let done: list<world_fork> = simulate_many(jobs, [system::Measure], 1, 1937)
+    let mut reports: list<DelayReport> = []
+    for i in range(len(done)) {
+        assert_only_changed(jobs[i], done[i], [DelayEvidence])
+        let r: DelayReport = (peek(done[i], delay_slot, DelayEvidence) |> unwrap).result
+        reports = push(reports, r)
+        print(json_stringify(r))
+    }
+    settle { for r in reports { Report(verdict, r) } }
+    print(json_stringify(require(verdict, Verdict)))
+    print(why(verdict, Verdict))
+}

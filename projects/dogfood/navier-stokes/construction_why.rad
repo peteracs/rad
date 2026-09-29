@@ -1,0 +1,144 @@
+use "endpoint_diagnosis.rad"
+resource DiagnosticSpec { lane: int = 0 }
+component ConstructionEvidence {
+    lane: int = 0, force_reference: str = "zero", seam_closed: bool = false,
+    force_jet_n: list<int> = [], denominator: int = 1,
+    first_excess_order: int = -1, endpoint_orders_checked: int = 5,
+    midpoint_checked: bool = false, midpoint_increment_n: int = 0, midpoint_denominator: int = 1,
+    whole_interval_budget_proved: bool = false, next_action: str = ""
+}
+entity diagnostic_trial { ConstructionEvidence {} }
+pure fn explain_construction(spec: DiagnosticSpec) -> ConstructionEvidence {
+    assert(spec.lane >= 0 and spec.lane < 6,"diagnostic lane")
+    let base: SmoothStage = fixture_stage()
+    let mut candidate: SmoothStage = base
+    let mut upstream: SmoothStage = stationary_predecessor()
+    if spec.lane == 1 { candidate.b = upstream.b }
+    if spec.lane == 2 {
+        let mut reversed: list<list<FluidMode>> = []
+        for bank in candidate.b {
+            let mut row: list<FluidMode> = []
+            for mode in bank {
+                row = push(row,FluidMode { k: mode.k,
+                    re: [-mode.re[0],-mode.re[1],-mode.re[2]],
+                    im: [-mode.im[0],-mode.im[1],-mode.im[2]] })
+            }
+            reversed = push(reversed,row)
+        }
+        candidate.b = reversed
+    }
+    if spec.lane == 3 or spec.lane == 4 { candidate = repair_endpoint_jet(base) }
+    if spec.lane == 4 { upstream = backpropagate_jet(candidate) }
+    let mut jets: list<int> = []
+    let mut denominator: int = 1
+    let mut found: bool = false
+    for mode in stage_force(candidate) {
+        if mode.k == [1,0,1] {
+            denominator = mode.denominator
+            let factors: list<int> = [1,1,2,6,24]
+            for order in range(5) {
+                jets = push(jets,factors[order]*mode.im[order][0][1])
+            }
+            found = true
+        }
+    }
+    assert(found and candidate.inverse_duration == 1,"diagnostic witness domain")
+    let mut midpoint_n: int = 0
+    let mut midpoint_den: int = 1
+    if spec.lane == 5 {
+        // Subtract the ACTUAL force of the constant background trajectory.
+        let background: list<ForceMode> = actual_force(base.a[0],[],base.viscosity)
+        for mode in background {
+            if mode.k == [1,0,1] {
+                assert(denominator%mode.denominator == 0,"background denominator")
+                jets[0] = jets[0]-int_div(denominator,mode.denominator)*mode.im[1]
+            }
+        }
+        for mode in midpoint_force(candidate) {
+            if mode.k == [1,0,1] { midpoint_n = mode.im[1]
+                midpoint_den = mode.denominator }
+        }
+        for mode in background {
+            if mode.k == [1,0,1] {
+                assert(midpoint_den%mode.denominator == 0,"midpoint reference denominator")
+                midpoint_n = midpoint_n-int_div(midpoint_den,mode.denominator)*mode.im[1]
+            }
+        }
+    }
+    let mut first_excess: int = -1
+    for order in range(5) {
+        let value: int = if jets[order] < 0 { -jets[order] } else { jets[order] }
+        // A single Fourier coefficient exceeding 1/16 disproves that endpoint
+        // derivative norm budget. This is a user-defined diagnostic, not Clay's bound.
+        if first_excess == -1 and 16*value > denominator { first_excess = order }
+    }
+    let seam: bool = stage_join(upstream,candidate)
+    let action: str = if spec.lane < 3 {
+        "Flat interior changes cannot fix this endpoint: change inherited jets or the specified force reference."
+    } else if spec.lane == 3 {
+        "The zeroth force jet is repaired, but propagate the changed velocity derivative into the preceding stage."
+    } else if spec.lane == 4 {
+        "The join and zeroth force jet are repaired; the first force derivative now requires a compatible acceleration."
+    } else {
+        "The endpoint passes relative to the smooth background, but the midpoint increment violates the budget; repair the whole path."
+    }
+    return ConstructionEvidence { lane: spec.lane,
+        force_reference: if spec.lane == 5 { "stationary_background" } else { "zero" },
+        seam_closed: seam,force_jet_n: jets,denominator: denominator,
+        midpoint_checked: spec.lane == 5,midpoint_increment_n: midpoint_n,midpoint_denominator: midpoint_den,
+        first_excess_order: first_excess,whole_interval_budget_proved: false,next_action: action }
+}
+system DiagnoseConstruction(row: mut ConstructionEvidence, spec: DiagnosticSpec) { row = explain_construction(spec) }
+component ConstructionDiagnosis { flat_repair_endpoint_effect: str = "unchecked",
+    jet_repair_needs_upstream_change: bool = false,
+    background_choice_changes_witness: bool = false,
+    universal_impossibility_proved: bool = false }
+entity construction_diagnosis { ConstructionDiagnosis {} }
+intent DiagnosisChecked { key target: entity, spec: DiagnosticSpec, evidence: ConstructionEvidence }
+law SubmitDiagnosis(target: entity, spec: DiagnosticSpec, evidence: ConstructionEvidence) {
+    propose DiagnosisChecked { target: target,spec: spec,evidence: evidence }
+}
+resolver AssembleDiagnosis for DiagnosisChecked(target, proposals) {
+    assert(len(proposals) == 6,"diagnostic coverage")
+    let mut seen: list<bool> = [false,false,false,false,false,false]
+    for proposal in proposals {
+        let lane: int = proposal.spec.lane
+        assert(lane >= 0 and lane < 6 and not seen[lane],"diagnostic identity")
+        seen[lane] = true
+        let row: ConstructionEvidence = proposal.evidence
+        assert(row == explain_construction(proposal.spec),"forged construction diagnosis")
+        if lane < 3 { assert(row.first_excess_order == 0 and row.seam_closed,"flat repair witness") }
+        if lane == 3 { assert(row.force_jet_n[0] == 0 and not row.seam_closed,"inherited-jet dependency") }
+        if lane == 4 { assert(row.force_jet_n[0] == 0 and row.first_excess_order == 1 and row.seam_closed,"next derivative obligation") }
+        if lane == 5 { assert(row.first_excess_order == -1 and row.seam_closed,"force reference diagnostic")
+            assert(row.midpoint_checked and 16*row.midpoint_increment_n < -row.midpoint_denominator,"interior increment witness") }
+    }
+    next(target,ConstructionDiagnosis { flat_repair_endpoint_effect: "zero, by the fixed-step flatness lemma",
+        jet_repair_needs_upstream_change: true,background_choice_changes_witness: true,
+        universal_impossibility_proved: false })
+}
+fn main() -> nil {
+    let base: world_fork = fork()
+    let digest: str = world_digest()
+    let mut jobs: list<world_fork> = []
+    for lane in range(6) { jobs = push(jobs,fork_with(base,DiagnosticSpec { lane: lane })) }
+    let results: list<world_fork> = simulate_many(jobs,[system::DiagnoseConstruction],1,20260908)
+    let mut evidence: list<ConstructionEvidence> = []
+    for i in range(6) {
+        assert_only_changed(jobs[i],results[i],[ConstructionEvidence])
+        let row: ConstructionEvidence = peek(results[i],diagnostic_trial,ConstructionEvidence) |> unwrap
+        evidence = push(evidence,row)
+        print("diagnostic",json_stringify(row))
+    }
+    assert(world_digest() == digest,"diagnostic fork isolation")
+    let args: list<str> = sys_args()
+    if len(args) > 0 {
+        assert(args[0] == "forge-budget","unknown diagnostic probe")
+        let mut forged: ConstructionEvidence = evidence[5]
+        forged.whole_interval_budget_proved = true
+        evidence[5] = forged
+    }
+    settle { for i in range(6) { SubmitDiagnosis(construction_diagnosis,DiagnosticSpec { lane: i },evidence[i]) } }
+    print("summary",json_stringify(require(construction_diagnosis,ConstructionDiagnosis)))
+    print(why(construction_diagnosis,ConstructionDiagnosis))
+}

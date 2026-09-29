@@ -1,0 +1,72 @@
+// The same exact test for the map (3x + d)/2, d = +1 or -1.
+use "exact_null.rad"
+
+pub pure fn dstep(x: int, d: int) -> int { return if x % 2 == 0 { int_div(x, 2) } else { int_div(3 * x + d, 2) } }
+
+pub pure fn trapped_states_d(bits: int, floors: list<int>, d: int, min_start: int) -> list<list<int>> {
+    // Terras for (3x+d)/2: T^t(r + 2^t u) = T^t(r) + 3^q u. Track x = T^t(r) of a large
+    // positive representative so d = -1 never meets negative values.
+    let lift: int = 1 << (bits + 2)
+    let mut out: list<list<int>> = []
+    let mut stack: list<list<int>> = [[0, 0, lift * 1, 1, 0]]   // r, t, x = T^t(r + lift), 3^q, q
+    while len(stack) > 0 {
+        let s: list<int> = stack[len(stack) - 1]
+        stack = slice(stack, 0, len(stack) - 1)
+        let r: int = s[0]
+        let t: int = s[1]
+        let x: int = s[2]
+        let p3: int = s[3]
+        let q: int = s[4]
+        if t == bits {
+            if r >= min_start {
+                // recompute the true image of r itself (not the lifted representative)
+                let mut y: int = r
+                for _ in range(bits) { y = dstep(y, d) }
+                out = push(out, [r, q, y])
+            }
+        } else {
+            for b in [0, 1] {
+                let r2: int = r + b * (1 << t)
+                let x2: int = x + b * p3
+                let odd: int = ((x2 % 2) + 2) % 2
+                let q2: int = q + odd
+                if q2 >= floors[t + 1] {
+                    stack = push(stack, [r2, t + 1, dstep(x2, d), if odd == 1 { 3 * p3 } else { p3 }, q2])
+                }
+            }
+        }
+    }
+    return out
+}
+
+pub pure fn signed_test(bits: int, d: int, marks: list<int>) -> list<ZRow> {
+    let floors: list<int> = floor_table(900)
+    let states: list<list<int>> = trapped_states_d(bits, floors, d, 1 << (bits - 1))
+    let horizon: int = marks[len(marks) - 1]
+    let mut real: list<int> = []
+    for _ in marks { real = push(real, 0) }
+    for s in states {
+        let mut x: int = s[2]
+        let mut q: int = s[1]
+        let mut t: int = bits
+        let mut alive: bool = true
+        while alive and t < horizon {
+            q = q + (x % 2)
+            x = dstep(x, d)
+            t = t + 1
+            if q < floors[t] { alive = false }
+            if alive { for i in range(len(marks)) { if marks[i] == t { real = set_at(real, i, real[i] + 1) } } }
+        }
+    }
+    let mut out: list<ZRow> = []
+    for i in range(len(marks)) {
+        let row: list<float> = survival_table(marks[i], bits, floors)[bits]
+        let mut mean: float = 0.0
+        let mut variance: float = 0.0
+        for s in states { let p: float = row[s[1]] mean = mean + p variance = variance + p * (1.0 - p) }
+        let sd: float = pow(variance, 0.5)
+        out = push(out, ZRow { mark: marks[i], observed: real[i], expected_x10: int(10.0 * mean), sd_x10: int(10.0 * sd),
+            z_x100: int(100.0 * (float(real[i]) - mean) / sd) })
+    }
+    return out
+}

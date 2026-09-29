@@ -1,0 +1,86 @@
+// Local merge test: a trapped prefix w (length a, odd count q, offset C, residue r)
+// is dominated by offset d when n - d follows a word with the same (a, q) and
+// the same image, i.e. its offset is exactly C + 3^q d.
+pub pure fn tstep(x: int) -> int { return if x % 2 == 0 { int_div(x, 2) } else { int_div(3 * x + 1, 2) } }
+
+pub struct LocalSieve {
+    depth: int = 0
+    max_offset: int = 0
+    trapped: int = 0
+    survivors: int = 0
+    dominated_at: list<int> = []
+    offsets_used: list<int> = []      // count of dominations by d = 1..max_offset
+    examples: list<list<int>> = []    // [length, residue, d, word bits] for non-family dominations
+}
+
+pub pure fn image_matches(r: int, d: int, a: int, q: int, p3: int, c: int) -> bool {
+    // Partner m = r - d + 2^a (kept positive). Follow a steps; need same q and same image.
+    let base_n: int = r + (1 << (a + 1))
+    let mut y: int = base_n - d
+    let mut qq: int = 0
+    for _ in range(a) { if y % 2 == 1 { qq = qq + 1 } y = tstep(y) }
+    if qq != q { return false }
+    let mut x: int = base_n
+    for _ in range(a) { x = tstep(x) }
+    return x == y
+}
+
+pub pure fn local_sieve(depth: int, max_offset: int) -> LocalSieve {
+    let mut trapped: int = 0
+    let mut survivors: int = 0
+    let mut dominated: list<int> = []
+    for _ in range(depth + 1) { dominated = push(dominated, 0) }
+    let mut used: list<int> = []
+    for _ in range(max_offset + 1) { used = push(used, 0) }
+    let mut examples: list<list<int>> = []
+    // node: length, q, C, 3^q, residue r (mod 2^length), dominated flag, word bits
+    let mut walk: list<list<int>> = [[0, 0, 0, 1, 0, 0, 0]]
+    while len(walk) > 0 {
+        let s: list<int> = walk[len(walk) - 1]
+        walk = slice(walk, 0, len(walk) - 1)
+        let a: int = s[0]
+        let q: int = s[1]
+        let c: int = s[2]
+        let p3: int = s[3]
+        let r: int = s[4]
+        let hit: int = s[5]
+        let bits: int = s[6]
+        if a == depth {
+            trapped = trapped + 1
+            if hit == 0 { survivors = survivors + 1 }
+        } else {
+            // Terras: parity of step a for residue r + 2^a u is parity of T^a(r) + 3^q u.
+            let mut xr: int = r
+            for _ in range(a) { xr = tstep(xr) }
+            for u in [0, 1] {
+                let b: int = (xr + u * p3) % 2
+                let a2: int = a + 1
+                let p3b: int = if b == 1 { 3 * p3 } else { p3 }
+                if p3b >= (1 << a2) {
+                    let c2: int = if b == 1 { 3 * c + (1 << a) } else { c }
+                    let q2: int = q + b
+                    let r2: int = r + u * (1 << a)
+                    let bits2: int = bits | (b << a)
+                    let mut h: int = hit
+                    if hit == 0 {
+                        let mut d: int = 1
+                        while h == 0 and d <= max_offset {
+                            if image_matches(r2, d, a2, q2, p3b, c2) {
+                                h = 1
+                                dominated = set_at(dominated, a2, dominated[a2] + 1)
+                                used = set_at(used, d, used[d] + 1)
+                                // record anything that is not the o^k e e family
+                                let family: int = ((1 << (a2 - 2)) - 1)
+                                if bits2 != family and len(examples) < 20 { examples = push(examples, [a2, r2, d, bits2]) }
+                            }
+                            d = d + 1
+                        }
+                    }
+                    walk = push(walk, [a2, q2, c2, p3b, r2, h, bits2])
+                }
+            }
+        }
+    }
+    return LocalSieve { depth: depth, max_offset: max_offset, trapped: trapped, survivors: survivors,
+        dominated_at: dominated, offsets_used: used, examples: examples }
+}

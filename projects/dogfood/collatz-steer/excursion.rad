@@ -1,0 +1,53 @@
+// Excursion depth D(n) = max_t (q_t log2 3 - t), in micro-bits, over the whole
+// trajectory to 1, compared with log2 n. Also the longest run of odd steps
+// that starts after the horizon t > L.
+pub pure fn tstep(x: int) -> int { return if x % 2 == 0 { int_div(x, 2) } else { int_div(3 * x + 1, 2) } }
+
+// log2 of 1 + k/1024 in micro-bits, k = 0..1023, by bisection on pow.
+pub pure fn mantissa_table() -> list<int> {
+    let mut out: list<int> = []
+    for k in range(1024) {
+        let x: float = 1.0 + float(k) / 1024.0
+        let mut lo: float = 0.0
+        let mut hi: float = 1.0
+        for _ in range(40) {
+            let mid: float = (lo + hi) / 2.0
+            if pow(2.0, mid) > x { hi = mid } else { lo = mid }
+        }
+        out = push(out, int(lo * 1000000.0))
+    }
+    return out
+}
+
+pub pure fn log2_micro(n: int, table: list<int>) -> int {
+    let mut b: int = 0
+    while (1 << (b + 1)) <= n { b = b + 1 }
+    let frac: int = if b >= 10 { (n >> (b - 10)) - 1024 } else { ((n << (10 - b)) - 1024) }
+    return 1000000 * b + table[frac]
+}
+
+pub struct Excursion { n: int = 0, depth_micro: int = 0, log2n_micro: int = 0, ratio_x1000: int = 0, odd_run_after_horizon: int = 0 }
+
+pub pure fn excursion(n: int, table: list<int>) -> Excursion {
+    let bits: int = int_div(log2_micro(n, table), 1000000) + 1
+    let mut x: int = n
+    let mut w: int = 0
+    let mut depth: int = 0
+    let mut t: int = 0
+    let mut run: int = 0
+    let mut best_run: int = 0
+    while x != 1 {
+        if x % 2 == 1 {
+            w = w - 584963
+            if t >= bits { run = run + 1 if run > best_run { best_run = run } }
+        } else {
+            w = w + 1000000
+            run = 0
+        }
+        if 0 - w > depth { depth = 0 - w }
+        x = tstep(x)
+        t = t + 1
+    }
+    let l: int = log2_micro(n, table)
+    return Excursion { n: n, depth_micro: depth, log2n_micro: l, ratio_x1000: int_div(1000 * depth, max(1, l)), odd_run_after_horizon: best_run }
+}
