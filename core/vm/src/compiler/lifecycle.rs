@@ -35,6 +35,12 @@ impl Compiler {
     /// top level must not hide an in-place heap opcode behind an otherwise
     /// pure call boundary.
     pub(crate) fn may_run_in_causal_region(&self, fn_name: &str) -> bool {
+        // Without causal syntax there is no source-level settlement caller.
+        // Treating every ordinary pure helper as causal otherwise turns proven
+        // unique buffer updates into full-buffer copies on every assignment.
+        if !crate::checker::causal_laws_feature_enabled(&self.features) {
+            return false;
+        }
         let Some(output) = &self.checker_output else {
             return false;
         };

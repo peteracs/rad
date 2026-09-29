@@ -1,5 +1,15 @@
 use super::*;
 
+/// The single definition of "RAD Causal Laws is enabled". The checker, the
+/// settlement compiler, and the pure-helper lowering gate must agree on every
+/// accepted spelling: if one accepts an alias the others reject, a law can
+/// compile while its helpers skip the conservative lowering it requires.
+pub(crate) fn causal_laws_feature_enabled(features: &[String]) -> bool {
+    features
+        .iter()
+        .any(|feature| feature == "causal_laws" || feature == "experimental-laws")
+}
+
 impl Checker {
     pub(super) fn warn_unproduced_resolvers(&mut self) {
         let unused = self
@@ -26,10 +36,7 @@ impl Checker {
     }
 
     pub(super) fn causal_laws_enabled(&self) -> bool {
-        self.options
-            .features
-            .iter()
-            .any(|f| f == "causal_laws" || f == "experimental-laws")
+        causal_laws_feature_enabled(&self.options.features)
     }
 
     pub(super) fn register_intent(&mut self, decl: &IntentDecl) {

@@ -1,5 +1,6 @@
 mod authority;
 mod causal;
+pub(crate) use causal::causal_laws_feature_enabled;
 mod declarations;
 mod diagnostics;
 mod ownership;

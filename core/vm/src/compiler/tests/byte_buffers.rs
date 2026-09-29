@@ -121,3 +121,72 @@
             );
         }
     }
+
+    #[test]
+    fn checked_pure_bytebuf_helpers_only_need_causal_lowering_when_enabled() {
+        let helper = r#"
+            pure fn encoded_value() -> bytebuf {
+                let mut bytes: bytebuf = bytebuf_new(7)
+                bytes = bytebuf_set_u8(bytes, 0, 42)
+                bytes = bytes |> bytebuf_set_u16_le(1, 4660)
+                bytes = bytebuf_set_u32_le(bytes, 3, 123456)
+                return bytes
+            }
+            pure fn aliased_values() -> int {
+                let mut bytes: bytebuf = bytebuf_new(1)
+                let saved: bytebuf = bytes
+                bytes = bytebuf_set_u8(bytes, 0, 7)
+                assert(bytebuf_get(saved, 0) == 0, "the copied value must remain independent")
+                return bytebuf_get(bytes, 0)
+            }
+        "#;
+        // `experimental-laws` is the accepted alias of `causal_laws`. Every
+        // spelling that enables settlement syntax must also enable the
+        // conservative helper lowering, or a law could reach an in-place op.
+        for feature in [None, Some("causal_laws"), Some("experimental-laws")] {
+            let causal_enabled = feature.is_some();
+            let caller = if causal_enabled {
+                r#"
+                    component ResultValue { value: int = 0 }
+                    intent ResultIntent { key target: entity, value: int }
+                    law Evaluate(target: entity) {
+                        let bytes: bytebuf = encoded_value()
+                        propose ResultIntent { target: target, value: bytebuf_get_u16_le(bytes, 1) }
+                    }
+                    resolver Store for ResultIntent(target, proposals) {
+                        next(target, ResultValue { value: proposals[0].value })
+                    }
+                    entity output { ResultValue {} }
+                    settle { Evaluate(output) }
+                    print(require(output, ResultValue).value)
+                "#
+            } else {
+                "print(bytebuf_get_u16_le(encoded_value(), 1))"
+            };
+            let result = crate::test_support::compile_checked_source(
+                &format!("{helper}\n{caller}\nassert(aliased_values() == 7, \"updated value\")"),
+                ParserOptions,
+                crate::checker::CheckerOptions {
+                    features: feature.map(str::to_string).into_iter().collect(),
+                    ..Default::default()
+                },
+            )
+            .expect("checked helper and its caller compile");
+            let mut vm = VM::new();
+            vm.op_profile = true;
+            vm.load_compile_result(result);
+            vm.run(0).expect("helper executes, including inside a law");
+            assert_eq!(vm.print_buffer, vec!["4660"]);
+            for op in [
+                crate::opcode::Op::ByteBufSetU8Inplace,
+                crate::opcode::Op::ByteBufSetU16LeInplace,
+                crate::opcode::Op::ByteBufSetU32LeInplace,
+            ] {
+                assert_eq!(
+                    vm.op_counts[op as usize],
+                    u64::from(!causal_enabled),
+                    "ordinary checked helpers must avoid copies, while causal helpers retain functional lowering: {op:?} under {feature:?}"
+                );
+            }
+        }
+    }

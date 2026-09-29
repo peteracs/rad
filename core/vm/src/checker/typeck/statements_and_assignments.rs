@@ -709,6 +709,20 @@ impl Checker {
     }
 
     fn check_assign(&mut self, stmt: &AssignStmt) {
+        // A pure/readonly body may update its own value collections, but
+        // writing through an index must not bypass the global-state boundary.
+        if let Some(name) = Self::assign_target_root_ident(&stmt.target) {
+            let read_only = self.scopes.last().is_some_and(|scope| {
+                Self::effect_set_is_read_only(&scope.effect_context)
+            });
+            if read_only && self.lookup_with_depth(name).is_some_and(|(_, depth)| depth == 0) {
+                self.error(
+                    stmt.target.span(),
+                    format!("Cannot mutate global variable '{}' in a pure or readonly context", name),
+                    Some("Copy the value to a local mutable binding before changing it".to_string()),
+                );
+            }
+        }
         // Same accepted-mixed contract as check_let: a target already typed
         // `list<any>` / `map<K, any>` re-assigned with a mixed literal must
         // not re-warn.

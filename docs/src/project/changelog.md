@@ -1,5 +1,17 @@
 # Changelog
 
+- **Ordinary checked pure helpers retain unique-buffer optimizations.**
+  The deletion-sync mathematical search exposed full-buffer copying on every
+  update because pure helpers received causal lowering even without
+  `--experimental-laws`. The compiler now applies that restriction only when
+  causal laws are enabled. A regression exercises ordinary and actual law
+  callers, all three unsigned write widths, and copied-buffer independence.
+  The checker, the settlement compiler, and this lowering gate share one
+  feature predicate. The accepted `experimental-laws` alias therefore also
+  receives conservative lowering. The regression covers both spellings,
+  because an alias-blind gate lets laws compile and then trap at runtime in
+  the settlement firewall.
+
 - **Native struct encoding now honors the sealed `repr(C)` layout.**
   `encode_le`/`encode_be` recursively encode packed, padded, and nested native
   structs, reject runtime/layout width drift, and deterministically zero RAD

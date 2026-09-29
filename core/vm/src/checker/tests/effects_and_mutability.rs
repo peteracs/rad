@@ -1,3 +1,74 @@
+    #[test]
+    fn local_collection_assignment_is_pure_but_index_effects_are_checked() {
+        let errors = check_src(r#"
+            pure fn local_marks() -> bool {
+                let mut seen: list<bool> = [false, false]
+                seen[1] = true
+                return seen[1]
+            }
+        "#);
+        assert!(errors.is_empty(), "local collection rejected: {errors:?}");
+
+        let errors = check_src(r#"
+            fn effect_index() -> int {
+                print("side effect")
+                return 0
+            }
+            pure fn bad() -> int {
+                let mut values: list<int> = [0]
+                values[effect_index()] = 1
+                return values[0]
+            }
+        "#);
+        assert!(!errors.is_empty(), "effectful index was accepted");
+
+        let errors = check_src(r#"
+            let mut shared: list<int> = [0]
+            pure fn bad_capture() -> nil { shared[0] = 1 }
+        "#);
+        assert!(!errors.is_empty(), "captured indexed mutation was accepted");
+    }
+
+    #[test]
+    fn resolver_accepts_local_collection_assignment() {
+        let source = r#"
+            component Count { value: int = 0 }
+            intent Add { key target: entity amount: int }
+            resolver Collect for Add(target, proposals) {
+                let mut seen: list<bool> = [false]
+                seen[0] = true
+                next(target, Count { value: if seen[0] { len(proposals) } else { 0 } })
+            }
+        "#;
+        let errors = crate::test_support::check_source_with(
+            source,
+            crate::parser::ParserOptions,
+            crate::checker::CheckerOptions {
+                features: vec!["causal_laws".to_string()],
+                ..crate::checker::CheckerOptions::default()
+            },
+        ).errors;
+        assert!(errors.is_empty(), "resolver local collection rejected: {errors:?}");
+    }
+
+    #[test]
+    fn local_collection_assignment_preserves_copied_input() {
+        let output = crate::test_support::run_checked_source(
+            r#"
+            pure fn mark(values: list<int>) -> list<int> {
+                let mut copy = values
+                copy[0] = 7
+                return copy
+            }
+            let original = [1, 2]
+            let changed = mark(original)
+            print(original[0], changed[0])
+            "#,
+            crate::parser::ParserOptions,
+            crate::checker::CheckerOptions::default(),
+        ).expect("checked local indexed mutation must run");
+        assert_eq!(output, vec!["1 7"]);
+    }
 
 
     #[test]

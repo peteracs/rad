@@ -1,5 +1,15 @@
 impl Checker {
 
+    // Indexed writes to a local value collection retain value semantics.
+    // Field-rooted writes are deliberately outside this narrow allowance.
+    fn local_collection_assignment_root(expr: &Expr) -> Option<&str> {
+        match expr {
+            Expr::Ident(name, _) => Some(name),
+            Expr::Index(inner, _, _) => Self::local_collection_assignment_root(inner),
+            _ => None,
+        }
+    }
+
     fn stmt_is_conservatively_readonly(
         &self,
         stmt: &Stmt,
@@ -24,9 +34,10 @@ impl Checker {
                     && self.block_is_conservatively_readonly_with_locals(&le.else_block, local_muts)
             }
             Stmt::Assign(s) => {
-                if let Expr::Ident(name, _) = &s.target {
+                if let Some(name) = Self::local_collection_assignment_root(&s.target) {
                     if local_muts.contains(name) {
-                        return self.expr_is_conservatively_readonly(&s.value);
+                        return self.expr_is_conservatively_readonly(&s.target)
+                            && self.expr_is_conservatively_readonly(&s.value);
                     }
                 }
                 false
@@ -368,9 +379,10 @@ impl Checker {
                 })
             }
             Stmt::Assign(s) => {
-                if let Expr::Ident(name, _) = &s.target {
+                if let Some(name) = Self::local_collection_assignment_root(&s.target) {
                     if local_muts.contains(name) {
-                        return self.find_expr_purity_breach(&s.value);
+                        return self.find_expr_purity_breach(&s.target)
+                            .or_else(|| self.find_expr_purity_breach(&s.value));
                     }
                 }
                 Some("mutates a non-local variable".to_string())
@@ -549,7 +561,7 @@ impl Checker {
     /// Like `find_block_purity_breach`, but permits ECS mutations (set, spawn,
     /// remove, despawn). Returns `Some(reason)` only when the block performs IO
     /// or Event effects — the operations forbidden inside `simulate()`.
-    fn assign_target_root_ident(expr: &Expr) -> Option<&str> {
+    pub(super) fn assign_target_root_ident(expr: &Expr) -> Option<&str> {
         match expr {
             Expr::Ident(name, _) => Some(name),
             Expr::Field(inner, _, _) | Expr::Index(inner, _, _) => {

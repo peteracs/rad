@@ -182,11 +182,7 @@ impl Compiler {
     }
 
     fn require_causal_feature(&self, span: &Span) -> Result<(), CompileError> {
-        if self
-            .features
-            .iter()
-            .any(|feature| feature == "causal_laws" || feature == "experimental-laws")
-        {
+        if crate::checker::causal_laws_feature_enabled(&self.features) {
             Ok(())
         } else {
             Err(CompileError {
