@@ -86,6 +86,8 @@ fn builtin_complexity(builtin: Builtin) -> &'static str {
         ByteBufSetU8 | ByteBufSetU16Le | ByteBufSetU32Le | ByteBufSetI32Le =>
             "O(1) when assignment lowers in place; O(n) for a functional destination copy",
         ByteBufSlice => "O(k) in the returned byte count",
+        WordsLen | WordsGet => "O(1)",
+        WordsNew | WordsSet | WordsGather | WordsAdd | WordsMin | WordsScale | WordsAddStrided | WordsMinValue | WordsMaxValue | WordsCountGt | WordsDigest | WordsMinRatio | WordsMaxRatio | AffineTrappedSurvival => "O(n) in words, parallel across native workers",
         ByteBufCopy =>
             "O(k) when assignment lowers in place; O(n + k) for a functional destination copy",
         LowerBound | UpperBound | First | Last | Next | Previous => "O(log n)",
@@ -115,6 +117,7 @@ fn builtin_allocation(builtin: Builtin) -> &'static str {
         | ByteBufCopy =>
             "functional call allocates a destination-sized bytebuf; assignment to a proven-unique local lowers in place",
         ByteBufSlice => "allocates one bytebuf proportional to the returned byte count",
+        WordsNew | WordsSet | WordsGather | WordsAdd | WordsMin | WordsScale | WordsAddStrided => "allocates one word buffer proportional to the output word count",
         _ => "not statically guaranteed allocation-free",
     }
 }
@@ -190,7 +193,7 @@ fn builtin_api_category(builtin: Builtin) -> &'static str {
         | BufferToStr | ByteBufNew | ByteBufLen | ByteBufGet | ByteBufSetU8
         | ByteBufSetU16Le | ByteBufSetU32Le | ByteBufSetI32Le | ByteBufGetU16Le
         | ByteBufGetU32Le | ByteBufGetI32Le | ByteBufSlice | ByteBufCopy | ByteBufToList
-        | ByteBufFromList => {
+        | ByteBufFromList | WordsNew | WordsLen | WordsGet | WordsSet | WordsGather | WordsAdd | WordsMin | WordsScale | WordsAddStrided | WordsMinValue | WordsMaxValue | WordsCountGt | WordsDigest | WordsMinRatio | WordsMaxRatio | AffineTrappedSurvival => {
             "buffers-bitsets"
         }
 

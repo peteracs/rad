@@ -3,7 +3,7 @@
 
 This inventory is generated from the production lexer, AST, parser, and builtin catalog. It is the completeness denominator for the normative reference and Sovereign Grid coverage gate. Names such as `Error` are recovery nodes rather than source syntax; the coverage manifest records explicit exclusions.
 
-Owner digest: `95ec0c397f9633019d7829aceb4b091357b078619c3c68edec599e555a00f2bf`.
+Owner digest: `d970a4a38834aae97f1ee7349998b0171adb818b31d93d34b332ff0a019f9cf8`.
 
 ## Token kinds
 
@@ -311,7 +311,7 @@ Owner digest: `95ec0c397f9633019d7829aceb4b091357b078619c3c68edec599e555a00f2bf`
 
 ## Builtin API names
 
-The 262 names below come from the one runtime catalog. Signatures and operational semantics are in the [complete builtin API catalog](builtin-api.md); this generated list makes omissions machine-detectable.
+The 278 names below come from the one runtime catalog. Signatures and operational semantics are in the [complete builtin API catalog](builtin-api.md); this generated list makes omissions machine-detectable.
 
 | Name | Runtime variant |
 |---|---|
@@ -484,6 +484,22 @@ The 262 names below come from the one runtime catalog. Signatures and operationa
 | <a id="builtin-bytebuf_copy"></a>`bytebuf_copy` | `ByteBufCopy` |
 | <a id="builtin-bytebuf_to_list"></a>`bytebuf_to_list` | `ByteBufToList` |
 | <a id="builtin-bytebuf_from_list"></a>`bytebuf_from_list` | `ByteBufFromList` |
+| <a id="builtin-words_new"></a>`words_new` | `WordsNew` |
+| <a id="builtin-words_len"></a>`words_len` | `WordsLen` |
+| <a id="builtin-words_get"></a>`words_get` | `WordsGet` |
+| <a id="builtin-words_set"></a>`words_set` | `WordsSet` |
+| <a id="builtin-words_gather"></a>`words_gather` | `WordsGather` |
+| <a id="builtin-words_add"></a>`words_add` | `WordsAdd` |
+| <a id="builtin-words_min"></a>`words_min` | `WordsMin` |
+| <a id="builtin-words_scale"></a>`words_scale` | `WordsScale` |
+| <a id="builtin-words_add_strided"></a>`words_add_strided` | `WordsAddStrided` |
+| <a id="builtin-words_min_value"></a>`words_min_value` | `WordsMinValue` |
+| <a id="builtin-words_max_value"></a>`words_max_value` | `WordsMaxValue` |
+| <a id="builtin-words_count_gt"></a>`words_count_gt` | `WordsCountGt` |
+| <a id="builtin-words_digest"></a>`words_digest` | `WordsDigest` |
+| <a id="builtin-words_min_ratio"></a>`words_min_ratio` | `WordsMinRatio` |
+| <a id="builtin-words_max_ratio"></a>`words_max_ratio` | `WordsMaxRatio` |
+| <a id="builtin-affine_trapped_survival"></a>`affine_trapped_survival` | `AffineTrappedSurvival` |
 | <a id="builtin-publish_bytes"></a>`publish_bytes` | `PublishBytes` |
 | <a id="builtin-size_of"></a>`size_of` | `SizeOf` |
 | <a id="builtin-offset_of"></a>`offset_of` | `OffsetOf` |

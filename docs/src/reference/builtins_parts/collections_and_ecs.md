@@ -142,6 +142,41 @@ reassignment patterns to in-place writes.
 | `bytebuf_to_list(buf)` | Convert to `list<int>` for interchange and tests |
 | `bytebuf_from_list(bytes)` | Convert `list<int>` byte values into a byte buffer |
 
+### Word buffers
+
+Word buffers are byte buffers read as packed little-endian unsigned 32-bit
+words. They give pure, deterministic, native-speed bulk integer arithmetic
+over hundreds of millions of values. Every kernel returns a new buffer and
+never mutates its inputs. Additions and scalings trap on 32-bit overflow
+instead of wrapping, every index is bounds-checked, and scaling rounds toward
+zero. Inputs of at least 65536 words are split across native workers by fixed
+index ranges; each output word depends only on its own index and reductions
+are associative, so results are identical for every worker count.
+
+| Function | Description |
+|---|---|
+| `words_new(count, value)` | Create `count` words, each equal to `value` (`0..2^32-1`) |
+| `words_len(buf)` | Return the number of words (the byte length must be a multiple of 4) |
+| `words_get(buf, index)` | Read one word |
+| `words_set(buf, index, value)` | Return a buffer with one word replaced |
+| `words_gather(src, count, a, b, modulus)` | `out[i] = src[(a*i + b) mod modulus]` for `i < count`; `modulus` must be in `1..=len(src)` |
+| `words_add(a, b)` | Elementwise sum of equal-length buffers; traps on overflow |
+| `words_min(a, b)` | Elementwise minimum of equal-length buffers |
+| `words_scale(buf, numerator, shift)` | `floor(x * numerator / 2^shift)` per word (`shift <= 64`); traps on overflow |
+| `words_add_strided(dst, src, start, stride)` | `dst[start + stride*i] += src[i]` for every `i < len(src)`; bounds- and overflow-checked |
+| `words_min_value(buf)`, `words_max_value(buf)` | Smallest or largest word of a nonempty buffer |
+| `words_count_gt(a, b)` | Number of indices with `a[i] > b[i]` |
+| `words_min_ratio(num, den, shift)`, `words_max_ratio(num, den, shift)` | Smallest or largest `floor(num[i] * 2^shift / den[i])` (`shift <= 30`); a zero denominator is an error |
+| `words_digest(buf)` | Order-sensitive 62-bit FNV-1a digest of the underlying bytes |
+
+`affine_trapped_survival(bits, d, marks)` is a research kernel for the maps
+`x -> x/2` (even) and `x -> (3x + d)/2` (odd, `d` odd). For every
+exactly-`bits`-bit start whose parity walk keeps `3^q >= 2^t` through step
+`bits`, it continues the real dynamics and computes the exact fair-coin null
+by backward recursion. It returns `[states, observed_1, expected_1 * 1000,
+variance_1 * 1000, ...]`, one triple per mark. Arithmetic is overflow-checked
+`i128`, and states are processed in parallel with order-independent sums.
+
 `encode_le(value)` and `encode_be(value)` encode fixed-width native scalars or
 complete `repr(C)` struct values. Nested structs follow their sealed layouts;
 padding is deterministic and zeroed. A field/layout mismatch is a runtime error

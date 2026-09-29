@@ -7,6 +7,7 @@ mod tests {
     include!("authority_execution.rs");
     include!("execution_helpers.rs");
     include!("byte_buffers.rs");
+    include!("word_buffers.rs");
     include!("transactions.rs");
     include!("native_types.rs");
     include!("semantic_features.rs");

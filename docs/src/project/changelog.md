@@ -1,5 +1,17 @@
 # Changelog
 
+- **Packed word buffers and an affine-walk research kernel.** Fifteen
+  `words_*` builtins treat a byte buffer as packed little-endian u32 words:
+  construction and access, affine-modular gather, elementwise add, minimum
+  and floor scaling, strided add, reductions, ratio bounds, and a digest.
+  They are pure, bounds- and overflow-checked, and parallel above 65536 words
+  with results independent of worker count. `affine_trapped_survival`
+  computes trapped-set survival for `x -> x/2, (3x+d)/2` together with its
+  exact fair-coin null. Unit tests cover values, error paths, the parallel
+  path, strict typing, and agreement with an independent pure-RAD
+  computation. The builtin reference, generated API catalog, and Sovereign
+  Grid coverage are regenerated.
+
 - **Ordinary checked pure helpers retain unique-buffer optimizations.**
   The deletion-sync mathematical search exposed full-buffer copying on every
   update because pure helpers received causal lowering even without

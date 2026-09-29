@@ -145,6 +145,13 @@ pub(super) fn is_immutable_transform_builtin(name: &str) -> bool {
             | "bytebuf_set_i32_le"
             | "bytebuf_slice"
             | "bytebuf_copy"
+            | "words_new"
+            | "words_set"
+            | "words_gather"
+            | "words_add"
+            | "words_min"
+            | "words_scale"
+            | "words_add_strided"
     )
 }
 

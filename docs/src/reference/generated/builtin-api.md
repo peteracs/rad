@@ -4091,6 +4091,390 @@ bytebuf_from_list(list<int>) -> bytebuf
 - Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
+<a id="words_new"></a>
+## `words_new`
+
+```text
+words_new(int, int) -> bytebuf
+```
+
+- Category: `buffers-bitsets`
+- Arity: `exactly 2` argument(s)
+- Effects: `pure`
+- Purity: `pure`
+- Errors: invalid arity, type, range, capability, platform, or runtime state is a runtime error
+- Determinism: deterministic for equal RAD state and arguments
+- Complexity: `O(n) in words, parallel across native workers`
+- Allocation: allocates one word buffer proportional to the output word count
+- Native: `available`
+- WASM: `available`
+- Sandbox: `capability-checked`
+- Transaction body: `allowed`
+- Post-commit: `allowed`
+- Settlement: `allowed`
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
+
+<a id="words_len"></a>
+## `words_len`
+
+```text
+words_len(bytebuf) -> int
+```
+
+- Category: `buffers-bitsets`
+- Arity: `exactly 1` argument(s)
+- Effects: `pure`
+- Purity: `pure`
+- Errors: invalid arity, type, range, capability, platform, or runtime state is a runtime error
+- Determinism: deterministic for equal RAD state and arguments
+- Complexity: `O(1)`
+- Allocation: not statically guaranteed allocation-free
+- Native: `available`
+- WASM: `available`
+- Sandbox: `capability-checked`
+- Transaction body: `allowed`
+- Post-commit: `allowed`
+- Settlement: `allowed`
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
+
+<a id="words_get"></a>
+## `words_get`
+
+```text
+words_get(bytebuf, int) -> int
+```
+
+- Category: `buffers-bitsets`
+- Arity: `exactly 2` argument(s)
+- Effects: `pure`
+- Purity: `pure`
+- Errors: invalid arity, type, range, capability, platform, or runtime state is a runtime error
+- Determinism: deterministic for equal RAD state and arguments
+- Complexity: `O(1)`
+- Allocation: not statically guaranteed allocation-free
+- Native: `available`
+- WASM: `available`
+- Sandbox: `capability-checked`
+- Transaction body: `allowed`
+- Post-commit: `allowed`
+- Settlement: `allowed`
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
+
+<a id="words_set"></a>
+## `words_set`
+
+```text
+words_set(bytebuf, int, int) -> bytebuf
+```
+
+- Category: `buffers-bitsets`
+- Arity: `exactly 3` argument(s)
+- Effects: `pure`
+- Purity: `pure`
+- Errors: invalid arity, type, range, capability, platform, or runtime state is a runtime error
+- Determinism: deterministic for equal RAD state and arguments
+- Complexity: `O(n) in words, parallel across native workers`
+- Allocation: allocates one word buffer proportional to the output word count
+- Native: `available`
+- WASM: `available`
+- Sandbox: `capability-checked`
+- Transaction body: `allowed`
+- Post-commit: `allowed`
+- Settlement: `allowed`
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
+
+<a id="words_gather"></a>
+## `words_gather`
+
+```text
+words_gather(bytebuf, int, int, int, int) -> bytebuf
+```
+
+- Category: `buffers-bitsets`
+- Arity: `exactly 5` argument(s)
+- Effects: `pure`
+- Purity: `pure`
+- Errors: invalid arity, type, range, capability, platform, or runtime state is a runtime error
+- Determinism: deterministic for equal RAD state and arguments
+- Complexity: `O(n) in words, parallel across native workers`
+- Allocation: allocates one word buffer proportional to the output word count
+- Native: `available`
+- WASM: `available`
+- Sandbox: `capability-checked`
+- Transaction body: `allowed`
+- Post-commit: `allowed`
+- Settlement: `allowed`
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
+
+<a id="words_add"></a>
+## `words_add`
+
+```text
+words_add(bytebuf, bytebuf) -> bytebuf
+```
+
+- Category: `buffers-bitsets`
+- Arity: `exactly 2` argument(s)
+- Effects: `pure`
+- Purity: `pure`
+- Errors: invalid arity, type, range, capability, platform, or runtime state is a runtime error
+- Determinism: deterministic for equal RAD state and arguments
+- Complexity: `O(n) in words, parallel across native workers`
+- Allocation: allocates one word buffer proportional to the output word count
+- Native: `available`
+- WASM: `available`
+- Sandbox: `capability-checked`
+- Transaction body: `allowed`
+- Post-commit: `allowed`
+- Settlement: `allowed`
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
+
+<a id="words_min"></a>
+## `words_min`
+
+```text
+words_min(bytebuf, bytebuf) -> bytebuf
+```
+
+- Category: `buffers-bitsets`
+- Arity: `exactly 2` argument(s)
+- Effects: `pure`
+- Purity: `pure`
+- Errors: invalid arity, type, range, capability, platform, or runtime state is a runtime error
+- Determinism: deterministic for equal RAD state and arguments
+- Complexity: `O(n) in words, parallel across native workers`
+- Allocation: allocates one word buffer proportional to the output word count
+- Native: `available`
+- WASM: `available`
+- Sandbox: `capability-checked`
+- Transaction body: `allowed`
+- Post-commit: `allowed`
+- Settlement: `allowed`
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
+
+<a id="words_scale"></a>
+## `words_scale`
+
+```text
+words_scale(bytebuf, int, int) -> bytebuf
+```
+
+- Category: `buffers-bitsets`
+- Arity: `exactly 3` argument(s)
+- Effects: `pure`
+- Purity: `pure`
+- Errors: invalid arity, type, range, capability, platform, or runtime state is a runtime error
+- Determinism: deterministic for equal RAD state and arguments
+- Complexity: `O(n) in words, parallel across native workers`
+- Allocation: allocates one word buffer proportional to the output word count
+- Native: `available`
+- WASM: `available`
+- Sandbox: `capability-checked`
+- Transaction body: `allowed`
+- Post-commit: `allowed`
+- Settlement: `allowed`
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
+
+<a id="words_add_strided"></a>
+## `words_add_strided`
+
+```text
+words_add_strided(bytebuf, bytebuf, int, int) -> bytebuf
+```
+
+- Category: `buffers-bitsets`
+- Arity: `exactly 4` argument(s)
+- Effects: `pure`
+- Purity: `pure`
+- Errors: invalid arity, type, range, capability, platform, or runtime state is a runtime error
+- Determinism: deterministic for equal RAD state and arguments
+- Complexity: `O(n) in words, parallel across native workers`
+- Allocation: allocates one word buffer proportional to the output word count
+- Native: `available`
+- WASM: `available`
+- Sandbox: `capability-checked`
+- Transaction body: `allowed`
+- Post-commit: `allowed`
+- Settlement: `allowed`
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
+
+<a id="words_min_value"></a>
+## `words_min_value`
+
+```text
+words_min_value(bytebuf) -> int
+```
+
+- Category: `buffers-bitsets`
+- Arity: `exactly 1` argument(s)
+- Effects: `pure`
+- Purity: `pure`
+- Errors: invalid arity, type, range, capability, platform, or runtime state is a runtime error
+- Determinism: deterministic for equal RAD state and arguments
+- Complexity: `O(n) in words, parallel across native workers`
+- Allocation: not statically guaranteed allocation-free
+- Native: `available`
+- WASM: `available`
+- Sandbox: `capability-checked`
+- Transaction body: `allowed`
+- Post-commit: `allowed`
+- Settlement: `allowed`
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
+
+<a id="words_max_value"></a>
+## `words_max_value`
+
+```text
+words_max_value(bytebuf) -> int
+```
+
+- Category: `buffers-bitsets`
+- Arity: `exactly 1` argument(s)
+- Effects: `pure`
+- Purity: `pure`
+- Errors: invalid arity, type, range, capability, platform, or runtime state is a runtime error
+- Determinism: deterministic for equal RAD state and arguments
+- Complexity: `O(n) in words, parallel across native workers`
+- Allocation: not statically guaranteed allocation-free
+- Native: `available`
+- WASM: `available`
+- Sandbox: `capability-checked`
+- Transaction body: `allowed`
+- Post-commit: `allowed`
+- Settlement: `allowed`
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
+
+<a id="words_count_gt"></a>
+## `words_count_gt`
+
+```text
+words_count_gt(bytebuf, bytebuf) -> int
+```
+
+- Category: `buffers-bitsets`
+- Arity: `exactly 2` argument(s)
+- Effects: `pure`
+- Purity: `pure`
+- Errors: invalid arity, type, range, capability, platform, or runtime state is a runtime error
+- Determinism: deterministic for equal RAD state and arguments
+- Complexity: `O(n) in words, parallel across native workers`
+- Allocation: not statically guaranteed allocation-free
+- Native: `available`
+- WASM: `available`
+- Sandbox: `capability-checked`
+- Transaction body: `allowed`
+- Post-commit: `allowed`
+- Settlement: `allowed`
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
+
+<a id="words_digest"></a>
+## `words_digest`
+
+```text
+words_digest(bytebuf) -> int
+```
+
+- Category: `buffers-bitsets`
+- Arity: `exactly 1` argument(s)
+- Effects: `pure`
+- Purity: `pure`
+- Errors: invalid arity, type, range, capability, platform, or runtime state is a runtime error
+- Determinism: deterministic for equal RAD state and arguments
+- Complexity: `O(n) in words, parallel across native workers`
+- Allocation: not statically guaranteed allocation-free
+- Native: `available`
+- WASM: `available`
+- Sandbox: `capability-checked`
+- Transaction body: `allowed`
+- Post-commit: `allowed`
+- Settlement: `allowed`
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
+
+<a id="words_min_ratio"></a>
+## `words_min_ratio`
+
+```text
+words_min_ratio(bytebuf, bytebuf, int) -> int
+```
+
+- Category: `buffers-bitsets`
+- Arity: `exactly 3` argument(s)
+- Effects: `pure`
+- Purity: `pure`
+- Errors: invalid arity, type, range, capability, platform, or runtime state is a runtime error
+- Determinism: deterministic for equal RAD state and arguments
+- Complexity: `O(n) in words, parallel across native workers`
+- Allocation: not statically guaranteed allocation-free
+- Native: `available`
+- WASM: `available`
+- Sandbox: `capability-checked`
+- Transaction body: `allowed`
+- Post-commit: `allowed`
+- Settlement: `allowed`
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
+
+<a id="words_max_ratio"></a>
+## `words_max_ratio`
+
+```text
+words_max_ratio(bytebuf, bytebuf, int) -> int
+```
+
+- Category: `buffers-bitsets`
+- Arity: `exactly 3` argument(s)
+- Effects: `pure`
+- Purity: `pure`
+- Errors: invalid arity, type, range, capability, platform, or runtime state is a runtime error
+- Determinism: deterministic for equal RAD state and arguments
+- Complexity: `O(n) in words, parallel across native workers`
+- Allocation: not statically guaranteed allocation-free
+- Native: `available`
+- WASM: `available`
+- Sandbox: `capability-checked`
+- Transaction body: `allowed`
+- Post-commit: `allowed`
+- Settlement: `allowed`
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
+
+<a id="affine_trapped_survival"></a>
+## `affine_trapped_survival`
+
+```text
+affine_trapped_survival(int, int, list<int>) -> list<int>
+```
+
+- Category: `buffers-bitsets`
+- Arity: `exactly 3` argument(s)
+- Effects: `pure`
+- Purity: `pure`
+- Errors: invalid arity, type, range, capability, platform, or runtime state is a runtime error
+- Determinism: deterministic for equal RAD state and arguments
+- Complexity: `O(n) in words, parallel across native workers`
+- Allocation: not statically guaranteed allocation-free
+- Native: `available`
+- WASM: `available`
+- Sandbox: `capability-checked`
+- Transaction body: `allowed`
+- Post-commit: `allowed`
+- Settlement: `allowed`
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
+
 <a id="publish_bytes"></a>
 ## `publish_bytes`
 
