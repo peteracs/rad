@@ -11,8 +11,19 @@ entity mirror_law { Claim { status: "proved", support: "collatz-automatic: T-^j(
 entity cycle_length { Claim { status: "proved", support: "collatz-steer/cycle_bound: any cycle has >= 72,057,431,991 odd steps" } }
 entity tau_poly { Claim { status: "open", support: "tau(n) <= n^eps for all large n" } }
 entity tau_log { Claim { status: "open", support: "tau(n) <= C log2 n; measured tau/log2 n <= 14.5 on record holders" } }
+entity descent_explicit { Claim { status: "proved", support: "collatz-descent: n >= N with q_tau(n) <= q*(N) descends at tau; q*(2^71) = 72,057,431,990, q* ~ N^0.5 up to 2^110, no Baker" } }
+entity cst_bounded { Claim { status: "proved", support: "collatz-descent/cst: sigma(n) = tau(n) for all 2 <= n < 2^36 and every n with tau(n) <= 301,993 (forked direct check below 2^24, native trapped classes to 2^36, descent theorem)" } }
+entity block_structure { Claim { status: "proved", support: "collatz-descent/blocks: a counterexample orbit from its minimum is a chain of resonant first-contraction blocks; first block >= 72,057,431,991 odd steps" } }
+entity tau_sqrt { Claim { status: "open", support: "tau(n) <= ceil(q*(n) log2 3) for n >= 2^71, where q*(n) ~ sqrt(n) is certified by collatz-descent" } }
+
+entity divergence_split { Claim { status: "proved", support: "tau(m) = inf => T^t(m) >= m for all t and the orbit is unbounded (a bounded orbit ends in a cycle, where 2^j > 3^q, so W -> +inf); otherwise the orbit from its minimum is a block chain with endpoints n_(k+1) < n_k + 0.2405 q_k + 0.69" } }
+entity cycle_divisibility { Claim { status: "open", support: "no resonant block chain with Q >= 72,057,431,991 odd steps has (2^j - 3^Q) | C(w); C mod p equidistributes at rate ~e^(-0.5 q) for p <= 43, so no small-prime obstruction exists" } }
+entity no_trapped_integer { Claim { status: "open", support: "no integer m > 2^71 has tau(m) = inf (its parity walk stays below the contraction line forever)" } }
+entity no_drift_chain { Claim { status: "open", support: "no infinite chain of finite blocks whose endpoints grow at most additively (0.93 per odd step)" } }
 
 // Derived statements.
+entity no_cycles { Claim {} }
+entity no_divergence { Claim {} }
 entity descent_from_tau { Claim {} }
 entity collatz { Claim {} }
 
@@ -24,6 +35,10 @@ entity coalescence { Claim {} }
 entity tau_by_counting { Claim {} }
 entity tau_by_mirror { Claim {} }
 entity tau_by_residues { Claim {} }
+entity cycle_by_envelope { Claim {} }
+entity cycle_by_analysis { Claim {} }
+entity cycle_by_length_sieve { Claim {} }
+entity cycle_by_shadow_barriers { Claim {} }
 
 intent Reduction {
     key target: entity
@@ -70,6 +85,11 @@ resolver Close for Refutation(target, proposals) {
 
 fn st(e: entity) -> str { return require(e, Claim).status }
 
+fn report(name: str, e: entity) -> nil {
+    let c: Claim = require(e, Claim)
+    print(format("{}: {} -- {}", name, c.status, c.support))
+}
+
 fn main() -> nil {
     // Level 1: closed branches.
     settle {
@@ -82,28 +102,50 @@ fn main() -> nil {
         Refutes(coalescence, "merging removes a constant 18.6% of trapped residues, not an exponent (collatz-merge)")
         Refutes(tau_by_counting, "tau(n) > t iff n in S_t; 'S_t has no small integers' restates tau_poly (circular)")
         Refutes(tau_by_mirror, "mirror and exit laws fix tau through the exit; beyond it depends on the unknown orbit of 3^(kq) - m")
+        Refutes(cycle_by_envelope, "the envelope cannot raise the 2^71 cycle bound: record 114208327604/72057431991 has 6 ln2 N g < q, dangerous even at the limit slope (collatz-descent)")
+        Refutes(cycle_by_analysis, "3x+d calibration: 302 real cycles pass every envelope/resonance/drift condition; single-block cycles at convergent lengths use 14-69% of the envelope; primitive ones exist only via gcd(d, 2^j - 3^q) > 1, so only the divisibility (2^j - 3^q) | C separates 3x+1 (collatz-descent/arith)")
+        Refutes(cycle_by_length_sieve, "block decomposition excludes none of the 104 Hercher-admissible odd counts <= 10^12 (collatz-descent/lengths)")
+        Refutes(cycle_by_shadow_barriers, "Barina shadow barriers (no preimage of a cycle element below 2^71) at 3-adic depth <= 9 leave the mean-payoff ceiling unchanged as bins refine (0.7241 at 8192 bins/bit, with or without barriers); the optimal closed walks are semiconvergents 19/12, 65/41, 149/94, 233/147 (collatz-shadow-cycle)")
         Refutes(tau_by_residues, "residue classes with short trapping cover only finitely many depths; -1 persists at every depth")
     }
     // Level 2: the reduction from a sub-polynomial stopping-time bound.
     settle {
         Reduces(descent_from_tau, "ladder + Baker: contraction at tau forces descent once n > poly(tau)",
             ["ladder", "baker", "tau_poly"], [st(ladder), st(baker), st(tau_poly)])
+        Reduces(descent_from_tau, "Baker-free below 2^111: first contraction with q <= q*(n) forces descent at tau",
+            ["ladder", "descent_explicit", "tau_sqrt"], [st(ladder), st(descent_explicit), st(tau_sqrt)])
         Reduces(descent_from_tau, "a logarithmic bound implies the polynomial one",
             ["ladder", "baker", "tau_log"], [st(ladder), st(baker), st(tau_log)])
     }
+    // Level 2b: the cycle / divergence split.
+    settle {
+        Reduces(no_cycles, "a cycle from its minimum is a resonant block chain; it exists iff some chain has (2^j - 3^Q) | C",
+            ["block_structure", "cycle_length", "cycle_divisibility"], [st(block_structure), st(cycle_length), st(cycle_divisibility)])
+        Reduces(no_divergence, "a divergent orbit contains a trapped integer or is an additive-drift block chain",
+            ["divergence_split", "no_trapped_integer", "no_drift_chain"], [st(divergence_split), st(no_trapped_integer), st(no_drift_chain)])
+    }
     // Level 3: the root.
     settle {
+        Reduces(collatz, "no nontrivial cycle and no divergent orbit",
+            ["no_cycles", "no_divergence"], [st(no_cycles), st(no_divergence)])
         Reduces(collatz, "every large n descends, strong induction, verification below the threshold",
             ["descent_from_tau", "verified_2_71"], [st(descent_from_tau), st(verified_2_71)])
     }
-    for name in ["collatz", "descent_from_tau", "automatic_certificate", "residue_template", "statistical_bias", "coalescence", "tau_by_counting", "tau_by_mirror", "tau_by_residues"] {
-        let e: entity = if name == "collatz" { collatz } else if name == "descent_from_tau" { descent_from_tau }
-            else if name == "automatic_certificate" { automatic_certificate } else if name == "residue_template" { residue_template }
-            else if name == "statistical_bias" { statistical_bias } else if name == "coalescence" { coalescence }
-            else if name == "tau_by_counting" { tau_by_counting } else if name == "tau_by_mirror" { tau_by_mirror } else { tau_by_residues }
-        let c: Claim = require(e, Claim)
-        print(format("{}: {} -- {}", name, c.status, c.support))
-    }
+    report("collatz", collatz)
+    report("descent_from_tau", descent_from_tau)
+    report("automatic_certificate", automatic_certificate)
+    report("residue_template", residue_template)
+    report("statistical_bias", statistical_bias)
+    report("coalescence", coalescence)
+    report("tau_by_counting", tau_by_counting)
+    report("tau_by_mirror", tau_by_mirror)
+    report("tau_by_residues", tau_by_residues)
+    report("cycle_by_envelope", cycle_by_envelope)
+    report("cycle_by_analysis", cycle_by_analysis)
+    report("cycle_by_length_sieve", cycle_by_length_sieve)
+    report("cycle_by_shadow_barriers", cycle_by_shadow_barriers)
+    report("no_cycles", no_cycles)
+    report("no_divergence", no_divergence)
     print(why(collatz, Claim))
     print(why(descent_from_tau, Claim))
 }

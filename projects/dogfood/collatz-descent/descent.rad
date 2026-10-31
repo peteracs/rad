@@ -1,0 +1,168 @@
+use "../collatz-barrier/barrier.rad"
+
+// Sharp descent at the first contraction.
+//
+// At the coefficient stopping time tau the parity word is a first-contraction
+// word, so tau - 1 <= q log2 3 < tau and tau = ceil(q alpha). The walk value
+// W = tau - q alpha = d(q) depends on q alone. T^tau(n) < n iff
+// n (2^tau - 3^q) > C, and 2^tau - 3^q = 3^q (2^d(q) - 1) > 3^q d(q) ln 2.
+// The ladder envelope (collatz-barrier/ladder) gives C/3^q <= s* q + beta*.
+// So n descends at tau whenever  n g(q) >= s* q + beta*,  g(q) = d(q) ln 2.
+//
+// d(q) only reaches a new record low at the upper one-sided best
+// approximations p/q > alpha: the right boundaries of the Stern-Brocot walk
+// toward alpha. Between consecutive records, d(q) >= the current record.
+
+pub struct Record { p: int = 0, q: int = 0, g_lower: Natural = Natural {} }
+// records: upper boundaries p/q > alpha, g = p ln2 - q ln3 > 0.
+// lows: lower boundaries p/q < alpha, g = q ln3 - p ln2 > 0.
+pub struct Walk { records: list<Record> = [], lows: list<Record> = [], lower_p: int = 0, lower_q: int = 0, steps: int = 0 }
+pub struct Logs { ln2: LogInterval = LogInterval {}, ln3: LogInterval = LogInterval {} }
+
+pub struct Descent {
+    floor_bits: int = 0
+    safe_odd_steps: int = 0
+    safe_tau: int = 0
+    stop_p: int = 0
+    stop_q: int = 0
+    stop_record_in_danger: bool = false
+    records_checked: int = 0
+}
+
+pub pure fn logs() -> Logs { return Logs { ln2: log_interval(3), ln3: log_interval(2) } }
+
+// s* = 756421 / (3 * 2^20), beta* <= 6882/10000 (checked by beta_bound).
+pub pure fn slope_numerator() -> int { return 756421 }
+pub pure fn slope_denominator() -> int { return 3145728 }
+
+pub pure fn nshift_down(a: Natural, bits: int) -> Natural {
+    let mut value: Natural = a
+    for _ in range(int_div(bits, 15)) {
+        let mut rest: list<int> = []
+        for i in range(1, len(value.digits)) { rest = push(rest, value.digits[i]) }
+        value = Natural { digits: rest }
+    }
+    return ndiv_small(value, 1 << (bits % 15))
+}
+
+pub pure fn nint(a: Natural) -> int {
+    assert(nbits(a) <= 62, "natural too large for int")
+    let mut result: int = 0
+    let mut i: int = len(a.digits)
+    while i > 0 {
+        i = i - 1
+        result = result * 32768 + a.digits[i]
+    }
+    return result
+}
+
+// Rigorous sign of p ln2 - q ln3 at scale 2^192: 1 above alpha, -1 below, 0 unresolved.
+pub pure fn side(l: Logs, p: int, q: int) -> int {
+    if ncmp(nmul(nat(p), l.ln2.lower), nmul(nat(q), l.ln3.upper)) > 0 { return 1 }
+    if ncmp(nmul(nat(p), l.ln2.upper), nmul(nat(q), l.ln3.lower)) < 0 { return -1 }
+    return 0
+}
+
+// Lower bound on g = p ln2 - q ln3 > 0, scaled by 2^192.
+pub pure fn gap_lower(l: Logs, p: int, q: int) -> Natural {
+    return nsub(nmul(nat(p), l.ln2.lower), nmul(nat(q), l.ln3.upper))
+}
+
+// Lower bound on q ln3 - p ln2 > 0 for p/q below alpha, scaled by 2^192.
+pub pure fn low_gap_lower(l: Logs, p: int, q: int) -> Natural {
+    return nsub(nmul(nat(q), l.ln3.lower), nmul(nat(p), l.ln2.upper))
+}
+
+// Stern-Brocot descent toward log2 3, collecting every right boundary.
+pub pure fn walk(l: Logs, max_q: int) -> Walk {
+    let mut a: int = 1
+    let mut b: int = 1
+    let mut c: int = 2
+    let mut d: int = 1
+    let mut records: list<Record> = [Record { p: 2, q: 1, g_lower: gap_lower(l, 2, 1) }]
+    let mut lows: list<Record> = [Record { p: 1, q: 1, g_lower: low_gap_lower(l, 1, 1) }]
+    let mut steps: int = 0
+    while b + d <= max_q {
+        let s: int = side(l, a + c, b + d)
+        assert(s != 0, "log interval too coarse for this walk")
+        if s > 0 {
+            c = a + c
+            d = b + d
+            records = push(records, Record { p: c, q: d, g_lower: gap_lower(l, c, d) })
+        } else {
+            a = a + c
+            b = b + d
+            lows = push(lows, Record { p: a, q: b, g_lower: low_gap_lower(l, a, b) })
+        }
+        steps = steps + 1
+    }
+    return Walk { records: records, lows: lows, lower_p: a, lower_q: b, steps: steps }
+}
+
+// Largest q with s* q + beta* <= N g, i.e.
+// 7564210000 q + 6882 * 3145728 <= 31457280000 N G / 2^192.
+pub pure fn safe_limit(g_lower: Natural, floor_bits: int) -> int {
+    let scaled: Natural = nshift_down(nscale(nscale(g_lower, 31457280), 1000), 192 - floor_bits)
+    let intercept: Natural = nscale(nat(6882), slope_denominator())
+    if ncmp(scaled, intercept) < 0 { return 0 }
+    let limit: Natural = ndiv_small(nsub(scaled, intercept), 10000 * slope_numerator())
+    if nbits(limit) > 62 { return 1 << 62 }
+    return nint(limit)
+}
+
+pub pure fn ceil_alpha(l: Logs, q: int) -> int {
+    // tau = ceil(q alpha): the least p with p ln2 > q ln3; q < q alpha < 2q.
+    let mut lo: int = q
+    let mut hi: int = 2 * q
+    while hi - lo > 1 {
+        let middle: int = lo + int_div(hi - lo, 2)
+        let s: int = side(l, middle, q)
+        assert(s != 0, "tau not resolved")
+        if s > 0 { hi = middle } else { lo = middle }
+    }
+    return hi
+}
+
+pub pure fn certify_descent(l: Logs, w: Walk, floor_bits: int) -> Descent {
+    let rs: list<Record> = w.records
+    for i in range(len(rs) - 1) {
+        let r: Record = rs[i]
+        let limit: int = safe_limit(r.g_lower, floor_bits)
+        let next_q: int = rs[i + 1].q
+        if limit < next_q - 1 {
+            let safe: int = max(limit, r.q - 1)
+            return Descent {
+                floor_bits: floor_bits, safe_odd_steps: safe, safe_tau: ceil_alpha(l, safe),
+                stop_p: r.p, stop_q: r.q, stop_record_in_danger: limit < r.q,
+                records_checked: i + 1,
+            }
+        }
+    }
+    assert(false, format("walk ended before floor 2^{} reached danger; extend max_q", floor_bits))
+    return Descent {}
+}
+
+// True when 6 ln2 * N g < q rigorously: record p/q is dangerous at floor 2^k
+// even for the limit slope 1/(6 ln 2), below which no envelope exists
+// (ladder result 2). No sharpening of the envelope can then clear q.
+pub pure fn danger_at_limit_slope(l: Logs, p: int, q: int, floor_bits: int) -> bool {
+    let g_upper: Natural = nsub(nmul(nat(p), l.ln2.upper), nmul(nat(q), l.ln3.lower))
+    let lhs: Natural = nscale(nmul(g_upper, l.ln2.upper), 6)
+    return ncmp(nshift_down(lhs, 384 - floor_bits), nat(q)) < 0
+}
+
+// Exact check that C_q/3^q - s* q <= 6882/10000 for all 1 <= q <= horizon, i.e.
+// 3145728 * 10000 * C_q <= 3^q (6882 * 3145728 + 10000 * 756421 q).
+// C_q = 3 C_(q-1) + 2^floor((q-1) log2 3) is the extremal first-contraction offset.
+pub pure fn beta_bound(horizon: int) -> int {
+    let mut power: Natural = nat(1)
+    let mut offset: Natural = nat(0)
+    for q in range(1, horizon + 1) {
+        offset = nadd(nscale(offset, 3), npow2(nbits(power) - 1))
+        power = nscale(power, 3)
+        let lhs: Natural = nscale(nscale(offset, slope_denominator()), 10000)
+        let rhs: Natural = nadd(nscale(power, 6882 * slope_denominator()), nscale(nscale(power, 10000 * slope_numerator()), q))
+        assert(ncmp(lhs, rhs) <= 0, format("beta bound fails at q = {}", q))
+    }
+    return horizon
+}

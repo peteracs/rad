@@ -1,0 +1,157 @@
+use "descent.rad"
+
+// Coefficient stopping time conjecture (Terras): sigma(n) = tau(n) for n >= 2.
+// Forked direct iteration proves T^tau(n) < n for every 2 <= n < 2^B.
+// The descent theorem at floor 2^B covers every n >= 2^B whose first
+// contraction has q <= q*(2^B). Together: sigma(n) = tau(n) for every n >= 2
+// with tau(n) <= tau*(2^B), and tau*(2^B) = ceil(q*(2^B) alpha).
+resource Span { lo: int = 2, hi: int = 4 }
+
+component SpanEvidence { checked: int = 0, largest_tau: int = 0, largest_tau_at: int = 0, first_failure: int = -1 }
+entity span_slot { SpanEvidence {} }
+
+system Check(evidence: mut SpanEvidence, span: Span, table: TauTable) {
+    let mut largest: int = 0
+    let mut at: int = 0
+    let mut failure: int = -1
+    for n in range(span.lo, span.hi) {
+        let mut x: int = n
+        let mut t: int = 0
+        let mut q: int = 0
+        while t < table.tau_of[q] {
+            if x % 2 == 0 { x = int_div(x, 2) } else { x = int_div(3 * x + 1, 2) q = q + 1 }
+            t = t + 1
+        }
+        if x >= n and failure < 0 { failure = n }
+        if t > largest { largest = t at = n }
+    }
+    evidence = SpanEvidence { checked: span.hi - span.lo, largest_tau: largest, largest_tau_at: at, first_failure: failure }
+}
+
+// tau_of[q] = ceil(q log2 3), decided exactly; tau_of[0] = 1.
+resource TauTable { tau_of: list<int> = [] }
+
+component Claim { status: str = "open", support: str = "" }
+entity cst_bounded { Claim {} }
+entity cst_extended { Claim {} }
+
+// Trapped-class survival receipts from the project-owned trapped_survival tool
+// (survival_receipts.py writes them). Each counts the b-bit starts whose coefficient
+// walk has not contracted by step M, visiting only trapped residue classes
+// (Terras) with overflow-checked i128 arithmetic.
+intent Extension {
+    key target: entity
+    direct_bits: int
+    direct_safe_tau: int
+    native_bits: int
+    horizon: int
+    trapped_states: int
+    survivors: int
+    wide_safe_tau: int
+    base_status: str
+}
+
+law Extend(target: entity, direct: Descent, wide: Descent, horizon: int, states: int, survivors: int, base: str) {
+    propose Extension { target: target, direct_bits: direct.floor_bits, direct_safe_tau: direct.safe_tau,
+        native_bits: wide.floor_bits, horizon: horizon, trapped_states: states, survivors: survivors,
+        wide_safe_tau: wide.safe_tau, base_status: base }
+}
+
+resolver Widen for Extension(target, proposals) {
+    for p in proposals {
+        // tau <= horizon < direct_safe_tau means q_tau is inside the direct floor's safe range.
+        if p.base_status == "proved" and p.survivors == 0 and p.horizon <= p.direct_safe_tau {
+            next(target, Claim { status: "proved", support: format("sigma = tau for all 2 <= n < 2^{} (every such n has tau <= {}; {} trapped classes checked natively), hence for every n >= 2 with tau(n) <= {}", p.native_bits, p.horizon, p.trapped_states, p.wide_safe_tau) })
+        } else {
+            next(target, Claim { status: "open", support: format("survivors {} base {}", p.survivors, p.base_status) })
+        }
+    }
+}
+
+intent Coverage {
+    key target: entity
+    lo: int
+    hi: int
+    failure: int
+    largest_tau: int
+    floor_bits: int
+    safe_tau: int
+}
+
+law Cover(target: entity, lo: int, hi: int, e: SpanEvidence, d: Descent) {
+    propose Coverage { target: target, lo: lo, hi: hi, failure: e.first_failure, largest_tau: e.largest_tau,
+        floor_bits: d.floor_bits, safe_tau: d.safe_tau }
+}
+
+resolver Join for Coverage(target, proposals) {
+    // The spans must tile [2, 2^B) with no failure; then the theorem applies.
+    let mut bits: int = -1
+    let mut safe: int = -1
+    let mut covered: int = 0
+    let mut failures: int = 0
+    let mut largest: int = 0
+    for p in proposals {
+        covered = covered + (p.hi - p.lo)
+        if p.failure >= 0 { failures = failures + 1 }
+        largest = max(largest, p.largest_tau)
+        assert(bits < 0 or (bits == p.floor_bits and safe == p.safe_tau), "coverage mixes theorems")
+        bits = p.floor_bits
+        safe = p.safe_tau
+    }
+    let tiled: bool = covered == (1 << bits) - 2
+    if tiled and failures == 0 {
+        next(target, Claim { status: "proved", support: format("sigma = tau for every n >= 2 with tau(n) <= {}: direct below 2^{} ({} spans, largest tau there {}), descent theorem above", safe, bits, len(proposals), largest) })
+    } else {
+        next(target, Claim { status: "open", support: format("tiled {} failures {}", tiled, failures) })
+    }
+}
+
+fn main() -> nil {
+    let bits: int = 24
+    let l: Logs = logs()
+    let d: Descent = certify_descent(l, walk(l, 1 << 40), bits)
+    let mut tau_of: list<int> = [1]
+    for q in range(1, 4000) { tau_of = push(tau_of, ceil_alpha(l, q)) }
+    set_resource(TauTable, TauTable { tau_of: tau_of })
+    let base: world_fork = fork()
+    let parts: int = 16
+    let width: int = int_div(1 << bits, parts)
+    let mut jobs: list<world_fork> = []
+    let mut spans: list<list<int>> = []
+    for i in range(parts) {
+        let lo: int = if i == 0 { 2 } else { i * width }
+        spans = push(spans, [lo, (i + 1) * width])
+        jobs = push(jobs, fork_with(base, Span { lo: lo, hi: (i + 1) * width }))
+    }
+    for i in range(parts - 1) { assert(spans[i][1] == spans[i + 1][0], "spans do not tile") }
+    assert(spans[0][0] == 2 and spans[parts - 1][1] == 1 << bits, "spans do not cover [2, 2^B)")
+    let done: list<world_fork> = simulate_many(jobs, [system::Check], 1, 4)
+    let mut evidence: list<SpanEvidence> = []
+    for i in range(parts) {
+        assert_only_changed(jobs[i], done[i], [SpanEvidence])
+        evidence = push(evidence, peek(done[i], span_slot, SpanEvidence) |> unwrap)
+    }
+    settle { for i in range(parts) { Cover(cst_bounded, spans[i][0], spans[i][1], evidence[i], d) } }
+    let c: Claim = require(cst_bounded, Claim)
+    print(format("cst_bounded: {} -- {}", c.status, c.support))
+    // Native extension: every b-bit n for b in (24, 36] has tau <= 4000.
+    let native_bits: int = 36
+    let horizon: int = 4000
+    let mut states: int = 0
+    let mut survivors: int = 0
+    for b in range(bits + 1, native_bits + 1) {
+        let receipt: any = json_parse(read_file(format("projects/dogfood/collatz-descent/out/survival-b{}-d1.json", b))) |> unwrap
+        let row: any = receipt["marks"][0]
+        assert(row["mark"] == horizon, "survival receipt has the wrong horizon")
+        let trapped: int = receipt["states"]
+        let alive: int = row["observed"]
+        states = states + trapped
+        survivors = survivors + alive
+        print(format("  b={}: trapped classes {}, alive at step {}: {}", b, trapped, horizon, alive))
+    }
+    let wide: Descent = certify_descent(l, walk(l, 1 << 40), native_bits)
+    settle { Extend(cst_extended, d, wide, horizon, states, survivors, c.status) }
+    let e: Claim = require(cst_extended, Claim)
+    print(format("cst_extended: {} -- {}", e.status, e.support))
+    print(why(cst_extended, Claim))
+}

@@ -1,0 +1,90 @@
+// Shadow barriers from verified convergence.
+//
+// Every n < N = 2^71 reaches 1 (Barina). A cycle element x therefore has no
+// preimage below N: a preimage y < N would carry y's orbit, which reaches 1,
+// through x. Preimages of x are 2x (always) and (2x - 1)/3 (when x = 2 mod 3).
+// Along a backward path with c odd and e even preimage steps, y <= x (2/3)^c 2^e,
+// because (2x - 1)/3 < 2x/3. So y >= N forces
+//   x >= N (3/2)^c 2^-e,   i.e.  log2(x/N) >= c log2(3/2) - e.
+// Whether a path is valid depends only on x mod 3^c. For a residue r mod 3^k the
+// barrier b_k(r) is the largest c log2(3/2) - e over paths it decides (c <= k).
+
+pub pure fn log2_3_2() -> float { return 0.5849625007211562 }
+
+// Largest path value reachable from residue r mod 3^m, starting from `value`.
+pub pure fn best_path(r: int, m: int, modulus: int, value: float, best_in: float) -> float {
+    let mut best: float = max(best_in, value)
+    // Even steps cost 1 and odd steps gain log2(3/2), so the remaining gain is at most m log2(3/2).
+    if value + float(m) * log2_3_2() <= best + 1e-12 { return best }
+    if m == 0 { return best }
+    if r % 3 == 2 {
+        // odd preimage (2x - 1)/3: its residue is known mod 3^(m-1)
+        let next_mod: int = int_div(modulus, 3)
+        let y: int = int_div(2 * r - 1, 3) % next_mod
+        best = best_path(y, m - 1, next_mod, value + log2_3_2(), best)
+    }
+    // even preimage 2x: residue 2r mod 3^m
+    best = best_path((2 * r) % modulus, m, modulus, value - 1.0, best)
+    return best
+}
+
+// b_k(r) for every r mod 3^k (index r; r = 0 mod 3 is unreachable in a cycle).
+pub pure fn barriers(k: int) -> list<float> {
+    let mut modulus: int = 1
+    for _ in range(k) { modulus = modulus * 3 }
+    let mut out: list<float> = []
+    for r in range(modulus) {
+        out = push(out, if r % 3 == 0 { 0.0 } else { best_path(r, k, modulus, 0.0, 0.0) })
+    }
+    return out
+}
+
+// Fixed-point barriers for shadow_walk: floor(2^30 b) - 1 never overstates one.
+pub pure fn barriers_fp(k: int) -> list<int> {
+    let mut out: list<int> = []
+    for x in barriers(k) { out = push(out, int(floor(x * 1073741824.0)) - 1) }
+    return out
+}
+
+// The same search over real integers instead of residues.
+pub pure fn real_best(x: int, m: int, value: float, best_in: float) -> float {
+    let mut best: float = max(best_in, value)
+    if value + float(m) * log2_3_2() <= best + 1e-12 { return best }
+    if m == 0 { return best }
+    if x % 3 == 2 { best = real_best(int_div(2 * x - 1, 3), m - 1, value + log2_3_2(), best) }
+    return real_best(2 * x, m, value - 1.0, best)
+}
+
+// A barrier must never claim more than the real backward paths of x give.
+pub pure fn check_against_integers(k: int, b: list<int>, limit: int) -> int {
+    let mut checked: int = 0
+    for x in range(1, limit) {
+        if x % 3 == 0 { continue }
+        let claim: float = float(b[x % len(b)]) / 1073741824.0
+        assert(claim <= real_best(x, k, 0.0, 0.0) + 1e-9, format("barrier overstated at x = {}, k = {}", x, k))
+        checked = checked + 1
+    }
+    return checked
+}
+
+fn main() -> nil {
+    for k in range(1, 10) {
+        let b: list<float> = barriers(k)
+        let fixed: list<int> = barriers_fp(k)
+        write_file(format("projects/dogfood/collatz-shadow-cycle/out/barriers-k{}.json", k), json_stringify(fixed))
+        let audited: int = if k <= 6 { check_against_integers(k, fixed, 3000) } else { 0 }
+        let mut units: int = 0
+        let mut positive: int = 0
+        let mut total: float = 0.0
+        let mut top: float = 0.0
+        for r in range(len(b)) {
+            if r % 3 == 0 { continue }
+            units = units + 1
+            if b[r] > 1e-9 { positive = positive + 1 }
+            total = total + b[r]
+            top = max(top, b[r])
+        }
+        print(format("k={}: units {}, barred {} ({}%), mean barrier {} bits, max {} bits, {} integers audited",
+            k, units, positive, int_div(positive * 100, units), total / float(units), top, audited))
+    }
+}

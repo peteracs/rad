@@ -1,0 +1,110 @@
+use "blocks.rad"
+
+// One fork per floor N = 2^k. Each fork lists the resonant block lengths up
+// to cumulative odd count X, the admissible first blocks with their
+// confinement bounds, and the feasible block sequences up to X_seq.
+resource Floor { bits: int = 71 }
+
+struct FirstBlock {
+    q: int = 0
+    tau: int = 0
+    mean_floor_milli: int = 0
+    far_fraction_ceil_milli: list<int> = []
+}
+
+struct Structure {
+    floor_bits: int = 0
+    resonant_lengths: int = 0
+    first_blocks: list<FirstBlock> = []
+    unlocks: list<str> = []
+}
+
+component StructureEvidence { result: Structure = Structure {} }
+entity structure_slot { StructureEvidence {} }
+
+// Fraction of odd steps at depth D_i > D in a failing first block:
+// phi (1/2 - 2^-D) <= F_q(0)/q - mean, with F_q(0)/q <= 3 (s* q + beta*)/q.
+pub pure fn far_fraction_ceil_milli(q: int, mean_milli: int, depth: int) -> int {
+    let ceiling_milli: int = int_div(3 * budget_milli(q, 1) + q - 1, q)
+    let slack: int = ceiling_milli - mean_milli
+    // divide by (1/2 - 2^-D) = (2^(D-1) - 1) / 2^D
+    let num: int = slack * (1 << depth)
+    let den: int = (1 << (depth - 1)) - 1
+    return min(1000, int_div(num + den - 1, den))
+}
+
+// A block of length q needs 1000 N g(q) < budget(Q_k, k + 1), and Q_k >= q.
+// So it can occur only once the cumulative odd count reaches unlock(q), the
+// least Q with 1000 N g(q) < budget(Q, 1) (beta* per block only helps later).
+pub pure fn unlock(m: Member) -> int {
+    let mut lo: int = 0
+    let mut hi: int = 1 << 42
+    while hi - lo > 1 {
+        let middle: int = lo + int_div(hi - lo, 2)
+        if m.g_milli_units < budget_milli(middle, 1) { hi = middle } else { lo = middle }
+    }
+    return max(hi, m.q)
+}
+
+system Survey(evidence: mut StructureEvidence, level: Floor) {
+    let l: Logs = logs()
+    let w: Walk = walk(l, 1 << 46)
+    let b: Blocks = enumerate_blocks(l, w, level.bits, 1000000000000)
+    let mut firsts: list<FirstBlock> = []
+    for m in b.members {
+        if m.g_milli_units < budget_milli(m.q, 1) {
+            let mut far: list<int> = []
+            for depth in [2, 4, 8, 16] { far = push(far, far_fraction_ceil_milli(m.q, m.mean_floor_milli, depth)) }
+            firsts = push(firsts, FirstBlock { q: m.q, tau: m.tau, mean_floor_milli: m.mean_floor_milli, far_fraction_ceil_milli: far })
+        }
+    }
+    // distinct lengths below 2 * 10^11 with the cumulative count that unlocks them
+    let mut unlocks: list<str> = []
+    for m in b.members {
+        if m.q <= 200000000000 { unlocks = push(unlocks, format("{}@{}", m.q, unlock(m))) }
+    }
+    evidence = StructureEvidence { result: Structure { floor_bits: level.bits, resonant_lengths: len(b.members),
+        first_blocks: firsts, unlocks: unlocks } }
+}
+
+component Claim { status: str = "open", support: str = "" }
+entity block_structure { Claim {} }
+
+intent Finding {
+    key target: entity
+    floor_bits: int
+    summary: str
+}
+
+law Report(target: entity, s: Structure) {
+    let first_q: int = if len(s.first_blocks) > 0 { s.first_blocks[0].q } else { -1 }
+    propose Finding { target: target, floor_bits: s.floor_bits,
+        summary: format("N=2^{}: {} resonant lengths <= 10^12, {} admissible first blocks (smallest {})",
+            s.floor_bits, s.resonant_lengths, len(s.first_blocks), first_q) }
+}
+
+resolver Collect for Finding(target, proposals) {
+    let mut rows: list<str> = []
+    for p in proposals { rows = push(rows, p.summary) }
+    next(target, Claim { status: "proved", support: join(rows, " | ") })
+}
+
+fn main() -> nil {
+    let base: world_fork = fork()
+    let mut jobs: list<world_fork> = []
+    for k in [71, 72, 73] { jobs = push(jobs, fork_with(base, Floor { bits: k })) }
+    let done: list<world_fork> = simulate_many(jobs, [system::Survey], 1, 3)
+    let mut found: list<Structure> = []
+    for i in range(len(done)) {
+        assert_only_changed(jobs[i], done[i], [StructureEvidence])
+        found = push(found, (peek(done[i], structure_slot, StructureEvidence) |> unwrap).result)
+    }
+    assert(found[0].first_blocks[0].q == 72057431991, "first admissible block at 2^71 moved")
+    settle { for s in found { Report(block_structure, s) } }
+    for s in found {
+        print(format("floor 2^{}: first blocks (q, tau, mean >= x/1000, far fraction <= x/1000 at D = 2,4,8,16)", s.floor_bits))
+        for f in s.first_blocks { print(format("  {} {} {} {}", f.q, f.tau, f.mean_floor_milli, f.far_fraction_ceil_milli)) }
+        print(format("  lengths <= 2e11 as q@unlock: {}", join(s.unlocks, " ")))
+    }
+    print(why(block_structure, Claim))
+}

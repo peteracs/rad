@@ -1,0 +1,101 @@
+use "blocks.rad"
+
+// Cycle-length exclusion by block decomposition.
+//
+// Hercher-type bound: a nontrivial cycle with Q odd steps, all elements > N,
+// has g(Q) < Q / (3N), where g = (j - Q alpha) ln 2 and j = ceil(Q alpha).
+// Block theorem: from its least element the cycle is a chain of
+// first-contraction blocks q_0, ..., q_m with sum Q, each passing
+// N g(q_k) < s* Q_k + beta* (k + 1), where Q_k = q_0 + ... + q_k. And g is
+// additive: j = sum ceil(q_k alpha) because sum d(q_k) = j - Q alpha < 1.
+// So a Hercher-admissible Q that no chain of certified block lengths reaches is
+// impossible as a cycle's odd count. All tests use lower bounds on g, so the
+// searched set is a superset and every exclusion is sound.
+
+pub struct LengthCensus {
+    horizon: int = 0
+    admissible: int = 0
+    excluded: int = 0
+    first_admissible: list<int> = []
+    first_excluded: list<int> = []
+    reachable_states: int = 0
+}
+
+// Tolerance X / (3 * 2^k), scaled by 2^192 (upper end of an interval).
+pub pure fn hercher_tolerance(horizon: int, floor_bits: int) -> Interval {
+    let lo: Natural = ndiv_small(nmul(nat(horizon), npow2(192 - floor_bits)), 3)
+    return Interval { lo: lo, hi: nadd(lo, nat(1)) }
+}
+
+// Every q <= X that could satisfy g(q) < q/(3N): members of the X-tolerance
+// strip, filtered by the q-dependent bound (superset: lower bound on g).
+pub pure fn hercher_lengths(l: Logs, w: Walk, floor_bits: int, horizon: int) -> list<int> {
+    let tol: Interval = hercher_tolerance(horizon, floor_bits)
+    let mut p: int = 0
+    let mut q: int = 0
+    for r in w.records {
+        if sure_less(up_gap(l, r.p, r.q), tol) { p = r.p q = r.q break }
+    }
+    assert(q > 0, "walk too short for the tolerance")
+    let mut out: list<int> = []
+    while q <= horizon {
+        let g: Interval = up_gap(l, p, q)
+        // g < q / (3N)  <=>  3 * 2^k * G < q * 2^192 (possible under the lower bound)
+        if ncmp(nscale(nmul(g.lo, npow2(floor_bits)), 3), nmul(nat(q), npow2(192))) < 0 { out = push(out, q) }
+        let nxt: list<int> = next_member(l, w, p, q, tol)
+        p = nxt[0]
+        q = nxt[1]
+    }
+    return out
+}
+
+pub pure fn census(l: Logs, w: Walk, floor_bits: int, horizon: int) -> LengthCensus {
+    let b: Blocks = enumerate_blocks(l, w, floor_bits, horizon)
+    let total_cap: int = int_div(horizon * 1000, 3) + 1000   // 1000 N g(prefix) < 1000 X / 3
+    // Reachable cumulative odd counts -> the smallest known 1000 N * (sum of
+    // lower bounds on g). Keeping the minimum keeps the search a superset: a
+    // larger sum reached first must not prune a state a smaller one can reach.
+    let mut reach: map<int, int> = {}
+    let mut frontier: list<int> = [0]
+    reach = set_at(reach, 0, 0)
+    while len(frontier) > 0 {
+        let mut next_frontier: list<int> = []
+        for s in frontier {
+            let gs: int = reach[s]
+            for m in b.members {
+                let t: int = s + m.q
+                if t > horizon { break }
+                let gt: int = gs + m.g_milli_units
+                if gt >= total_cap { continue }
+                if m.g_milli_units >= budget_milli(t, 1 + int_div(t, 1000000000)) { continue }
+                if not contains(reach, t) or gt < reach[t] {
+                    reach = set_at(reach, t, gt)
+                    next_frontier = push(next_frontier, t)
+                }
+            }
+        }
+        frontier = next_frontier
+    }
+    let hs: list<int> = hercher_lengths(l, w, floor_bits, horizon)
+    let mut excluded: int = 0
+    let mut first_ok: list<int> = []
+    let mut first_bad: list<int> = []
+    for q in hs {
+        if contains(reach, q) {
+            if len(first_ok) < 8 { first_ok = push(first_ok, q) }
+        } else {
+            excluded = excluded + 1
+            if len(first_bad) < 8 { first_bad = push(first_bad, q) }
+        }
+    }
+    return LengthCensus { horizon: horizon, admissible: len(hs), excluded: excluded,
+        first_admissible: first_ok, first_excluded: first_bad, reachable_states: len(keys(reach)) }
+}
+
+fn main() -> nil {
+    let l: Logs = logs()
+    let w: Walk = walk(l, 1 << 46)
+    let c: LengthCensus = census(l, w, 71, 1000000000000)
+    print(json_stringify(c))
+    assert(c.first_admissible[0] == 72057431991, "smallest admissible cycle odd count moved")
+}

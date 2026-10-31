@@ -1,0 +1,135 @@
+use "descent.rad"
+
+// Arithmetic randomness of first-contraction offsets.
+//
+// A single-block cycle of length q needs D_q = 2^ceil(q alpha) - 3^q to divide
+// C(w). Heuristics treat C(w) mod D as uniform. Here, for small primes p, an
+// exact dynamic program over all first-contraction words computes the full
+// distribution of C(w) mod p (C <- 3C + 2^i at an odd step i). Floats carry
+// only the relative weights, so this is a measurement, not a certificate.
+// It reports:
+//   * the total-variation distance to uniform after q odd steps, and its decay;
+//   * the weight on residue 0 at the lengths q with p | D_q, relative to 1/p.
+resource Prime { p: int = 5 }
+
+pub struct Uniformity {
+    p: int = 0
+    lengths: int = 0
+    divisible_lengths: int = 0
+    tv_at: list<str> = []
+    zero_bias_worst_ppm: int = 0
+    zero_bias_at_q: int = 0
+    decay_per_odd_step_milli: int = 0
+}
+
+component UniformityEvidence { result: Uniformity = Uniformity {} }
+entity uniformity_slot { UniformityEvidence {} }
+
+// tau_of[q] = ceil(q alpha) for q < limit, exact.
+resource TauTable { tau_of: list<int> = [] }
+
+// Natural logarithm for positive floats: scale into [1, 2), then 2 atanh((m-1)/(m+1)).
+pub pure fn ln(x: float) -> float {
+    assert(x > 0.0, "ln of non-positive value")
+    let mut m: float = x
+    let mut e: int = 0
+    while m >= 2.0 { m = m / 2.0 e = e + 1 }
+    while m < 1.0 { m = m * 2.0 e = e - 1 }
+    let y: float = (m - 1.0) / (m + 1.0)
+    let mut term: float = y
+    let mut total: float = 0.0
+    for k in range(40) { total = total + term / float(2 * k + 1) term = term * y * y }
+    return 2.0 * total + float(e) * 0.6931471805599453
+}
+
+pub pure fn distribution(p: int, tau_of: list<int>, qmax: int) -> Uniformity {
+    // weights[q * p + r]: non-contracting prefixes with q odd steps and C = r mod p
+    let width: int = (qmax + 1) * p
+    let mut weights: list<float> = []
+    for _ in range(width) { weights = push(weights, 0.0) }
+    weights = set_at(weights, 0, 1.0)
+    let mut pow2: int = 1 % p
+    let mut tvs: list<str> = []
+    let mut lengths: int = 0
+    let mut divisible: int = 0
+    let mut worst: float = 0.0
+    let mut worst_q: int = 0
+    let mut tv_first: float = -1.0
+    let mut tv_last: float = -1.0
+    let mut q_first: int = 0
+    let mut q_last: int = 0
+    let horizon: int = tau_of[qmax]
+    for t in range(horizon) {
+        let mut nxt: list<float> = []
+        for _ in range(width) { nxt = push(nxt, 0.0) }
+        for q in range(qmax + 1) {
+            for r in range(p) {
+                let v: float = weights[q * p + r]
+                if v == 0.0 { continue }
+                // even step: C unchanged
+                nxt = set_at(nxt, q * p + r, nxt[q * p + r] + v)
+                // odd step: C <- 3C + 2^t
+                if q < qmax {
+                    let r2: int = (3 * r + pow2) % p
+                    nxt = set_at(nxt, (q + 1) * p + r2, nxt[(q + 1) * p + r2] + v)
+                }
+            }
+        }
+        pow2 = (pow2 * 2) % p
+        // step t + 1 is done: states with t + 1 >= tau_of[q] have contracted; harvest them.
+        for q in range(qmax + 1) {
+            if t + 1 == tau_of[q] {
+                let mut total: float = 0.0
+                for r in range(p) { total = total + nxt[q * p + r] }
+                if total > 0.0 {
+                    lengths = lengths + 1
+                    let mut tv: float = 0.0
+                    for r in range(p) { tv = tv + abs(nxt[q * p + r] / total - 1.0 / float(p)) }
+                    tv = tv / 2.0
+                    if q % 25 == 0 { tvs = push(tvs, format("q{}:{}", q, tv)) }
+                    if tv > 1e-13 {
+                        if tv_first < 0.0 { tv_first = tv q_first = q }
+                        tv_last = tv
+                        q_last = q
+                    }
+                    // p | D_q ?
+                    let mut two: int = 1
+                    for _ in range(tau_of[q]) { two = (two * 2) % p }
+                    let mut three: int = 1
+                    for _ in range(q) { three = (three * 3) % p }
+                    if two == three {
+                        divisible = divisible + 1
+                        let bias: float = nxt[q * p] / total * float(p) - 1.0
+                        if abs(bias) > abs(worst) and tv > 1e-13 { worst = bias worst_q = q }
+                    }
+                }
+                for r in range(p) { nxt = set_at(nxt, q * p + r, 0.0) }
+            }
+        }
+        weights = nxt
+    }
+    let decay: float = if q_last > q_first and tv_first > 0.0 { ln(tv_last / tv_first) / float(q_last - q_first) } else { 0.0 }
+    return Uniformity { p: p, lengths: lengths, divisible_lengths: divisible, tv_at: tvs,
+        zero_bias_worst_ppm: int(worst * 1000000.0), zero_bias_at_q: worst_q,
+        decay_per_odd_step_milli: int(decay * 1000.0) }
+}
+
+system Measure(evidence: mut UniformityEvidence, prime: Prime, table: TauTable) {
+    evidence = UniformityEvidence { result: distribution(prime.p, table.tau_of, 150) }
+}
+
+fn main() -> nil {
+    let l: Logs = logs()
+    let mut tau_of: list<int> = [1]
+    for q in range(1, 200) { tau_of = push(tau_of, ceil_alpha(l, q)) }
+    set_resource(TauTable, TauTable { tau_of: tau_of })
+    let base: world_fork = fork()
+    let primes: list<int> = [5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43]
+    let mut jobs: list<world_fork> = []
+    for p in primes { jobs = push(jobs, fork_with(base, Prime { p: p })) }
+    let done: list<world_fork> = simulate_many(jobs, [system::Measure], 1, 8)
+    for i in range(len(done)) {
+        assert_only_changed(jobs[i], done[i], [UniformityEvidence])
+        print(json_stringify((peek(done[i], uniformity_slot, UniformityEvidence) |> unwrap).result))
+    }
+}

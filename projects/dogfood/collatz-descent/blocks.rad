@@ -1,0 +1,101 @@
+use "descent.rad"
+
+// Resonant block structure of a minimal counterexample.
+//
+// Drift lemma. For every n with finite tau and q odd steps,
+//   T^tau(n) = 2^(-d(q)) (n + C/3^q) < n + C/3^q <= n + s* q + beta*.
+// Let n0 >= N be the least element of a cycle or of a divergent orbit whose
+// coefficient stopping times stay finite. Cut the orbit into first-contraction
+// blocks n0 -> n1 -> n2 ... with q_k odd steps. Then n_k >= n0 and
+// n_(k+1) < n_k + c_k, where c_k = C_k/3^(q_k) <= s* q_k + beta*. From
+// n0 <= n_(k+1) = 2^(-d_k)(n_k + c_k) we get 2^(d_k) <= (n0 + sum_(i<=k) c_i)/n0,
+// and hence
+//   d(q_k) ln 2 < (s* Q_k + beta* (k+1)) / N,     Q_k = q_0 + ... + q_k.
+// So until the cumulative odd count reaches X, every block length lies in
+//   R(X) = { q : g(q) < (s* X + beta* m) / N },   g = d ln 2,
+// where m <= 1 + X / 10^9 blocks, because the certified member test forces
+// q >= 10^9 for every member.
+
+pub struct Interval { lo: Natural = Natural {}, hi: Natural = Natural {} }
+pub struct Member { q: int = 0, tau: int = 0, g_milli_units: int = 0, mean_floor_milli: int = 0 }
+pub struct Blocks { floor_bits: int = 0, horizon: int = 0, members: list<Member> = [], smallest: int = 0 }
+
+// g for an upper fraction p/q > alpha: p ln2 - q ln3, scaled by 2^192.
+pub pure fn up_gap(l: Logs, p: int, q: int) -> Interval {
+    return Interval { lo: nsub(nmul(nat(p), l.ln2.lower), nmul(nat(q), l.ln3.upper)),
+        hi: nsub(nmul(nat(p), l.ln2.upper), nmul(nat(q), l.ln3.lower)) }
+}
+
+// g for a lower fraction p/q < alpha: q ln3 - p ln2, scaled by 2^192.
+pub pure fn low_gap(l: Logs, p: int, q: int) -> Interval {
+    return Interval { lo: nsub(nmul(nat(q), l.ln3.lower), nmul(nat(p), l.ln2.upper)),
+        hi: nsub(nmul(nat(q), l.ln3.upper), nmul(nat(p), l.ln2.lower)) }
+}
+
+pub pure fn iadd(a: Interval, b: Interval) -> Interval { return Interval { lo: nadd(a.lo, b.lo), hi: nadd(a.hi, b.hi) } }
+
+// True if a < b surely, false if a >= b surely; an undecided comparison aborts.
+pub pure fn sure_less(a: Interval, b: Interval) -> bool {
+    if ncmp(a.hi, b.lo) < 0 { return true }
+    assert(ncmp(a.lo, b.hi) >= 0, "interval comparison undecided")
+    return false
+}
+
+// Tolerance (s* X + beta* (1 + ceil(X / 10^9))) / 2^k, scaled by 2^192.
+pub pure fn tolerance(horizon: int, floor_bits: int) -> Interval {
+    let blocks: int = 1 + int_div(horizon + 999999999, 1000000000)
+    let num: Natural = nadd(nscale(nscale(nat(horizon), slope_numerator()), 10000), nscale(nat(6882 * slope_denominator()), blocks))
+    let scaled: Natural = nmul(num, npow2(192 - floor_bits))
+    let lo: Natural = ndiv_small(scaled, 10000 * slope_denominator())
+    return Interval { lo: lo, hi: nadd(lo, nat(1)) }
+}
+
+// Smallest k >= 1 that moves q to the next member: either k is an upper record
+// with u(k) + g(q) < tol, or a lower record with l(k) < g(q) (then d drops).
+pub pure fn next_member(l: Logs, w: Walk, p: int, q: int, tol: Interval) -> list<int> {
+    let here: Interval = up_gap(l, p, q)
+    let mut best_k: int = -1
+    let mut best_p: int = 0
+    for r in w.records {
+        if sure_less(iadd(up_gap(l, r.p, r.q), here), tol) { best_k = r.q best_p = r.p break }
+    }
+    for r in w.lows {
+        if best_k > 0 and r.q >= best_k { break }
+        if sure_less(low_gap(l, r.p, r.q), here) { best_k = r.q best_p = r.p break }
+    }
+    assert(best_k > 0, "walk too short for next member")
+    return [p + best_p, q + best_k]
+}
+
+pub pure fn enumerate_blocks(l: Logs, w: Walk, floor_bits: int, horizon: int) -> Blocks {
+    let tol: Interval = tolerance(horizon, floor_bits)
+    // the first member is the first upper record below the tolerance
+    let mut p: int = 0
+    let mut q: int = 0
+    for r in w.records {
+        if sure_less(up_gap(l, r.p, r.q), tol) { p = r.p q = r.q break }
+    }
+    assert(q >= 1000000000, "block count bound assumes members >= 10^9")
+    let mut members: list<Member> = []
+    while q <= horizon {
+        let g: Interval = up_gap(l, p, q)
+        assert(sure_less(g, tol), "listed block length is not surely resonant")
+        // Failure of the block at n0 >= N needs mean 2^(-D_i) >= 3 N g / q.
+        let mean: Natural = nshift_down(nscale(g.lo, 3000), 192 - floor_bits)
+        members = push(members, Member { q: q, tau: p,
+            g_milli_units: nint(nshift_down(nscale(g.lo, 1000), 192 - floor_bits)),
+            mean_floor_milli: int_div(nint(mean), q) })
+        let nxt: list<int> = next_member(l, w, p, q, tol)
+        p = nxt[0]
+        q = nxt[1]
+    }
+    return Blocks { floor_bits: floor_bits, horizon: horizon, members: members, smallest: members[0].q }
+}
+
+// ceil(1000 (s* Q + beta* m)) in exact integers.
+pub pure fn budget_milli(total: int, blocks: int) -> int {
+    let a: int = slope_numerator() * total
+    let whole: int = int_div(a, slope_denominator()) * 1000
+    let part: int = int_div((a % slope_denominator()) * 1000 + slope_denominator() - 1, slope_denominator())
+    return whole + part + int_div(6882 * blocks + 9, 10)
+}

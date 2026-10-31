@@ -1,0 +1,138 @@
+use "descent.rad"
+
+// One forked world per verification floor N = 2^k. Each fork certifies, in
+// exact arithmetic, the largest q such that every n >= N whose first
+// contraction has at most q odd steps descends at its coefficient stopping time.
+resource Floor { bits: int = 71 }
+
+component DescentEvidence { result: Descent = Descent {} }
+
+entity evidence_slot { DescentEvidence {} }
+
+system Certify(evidence: mut DescentEvidence, level: Floor) {
+    let l: Logs = logs()
+    evidence = DescentEvidence { result: certify_descent(l, walk(l, 1 << 60), level.bits) }
+}
+
+component Claim { status: str = "open", support: str = "" }
+component Frontier { floors: int = 0, weakest_exponent_milli: int = 0, table: list<str> = [] }
+
+entity descent_explicit { Claim {} }
+entity cycle_by_envelope { Claim {} }
+entity frontier { Frontier {} }
+
+intent SafeRange {
+    key target: entity
+    floor_bits: int
+    safe_odd_steps: int
+    safe_tau: int
+    stop: str
+}
+
+intent Obstruction {
+    key target: entity
+    evidence: str
+}
+
+law Submit(target: entity, d: Descent) {
+    propose SafeRange { target: target, floor_bits: d.floor_bits, safe_odd_steps: d.safe_odd_steps,
+        safe_tau: d.safe_tau, stop: format("{}/{}", d.stop_p, d.stop_q) }
+}
+
+intent Proof {
+    key target: entity
+    evidence: str
+}
+
+law Establish(target: entity, evidence: str) {
+    propose Proof { target: target, evidence: evidence }
+}
+
+resolver Prove for Proof(target, proposals) {
+    let mut ev: list<str> = []
+    for p in proposals { ev = push(ev, p.evidence) }
+    next(target, Claim { status: "proved", support: join(ev, " | ") })
+}
+
+law Obstruct(target: entity, evidence: str) {
+    propose Obstruction { target: target, evidence: evidence }
+}
+
+pub pure fn log2_milli(x: int) -> int {
+    // floor(1000 log2 x) by repeated squaring of the mantissa, exact in ints.
+    let mut bits: int = 0
+    let mut v: int = x
+    while v >= 2 { v = int_div(v, 2) bits = bits + 1 }
+    let mut mantissa: int = int_div(x, 1 << max(bits - 30, 0)) << max(30 - bits, 0)
+    let mut frac: int = 0
+    for _ in range(10) {
+        mantissa = int_div(mantissa * mantissa, 1 << 30)
+        frac = frac * 2
+        if mantissa >= 1 << 31 { mantissa = int_div(mantissa, 2) frac = frac + 1 }
+    }
+    return bits * 1000 + int_div(frac * 1000, 1024)
+}
+
+resolver Tabulate for SafeRange(target, proposals) {
+    let mut rows: list<str> = []
+    let mut weakest: int = 1000000
+    for p in proposals {
+        let e: int = int_div(log2_milli(p.safe_odd_steps) * 1000, p.floor_bits * 1000)
+        if e < weakest { weakest = e }
+        rows = push(rows, format("N=2^{}: q <= {} (tau <= {}), first danger {}", p.floor_bits, p.safe_odd_steps, p.safe_tau, p.stop))
+    }
+    next(target, Frontier { floors: len(proposals), weakest_exponent_milli: weakest, table: rows })
+}
+
+resolver Close for Obstruction(target, proposals) {
+    let mut ev: list<str> = []
+    for p in proposals { ev = push(ev, p.evidence) }
+    next(target, Claim { status: "refuted", support: join(ev, " | ") })
+}
+
+// The certified range must reach the cycle bound of result 9 at N = 2^71 and
+// grow with the floor; a regression in either is a broken certificate.
+constraint GrowsWithFloor for Frontier(subject, proposed) {
+    require proposed.floors >= 2 else "descent.too_few_floors"
+    require proposed.weakest_exponent_milli >= 490 else "descent.exponent_below_half"
+}
+
+fn main() -> nil {
+    let checked: int = beta_bound(7489)
+    let base: world_fork = fork()
+    let floors: list<int> = [71, 72, 76, 80, 90, 100, 110]
+    let mut jobs: list<world_fork> = []
+    for k in floors { jobs = push(jobs, fork_with(base, Floor { bits: k })) }
+    let done: list<world_fork> = simulate_many(jobs, [system::Certify], 1, 4)
+    let mut results: list<Descent> = []
+    for i in range(len(done)) {
+        assert_only_changed(jobs[i], done[i], [DescentEvidence])
+        results = push(results, (peek(done[i], evidence_slot, DescentEvidence) |> unwrap).result)
+    }
+    let at71: Descent = results[0]
+    assert(at71.floor_bits == 71 and at71.safe_odd_steps == 72057431990, "floor 2^71 range changed")
+    let l: Logs = logs()
+    let hopeless: bool = danger_at_limit_slope(l, at71.stop_p, at71.stop_q, 71)
+    settle {
+        for d in results { Submit(frontier, d) }
+        if hopeless {
+            Obstruct(cycle_by_envelope, format("at N = 2^71 the record {}/{} satisfies 6 ln2 N g < q: dangerous even at the limit slope 1/(6 ln 2)", at71.stop_p, at71.stop_q))
+        }
+    }
+    let f: Frontier = require(frontier, Frontier)
+    settle {
+        // Leaf status is derived only from certificates that just settled.
+        if f.floors == len(floors) {
+            Establish(descent_explicit, format("beta* <= 0.6882 exact for q <= {}; {} floors certified; log2 q*/log2 N >= 0.{}", checked, f.floors, f.weakest_exponent_milli))
+        }
+    }
+    for row in f.table { print(row) }
+    for name in ["descent_explicit", "cycle_by_envelope"] {
+        let e: entity = if name == "descent_explicit" { descent_explicit } else { cycle_by_envelope }
+        let c: Claim = require(e, Claim)
+        print(format("{}: {} -- {}", name, c.status, c.support))
+    }
+    print(why(frontier, Frontier))
+    print(why(descent_explicit, Claim))
+    print(why(cycle_by_envelope, Claim))
+}

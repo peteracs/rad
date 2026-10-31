@@ -1,0 +1,38 @@
+use "descent.rad"
+
+// Soundness audit by direct iteration. For small floors N = 2^k, every
+// n in [N, 2^18) whose first contraction has q <= safe(k) odd steps must
+// satisfy T^tau(n) < n. Integers trap on overflow, so no value can wrap.
+struct Audit { floor_bits: int = 0, safe_odd_steps: int = 0, checked: int = 0, covered: int = 0, failures_beyond: int = 0 }
+
+pub pure fn first_contraction(n: int, tau_of: list<int>) -> list<int> {
+    // returns [tau, q, T^tau(n)]; 2^t > 3^q iff t >= ceil(q log2 3) = tau_of[q].
+    let mut x: int = n
+    let mut t: int = 0
+    let mut q: int = 0
+    while t < tau_of[q] {
+        if x % 2 == 0 { x = int_div(x, 2) } else { x = int_div(3 * x + 1, 2) q = q + 1 }
+        t = t + 1
+    }
+    return [t, q, x]
+}
+
+fn main() -> nil {
+    let l: Logs = logs()
+    let w: Walk = walk(l, 1 << 40)
+    let mut tau_of: list<int> = [1]
+    for q in range(1, 2000) { tau_of = push(tau_of, ceil_alpha(l, q)) }
+    for k in range(3, 16) {
+        let d: Descent = certify_descent(l, w, k)
+        let mut a: Audit = Audit { floor_bits: k, safe_odd_steps: d.safe_odd_steps }
+        for n in range(1 << k, 1 << 18) {
+            let r: list<int> = first_contraction(n, tau_of)
+            a.checked = a.checked + 1
+            if r[1] <= d.safe_odd_steps {
+                a.covered = a.covered + 1
+                assert(r[2] < n, format("descent certificate violated at n = {}", n))
+            } else if r[2] >= n { a.failures_beyond = a.failures_beyond + 1 }
+        }
+        print(json_stringify(a))
+    }
+}
