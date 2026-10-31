@@ -161,7 +161,7 @@
     #[test]
     fn affine_trapped_survival_matches_the_independent_vm_computation() {
         // Values cross-checked against the pure-RAD implementation in
-        // projects/dogfood/collatz-repulsion (exact_null.rad), L = 16, 3x+1.
+        // Exact-null workload from a project-owned dogfood, L = 16, 3x+1.
         let output = run_source(
             r#"
             let raw: list<int> = affine_trapped_survival(16, 1, [32, 48, 64, 80, 96])
