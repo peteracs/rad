@@ -274,6 +274,7 @@ impl VM {
         if args.len() != 1 {
             return Err("load_world() requires 1 argument (the save_world() JSON)".into());
         }
+        self.model_trace_write("*");
         let text = args[0]
             .as_str()
             .ok_or_else(|| format!("load_world() expects str, got {}", args[0].type_name()))?

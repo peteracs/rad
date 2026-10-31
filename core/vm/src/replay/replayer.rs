@@ -194,6 +194,7 @@ impl TraceReplayer {
             last_served: HashMap::new(),
             reused: 0,
             virtualized: 0,
+            recomputed: 0,
         };
         self
     }
@@ -262,6 +263,35 @@ impl TraceReplayer {
         self.end_world_digest.as_deref()
     }
 
+    /// Serve a nested-simulation boundary. Its digest covers the simulation's
+    /// inputs, so a retroactive edit that changes the world or the systems
+    /// asks a question the recording never answered. That is not a hole: a
+    /// simulation consumes nothing from the outside world except native calls,
+    /// so `None` tells the caller to recompute it with empty native lanes. A
+    /// native call inside the recomputation still halts on the empty lane.
+    pub(crate) fn next_nested_boundary(
+        &mut self,
+        builtin: &str,
+        args_digest: &str,
+    ) -> Result<Option<IoRecord>, String> {
+        if let ReplayMode::Retro {
+            oracle,
+            last_served,
+            recomputed,
+            ..
+        } = &mut self.mode
+        {
+            let key = (builtin.to_string(), args_digest.to_string());
+            let answered =
+                oracle.get(&key).is_some_and(|queue| !queue.is_empty()) || last_served.contains_key(&key);
+            if !answered {
+                *recomputed += 1;
+                return Ok(None);
+            }
+        }
+        self.next_io(builtin, args_digest).map(Some)
+    }
+
     /// Serve the next io record. Strict mode halts loudly on any divergence
     /// between the recorded and replayed timelines; retro mode answers from
     /// the args-keyed oracle.
@@ -306,6 +336,7 @@ impl TraceReplayer {
                 last_served,
                 reused,
                 virtualized,
+                ..
             } => {
                 let key = (builtin.to_string(), args_digest.to_string());
                 if let Some(queue) = oracle.get_mut(&key) {
@@ -424,6 +455,10 @@ impl TraceReplayer {
             virtual_writes: match &self.mode {
                 ReplayMode::Strict => 0,
                 ReplayMode::Retro { virtualized, .. } => *virtualized,
+            },
+            recomputed_simulations: match &self.mode {
+                ReplayMode::Strict => 0,
+                ReplayMode::Retro { recomputed, .. } => *recomputed,
             },
         }
     }

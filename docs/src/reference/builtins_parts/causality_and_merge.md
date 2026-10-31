@@ -57,8 +57,14 @@ Oracle semantics, chosen deliberately:
   `clock()` freezes time at its last reading.
 - **Holes are loud** — io the recorded session *never* performed halts the retro pass:
   `retroactive replay hole at frame N: …` — replay cannot fabricate answers from a world
-  it never saw. (RNG needs no oracle: the seed travels in the header, so `rand_int`
-  replays for free even when the edit consumes it differently.)
+  it never saw. The run exits non-zero and reports the blast radius as unknown, because a
+  partial world says nothing about what the edit changes. (RNG needs no oracle: the seed
+  travels in the header, so `rand_int` replays for free even when the edit consumes it
+  differently.)
+- **Simulations are recomputed** — when an edit changes the inputs of `simulate`,
+  `simulate_many` or `simulate_par`, the simulation reruns against the edited world. It
+  reads nothing from outside, so this fabricates nothing. A native call inside a recomputed
+  simulation has no recorded answer and still halts.
 
 The deliverable is the **fix's blast radius** — a value-accurate diff of the two final
 worlds:

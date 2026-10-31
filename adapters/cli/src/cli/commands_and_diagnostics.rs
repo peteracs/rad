@@ -56,31 +56,21 @@ fn retroactive_replay(trace_text: &str, new_path: &str, force: bool) {
         }
         process::exit(1);
     }
-    let source_identity = loaded
-        .source_layout
-        .digest(&loaded.merged_source)
-        .expect("module loader produced an invalid source layout");
-    let compile_result = match rad_vm::pipeline::compile_unchecked_program(
-        &loaded.program,
-        loaded.aliases,
-        rad_vm::pipeline::UncheckedCompileOptions {
-            features: trace_features,
-            source_identity: Some(source_identity),
-            ..rad_vm::pipeline::UncheckedCompileOptions::default()
-        },
+    // The same checked compile as the baseline pass: unchecked code loses
+    // checker-derived semantics and would not be the program the edit claims.
+    let mut vm_b = match rad_vm::replay_compile::compile_trace_vm(
+        &loaded.merged_source,
+        new_path,
+        &trace_features,
+        &loaded.source_layout,
     ) {
-        Ok(c) => c,
+        Ok(vm) => vm,
         Err(e) => {
-            eprintln!(
-                "{}",
-                format_error(&loaded.merged_source, new_path, &e.message, e.line, e.col)
-            );
+            eprintln!("Error: {}", e);
             process::exit(1);
         }
     };
-    let mut vm_b = VM::new();
     vm_b.enable_replay(retro);
-    vm_b.load_compile_result(compile_result);
     let retro_err = vm_b.run(0).err();
     let world_b = vm_b.world_snapshot();
     let digest_b = vm_b.world_digest();
@@ -106,6 +96,18 @@ fn retroactive_replay(trace_text: &str, new_path: &str, force: bool) {
              replayed as no-ops (no real io was done)",
             report.virtual_writes
         );
+    }
+    if report.recomputed_simulations > 0 {
+        eprintln!(
+            "Recomputed simulations: {} nested simulation(s) whose inputs the edit changed",
+            report.recomputed_simulations
+        );
+    }
+    if retro_err.is_some() {
+        // The world below is wherever the edit stopped, so comparing it with
+        // the recorded end state cannot say what the edit changes.
+        eprintln!("The edit's blast radius is UNKNOWN: the edited run did not finish");
+        process::exit(1);
     }
     let diff = rad_vm::world::WorldSnapshot::diff_summary(&world_a, &world_b);
     if digest_a == digest_b {

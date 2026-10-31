@@ -218,11 +218,12 @@ impl VM {
             }
         };
         let name_opt = dynamic_name.as_deref();
-        if self.sandbox_caps.is_some() {
+        if self.access_checks_active() {
             for c in &comps {
                 self.sandbox_check_write(&c.type_name)?;
             }
         }
+        self.model_trace_write("$entities");
         self.transaction_check_write("$entities")?;
         self.transaction_check_write("$entity_identity")?;
         if name_opt.is_some() {

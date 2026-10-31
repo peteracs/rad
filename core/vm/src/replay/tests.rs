@@ -646,6 +646,62 @@ mod tests {
         assert_eq!(diff.get("Pos"), Some(&1usize), "diff: {:?}", diff);
     }
 
+    const NESTED_SIMULATION: &str = r#"
+resource S { n: int = 0 }
+system Step(s: mut S, io true) { s.n = s.n + rand_int(1, 3) }
+set_resource(S, S { n: 1 })
+let mut best = 0
+for f in simulate_par(fork(), [system::Step], 5, 4, 42) {
+    let value = peek_resource(f, S) |> unwrap
+    if value.n > best { best = value.n }
+}
+set_resource(S, S { n: best })
+flush_events()
+"#;
+
+    fn retro_run_nested_simulation(edited: &str) -> (ReplayReport, Option<String>) {
+        let compile = |source: &str| {
+            crate::replay_compile::compile_trace_vm(source, "fixture", &[], &SourceLayout::default())
+                .expect("nested simulation fixture compiles")
+        };
+        let mut recording = compile(NESTED_SIMULATION);
+        recording.enable_recording(NESTED_SIMULATION);
+        recording.run(0).expect("recorded run");
+        let trace = recording.take_trace().expect("trace");
+        let mut vm = compile(edited);
+        vm.enable_replay(TraceReplayer::parse(&trace, false).expect("parse").into_retro());
+        let error = vm.run(0).err();
+        (vm.finish_replay().expect("report"), error)
+    }
+
+    #[test]
+    fn retro_replay_serves_an_unchanged_nested_simulation_from_the_trace() {
+        let (report, error) = retro_run_nested_simulation(NESTED_SIMULATION);
+        assert_eq!(error, None);
+        assert_eq!(report.recomputed_simulations, 0);
+        assert_eq!(report.leftover_io, 0);
+    }
+
+    #[test]
+    fn retro_replay_recomputes_a_nested_simulation_the_edit_changed() {
+        let edited = NESTED_SIMULATION.replace("set_resource(S, S { n: 1 })", "set_resource(S, S { n: 2 })");
+        let (report, error) = retro_run_nested_simulation(&edited);
+        assert_eq!(error, None);
+        assert_eq!(report.recomputed_simulations, 1);
+    }
+
+    #[test]
+    fn retro_replay_still_halts_on_io_the_recording_never_saw() {
+        let edited = NESTED_SIMULATION.replace(
+            "flush_events()",
+            "read_file(\"never_recorded.txt\")
+flush_events()",
+        );
+        let (_, error) = retro_run_nested_simulation(&edited);
+        let error = error.expect("unrecorded read halts");
+        assert!(error.contains("retroactive replay hole"), "{error}");
+    }
+
     #[test]
     fn retro_replay_shows_the_fix_blast_radius() {
         // The gold-drain bug from the Phase 3 dogfood: record the buggy run,

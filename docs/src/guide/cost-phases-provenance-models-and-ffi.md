@@ -167,6 +167,14 @@ Finite model checking does not prove an unbounded system. Bounds and seed are
 part of the report. Commands must encode the real transition boundary; a model
 cannot detect a business rule omitted from both model and implementation.
 
+Coverage shows how much a passing run exercised. For each command the report
+counts executions, executions that wrote state, and executions that wrote
+something an invariant or temporal clause reads. A write counts even if it
+stores the value already present, so coverage shows a property was re-checked,
+not that the state changed. A command that never wrote produces a warning, and
+a run where no command reached any property exits non-zero because it only
+checked the initial state.
+
 WorkPulse mutation-proves ten lifecycle failures, runs 10,000 histories of up
 to 200 commands, and benchmarks 1,000,000 commands over 100,000 jobs.
 

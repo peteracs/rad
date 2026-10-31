@@ -134,6 +134,7 @@ impl VM {
                 "sandbox: fact explanations require capability-filtered proof rendering".into(),
             );
         }
+        self.model_trace_read("*");
         let relation = args[0]
             .as_str()
             .ok_or_else(|| "why_fact() relation identity must be a string".to_string())?;
@@ -171,6 +172,7 @@ impl VM {
                 "sandbox: relation fact reads require a capability-aware relation grant".into(),
             );
         }
+        self.model_trace_read("*");
         let relation = args[0]
             .as_str()
             .ok_or_else(|| "constraint fact relation identity must be a string".to_string())?;

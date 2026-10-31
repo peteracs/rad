@@ -124,10 +124,13 @@ impl VM {
     ) -> Result<NestedNativePlan, String> {
         let boundary = format!("nested-native:v1:{operation}");
         let replay_lanes = if let Some(replayer) = self.replayer.as_mut() {
-            let record = replayer.next_io(&boundary, &digest)?;
-            let encoded = record.result?;
             Some(std::sync::Arc::new(
-                crate::replay::decode_nested_native_lanes(&encoded, lane_count)?,
+                match replayer.next_nested_boundary(&boundary, &digest)? {
+                    Some(record) => {
+                        crate::replay::decode_nested_native_lanes(&record.result?, lane_count)?
+                    }
+                    None => vec![Vec::new(); lane_count],
+                },
             ))
         } else {
             None

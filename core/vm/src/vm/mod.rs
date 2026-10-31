@@ -278,6 +278,189 @@ pub struct ModelCheckReport {
     pub shrink_ns: u64,
     pub median_history_ns: u64,
     pub p95_history_ns: u64,
+    pub coverage: Vec<ModelCommandCoverage>,
+}
+
+/// What one model command did across a campaign. `wrote` and `reached_property`
+/// count executions, so each is at most `executed`. Writes are attempted writes:
+/// a command that stores the value already present still counts.
+#[derive(Clone, Debug, serde::Serialize)]
+pub struct ModelCommandCoverage {
+    pub command: String,
+    pub executed: u64,
+    pub wrote: u64,
+    pub reached_property: u64,
+}
+
+impl ModelCheckReport {
+    /// A pass in which no command touched anything a property reads. Such a
+    /// campaign only re-checked the initial state, so it is not a pass.
+    pub fn is_vacuous(&self) -> bool {
+        self.counterexamples == 0
+            && self
+                .coverage
+                .iter()
+                .all(|command| command.reached_property == 0)
+    }
+
+    /// Reasons a passing campaign may have tested less than it appears to.
+    /// A failed campaign already has its answer, so it has no warnings.
+    pub fn coverage_warnings(&self) -> Vec<String> {
+        if self.counterexamples != 0 {
+            return Vec::new();
+        }
+        let mut warnings = Vec::new();
+        for command in &self.coverage {
+            if command.executed == 0 {
+                warnings.push(format!("command '{}' never ran", command.command));
+            } else if command.wrote == 0 {
+                warnings.push(format!(
+                    "command '{}' ran {} time(s) and never wrote state",
+                    command.command, command.executed
+                ));
+            }
+        }
+        if self.is_vacuous() {
+            warnings.push(
+                "no command wrote anything an invariant or temporal clause reads, so this pass proves nothing"
+                    .to_string(),
+            );
+        }
+        warnings
+    }
+}
+
+#[cfg(test)]
+mod model_coverage_tests {
+    use super::{ModelCheckReport, ModelCommandCoverage};
+
+    fn report(counterexamples: u32, coverage: &[(&str, u64, u64, u64)]) -> ModelCheckReport {
+        ModelCheckReport {
+            model: "M".to_string(),
+            seed: 1,
+            histories_requested: 1,
+            histories_executed: 1,
+            commands_executed: 1,
+            counterexamples,
+            minimum_trace_length: None,
+            shrink_ns: 0,
+            median_history_ns: 0,
+            p95_history_ns: 0,
+            coverage: coverage
+                .iter()
+                .map(
+                    |&(command, executed, wrote, reached_property)| ModelCommandCoverage {
+                        command: command.to_string(),
+                        executed,
+                        wrote,
+                        reached_property,
+                    },
+                )
+                .collect(),
+        }
+    }
+
+    /// Run a program's models and return the failure of model `M`, if any.
+    fn campaign_failure(source: &str) -> Option<String> {
+        let mut vm = crate::replay_compile::compile_trace_vm(
+            source,
+            "model fixture",
+            &[],
+            &crate::source_bundle::SourceLayout::default(),
+        )
+        .expect("model fixture compiles");
+        vm.run(0).expect("model fixture initializes");
+        crate::test_runner::run_tests(&mut vm)
+            .into_iter()
+            .find(|outcome| outcome.name == "model_M")
+            .expect("model M ran")
+            .error
+    }
+
+    /// Each of these violates its invariant on the first or a later step, and
+    /// passes if the write or read is missing from the dependency trace.
+    fn assert_campaign_fails(setup: &str, command: &str, invariant: &str) {
+        let source = format!(
+            "{setup}\nfn step() -> nil {{ {command} }}\nmodel M {{\n commands [step]\n invariant {{ {invariant} }}\n runs 3\n max_commands 8\n seed 1\n}}\n"
+        );
+        let failure = campaign_failure(&source);
+        assert!(
+            failure.is_some(),
+            "invariant was not re-evaluated:\n{source}"
+        );
+    }
+
+    #[test]
+    fn spawn_reaches_a_query_invariant() {
+        assert_campaign_fails(
+            "component F { on: bool = false }",
+            "let _e = spawn(F { on: true })",
+            "return len(query { F }) <= 3",
+        );
+    }
+
+    #[test]
+    fn set_reaches_a_query_invariant() {
+        assert_campaign_fails(
+            "component F { n: int = 0 }\nlet e = spawn(F { n: 0 })",
+            "set(e, F { n: 1 })\n let _x = spawn(F { n: 2 })",
+            "let mut total = 0\n for row in query { F } { total = total + 1 }\n return total <= 2",
+        );
+    }
+
+    #[test]
+    fn a_named_spawn_reaches_a_name_lookup_invariant() {
+        assert_campaign_fails(
+            "component F { on: bool = false }",
+            "if get_entity(\"x\") == nil { let _e = spawn(\"x\", F { on: true }) }",
+            "return get_entity(\"x\") == nil",
+        );
+    }
+
+    #[test]
+    fn commit_reaches_an_invariant() {
+        assert_campaign_fails(
+            "resource R { n: int = 0 }\nset_resource(R, R { n: 0 })",
+            "commit(fork_with(fork(), R { n: 5 }))",
+            "return (get_resource(R) |> unwrap).n == 0",
+        );
+    }
+
+    #[test]
+    fn load_world_reaches_an_invariant() {
+        assert_campaign_fails(
+            "resource R { n: int = 0 }\nset_resource(R, R { n: 5 })\nlet saved = save_world()\nset_resource(R, R { n: 0 })",
+            "load_world(saved)",
+            "return (get_resource(R) |> unwrap).n == 0",
+        );
+    }
+
+    #[test]
+    fn a_pass_no_command_reached_is_vacuous() {
+        let report = report(0, &[("add", 5, 0, 0), ("other", 5, 5, 0)]);
+        assert!(report.is_vacuous());
+        let warnings = report.coverage_warnings();
+        assert_eq!(warnings.len(), 2);
+        assert!(warnings[0].contains("'add'"));
+        assert!(warnings[1].contains("proves nothing"));
+    }
+
+    #[test]
+    fn a_dead_command_warns_without_making_the_pass_vacuous() {
+        let report = report(
+            0,
+            &[("add", 5, 5, 5), ("dead", 5, 0, 0), ("unrun", 0, 0, 0)],
+        );
+        assert!(!report.is_vacuous());
+        assert_eq!(report.coverage_warnings().len(), 2);
+    }
+
+    #[test]
+    fn a_counterexample_is_never_vacuous() {
+        let report = report(1, &[("add", 5, 0, 0)]);
+        assert!(!report.is_vacuous());
+        assert!(report.coverage_warnings().is_empty());
+    }
 }
 
 /// Dynamic dependency evidence for one stateful-model operation.

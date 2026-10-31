@@ -139,9 +139,10 @@ fn parse_cli_args(args: &[String]) -> Result<CliCommand, String> {
     if args.get(1).map(String::as_str) == Some("model-check") {
         let mut filepath = None;
         let mut model = None;
-        let mut runs = 10_000_u32;
-        let mut max_commands = 200_u32;
-        let mut seed = 1_u64;
+        // Absent flags leave the values the model declares in force.
+        let mut runs = None;
+        let mut max_commands = None;
+        let mut seed = None;
         let mut artifact_directory = None;
         let mut json = false;
         let mut index = 2;
@@ -161,19 +162,25 @@ fn parse_cli_args(args: &[String]) -> Result<CliCommand, String> {
                 }
                 "--model" => model = Some(take_value("--model")?),
                 "--runs" => {
-                    runs = take_value("--runs")?
-                        .parse()
-                        .map_err(|_| "--runs requires a positive u32".to_string())?;
+                    runs = Some(
+                        take_value("--runs")?
+                            .parse::<u32>()
+                            .map_err(|_| "--runs requires a positive u32".to_string())?,
+                    );
                 }
                 "--max-commands" => {
-                    max_commands = take_value("--max-commands")?
-                        .parse()
-                        .map_err(|_| "--max-commands requires a positive u32".to_string())?;
+                    max_commands = Some(
+                        take_value("--max-commands")?
+                            .parse::<u32>()
+                            .map_err(|_| "--max-commands requires a positive u32".to_string())?,
+                    );
                 }
                 "--seed" => {
-                    seed = take_value("--seed")?
-                        .parse()
-                        .map_err(|_| "--seed requires a u64".to_string())?;
+                    seed = Some(
+                        take_value("--seed")?
+                            .parse::<u64>()
+                            .map_err(|_| "--seed requires a u64".to_string())?,
+                    );
                 }
                 "--artifact-dir" => artifact_directory = Some(take_value("--artifact-dir")?),
                 option if option.starts_with('-') => {
@@ -187,7 +194,7 @@ fn parse_cli_args(args: &[String]) -> Result<CliCommand, String> {
                 }
             }
         }
-        if runs == 0 || max_commands == 0 {
+        if runs == Some(0) || max_commands == Some(0) {
             return Err("--runs and --max-commands must be positive".to_string());
         }
         let filepath = filepath.ok_or_else(|| {

@@ -157,6 +157,29 @@ impl VM {
         }
     }
 
+    /// Whether an access check must run. Access checks also feed the model
+    /// dependency trace, so a site may skip them only when neither is active.
+    #[inline]
+    pub(crate) fn access_checks_active(&self) -> bool {
+        self.sandbox_caps.is_some() || self.model_access_trace.is_some()
+    }
+
+    /// Record a read in the model dependency trace. `*` means all state.
+    #[inline]
+    pub(crate) fn model_trace_read(&self, identity: &str) {
+        if let Some(trace) = &self.model_access_trace {
+            trace.borrow_mut().reads.insert(identity);
+        }
+    }
+
+    /// Record a write in the model dependency trace. `*` means all state.
+    #[inline]
+    pub(crate) fn model_trace_write(&self, identity: &str) {
+        if let Some(trace) = &self.model_access_trace {
+            trace.borrow_mut().writes.insert(identity);
+        }
+    }
+
     /// Enforce the sandbox component-write ACL. No-op for trusted code.
     #[inline]
     pub(crate) fn sandbox_check_write(&self, component: &str) -> Result<(), String> {

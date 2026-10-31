@@ -683,6 +683,9 @@ pub struct ReplayReport {
     /// Retro mode only: pure-output write calls the recording never
     /// performed, replayed as virtualized no-ops (retro replay mode).
     pub virtual_writes: usize,
+    /// Retro mode only: nested simulations whose inputs the edit changed,
+    /// recomputed instead of served from the recorded boundary.
+    pub recomputed_simulations: usize,
 }
 
 /// Pure-output builtins: they emit data and return `nil` on success, so a
@@ -711,6 +714,7 @@ enum ReplayMode {
         last_served: HashMap<(String, String), IoRecord>,
         reused: usize,
         virtualized: usize,
+        recomputed: usize,
     },
 }
 

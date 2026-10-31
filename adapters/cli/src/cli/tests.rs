@@ -242,6 +242,20 @@ mod tests {
     }
 
     #[test]
+    fn model_check_flags_are_absent_unless_passed() {
+        let args = ["rad", "model-check", "model.rad"].map(str::to_string).to_vec();
+        match parse_cli_args(&args).expect("model-check command") {
+            CliCommand::ModelCheck {
+                runs,
+                max_commands,
+                seed,
+                ..
+            } => assert_eq!((runs, max_commands, seed), (None, None, None)),
+            parsed => panic!("expected model-check command, got {parsed:?}"),
+        }
+    }
+
+    #[test]
     fn parse_cli_args_parses_model_check_campaign() {
         let args = [
             "rad",
@@ -277,9 +291,9 @@ mod tests {
                     "projects/dogfood/workpulse/tests/job_model.rad"
                 );
                 assert_eq!(model.as_deref(), Some("JobLifecycleModel"));
-                assert_eq!(runs, 10_000);
-                assert_eq!(max_commands, 200);
-                assert_eq!(seed, 1234);
+                assert_eq!(runs, Some(10_000));
+                assert_eq!(max_commands, Some(200));
+                assert_eq!(seed, Some(1234));
                 assert_eq!(
                     artifact_directory.as_deref(),
                     Some("artifacts/workpulse/failures")

@@ -1,9 +1,9 @@
 fn run_model_check_command(
     filepath: String,
     model: Option<String>,
-    runs: u32,
-    max_commands: u32,
-    seed: u64,
+    runs: Option<u32>,
+    max_commands: Option<u32>,
+    seed: Option<u64>,
     artifact_directory: Option<String>,
     json: bool,
 ) {
@@ -14,15 +14,15 @@ fn run_model_check_command(
             process::exit(1);
         }
     };
-    let mut vm = VM::new_with_seed(seed);
+    let mut vm = VM::new_with_seed(seed.unwrap_or(1));
     if json {
         vm.suppress_output();
     }
     vm.configure_model_check(rad_vm::vm::ModelCheckConfig {
         model: model.clone(),
-        runs: Some(runs),
-        max_commands: Some(max_commands),
-        seed: Some(seed),
+        runs,
+        max_commands,
+        seed,
         trace: None,
     });
     vm.load_compile_result(checked.compiled);
@@ -80,6 +80,16 @@ fn run_model_check_command(
                 "file": filepath,
                 "elapsed_ns": elapsed_ns,
                 "reports": vm.model_check_reports(),
+                "warnings": vm
+                    .model_check_reports()
+                    .iter()
+                    .flat_map(|report| {
+                        report
+                            .coverage_warnings()
+                            .into_iter()
+                            .map(|warning| format!("model {}: {warning}", report.model))
+                    })
+                    .collect::<Vec<_>>(),
                 "failures": failures,
             }))
             .expect("model report is serializable")
@@ -100,6 +110,15 @@ fn run_model_check_command(
                 report.median_history_ns as f64 / 1_000_000.0,
                 report.p95_history_ns as f64 / 1_000_000.0,
             );
+            for command in &report.coverage {
+                println!(
+                    "  {}: ran {}, wrote {}, reached a property {}",
+                    command.command, command.executed, command.wrote, command.reached_property
+                );
+            }
+            for warning in report.coverage_warnings() {
+                eprintln!("warning: model {}: {warning}", report.model);
+            }
         }
         println!("elapsed: {:.3} s", elapsed_ns as f64 / 1_000_000_000.0);
         for failure in &failures {
@@ -110,7 +129,11 @@ fn run_model_check_command(
             );
         }
     }
-    if !failures.is_empty() {
+    let vacuous = vm
+        .model_check_reports()
+        .iter()
+        .any(rad_vm::vm::ModelCheckReport::is_vacuous);
+    if !failures.is_empty() || vacuous {
         process::exit(1);
     }
 }

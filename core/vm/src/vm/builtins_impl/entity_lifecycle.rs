@@ -32,6 +32,14 @@ impl VM {
                 }
             }
         }
+        if self.model_access_trace.is_some() {
+            self.model_trace_write("$entities");
+            for arg in &args {
+                if let Some(c) = arg.as_component() {
+                    self.model_trace_write(&c.type_name);
+                }
+            }
+        }
         let name = args.first().and_then(|v| v.as_str().map(|s| s.to_string()));
         self.transaction_check_write("$entities")?;
         self.transaction_check_write("$entity_identity")?;
@@ -116,6 +124,7 @@ impl VM {
                 args[0].type_name()
             )
         })?;
+        self.model_trace_read("$entities");
         if let Some(eid) = self.world.get_entity_by_name(name) {
             Ok(Value::from_entity_id(&mut self.gc, eid))
         } else {
@@ -135,6 +144,7 @@ impl VM {
                 args[0].type_name()
             )
         })?;
+        self.model_trace_read("$entities");
         match self.world.get_entity_by_name(name) {
             Some(eid) => Ok(Value::from_entity_id(&mut self.gc, eid)),
             None => Err(format!("require_entity(): no entity named '{}'", name)),

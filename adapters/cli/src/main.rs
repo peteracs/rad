@@ -79,9 +79,9 @@ enum CliCommand {
     ModelCheck {
         filepath: String,
         model: Option<String>,
-        runs: u32,
-        max_commands: u32,
-        seed: u64,
+        runs: Option<u32>,
+        max_commands: Option<u32>,
+        seed: Option<u64>,
         artifact_directory: Option<String>,
         json: bool,
     },

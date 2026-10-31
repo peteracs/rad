@@ -1,10 +1,10 @@
 {
   "formatVersion": 1,
-  "ownerDigest": "32aa7fdefd34162ed75f4ec20009d33c4f3c65ec1861e7ebc689efe460be2fc3",
+  "ownerDigest": "e4c3238714e30fde1cf578fe4cc67daaf5fe347b26fd1261cab1c0f377f25263",
   "owners": [
     {
       "path": "adapters/cli/src/cli/arguments.rs",
-      "sha256": "a9f267cc10f0d26d526bafbe62dbbbe5fc87d7a2d390e0dae224b0c6de30e49e"
+      "sha256": "fb10a5f44ba3b72bfdff4ba5841572e915630ed967fb47e803ddc6539cdf6dd6"
     },
     {
       "path": "core/vm/src/wasm/runtime_api.rs",

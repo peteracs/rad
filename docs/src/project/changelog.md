@@ -1,5 +1,21 @@
 # Changelog
 
+- **Model checking no longer passes without checking.** `spawn` and `query`
+  reached the model dependency trace only inside a sandbox, so an invariant
+  over them was evaluated once and then skipped. `commit`, `merge_forks`,
+  `load_world`, settlement commits, name lookups and relation fact reads are
+  now traced too. `rad model-check` honors the `runs`, `max_commands` and
+  `seed` a model declares unless a flag overrides them; it used to replace
+  them with built-in defaults. Reports gain per-command coverage, warnings for
+  commands that never wrote state, and a non-zero exit when no command touched
+  anything a property reads.
+- **`rad replay --with` compiles the edit the way the recording was compiled.**
+  Edits are now type-checked and keep checker-derived semantics. A nested
+  simulation whose inputs the edit changed is recomputed instead of halting as
+  a replay hole. A run that halts reports its blast radius as unknown and exits
+  non-zero, where it used to compare a partial world and could claim the edit
+  changed nothing.
+
 - **Packed word buffers and an affine-walk research kernel.** Fifteen
   `words_*` builtins treat a byte buffer as packed little-endian u32 words:
   construction and access, affine-modular gather, elementwise add, minimum

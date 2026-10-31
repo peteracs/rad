@@ -1,3 +1,56 @@
+/// Running totals for one command, indexed like the model's command list.
+#[derive(Clone, Copy, Default)]
+struct ModelCommandTally {
+    executed: u64,
+    wrote: u64,
+    reached_property: u64,
+}
+
+/// One executed step's effect. Events apply at a flush, so a flush's writes
+/// belong to every step since the previous flush.
+struct ModelStepEffect {
+    command: usize,
+    wrote: bool,
+    reached_property: bool,
+}
+
+fn credit_model_flush(
+    effects: &mut [ModelStepEffect],
+    flushed_through: &mut usize,
+    wrote: bool,
+    reached_property: bool,
+) {
+    for effect in &mut effects[*flushed_through..] {
+        effect.wrote |= wrote;
+        effect.reached_property |= reached_property;
+    }
+    *flushed_through = effects.len();
+}
+
+fn merge_model_tallies(total: &mut [ModelCommandTally], history: &[ModelCommandTally]) {
+    for (total, history) in total.iter_mut().zip(history) {
+        total.executed += history.executed;
+        total.wrote += history.wrote;
+        total.reached_property += history.reached_property;
+    }
+}
+
+fn model_coverage(
+    labels: &[String],
+    tallies: &[ModelCommandTally],
+) -> Vec<crate::vm::ModelCommandCoverage> {
+    labels
+        .iter()
+        .zip(tallies)
+        .map(|(label, tally)| crate::vm::ModelCommandCoverage {
+            command: label.clone(),
+            executed: tally.executed,
+            wrote: tally.wrote,
+            reached_property: tally.reached_property,
+        })
+        .collect()
+}
+
 #[derive(Clone, Copy)]
 struct ModelTrialSpec<'a> {
     base: &'a crate::world::WorldSnapshot,
@@ -18,6 +71,7 @@ struct ModelFailureContext<'a> {
     history_ns: &'a [u64],
     trial: ModelTrialSpec<'a>,
     trace: &'a [ModelTraceStep],
+    coverage: Vec<crate::vm::ModelCommandCoverage>,
 }
 
 impl VM {
@@ -27,6 +81,7 @@ impl VM {
         labels: Option<&[String]>,
         trace: &[ModelTraceStep],
         seed: u64,
+        tallies: &mut [ModelCommandTally],
     ) -> Result<(), String> {
         let native_plan = self.prepare_nested_native_model_trial(spec.base, trace, seed)?;
         let mut worker = VM::from_shared_state(self.shared_state());
@@ -46,15 +101,7 @@ impl VM {
         worker.suppress_output = true;
         worker.set_random_seed(seed);
 
-        let execution = Self::execute_model_trial(
-            &mut worker,
-            spec.commands,
-            labels,
-            spec.invariants,
-            spec.temporal,
-            spec.observation_plan,
-            trace,
-        );
+        let execution = Self::execute_model_trial(&mut worker, spec, labels, trace, tallies);
         let native_calls = worker.finish_worker_native_tape()?;
         if native_plan.active() {
             self.finish_nested_native(native_plan, &[native_calls])?;
@@ -64,13 +111,18 @@ impl VM {
 
     fn execute_model_trial(
         worker: &mut VM,
-        commands: &[Value],
+        spec: ModelTrialSpec<'_>,
         labels: Option<&[String]>,
-        invariants: &[Value],
-        temporal: &[ModelTemporal],
-        observation_plan: &ModelObservationPlan,
         trace: &[ModelTraceStep],
+        tallies: &mut [ModelCommandTally],
     ) -> Result<(), String> {
+        let ModelTrialSpec {
+            commands,
+            invariants,
+            temporal,
+            observation_plan,
+            ..
+        } = spec;
         let observation_capacity = trace.len().saturating_add(1);
         let mut signals = observation_plan
             .names
@@ -82,6 +134,8 @@ impl VM {
         let mut event_counts = vec![0usize; observation_plan.names.len()];
         let mut prior_event_count = 0usize;
         let mut invariant_dependencies = ModelAccessSet::default();
+        let mut step_effects = Vec::<ModelStepEffect>::with_capacity(trace.len());
+        let mut flushed_through = 0usize;
 
         let outcome = (|| {
             Self::model_invariants_hold_traced(
@@ -121,13 +175,20 @@ impl VM {
                             step_number, label
                         )
                     });
-                    let (observation_changed, invariant_changed) =
+                    let (observation_changed, invariant_changed, wrote) =
                         Self::finish_model_access_trace(worker, |trace| {
                             (
                                 trace.writes.intersects(&observation_plan.dependencies),
                                 trace.writes.intersects(&invariant_dependencies),
+                                !trace.writes.is_empty(),
                             )
                         });
+                    credit_model_flush(
+                        &mut step_effects,
+                        &mut flushed_through,
+                        wrote,
+                        observation_changed || invariant_changed,
+                    );
                     flush?;
                     temporal_dirty |= observation_changed;
                     Self::model_invariants_hold_traced(
@@ -148,13 +209,19 @@ impl VM {
                         label, step_number
                     )
                 });
-                let (observation_changed, invariant_changed) =
+                let (observation_changed, invariant_changed, wrote) =
                     Self::finish_model_access_trace(worker, |trace| {
                         (
                             trace.writes.intersects(&observation_plan.dependencies),
                             trace.writes.intersects(&invariant_dependencies),
+                            !trace.writes.is_empty(),
                         )
                     });
+                step_effects.push(ModelStepEffect {
+                    command: step.command,
+                    wrote,
+                    reached_property: observation_changed || invariant_changed,
+                });
                 command_result?;
                 temporal_dirty |= observation_changed;
                 Self::model_invariants_hold_traced(
@@ -175,13 +242,20 @@ impl VM {
                             step_number, label
                         )
                     });
-                    let (observation_changed, invariant_changed) =
+                    let (observation_changed, invariant_changed, wrote) =
                         Self::finish_model_access_trace(worker, |trace| {
                             (
                                 trace.writes.intersects(&observation_plan.dependencies),
                                 trace.writes.intersects(&invariant_dependencies),
+                                !trace.writes.is_empty(),
                             )
                         });
+                    credit_model_flush(
+                        &mut step_effects,
+                        &mut flushed_through,
+                        wrote,
+                        observation_changed || invariant_changed,
+                    );
                     flush?;
                     temporal_dirty |= observation_changed;
                     Self::model_invariants_hold_traced(
@@ -195,6 +269,12 @@ impl VM {
                 if worker.event_log.len() != prior_event_count
                     || temporal_dirty
                 {
+                    if !temporal.is_empty() && worker.event_log.len() != prior_event_count {
+                        // Temporal clauses observe events directly.
+                        if let Some(effect) = step_effects.last_mut() {
+                            effect.reached_property = true;
+                        }
+                    }
                     Self::model_sample(
                         worker,
                         observation_plan,
@@ -211,6 +291,12 @@ impl VM {
             Self::model_temporal_holds(temporal, observation_plan, &signals, &occurrences)
         })();
         worker.model_access_trace = None;
+        for effect in &step_effects {
+            let tally = &mut tallies[effect.command];
+            tally.executed += 1;
+            tally.wrote += u64::from(effect.wrote);
+            tally.reached_property += u64::from(effect.reached_property);
+        }
         outcome
     }
 
@@ -317,9 +403,11 @@ impl VM {
         original: &[ModelTraceStep],
         seed: u64,
     ) -> (Vec<ModelTraceStep>, String) {
+        // Shrinking candidates are not part of the campaign's coverage.
+        let mut scratch = vec![ModelCommandTally::default(); spec.commands.len()];
         let mut trace = original.to_vec();
         let mut reason = self
-            .run_model_trial(spec, None, &trace, seed)
+            .run_model_trial(spec, None, &trace, seed, &mut scratch)
             .expect_err("shrink is entered only for a failing trace");
         let failure_identity = Self::model_failure_identity(&reason);
         let mut partitions = 2usize;
@@ -332,7 +420,7 @@ impl VM {
                 let mut candidate = Vec::with_capacity(trace.len() - (end - start));
                 candidate.extend_from_slice(&trace[..start]);
                 candidate.extend_from_slice(&trace[end..]);
-                if let Err(candidate_reason) = self.run_model_trial(spec, None, &candidate, seed) {
+                if let Err(candidate_reason) = self.run_model_trial(spec, None, &candidate, seed, &mut scratch) {
                     if Self::model_failure_identity(&candidate_reason) == failure_identity {
                         trace = candidate;
                         reason = candidate_reason;
@@ -421,6 +509,7 @@ impl VM {
             history_ns,
             trial,
             trace,
+            coverage,
         } = context;
         let shrink_started = std::time::Instant::now();
         let (minimal, reason) = self.shrink_model_trace(trial, trace, run_seed);
@@ -437,6 +526,7 @@ impl VM {
             shrink_ns,
             median_history_ns,
             p95_history_ns,
+            coverage,
         });
         let marker = serde_json::json!({
             "kind": "rad_model_failure_v1",
@@ -589,35 +679,39 @@ impl VM {
                     let run_seed = Self::model_run_seed(campaign_seed, run_index);
                     let trace = Self::generate_model_trace(commands.len(), max_commands, run_seed);
 
+                    let mut tallies = vec![ModelCommandTally::default(); commands.len()];
                     let started = std::time::Instant::now();
                     Self::reset_pooled_model_trial(worker, &shared, &base, run_seed);
                     let result = Self::execute_model_trial(
                         worker,
-                        &commands,
+                        trial_spec,
                         Some(&labels),
-                        &invariants,
-                        &temporal,
-                        &observation_plan,
                         &trace,
+                        &mut tallies,
                     );
                     let elapsed_ns = started
                         .elapsed()
                         .as_nanos()
                         .min(u128::from(u64::MAX)) as u64;
-                    (run_seed, elapsed_ns, result)
+                    (run_seed, elapsed_ns, result, tallies)
                 },
                 )
                 .collect::<Vec<_>>();
 
-            let first_failure = outcomes.iter().position(|(_, _, result)| result.is_err());
+            let first_failure = outcomes.iter().position(|(_, _, result, _)| result.is_err());
             let histories_executed = first_failure.map_or(histories_requested, |index| {
                 u32::try_from(index + 1).expect("history index is bounded by u32 run count")
             });
             let history_ns = outcomes
                 .iter()
                 .take(histories_executed as usize)
-                .map(|(_, elapsed_ns, _)| *elapsed_ns)
+                .map(|(_, elapsed_ns, _, _)| *elapsed_ns)
                 .collect::<Vec<_>>();
+            let mut tallies = vec![ModelCommandTally::default(); commands.len()];
+            for (_, _, _, history) in outcomes.iter().take(histories_executed as usize) {
+                merge_model_tallies(&mut tallies, history);
+            }
+            let coverage = model_coverage(&labels, &tallies);
             let commands_executed =
                 u64::from(histories_executed).saturating_mul(u64::from(max_commands));
 
@@ -639,6 +733,7 @@ impl VM {
                     history_ns: &history_ns,
                     trial: trial_spec,
                     trace: &trace,
+                    coverage,
                 });
             }
 
@@ -655,12 +750,14 @@ impl VM {
                 shrink_ns: 0,
                 median_history_ns,
                 p95_history_ns,
+                coverage,
             });
             return Ok(Value::NIL);
         }
 
         let mut commands_executed = 0_u64;
         let mut history_ns = Vec::with_capacity(histories_requested as usize);
+        let mut tallies = vec![ModelCommandTally::default(); commands.len()];
 
         for run_index in 0..histories_requested {
             let run_seed = exact_trace
@@ -694,6 +791,7 @@ impl VM {
                 Some(&labels),
                 &trace,
                 run_seed,
+                &mut tallies,
             );
             history_ns.push(
                 history_started
@@ -720,6 +818,7 @@ impl VM {
                 history_ns: &history_ns,
                 trial: trial_spec,
                 trace: &trace,
+                coverage: model_coverage(&labels, &tallies),
             });
         }
 
@@ -735,6 +834,7 @@ impl VM {
             shrink_ns: 0,
             median_history_ns,
             p95_history_ns,
+            coverage: model_coverage(&labels, &tallies),
         });
         Ok(Value::NIL)
     }

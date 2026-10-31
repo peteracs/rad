@@ -83,7 +83,7 @@ or `--file=<entry.rad>`.
 |---|---|
 | `rad bench <file.rad> [--json] [-- args...]` | Run setup once and measure `bench_run()` when present. JSON includes entry, elapsed/CPU time, semantic instructions, allocation categories, and digest. |
 | `rad replay <trace.radr>` | Verify/replay. Faithful replay streams records; `--to-frame N` stops. `--with file.rad` and `--serve` intentionally materialize the trace for oracle/time-travel random access. `--force` explicitly accepts permitted identity drift. |
-| `rad model-check <file.rad>` | Execute a model. `--model`, `--runs`, `--max-commands`, `--seed`, `--artifact-dir`, and `--json` control the campaign. Counts must be positive. |
+| `rad model-check <file.rad>` | Execute a model. `--model`, `--runs`, `--max-commands`, `--seed`, `--artifact-dir`, and `--json` control the campaign. `--runs`, `--max-commands` and `--seed` override the values the model declares; without them the declared values apply. Counts must be positive. Reports per-command coverage and warns about commands that never wrote state. Exits non-zero on a counterexample, or when no command touched anything a property reads, because that pass proves nothing. |
 | `rad shrink <failure.radr>` | Deterministically minimize a model-failure artifact. |
 | `rad ffi verify <plugin>` | Verify image, descriptor, layouts, exports, effects, containment, and determinism. `--contract file.json` and `--json` control expected/machine output. |
 | `rad relations check <file.rad> --experimental-relations [--module id]` | Parse, type, bound, and seal relation source without execution. |

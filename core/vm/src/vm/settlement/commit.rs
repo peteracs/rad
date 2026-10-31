@@ -230,6 +230,7 @@ impl VM {
         }
 
         let context = self.settlement.take().unwrap();
+        self.model_trace_write("*");
         self.world.restore(committed);
         self.record_settlement_provenance(&context);
         Ok(())

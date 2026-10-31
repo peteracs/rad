@@ -102,6 +102,7 @@ impl VM {
         if args.len() != 1 {
             return Err(format!("commit() expects 1 argument, got {}", args.len()));
         }
+        self.model_trace_write("*");
         let fork_snap = args[0]
             .as_world_fork()
             .ok_or_else(|| "commit() argument must be a world_fork".to_string())?
@@ -160,6 +161,7 @@ impl VM {
                 args.len()
             ));
         }
+        self.model_trace_write("*");
         let snaps: Vec<std::sync::Arc<crate::world::WorldSnapshot>> = args
             .iter()
             .enumerate()
@@ -191,6 +193,7 @@ impl VM {
                 args.len()
             ));
         }
+        self.model_trace_write("*");
         let snaps: Vec<std::sync::Arc<crate::world::WorldSnapshot>> = args[..3]
             .iter()
             .enumerate()
