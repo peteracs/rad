@@ -215,6 +215,21 @@ rad/
         - `projects/dogfood/collatz-barrier/escape/` - Polynomial coefficient-spread bounds, exact strip deadlines, and causal selection of certified exponents.
         - `projects/dogfood/collatz-barrier/correction/` - Uniform additive-correction bounds from exact image collisions and certified infinite tails.
         - `projects/dogfood/collatz-barrier/ladder/` - Complete sharp linear-envelope family near the limit slope, convergent-denominator ladder, and causally assembled parallel block certificates.
+      - `projects/dogfood/bsd-x/` - Finite algebraic decision rules and verifiers around Selmer observability; the universal X3 assertion stays unproved.
+      - `projects/dogfood/collatz-automatic/` - Working notes on mixed binary/ternary termination certificates; nothing here proves Collatz.
+        - `projects/dogfood/collatz-automatic/farkas/` - Farkas-style certificate checks and their explanations.
+      - `projects/dogfood/collatz-carry/` - Whether multiplying by 3 moves parity information to the high end of a number in a structured way.
+      - `projects/dogfood/collatz-cegar/` - Counterexample-guided search for Lyapunov function templates, each refuted exactly.
+      - `projects/dogfood/collatz-density/` - Krasikov-Lagarias linear programs on packed word buffers, with rate and validation probes.
+      - `projects/dogfood/collatz-epoch/` - Epochs as the unit of time for large-value dynamics, following the shadow-fork result.
+      - `projects/dogfood/collatz-frontier/` - Proof-dependency graph of Collatz session results, with statements as entities carrying a claim status.
+      - `projects/dogfood/collatz-merge/` - Coalescence as a weaker target than descent: meeting the trajectory of a smaller number.
+      - `projects/dogfood/collatz-repulsion/` - Weakening the uniform coefficient stopping-time bound left by the coefficient-guided refinement.
+      - `projects/dogfood/collatz-shadow/` - Runs each orbit twice, in the real map and in a shadow world without the +1.
+      - `projects/dogfood/collatz-steer/` - Evidence-driven choice of the next research direction; nothing here is a proof.
+      - `projects/dogfood/collatz-surgery/` - Forked universes that change the map on one odd residue class.
+      - `projects/dogfood/navier-stokes/` - Navier-Stokes lower-bound and construction workloads with independent verifiers.
+        - `projects/dogfood/navier-stokes/calibration_run/` - Calibration receipts, manifest, and summaries.
       - `projects/dogfood/collatz-termination/` - Direct termination search with speculative RAD repair lanes, native acceleration, and independent matrix and polynomial certificate checks.
         - `projects/dogfood/collatz-termination/local-rank/` - Question-led factor and prefix-residue rank investigations with exact RAD obstruction checks.
           - `projects/dogfood/collatz-termination/local-rank/certificates/` - Durable sparse contradiction certificates and a literal Collatz orbit witness.

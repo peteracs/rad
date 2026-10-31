@@ -374,3 +374,204 @@
             errors
         );
     }
+
+    #[test]
+    fn pipeline_purity_diagnostic_names_impure_builtin() {
+        let src = r#"
+            component Health { hp: 100 }
+            fn use_set(e) {
+                set(e, Health { hp: 50 })
+            }
+            let result = [1, 2, 3] |> map(use_set)
+        "#;
+        let errors = check_src(src);
+        let purity_err = errors.iter().find(|e| e.message.contains("side-effecting"));
+        assert!(
+            purity_err.is_some(),
+            "Expected purity error, got: {:?}",
+            errors
+        );
+        let hint = purity_err.unwrap().hint.as_deref().unwrap_or("");
+        assert!(
+            hint.contains("calls impure builtin 'set'"),
+            "Hint should trace to impure builtin 'set', got: {}",
+            hint
+        );
+    }
+
+    #[test]
+    fn query_where_impure_predicate_diagnostic_names_the_call() {
+        // A structurally-correct but side-effecting predicate used to render
+        // as "expects pure fn(entity) -> bool, got fn(entity) -> bool" — two
+        // identical-looking types with no reason given. The diagnostic now
+        // says the predicate has side effects and names the offending call.
+        let src = r#"
+            component C { v: int = 0 }
+            let e = spawn("e", C { v: 1 })
+            let picked = query_where(C, fn(id: entity) -> bool {
+                print("side effect")
+                return true
+            })
+        "#;
+        let errors = check_src(src);
+        let err = errors
+            .iter()
+            .find(|e| e.message.contains("must be a read-only predicate"));
+        assert!(
+            err.is_some(),
+            "expected the read-only-predicate diagnostic, got: {:?}",
+            errors
+        );
+        let hint = err.unwrap().hint.as_deref().unwrap_or("");
+        assert!(
+            hint.contains("impure builtin 'print'"),
+            "hint should name the offending call, got: {}",
+            hint
+        );
+    }
+
+    #[test]
+    fn query_where_accepts_a_readonly_predicate() {
+        // Filtering by component values is query_where's whole purpose:
+        // a predicate that only READS the world (`get` + `unwrap`) is
+        // accepted. The entity list is snapshotted before the predicate
+        // runs, so reads observe a stable world.
+        let src = r#"
+            component C { v: int = 0 }
+            let e = spawn("e", C { v: 1 })
+            let picked = query_where(C, fn(id: entity) -> bool {
+                let c = get(id, C) |> unwrap
+                return c.v >= 1
+            })
+        "#;
+        let errors = check_src(src);
+        assert!(
+            errors.is_empty(),
+            "a read-only predicate must be accepted, got: {:?}",
+            errors
+        );
+    }
+
+    #[test]
+    fn query_where_accepts_a_named_readonly_fn() {
+        // A declared `readonly fn` passed by name is exactly as safe as the
+        // inline closure — its effect row already proves it cannot write.
+        let src = r#"
+            component C { v: int = 0 }
+            readonly fn rich(id: entity) -> bool {
+                let c = get(id, C) |> unwrap
+                return c.v >= 10
+            }
+            let e = spawn("e", C { v: 12 })
+            let picked = query_where(C, rich)
+        "#;
+        let errors = check_src(src);
+        assert!(
+            errors.is_empty(),
+            "a named readonly fn must be accepted, got: {:?}",
+            errors
+        );
+    }
+
+    #[test]
+    fn query_map_accepts_a_readonly_mapper() {
+        // query_map gets the same read-only contract as query_where: a
+        // mapper that reads components is the builtin's whole purpose.
+        let src = r#"
+            component C { v: int = 0 }
+            let e = spawn("e", C { v: 7 })
+            let values = query_map(C, fn(id: entity) -> int {
+                let c = get(id, C) |> unwrap
+                return c.v * 2
+            })
+        "#;
+        let errors = check_src(src);
+        assert!(
+            errors.is_empty(),
+            "a read-only mapper must be accepted, got: {:?}",
+            errors
+        );
+    }
+
+    #[test]
+    fn query_map_rejects_a_writing_mapper() {
+        // query_map previously enforced NOTHING on the mapper — a `set`
+        // inside it sailed through the checker. It now shares query_where's
+        // read-only contract.
+        let src = r#"
+            component C { v: int = 0 }
+            let e = spawn("e", C { v: 1 })
+            let values = query_map(C, fn(id: entity) -> int {
+                set(id, C { v: 99 })
+                return 0
+            })
+        "#;
+        let errors = check_src(src);
+        let err = errors
+            .iter()
+            .find(|e| e.message.contains("must be a read-only mapper"));
+        assert!(
+            err.is_some(),
+            "a writing mapper must be rejected, got: {:?}",
+            errors
+        );
+        let hint = err.unwrap().hint.as_deref().unwrap_or("");
+        assert!(
+            hint.contains("impure builtin 'set'"),
+            "hint should name the write, got: {}",
+            hint
+        );
+    }
+
+    #[test]
+    fn query_map_rejects_a_resource_writing_mapper() {
+        // The escape adversarial verification found: `set_resource` was
+        // missing from every purity/effect table (no BuiltinSig, not in
+        // is_impure_builtin, not in the effect arms), so a checked mapper
+        // could mutate a resource at runtime. Now closed.
+        let src = r#"
+            resource R { x: int = 0 }
+            component C { v: int = 0 }
+            let e = spawn("e", C { v: 1 })
+            let values = query_map(C, fn(id: entity) -> int {
+                set_resource(R, R { x: 42 })
+                return 0
+            })
+        "#;
+        let errors = check_src(src);
+        let err = errors
+            .iter()
+            .find(|e| e.message.contains("must be a read-only mapper"));
+        assert!(
+            err.is_some(),
+            "a set_resource mapper must be rejected, got: {:?}",
+            errors
+        );
+        let hint = err.unwrap().hint.as_deref().unwrap_or("");
+        assert!(
+            hint.contains("impure builtin 'set_resource'"),
+            "hint should name set_resource, got: {}",
+            hint
+        );
+    }
+
+    #[test]
+    fn query_where_rejects_a_resource_writing_predicate() {
+        let src = r#"
+            resource R { x: int = 0 }
+            component C { v: int = 0 }
+            let e = spawn("e", C { v: 1 })
+            let picked = query_where(C, fn(id: entity) -> bool {
+                set_resource(R, R { x: 42 })
+                return true
+            })
+        "#;
+        let errors = check_src(src);
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.message.contains("must be a read-only predicate")),
+            "a set_resource predicate must be rejected, got: {:?}",
+            errors
+        );
+    }

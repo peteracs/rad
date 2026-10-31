@@ -37,7 +37,7 @@ base64 = "0.22"
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 # RADPACKZ file envelope (tapes): zstd beats DEFLATE ~25% on digest-dense
 # JSONL. C bindings, so native-only; the wire envelope stays pure-Rust.
-zstd = "0.13"
+zstd = "0.14"
 libloading = "0.8"
 ureq = "3.3.0"
 tokio = { version = "1.36.0", features = ["full"] }

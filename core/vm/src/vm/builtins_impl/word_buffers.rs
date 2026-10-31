@@ -61,9 +61,9 @@ where
     let mut out = vec![0u8; count * WORD_BYTES];
     let fill = |(chunk_index, chunk): (usize, &mut [u8])| -> bool {
         let base = chunk_index * WORDS_CHUNK;
-        for (offset, word) in chunk.chunks_exact_mut(WORD_BYTES).enumerate() {
+        for (offset, word) in chunk.as_chunks_mut::<WORD_BYTES>().0.iter_mut().enumerate() {
             match f(base + offset) {
-                Some(value) => word.copy_from_slice(&value.to_le_bytes()),
+                Some(value) => *word = value.to_le_bytes(),
                 None => return false,
             }
         }

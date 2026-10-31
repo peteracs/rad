@@ -353,4 +353,175 @@ impl Checker {
         self.check_block(&handler.body);
         self.pop_scope();
     }
+
+    fn check_fn_decl(&mut self, decl: &FnDecl) {
+        let require_types = !decl.is_pub && self.options.strict_types;
+
+        if require_types {
+            for (idx, param) in decl.params.iter().enumerate() {
+                if decl.param_types.get(idx).and_then(|t| t.as_ref()).is_none() {
+                    self.error(
+                        &decl.span,
+                        format!(
+                            "Strict types: parameter '{}' in function '{}' needs a type annotation",
+                            param, decl.name
+                        ),
+                        Some("Add a type, e.g. `param: int`".to_string()),
+                    );
+                }
+            }
+            if decl.return_type.is_none() {
+                self.error(
+                    &decl.span,
+                    format!(
+                        "Strict types: function '{}' needs an explicit return type",
+                        decl.name
+                    ),
+                    Some("Declare `-> Type` on the function signature".to_string()),
+                );
+            }
+        } else {
+            for (idx, param) in decl.params.iter().enumerate() {
+                if decl.param_types.get(idx).and_then(|t| t.as_ref()).is_none() {
+                    self.warning(
+                        &decl.span,
+                        format!(
+                            "Parameter '{}' in function '{}' has no type annotation; defaulting to any",
+                            param, decl.name
+                        ),
+                        Some("Add a type, e.g. `param: int` or use a generic parameter like `T`".to_string()),
+                    );
+                }
+            }
+            if decl.return_type.is_none() {
+                self.warning(
+                    &decl.span,
+                    format!(
+                        "Function '{}' has no explicit return type; defaulting to inferred/any",
+                        decl.name
+                    ),
+                    Some("Declare `-> Type` on the function signature".to_string()),
+                );
+            }
+        }
+        self.validate_fn_param_alignment(
+            &format!("function '{}'", decl.name),
+            decl.params.len(),
+            decl.param_types.len(),
+            &decl.span,
+        );
+        self.push_type_param_scope(&decl.type_params);
+        let param_tys = decl
+            .params
+            .iter()
+            .enumerate()
+            .map(|(idx, _)| {
+                decl.param_types
+                    .get(idx)
+                    .and_then(|ann| ann.as_ref())
+                    .map_or(Ty::Any, |te| self.resolve_type_expr(te, &decl.span))
+            })
+            .collect::<Vec<_>>();
+        // Keep in lockstep with register_function: bare fn-typed params of
+        // an explicitly effect-annotated fn are promoted (readonly rows get
+        // readonly callbacks, everything else pure). This pass overwrites
+        // sig.params below, so both passes must agree.
+        let param_tys = if decl.is_pure || !decl.effects.is_empty() {
+            let allows_reads = self
+                .functions
+                .get(&decl.name)
+                .is_some_and(|sig| sig.effects.allows(Effect::ReadECS));
+            let target = if allows_reads {
+                FnPurity::Readonly
+            } else {
+                FnPurity::Pure
+            };
+            Self::promote_callback_params(param_tys, target)
+        } else {
+            param_tys
+        };
+        let declared_ret = decl
+            .return_type
+            .as_ref()
+            .map(|te| self.resolve_type_expr(te, &decl.span));
+        let declared_ret = if decl.is_async {
+            Some(Ty::Task(Box::new(declared_ret.clone().unwrap_or(Ty::Any))))
+        } else {
+            declared_ret
+        };
+        self.push_scope();
+        if let Some(sig) = self.functions.get(&decl.name) {
+            self.scopes.last_mut().unwrap().effect_context = sig.effects.clone();
+        }
+        if let Some(scope) = self.scopes.last_mut() {
+            scope.in_async = decl.is_async;
+        }
+        {
+            let mut seen_params = std::collections::HashSet::new();
+            for param in &decl.params {
+                if !seen_params.insert(param.clone()) {
+                    self.error(
+                        &decl.span,
+                        format!(
+                            "Duplicate parameter '{}' in function '{}'",
+                            param, decl.name
+                        ),
+                        None,
+                    );
+                }
+            }
+        }
+        for (idx, param) in decl.params.iter().enumerate() {
+            let ty = param_tys.get(idx).cloned().unwrap_or(Ty::Any);
+            let is_mut = decl.param_muts.get(idx).copied().unwrap_or(false);
+            self.define(param, ty, is_mut, decl.span.clone(), false, true);
+        }
+        self.current_fn_name = Some(decl.name.clone());
+        self.current_fn_returns.clear();
+        self.check_block(&decl.body);
+        if !self.block_diverges(&decl.body) {
+            self.current_fn_returns.push((Ty::Nil, decl.span.clone()));
+        }
+        let inner_expected_ret = decl
+            .return_type
+            .as_ref()
+            .map(|te| self.resolve_type_expr(te, &decl.span));
+        let inferred_ret = self.merge_return_types(&decl.span, inner_expected_ret.as_ref());
+        let effective_inferred_ret = if decl.is_async {
+            Ty::Task(Box::new(inferred_ret.clone()))
+        } else {
+            inferred_ret.clone()
+        };
+        self.pop_type_param_scope();
+        self.pop_scope();
+        let final_ret = declared_ret.unwrap_or(effective_inferred_ret);
+        let purity = self
+            .functions
+            .get(&decl.name)
+            .map(|sig| {
+                if sig.is_pure {
+                    FnPurity::Pure
+                } else if sig.effects.is_readonly() {
+                    FnPurity::Readonly
+                } else {
+                    FnPurity::Impure
+                }
+            })
+            .unwrap_or(FnPurity::Impure);
+        if let Some(sig) = self.functions.get_mut(&decl.name) {
+            sig.params = param_tys.clone();
+            sig.ret = final_ret.clone();
+        }
+        if let Some(global_scope) = self.scopes.first_mut() {
+            if let Some(binding) = global_scope.bindings.get_mut(&decl.name) {
+                binding.ty = Ty::Fn {
+                    params: param_tys,
+                    ret: Box::new(final_ret),
+                    purity,
+                };
+            }
+        }
+        self.current_fn_name = None;
+        self.current_fn_returns.clear();
+    }
 }

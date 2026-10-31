@@ -1,7 +1,6 @@
 # Exact repository path<TAB>why this file is intentionally indivisible.
 # Exceptions are reviewed debt: globs and stale entries are rejected.
 Cargo.lock	Generated Cargo dependency resolution must remain one canonical workspace lockfile.
-projects/moba/vertical-slice/client/package-lock.json	Generated npm dependency resolution must remain one canonical package lockfile.
 projects/moba/vertical-slice/edge-proxy/Cargo.lock	Generated Cargo dependency resolution belongs to the independently built edge proxy workspace.
 projects/dogfood/sudoku/data/top1465.txt	Fixed upstream benchmark corpus whose line order and identity are part of the dataset.
 projects/dogfood/frankl-search/certificates/generator8-q13-exclusions.json	Generated proof certificate is reviewed and verified as one authenticated artifact; splitting it would change the certificate/verifier contract.
@@ -15,3 +14,11 @@ docs/rfcs/0002-candidate-constraints.md	Accepted normative RFC is an immutable r
 docs/language-surface.json	Generated compiler-surface inventory is one source-digested machine artifact consumed atomically by coverage gates.
 docs/src/reference/generated/builtin-api.md	Generated complete builtin catalog is one runtime-owned API projection; the separate category index provides human navigation.
 projects/dogfood/sovereign-grid/coverage.toml	Generated one-row-per-surface acceptance manifest is verified atomically against syntax, API, docs, and executable evidence.
+projects/dogfood/navier-stokes/calibration_run/candidates.jsonl	Generated calibration receipt with one record per candidate, read whole by verify_calibration.py.
+projects/dogfood/navier-stokes/source_construction_imports.json	Generated import-hash manifest written and read as one artifact by verify_source_construction_audit.py.
+projects/dogfood/navier-stokes/coupled_jet_data.json	Generated coupled-jet dataset emitted by build_coupled_jet.py and read whole by verify_coupled_evolution.py.
+projects/dogfood/bsd-x/fitting_rank_target.why.txt	Generated WHY receipt written whole by verify_fitting_rank.py.
+projects/dogfood/bsd-x/quotient_comparison_transfer.why.txt	Generated WHY receipt written whole by verify_quotient_transfer.py.
+projects/dogfood/bsd-x/selmer_observability.why.txt	Generated WHY receipt written whole by verify_observability.py.
+projects/dogfood/bsd-x/single_level_certificate.why.txt	Generated WHY receipt written whole by verify_single_level.py.
+projects/dogfood/bsd-x/adaptive_layer_decision.why.txt	Generated WHY receipt written whole by verify_adaptive_layers.py.
