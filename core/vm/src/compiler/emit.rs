@@ -10,7 +10,12 @@ impl Compiler {
     }
 
     pub(crate) fn emit_op(&mut self, op: Op, line: u32) {
-        if matches!(op, Op::Jump | Op::JumpIfFalse | Op::JumpBack) {
+        // Any branch ends the straight-line window in which a read can be the
+        // last use. Fused compare-and-jumps clear it in `emit_jump`.
+        if matches!(
+            op,
+            Op::Jump | Op::JumpIfFalse | Op::JumpBack | Op::ForRangeNext | Op::MatchState
+        ) {
             self.current().last_get_local.clear();
         }
         let at = self.current_offset();

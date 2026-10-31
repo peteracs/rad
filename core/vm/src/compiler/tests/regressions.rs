@@ -292,3 +292,44 @@
         );
         assert_eq!(output, vec!["1", "[7]"]);
     }
+
+    #[test]
+    fn counted_range_read_is_not_moved_before_later_reassignment() {
+        let output = run_source(
+            r#"
+            struct Box { digits: list<int> = [] }
+            fn tail(a: Box) -> int {
+                let mut value: Box = a
+                let mut rest: list<int> = []
+                for i in range(1, len(value.digits)) { rest = push(rest, value.digits[i]) }
+                value = Box { digits: rest }
+                return len(value.digits)
+            }
+            print(tail(Box { digits: [1, 2, 3, 4] }))
+        "#,
+        );
+        assert_eq!(output, vec!["3"]);
+    }
+
+    #[test]
+    fn match_subject_read_is_not_moved_by_an_assignment_in_one_arm() {
+        let output = run_source(
+            r#"
+            type Choice {
+                Keep { v: int }
+                Reset { v: int }
+            }
+            fn tick(start: Choice) -> Choice {
+                let mut current: Choice = start
+                print("tick")
+                match current {
+                    Choice::Reset { v: _v } => { current = Choice::Keep { v: 0 } }
+                    Choice::Keep { v: _v } => { print(variant_of(current)) }
+                }
+                return current
+            }
+            print(variant_of(tick(Choice::Keep { v: 1 })))
+        "#,
+        );
+        assert_eq!(output, vec!["tick", "Keep", "Keep"]);
+    }
