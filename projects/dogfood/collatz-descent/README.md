@@ -16,8 +16,8 @@ python projects/dogfood/native-math-kernels/survival_receipts.py --out projects/
 .\target\release\rad.exe projects/dogfood/collatz-descent/blocks_main.rad --strict-types --deny-warnings --experimental-laws
 ```
 
-`main.rad` takes about 46 s. Most of that time is the exact check of the
-intercept. `audit.rad` takes about 30 s.
+`main.rad` takes about 2 minutes. Most of that time is the exact check of the
+intercept. `audit.rad` takes about a minute.
 
 ## Statement
 

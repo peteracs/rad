@@ -84,6 +84,13 @@ fn ceiling_and_certificate_agree() {
 }
 
 #[test]
+fn policy_iteration_does_not_chase_float_noise() {
+    // Tolerances below the noise of weights near 2^30 never converge here.
+    let found = ceiling(&free(8192)).unwrap();
+    assert!(found.policy_rounds < 400, "{}", found.policy_rounds);
+}
+
+#[test]
 fn barriers_only_remove_closed_walks() {
     let barriers = [0, ONE / 2, -ONE];
     let barred = Relaxation {

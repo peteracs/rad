@@ -81,6 +81,14 @@ exactly, in 0.08 s instead of about 5 s.
 python projects/dogfood/native-math-kernels/survival_receipts.py --out projects/dogfood/collatz-repulsion/out --bits 16 18 20 --marks 2L 3L 4L 5L 6L
 ```
 
+`native_check.rad` reads those receipts. `scale.rad D` reads the `L = 30`
+receipt for the map with offset `D`:
+
+```powershell
+python projects/dogfood/native-math-kernels/survival_receipts.py --out projects/dogfood/collatz-repulsion/out --bits 30 --d 1 --marks 2L 3L 4L 5L 6L
+.\target\release\rad.exe projects/dogfood/collatz-repulsion/scale.rad --strict-types --deny-warnings -- 1
+```
+
 | map | L | z x 100 at 2L..6L | observed / expected x 1000 |
 |---|---|---|---|
 | 3x+1 | 22 | -37, -28, -155, -174, 103 | 997, 995, 951, 904, 1095 |
