@@ -219,7 +219,6 @@ define_builtins! {
     WordsDigest => "words_digest",
     WordsMinRatio => "words_min_ratio",
     WordsMaxRatio => "words_max_ratio",
-    AffineTrappedSurvival => "affine_trapped_survival",
     PublishBytes => "publish_bytes",
     SizeOf => "size_of",
     OffsetOf => "offset_of",

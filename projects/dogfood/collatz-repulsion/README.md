@@ -70,12 +70,16 @@ larger `L`, beyond what the VM could reach within the time cap.
 
 ## The 100x kernel settles it: no repulsion
 
-`affine_trapped_survival(bits, d, marks)` is a native RAD builtin
-(`core/vm/src/vm/builtins_impl/affine_walks.rs`). It enumerates the trapped
+The `trapped_survival` batch tool
+(`projects/dogfood/native-math-kernels/src/trapped_survival.rs`) enumerates the trapped
 states by Terras's rule, continues the real dynamics in parallel, and
 computes the exact fair-coin null by backward recursion, all in overflow-
 checked `i128`. `native.rad` reproduces all 15 VM rows (L = 16, 18, 20)
 exactly, in 0.08 s instead of about 5 s.
+
+```powershell
+python projects/dogfood/native-math-kernels/survival_receipts.py --out projects/dogfood/collatz-repulsion/out --bits 16 18 20 --marks 2L 3L 4L 5L 6L
+```
 
 | map | L | z x 100 at 2L..6L | observed / expected x 1000 |
 |---|---|---|---|

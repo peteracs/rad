@@ -87,7 +87,7 @@ fn builtin_complexity(builtin: Builtin) -> &'static str {
             "O(1) when assignment lowers in place; O(n) for a functional destination copy",
         ByteBufSlice => "O(k) in the returned byte count",
         WordsLen | WordsGet => "O(1)",
-        WordsNew | WordsSet | WordsGather | WordsAdd | WordsMin | WordsScale | WordsAddStrided | WordsMinValue | WordsMaxValue | WordsCountGt | WordsDigest | WordsMinRatio | WordsMaxRatio | AffineTrappedSurvival => "O(n) in words, parallel across native workers",
+        WordsNew | WordsSet | WordsGather | WordsAdd | WordsMin | WordsScale | WordsAddStrided | WordsMinValue | WordsMaxValue | WordsCountGt | WordsDigest | WordsMinRatio | WordsMaxRatio => "O(n) in words, parallel across native workers",
         ByteBufCopy =>
             "O(k) when assignment lowers in place; O(n + k) for a functional destination copy",
         LowerBound | UpperBound | First | Last | Next | Previous => "O(log n)",
@@ -193,7 +193,7 @@ fn builtin_api_category(builtin: Builtin) -> &'static str {
         | BufferToStr | ByteBufNew | ByteBufLen | ByteBufGet | ByteBufSetU8
         | ByteBufSetU16Le | ByteBufSetU32Le | ByteBufSetI32Le | ByteBufGetU16Le
         | ByteBufGetU32Le | ByteBufGetI32Le | ByteBufSlice | ByteBufCopy | ByteBufToList
-        | ByteBufFromList | WordsNew | WordsLen | WordsGet | WordsSet | WordsGather | WordsAdd | WordsMin | WordsScale | WordsAddStrided | WordsMinValue | WordsMaxValue | WordsCountGt | WordsDigest | WordsMinRatio | WordsMaxRatio | AffineTrappedSurvival => {
+        | ByteBufFromList | WordsNew | WordsLen | WordsGet | WordsSet | WordsGather | WordsAdd | WordsMin | WordsScale | WordsAddStrided | WordsMinValue | WordsMaxValue | WordsCountGt | WordsDigest | WordsMinRatio | WordsMaxRatio => {
             "buffers-bitsets"
         }
 

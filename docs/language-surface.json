@@ -1,11 +1,11 @@
 {
   "formatVersion": 1,
-  "ownerDigest": "d970a4a38834aae97f1ee7349998b0171adb818b31d93d34b332ff0a019f9cf8",
+  "ownerDigest": "8401431720d718b5d6d4e88a11d1ad761251864980636ef7835b08ff53f38e32",
   "sources": [
     {
       "role": "builtins",
       "path": "core/vm/src/value/builtin_catalog.rs",
-      "sha256": "584505cc39e0353f3072512c33d389df4fc4a9e490860ef06e305f9c47330ee4"
+      "sha256": "62a0b74833b670b591bd02288012ab3b64542c23de8f5abfe64f88732f29417e"
     },
     {
       "role": "contracts",
@@ -1165,10 +1165,6 @@
     {
       "variant": "WordsMaxRatio",
       "name": "words_max_ratio"
-    },
-    {
-      "variant": "AffineTrappedSurvival",
-      "name": "affine_trapped_survival"
     },
     {
       "variant": "PublishBytes",

@@ -411,8 +411,8 @@ pub(crate) fn cyclic_pair_profiles(
                 scope.spawn(move || {
                     profile_pair_classes(
                         &classes,
-                        &orbits,
-                        &seeds,
+                        orbits,
+                        seeds,
                         width,
                         cube_size,
                         minimum_members,

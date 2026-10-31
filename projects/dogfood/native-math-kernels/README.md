@@ -15,6 +15,11 @@ projects/dogfood/native-math-kernels/build.ps1
 projects/dogfood/native-math-kernels/build.sh release
 ```
 
+Extension calls end at RAD's native-call deadline, so longer runs are batch
+tools in `src/bin/`, and RAD reads their JSON receipts. `shadow_walk` measures
+and certifies the shadow-cycle relaxation. `trapped_survival` counts
+trapped-set survival; `survival_receipts.py` writes one receipt per bit length.
+
 The scripts also install a stable extensionless name (and the platform name
 needed by Windows' loader). The RAD adapters exchange canonical JSON across
 the scalar extension ABI.

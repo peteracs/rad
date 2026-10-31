@@ -22,7 +22,6 @@ include!("builtins_impl/entity_lifecycle.rs");
 include!("builtins_impl/world_queries.rs");
 include!("builtins_impl/byte_buffers.rs");
 include!("builtins_impl/word_buffers.rs");
-include!("builtins_impl/affine_walks.rs");
 include!("builtins_impl/binary_publications.rs");
 include!("builtins_impl/native_layout.rs");
 include!("builtins_impl/forks_and_simulation.rs");

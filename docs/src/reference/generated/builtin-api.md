@@ -4451,30 +4451,6 @@ words_max_ratio(bytebuf, bytebuf, int) -> int
 - Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
-<a id="affine_trapped_survival"></a>
-## `affine_trapped_survival`
-
-```text
-affine_trapped_survival(int, int, list<int>) -> list<int>
-```
-
-- Category: `buffers-bitsets`
-- Arity: `exactly 3` argument(s)
-- Effects: `pure`
-- Purity: `pure`
-- Errors: invalid arity, type, range, capability, platform, or runtime state is a runtime error
-- Determinism: deterministic for equal RAD state and arguments
-- Complexity: `O(n) in words, parallel across native workers`
-- Allocation: not statically guaranteed allocation-free
-- Native: `available`
-- WASM: `available`
-- Sandbox: `capability-checked`
-- Transaction body: `allowed`
-- Post-commit: `allowed`
-- Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
-- Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
-
 <a id="publish_bytes"></a>
 ## `publish_bytes`
 

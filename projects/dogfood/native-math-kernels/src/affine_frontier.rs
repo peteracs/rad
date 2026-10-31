@@ -299,7 +299,7 @@ fn retain_zero_runway_beam(
                 depth,
                 max_depth,
             );
-            candidate.rank_runway = ranked_runway(&candidate, depth, (max_depth - depth).min(512));
+            candidate.rank_runway = ranked_runway(candidate, depth, (max_depth - depth).min(512));
         }
     }
     if bucket.len() > beam {

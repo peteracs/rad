@@ -10,7 +10,9 @@ mod affine_parity;
 mod boolean_lattice;
 mod column_quotient;
 mod rewrite_rank;
+pub mod shadow_walk;
 mod sparse_slope;
+pub mod trapped_survival;
 mod zeta_cover;
 
 // Public lane receipts must remain stable across the independent production

@@ -304,7 +304,6 @@ impl VM {
             Builtin::WordsDigest => self.bi_words_digest(args),
             Builtin::WordsMinRatio => self.bi_words_min_ratio(args),
             Builtin::WordsMaxRatio => self.bi_words_max_ratio(args),
-            Builtin::AffineTrappedSurvival => self.bi_affine_trapped_survival(args),
             Builtin::PublishBytes => self.bi_publish_bytes(args),
             Builtin::SizeOf => self.bi_size_of(args),
             Builtin::OffsetOf => self.bi_offset_of(args),

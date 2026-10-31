@@ -221,11 +221,13 @@ rad/
       - `projects/dogfood/collatz-carry/` - Whether multiplying by 3 moves parity information to the high end of a number in a structured way.
       - `projects/dogfood/collatz-cegar/` - Counterexample-guided search for Lyapunov function templates, each refuted exactly.
       - `projects/dogfood/collatz-density/` - Krasikov-Lagarias linear programs on packed word buffers, with rate and validation probes.
+      - `projects/dogfood/collatz-descent/` - Sharp descent at the first contraction, with exact ranges, block structure and calibration on 3x+d.
       - `projects/dogfood/collatz-epoch/` - Epochs as the unit of time for large-value dynamics, following the shadow-fork result.
       - `projects/dogfood/collatz-frontier/` - Proof-dependency graph of Collatz session results, with statements as entities carrying a claim status.
       - `projects/dogfood/collatz-merge/` - Coalescence as a weaker target than descent: meeting the trajectory of a smaller number.
       - `projects/dogfood/collatz-repulsion/` - Weakening the uniform coefficient stopping-time bound left by the coefficient-guided refinement.
       - `projects/dogfood/collatz-shadow/` - Runs each orbit twice, in the real map and in a shadow world without the +1.
+      - `projects/dogfood/collatz-shadow-cycle/` - Shows that shadow barriers from verified convergence cannot exclude the smallest admissible cycle.
       - `projects/dogfood/collatz-steer/` - Evidence-driven choice of the next research direction; nothing here is a proof.
       - `projects/dogfood/collatz-surgery/` - Forked universes that change the map on one odd residue class.
       - `projects/dogfood/navier-stokes/` - Navier-Stokes lower-bound and construction workloads with independent verifiers.
@@ -247,6 +249,7 @@ rad/
           - `projects/dogfood/native-math-kernels/src/bin/` - Standalone mathematical analysis binaries.
           - `projects/dogfood/native-math-kernels/src/boolean_lattice/` - Boolean-lattice closure and audit kernels.
           - `projects/dogfood/native-math-kernels/src/lib/` - RAD extension ABI bindings and registration sections.
+          - `projects/dogfood/native-math-kernels/src/shadow_walk/` - Tests for the shadow-cycle relaxation.
           - `projects/dogfood/native-math-kernels/src/zeta_cover/` - Zeta certificate, correlation, spacing, and window-verification kernels.
       - `projects/dogfood/opsdesk/` - Operations-desk workflow application.
       - `projects/dogfood/oracle/` - Speculative planner and beam-search application.

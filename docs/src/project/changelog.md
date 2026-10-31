@@ -1,5 +1,12 @@
 # Changelog
 
+- **Assignments in one branch no longer clear a local for the others.** The
+  compiler treated a read before `ForRangeNext` or `MatchState` as a last use.
+  An assignment later in the same function could then move the value out, and
+  a later loop iteration or another `match` arm read `nil`.
+- **Removed `affine_trapped_survival`.** It was problem-specific mathematics in
+  the VM. It is now the `trapped_survival` batch tool in
+  `projects/dogfood/native-math-kernels`, and programs read its JSON receipts.
 - **Model checking no longer passes without checking.** `spawn` and `query`
   reached the model dependency trace only inside a sandbox, so an invariant
   over them was evaluated once and then skipped. `commit`, `merge_forks`,
@@ -21,9 +28,7 @@
   construction and access, affine-modular gather, elementwise add, minimum
   and floor scaling, strided add, reductions, ratio bounds, and a digest.
   They are pure, bounds- and overflow-checked, and parallel above 65536 words
-  with results independent of worker count. `affine_trapped_survival`
-  computes trapped-set survival for `x -> x/2, (3x+d)/2` together with its
-  exact fair-coin null. Unit tests cover values, error paths, the parallel
+  with results independent of worker count. Unit tests cover values, error paths, the parallel
   path, strict typing, and agreement with an independent pure-RAD
   computation. The builtin reference, generated API catalog, and Sovereign
   Grid coverage are regenerated.

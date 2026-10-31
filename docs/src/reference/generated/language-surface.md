@@ -3,7 +3,7 @@
 
 This inventory is generated from the production lexer, AST, parser, and builtin catalog. It is the completeness denominator for the normative reference and Sovereign Grid coverage gate. Names such as `Error` are recovery nodes rather than source syntax; the coverage manifest records explicit exclusions.
 
-Owner digest: `d970a4a38834aae97f1ee7349998b0171adb818b31d93d34b332ff0a019f9cf8`.
+Owner digest: `8401431720d718b5d6d4e88a11d1ad761251864980636ef7835b08ff53f38e32`.
 
 ## Token kinds
 
@@ -311,7 +311,7 @@ Owner digest: `d970a4a38834aae97f1ee7349998b0171adb818b31d93d34b332ff0a019f9cf8`
 
 ## Builtin API names
 
-The 278 names below come from the one runtime catalog. Signatures and operational semantics are in the [complete builtin API catalog](builtin-api.md); this generated list makes omissions machine-detectable.
+The 277 names below come from the one runtime catalog. Signatures and operational semantics are in the [complete builtin API catalog](builtin-api.md); this generated list makes omissions machine-detectable.
 
 | Name | Runtime variant |
 |---|---|
@@ -499,7 +499,6 @@ The 278 names below come from the one runtime catalog. Signatures and operationa
 | <a id="builtin-words_digest"></a>`words_digest` | `WordsDigest` |
 | <a id="builtin-words_min_ratio"></a>`words_min_ratio` | `WordsMinRatio` |
 | <a id="builtin-words_max_ratio"></a>`words_max_ratio` | `WordsMaxRatio` |
-| <a id="builtin-affine_trapped_survival"></a>`affine_trapped_survival` | `AffineTrappedSurvival` |
 | <a id="builtin-publish_bytes"></a>`publish_bytes` | `PublishBytes` |
 | <a id="builtin-size_of"></a>`size_of` | `SizeOf` |
 | <a id="builtin-offset_of"></a>`offset_of` | `OffsetOf` |

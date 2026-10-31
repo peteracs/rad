@@ -157,22 +157,3 @@
         .expect("word kernels are pure and well typed");
         assert_eq!(output, vec!["7"]);
     }
-
-    #[test]
-    fn affine_trapped_survival_matches_the_independent_vm_computation() {
-        // Values cross-checked against the pure-RAD implementation in
-        // Exact-null workload from a project-owned dogfood, L = 16, 3x+1.
-        let output = run_source(
-            r#"
-            let raw: list<int> = affine_trapped_survival(16, 1, [32, 48, 64, 80, 96])
-            let mut observed: list<int> = []
-            for i in range(5) { observed = push(observed, raw[1 + 3 * i]) }
-            print(observed)
-            print(int_div(raw[2], 100))    // expected survivors at t = 32, truncated to tenths as in the VM run
-        "#,
-        );
-        assert_eq!(output, vec!["[313, 113, 48, 12, 8]", "3139"]);
-        assert!(words_error("print(affine_trapped_survival(16, 2, [40]))").contains("odd"));
-        assert!(words_error("print(affine_trapped_survival(16, 1, [10]))").contains("mark"));
-        assert!(words_error("print(affine_trapped_survival(1, 1, [10]))").contains("bits"));
-    }

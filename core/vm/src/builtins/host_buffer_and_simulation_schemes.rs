@@ -631,12 +631,6 @@ fn builtin_type_scheme_buffers(name: &str) -> Option<BuiltinSig> {
             ret: Ty::Int,
             is_pure: true,
         },
-        "affine_trapped_survival" => BuiltinSig {
-            type_params: vec![],
-            params: vec![Ty::Int, Ty::Int, Ty::List(Box::new(Ty::Int))],
-            ret: Ty::List(Box::new(Ty::Int)),
-            is_pure: true,
-        },
         "bytebuf_slice" => BuiltinSig {
             type_params: vec![],
             params: vec![Ty::ByteBuf, Ty::Int, Ty::Int],

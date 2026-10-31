@@ -144,7 +144,6 @@ Every runtime builtin appears exactly once. Each entry links to its exact contra
 | [`words_digest`](builtin-api.md#words_digest) | [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad) |
 | [`words_min_ratio`](builtin-api.md#words_min_ratio) | [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad) |
 | [`words_max_ratio`](builtin-api.md#words_max_ratio) | [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad) |
-| [`affine_trapped_survival`](builtin-api.md#affine_trapped_survival) | [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad) |
 
 ## Host Publications
 

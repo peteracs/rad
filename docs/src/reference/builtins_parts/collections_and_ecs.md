@@ -169,14 +169,6 @@ are associative, so results are identical for every worker count.
 | `words_min_ratio(num, den, shift)`, `words_max_ratio(num, den, shift)` | Smallest or largest `floor(num[i] * 2^shift / den[i])` (`shift <= 30`); a zero denominator is an error |
 | `words_digest(buf)` | Order-sensitive 62-bit FNV-1a digest of the underlying bytes |
 
-`affine_trapped_survival(bits, d, marks)` is a research kernel for the maps
-`x -> x/2` (even) and `x -> (3x + d)/2` (odd, `d` odd). For every
-exactly-`bits`-bit start whose parity walk keeps `3^q >= 2^t` through step
-`bits`, it continues the real dynamics and computes the exact fair-coin null
-by backward recursion. It returns `[states, observed_1, expected_1 * 1000,
-variance_1 * 1000, ...]`, one triple per mark. Arithmetic is overflow-checked
-`i128`, and states are processed in parallel with order-independent sums.
-
 `encode_le(value)` and `encode_be(value)` encode fixed-width native scalars or
 complete `repr(C)` struct values. Nested structs follow their sealed layouts;
 padding is deterministic and zeroed. A field/layout mismatch is a runtime error
