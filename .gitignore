@@ -133,3 +133,6 @@ devtools/**/obj/
 *.etl
 *.etlx
 *.mm_profdata
+
+# GitHub-style issues kept on disk (see GH/README.md)
+/GH/
