@@ -11,6 +11,8 @@ name: Soundness
 #   - asan-soak: nightly cron + manual, AddressSanitizer build with a deep
 #     budget. ASAN (not Miri) because the zstd envelope crosses a C FFI
 #     boundary that Miri cannot execute — ASAN watches exactly that seam.
+#     Also on push/PR, at a short budget, when a change reaches that seam
+#     (ffi-changes): a lockfile bump broke it unseen until cron (GH 0002).
 
 on:
   push:
@@ -98,9 +100,41 @@ jobs:
           path: /tmp/rad_fuzz_findings/
           if-no-files-found: ignore
 
+  # Does this push/PR reach the C/FFI seam? Dependency and build-script
+  # changes (61a64b5's cc bump is the case that got through), this workflow,
+  # and zstd's callers (cargo check with zstd removed lists exactly those two
+  # files, GH 0001).
+  ffi-changes:
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    outputs:
+      touched: ${{ steps.diff.outputs.touched }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+      - id: diff
+        env:
+          BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          seam='^(Cargo\.lock|(.*/)?Cargo\.toml|(.*/)?build\.rs|\.github/workflows/soundness\.yml|core/vm/src/radpack\.rs|core/vm/src/replay/file_stream\.rs)$'
+          if [ -z "$BASE" ] || ! git cat-file -e "$BASE^{commit}" 2> /dev/null; then
+            echo "no usable base ('$BASE'): run the soak"; touched=true
+          elif git diff --name-only "$BASE...HEAD" | grep -E "$seam"; then
+            touched=true
+          else
+            touched=false
+          fi
+          echo "touched=$touched" | tee -a "$GITHUB_OUTPUT"
+
   asan-soak:
-    # Sanitizers need nightly + -Z flags; soak budget only on cron/manual.
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    # Sanitizers need nightly + -Z flags. Deep budget on cron/manual; a short
+    # one on push/PR that reaches the seam (2000 reproduced GH 0001).
+    needs: ffi-changes
+    if: >-
+      !cancelled() && (github.event_name == 'schedule'
+      || github.event_name == 'workflow_dispatch'
+      || needs.ffi-changes.outputs.touched == 'true')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -148,7 +182,7 @@ jobs:
           RUSTFLAGS: "-Zsanitizer=address"
           RUSTDOCFLAGS: "-Zsanitizer=address"
           ASAN_OPTIONS: "detect_leaks=0" # the GC owns liveness; leaks are not UB
-          RAD_FUZZ_ITERS: ${{ github.event.inputs.iters || '20000' }}
+          RAD_FUZZ_ITERS: ${{ github.event.inputs.iters || (github.event_name == 'schedule' && '20000' || '2000') }}
         run: |
           cargo +nightly test -p rad-vm --release fuzz_ \
             -Zbuild-std --target x86_64-unknown-linux-gnu -- --nocapture
