@@ -130,7 +130,7 @@ jobs:
           fpr=$(gpg --show-keys --with-colons llvm.asc | awk -F: '/^fpr/ { print $10; exit }')
           test "$fpr" = 6084F3CF814B57C1CF12EFD515CF4D18AF4F7421 || {
             echo "::error::apt.llvm.org key fingerprint is '$fpr'"; exit 1; }
-          sudo gpg --dearmor -o /usr/share/keyrings/apt-llvm.gpg < llvm.asc
+          sudo gpg --dearmor -o /usr/share/keyrings/apt-llvm.gpg llvm.asc
           echo "deb [signed-by=/usr/share/keyrings/apt-llvm.gpg] $base/ $suite main" |
             sudo tee /etc/apt/sources.list.d/apt-llvm.list
           sudo apt-get update -q
@@ -138,9 +138,11 @@ jobs:
           clang_major=$("clang-$llvm_major" -dumpversion | cut -d. -f1)
           test "$clang_major" = "$llvm_major" || {
             echo "::error::clang-$llvm_major reports $clang_major; rustc uses LLVM $llvm_major"; exit 1; }
-          echo "CC=clang-$llvm_major" >> "$GITHUB_ENV"
-          echo "CXX=clang++-$llvm_major" >> "$GITHUB_ENV"
-          echo "LLVM_MAJOR=$llvm_major" >> "$GITHUB_ENV"
+          {
+            echo "CC=clang-$llvm_major"
+            echo "CXX=clang++-$llvm_major"
+            echo "LLVM_MAJOR=$llvm_major"
+          } >> "$GITHUB_ENV"
       - name: Fuzz under AddressSanitizer
         env:
           RUSTFLAGS: "-Zsanitizer=address"
