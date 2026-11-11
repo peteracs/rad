@@ -369,7 +369,16 @@ jobs:
         run: npm run build
         working-directory: adapters/webgpu
       - name: Install browser rendering dependency
-        run: npx --no-install playwright install --with-deps --no-shell chromium
+        # --with-deps runs apt-get, which fails when the runner cannot resolve
+        # the Ubuntu archives (seen on 2026-11-11 for both the Azure mirror and
+        # archive.ubuntu.com). The runner image already carries Chrome's
+        # system libraries and Xvfb, so fall back to the browser download
+        # alone and let the smoke test below decide.
+        run: |
+          if ! npx --no-install playwright install --with-deps --no-shell chromium; then
+            echo "::warning::apt-get failed; installing Chromium without system packages"
+            npx --no-install playwright install --no-shell chromium
+          fi
         working-directory: adapters/webgpu
       - name: WebGPU pixel, resize, restart, and recovery smoke
         run: xvfb-run --auto-servernum npm run test:browser

@@ -1,0 +1,24 @@
+cff-version: 1.2.0
+message: "If you use these certificates, please cite them as below."
+title: "Andrews-Curtis certificates for Miller-Schupp presentations"
+type: dataset
+authors:
+  - alias: peteracs
+license: CC-BY-4.0
+repository-code: "https://github.com/peteracs/ac-miller-schupp"
+keywords:
+  - Andrews-Curtis conjecture
+  - Miller-Schupp presentations
+  - Akbulut-Kirby presentations
+  - balanced presentations
+  - combinatorial group theory
+references:
+  - type: article
+    title: "What makes math problems hard for reinforcement learning: a case study"
+    authors:
+      - family-names: Shehper
+        given-names: Ali
+      - name: "et al."
+    identifiers:
+      - type: other
+        value: "arXiv:2408.15332"

@@ -77,8 +77,14 @@ def main():
                 record(out, first)
                 print(f"  core resolved: {first[3]} {first[4]}", flush=True)
                 continue
-            atlas_sweep.grow(rad, label, r1, r2, 1, 20000)
-            record(out, (index, r1, r2, "CORE", label, "0", "", ""))
+            head, lines = atlas_sweep.grow(rad, label, r1, r2, 1, 20000)
+            if head.startswith("JOINED"):
+                # Growing the core reached another class: the core is resolved.
+                core = atlas_sweep.check_chain((index, r1, r2), lines, head, atlas_sweep.classes())
+                record(out, core)
+                print(f"  core resolved while growing: {core[3]} {core[4]}", flush=True)
+            else:
+                record(out, (index, r1, r2, "CORE", label, "0", "", ""))
             table = atlas_sweep.classes()
             rest = [tuple(cells[:3]) for cells in unsolved[1:]]
             joined = 0
