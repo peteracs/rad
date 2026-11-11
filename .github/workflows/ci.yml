@@ -369,7 +369,15 @@ jobs:
         run: npm run build
         working-directory: adapters/webgpu
       - name: Install browser rendering dependency
-        run: npx --no-install playwright install --with-deps --no-shell chromium
+        # --with-deps runs apt-get against the runner's Azure Ubuntu mirror.
+        # When that mirror's name does not resolve, retry once against
+        # archive.ubuntu.com instead of failing the job on infrastructure.
+        run: |
+          if ! npx --no-install playwright install --with-deps --no-shell chromium; then
+            echo "::warning::apt mirror unreachable; retrying with archive.ubuntu.com"
+            echo "http://archive.ubuntu.com/ubuntu/" | sudo tee /etc/apt/apt-mirrors.txt
+            npx --no-install playwright install --with-deps --no-shell chromium
+          fi
         working-directory: adapters/webgpu
       - name: WebGPU pixel, resize, restart, and recovery smoke
         run: xvfb-run --auto-servernum npm run test:browser
