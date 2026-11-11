@@ -12,6 +12,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 CLI = ROOT / "adapters/cli/src/cli/arguments.rs"
+# Commands whose options are parsed outside arguments.rs. Their usage line
+# still lives in arguments.rs, with every other command form.
+CLI_COMMANDS = [ROOT / "adapters/cli/src/cli/blame_command.rs"]
 WASM_RUNTIME = ROOT / "core/vm/src/wasm/runtime_api.rs"
 WASM_BINARY = ROOT / "core/vm/src/wasm/binary_host.rs"
 WASM_CHUNK = ROOT / "core/vm/src/wasm/rendering_and_tests.rs"
@@ -52,7 +55,7 @@ def public_functions(source: str) -> list[str]:
 
 
 def build() -> dict[str, object]:
-    owners = [CLI, WASM_RUNTIME, WASM_BINARY, WASM_CHUNK]
+    owners = [CLI, *CLI_COMMANDS, WASM_RUNTIME, WASM_BINARY, WASM_CHUNK]
     digest = hashlib.sha256()
     owner_rows = []
     for path in owners:
@@ -69,7 +72,9 @@ def build() -> dict[str, object]:
         "owners": owner_rows,
         "cli": {
             "usages": command_usages(cli_source),
-            "options": cli_options(cli_source),
+            "options": cli_options(
+                cli_source + "".join(text(path) for path in CLI_COMMANDS)
+            ),
         },
         "wasm": {
             "runtimeMethods": public_functions(text(WASM_RUNTIME)),

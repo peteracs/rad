@@ -38,6 +38,7 @@ Usage: {program} <file.rad> [--no-check] [--experimental-laws] [--relation-schem
        {program} types <input.rad> <output.d.ts> [--feature <name>]
        {program} sandbox serve [host.rad] [--caps <caps.json>]
        {program} replay <trace.radr> [--to-frame <n>] [--serve] [--with <fixed.rad>] [--force]
+       {program} blame <trace.radr> [--output <text> | --error <text>] [--with <file.rad>] [--why <entity> <component> | --why-resource <resource>] [--strategy <guided|ddmin>] [--no-but-for] [--jobs <n>] [--max-replays <n>] [--write-script <file>] [--json] [--force]
        {program} fmt [--check] [file.rad...]
        {program} lint [--preset=strict] [file.rad...]
        {program} surface <file.rad> [--json]
@@ -209,6 +210,10 @@ fn parse_cli_args(args: &[String]) -> Result<CliCommand, String> {
             artifact_directory,
             json,
         });
+    }
+
+    if args.get(1).map(String::as_str) == Some("blame") {
+        return parse_blame_arguments(args, program);
     }
 
     if args.get(1).map(String::as_str) == Some("shrink") {

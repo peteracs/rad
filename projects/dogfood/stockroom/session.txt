@@ -1,0 +1,400 @@
+receive bolt 313
+receive nut 268
+receive washer 288
+receive gear 240
+receive belt 317
+receive chain 280
+receive hinge 366
+receive spring 349
+receive nut 25
+order o1 belt 14
+cancel o1
+receive belt 91
+order o2 gear 51
+receive spring 106
+ship o2
+receive nut 66
+order o3 gear 21
+order o4 spring 34
+ship o4
+ship o3
+receive hinge 65
+order o5 spring 55
+cancel o5
+receive belt 77
+order o6 nut 22
+cancel o6
+order o7 nut 26
+cancel o7
+order o8 spring 27
+order o9 belt 48
+order o10 gear 27
+order o11 belt 5
+ship o11
+ship o8
+receive belt 34
+order o12 belt 23
+order o13 bolt 9
+ship o13
+ship o9
+cancel o10
+cancel o12
+receive washer 79
+receive belt 28
+order o14 washer 59
+order o15 belt 23
+order o16 hinge 59
+cancel o16
+order o17 hinge 56
+order o18 chain 22
+ship o14
+ship o15
+order o19 bolt 28
+order o20 washer 54
+cancel o19
+order o21 bolt 49
+order o22 spring 53
+cancel o18
+order o23 belt 47
+order o24 bolt 43
+ship o20
+ship o22
+ship o21
+ship o17
+ship o24
+order o25 gear 42
+order o26 gear 25
+receive chain 83
+order o27 chain 15
+cancel o25
+order o28 bolt 29
+order o29 spring 44
+cancel o17
+receive gear 23
+order o30 belt 39
+order o31 bolt 25
+order o32 chain 15
+order o33 hinge 14
+receive chain 82
+order o34 gear 33
+ship o29
+receive belt 41
+ship o23
+ship o26
+cancel o28
+cancel o31
+order o35 hinge 54
+ship o35
+ship o33
+ship o34
+ship o32
+order o36 bolt 10
+order o37 chain 18
+cancel o36
+order o38 belt 51
+order o39 chain 47
+order o40 gear 16
+order o41 spring 59
+cancel o41
+order o42 spring 21
+ship o40
+order o43 gear 24
+order o44 nut 39
+cancel o30
+order o45 spring 42
+order o46 spring 27
+order o47 nut 17
+order o48 chain 30
+ship o48
+order o49 washer 41
+cancel o27
+order o50 belt 45
+order o51 bolt 17
+order o52 chain 42
+order o53 bolt 10
+receive spring 38
+order o54 belt 43
+receive gear 92
+order o55 washer 55
+ship o49
+ship o46
+ship o51
+ship o37
+ship o54
+order o56 spring 29
+ship o38
+ship o43
+cancel o53
+receive gear 35
+order o57 nut 44
+ship o39
+order o58 washer 26
+order o59 bolt 30
+receive nut 103
+ship o55
+order o60 hinge 5
+cancel o58
+ship o50
+receive chain 117
+receive gear 97
+order o61 bolt 56
+order o62 nut 39
+ship o59
+order o63 washer 29
+receive nut 55
+cancel o63
+ship o47
+order o64 belt 23
+ship o56
+cancel o52
+cancel o62
+order o65 gear 58
+cancel o64
+cancel o42
+receive bolt 95
+ship o45
+ship o61
+ship o60
+ship o57
+receive chain 77
+order o66 spring 38
+order o67 belt 33
+order o68 bolt 56
+ship o65
+receive washer 76
+receive belt 96
+receive spring 107
+cancel o44
+cancel o67
+cancel o66
+ship o68
+order o69 gear 5
+order o70 washer 54
+ship o69
+receive washer 61
+cancel o70
+order o71 gear 29
+ship o71
+order o72 nut 15
+cancel o72
+order o73 nut 11
+order o74 belt 16
+order o75 hinge 26
+order o76 hinge 51
+ship o76
+receive washer 70
+ship o73
+order o77 washer 32
+receive chain 111
+ship o74
+order o78 hinge 37
+order o79 nut 43
+ship o79
+receive chain 95
+ship o75
+order o80 gear 10
+ship o78
+receive gear 94
+receive bolt 112
+ship o77
+order o81 spring 19
+ship o81
+ship o80
+receive hinge 45
+order o82 hinge 32
+order o83 bolt 14
+order o84 belt 26
+receive chain 44
+cancel o84
+order o85 hinge 39
+cancel o82
+order o86 nut 13
+receive belt 48
+order o87 gear 24
+ship o83
+ship o87
+order o88 belt 5
+order o89 chain 34
+receive nut 23
+order o90 chain 9
+cancel o85
+order o91 bolt 57
+receive gear 45
+receive spring 65
+cancel o89
+order o92 belt 55
+order o93 washer 52
+receive spring 79
+order o94 gear 52
+order o95 gear 12
+order o96 bolt 11
+receive nut 90
+order o97 belt 58
+receive belt 50
+order o98 spring 33
+order o99 belt 36
+receive chain 61
+receive bolt 46
+receive nut 110
+order o100 bolt 16
+order o101 gear 59
+receive gear 72
+ship o100
+receive washer 54
+ship o99
+ship o95
+order o102 hinge 51
+order o103 gear 32
+order o104 hinge 20
+order o105 nut 20
+order o106 chain 56
+order o107 spring 57
+ship o107
+order o108 chain 29
+cancel o101
+cancel o91
+receive chain 99
+ship o108
+order o109 washer 37
+receive gear 22
+order o110 hinge 33
+order o111 spring 26
+receive gear 98
+ship o96
+ship o90
+order o112 chain 7
+order o113 hinge 59
+ship o106
+cancel o102
+receive bolt 103
+cancel o112
+ship o109
+order o114 nut 53
+order o115 hinge 35
+order o116 bolt 23
+cancel o110
+receive bolt 108
+cancel o94
+order o117 nut 59
+order o118 hinge 15
+ship o113
+ship o92
+receive bolt 25
+receive chain 110
+order o119 nut 34
+order o120 nut 7
+cancel o120
+receive hinge 93
+order o121 spring 36
+ship o88
+ship o117
+ship o104
+receive belt 45
+order o122 bolt 9
+order o123 bolt 44
+ship o119
+order o124 belt 59
+ship o98
+order o125 nut 43
+ship o111
+receive nut 113
+order o126 hinge 49
+ship o121
+ship o123
+ship o118
+order o127 chain 12
+order o128 hinge 29
+order o129 hinge 57
+ship o116
+receive hinge 20
+ship o126
+order o130 washer 59
+ship o86
+ship o128
+cancel o122
+cancel o124
+order o131 nut 19
+order o132 spring 37
+order o133 washer 40
+cancel o105
+ship o103
+order o134 gear 57
+ship o127
+order o135 spring 22
+cancel o130
+order o136 hinge 59
+ship o133
+order o137 washer 54
+ship o136
+ship o125
+cancel o97
+receive washer 56
+order o138 spring 5
+order o139 belt 50
+receive washer 106
+receive chain 22
+ship o115
+cancel o134
+ship o132
+order o140 belt 11
+ship o138
+ship o114
+ship o135
+order o141 washer 21
+ship o141
+order o142 chain 30
+order o143 bolt 20
+order o144 bolt 49
+ship o139
+order o145 chain 7
+order o146 belt 19
+order o147 hinge 17
+order o148 hinge 51
+order o149 chain 44
+receive chain 89
+cancel o147
+ship o145
+order o150 gear 27
+ship o149
+order o151 washer 38
+ship o144
+receive hinge 81
+cancel o137
+cancel o131
+ship o151
+cancel o140
+ship o143
+receive spring 97
+receive spring 117
+order o152 bolt 11
+order o153 nut 25
+order o154 spring 27
+ship o146
+cancel o142
+ship o152
+ship o154
+cancel o129
+order o155 bolt 41
+order o156 spring 9
+receive nut 26
+order o157 chain 32
+order o158 hinge 43
+receive belt 64
+ship o157
+order o159 gear 56
+receive washer 38
+cancel o93
+order o160 washer 59
+receive washer 71
+order o161 belt 21
+ship o161
+cancel o156
+order o162 gear 29
+cancel o158
+order o163 hinge 9
+cancel o163
+receive bolt 111
+receive hinge 38
+order o164 gear 13
+ship o159
+done

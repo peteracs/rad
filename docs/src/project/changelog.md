@@ -1,5 +1,17 @@
 # Changelog
 
+- **`rad blame`: which recorded inputs cause a symptom.** `why()` reports the
+  lineage of a value. `rad blame <trace.radr>` answers by intervention: it
+  replays the recorded session with inputs withheld and reports a 1-minimal
+  set that still produces the symptom, a but-for class for every input
+  (necessary, structural, incidental), and optionally how the `why()` lineage
+  of a value compares. Every claim is a replay; the result is the same at any
+  worker count. Trace replay gains the counterfactual mode behind it: a
+  history that runs out of standard input sees end of input instead of a
+  repeated last line, and a clock, file or HTTP reading stays with the input
+  it was taken under, so withholding one command does not hand the next one
+  its clock. See the
+  [guide](../guide/counterfactual-blame.md) and `projects/dogfood/stockroom`.
 - **Assignments in one branch no longer clear a local for the others.** The
   compiler treated a read before `ForRangeNext` or `MatchState` as a last use.
   An assignment later in the same function could then move the value out, and

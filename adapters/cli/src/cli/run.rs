@@ -83,6 +83,15 @@ fn main() {
         return;
     }
 
+    if let CliCommand::Blame {
+        trace_path,
+        arguments,
+    } = command
+    {
+        run_blame_command(&trace_path, arguments);
+        return;
+    }
+
     if let CliCommand::FfiVerify {
         plugin,
         contract,

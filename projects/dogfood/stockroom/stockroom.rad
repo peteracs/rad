@@ -1,0 +1,136 @@
+// STOCKROOM: an order desk that keeps stock, reservations and shipments.
+//
+//   rad projects/dogfood/stockroom/stockroom.rad < projects/dogfood/stockroom/session.txt
+//
+// One command per line:
+//   receive <sku> <qty>        goods arrive
+//   order <id> <sku> <qty>     reserve stock for an order (rejected if short)
+//   ship <id>                  an open order leaves the building
+//   cancel <id>                release an order's reservation
+//   done                       end of day: audit every sku
+//
+// The audit checks the one thing a stockroom must never get wrong: every
+// unit received is on the shelf, reserved, or shipped.
+//
+// This build has the bug the incident in README.md is about: `cancel` puts
+// the quantity back on the shelf without checking that the order is still
+// open. Cancel an order that already shipped and the shelf count grows by
+// goods that left the building. Nothing fails until the audit.
+
+component Stock { on_hand: int = 0, received: int = 0, shipped: int = 0 }
+
+component Order { sku: str = "", qty: int = 0, state: str = "open" }
+
+event Received { sku: str, qty: int }
+
+event Placed { id: str, sku: str, qty: int }
+
+event Shipped { id: str }
+
+event Cancelled { id: str }
+
+fn stock_of(sku: str) -> entity {
+    let found = get_entity(sku)
+    if found != nil { return found }
+    return spawn(sku, Stock { on_hand: 0, received: 0, shipped: 0 })
+}
+
+on Received(e) {
+    let shelf = stock_of(e.sku)
+    let s = get(shelf, Stock) |> unwrap
+    set(shelf, Stock { on_hand: s.on_hand + e.qty, received: s.received + e.qty, shipped: s.shipped })
+}
+
+on Placed(e) {
+    if get_entity(e.id) != nil {
+        print(f"order {e.id}: duplicate id, ignored")
+        return nil
+    }
+    let shelf = stock_of(e.sku)
+    let s = get(shelf, Stock) |> unwrap
+    if s.on_hand < e.qty {
+        print(f"order {e.id}: only {s.on_hand} {e.sku} on hand, rejected")
+        return nil
+    }
+    set(shelf, Stock { on_hand: s.on_hand - e.qty, received: s.received, shipped: s.shipped })
+    let _ = spawn(e.id, Order { sku: e.sku, qty: e.qty, state: "open" })
+}
+
+on Shipped(e) {
+    let order = get_entity(e.id)
+    if order == nil { return nil }
+    let o = get(order, Order) |> unwrap
+    if o.state != "open" { return nil }
+    let shelf = stock_of(o.sku)
+    let s = get(shelf, Stock) |> unwrap
+    set(shelf, Stock { on_hand: s.on_hand, received: s.received, shipped: s.shipped + o.qty })
+    set(order, Order { sku: o.sku, qty: o.qty, state: "shipped" })
+}
+
+on Cancelled(e) {
+    let order = get_entity(e.id)
+    if order == nil { return nil }
+    let o = get(order, Order) |> unwrap
+    if o.state == "cancelled" { return nil }
+    // THE BUG: a shipped order is not open, but its quantity is released
+    // to the shelf all the same.
+    let shelf = stock_of(o.sku)
+    let s = get(shelf, Stock) |> unwrap
+    set(shelf, Stock { on_hand: s.on_hand + o.qty, received: s.received, shipped: s.shipped })
+    set(order, Order { sku: o.sku, qty: o.qty, state: "cancelled" })
+}
+
+fn reserved_for(sku: str) -> int {
+    let mut total = 0
+    for order in entities(Order) {
+        let o = get(order, Order) |> unwrap
+        if o.sku == sku and o.state == "open" { total = total + o.qty }
+    }
+    return total
+}
+
+fn audit() -> int {
+    let mut failures = 0
+    for shelf in entities(Stock) {
+        let s = get(shelf, Stock) |> unwrap
+        let sku = name_of(shelf)
+        let accounted = s.on_hand + reserved_for(sku) + s.shipped
+        if accounted != s.received {
+            print(f"AUDIT FAILED {sku}: received {s.received}, accounted for {accounted}")
+            failures = failures + 1
+        }
+    }
+    return failures
+}
+
+fn number(text: str) -> int {
+    match try_int(text) {
+        Some(n) => { return n }
+        None => { return 0 }
+    }
+}
+
+fn main() -> nil {
+    let mut open = true
+    while open {
+        let line = trim(readline())
+        let parts = split(line, " ")
+        let verb = parts[0]
+        if line == "done" or line == "" {
+            open = false
+        } else if verb == "receive" and len(parts) == 3 {
+            emit Received { sku: parts[1], qty: number(parts[2]) }
+        } else if verb == "order" and len(parts) == 4 {
+            emit Placed { id: parts[1], sku: parts[2], qty: number(parts[3]) }
+        } else if verb == "ship" and len(parts) == 2 {
+            emit Shipped { id: parts[1] }
+        } else if verb == "cancel" and len(parts) == 2 {
+            emit Cancelled { id: parts[1] }
+        } else {
+            print(f"ignored: {line}")
+        }
+        flush_events()
+    }
+    let failures = audit()
+    if failures == 0 { print("audit clean") }
+}

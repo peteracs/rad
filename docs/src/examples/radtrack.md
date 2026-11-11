@@ -54,6 +54,9 @@ From `demo/run_sync_demo.ps1` (real output):
 - the whole multi-user session was recorded with `--record incident.radr`
   (31.5 KB) and `rad replay` reproduced the server log byte-for-byte:
   `53 io record(s) consumed, 0 leftover … world digest matches`.
+  (That was the build of 2026-08-03. The committed tape is stale on current
+  Rad and replays as `DIVERGED`; `run_sync_demo.ps1 -Record` cuts a new one.
+  See `tooling/stale-tapes.tsv`.)
 - `upgrade_v2.rad` migrated the organically-grown v1 save: renamed
   `assignee` → `owner` (alice's assignment survived), seeded `estimate`
   from priority per row, and the v2 save round-trips with no migration.
@@ -251,7 +254,9 @@ entering numbers, and the books silently don't balance — `TOTALS 2490
 2795 5285` with row 4 visible in the grid and missing from every sum.
 
 Three commands, all answered **from the tape**
-(`projects/dogfood/radsheet/incident/`):
+(`projects/dogfood/radsheet/incident/`). The results are those of the build
+that cut the tape; on current Rad, record the session again first, as
+[the incident page](radsheet-incident.md) explains:
 
 1. `rad replay incident.radr` — the corruption reproduces byte-for-byte:
    `17 io record(s) consumed, 0 leftover … world digest matches`.
@@ -494,6 +499,7 @@ powershell -File projects/dogfood/radtrack/demo/run_sync_demo.ps1 -Record
 powershell -File projects/dogfood/radtrack/demo/run_name_demo.ps1
 
 # replay the recorded server session from the referee's seat
+# (cut a new tape with -Record first: the committed one is stale, see tooling/stale-tapes.tsv)
 ./target/debug/rad.exe replay projects/dogfood/radtrack/demo/incident.radr
 
 # the v2 schema deploy against the save the demo grew

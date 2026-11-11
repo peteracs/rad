@@ -62,6 +62,8 @@ mod test_support;
 pub mod visitor;
 pub mod wasm_compiler_host;
 pub use manifest::RadManifest;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod blame;
 pub mod opcode;
 pub mod parser;
 pub mod pipeline;

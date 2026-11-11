@@ -66,6 +66,9 @@ jobs:
         run: |
           cargo test -p rad-syntax --verbose
           cargo test -p rad-vm --verbose
+          # The CLI's own tests: argument parsing, `rad blame` end to end
+          # through the binary, and the committed-trace gate (GH 0003).
+          cargo test -p rad-cli --verbose
       - name: Compiler-owned language and host API coverage
         run: |
           # Native FFI syntax/API evidence is part of the mandatory surface.

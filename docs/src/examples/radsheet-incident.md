@@ -20,6 +20,15 @@ The session was recorded (`--record incident.radr`, 17 io records — the
 actual keystrokes, since edits arrive via `readline()`). Three commands,
 all answered **from the tape**:
 
+> **Note on the committed tape.** `incident.radr` in the repository was cut
+> on 2026-08-03 and current Rad does not replay it: `rad replay` reports
+> `DIVERGED`, because the world digest the tape recorded is not the one this
+> build computes. It is listed with the other stale tapes in
+> `tooling/stale-tapes.tsv`. Record the session again (the first command
+> under [Files](#files)) and everything below reproduces: same output, same
+> io counts, same `{Cell: 3}` blast radius. Only the two digests differ; a
+> fresh tape reads `61851e92…` and `8527d246…`.
+
 ## 1. Reproduce the corruption, byte-for-byte
 
 ```text
@@ -71,7 +80,7 @@ file — months later if need be.
 | `buggy.rad` | the shipped build (bug marked with a comment) |
 | `fixed.rad` | the one-character fix |
 | `edits.txt` | the editing session piped to the recording |
-| `incident.radr` | the tape (committed: it IS the incident) |
+| `incident.radr` | the tape as cut on 2026-08-03 (stale on current Rad, see the note above) |
 
 Reproduce end-to-end:
 

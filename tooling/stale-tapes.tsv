@@ -1,0 +1,14 @@
+# Exact repository path<TAB>why `rad replay` fails on this committed trace.
+# A trace is a claim about the build that cut it. Every committed .radr must
+# replay (exit 0) or be listed here; an entry that replays again is rejected,
+# so the list can only shrink. See adapters/cli/tests/tapes.rs.
+projects/dogfood/opsdesk/ops.radr	Cut 2026-08-03; the embedded source no longer passes the checker (peek argument type).
+projects/dogfood/radsheet/demo/sheet.radr	Cut 2026-08-03; the recorded end digest predates changes to the world digest.
+projects/dogfood/radsheet/incident/incident.radr	Cut 2026-08-03; the recorded end digest predates changes to the world digest.
+projects/dogfood/radtrack/demo/incident.radr	Cut 2026-08-03; the recorded end digest predates changes to the world digest.
+projects/dogfood/radtrack/demo/incident_v1.radr	Cut 2026-08-03; the recorded end digest predates changes to the world digest.
+projects/dogfood/strongbox/bugs/05_retro_write_hole/base.radr	Cut 2026-08-03; the recorded end digest predates changes to the world digest.
+projects/dogfood/strongbox/run.radr	Cut 2026-08-03; the recorded end digest predates changes to the world digest.
+projects/dogfood/tactics/arena_tape.radr	Cut 2026-08-03; the embedded source starts with a byte-order mark the lexer now rejects.
+projects/dogfood/timetravel/buggy.radr	Cut 2026-08-03; the recorded end digest predates changes to the world digest.
+projects/dogfood/timetravel/trace.radr	Cut 2026-08-03; the recorded end digest predates changes to the world digest.

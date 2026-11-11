@@ -77,6 +77,7 @@ lifetime, the test fails and names it.
 | **Reviewable hot paths** | Query plans expose scans, sorts, allocations, complexity, and transitive cost paths; frame budgets are enforced before deployment. |
 | **Stateful model checking** | Generate lifecycle histories, check temporal properties, shrink failures, and replay the minimal `.radr` counterexample from the CLI. |
 | **Contained native extensions** | Verify ABI/effects/layout/determinism, isolate crashes and timeouts, pin plugin generations, and replay recorded host results. |
+| **Counterfactual root cause** | `rad blame` replays a recorded session with inputs withheld and reports the minimal set of inputs a failure depends on, next to what `why()` lineage names. |
 | **Record, replay, and time travel** | Record a session, inspect earlier frames, ask `why` in the past, or replay the same inputs against edited source. |
 | **Capability sandboxing** | Run proposed Rad code against a fork with a builtin mask, component-write ACL, and fuel/memory budgets; the host decides what commits. |
 | **Mergeable worlds** | Inspect, serialize, diff, patch, and three-way merge forks with deterministic conflict handling. |

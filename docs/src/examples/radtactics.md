@@ -118,7 +118,10 @@ Receipts from live runs:
   `rad replay` re-runs it **offline, no sockets, no clients**, the world
   digest verifies, and all 103 referee stdout lines reproduce byte-for-byte.
   A distributed bug report is now a file you can step through from the
-  referee's seat.
+  referee's seat. (The committed `arena_tape.radr` dates from 2026-08-03 and
+  is stale: its embedded source starts with a byte-order mark that the lexer
+  now rejects. Record a new match to replay one; see
+  `tooling/stale-tapes.tsv`.)
 
 ### Tournament (`tournament.rad`)
 

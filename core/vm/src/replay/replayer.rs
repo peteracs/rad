@@ -148,7 +148,104 @@ impl TraceReplayer {
             mode: ReplayMode::Strict,
             capture_timeline: false,
             timeline: Vec::new(),
+            halt_exhausted_streams: false,
+            closed_stream_reads: 0,
+            arrivals: HashMap::new(),
+            current_arrival: 0,
         })
+    }
+
+    /// The recorded io, in order. Empty for a file-streamed replayer.
+    pub fn io_records(&self) -> &[IoRecord] {
+        &self.records
+    }
+
+    /// How the recorded run ended: outer `None` for a vintage trace without
+    /// an outcome, inner `None` for success, else the runtime error.
+    pub fn recorded_outcome(&self) -> Option<Option<&str>> {
+        self.end_error.as_ref().map(|error| error.as_deref())
+    }
+
+    /// A replayer for the session that would have been recorded had the
+    /// `withheld` stream inputs never arrived. `records` is the whole tape
+    /// and `withheld` flags, record by record, the messages to take out.
+    ///
+    /// The remaining records are served through the retroactive oracle, with
+    /// three differences from `into_retro`:
+    ///
+    /// - A stream that runs dry ends instead of repeating its last message:
+    ///   standard input reads as closed, and a socket halts the run
+    ///   (`COUNTERFACTUAL_EXHAUSTED_PREFIX`).
+    /// - A sampled read (`is_sampled_read`: clocks, files, HTTP) is answered
+    ///   with what was recorded while the program handled the *same* stream
+    ///   input, not with the next answer in call order. Readings recorded
+    ///   under a withheld or already finished input are passed over; a read
+    ///   the recording has no answer for at this point gets the most recent
+    ///   earlier one. Without this, withholding one command would hand every
+    ///   later command its predecessor's clock.
+    /// - There is no recorded end digest, because a different session has no
+    ///   recorded end to match.
+    ///
+    /// It takes plain parts instead of a parsed replayer so that worker
+    /// threads can each build their own from shared, immutable tape data.
+    pub fn counterfactual(
+        source: &str,
+        source_layout: &SourceLayout,
+        features: &[String],
+        seed: u64,
+        records: &[IoRecord],
+        withheld: &[bool],
+    ) -> Self {
+        let mut kept = Vec::with_capacity(records.len());
+        let mut arrivals: HashMap<(String, String), std::collections::VecDeque<usize>> =
+            HashMap::new();
+        let mut arrival = 0;
+        for (index, record) in records.iter().enumerate() {
+            if is_stream_input(&record.builtin) {
+                arrival = index + 1;
+            }
+            if withheld.get(index).copied().unwrap_or(false) {
+                continue;
+            }
+            arrivals
+                .entry((record.builtin.clone(), record.args_digest.clone()))
+                .or_default()
+                .push_back(arrival);
+            kept.push(record.clone());
+        }
+        let mut frame_starts = std::collections::BTreeMap::new();
+        for (index, record) in kept.iter().enumerate() {
+            frame_starts.entry(record.frame).or_insert(index);
+        }
+        let total_io_records = kept.len();
+        let mut replayer = Self {
+            source: source.to_string(),
+            source_layout: source_layout.clone(),
+            features: features.to_vec(),
+            seed,
+            records: kept,
+            total_io_records,
+            #[cfg(not(target_arch = "wasm32"))]
+            strict_stream: None,
+            frame_starts,
+            cursor: 0,
+            current_frame: 0,
+            stop_at_frame: None,
+            total_frames: 0,
+            end_world_digest: None,
+            end_error: None,
+            mode: ReplayMode::Strict,
+            capture_timeline: false,
+            timeline: Vec::new(),
+            halt_exhausted_streams: false,
+            closed_stream_reads: 0,
+            arrivals: HashMap::new(),
+            current_arrival: 0,
+        }
+        .into_retro();
+        replayer.halt_exhausted_streams = true;
+        replayer.arrivals = arrivals;
+        replayer
     }
 
     /// Index and verify a canonical trace file without retaining its I/O
@@ -339,12 +436,78 @@ impl TraceReplayer {
                 ..
             } => {
                 let key = (builtin.to_string(), args_digest.to_string());
-                if let Some(queue) = oracle.get_mut(&key) {
+                if self.halt_exhausted_streams && is_sampled_read(builtin) {
+                    // Counterfactual: answer with the reading recorded under
+                    // the arrival being handled. Readings of earlier
+                    // arrivals (withheld, or asked for less often this
+                    // time) are in the past; the newest of them stands in
+                    // when this arrival recorded none.
+                    let current = self.current_arrival;
+                    let queue = oracle.entry(key.clone()).or_default();
+                    let owners = self.arrivals.entry(key.clone()).or_default();
+                    while owners.front().is_some_and(|owner| *owner < current) {
+                        owners.pop_front();
+                        if let Some(stale) = queue.pop_front() {
+                            last_served.insert(key.clone(), stale);
+                        }
+                    }
+                    if owners.front() == Some(&current) {
+                        owners.pop_front();
+                        if let Some(rec) = queue.pop_front() {
+                            last_served.insert(key, rec.clone());
+                            self.cursor += 1;
+                            return Ok(rec);
+                        }
+                    }
+                    if let Some(rec) = last_served.get(&key) {
+                        *reused += 1;
+                        return Ok(rec.clone());
+                    }
+                    // Nothing recorded yet at this point: the first later
+                    // reading is the nearest, and its own arrival keeps it.
+                    if let Some(rec) = queue.front() {
+                        *reused += 1;
+                        return Ok(rec.clone());
+                    }
+                } else if let Some(queue) = oracle.get_mut(&key) {
                     if let Some(rec) = queue.pop_front() {
+                        if self.halt_exhausted_streams {
+                            let arrival = self
+                                .arrivals
+                                .get_mut(&key)
+                                .and_then(|owners| owners.pop_front());
+                            if let (true, Some(arrival)) = (is_stream_input(builtin), arrival) {
+                                self.current_arrival = arrival;
+                            }
+                        }
                         last_served.insert(key, rec.clone());
                         self.cursor += 1;
                         return Ok(rec);
                     }
+                }
+                if self.halt_exhausted_streams && is_stream_input(builtin) {
+                    // The history holds no further message on this stream.
+                    // Standard input then reads as closed, which is what
+                    // `readline`/`input` return at end of file. A socket has
+                    // no such neutral answer, so that history cannot go on.
+                    // A program that keeps reading a closed stdin is not
+                    // going to finish; a few empty reads are enough to see it.
+                    if matches!(builtin, "readline" | "input")
+                        && self.closed_stream_reads < CLOSED_STREAM_READ_LIMIT
+                    {
+                        self.closed_stream_reads += 1;
+                        return Ok(IoRecord {
+                            frame: self.current_frame,
+                            seq: 0,
+                            builtin: builtin.to_string(),
+                            args_digest: args_digest.to_string(),
+                            result: Ok(serde_json::json!({"t": "str", "v": ""})),
+                        });
+                    }
+                    return Err(format!(
+                        "{} at frame {}: the program calls {}() again, but this history holds no further message on that stream",
+                        COUNTERFACTUAL_EXHAUSTED_PREFIX, self.current_frame, builtin
+                    ));
                 }
                 if let Some(rec) = last_served.get(&key) {
                     // Repeatable read: the key was recorded, just fewer

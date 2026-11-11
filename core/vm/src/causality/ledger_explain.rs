@@ -163,6 +163,36 @@ impl CausalityLedger {
         out
     }
 
+    /// Frames on the causal chain of the newest write that `matches`
+    /// selects: the frame of the write, then the frame of every event
+    /// emission the chain passes through, back to the main-timeline code or
+    /// system that started it. `None` when no retained write matches.
+    ///
+    /// This is the structured form of what `why()` prints. `rad blame` maps
+    /// the frames onto recorded inputs to compare lineage with intervention.
+    pub fn lineage_frames(&self, matches: impl Fn(&WriteRecord) -> bool) -> Option<Vec<u64>> {
+        let write = self.writes.iter().rev().find(|write| matches(write))?;
+        let mut frames = vec![write.frame];
+        let mut cause = &write.by;
+        // Bounded by the retained emit window: every step consumes one emit.
+        for _ in 0..=self.emits.len() {
+            match cause {
+                Cause::Main | Cause::System { .. } => break,
+                Cause::Handler { emit_id, .. } => match self.emit_by_id(*emit_id) {
+                    Some(emit) => {
+                        frames.push(emit.frame);
+                        cause = &emit.by;
+                    }
+                    None => break,
+                },
+                Cause::Transaction { parent, .. } | Cause::HostCall { parent, .. } => {
+                    cause = parent;
+                }
+            }
+        }
+        Some(frames)
+    }
+
     pub(super) fn render_cause_chain(&self, initial: &Cause) -> String {
         let mut out = String::new();
         let mut cause = initial;

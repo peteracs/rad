@@ -41,6 +41,7 @@ This generates a project directory with a `main.rad` entry point, a `rad.toml` c
 | `rad bench <file.rad> --json` | Run a metered Rad workload and report semantic work/allocation categories |
 | `rad model-check <file.rad>` | Generate stateful histories, check temporal properties, shrink failures, and emit replay artifacts |
 | `rad shrink <failure.radr>` | Deterministically minimize an existing model-check failure |
+| `rad blame <trace.radr>` | Find the recorded inputs a symptom depends on by replaying the session with inputs withheld — see [Counterfactual Root Cause](../guide/counterfactual-blame.md) |
 | `rad ffi verify <plugin> --contract <contract.json>` | Verify ABI layout, opaque identity, effects, determinism, and worker containment |
 | `rad relations check <file.rad> --experimental-relations` | Check the opt-in RFC-0003 relation surface |
 | `rad lsp` | Start the language server over stdio |

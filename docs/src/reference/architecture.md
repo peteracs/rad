@@ -162,6 +162,7 @@ py experiments\c-backend\test_c_backend.py --debug-arena
 | `rad why` / `why-field` / `why-removed` / `why-not-in-view` | Query current, field, deletion, and negative view provenance |
 | `rad bench` | Run a workload with deterministic semantic-work and separate allocation meters |
 | `rad model-check` / `shrink` | Generate stateful histories, evaluate temporal properties, and create minimal replayable failures |
+| `rad blame` | Replay a recorded session with inputs withheld: a 1-minimal cause and a but-for class per input — see [Counterfactual Root Cause](../guide/counterfactual-blame.md) |
 | `rad ffi verify` | Verify extension ABI/layout/effect contracts through the isolated FFI worker |
 | `rad types` | Generate TypeScript declarations from checked exported Rad declarations |
 | `rad snapshot` | Verify `.rad` script output against stored `.snap` baselines |

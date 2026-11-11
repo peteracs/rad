@@ -482,6 +482,7 @@ mod tests {
             | CliCommand::SandboxServe { .. }
             | CliCommand::Types { .. }
             | CliCommand::Replay { .. }
+            | CliCommand::Blame { .. }
             | CliCommand::ModelCheck { .. }
             | CliCommand::ShrinkModel { .. }
             | CliCommand::FfiVerify { .. } => todo!(),
@@ -631,6 +632,7 @@ mod tests {
             | CliCommand::SandboxServe { .. }
             | CliCommand::Types { .. }
             | CliCommand::Replay { .. }
+            | CliCommand::Blame { .. }
             | CliCommand::ModelCheck { .. }
             | CliCommand::ShrinkModel { .. }
             | CliCommand::FfiVerify { .. } => todo!(),
@@ -675,6 +677,7 @@ mod tests {
             | CliCommand::SandboxServe { .. }
             | CliCommand::Types { .. }
             | CliCommand::Replay { .. }
+            | CliCommand::Blame { .. }
             | CliCommand::ModelCheck { .. }
             | CliCommand::ShrinkModel { .. }
             | CliCommand::FfiVerify { .. } => todo!(),
@@ -713,6 +716,7 @@ mod tests {
             | CliCommand::SandboxServe { .. }
             | CliCommand::Types { .. }
             | CliCommand::Replay { .. }
+            | CliCommand::Blame { .. }
             | CliCommand::ModelCheck { .. }
             | CliCommand::ShrinkModel { .. }
             | CliCommand::FfiVerify { .. } => {

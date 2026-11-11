@@ -13,7 +13,7 @@ Use these discoverability groups when choosing a workload:
 - Research workloads: `collatz-lab`, `collatz-barrier`, `collatz-descent`, `collatz-shadow-cycle`, `collatz-termination`, `deletion-sync`, `frankl-search`, `sudoku`,
   `zeta-simple-zeros`.
 - Language and causal verticals: `causal-laws`, `causal-constraints`,
-  `causality`, `speculation`, `timetravel`, `world-law-rpg`,
+  `causality`, `speculation`, `stockroom`, `timetravel`, `world-law-rpg`,
   `authority-effects`.
 - Host/extension proofs: `native-math-kernels`, `orianna_gui`, `radgui`.
 - Production-boundary portfolio: `pagergrid`, `fulfillos`, `clearpay`,
