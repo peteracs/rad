@@ -157,9 +157,14 @@ shipped and then cancelled, 8 workers, a 4-command cause near the start):
 | 400 | 0.06 s | 172 histories (median of 40 days) | 424 histories, 3 s |
 | 4,000 | 0.2 s | 192 histories, 1.4 s | 4,030 histories, 108 s |
 | 40,000 | 1.6 s | 172 histories, 6.4 s | not run |
+| 400,000 | 28 s | 184 histories, 17.7 min | not run |
 
-Use the default up to a few thousand inputs and `--strategy ddmin
---no-but-for` beyond that.
+One replay grows faster than the session: ten times the commands cost 8
+times the time from 4,000 to 40,000, and about 15 times from 40,000 to
+400,000. Every history pays it again, so a 400,000-command search takes
+minutes even when it replays fewer than 200 histories. Use the default up to
+a few thousand inputs and `--strategy ddmin --no-but-for` beyond that. There
+is no way yet to blame only a window of a long tape.
 
 Histories run on worker threads (`--jobs`, default: the machine's
 parallelism, at most 8). The result does not depend on the thread count:
