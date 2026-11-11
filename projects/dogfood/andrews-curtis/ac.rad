@@ -1,0 +1,238 @@
+// Andrews-Curtis trivialization search for balanced presentations <x, y | r1, r2>.
+//
+//   rad ac.rad -- <r1> <r2> [max_relator_len] [max_states]
+//
+// A word is a string over x, X, y, Y (capital = inverse). A state is a pair of
+// cyclic words: each relator is the least string among the rotations of the
+// word and of its inverse, and the pair is sorted.
+//
+// Two kinds of step:
+//   product   one relator a becomes the cyclic reduction of u * v, where u is
+//             a rotation of a and v a rotation of the other relator or of its
+//             inverse. Rotation, inversion and the product are compositions
+//             of AC moves.
+//   aut       both relators are rewritten by a Whitehead automorphism of the
+//             free group (y -> yx and the like) when that shortens the pair.
+//             If phi(r1), phi(r2) can be trivialized then so can r1, r2: undo
+//             phi along the whole path and it ends at a basis of the free
+//             group, which Nielsen moves (AC moves) take to x, y.
+//
+// The search lives in the world. Every presentation reached is an entity
+// named by its state, with the state it came from; an indexed `bucket` field
+// is the priority queue (total length while open, -1 once expanded). Each
+// expansion is an event, so the ledger can answer why() for any state.
+
+component Node { indexed bucket: int = -1, total: int = 0, from: str = "", via: str = "" }
+
+resource Search { cap: int = 24, found: bool = false, expanded: int = 0 }
+
+event Expand { key: str }
+
+// Stop expanding after this long, so a run always reports within 30 s.
+fn wall_ms() -> int { return 20000 }
+
+fn inverse(w: str) -> str {
+    let r = join(reverse(chars(w)), "")
+    let a = replace(replace(replace(r, "x", "1"), "X", "x"), "1", "X")
+    return replace(replace(replace(a, "y", "2"), "Y", "y"), "2", "Y")
+}
+
+// Least rotation of w or of its inverse.
+fn canon(w: str) -> str {
+    let n = len(w)
+    if n <= 1 {
+        if w == "x" { return "X" }
+        if w == "y" { return "Y" }
+        return w
+    }
+    let ww = w + w
+    let v = inverse(w)
+    let vv = v + v
+    let mut best = w
+    let mut i = 0
+    while i < n {
+        let c = slice(ww, i, i + n)
+        if c < best { best = c }
+        let d = slice(vv, i, i + n)
+        if d < best { best = d }
+        i = i + 1
+    }
+    return best
+}
+
+fn cyclic(w: str) -> str {
+    let mut lo = 0
+    let mut hi = len(w)
+    while hi - lo >= 2 and abs(byte_at(w, lo) - byte_at(w, hi - 1)) == 32 {
+        lo = lo + 1
+        hi = hi - 1
+    }
+    return slice(w, lo, hi)
+}
+
+// Cyclic reduction of the free product u * v (u and v freely reduced).
+fn product(u: str, v: str) -> str {
+    let mut a = len(u)
+    let mut b = 0
+    let m = len(v)
+    while a > 0 and b < m and abs(byte_at(u, a - 1) - byte_at(v, b)) == 32 {
+        a = a - 1
+        b = b + 1
+    }
+    return cyclic(slice(u, 0, a) + slice(v, b, m))
+}
+
+// Free and cyclic reduction of an arbitrary word.
+fn reduce(w: str) -> str {
+    let mut s = w
+    let mut before = len(s) + 1
+    while len(s) < before {
+        before = len(s)
+        s = replace(replace(replace(replace(s, "xX", ""), "Xx", ""), "yY", ""), "Yy", "")
+    }
+    return cyclic(s)
+}
+
+// The four Whitehead automorphisms of F(x, y) that act on cyclic words:
+// 0: y -> yx   1: y -> yX   2: x -> xy   3: x -> xY
+// The inverse letter maps to the inverse word: Y -> XY, xY, and X -> YX, yX.
+fn whitehead(w: str, kind: int) -> str {
+    if kind == 0 { return reduce(replace(replace(replace(replace(w, "y", "1"), "Y", "2"), "1", "yx"), "2", "XY")) }
+    if kind == 1 { return reduce(replace(replace(replace(replace(w, "y", "1"), "Y", "2"), "1", "yX"), "2", "xY")) }
+    if kind == 2 { return reduce(replace(replace(replace(replace(w, "x", "1"), "X", "2"), "1", "xy"), "2", "YX")) }
+    return reduce(replace(replace(replace(replace(w, "x", "1"), "X", "2"), "1", "xY"), "2", "yX"))
+}
+
+fn key_of(a: str, b: str) -> str {
+    if a <= b { return a + "," + b }
+    return b + "," + a
+}
+
+// Register a state unless it is known. Returns true when it is new.
+fn reach(key: str, from: str, via: str) -> bool {
+    if get_entity(key) != nil { return false }
+    let total = len(key) - 1
+    let _ = spawn(key, Node { bucket: total, total: total, from: from, via: via })
+    if key == "X,Y" {
+        let s = get_resource(Search) |> unwrap
+        set_resource(Search, Search { found: true, ..s })
+    }
+    return true
+}
+
+on Expand(e) {
+    let node = require_entity(e.key)
+    let n = get(node, Node) |> unwrap
+    set(node, Node { bucket: -1, ..n })
+    let s = get_resource(Search) |> unwrap
+    set_resource(Search, Search { expanded: s.expanded + 1, ..s })
+    let cap = s.cap
+
+    let parts = split(e.key, ",")
+
+    // Whitehead descent: if an automorphism shortens the pair, the shorter
+    // pair is the only successor. Whitehead's theorem says this never gets
+    // stuck above the minimum of the automorphism orbit.
+    let mut kind = 0
+    while kind < 4 {
+        let p = whitehead(parts[0], kind)
+        let q = whitehead(parts[1], kind)
+        if len(p) + len(q) < n.total and len(p) > 0 and len(q) > 0 {
+            let _ = reach(key_of(canon(p), canon(q)), e.key, f"aut{kind}")
+            return nil
+        }
+        kind = kind + 1
+    }
+
+    let mut side = 0
+    while side < 2 {
+        let a = parts[side]
+        let b = parts[1 - side]
+        let alen = len(a)
+        let m = len(b)
+        let aa = a + a
+        let bi = inverse(b)
+        let mut turn = 0
+        while turn < 2 {
+            let other = if turn == 0 { b } else { bi }
+            let oo = other + other
+            let mut i = 0
+            while i < alen {
+                let tail = byte_at(aa, i + alen - 1)
+                let mut j = 0
+                while j < m {
+                    if abs(tail - byte_at(oo, j)) == 32 {
+                        let w = product(slice(aa, i, i + alen), slice(oo, j, j + m))
+                        let size = len(w)
+                        if size > 0 and size <= cap {
+                            let _ = reach(key_of(canon(w), b), e.key, "")
+                        }
+                    }
+                    j = j + 1
+                }
+                i = i + 1
+            }
+            turn = turn + 1
+        }
+        side = side + 1
+    }
+}
+
+fn main() -> nil {
+    let args = sys_args()
+    if len(args) < 2 {
+        print("usage: rad ac.rad -- <r1> <r2> [max_relator_len] [max_states]")
+        return nil
+    }
+    let cap = if len(args) > 2 { int(args[2]) } else { 24 }
+    let budget = if len(args) > 3 { int(args[3]) } else { 20000 }
+    let started = now_unix_ms()
+    set_resource(Search, Search { cap: cap, found: false, expanded: 0 })
+
+    let start = key_of(canon(reduce(args[0])), canon(reduce(args[1])))
+    let _ = reach(start, "", "")
+
+    let mut running = true
+    let mut lowest = len(start) - 1
+    while running {
+        let s = get_resource(Search) |> unwrap
+        if s.found or s.expanded >= budget or now_unix_ms() - started > wall_ms() {
+            running = false
+        } else {
+            let mut level = 2
+            let mut pick = lookup(Node, "bucket", level)
+            while is_none(pick) and level <= 2 * cap {
+                level = level + 1
+                pick = lookup(Node, "bucket", level)
+            }
+            if is_none(pick) {
+                running = false
+            } else {
+                if level < lowest { lowest = level }
+                emit Expand { key: name_of(unwrap(pick)) }
+                flush_events()
+            }
+        }
+    }
+
+    let s = get_resource(Search) |> unwrap
+    let elapsed = now_unix_ms() - started
+    let seen = query_count(Node)
+    if not s.found {
+        print(f"UNSOLVED {start} cap={cap} expanded={s.expanded} seen={seen} lowest_total={lowest} ms={elapsed}")
+        return nil
+    }
+    let mut path = []
+    let mut at = "X,Y"
+    while at != "" {
+        let n = get(require_entity(at), Node) |> unwrap
+        path = push(path, f"{n.via} {at}")
+        at = n.from
+    }
+    print(f"SOLVED {start} steps={len(path) - 1} cap={cap} expanded={s.expanded} seen={seen} ms={elapsed}")
+    let mut k = len(path) - 1
+    while k >= 0 {
+        print(trim(path[k]))
+        k = k - 1
+    }
+}

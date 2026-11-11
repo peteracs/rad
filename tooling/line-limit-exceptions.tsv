@@ -22,3 +22,4 @@ projects/dogfood/bsd-x/quotient_comparison_transfer.why.txt	Generated WHY receip
 projects/dogfood/bsd-x/selmer_observability.why.txt	Generated WHY receipt written whole by verify_observability.py.
 projects/dogfood/bsd-x/single_level_certificate.why.txt	Generated WHY receipt written whole by verify_single_level.py.
 projects/dogfood/bsd-x/adaptive_layer_decision.why.txt	Generated WHY receipt written whole by verify_adaptive_layers.py.
+projects/dogfood/andrews-curtis/data/miller_schupp.tsv	The 1,190-row Miller-Schupp table from arXiv:2408.15332, one presentation per line; sweep.py and the result tables refer to rows by index, so splitting it would only rename indices.

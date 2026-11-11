@@ -1,0 +1,6 @@
+SOLVED XXyyxYY,XYxyy steps=4 cap=24 expanded=4 seen=30 ms=5
+XXyyxYY,XYxyy
+XYxyy,Xy
+aut2 X,XYxyy
+X,Xy
+aut0 X,Y

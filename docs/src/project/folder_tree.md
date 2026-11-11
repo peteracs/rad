@@ -218,6 +218,9 @@ rad/
         - `projects/dogfood/collatz-barrier/correction/` - Uniform additive-correction bounds from exact image collisions and certified infinite tails.
         - `projects/dogfood/collatz-barrier/ladder/` - Complete sharp linear-envelope family near the limit slope, convergent-denominator ladder, and causally assembled parallel block certificates.
       - `projects/dogfood/bsd-x/` - Finite algebraic decision rules and verifiers around Selmer observability; the universal X3 assertion stays unproved.
+      - `projects/dogfood/andrews-curtis/` - Andrews-Curtis trivialization search on the Miller-Schupp presentations, with an independent path checker.
+        - `projects/dogfood/andrews-curtis/data/` - The 1,190 presentations, converted from the AC-Solver repository.
+        - `projects/dogfood/andrews-curtis/paths/` - Verified trivializations and class joins, one file per presentation.
       - `projects/dogfood/collatz-automatic/` - Working notes on mixed binary/ternary termination certificates; nothing here proves Collatz.
         - `projects/dogfood/collatz-automatic/farkas/` - Farkas-style certificate checks and their explanations.
       - `projects/dogfood/collatz-carry/` - Whether multiplying by 3 moves parity information to the high end of a number in a structured way.

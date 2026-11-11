@@ -1,0 +1,11 @@
+JOINED probe XYYYYYYYxyyyyyyyy,XYxYxy meets class ms1037 visits=0 states=157815
+XYYYYYYYxyyyyyyyy,XYxYxy
+XYYYYYYXyxyyyyyyy,XYxYxy
+XXyxyyyyyxYYYYYYY,XYxYxy
+XXyxyyyyxYxYYYYYY,XYxYxy
+XXYYYYXYxxyyyyyxy,XYxYxy
+XXYYYYYXyxyyyyyxy,XYxYxy
+XXYYYYYYxyyyyyyxy,XYxYxy
+aut2 XXyxY,XYXYYYYYYxyyyyyyyxy
+XXYYYYYYxyyyyyyy,XXyxY
+XXyxY,XYYYYYYYxyyyyyyyy

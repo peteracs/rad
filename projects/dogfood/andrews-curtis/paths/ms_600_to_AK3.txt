@@ -1,0 +1,15 @@
+JOINED probe XYYYxyyyy,XYxYYYxY meets class AK3 visits=0 states=59067
+XYYYxyyyy,XYxYYYxY
+aut3 XYYYxyyyy,XYxYYYYxY
+XXyyyyxy,XYxYYYYxY
+XXyxyxY,XYxYYYYxY
+aut2 XYXyxyyxY,XYxYYYxY
+aut2 XYYXyxyyyxY,XYxYYxY
+aut2 XYYYXyxyyyyxY,XYxYxY
+aut2 XXyxy,XYYYYXyxyyyyyxY
+XXyxy,XYYYXyxyyyyy
+XXyxy,XYYYxyyyy
+aut2 XYXyxy,XYYYxyyyy
+XYXyxy,XYYxyXyyy
+XXyyyXYxy,XYXyxy
+XXXyyyy,XYXyxy

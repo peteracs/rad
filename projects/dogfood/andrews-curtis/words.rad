@@ -1,0 +1,97 @@
+// Words in the free group F(x, y) as strings over x, X, y, Y (capital =
+// inverse), and the cyclic-word operations the Andrews-Curtis searches share.
+
+pub fn inverse(w: str) -> str {
+    let r = join(reverse(chars(w)), "")
+    let a = replace(replace(replace(r, "x", "1"), "X", "x"), "1", "X")
+    return replace(replace(replace(a, "y", "2"), "Y", "y"), "2", "Y")
+}
+
+// Least rotation of w or of its inverse.
+pub fn canon(w: str) -> str {
+    let n = len(w)
+    if n <= 1 {
+        if w == "x" { return "X" }
+        if w == "y" { return "Y" }
+        return w
+    }
+    let ww = w + w
+    let v = inverse(w)
+    let vv = v + v
+    let mut best = w
+    let mut i = 0
+    while i < n {
+        let c = slice(ww, i, i + n)
+        if c < best { best = c }
+        let d = slice(vv, i, i + n)
+        if d < best { best = d }
+        i = i + 1
+    }
+    return best
+}
+
+pub fn cyclic(w: str) -> str {
+    let mut lo = 0
+    let mut hi = len(w)
+    while hi - lo >= 2 and abs(byte_at(w, lo) - byte_at(w, hi - 1)) == 32 {
+        lo = lo + 1
+        hi = hi - 1
+    }
+    return slice(w, lo, hi)
+}
+
+// Cyclic reduction of the free product u * v (u and v freely reduced).
+pub fn product(u: str, v: str) -> str {
+    let mut a = len(u)
+    let mut b = 0
+    let m = len(v)
+    while a > 0 and b < m and abs(byte_at(u, a - 1) - byte_at(v, b)) == 32 {
+        a = a - 1
+        b = b + 1
+    }
+    return cyclic(slice(u, 0, a) + slice(v, b, m))
+}
+
+// Free and cyclic reduction of an arbitrary word.
+pub fn reduce(w: str) -> str {
+    let mut s = w
+    let mut before = len(s) + 1
+    while len(s) < before {
+        before = len(s)
+        s = replace(replace(replace(replace(s, "xX", ""), "Xx", ""), "yY", ""), "Yy", "")
+    }
+    return cyclic(s)
+}
+
+// The four Whitehead automorphisms of F(x, y) that act on cyclic words:
+// 0: y -> yx   1: y -> yX   2: x -> xy   3: x -> xY
+// The inverse letter maps to the inverse word: Y -> XY, xY, and X -> YX, yX.
+pub fn whitehead(w: str, kind: int) -> str {
+    if kind == 0 { return reduce(replace(replace(replace(replace(w, "y", "1"), "Y", "2"), "1", "yx"), "2", "XY")) }
+    if kind == 1 { return reduce(replace(replace(replace(replace(w, "y", "1"), "Y", "2"), "1", "yX"), "2", "xY")) }
+    if kind == 2 { return reduce(replace(replace(replace(replace(w, "x", "1"), "X", "2"), "1", "xy"), "2", "YX")) }
+    return reduce(replace(replace(replace(replace(w, "x", "1"), "X", "2"), "1", "xY"), "2", "yX"))
+}
+
+pub fn key_of(a: str, b: str) -> str {
+    if a <= b { return a + "," + b }
+    return b + "," + a
+}
+
+// The lowest level above `after` at which the pair of lengths (n0, n1) has
+// product children, or -1. Replacing the relator of length n by a product
+// with the one of length m at cancellation c gives total n + 2m - 2c.
+pub fn next_level(n0: int, n1: int, after: int, max_total: int) -> int {
+    let lo0 = n0 + 2 * n1 - 2 * min(n0, n1)
+    let lo1 = n1 + 2 * n0 - 2 * min(n0, n1)
+    let hi0 = n0 + 2 * n1 - 2
+    let hi1 = n1 + 2 * n0 - 2
+    let mut t = max(after + 1, min(lo0, lo1))
+    while t <= max_total and t <= max(hi0, hi1) {
+        if t >= lo0 and t <= hi0 and (hi0 - t) % 2 == 0 { return t }
+        if t >= lo1 and t <= hi1 and (hi1 - t) % 2 == 0 { return t }
+        t = t + 1
+    }
+    return -1
+}
+

@@ -8,6 +8,10 @@
   path, and a survivor is priced in full at the next collection.
 - **`<`, `<=`, `>`, `>=` on two strings type-check.** The VM always ordered
   strings by byte; only the checker refused.
+- **Andrews-Curtis dogfood.** `projects/dogfood/andrews-curtis` searches for
+  trivializations of the Miller-Schupp presentations with the world as the
+  search state, the ledger as an audit of every path, and a saved world as a
+  resumable atlas. Both fixes above came from its first probe.
 - **`rad blame`: which recorded inputs cause a symptom.** `why()` reports the
   lineage of a value. `rad blame <trace.radr>` answers by intervention: it
   replays the recorded session with inputs withheld and reports a 1-minimal

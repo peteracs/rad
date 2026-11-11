@@ -1,0 +1,291 @@
+// An atlas of Andrews-Curtis classes, kept as a saved Rad world.
+//
+//   rad atlas.rad -- grow  <atlas.radw> <label> <r1> <r2> [wall_ms]
+//   rad atlas.rad -- probe <atlas.radw> <r1> <r2> [wall_ms]
+//
+// The world holds every presentation reached from a few named starting
+// points ("classes"): where each state came from, and how far its class has
+// been explored. `grow` loads the world, continues the search of one class
+// from where the last run stopped (or starts a new class), and saves it.
+// `probe` loads the world and searches from another presentation until it
+// reaches a state some class already holds. The two presentations are then
+// joined by a chain of AC steps and automorphisms: one can be trivialized
+// exactly when the other can. Class T is seeded with <x, y | x, y>, so
+// reaching it is a trivialization.
+//
+// Steps and state encoding are those of ac_levels.rad.
+
+use "words.rad"
+
+// Written once, when the state is first reached: the ledger's last writer of
+// it is the visit that found the state. `class` names the starting point.
+component Origin { from: str = "", via: str = "", class: str = "" }
+
+// Next level this state can produce children at, coded as slot * 1000 +
+// level so each class has its own queue; -1 when exhausted.
+component Queue { indexed bucket: int = -1, fresh: bool = true }
+
+// On the starting state of a class.
+component Class { indexed label: str = "", slot: int = 0, visits: int = 0 }
+
+resource Atlas { slots: int = 0 }
+
+resource Run { class: str = "", slot: int = 0, max_total: int = 40, visits: int = 0, hit: str = "", hit_from: str = "", hit_via: str = "" }
+
+event Expand { key: str }
+
+// Register a state for the running class. A state another class holds is
+// not taken over: it is recorded as the meeting point and the run stops.
+fn reach(key: str, from: str, via: str) -> nil {
+    let run = get_resource(Run) |> unwrap
+    let known = get_entity(key)
+    if known != nil {
+        let origin = get(known, Origin) |> unwrap
+        if origin.class != run.class and run.hit == "" {
+            set_resource(Run, Run { hit: key, hit_from: from, hit_via: via, ..run })
+        }
+        return nil
+    }
+    let parts = split(key, ",")
+    let level = next_level(len(parts[0]), len(parts[1]), 0, run.max_total)
+    let coded = if level < 0 { -1 } else { run.slot * 1000 + level }
+    let _ = spawn(key, Origin { from: from, via: via, class: run.class }, Queue { bucket: coded, fresh: true })
+}
+
+on Expand(e) {
+    let node = require_entity(e.key)
+    let here = get(node, Queue) |> unwrap
+    let run = get_resource(Run) |> unwrap
+    set_resource(Run, Run { visits: run.visits + 1, ..run })
+    let base = run.slot * 1000
+    let level = here.bucket - base
+    let limit = run.max_total
+    let parts = split(e.key, ",")
+    let n0 = len(parts[0])
+    let n1 = len(parts[1])
+
+    if here.fresh {
+        let mut kind = 0
+        while kind < 4 {
+            let p = whitehead(parts[0], kind)
+            let q = whitehead(parts[1], kind)
+            if len(p) + len(q) < n0 + n1 and len(p) > 0 and len(q) > 0 {
+                reach(key_of(canon(p), canon(q)), e.key, f"aut{kind}")
+                set(node, Queue { bucket: -1, fresh: false })
+                return nil
+            }
+            kind = kind + 1
+        }
+    }
+
+    let mut side = 0
+    while side < 2 {
+        let a = parts[side]
+        let b = parts[1 - side]
+        let n = len(a)
+        let m = len(b)
+        let twice = n + 2 * m - level
+        if twice >= 2 and twice % 2 == 0 and twice <= 2 * min(n, m) and twice < n + m {
+            let c = int_div(twice, 2)
+            let wanted = n + m - twice
+            let aa = a + a
+            let mut ends = {}
+            let mut i = 0
+            while i < n {
+                let g = slice(aa, i + n - c, i + n)
+                ends[g] = push(get_or(ends, g, []), i)
+                i = i + 1
+            }
+            let mut turn = 0
+            while turn < 2 {
+                let other = if turn == 0 { b } else { inverse(b) }
+                let oo = other + other
+                let io = inverse(oo)
+                let mut j = 0
+                while j < m {
+                    let q = slice(io, 2 * m - j - c, 2 * m - j)
+                    if contains(ends, q) {
+                        let v = slice(oo, j, j + m)
+                        for spot in ends[q] {
+                            let w = product(slice(aa, spot, spot + n), v)
+                            if len(w) <= wanted and len(w) > 0 {
+                                reach(key_of(canon(w), b), e.key, "")
+                            }
+                        }
+                    }
+                    j = j + 1
+                }
+                turn = turn + 1
+            }
+        }
+        side = side + 1
+    }
+    let next = next_level(n0, n1, level, limit)
+    let coded = if next < 0 { -1 } else { base + next }
+    set(node, Queue { bucket: coded, fresh: false })
+}
+
+// The automorphism that undoes `via` (y -> yx and y -> yX are inverse, and
+// so are x -> xy and x -> xY). A product step is undone by a product step.
+fn undo(via: str) -> str {
+    if via == "aut0" { return "aut1" }
+    if via == "aut1" { return "aut0" }
+    if via == "aut2" { return "aut3" }
+    if via == "aut3" { return "aut2" }
+    return ""
+}
+
+// Start a class at `key`, or find the one that starts there.
+fn open_class(label: str, key: str) -> int {
+    let found = lookup(Class, "label", label)
+    if is_some(found) {
+        return (get(unwrap(found), Class) |> unwrap).slot
+    }
+    let atlas = get_resource(Atlas) |> unwrap
+    let slot = atlas.slots + 1
+    set_resource(Atlas, Atlas { slots: slot })
+    let parts = split(key, ",")
+    let level = next_level(len(parts[0]), len(parts[1]), 0, 60)
+    let node = spawn(key, Origin { from: "", via: "", class: label }, Queue { bucket: slot * 1000 + level, fresh: true })
+    set(node, Class { label: label, slot: slot, visits: 0 })
+    return slot
+}
+
+// Expand the running class until it meets another class, runs dry, or the
+// wall time is up. Returns the lowest level still queued (0 when dry).
+fn explore(wall: int, started: int) -> int {
+    let run0 = get_resource(Run) |> unwrap
+    let base = run0.slot * 1000
+    let limit = run0.max_total
+    let mut steps = 0
+    let mut open = 1
+    let mut running = true
+    while running {
+        let run = get_resource(Run) |> unwrap
+        steps = steps + 1
+        if run.hit != "" or (steps % 64 == 0 and now_unix_ms() - started > wall) {
+            running = false
+        } else {
+            let mut level = 1
+            let mut pick = lookup(Queue, "bucket", base + level)
+            while is_none(pick) and level <= limit {
+                level = level + 1
+                pick = lookup(Queue, "bucket", base + level)
+            }
+            open = level
+            if is_none(pick) {
+                running = false
+                open = 0
+            } else {
+                emit Expand { key: name_of(unwrap(pick)) }
+                flush_events()
+            }
+        }
+    }
+    return open
+}
+
+// Print the chain from the run's start to the start of the class it met:
+// forward along the run's own tree, across the meeting step, then back up
+// the other class's tree with every step undone.
+fn print_chain(start: str) -> nil {
+    let run = get_resource(Run) |> unwrap
+    let mut mine = []
+    let mut at = run.hit_from
+    while at != "" {
+        let origin = get(require_entity(at), Origin) |> unwrap
+        mine = push(mine, trim(f"{origin.via} {at}"))
+        at = origin.from
+    }
+    let mut k = len(mine) - 1
+    while k >= 0 {
+        print(mine[k])
+        k = k - 1
+    }
+    if run.hit_from != "" {
+        print(trim(f"{run.hit_via} {run.hit}"))
+    } else {
+        print(run.hit)
+    }
+    at = run.hit
+    let mut origin = get(require_entity(at), Origin) |> unwrap
+    while origin.from != "" {
+        print(trim(f"{undo(origin.via)} {origin.from}"))
+        at = origin.from
+        origin = get(require_entity(at), Origin) |> unwrap
+    }
+}
+
+fn main() -> nil {
+    let args = sys_args()
+    let mode = if len(args) > 0 { args[0] } else { "" }
+    if not ((mode == "grow" and len(args) >= 5) or (mode == "probe" and len(args) >= 4)) {
+        print("usage: rad atlas.rad -- grow <atlas.radw> <label> <r1> <r2> [wall_ms]")
+        print("       rad atlas.rad -- probe <atlas.radw> <r1> <r2> [wall_ms]")
+        return nil
+    }
+    let started = now_unix_ms()
+    let file = args[1]
+    if file_exists(file) {
+        let _ = load_world(read_file(file))
+    } else {
+        set_resource(Atlas, Atlas { slots: 0 })
+        set_resource(Run, Run { class: "T", slot: 0 })
+        let _ = open_class("T", "X,Y")
+    }
+    let loaded = query_count(Origin)
+
+    if mode == "grow" {
+        let label = args[2]
+        let start = key_of(canon(reduce(args[3])), canon(reduce(args[4])))
+        let wall = if len(args) > 5 { int(args[5]) } else { 20000 }
+        let holder = get_entity(start)
+        if holder != nil and (get(holder, Origin) |> unwrap).class != label {
+            print(f"KNOWN {start} is already in class {(get(holder, Origin) |> unwrap).class}")
+            return nil
+        }
+        let slot = open_class(label, start)
+        set_resource(Run, Run { class: label, slot: slot, max_total: 60, visits: 0, hit: "", hit_from: "", hit_via: "" })
+        let open = explore(wall, started)
+        let run = get_resource(Run) |> unwrap
+        let root = unwrap(lookup(Class, "label", label))
+        let before = get(root, Class) |> unwrap
+        set(root, Class { visits: before.visits + run.visits, ..before })
+        let total = query_count(Origin)
+        if run.hit != "" {
+            let other = (get(require_entity(run.hit), Origin) |> unwrap).class
+            print(f"JOINED {label} {start} meets class {other} visits={run.visits} states={total}")
+            print_chain(start)
+        } else {
+            let explored = now_unix_ms() - started
+            write_file(file, save_world())
+            print(f"GROWN {label} {start} open_level={open} visits={before.visits + run.visits} states={total} (+{total - loaded}) explore_ms={explored} total_ms={now_unix_ms() - started}")
+        }
+        return nil
+    }
+
+    let start = key_of(canon(reduce(args[2])), canon(reduce(args[3])))
+    let wall = if len(args) > 4 { int(args[4]) } else { 20000 }
+    let holder = get_entity(start)
+    if holder != nil {
+        let other = (get(holder, Origin) |> unwrap).class
+        set_resource(Run, Run { class: "probe", slot: 0, hit: start, hit_from: "", hit_via: "" })
+        print(f"JOINED probe {start} meets class {other} visits=0 states={loaded}")
+        print_chain(start)
+        return nil
+    }
+    let parts = split(start, ",")
+    set_resource(Run, Run { class: "probe", slot: 0, max_total: 60, visits: 0, hit: "", hit_from: "", hit_via: "" })
+    let level = next_level(len(parts[0]), len(parts[1]), 0, 60)
+    let _ = spawn(start, Origin { from: "", via: "", class: "probe" }, Queue { bucket: level, fresh: true })
+    let open = explore(wall, started)
+    let run = get_resource(Run) |> unwrap
+    let total = query_count(Origin)
+    if run.hit != "" {
+        let other = (get(require_entity(run.hit), Origin) |> unwrap).class
+        print(f"JOINED probe {start} meets class {other} visits={run.visits} states={total - loaded} ms={now_unix_ms() - started}")
+        print_chain(start)
+    } else {
+        print(f"UNSOLVED {start} open_level={open} visits={run.visits} states={total - loaded} ms={now_unix_ms() - started}")
+    }
+}

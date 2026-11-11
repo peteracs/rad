@@ -1,0 +1,19 @@
+SOLVED XYYYYYxyyyyyy,XYxYxYYY steps=17 cap=24 expanded=17 seen=227 ms=25
+XYYYYYxyyyyyy,XYxYxYYY
+aut2 XXyxyyy,XYYYYYxyyyyyy
+XXyxyyy,XYxYYYYYxyyy
+XXyxyyy,XyXyyyyyy
+aut2 XXyyyyy,XYXyxyyy
+XXyyyyy,XYxyXyy
+aut2 XYXyyyy,XYxyXy
+aut2 XXYxy,XYYXyyy
+XXYxy,XXyyXY
+XXXYXyy,XXYxy
+XXXXXy,XXYxy
+aut0 XXXXy,XXYxy
+aut0 XXXy,XXYxy
+aut0 XXYxy,XXy
+aut0 XXYxy,Xy
+aut0 XXYxy,Y
+XY,Y
+aut3 X,Y

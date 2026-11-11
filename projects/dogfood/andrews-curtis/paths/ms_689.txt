@@ -1,0 +1,39 @@
+SOLVED XXyxyyyy,XYYYYxyyyyy steps=37 cap=24 expanded=200 seen=7077 ms=872
+XXyxyyyy,XYYYYxyyyyy
+XYYYYxyyyyy,XYxYYYYxy
+aut2 XYYYYxyyyyy,XYxYYYxy
+aut2 XYYYYxyyyyy,XYxYYxy
+aut2 XYYYYxyyyyy,XYxYxy
+aut2 XXyxY,XYYYYxyyyyy
+XXYYYxyyyy,XXyxY
+XXyXYYYxyyy,XXyxY
+XXXXYYxyyy,XXyxY
+XXXYXXYxyyy,XXyxY
+XXXYXYXyyy,XXyxY
+XXXYYXXXyyy,XXyxY
+XXXYYXyXyy,XXyxY
+XXYYXyXyXXy,XXyxY
+aut0 XXYXYXyyXy,XXyxY
+XXXyyXyXXYY,XXyxY
+XXYYXyXyXy,XXyxY
+aut0 XXYXYXyyy,XXyxY
+XXyXYXYXyy,XXyxY
+XXXXXYXyy,XXyxY
+XXXXYXyXXy,XXyxY
+aut0 XXXXYXyXy,XXyxY
+aut0 XXXXYXyy,XXyxY
+XXXYXyXXy,XXyxY
+aut0 XXXYXyXy,XXyxY
+aut0 XXXYXyy,XXyxY
+XXYXyXXy,XXyxY
+aut0 XXYXyXy,XXyxY
+aut0 XXYXyy,XXyxY
+XXyXYXy,XXyxY
+aut0 XXyxY,XYXyXy
+aut0 XXyxY,XYXyy
+XXXy,XXyxY
+aut0 XXy,XXyxY
+aut0 XXyxY,Xy
+aut0 XXyxY,Y
+XY,Y
+aut3 X,Y

@@ -10,7 +10,7 @@ Use these discoverability groups when choosing a workload:
 - Applications: `opsdesk`, `radsheet`, `radtrack`, `syncdesk`, `todo`.
 - Security and persistence labs: `bastion`, `strongbox`, `worldmerge`,
   `migration-chain`, `schema`.
-- Research workloads: `collatz-lab`, `collatz-barrier`, `collatz-descent`, `collatz-shadow-cycle`, `collatz-termination`, `deletion-sync`, `frankl-search`, `sudoku`,
+- Research workloads: `andrews-curtis`, `collatz-lab`, `collatz-barrier`, `collatz-descent`, `collatz-shadow-cycle`, `collatz-termination`, `deletion-sync`, `frankl-search`, `sudoku`,
   `zeta-simple-zeros`.
 - Language and causal verticals: `causal-laws`, `causal-constraints`,
   `causality`, `speculation`, `stockroom`, `timetravel`, `world-law-rpg`,
