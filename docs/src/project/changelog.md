@@ -1,5 +1,13 @@
 # Changelog
 
+- **`m[k] = v` in a loop is no longer linear in the size of the map.** The
+  insert was already O(log n); pricing the new map for the collector walked
+  every key and charged the whole map each time, so the collector also ran
+  every few inserts. A 20,000-entry visited set took 31.9 s and now takes
+  77 ms. A map made by one insert is charged its entry and the copied trie
+  path, and a survivor is priced in full at the next collection.
+- **`<`, `<=`, `>`, `>=` on two strings type-check.** The VM always ordered
+  strings by byte; only the checker refused.
 - **`rad blame`: which recorded inputs cause a symptom.** `why()` reports the
   lineage of a value. `rad blame <trace.radr>` answers by intervention: it
   replays the recorded session with inputs withheld and reports a 1-minimal

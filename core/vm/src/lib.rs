@@ -76,6 +76,8 @@ pub mod replay_serve;
 pub mod sandbox;
 pub mod sandbox_serve;
 pub mod scaffold;
+#[cfg(test)]
+mod search_workload_tests;
 #[doc(hidden)]
 pub mod settlement_reference;
 pub mod snapshot;

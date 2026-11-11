@@ -398,6 +398,19 @@ impl Value {
         Self::from_object(alloc, Object::Map(entries))
     }
 
+    /// A map made from an older VM-heap map by one insert. The two share all
+    /// but one path of the trie, so the heap charges `incremental_bytes`
+    /// instead of pricing every entry again (`GcHeap::alloc_derived_object`).
+    pub(crate) fn derived_map(
+        gc: &mut crate::gc::GcHeap,
+        entries: MapStorage,
+        incremental_bytes: usize,
+    ) -> Self {
+        let ptr = gc.alloc_derived_object(Object::Map(entries), incremental_bytes) as u64;
+        debug_assert!(ptr & !PTR_MASK == 0, "pointer exceeds 48 bits");
+        Value(SIGN_BIT | QNAN | (ptr & PTR_MASK))
+    }
+
     pub(crate) fn bitset(alloc: &mut dyn Allocator, words: Vec<u64>) -> Self {
         Self::from_object(alloc, Object::BitSet(words))
     }
@@ -881,6 +894,7 @@ impl Value {
     pub(crate) fn trace(&self, gc: &mut crate::gc::GcHeap) {
         if let Some(ptr) = self.object_ptr() {
             if unsafe { gc.mark(ptr as *mut Object) } {
+                unsafe { gc.settle_derived_object(ptr as *mut Object) };
                 if let Some(obj) = self.as_object() {
                     obj.trace(gc);
                 }
