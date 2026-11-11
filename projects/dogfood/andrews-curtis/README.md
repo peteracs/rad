@@ -24,6 +24,7 @@ reinforcement learning: a case study* (arXiv:2408.15332). Their greedy search
 | `words.rad` | Cyclic words in F(x, y): inverse, canonical rotation, product, Whitehead automorphisms. |
 | `verify.py` | Checks a printed path. Shares no code with the searches. |
 | `sweep.py`, `atlas_sweep.py` | Run a search over the table, 30 s wall limit per run, and verify every path. |
+| `novelty.py`, `export.py`, `check_certificate.py` | Compare with the literature; turn paths into pure AC-move certificates; check them. |
 | `paths/` | The verified paths. `results.tsv`, `atlas_results.tsv`: one line per presentation tried. |
 
 Every Rad script stops itself after 20 s.
@@ -41,11 +42,13 @@ inversion).
   shorter.
 
 Automorphisms are not AC moves, and the published search does not use them.
-They are sound for this question. AC moves commute with automorphisms, so a
-path with aut steps from `<r1, r2>` to `<x, y>` shows that `<r1, r2>` is
-AC-equivalent to `<psi(x), psi(y)>` for an automorphism `psi`. That pair is a
-basis of the free group, and Nielsen moves, which are AC moves, take every
-basis to `<x, y>`.
+They are sound for this question. If `phi(Q)` is carried to `F` by AC
+moves, then `Q` is carried to `phi^-1(F)` by the same moves pulled back
+through `phi^-1`. So a path with aut steps from `<r1, r2>` to `<x, y>` shows
+that `<r1, r2>` is AC-equivalent to `<psi(x), psi(y)>` for an automorphism
+`psi`; that pair is a basis, and Nielsen moves take every basis to `<x, y>`.
+A path to a class core `K` shows AC-equivalence to `psi(K)`, which is
+AC-trivial exactly when `K` is. `export.py` carries out this construction.
 
 ## What Rad is used for
 
@@ -75,29 +78,40 @@ python atlas_sweep.py --rad <rad> probe
 
 Of the 657 presentations the published greedy search left unsolved:
 
-| n | TRIVIAL | JOINED AK3 | JOINED AK4 | JOINED AK5 | JOINED AK6 | JOINED AK7 | JOINED ms1037 | JOINED ms1040 | JOINED ms891 | UNSOLVED | total |
-|---|---|---|---|---|---|---|---|---|---|---|---|
-| 2 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 32 | 32 |
-| 3 | 2 | 34 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 36 | 72 |
-| 4 | 24 | 0 | 22 | 0 | 0 | 0 | 0 | 0 | 0 | 72 | 118 |
-| 5 | 31 | 0 | 0 | 16 | 0 | 0 | 0 | 0 | 0 | 88 | 135 |
-| 6 | 14 | 0 | 0 | 0 | 14 | 0 | 0 | 0 | 1 | 117 | 146 |
-| 7 | 8 | 0 | 0 | 0 | 0 | 14 | 14 | 5 | 0 | 113 | 154 |
-| all | 79 | 34 | 22 | 16 | 14 | 14 | 14 | 5 | 1 | 458 | 657 |
+| n | TRIVIAL | JOINED AK3 | JOINED AK4 | JOINED AK5 | JOINED AK6 | JOINED AK7 | JOINED ms1037 | JOINED ms1040 | UNSOLVED | total |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 2 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 32 | 32 |
+| 3 | 2 | 34 | 0 | 0 | 0 | 0 | 0 | 0 | 36 | 72 |
+| 4 | 24 | 0 | 22 | 0 | 0 | 0 | 0 | 0 | 72 | 118 |
+| 5 | 31 | 0 | 0 | 16 | 0 | 0 | 0 | 0 | 88 | 135 |
+| 6 | 15 | 0 | 0 | 0 | 14 | 0 | 0 | 0 | 117 | 146 |
+| 7 | 8 | 0 | 0 | 0 | 0 | 14 | 14 | 5 | 113 | 154 |
+| all | 80 | 34 | 22 | 16 | 14 | 14 | 14 | 5 | 458 | 657 |
 
 TRIVIAL: a verified path to `<x, y>` that the published greedy search did not
-find. Paths have 15 to 86 steps (median 28) and take a median of 160 ms to find.
+find. JOINED *c*: a verified chain to class *c*'s core, so the two are
+AC-trivial together or not at all. AK3 to AK7 are `AK(n)`; `ms1037` and
+`ms1040` start at those table rows and are counted in their own column.
+Every join so far is between presentations with the same first relator. The
+UNSOLVED rows stopped at the 20 s limit without reaching a class.
 
-JOINED *c*: a verified chain to class *c*'s starting presentation, so the two
-are trivializable together or not at all. AK3 to AK7 are `AK(n)` with that
-`n`; `ms<i>` classes start at row `i` of the table; that starting presentation
-(ms891, ms1037, ms1040) is counted in its own column, so 117 presentations
-are joined to a class and 3 are class cores. Every join so far is between presentations with the same first
-relator. The 458 UNSOLVED rows are open here: the searches stopped at their
-20 s limit without reaching a class.
+Against the published results (`python novelty.py`, which encodes Theorem B
+and Theorem 10 of arXiv:2408.15332v2): 78 trivializations and 82 joins are
+new, 2 and 35 were known. 27 of the new joins tie n = 3 presentations to
+AK(3).
 
 The classification was stopped by hand after three classifier rounds; rerun
 `python classify.py --rad <rad>` to continue it.
+
+## Certificates
+
+`python export.py` turns every path into a sequence of elementary AC moves
+(multiply, invert, conjugate by a letter) with the automorphisms removed;
+`python check_certificate.py certificates/*.json` replays them using only free
+reduction, and shares no code with the searches or the exporter.
+`novelty.py --table` writes `certificates/results.tsv`, and `make_release.py
+<dir>` assembles the standalone release in `release/` (README, licenses,
+citation, a short note in `release/paper/`), which needs no Rad.
 
 ## What the checker guards against
 
@@ -115,9 +129,9 @@ A path is still only as good as the two step rules above. They are stated in
 
 ## Limits
 
-- "New" means: not in AC-Solver's list of presentations its greedy search
-  solved. The same paper solves a few more by other means and proves some
-  infinite families trivial; this project has not compared against those.
+- "New" means: not covered by the greedy and BFS lists, Theorem B or
+  Theorem 10 of arXiv:2408.15332v2. That paper also relates four length-14
+  presentations to AK(3) without listing them; one join here has length 14.
 - A JOINED result says two presentations are trivializable together or not at
   all. It does not say which.
 - AK(3), `<x, y | x^3 = y^4, xyx = yxy>`, is not trivialized here.

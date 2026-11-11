@@ -1,0 +1,121 @@
+\documentclass[11pt]{amsart}
+\usepackage{amssymb,booktabs,hyperref}
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}[theorem]{Lemma}
+\newcommand{\MS}{\mathrm{MS}}
+\newcommand{\AK}{\mathrm{AK}}
+
+\title{Andrews--Curtis certificates for Miller--Schupp presentations}
+\author{peteracs}
+\date{November 2026}
+
+\begin{abstract}
+Of the $1190$ Miller--Schupp presentations $\MS(n,w)$ with $n\le 7$ and
+$|w|\le 7$, a published greedy search left $657$ unsolved. We give explicit,
+machine-checkable sequences of elementary Andrews--Curtis moves that
+trivialize $78$ of them, and that show $65$ more to be AC-trivial if and only
+if the Akbulut--Kirby presentation $\AK(n)$ is; for $n=3$ this adds $27$
+presentations to those known to stand or fall with $\AK(3)$. A further $17$
+are tied to two other presentations with $n=7$. Every certificate is checked
+by a program of about 150 lines that uses only free reduction.
+\end{abstract}
+
+\maketitle
+
+\section{Setting}
+
+An \emph{AC move} on a balanced presentation $\langle x,y\mid r_0,r_1\rangle$
+replaces $r_i$ by $r_ir_j^{\pm1}$ ($j\ne i$), by $r_i^{-1}$, or by
+$gr_ig^{-1}$ for a letter $g$, and then freely reduces. The Andrews--Curtis
+conjecture asserts that every balanced presentation of the trivial group is
+AC-equivalent to $\langle x,y\mid x,y\rangle$. The Miller--Schupp
+presentations
+\[
+\MS(n,w)=\langle x,y\mid x^{-1}y^nx=y^{n+1},\ x=w\rangle,
+\]
+with $w$ of exponent sum zero in $x$, present the trivial group and are a
+standard source of potential counterexamples, as are the Akbulut--Kirby
+presentations $\AK(n)=\langle x,y\mid x^n=y^{n+1},\ xyx=yxy\rangle$, open for
+$n\ge3$. Shehper et al.~\cite{shehper} studied the $1190$ presentations with
+$n\le7$, $|w|\le7$; their greedy search solved $533$. They proved
+(Theorem~B) that $\MS(1,w)$, $\MS(n,y^{-1}xyx^{-1})$ and $\MS(2,w_k)$ with
+$w_k=y^{-k}x^{-1}yxy$ are AC-trivial, that $\MS(n,w_k)$ is AC-equivalent to
+$\AK(n)$, and (Theorem~10) trivialized two more. Lisitsa~\cite{lisitsa}
+trivialized $\MS(n,y^{-1}xyx^{-1})$ for $3\le n\le8$.
+
+\section{Method}
+
+The search works on pairs of cyclic words, each up to rotation and
+inversion, with two steps: replace one relator by the cyclic reduction of
+$uv$, with $u$ a rotation of it and $v$ a rotation of the other relator or of
+its inverse; or apply one of the Whitehead automorphisms $y\mapsto yx^{\pm1}$,
+$x\mapsto xy^{\pm1}$ to both relators when this shortens the pair. Products
+are compositions of AC moves. Automorphisms are not, and are removed as
+follows.
+
+\begin{lemma}
+Let $P$ be a presentation, $\varphi\in\mathrm{Aut}(F(x,y))$, and suppose
+$\varphi(P)$ is carried to $Q$ by AC moves $m_1,\dots,m_k$. Then $P$ is
+carried to $\varphi^{-1}(Q)$ by the AC moves $\varphi^{-1}(m_1),\dots,
+\varphi^{-1}(m_k)$, where $\varphi^{-1}$ fixes multiplication and inversion
+moves and sends conjugation by $g$ to conjugation by the word
+$\varphi^{-1}(g)$, a composition of conjugations by letters.
+\end{lemma}
+
+Applying the lemma at each automorphism, a search path from $P$ to
+$\langle x,y\mid x,y\rangle$ becomes AC moves from $P$ to
+$\langle x,y\mid\psi(x),\psi(y)\rangle$ for an automorphism $\psi$; since
+$\{\psi(x),\psi(y)\}$ is a basis, Nielsen moves (themselves AC moves) take it
+to $\langle x,y\mid x,y\rangle$. A path from $P$ to a presentation $K$ becomes
+AC moves from $P$ to $\psi(K)$, and $\psi(K)$ is AC-trivial if and only if $K$
+is, by the lemma again. Ties to a class are found with a saved search graph:
+the graph is grown from $K$, and a search from $P$ stops when it reaches a
+state of the graph.
+
+\section{Results}
+
+\begin{center}
+\begin{tabular}{rrrrrr}
+\toprule
+$n$ & AC-trivial & tied to $\AK(n)$ & tied to other & already known & open\\
+\midrule
+2 & 0 & 0 & 0 & 0 & 32\\
+3 & 1 & 27 & 0 & 8 & 36\\
+4 & 23 & 15 & 0 & 8 & 72\\
+5 & 31 & 9 & 0 & 7 & 88\\
+6 & 15 & 7 & 0 & 7 & 117\\
+7 & 8 & 7 & 17 & 7 & 115\\
+\midrule
+all & 78 & 65 & 17 & 37 & 460\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent The columns count the $657$ presentations the greedy search left.
+``Already known'' are those covered by the results recalled above. The other
+two cores are $\MS(7,yxy^{-1}x^{-1})$ (13 tied) and $\MS(7,yxy^2x^{-1})$
+(4 tied); both are open. The trivializations use 122 to 10868 moves (median
+576). No presentation with $n=2$ was resolved, and $\AK(3)$ was not
+trivialized.
+
+The comparison with~\cite{shehper} is exact for the families and theorems
+above. That paper also relates four presentations of length 14 to $\AK(3)$
+without listing them in machine-readable form; one tie here has length 14
+and may coincide with one of them.
+
+\section{Data}
+
+The certificates, the table and the checker are at
+\url{https://github.com/peteracs/ac-miller-schupp}. A certificate lists the
+moves on the ordered pair of relators; the checker replays them from the
+stated start and compares with the stated end.
+
+\begin{thebibliography}{9}
+\bibitem{shehper} A.~Shehper et al., \emph{What makes math problems hard for
+reinforcement learning: a case study}, arXiv:2408.15332v2, 2025.
+\bibitem{lisitsa} A.~Lisitsa, \emph{New Andrews--Curtis trivializations for
+Miller--Schupp group presentations}, Examples and Counterexamples 6 (2024),
+100168.
+\end{thebibliography}
+
+\end{document}

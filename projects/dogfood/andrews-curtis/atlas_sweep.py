@@ -59,7 +59,8 @@ def grow(rad, label, r1, r2, rounds, wall_ms):
                 (HERE / "paths").mkdir(exist_ok=True)
                 (HERE / "paths" / f"class_{label}.txt").write_text(
                     "\n".join(lines[lines.index(head):]) + "\n", encoding="utf-8", newline="\n")
-            break
+            return head, lines
+    return head, lines
 
 
 def probe_one(rad, row, wall_ms, table):
@@ -73,9 +74,16 @@ def probe_one(rad, row, wall_ms, table):
         return (index, r1, r2, "TIMEOUT", "", "", "", "")
     lines = [line for line in done.stdout.splitlines() if line.strip()]
     head = next((line for line in lines if line.startswith(("JOINED", "UNSOLVED"))), "")
-    fields = dict(part.split("=", 1) for part in head.split() if "=" in part)
     if not head.startswith("JOINED"):
+        fields = dict(part.split("=", 1) for part in head.split() if "=" in part)
         return (index, r1, r2, "UNSOLVED" if head else "ERROR", "", "", fields.get("visits", ""), fields.get("ms", ""))
+    return check_chain(row, lines, head, table)
+
+
+def check_chain(row, lines, head, table):
+    """Verify the chain a JOINED line starts; save it and return the result row."""
+    index, r1, r2 = row
+    fields = dict(part.split("=", 1) for part in head.split() if "=" in part)
     label = head.split(" meets class ")[1].split()[0]
     chain = "\n".join(lines[lines.index(head):]) + "\n"
     target = table.get(label)
