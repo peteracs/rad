@@ -448,7 +448,13 @@ fn check_expr_control_and_functions(&mut self, expr: &Expr) -> Ty {
                         right = self.resolve_ty(&right);
                     }
                 }
-                if (left.is_numeric() && right.is_numeric()) || left == Ty::Any || right == Ty::Any
+                // Strings order lexicographically by byte, as `sort` and the
+                // runtime comparison already do.
+                if left == Ty::Str && right == Ty::Str {
+                    Ty::Bool
+                } else if (left.is_numeric() && right.is_numeric())
+                    || left == Ty::Any
+                    || right == Ty::Any
                 {
                     if (matches!(left, Ty::Native { .. }) || matches!(right, Ty::Native { .. }))
                         && left != right

@@ -1,5 +1,29 @@
 # Changelog
 
+- **`m[k] = v` in a loop is no longer linear in the size of the map.** The
+  insert was already O(log n); pricing the new map for the collector walked
+  every key and charged the whole map each time, so the collector also ran
+  every few inserts. A 20,000-entry visited set took 31.9 s and now takes
+  77 ms. A map made by one insert is charged its entry and the copied trie
+  path, and a survivor is priced in full at the next collection.
+- **`<`, `<=`, `>`, `>=` on two strings type-check.** The VM always ordered
+  strings by byte; only the checker refused.
+- **Andrews-Curtis dogfood.** `projects/dogfood/andrews-curtis` searches for
+  trivializations of the Miller-Schupp presentations with the world as the
+  search state, the ledger as an audit of every path, and a saved world as a
+  resumable atlas. Both fixes above came from its first probe.
+- **`rad blame`: which recorded inputs cause a symptom.** `why()` reports the
+  lineage of a value. `rad blame <trace.radr>` answers by intervention: it
+  replays the recorded session with inputs withheld and reports a 1-minimal
+  set that still produces the symptom, a but-for class for every input
+  (necessary, structural, incidental), and optionally how the `why()` lineage
+  of a value compares. Every claim is a replay; the result is the same at any
+  worker count. Trace replay gains the counterfactual mode behind it: a
+  history that runs out of standard input sees end of input instead of a
+  repeated last line, and a clock, file or HTTP reading stays with the input
+  it was taken under, so withholding one command does not hand the next one
+  its clock. See the
+  [guide](../guide/counterfactual-blame.md) and `projects/dogfood/stockroom`.
 - **Assignments in one branch no longer clear a local for the others.** The
   compiler treated a read before `ForRangeNext` or `MatchState` as a last use.
   An assignment later in the same function could then move the value out, and

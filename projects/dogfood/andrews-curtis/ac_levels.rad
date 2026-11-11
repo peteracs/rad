@@ -1,0 +1,303 @@
+// Andrews-Curtis trivialization search for balanced presentations <x, y | r1, r2>.
+//
+//   rad ac_levels.rad -- <r1> <r2> [max_total] [wall_ms]
+//
+// A word is a string over x, X, y, Y (capital = inverse). A state is a pair of
+// cyclic words: each relator is the least string among the rotations of the
+// word and of its inverse, and the pair is sorted. Its total is the sum of the
+// two lengths.
+//
+// Two kinds of step:
+//   product   one relator a becomes the cyclic reduction of u * v, where u is
+//             a rotation of a and v a rotation of the other relator or of its
+//             inverse. Rotation, inversion and the product are compositions
+//             of AC moves.
+//   aut       both relators are rewritten by a Whitehead automorphism of the
+//             free group (y -> yx and the like) when that shortens the pair.
+//             If phi(r1), phi(r2) can be trivialized then so can r1, r2: undo
+//             phi along the whole path and it ends at a basis of the free
+//             group, which Nielsen moves (AC moves) take to x, y.
+//
+// The search is lazy and ordered by the total of the state a step produces.
+// A state queued at level t is asked only for its product children of total
+// exactly t, then queued again at the next level it can produce. Children of
+// total t need a cancellation of a fixed length c between the two relators,
+// so they are found by matching the c-letter ends of one against the other,
+// not by trying every alignment. (A child can come out shorter than its
+// level, when removing the cancelled piece lets its two sides cancel too.)
+//
+// The search lives in the world. Every presentation reached is an entity
+// named by its state, with the state it came from; the indexed `bucket`
+// field is the queue (next level to produce, -1 when exhausted). Each visit
+// is an event, so the ledger records which visit created which state. The
+// path is read from the `from` fields and every hop is checked against the
+// ledger (why()) before it is printed: `ledger_hops` must equal `steps`.
+
+// Origin is written once, when the state is first reached, so the ledger's
+// last writer of it is the visit that found the state. Queue changes on every
+// visit and is kept apart for that reason.
+component Origin { from: str = "", via: str = "" }
+
+component Queue { indexed bucket: int = -1, fresh: bool = true }
+
+resource Search { max_total: int = 40, found: bool = false, visits: int = 0 }
+
+event Expand { key: str }
+
+fn inverse(w: str) -> str {
+    let r = join(reverse(chars(w)), "")
+    let a = replace(replace(replace(r, "x", "1"), "X", "x"), "1", "X")
+    return replace(replace(replace(a, "y", "2"), "Y", "y"), "2", "Y")
+}
+
+// Least rotation of w or of its inverse.
+fn canon(w: str) -> str {
+    let n = len(w)
+    if n <= 1 {
+        if w == "x" { return "X" }
+        if w == "y" { return "Y" }
+        return w
+    }
+    let ww = w + w
+    let v = inverse(w)
+    let vv = v + v
+    let mut best = w
+    let mut i = 0
+    while i < n {
+        let c = slice(ww, i, i + n)
+        if c < best { best = c }
+        let d = slice(vv, i, i + n)
+        if d < best { best = d }
+        i = i + 1
+    }
+    return best
+}
+
+fn cyclic(w: str) -> str {
+    let mut lo = 0
+    let mut hi = len(w)
+    while hi - lo >= 2 and abs(byte_at(w, lo) - byte_at(w, hi - 1)) == 32 {
+        lo = lo + 1
+        hi = hi - 1
+    }
+    return slice(w, lo, hi)
+}
+
+// Cyclic reduction of the free product u * v (u and v freely reduced).
+fn product(u: str, v: str) -> str {
+    let mut a = len(u)
+    let mut b = 0
+    let m = len(v)
+    while a > 0 and b < m and abs(byte_at(u, a - 1) - byte_at(v, b)) == 32 {
+        a = a - 1
+        b = b + 1
+    }
+    return cyclic(slice(u, 0, a) + slice(v, b, m))
+}
+
+// Free and cyclic reduction of an arbitrary word.
+fn reduce(w: str) -> str {
+    let mut s = w
+    let mut before = len(s) + 1
+    while len(s) < before {
+        before = len(s)
+        s = replace(replace(replace(replace(s, "xX", ""), "Xx", ""), "yY", ""), "Yy", "")
+    }
+    return cyclic(s)
+}
+
+// The four Whitehead automorphisms of F(x, y) that act on cyclic words:
+// 0: y -> yx   1: y -> yX   2: x -> xy   3: x -> xY
+// The inverse letter maps to the inverse word: Y -> XY, xY, and X -> YX, yX.
+fn whitehead(w: str, kind: int) -> str {
+    if kind == 0 { return reduce(replace(replace(replace(replace(w, "y", "1"), "Y", "2"), "1", "yx"), "2", "XY")) }
+    if kind == 1 { return reduce(replace(replace(replace(replace(w, "y", "1"), "Y", "2"), "1", "yX"), "2", "xY")) }
+    if kind == 2 { return reduce(replace(replace(replace(replace(w, "x", "1"), "X", "2"), "1", "xy"), "2", "YX")) }
+    return reduce(replace(replace(replace(replace(w, "x", "1"), "X", "2"), "1", "xY"), "2", "yX"))
+}
+
+fn key_of(a: str, b: str) -> str {
+    if a <= b { return a + "," + b }
+    return b + "," + a
+}
+
+// The lowest level above `after` at which the pair of lengths (n0, n1) has
+// product children, or -1. Replacing the relator of length n by a product
+// with the one of length m at cancellation c gives total n + 2m - 2c.
+fn next_level(n0: int, n1: int, after: int, max_total: int) -> int {
+    let lo0 = n0 + 2 * n1 - 2 * min(n0, n1)
+    let lo1 = n1 + 2 * n0 - 2 * min(n0, n1)
+    let hi0 = n0 + 2 * n1 - 2
+    let hi1 = n1 + 2 * n0 - 2
+    let mut t = max(after + 1, min(lo0, lo1))
+    while t <= max_total and t <= max(hi0, hi1) {
+        if t >= lo0 and t <= hi0 and (hi0 - t) % 2 == 0 { return t }
+        if t >= lo1 and t <= hi1 and (hi1 - t) % 2 == 0 { return t }
+        t = t + 1
+    }
+    return -1
+}
+
+// Register a state unless it is known. Returns true when it is new.
+fn reach(key: str, from: str, via: str, max_total: int) -> bool {
+    if get_entity(key) != nil { return false }
+    let parts = split(key, ",")
+    let level = next_level(len(parts[0]), len(parts[1]), 0, max_total)
+    let _ = spawn(key, Origin { from: from, via: via }, Queue { bucket: level, fresh: true })
+    if key == "X,Y" {
+        let s = get_resource(Search) |> unwrap
+        set_resource(Search, Search { found: true, ..s })
+    }
+    return true
+}
+
+on Expand(e) {
+    let node = require_entity(e.key)
+    let here = get(node, Queue) |> unwrap
+    let level = here.bucket
+    let s = get_resource(Search) |> unwrap
+    set_resource(Search, Search { visits: s.visits + 1, ..s })
+    let limit = s.max_total
+    let parts = split(e.key, ",")
+    let n0 = len(parts[0])
+    let n1 = len(parts[1])
+
+    if here.fresh {
+        // Whitehead descent: if an automorphism shortens the pair, the
+        // shorter pair is the only successor. By the theorem of Whitehead
+        // this never gets stuck above the minimum of the automorphism orbit.
+        let mut kind = 0
+        while kind < 4 {
+            let p = whitehead(parts[0], kind)
+            let q = whitehead(parts[1], kind)
+            if len(p) + len(q) < n0 + n1 and len(p) > 0 and len(q) > 0 {
+                let _ = reach(key_of(canon(p), canon(q)), e.key, f"aut{kind}", limit)
+                set(node, Queue { bucket: -1, fresh: false })
+                return nil
+            }
+            kind = kind + 1
+        }
+    }
+
+    let mut side = 0
+    while side < 2 {
+        let a = parts[side]
+        let b = parts[1 - side]
+        let n = len(a)
+        let m = len(b)
+        let twice = n + 2 * m - level
+        if twice >= 2 and twice % 2 == 0 and twice <= 2 * min(n, m) and twice < n + m {
+            let c = int_div(twice, 2)
+            let wanted = n + m - twice
+            let aa = a + a
+            // Rotations of a, by their last c letters.
+            let mut ends = {}
+            let mut i = 0
+            while i < n {
+                let g = slice(aa, i + n - c, i + n)
+                ends[g] = push(get_or(ends, g, []), i)
+                i = i + 1
+            }
+            let mut turn = 0
+            while turn < 2 {
+                let other = if turn == 0 { b } else { inverse(b) }
+                let oo = other + other
+                let io = inverse(oo)
+                let mut j = 0
+                while j < m {
+                    // The inverse of the first c letters of this rotation.
+                    let q = slice(io, 2 * m - j - c, 2 * m - j)
+                    if contains(ends, q) {
+                        let v = slice(oo, j, j + m)
+                        for at in ends[q] {
+                            let w = product(slice(aa, at, at + n), v)
+                            // Shorter than `wanted` when taking the piece
+                            // out lets the two sides of it cancel as well.
+                            if len(w) <= wanted and len(w) > 0 {
+                                let _ = reach(key_of(canon(w), b), e.key, "", limit)
+                            }
+                        }
+                    }
+                    j = j + 1
+                }
+                turn = turn + 1
+            }
+        }
+        side = side + 1
+    }
+    set(node, Queue { bucket: next_level(n0, n1, level, limit), fresh: false })
+}
+
+fn main() -> nil {
+    let args = sys_args()
+    if len(args) < 2 {
+        print("usage: rad ac_levels.rad -- <r1> <r2> [max_total] [wall_ms]")
+        return nil
+    }
+    let limit = if len(args) > 2 { int(args[2]) } else { 40 }
+    let wall = if len(args) > 3 { int(args[3]) } else { 20000 }
+    let started = now_unix_ms()
+    set_resource(Search, Search { max_total: limit, found: false, visits: 0 })
+
+    let start = key_of(canon(reduce(args[0])), canon(reduce(args[1])))
+    let _ = reach(start, "", "", limit)
+
+    // `open` is the lowest level that still holds a queued state.
+    let mut running = true
+    let mut exhausted = false
+    let mut open = 1
+    let mut steps = 0
+    while running {
+        let s = get_resource(Search) |> unwrap
+        steps = steps + 1
+        if s.found or (steps % 64 == 0 and now_unix_ms() - started > wall) {
+            running = false
+        } else {
+            let mut level = 1
+            let mut pick = lookup(Queue, "bucket", level)
+            while is_none(pick) and level <= limit {
+                level = level + 1
+                pick = lookup(Queue, "bucket", level)
+            }
+            open = level
+            if is_none(pick) {
+                running = false
+                exhausted = true
+            } else {
+                emit Expand { key: name_of(unwrap(pick)) }
+                flush_events()
+            }
+        }
+    }
+
+    let s = get_resource(Search) |> unwrap
+    let elapsed = now_unix_ms() - started
+    let seen = query_count(Origin)
+    if not s.found {
+        let verdict = if exhausted { "EXHAUSTED" } else { "UNSOLVED" }
+        print(f"{verdict} {start} max_total={limit} open_level={open} visits={s.visits} seen={seen} ms={elapsed}")
+        return nil
+    }
+    // Walk back from the goal. Each hop is taken from the `from` field and
+    // must agree with the ledger: the state was spawned while handling the
+    // Expand event of the state it claims to come from.
+    let mut path = []
+    let mut at = "X,Y"
+    let mut ledger_hops = 0
+    while at != "" {
+        let spot = require_entity(at)
+        let n = get(spot, Origin) |> unwrap
+        path = push(path, f"{n.via} {at}")
+        if n.from != "" {
+            let witness = "Expand { key: \"" + n.from + "\" }"
+            if len(split(why(spot, Origin), witness)) > 1 { ledger_hops = ledger_hops + 1 }
+        }
+        at = n.from
+    }
+    print(f"SOLVED {start} steps={len(path) - 1} ledger_hops={ledger_hops} visits={s.visits} seen={seen} ms={elapsed}")
+    let mut k = len(path) - 1
+    while k >= 0 {
+        print(trim(path[k]))
+        k = k - 1
+    }
+}

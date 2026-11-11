@@ -1,6 +1,10 @@
 // Opcode dispatch for the collection and ECS families, plus indexing into
 // lists, maps, tuples, and buffers.
 
+/// Heap charged for the trie nodes one persistent-map insert copies: the
+/// path from the root to the changed leaf. A deliberate over-estimate.
+const MAP_INSERT_PATH_BYTES: usize = 512;
+
 impl VM {
     fn execute_collection_opcode(
         &mut self,
@@ -335,8 +339,12 @@ impl VM {
             let map_key = MapKey::from_value(&idx_val)?;
             let mut new_map = obj.into_map().expect("map type already checked");
             self.meter_constraint_resources(new_map.len(), new_map.len().saturating_mul(256))?;
+            // The new map shares all but one trie path with `obj`: charge
+            // the entry and that path, not every entry again.
+            let incremental = crate::value::Object::accounted_map_entry_bytes(&map_key)
+                .saturating_add(MAP_INSERT_PATH_BYTES);
             new_map.insert(map_key, val);
-            let __v = Value::map(&mut self.gc, new_map);
+            let __v = Value::derived_map(&mut self.gc, new_map, incremental);
             self.push(__v);
         } else {
             return Err(format!(

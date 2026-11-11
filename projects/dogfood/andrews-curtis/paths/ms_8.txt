@@ -1,0 +1,8 @@
+SOLVED XYxyy,Xyyyy steps=6 cap=24 expanded=6 seen=9 ms=2
+XYxyy,Xyyyy
+aut2 XYxyy,Xyyy
+aut2 XYxyy,Xyy
+aut2 XYxyy,Xy
+aut2 X,XYxyy
+X,Xy
+aut0 X,Y

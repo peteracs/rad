@@ -697,6 +697,61 @@ fn is_virtualizable_write(builtin: &str) -> bool {
     matches!(builtin, "write_file" | "write_file_bytes" | "append_file")
 }
 
+/// Error prefix of a counterfactual replay whose program asked a stream for
+/// input the history does not hold: an exhausted socket, or a closed
+/// standard input read again and again. `rad blame` reads it to tell "the
+/// session could not finish" apart from "it finished without the symptom".
+pub const COUNTERFACTUAL_EXHAUSTED_PREFIX: &str = "counterfactual replay: input exhausted";
+
+/// Empty reads a counterfactual replay serves from a closed standard input
+/// before it halts the run. A program that handles end of input stops at the
+/// first; one that does not would read forever.
+const CLOSED_STREAM_READ_LIMIT: usize = 8;
+
+/// Builtins that deliver one message of an ordered external stream: a line
+/// of stdin, a chunk of a socket, a datagram. These are the interventions a
+/// counterfactual replay can make ("this message never arrived"): deleting
+/// one leaves the rest of its stream in order. Keyed reads (`read_file`),
+/// clocks and connection setup are not: removing one does not describe a
+/// session that could have happened.
+pub fn is_stream_input(builtin: &str) -> bool {
+    matches!(
+        builtin,
+        "input"
+            | "readline"
+            | "tcp_read"
+            | "udp_recv_from"
+            | "udp_recv_from_timeout"
+            | "udp_recv_from_bytes"
+            | "udp_recv_from_bytes_timeout"
+            | "udp_recv_bytebuf"
+            | "udp_recv_bytebuf_timeout"
+    )
+}
+
+/// Builtins that sample the outside world at the moment they are called: a
+/// clock, a file, an HTTP endpoint. The recorded answer is tied to *when* it
+/// was asked. A counterfactual replay therefore serves it by arrival (the
+/// stream input the program was handling), not by call count: with an input
+/// withheld, the next command must still see its own clock reading, not the
+/// one the withheld command saw.
+pub fn is_sampled_read(builtin: &str) -> bool {
+    matches!(
+        builtin,
+        "clock"
+            | "now_unix_s"
+            | "now_unix_ms"
+            | "read_file"
+            | "read_file_bytes"
+            | "file_exists"
+            | "list_dir"
+            | "http_get"
+            | "http_post"
+            | "http_post_json"
+            | "http_request"
+    )
+}
+
 /// How recorded io is served back to the running program.
 enum ReplayMode {
     /// Faithful replay: records are consumed strictly in order, with
@@ -748,6 +803,20 @@ pub struct TraceReplayer {
     /// index movement — no re-execution.
     capture_timeline: bool,
     timeline: Vec<std::sync::Arc<crate::world::WorldSnapshot>>,
+    /// Counterfactual replay only: a stream input asked for more than the
+    /// history holds ends (standard input reads as closed, a socket halts
+    /// the run) instead of repeating its last message. A session whose input
+    /// ran out is not the same session with a stuck keyboard.
+    halt_exhausted_streams: bool,
+    /// Empty reads served from a closed standard input so far.
+    closed_stream_reads: usize,
+    /// Counterfactual replay only: for every queued record of the oracle,
+    /// the arrival it was recorded under (queues and keys as in the oracle).
+    /// An arrival is a stream input, numbered by its position on the full
+    /// tape; io before the first one belongs to arrival 0.
+    arrivals: HashMap<(String, String), std::collections::VecDeque<usize>>,
+    /// The arrival the program is handling: the last stream input served.
+    current_arrival: usize,
 }
 
 impl std::fmt::Debug for TraceReplayer {

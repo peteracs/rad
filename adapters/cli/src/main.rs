@@ -163,6 +163,10 @@ enum CliCommand {
         serve: bool,
         with_source: Option<String>,
     },
+    Blame {
+        trace_path: String,
+        arguments: BlameArguments,
+    },
     Version,
 }
 // CLI argument parsing and command execution share one private adapter state.
@@ -172,6 +176,7 @@ include!("cli/authority_commands.rs");
 include!("cli/operational_commands.rs");
 include!("cli/model_commands.rs");
 include!("cli/ffi_commands.rs");
+include!("cli/blame_command.rs");
 include!("cli/source_commands.rs");
 include!("cli/run.rs");
 include!("cli/test_parallel.rs");

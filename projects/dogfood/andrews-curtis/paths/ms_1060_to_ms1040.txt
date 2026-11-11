@@ -1,0 +1,3 @@
+JOINED probe XYXyxyy,XYYYYYYYxyyyyyyyy meets class ms1040 visits=1 states=1 ms=3542
+XYXyxyy,XYYYYYYYxyyyyyyyy
+aut3 XXyxyy,XYYYYYYYxyyyyyyyy

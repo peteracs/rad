@@ -1,0 +1,193 @@
+JOINED ms891 XXyxY,XYYYYYYxyyyyyyy meets class T visits=48542 states=170771
+XXyxY,XYYYYYYxyyyyyyy
+XXYYYYYxyyyyyy,XXyxY
+XXYYYYxyyyyyyXY,XXyxY
+XXXXYYYYxyyyyy,XXyxY
+XXXYXXYYYxyyyyy,XXyxY
+XXXXYYYxyyyyyXXY,XXyxY
+XXXXXXYYYxyyyyyXY,XXyxY
+XXXXXXXXYYYxyyyy,XXyxY
+XXXXXYYYxyyyyXyXY,XXyxY
+XXXYYYxyyyyXyXXY,XXyxY
+XXXYXYYYxyyyyXy,XXyxY
+XXXYXYYxYXyyyyXy,XXyxY
+XXXYXYxYXYXyyyyXy,XXyxY
+XXXYYXYXYXyyyyXy,XXyxY
+XXXYYXYYXXXyyyyXy,XXyxY
+XXXYYXYYXyXyyyXy,XXyxY
+XXXYYXYYxyXXyyyXy,XXyxY
+XXXYYXYYxyyXyyXy,XXyxY
+XXyxY,XYYYXYYxyyXyyXyXy
+aut2 XXXYYYYXYYxyyXy,XYXyxY
+XXXYYYYXYxYXyXy,XYXyxY
+XXXYYYYYXYYXyXy,XYXyxY
+XXXYYYYYXYxyXXy,XYXyxY
+XXXYYYYYYXXXy,XYXyxY
+XXXXYYYYYYXXyxy,XYXyxY
+XXXXYYYYYYXyxyy,XYXyxY
+XXXXYYYYYxyyy,XYXyxY
+XXXXYYYYxYXyy,XYXyxY
+XXXXYYYYxxyXy,XYXyxY
+XXXXYYYYxyxYXXy,XYXyxY
+XXXXYYYxYYXXy,XYXyxY
+XXXXXYYYxYYXyxy,XYXyxY
+XXXXXYYYxYxyy,XYXyxY
+XXXXXYYYxxYXy,XYXyxY
+XXXXYXYXYYxxYXy,XYXyxY
+aut1 XXXXYYYxYxxxYXy,XYxyy
+XXXXXYYYxYxxxy,XYxyy
+XXXXXYYYxYxxyxY,XYxyy
+XXXXXYYYxYxyxYxY,XYxyy
+XXXXXYYYxxYxYxY,XYxyy
+XXXXYYYxxYxYxyXY,XYxyy
+XXXXYYYxxYxxYXY,XYxyy
+XXXYYYxxYxxYXyXY,XYxyy
+XXXYYYxxYxxyXXY,XYxyy
+XXXYYYxxYxyxYXXY,XYxyy
+XXXYYYxxxYxYXXY,XYxyy
+XXXYYYxxxYxyXYXY,XYxyy
+XXXXyyyxxxyxyxy,XYxyy
+XXXXyyyxxxyxyyxY,XYxyy
+XXXXyyyxxxyyxxY,XYxyy
+XXXXyyyxxyxxxY,XYxyy
+XXXXXyxyxxyxxxY,XYxyy
+aut1 XXXXXyyxyxxxY,XYxyXy
+XXXXYXyxyxyxxxY,XYxyXy
+aut1 XXXYXyyyxxxY,XXyXYxy
+XXYXyyyxyXY,XXyXYxy
+XXYXyyyyxYxY,XXyXYxy
+XXyXYxy,XYXYXyyyyxYXy
+XXYXYXyyyyXy,XXyXYxy
+XXyXYxy,XXyxYYXYXyyyy
+XXYxYYYxyxyy,XXyXYxy
+XXXyXyyXyxxYY,XXyXYxy
+aut0 XXXyyxyyxxYXY,XYxyXy
+XXXyyxyyxyXYY,XYxyXy
+XXXyyxyyyxYYY,XYxyXy
+XXyXyXyxyyyxYYY,XYxyXy
+aut2 XXXyxyyyyxYYYXY,XXYxy
+XXYxy,XXyXyyyyxYYYXY
+XXXyXyyyyxYYYxY,XXYxy
+XXYxy,XYYYYxYxYxyyXyyy
+aut2 XXXyyyyxYYxYY,XYXYxy
+XXXyyyXYxYxYY,XYXYxy
+XXXyyXyxxYxYY,XYXYxy
+XXXyyXXYxyxYxYY,XYXYxy
+XXXyyXXYYxxYY,XYXYxy
+XXXyyXYXyxYxxYY,XYXYxy
+XXXyXyyxYxxYY,XYXYxy
+XXXyXyXYxxxYY,XYXYxy
+XXXyxYxYxxyxyxy,XYXYxy
+aut1 XXXXyxYxxYxxyyy,XYYxy
+XXXXYxxxYxxyyy,XYYxy
+XXXXYxxxYxyyxyy,XYYxy
+XXXXYxxxyxyxyy,XYYxy
+XXXYXyxxxyxyxyy,XYYxy
+aut1 XXXYXyxxyyyXy,XYxYxy
+XXXYYxyxyyyXy,XYxYxy
+XXXYxYXyyxyyyXy,XYxYxy
+XXYXXyyxyyyXy,XYxYxy
+XXYXXyxYxyyyyXy,XYxYxy
+XXYXYxxyyyyXy,XYxYxy
+XXYYXyxyyyyXy,XYxYxy
+XXYYYxyyyyyXy,XYxYxy
+aut2 XXYXYYYxyyyyy,XXyxY
+XXYXYYxYXyyyyy,XXyxY
+XXYXYxYXYXyyyyy,XXyxY
+XXYYXYXYXyyyyy,XXyxY
+XXXyyyyyXXYYXYY,XXyxY
+XXYYXYYXyXyyyy,XXyxY
+XXYYXYYxyXXyyyy,XXyxY
+XXYYXYYxyyXyyy,XXyxY
+XXYYXYxYXyyXyyy,XXyxY
+XXYYYXYXyyXyyy,XXyxY
+XXXyyXyyyXXYYYY,XXyxY
+XXYYYYXyXyXyyy,XXyxY
+XXYYYYxyXXyXyyy,XXyxY
+XXYYYYxyyXXyyy,XXyxY
+XXYYYYxyyyXyy,XXyxY
+XXYYYxYXyyyXyy,XXyxY
+XXYYYxYxyXyyXyy,XXyxY
+aut2 XXyyyxyxYxYxY,XYXyxY
+XXYxYYxxyXyXy,XYXyxY
+aut0 XXYXyxY,XXYYXYxxyyy
+XXYXyxY,XXYYYXXYxyyy
+XXYXyxY,XXYYYXYXXyy
+XXYXyxY,XXYYYxyXYXyy
+XXYXyxY,XXYYYxyxyXy
+XXYXyxY,XXYYxYXyXy
+XXYXYxYXyXyXY,XXYXyxY
+aut1 XXyXYXYYxxYXy,XYXyxY
+XXXYXXYYxxYXy,XYXyxY
+XXXXYXXYYxxxy,XYXyxY
+aut1 XXXXYXYxYxxxy,XYxyy
+XXXXYYYYxxxy,XYxyy
+XXXXYYYYxxyxY,XYxyy
+XXXXYYYYxyxYxY,XYxyy
+XXXXYYYxYxYxY,XYxyy
+XXXYYYxYxYxyXY,XYxyy
+XXXYYYxYxxYXY,XYxyy
+XXYYYxYxxYXyXY,XYxyy
+XXYXXYYYxYxxy,XYxyy
+XXYXXYYYxYxyxY,XYxyy
+XXYXXYYYxxYxY,XYxyy
+XXYYYxxYxyXYXY,XYxyy
+XXXyyyxxyxyxy,XYxyy
+XXXyyxyyxyxyxy,XYxyy
+aut3 XXXYXYYxYxYxY,XYxyy
+XXYXYYxYxYxyXY,XYxyy
+XXYXYYxYxxYXY,XYxyy
+XXYXYYYxyxxYXY,XYxyy
+aut3 XXYYYxxYxYXXy,XYxyy
+XXXYYYxxYxYXyy,XYxyy
+XXXYYYxxYxyXy,XYxyy
+XXXYYYxxxYXy,XYxyy
+XXXXYYYxxxy,XYxyy
+XXXXYYYxxyxY,XYxyy
+XXXXYYYxyxYxY,XYxyy
+XXXXYYxYxYxY,XYxyy
+XXXYYxYxYxyXY,XYxyy
+XXXYYxYxxYXY,XYxyy
+XXYYxYxxYXyXY,XYxyy
+XXYXXYYxYxxy,XYxyy
+XXYXXYxYYYxxy,XYxyy
+XXYXYYYYYxxy,XYxyy
+XXYXYYYYYxyxY,XYxyy
+aut3 XXYYYYYxxYXy,XYxyy
+XXXYYYYYxxy,XYxyy
+XXXYYYYYxyxY,XYxyy
+XXXYYYYxYxY,XYxyy
+XXYYYYxYxyXY,XYxyy
+XXYYYYxxYXY,XYxyy
+XXyyyxyyxyxy,XYxyy
+aut3 XXYXYYYxYxY,XYxyy
+XYXYXYYYxYxy,XYxyy
+aut3 XXXYYYxYYxy,XYxyy
+XXXYYYxYxY,XYxyy
+XXYYYxYxyXY,XYxyy
+XXYYYxxYXY,XYxyy
+XXyyxyyxyxy,XYxyy
+aut3 XXYXYYxYxY,XYxyy
+XYXYXYYxYxy,XYxyy
+aut3 XXXYYxYYxy,XYxyy
+XXXYYxYxY,XYxyy
+XXYYxYxyXY,XYxyy
+XXYYxxYXY,XYxyy
+XXyxyyxyxy,XYxyy
+aut3 XXYXYxYxY,XYxyy
+XXYYYYxY,XYxyy
+XYYXYYYxY,XYxyy
+aut3 XYXYYYxY,XYxyy
+aut3 XXYYYxY,XYxyy
+XYYXYYxY,XYxyy
+aut3 XYXYYxY,XYxyy
+aut3 XXYYxY,XYxyy
+XYYXYxY,XYxyy
+aut3 XYXYxY,XYxyy
+aut3 XXYxY,XYxyy
+XYYY,XYxyy
+aut3 XYY,XYxyy
+aut3 XY,XYxyy
+aut3 X,XYxyy
+X,Xy
+aut0 X,Y

@@ -1,0 +1,7 @@
+SOLVED XXYxYY,XYxyy steps=5 cap=24 expanded=5 seen=27 ms=3
+XXYxYY,XYxyy
+XYY,XYxyy
+aut3 XY,XYxyy
+aut3 X,XYxyy
+X,Xy
+aut0 X,Y

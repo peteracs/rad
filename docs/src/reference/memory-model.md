@@ -32,7 +32,7 @@ By unboxing 48-bit integers, the vast majority of integer arithmetic in Rad requ
 ### Lists and maps (copy-on-write vs persistent maps)
 
 - **Lists** are backed by **`Arc<Vec<Value>>`**. Assignment is a cheap pointer copy (`Arc::clone`). Mutations use `Arc::make_mut`: if the list is uniquely owned, the vector is updated in place; if shared, the vector is cloned once and then mutated.
-- **Maps** are backed by **HAMTs** (`im::HashMap`) for structural sharing and $O(\log n)$-style updates with sharing.
+- **Maps** are backed by a persistent hash trie (`rpds::HashTrieMapSync`): an update shares all but one path with the map it came from and costs $O(\log n)$. The collector charges a map made by `m[k] = v` for the new entry and that path, and prices a surviving map in full at the next collection. A list on a plain `let mut` local is still copied by `push` and `xs[i] = v`; declare it `let unique` to update it in place.
 
 When you assign a list to a new variable or pass it to a function, it is a cheap pointer copy. When you `push` a new value, builtins return a new list value; the runtime avoids full deep copies of unrelated elements when the backing buffer can be updated in place.
 

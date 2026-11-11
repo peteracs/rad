@@ -1,0 +1,5 @@
+SOLVED XXyxYY,XYxyy steps=3 cap=24 expanded=3 seen=24 ms=3
+XXyxYY,XYxyy
+X,XYxyy
+X,Xy
+aut0 X,Y

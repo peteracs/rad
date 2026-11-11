@@ -15,6 +15,7 @@ rad/
     - `adapters/cli/` - Rust package for the rad executable and process I/O.
       - `adapters/cli/src/` - CLI composition root.
         - `adapters/cli/src/cli/` - Command arguments, execution, and diagnostic presentation.
+      - `adapters/cli/tests/` - Process-level tests: `rad blame` end to end and the committed-trace gate.
     - `adapters/ffi-worker/` - Out-of-process native-plugin containment and replay worker.
       - `adapters/ffi-worker/src/` - Worker protocol, process boundary, timeout, and crash handling.
     - `adapters/lsp/` - Rust package for the Language Server Protocol boundary.
@@ -55,6 +56,7 @@ rad/
       - `core/vm/scripts/` - VM-specific documentation and benchmark helpers.
       - `core/vm/src/` - Language semantics, compilation, world state, execution, replay, relations, and WASM boundary.
         - `core/vm/src/bin/` - Internal diagnostic executables for phase-level runtime profiling.
+        - `core/vm/src/blame/` - Counterfactual root-cause report rendering and tests.
         - `core/vm/src/builtins/` - Builtin signatures grouped by value, world, host, and simulation roles.
         - `core/vm/src/causality/` - Settlement provenance model and explanation rendering.
         - `core/vm/src/checker/` - Static semantics, effects, scopes, diagnostics, and type checking.
@@ -216,6 +218,9 @@ rad/
         - `projects/dogfood/collatz-barrier/correction/` - Uniform additive-correction bounds from exact image collisions and certified infinite tails.
         - `projects/dogfood/collatz-barrier/ladder/` - Complete sharp linear-envelope family near the limit slope, convergent-denominator ladder, and causally assembled parallel block certificates.
       - `projects/dogfood/bsd-x/` - Finite algebraic decision rules and verifiers around Selmer observability; the universal X3 assertion stays unproved.
+      - `projects/dogfood/andrews-curtis/` - Andrews-Curtis trivialization search on the Miller-Schupp presentations, with an independent path checker.
+        - `projects/dogfood/andrews-curtis/data/` - The 1,190 presentations, converted from the AC-Solver repository.
+        - `projects/dogfood/andrews-curtis/paths/` - Verified trivializations and class joins, one file per presentation.
       - `projects/dogfood/collatz-automatic/` - Working notes on mixed binary/ternary termination certificates; nothing here proves Collatz.
         - `projects/dogfood/collatz-automatic/farkas/` - Farkas-style certificate checks and their explanations.
       - `projects/dogfood/collatz-carry/` - Whether multiplying by 3 moves parity information to the high end of a number in a structured way.
@@ -268,6 +273,7 @@ rad/
         - `projects/dogfood/radtrack/demo/` - Tracker sync, conflict, replay, and migration demonstrations.
       - `projects/dogfood/schema/` - Versioned schema and saved-world migration fixtures.
       - `projects/dogfood/speculation/` - Fork, simulate, sandbox, and blast-radius examples.
+      - `projects/dogfood/stockroom/` - Order-desk incident traced with `rad blame`, and a lineage-versus-intervention experiment.
       - `projects/dogfood/strongbox/` - Persistence, migration, replay, and hostile-save laboratory.
         - `projects/dogfood/strongbox/bugs/` - Persistence and replay regressions.
           - `projects/dogfood/strongbox/bugs/05_retro_write_hole/` - Retroactive-write replay reproduction assets.

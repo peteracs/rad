@@ -87,6 +87,9 @@ struct GcEntry {
     payload_layout: std::alloc::Layout,
     accounted_size: usize,
     marked: bool,
+    /// Accounted by its increment over an older object it shares storage
+    /// with, not by its full retained size. Settled at the next mark.
+    derived: bool,
 }
 
 unsafe fn drop_typed<T>(ptr: *mut u8) {
@@ -151,6 +154,7 @@ impl GcHeap {
                 payload_layout,
                 accounted_size: allocation_layout.size().saturating_add(retained_bytes),
                 marked: false,
+                derived: false,
             });
             if self.tail.is_null() {
                 self.head = entry;
@@ -167,6 +171,52 @@ impl GcHeap {
             .total_allocated_bytes
             .saturating_add(accounted_size as u64);
         ptr
+    }
+
+    /// Allocate an object that shares nearly all of its storage with an
+    /// older one: a persistent map after one insert. Charging its full
+    /// retained size would count the shared entries once per update, which
+    /// made a loop of `m[k] = v` collect every few inserts and walk every
+    /// key to price each new map. It is charged `incremental_bytes` now.
+    /// The older object is usually garbage by the next collection, so the
+    /// mark phase then prices each survivor at its full size
+    /// (`settle_derived_object`) and the accounting is exact again.
+    pub(crate) fn alloc_derived_object(
+        &mut self,
+        obj: crate::value::Object,
+        incremental_bytes: usize,
+    ) -> *mut crate::value::Object {
+        let ptr = self.alloc_accounted(obj, incremental_bytes);
+        // SAFETY: `alloc_accounted` just linked this allocation as the tail.
+        unsafe { (*self.tail).derived = true };
+        ptr
+    }
+
+    /// Price a surviving derived object at its full retained size. Called on
+    /// the first mark of an object in a collection.
+    ///
+    /// # Safety
+    /// `ptr` must be a live `Object` allocated by this or a merged `GcHeap`.
+    #[inline]
+    pub(crate) unsafe fn settle_derived_object(&mut self, ptr: *mut crate::value::Object) {
+        let (_, payload_offset) = std::alloc::Layout::new::<GcEntry>()
+            .extend(std::alloc::Layout::new::<crate::value::Object>())
+            .expect("GC mark layout overflow");
+        let entry = unsafe { ptr.cast::<u8>().sub(payload_offset).cast::<GcEntry>() };
+        if !unsafe { (*entry).derived } {
+            return;
+        }
+        let full = unsafe { (*entry).allocation_layout }
+            .size()
+            .saturating_add(unsafe { (*ptr).accounted_heap_bytes() });
+        self.bytes_allocated = self
+            .bytes_allocated
+            .saturating_sub(unsafe { (*entry).accounted_size })
+            .saturating_add(full);
+        unsafe {
+            (*entry).accounted_size = full;
+            (*entry).derived = false;
+        }
     }
 
     pub fn should_collect(&self) -> bool {

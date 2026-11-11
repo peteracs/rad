@@ -62,6 +62,8 @@ mod test_support;
 pub mod visitor;
 pub mod wasm_compiler_host;
 pub use manifest::RadManifest;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod blame;
 pub mod opcode;
 pub mod parser;
 pub mod pipeline;
@@ -74,6 +76,8 @@ pub mod replay_serve;
 pub mod sandbox;
 pub mod sandbox_serve;
 pub mod scaffold;
+#[cfg(test)]
+mod search_workload_tests;
 #[doc(hidden)]
 pub mod settlement_reference;
 pub mod snapshot;

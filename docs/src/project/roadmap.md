@@ -56,6 +56,7 @@ and
 | **Shipped** | Async and deterministic parallel execution | Async handlers, conflict-aware schedule batches, parallel simulation, serial overrides |
 | **Shipped** | Fork/diff/merge/replay/sandbox | Copy-on-write speculation, field conflicts, deterministic traces, capability isolation |
 | **Shipped** | WebGPU presentation host | Bounded packets, generated layout contract, device-loss recovery |
+| **Shipped** | Counterfactual root cause | `rad blame` withholds recorded inputs and replays: a 1-minimal cause, a but-for class per input, and a lineage comparison |
 | **Shipped** | Relations and causal settlements | Experimental opt-in surfaces; see their RFCs and explicit feature flags |
 
 ## Open work

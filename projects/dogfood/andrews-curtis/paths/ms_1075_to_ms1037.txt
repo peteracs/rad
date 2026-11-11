@@ -1,0 +1,106 @@
+JOINED probe XYYYYYYYxyyyyyyyy,XYxyXyy meets class ms1037 visits=1 states=1 ms=2895
+XYYYYYYYxyyyyyyyy,XYxyXyy
+aut2 XYYYYYYYxyyyyyyyy,XYxyXy
+XYYYYYYYXyyyyyyxy,XYxyXy
+XXYYYYYYxyyyyyyxy,XYxyXy
+XXYYYYYxYxyyyyyxy,XYxyXy
+XXYYYYYxxYxyyyyxy,XYxyXy
+XXXyyyyyxxYXYYYXy,XYxyXy
+XXXXyyyyyxxYXYYXy,XYxyXy
+XXXXXyyyyyxxYXYXy,XYxyXy
+XXXXXXyyyyyxxYXXy,XYxyXy
+XXXXXXyyyyyxyXYXy,XYxyXy
+XXXXXXXyyyyyxyXXy,XYxyXy
+XXXXXXXyyyyyyxYXy,XYxyXy
+XXXXXXXXyyyyyyy,XYxyXy
+XXXXXXXyyyyyyXyxY,XYxyXy
+XXXXXXyyyyyyXyyXY,XYxyXy
+XXXXXXyyyyyXyxyXY,XYxyXy
+XXXXXXyyyyyXyyxYY,XYxyXy
+XXXXXXyyyyXyxyxYY,XYxyXy
+XXXXXXyyyXyxxyxYY,XYxyXy
+XXXXXXyyXyxxxyxYY,XYxyXy
+XXXXXXyXyxxxxyxYY,XYxyXy
+XXXXXYXyyxxxxyxYY,XYxyXy
+XXXXXYXyyxxxxxyXY,XYxyXy
+XXXXXXYXyyxxxxxxY,XYxyXy
+aut0 XXXXXXXYXyxyxxxxxxY,XYxyy
+XXXXXXXyyxxxxxxY,XYxyy
+XXXXXXXyxyyxxxxxY,XYxyy
+XXXXXXyyyyxxxxxY,XYxyy
+XXXXXXyXyxyxxxxxY,XYxyy
+aut1 XXXXXXyXXyyxxxxxY,XYxyXy
+XXXXXyXXyyxxxxyXY,XYxyXy
+XXXXYXyXyyxxxxyXY,XYxyXy
+aut1 XXXYXyXXyXyxxxyXY,XXyXYxy
+XXXYXXyyxxxyXY,XXyXYxy
+XXXYXXyyxxyxYxY,XXyXYxy
+XXYXXyyxxyxYXyXY,XXyXYxy
+XXYXXYXXyyxxyXy,XXyXYxy
+XXYXXYXXyyxyxYxy,XXyXYxy
+XXYXXyyxyxxYY,XXyXYxy
+XXYXXyyxyyXYxY,XXyXYxy
+XXyXYxy,XXyyxyyXYXyXYXY
+aut3 XXXyXyyxyyXXyy,XYxyXyXyy
+XXYXyxxyyXXyy,XYxyXyXyy
+aut0 XXXYxyxxYXYxYXY,XYYYXyxY
+XXXYxyxxYXYYxyy,XYYYXyxY
+XXXYxyxYxyxyy,XYYYXyxY
+XXXYxyxYxYYXyxy,XYYYXyxY
+XXYxyxYxYYXYYXy,XYYYXyxY
+XXYxyxYxYXYxyXy,XYYYXyxY
+XXYxyxYYxyyxyXy,XYYYXyxY
+XXYxyxYYxYXyy,XYYYXyxY
+aut3 XXyxYxYYYxyXyyy,XYYXyxY
+XXYYxYYYxYXyyy,XYYXyxY
+XXYYxYYYxyxyXyy,XYYXyxY
+XXYYxYYxYXYxyXyy,XYYXyxY
+XXYYxYYxYYXYXyy,XYYXyxY
+XXYYxYYxxyXYYXyy,XYYXyxY
+XXYYxYYxxyyXy,XYYXyxY
+XXYYxYYxyxYXXy,XYYXyxY
+XXYYxYxYXYxYXXy,XYYXyxY
+XXYYxYxYYXYYYXXy,XYYXyxY
+XXYYxYxYYXYxyXYXy,XYYXyxY
+XXYYxYxYYYXYXYXy,XYYXyxY
+XXYYxYxYxyXYYXYXy,XYYXyxY
+XXYYxYxYxyyXYYXy,XYYXyxY
+XXXYYxYxYxyyy,XYYXyxY
+XXXYYxYxxYXy,XYYXyxY
+aut0 XXXYXYYxYXy,XXYXYXyxY
+aut0 XXXYXXYXYYXy,XXXYXXYXyxY
+XXXYXXYXyxY,XYYYXyy
+aut3 XXyXXyxYXyXy,XYYXyyy
+XXyXXyxyxYYXy,XYYXyyy
+XXYXYxxYxxyy,XYYXyyy
+XXXYXYxxYxyyy,XYYXyyy
+XXXYXYxxyyXy,XYYXyyy
+XXXYXYxyyyXXy,XYYXyyy
+XXXYXyyXyXXy,XYYXyyy
+XXXyxYXyXXy,XYYXyyy
+aut0 XXyxYXyXy,XYXYXyxyxy
+aut0 XXYXXYxyxxyxY,XYxYYxy
+XXXYXyxxyxyy,XYxYYxy
+XXXYYYxyxyxyy,XYxYYxy
+XXYXyyXYYxyxyxyy,XYxYYxy
+XXYXyXyyXYxyxyxyy,XYxYYxy
+XXYXyXyXyyyxyxyy,XYxYYxy
+XXYXyXYxyXyyxyxyy,XYxYYxy
+XXYXXyyyXyyxyxyy,XYxYYxy
+XXYXXyxyXyxyxyy,XYxYYxy
+XXYXXyxYxyyxyy,XYxYYxy
+XXYXYYxxyyxyy,XYxYYxy
+XXYYXyyXYxxyyxyy,XYxYYxy
+XXYYXyXyyxyyxyy,XYxYYxy
+XXYYXYxyXyxyyxyy,XYxYYxy
+XXYYXYxYxyyyxyy,XYxYYxy
+XXYYYXyxyyyxyy,XYxYYxy
+aut2 XYXYYYYXyxyyyyxyy,XYxYxy
+XXYYYYXyxyyyyxyXy,XYxYxy
+aut2 XXYXYYYYYXyxyyyyyxy,XXyxY
+XXyxY,XYXYYYYYXyxyyyyyXy
+XXXXYYYYYXyxyyyyy,XXyxY
+XXXXYYYYYxyyyyyy,XXyxY
+XXYYYYYxyyyyyyyXY,XXyxY
+XXYYYYYYxyyyyyyy,XXyxY
+XXyxY,XYYYYYYYxyyyyyyyy

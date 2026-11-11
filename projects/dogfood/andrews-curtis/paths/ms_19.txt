@@ -1,0 +1,9 @@
+SOLVED XXyyxY,XYxyy steps=7 cap=24 expanded=7 seen=42 ms=6
+XXyyxY,XYxyy
+XXyxy,XYxyy
+XYxyy,Xyyy
+aut2 XYxyy,Xyy
+aut2 XYxyy,Xy
+aut2 X,XYxyy
+X,Xy
+aut0 X,Y

@@ -189,7 +189,8 @@ impl Object {
     /// object but not covered by `size_of::<Object>()`. Causal code cannot
     /// mutate these containers in place, so the allocation-time charge stays
     /// valid for an invocation's heap budget.
-    pub(crate) fn accounted_heap_bytes(&self) -> usize {
+    /// Bytes one map entry adds to `accounted_heap_bytes`.
+    pub(crate) fn accounted_map_entry_bytes(key: &MapKey) -> usize {
         fn key_bytes(key: &MapKey) -> usize {
             match key {
                 MapKey::Int(_) => std::mem::size_of::<i64>(),
@@ -199,6 +200,13 @@ impl Object {
                 MapKey::Entity(_) => std::mem::size_of::<u32>(),
                 MapKey::Tuple(values) => values.iter().map(key_bytes).sum(),
             }
+        }
+        key_bytes(key).saturating_add(std::mem::size_of::<Value>())
+    }
+
+    pub(crate) fn accounted_heap_bytes(&self) -> usize {
+        fn key_bytes(key: &MapKey) -> usize {
+            Object::accounted_map_entry_bytes(key).saturating_sub(std::mem::size_of::<Value>())
         }
         fn text_fields(fields: &HashMap<String, Value>) -> usize {
             fields

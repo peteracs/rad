@@ -31,6 +31,7 @@
 - [Async and Parallel Execution](./guide/async-and-parallel.md)
 - [Authority, Transactions, and Native Data](./guide/authority-transactions-and-native-data.md)
 - [Cost, Phases, Provenance, Models, and FFI](./guide/cost-phases-provenance-models-and-ffi.md)
+- [Counterfactual Root Cause](./guide/counterfactual-blame.md)
 - [WebTransport Edge Networking](./guide/webtransport-networking.md)
 - [Game Embedding & MOBA Dogfood](./guide/game-embedding.md)
 - [WebGPU Presentation Host](./guide/webgpu.md)

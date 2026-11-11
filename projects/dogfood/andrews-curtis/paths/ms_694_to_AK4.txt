@@ -1,0 +1,36 @@
+JOINED probe XYYYYxyyyyy,XYxYYYxY meets class AK4 visits=0 states=140267
+XYYYYxyyyyy,XYxYYYxY
+aut3 XYYYYxyyyyy,XYxYYYYxY
+XXyxyyyyyy,XYxYYYYxY
+aut3 XYxYYYYYxY,XYxYxYYYYYY
+XXyxyxY,XYxYYYYYxY
+XXyxyxY,XXyyyyyxy
+XXXyyyyxxy,XXyxyxY
+XXYYYxyxYxY,XXyxyxY
+aut1 XXyXYXyXyXyxy,XXyyxY
+XXyyxY,XYXYXyXyXyxyy
+aut2 XXXyxyyXYYXYY,XYXyyxY
+XXXXyyxyXYYXYY,XYXyyxY
+XXXXyXXYY,XYXyyxY
+aut1 XXXXyXXYxY,XYxYxyy
+XXXXXyXYY,XYxYxyy
+XXXXyyXYYY,XYxYxyy
+aut2 XXyxYY,XYXYXYXyXYYYY
+aut1 XXyxYxY,XYxYxYxYYYYXy
+XXXyyxYxyyyy,XXyxYxY
+aut2 XXYYxyxyxYYYY,XXYxyxy
+XXXyxxyyyy,XXYxyxy
+XXYxyxy,XXyxyyyyy
+XXYxyxy,XYxYYYYYxY
+aut2 XYXYxyyxy,XYxYYYYxY
+aut2 XYYXYxyyyxy,XYxYYYxY
+aut2 XYYYXYxyyyyxy,XYxYYxY
+aut2 XYYYYXYxyyyyyxy,XYxYxY
+aut2 XXyxy,XYYYYYXYxyyyyyyxy
+XXyxy,XYYYYYXyxyyyyy
+XXyxy,XYYYYYxyyyy
+aut2 XYXyxy,XYYYYYxyyyy
+XYXyxy,XYxYYYYxyyy
+XXyxYYXyyyy,XYXyxy
+XXXyxYXyyyy,XYXyxy
+XXXXyyyyy,XYXyxy

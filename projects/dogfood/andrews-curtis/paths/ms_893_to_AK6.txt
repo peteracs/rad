@@ -1,0 +1,39 @@
+JOINED probe XXYxY,XYYYYYYxyyyyyyy meets class AK6 visits=0 states=140267
+XXYxY,XYYYYYYxyyyyyyy
+aut3 XYYYYYYxyyyyyyy,XYxYXy
+XYYYYYXYxyyyyyy,XYxYXy
+XXYxyyyyyXYYYYY,XYxYXy
+XXXYxyyyyXYYYYY,XYxYXy
+XXXXYxyyyXYYYYY,XYxYXy
+XXXXXYxyyXYYYYY,XYxYXy
+XXXXXYxyxyXYYYY,XYxYXy
+XXXXXYxyxxyXYYY,XYxYXy
+aut1 XXXXYxyxyXYxYxY,XXyxYxy
+aut1 XXXYxyyXYxxYxxY,XXXyxYxy
+XXXyxYxy,XXYxyyXYxxYXyxY
+XXXyxYxy,XXYxyxYYXyxxy
+aut1 XXXXyxYxy,XXYxyxYxYXyxy
+XXXXXyxxYXYxyy,XXXXyxYxy
+XXXXyxYxy,XYXyxYXYxyy
+XXXXyxYxy,XXXyxYYXyxxy
+aut1 XXXXXyxYxy,XXXXyxYxYXyxy
+XXXXXyxYxy,XYXYxyy
+aut1 XXXXXXyxYxy,XYYxyXy
+XXXXXyxyxY,XYYxyXy
+XXXXyxyyXYY,XYYxyXy
+aut2 XXYYxy,XYXYXYXyxyyXYYY
+XXXYxyyXYYYXYXY,XXYYxy
+aut1 XXYxYxy,XXYxyXyXYxYxYYY
+XXYxYxy,XXYxyXyxYYYY
+XXYxYxy,XXYxxyXYYYY
+XXYxYxy,XYYYYYXyxy
+aut3 XYYYYXyxy,XYxYYxyXy
+aut3 XYYYXyxy,XYxYYYxyXyy
+aut3 XYYXyxy,XYxYYYYxyXyyy
+aut3 XYXyxy,XYxYYYYYxyXyyyy
+XYXyxy,XYxYYYYYYxyyyyy
+XXyxYYYYXyyyyyy,XYXyxy
+XXXyxYYYXyyyyyy,XYXyxy
+XXXXyxYYXyyyyyy,XYXyxy
+XXXXXyxYXyyyyyy,XYXyxy
+XXXXXXyyyyyyy,XYXyxy

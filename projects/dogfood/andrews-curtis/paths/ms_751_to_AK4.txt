@@ -1,0 +1,15 @@
+JOINED probe XYXYYYxy,XYYYYxyyyyy meets class AK4 visits=1 states=1 ms=2073
+XYXYYYxy,XYYYYxyyyyy
+aut3 XXYYYxy,XYYYYxyyyyy
+XXYYYxy,XXyxYYYY
+XXXyxYxxY,XXyxYYYY
+XXyXYxyxYYY,XXyxYYYY
+XXYxyxy,XXyxYYYY
+aut3 XXyxYxY,XYxYxyyyy
+XXyxYxY,XYYYXyxy
+aut3 XYYXyxy,XYxYxyXyy
+aut3 XYXyxy,XYxYYxyXyyy
+XXyyyXYxYxy,XYXyxy
+XXXyyyXYxxy,XYXyxy
+XXXyyyyXYxy,XYXyxy
+XXXXyyyyy,XYXyxy
