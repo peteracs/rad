@@ -11,6 +11,8 @@ name: Soundness
 #   - asan-soak: nightly cron + manual, AddressSanitizer build with a deep
 #     budget. ASAN (not Miri) because the zstd envelope crosses a C FFI
 #     boundary that Miri cannot execute — ASAN watches exactly that seam.
+#     Also on push/PR, at a short budget, when a change reaches that seam
+#     (ffi-changes): a lockfile bump broke it unseen until cron (GH 0002).
 
 on:
   push:
@@ -98,9 +100,41 @@ jobs:
           path: /tmp/rad_fuzz_findings/
           if-no-files-found: ignore
 
+  # Does this push/PR reach the C/FFI seam? Dependency and build-script
+  # changes (61a64b5's cc bump is the case that got through), this workflow,
+  # and zstd's callers (cargo check with zstd removed lists exactly those two
+  # files, GH 0001).
+  ffi-changes:
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    outputs:
+      touched: ${{ steps.diff.outputs.touched }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+      - id: diff
+        env:
+          BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          seam='^(Cargo\.lock|(.*/)?Cargo\.toml|(.*/)?build\.rs|\.github/workflows/soundness\.yml|core/vm/src/radpack\.rs|core/vm/src/replay/file_stream\.rs)$'
+          if [ -z "$BASE" ] || ! git cat-file -e "$BASE^{commit}" 2> /dev/null; then
+            echo "no usable base ('$BASE'): run the soak"; touched=true
+          elif git diff --name-only "$BASE...HEAD" | grep -E "$seam"; then
+            touched=true
+          else
+            touched=false
+          fi
+          echo "touched=$touched" | tee -a "$GITHUB_OUTPUT"
+
   asan-soak:
-    # Sanitizers need nightly + -Z flags; soak budget only on cron/manual.
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    # Sanitizers need nightly + -Z flags. Deep budget on cron/manual; a short
+    # one on push/PR that reaches the seam (2000 reproduced GH 0001).
+    needs: ffi-changes
+    if: >-
+      !cancelled() && (github.event_name == 'schedule'
+      || github.event_name == 'workflow_dispatch'
+      || needs.ffi-changes.outputs.touched == 'true')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -109,15 +143,67 @@ jobs:
         with:
           toolchain: nightly
           components: rust-src
+      # cc >= 1.10 forwards -Zsanitizer=address to the C it builds as
+      # -fsanitize=address (cc src/lib.rs, CARGO_CFG_SANITIZE). That C must
+      # come from a clang on rustc's own LLVM major: GCC 13-instrumented zstd
+      # under rustc's LLVM 23 ASan runtime gave a bogus "stack-use-after-scope"
+      # on a zstd global (GH 0001: red with GCC 13, green with clang 23, same
+      # nightly and source). blake3, ring and wasmtime also build C via cc
+      # (cargo tree -i cc); the net step below checks all of them.
+      - name: C compiler on rustc's LLVM
+        run: |
+          llvm_major=$(rustc +nightly -Vv | sed -n 's/^LLVM version: \([0-9]*\)\..*/\1/p')
+          test -n "$llvm_major" || { echo "::error::no LLVM version in rustc -Vv"; exit 1; }
+          codename=$(. /etc/os-release && echo "$VERSION_CODENAME")
+          base="https://apt.llvm.org/$codename"
+          suite="llvm-toolchain-$codename-$llvm_major"
+          # a nightly on LLVM's development branch has no versioned suite yet
+          curl -fsI "$base/dists/$suite/Release" > /dev/null || suite="llvm-toolchain-$codename"
+          # key pinned to the fingerprint apt.llvm.org publishes
+          curl -fsSL https://apt.llvm.org/llvm-snapshot.gpg.key -o llvm.asc
+          fpr=$(gpg --show-keys --with-colons llvm.asc | awk -F: '/^fpr/ { print $10; exit }')
+          test "$fpr" = 6084F3CF814B57C1CF12EFD515CF4D18AF4F7421 || {
+            echo "::error::apt.llvm.org key fingerprint is '$fpr'"; exit 1; }
+          sudo gpg --dearmor -o /usr/share/keyrings/apt-llvm.gpg llvm.asc
+          echo "deb [signed-by=/usr/share/keyrings/apt-llvm.gpg] $base/ $suite main" |
+            sudo tee /etc/apt/sources.list.d/apt-llvm.list
+          sudo apt-get update -q
+          sudo apt-get install -y --no-install-recommends "clang-$llvm_major"
+          clang_major=$("clang-$llvm_major" -dumpversion | cut -d. -f1)
+          test "$clang_major" = "$llvm_major" || {
+            echo "::error::clang-$llvm_major reports $clang_major; rustc uses LLVM $llvm_major"; exit 1; }
+          {
+            echo "CC=clang-$llvm_major"
+            echo "CXX=clang++-$llvm_major"
+            echo "LLVM_MAJOR=$llvm_major"
+          } >> "$GITHUB_ENV"
       - name: Fuzz under AddressSanitizer
         env:
           RUSTFLAGS: "-Zsanitizer=address"
           RUSTDOCFLAGS: "-Zsanitizer=address"
           ASAN_OPTIONS: "detect_leaks=0" # the GC owns liveness; leaks are not UB
-          RAD_FUZZ_ITERS: ${{ github.event.inputs.iters || '20000' }}
+          RAD_FUZZ_ITERS: ${{ github.event.inputs.iters || (github.event_name == 'schedule' && '20000' || '2000') }}
         run: |
           cargo +nightly test -p rad-vm --release fuzz_ \
             -Zbuild-std --target x86_64-unknown-linux-gnu -- --nocapture
+      # The net: the FFI seam this job exists for must really be instrumented,
+      # and every C archive built for the target must come from the matching
+      # clang, not GCC. Fails if cc stops forwarding the flag or another
+      # compiler slips in (GH 0001). Checked on the 0001 trees: GCC-built
+      # fails, uninstrumented fails, clang-23-built passes.
+      - name: C is ASan-instrumented by the matching clang
+        if: always()
+        run: |
+          build=target/x86_64-unknown-linux-gnu/release/build
+          zstd=$(find "$build" -path '*zstd-sys*' -name libzstd.a | head -n1)
+          test -n "$zstd" || { echo "::error::libzstd.a not found under $build"; exit 1; }
+          refs=$(nm "$zstd" | grep -c ' U __asan_' || true)
+          echo "$zstd: $refs __asan_ refs"
+          test "$refs" -gt 0 || { echo "::error::zstd C is not ASan-instrumented"; exit 1; }
+          strings -a "$zstd" | grep -q "clang version $LLVM_MAJOR\." || {
+            echo "::error::no object in $zstd is from clang $LLVM_MAJOR"; exit 1; }
+          gcc_built=$(find "$build" -name '*.a' -exec sh -c 'strings -a "$1" | grep -q "GCC: (" && echo "$1"' _ {} \;)
+          test -z "$gcc_built" || { echo "::error::GCC-built C under ASan:"; echo "$gcc_built"; exit 1; }
       - name: Codec + merge suites under ASAN
         env:
           RUSTFLAGS: "-Zsanitizer=address"
