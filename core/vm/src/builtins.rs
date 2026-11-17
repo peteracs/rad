@@ -71,6 +71,7 @@ fn derive_builtin_call_shape(builtin: Builtin) -> BuiltinCallShape {
         Input | WorldDigest => BuiltinCallShape::Range { min: 0, max: 1 },
         SandboxRun => BuiltinCallShape::Range { min: 3, max: 4 },
         SimulatePar => BuiltinCallShape::Range { min: 5, max: 6 },
+        Explore => BuiltinCallShape::Range { min: 2, max: 3 },
         _ => BuiltinCallShape::Exact(
             builtin_type_scheme(builtin.name())
                 .unwrap_or_else(|| {

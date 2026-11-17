@@ -43,13 +43,16 @@ pub fn is_named_call(callee: &str, argc: usize) -> bool {
 /// share `simulate`'s static-schedule and purity rules. `simulate_many` takes
 /// a list of forks at arg 0 but its schedule is still at arg 1, and
 /// `simulate_seeded` is a single exact-seed rollout — for all of them the
-/// same static classification and const-folding apply.
+/// same static classification and const-folding apply. `explore` and `follow`
+/// take their move systems in the same position.
 #[inline]
 pub fn is_simulate_family(callee: &str) -> bool {
     callee == callee_name()
         || callee == Builtin::SimulatePar.name()
         || callee == Builtin::SimulateMany.name()
         || callee == Builtin::SimulateSeeded.name()
+        || callee == Builtin::Explore.name()
+        || callee == Builtin::Follow.name()
 }
 
 /// Direct `Expr::Ident` call to `simulate` with enough arguments.

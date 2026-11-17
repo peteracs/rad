@@ -255,6 +255,9 @@ Every runtime builtin appears exactly once. Each entry links to its exact contra
 | [`assert_only_changed`](builtin-api.md#assert_only_changed) | [projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad) |
 | [`merge_forks`](builtin-api.md#merge_forks) | [projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad) |
 | [`merge_forks_with`](builtin-api.md#merge_forks_with) | [projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad) |
+| [`explore`](builtin-api.md#explore) | [projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad) |
+| [`offer`](builtin-api.md#offer) | [projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad) |
+| [`follow`](builtin-api.md#follow) | [projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad) |
 
 ## Persistence Wire Replay
 

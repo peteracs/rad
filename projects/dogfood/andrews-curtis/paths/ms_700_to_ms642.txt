@@ -1,0 +1,4 @@
+JOINED meet XYYYYxyyyyy,XYxYYxyy meets class ms642 route=700>642 worlds=20000 strategy=descent
+XYYYYxyyyyy,XYxYYxyy
+aut2 XYYYYxyyyyy,XYxYxyy
+aut2 XXyxYY,XYYYYxyyyyy

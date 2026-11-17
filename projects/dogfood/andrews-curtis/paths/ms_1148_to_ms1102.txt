@@ -1,0 +1,3 @@
+JOINED meet XXYxxyXy,XYYYYYYYxyyyyyyyy meets class ms1102 route=1148>1102 worlds=20000 strategy=descent
+XXYxxyXy,XYYYYYYYxyyyyyyyy
+flipy XXYxxyxy,XYYYYYYYxyyyyyyyy

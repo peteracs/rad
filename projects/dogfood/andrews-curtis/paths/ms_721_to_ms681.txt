@@ -1,0 +1,3 @@
+JOINED meet XXYxxYXy,XYYYYxyyyyy meets class ms681 route=721>681 worlds=20000 strategy=descent
+XXYxxYXy,XYYYYxyyyyy
+flipy XXYxxyxY,XYYYYxyyyyy

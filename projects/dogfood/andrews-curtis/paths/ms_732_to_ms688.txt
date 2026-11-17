@@ -1,0 +1,3 @@
+JOINED meet XXXYxYxy,XYYYYxyyyyy meets class ms688 route=732>688 worlds=20000 strategy=descent
+XXXYxYxy,XYYYYxyyyyy
+flipy XXXyxyxY,XYYYYxyyyyy

@@ -121,6 +121,12 @@ impl WorldSnapshot {
         self.resources.get(name).cloned()
     }
 
+    /// Borrow one resource row. `explore` reads a few fields of every world
+    /// it reaches, so it must not clone the row each time.
+    pub(crate) fn resource_ref(&self, name: &str) -> Option<&ComponentData> {
+        self.resources.get(name)
+    }
+
     /// Resolve a named entity to its id.
     pub fn get_entity_by_name(&self, name: &str) -> Option<u32> {
         self.name_to_id.get(name).copied()

@@ -1,0 +1,3 @@
+JOINED meet XXXYxxY,XYYYYxyyyyy meets class ms649 route=667>649 worlds=20000 strategy=descent
+XXXYxxY,XYYYYxyyyyy
+flipy XXXyxxy,XYYYYxyyyyy

@@ -1,0 +1,41 @@
+// The 8-puzzle, all of it.
+//
+//   rad eight_puzzle.rad
+//
+// With no goal, `explore` visits every position reachable from the start and
+// reports how many there are at each distance. The known answer: 181,440
+// positions (half of 9!), the farthest 31 moves from solved, and exactly two
+// positions at that distance. oracle.py recomputes all of it independently.
+
+resource Board { cells: str = "123456780", solved: bool = true }
+
+ecs fn slide(cells: list<str>, blank: int, to: int, label: str) -> nil {
+    let moved = join(set_at(set_at(cells, blank, cells[to]), to, "0"), "")
+    set_resource(Board, Board { cells: moved, solved: moved == "123456780" })
+    offer(label)
+}
+
+// The blank moves up, down, left or right.
+system Slide(board: Board, writes Board) {
+    let cells = chars(board.cells)
+    let blank = index_of(cells, "0")
+    let row = int_div(blank, 3)
+    let col = blank % 3
+    if row > 0 { slide(cells, blank, blank - 3, "U") }
+    if row < 2 { slide(cells, blank, blank + 3, "D") }
+    if col > 0 { slide(cells, blank, blank - 1, "L") }
+    if col < 2 { slide(cells, blank, blank + 1, "R") }
+}
+
+fn main() -> nil {
+    let solved = fork()
+    let every = explore(solved, [system::Slide], {"key": "Board.cells"})
+    print(f"positions {every["status"]} seen={every["seen"]} depth={every["depth"]}")
+    print(f"levels    {every["levels"]}")
+
+    // One of the two positions at distance 31, solved by a shortest path.
+    let hardest = fork_with(solved, Board { cells: "867254301", solved: false })
+    let back = explore(hardest, [system::Slide], {"goal": "Board.solved", "key": "Board.cells"})
+    let route = join(back["path"], "")
+    print(f"hardest   {back["status"]} moves={len(back["path"])} path={route}")
+}

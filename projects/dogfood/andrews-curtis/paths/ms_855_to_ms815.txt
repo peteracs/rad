@@ -1,0 +1,3 @@
+JOINED meet XXYxxyXy,XYYYYYxyyyyyy meets class ms815 route=855>815 worlds=20000 strategy=descent
+XXYxxyXy,XYYYYYxyyyyyy
+flipy XXYxxyxy,XYYYYYxyyyyyy

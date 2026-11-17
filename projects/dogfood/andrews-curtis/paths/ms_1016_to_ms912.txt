@@ -1,0 +1,18 @@
+JOINED meet XXYxyyyy,XYYYYYYxyyyyyyy meets class ms912 route=1016>912 worlds=20000 strategy=descent
+XXYxyyyy,XYYYYYYxyyyyyyy
+XXYxyyyy,XXyyyyyxYYY
+XXYxyyyy,XXyyyyyXYxy
+XXYxyyyy,XXyXyxYxy
+XXYxyyyy,XYxYYxyyyXy
+aut2 XXYxYxyyy,XYXYxyyyy
+flipy XXyxyxYYY,XYxYxyyyy
+aut3 XXYxYxyyy,XYxYYxyyyy
+XXYxYxyyy,XYYYYXyxyyy
+aut3 XYYYXyxyyy,XYxYYxyyyXy
+aut3 XYYXyxyyy,XYxYYYxyyyXyy
+aut3 XYXyxyyy,XYxYYYYxyyyXyyy
+XYXyxyyy,XYxYYYYYxyyyy
+XXyxYXyyyyy,XYXyxyyy
+aut3 XXyxyyy,XYxYxYYYYYYxy
+XXyxyyy,XYxYYYYYYxyyyy
+XXyxyyy,XYYYYYYxyyyyyyy

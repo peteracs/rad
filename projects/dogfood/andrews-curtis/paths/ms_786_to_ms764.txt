@@ -1,0 +1,3 @@
+JOINED meet XYYYYYxyyyyyy,XYYxYxy meets class ms764 route=786>764 worlds=20000 strategy=descent
+XYYYYYxyyyyyy,XYYxYxy
+aut2 XXyyxY,XYYYYYxyyyyyy

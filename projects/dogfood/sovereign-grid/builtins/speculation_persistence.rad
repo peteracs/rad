@@ -5,6 +5,21 @@ system Increment(counter: mut SurfaceCounter) {
     counter.value = counter.value + 1
 }
 
+resource SurfaceSteps { taken: int = 0, done: bool = false }
+
+ecs fn surface_step(taken: int, label: str) -> nil {
+    set_resource(SurfaceSteps, SurfaceSteps { taken: taken, done: taken == 3 })
+    offer(label)
+}
+
+// A move system: each `offer` is one successor world of the world it ran from.
+system SurfaceWalk(steps: SurfaceSteps, writes SurfaceSteps) {
+    if steps.taken < 5 {
+        surface_step(steps.taken + 1, "one")
+        surface_step(steps.taken + 2, "two")
+    }
+}
+
 fn main() -> nil {
     let subject: entity = spawn("surface-counter", SurfaceCounter { value: 0 })
     let base: world_fork = fork()
@@ -27,6 +42,19 @@ fn main() -> nil {
     }
     let many: list<world_fork> = simulate_many([base, base], [system::Increment], 2, 202)
     assert(len(many) == 2, "simulate_many")
+
+    let found: map<str, any> = explore(base, [system::SurfaceWalk], { "goal": "SurfaceSteps.done" })
+    assert(found["status"] == "goal", "explore reaches the goal")
+    assert(found["path"] == ["one", "two"], "explore returns a shortest path of offer labels")
+    assert(found["seen"] == 4, "explore counts distinct worlds")
+    let walked: world_fork = follow(base, [system::SurfaceWalk], ["one", "two"])
+    assert(unwrap(peek_resource(walked, SurfaceSteps)).taken == 3, "follow replays a path")
+    assert(world_digest(walked) == world_digest(found["world"]), "follow arrives at the world explore reported")
+    let every: map<str, any> = explore(base, [system::SurfaceWalk])
+    assert(every["status"] == "exhausted", "explore without a goal visits every world")
+    assert(every["levels"] == [1, 2, 2, 2], "explore reports worlds per depth")
+    let listed: map<str, any> = explore(base, [system::SurfaceWalk], { "collect": "SurfaceSteps.taken" })
+    assert(listed["collected"] == [0, 1, 2, 3, 4, 5, 6], "explore collects a field of every world in the order reached")
 
     let changes: map<str, int> = diff(base, one_tick)
     assert(len(changes) > 0, "diff")

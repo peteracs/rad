@@ -1,5 +1,44 @@
 # Changelog
 
+- **Andrews-Curtis dogfood: fewer results are new than it said, and the open
+  presentations are now 120 classes.** `novelty.py` compared presentations
+  with the published ones letter by letter. An automorphic image of a
+  published presentation is settled by the same theorem, and five
+  automorphisms map one Miller-Schupp table row to another, so images were
+  counted as discoveries: of 80 trivializations 59 are new, not 78, and
+  `MS(7, y x y^-1 x^-1)`, called open, is AC-trivial by Theorem B of
+  arXiv:2408.15332v2. The READMEs, the release note and `results.tsv` now
+  say so. `explore_meet.py` then compared what a 20,000-world `explore` from
+  each of the 458 open presentations reaches: 13 met a trivialized row (all
+  images of Theorem B's family; only their certificates are new) and the
+  other 445 are tied to one another. With the five tied before, that is 450
+  presentations in 120 classes, where the five automorphisms alone give 147
+  orbits. All 584 certificates pass `check_certificate.py`, which now takes
+  a directory.
+- **`explore`: every future of a forked world, not a sample.** `simulate` runs
+  one future and `simulate_par` a sample of them. `explore(fork, moves,
+  options?)` searches every world reachable from a fork and returns a path to
+  a goal or the statement that there is none (`"exhausted"`). A move is a
+  system; inside it `offer(label)` records the world as it is now as one
+  successor and rewinds, and a system that never offers is one move named
+  after itself, so a plain list of systems means every interleaving of them.
+  `follow(fork, moves, path)` replays a path with none of the search's state,
+  which makes a path a certificate. `"collect"` returns one field of every
+  world reached, so two searches can be compared and joined where they meet.
+  The search runs on the worker pool and returns the same status, path,
+  counts and collected list at any thread count. Checked
+  against an independent Python search in `projects/dogfood/explore`: the
+  8-puzzle's 181,440 positions and 31-move diameter, a crate-pushing level
+  solved, played and then proved lost from a cornered position, and a
+  lost-update race found as a four-step schedule. See
+  [World Forking](../reference/builtins.md).
+- **A user function named like a builtin no longer escapes system
+  authority.** The authority scanner took `sum(3)` for the builtin even when
+  the program defined its own `sum`, which is the one that runs. A system that
+  declared no writes could then write any component or resource through such
+  a helper. The call now follows the program's function, as the type checker
+  and the runtime already did. A system that relied on the hole must declare
+  what it writes.
 - **`m[k] = v` in a loop is no longer linear in the size of the map.** The
   insert was already O(log n); pricing the new map for the collector walked
   every key and charged the whole map each time, so the collector also ran

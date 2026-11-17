@@ -1,0 +1,23 @@
+JOINED meet XXYYYYxY,XYYYYYYYxyyyyyyyy meets class ms1074 route=1177>1140>1074 worlds=20000 strategy=descent
+XXYYYYxY,XYYYYYYYxyyyyyyyy
+flipy XXyyyyxy,XYYYYYYYxyyyyyyyy
+XXyyyyxy,XYYYxyXyyyyyyyy
+XXyyyyxy,XYxYYYYYYYYxYxY
+aut2 XXyyyyyyyXyxy,XYXyyyyxy
+XYXyyyyxy,XYYYxyXyyyyyyy
+XYXyyyyxy,XYYYYxYYxyXyyyyyy
+aut2 XYYXyyyyxy,XYYYYxYxyXyyyyy
+aut2 XXyyyyxYYYYxY,XYYYXyyyyxy
+XXyyyyxYYYYxY,XYYYxyXyyyyy
+aut2 XYXyyyyxYYYxY,XYYYxyXyyyy
+aut2 XYYXyyyyxYYxY,XYYYxyXyyy
+aut2 XYYYXyyyyxYxY,XYYYxyXyy
+aut2 XXYYYYxyyyyxy,XYYYxyXy
+XXYxYxyyyxy,XYYYxyXy
+XXYxYxxyXyy,XYYYxyXy
+aut2 XXYYYxy,XXyxyxYxYXY
+XXYYYxy,XXyxyxYXYYYY
+XXYYYxy,XXyxyXYYYYYYY
+flipy XXYxYXyyyyyyy,XXyyyxY
+XXYYYYxyyyyyyy,XXyyyxY
+XXyyyxY,XYYYYYYYxyyyyyyyy

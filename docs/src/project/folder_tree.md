@@ -147,6 +147,7 @@ rad/
         - `projects/dogfood/dispatch60/scenarios/` - Production-shaped dispatch workloads.
         - `projects/dogfood/dispatch60/systems/` - Fixed-rate dispatch systems.
         - `projects/dogfood/dispatch60/tests/` - Dispatch workflow acceptance programs.
+      - `projects/dogfood/explore/` - Exhaustive searches with `explore`, each checked against an independent Python search.
       - `projects/dogfood/forgelink/` - Native-fidelity industrial protocol and telemetry gateway.
         - `projects/dogfood/forgelink/negative/` - Rejected nominal, layout, endian, and scalar implementations.
         - `projects/dogfood/forgelink/owners/` - Authoritative telemetry publication boundary.

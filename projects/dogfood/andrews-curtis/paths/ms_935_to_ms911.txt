@@ -1,0 +1,3 @@
+JOINED meet XXXYxxy,XYYYYYYxyyyyyyy meets class ms911 route=935>911 worlds=20000 strategy=descent
+XXXYxxy,XYYYYYYxyyyyyyy
+flipy XXXyxxY,XYYYYYYxyyyyyyy

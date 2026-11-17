@@ -3,7 +3,7 @@
 
 This inventory is generated from the production lexer, AST, parser, and builtin catalog. It is the completeness denominator for the normative reference and Sovereign Grid coverage gate. Names such as `Error` are recovery nodes rather than source syntax; the coverage manifest records explicit exclusions.
 
-Owner digest: `8401431720d718b5d6d4e88a11d1ad761251864980636ef7835b08ff53f38e32`.
+Owner digest: `25ea70773fa4c5fed3c4c324142decf7da490feb51d2cde9002038800e47ea9a`.
 
 ## Token kinds
 
@@ -311,7 +311,7 @@ Owner digest: `8401431720d718b5d6d4e88a11d1ad761251864980636ef7835b08ff53f38e32`
 
 ## Builtin API names
 
-The 277 names below come from the one runtime catalog. Signatures and operational semantics are in the [complete builtin API catalog](builtin-api.md); this generated list makes omissions machine-detectable.
+The 280 names below come from the one runtime catalog. Signatures and operational semantics are in the [complete builtin API catalog](builtin-api.md); this generated list makes omissions machine-detectable.
 
 | Name | Runtime variant |
 |---|---|
@@ -592,3 +592,6 @@ The 277 names below come from the one runtime catalog. Signatures and operationa
 | <a id="builtin-insert_fact"></a>`insert_fact` | `InsertFact` |
 | <a id="builtin-remove_fact"></a>`remove_fact` | `RemoveFact` |
 | <a id="builtin-replace_fact_by"></a>`replace_fact_by` | `ReplaceFactBy` |
+| <a id="builtin-explore"></a>`explore` | `Explore` |
+| <a id="builtin-offer"></a>`offer` | `Offer` |
+| <a id="builtin-follow"></a>`follow` | `Follow` |

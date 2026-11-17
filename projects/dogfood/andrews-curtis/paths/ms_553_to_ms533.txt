@@ -1,0 +1,7 @@
+JOINED meet XXyXYxxy,XYYxyyy meets class ms533 route=553>533 worlds=20000 strategy=descent
+XXyXYxxy,XYYxyyy
+XXYYXyxxy,XYYxyyy
+aut3 XYXyxYxyXy,XYYxyyy
+aut3 XXyxYYxyXyy,XYYxyyy
+XXYxxYYxyy,XYYxyyy
+XXXyxxy,XYYxyyy

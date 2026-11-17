@@ -6688,3 +6688,75 @@ replace_fact_by(str, str, list<any>, list<any>) -> nil
 - Settlement: `allowed`
 - Executable evidence: [projects/dogfood/sovereign-grid/experimental/relation_builtins.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/experimental/relation_builtins.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/experimental/relation_builtins.rad --experimental-laws --relation-schema projects/dogfood/sovereign-grid/experimental/relation_runtime.rad --relation-module sovereign::surface --experimental-relations --strict-types --deny-warnings`
+
+<a id="explore"></a>
+## `explore`
+
+```text
+explore(fork, moves, options?: map<str, any>) -> map<str, any>
+```
+
+- Category: `transactions-speculation`
+- Arity: `2 to 3` argument(s)
+- Effects: `ecs`
+- Purity: `effectful or readonly`
+- Errors: invalid arity, type, range, capability, platform, or runtime state is a runtime error
+- Determinism: deterministic for equal RAD state and arguments
+- Complexity: `no stronger asymptotic guarantee than the documented input/output size`
+- Allocation: not statically guaranteed allocation-free
+- Native: `available`
+- WASM: `available`
+- Sandbox: `denied`
+- Transaction body: `denied: ecs`
+- Post-commit: `denied: ecs`
+- Settlement: `denied: ecs effect`
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad)
+- Verification command: `rad projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad --strict-types --deny-warnings`
+
+<a id="offer"></a>
+## `offer`
+
+```text
+offer(label: str | int) -> nil
+```
+
+- Category: `transactions-speculation`
+- Arity: `exactly 1` argument(s)
+- Effects: `ecs`
+- Purity: `effectful or readonly`
+- Errors: invalid arity, type, range, capability, platform, or runtime state is a runtime error
+- Determinism: deterministic for equal RAD state and arguments
+- Complexity: `no stronger asymptotic guarantee than the documented input/output size`
+- Allocation: not statically guaranteed allocation-free
+- Native: `available`
+- WASM: `available`
+- Sandbox: `denied`
+- Transaction body: `denied: ecs`
+- Post-commit: `denied: ecs`
+- Settlement: `denied: ecs effect`
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad)
+- Verification command: `rad projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad --strict-types --deny-warnings`
+
+<a id="follow"></a>
+## `follow`
+
+```text
+follow(fork, moves, path: list<str | int>) -> world_fork
+```
+
+- Category: `transactions-speculation`
+- Arity: `exactly 3` argument(s)
+- Effects: `ecs`
+- Purity: `effectful or readonly`
+- Errors: invalid arity, type, range, capability, platform, or runtime state is a runtime error
+- Determinism: deterministic for equal RAD state and arguments
+- Complexity: `no stronger asymptotic guarantee than the documented input/output size`
+- Allocation: not statically guaranteed allocation-free
+- Native: `available`
+- WASM: `available`
+- Sandbox: `denied`
+- Transaction body: `denied: ecs`
+- Post-commit: `denied: ecs`
+- Settlement: `denied: ecs effect`
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad)
+- Verification command: `rad projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad --strict-types --deny-warnings`
