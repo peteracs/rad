@@ -30,8 +30,9 @@ def main():
     shutil.copy2(HERE / "check_certificate.py", out / "check_certificate.py")
     (out / "data").mkdir()
     shutil.copy2(HERE / "data" / "miller_schupp.tsv", out / "data" / "miller_schupp.tsv")
-    certs = sorted(str(p) for p in (out / "certificates").glob("*.json"))
-    done = subprocess.run([sys.executable, str(out / "check_certificate.py"), *certs], capture_output=True, text=True)
+    # The directory, not its 500-odd files: a Windows command line has a length limit.
+    done = subprocess.run([sys.executable, str(out / "check_certificate.py"), str(out / "certificates")],
+                          capture_output=True, text=True)
     print(done.stdout.splitlines()[-1])
     sys.exit(done.returncode)
 

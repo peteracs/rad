@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Check Andrews-Curtis certificates. Standalone: Python 3 standard library only.
 
-    python check_certificate.py certificates/*.json
+    python check_certificate.py certificates
 
-Words are strings over x, y, X, Y (X = x^-1, Y = y^-1). A certificate is
+An argument is a certificate file or a directory of them. Words are strings over x, y, X, Y (X = x^-1, Y = y^-1). A certificate is
 
     {"index": i, "start": [r0, r1], "moves": [...], "end": [s0, s1], "claim": ...}
 
@@ -26,7 +26,9 @@ These are the elementary Andrews-Curtis moves. The checker confirms:
    inverse for the core relators k, one each. Then start is AC-equivalent
    to psi(core), which is AC-trivial exactly when the core is.
 """
+import glob
 import json
+import os
 import sys
 
 
@@ -128,9 +130,24 @@ def check(cert):
     return None
 
 
+def files(arguments):
+    """Certificate files named by the arguments: a file, a directory (every
+    .json in it), or a pattern the shell left unexpanded."""
+    names = []
+    for argument in arguments:
+        if os.path.isdir(argument):
+            names += sorted(glob.glob(os.path.join(glob.escape(argument), "*.json")))
+        elif os.path.exists(argument):
+            names.append(argument)
+        else:
+            names += sorted(glob.glob(argument)) or [argument]
+    return names
+
+
 def main():
     failures = 0
-    for name in sys.argv[1:]:
+    names = files(sys.argv[1:])
+    for name in names:
         with open(name, encoding="utf-8") as f:
             cert = json.load(f)
         problem = check(cert)
@@ -140,8 +157,8 @@ def main():
         else:
             what = "AC-trivial" if cert["claim"] == "AC-trivial" else f"AC-trivial iff {cert['core']} is"
             print(f"ok   {name}: <{cert['start'][0]}, {cert['start'][1]}> {what} ({len(cert['moves'])} moves)")
-    print(f"{len(sys.argv) - 1 - failures} certificates checked, {failures} failed")
-    sys.exit(1 if failures else 0)
+    print(f"{len(names) - failures} certificates checked, {failures} failed")
+    sys.exit(1 if failures or not names else 0)
 
 
 if __name__ == "__main__":
