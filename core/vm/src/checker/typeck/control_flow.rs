@@ -791,10 +791,7 @@ impl Checker {
                 return true;
             }
         }
-        if prefix == type_name {
-            return true;
-        }
-        false
+        prefix == type_name
     }
 
     fn check_match_stmt(&mut self, stmt: &MatchStmt) -> Ty {
