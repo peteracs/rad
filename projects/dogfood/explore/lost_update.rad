@@ -1,0 +1,69 @@
+// Every interleaving of two systems, and the shortest one that breaks.
+//
+//   rad lost_update.rad
+//
+// A system that never calls `offer` is one move, named after the system. A
+// list of such systems therefore means "run these in every order", which is
+// what a scheduler may do. Alice and Bob each add to a balance in two steps:
+// read it, then write it back plus their amount. `explore` returns the
+// shortest schedule that loses an update. With the step made atomic it runs
+// out of worlds instead: no schedule breaks it.
+
+resource Account { balance: int = 100 }
+resource Audit { broken: bool = false }
+component Job { amount: int = 0, pc: int = 0, read: int = 0 }
+
+readonly ecs fn audit() -> nil {
+    let a = get(require_entity("alice"), Job) |> unwrap
+    let b = get(require_entity("bob"), Job) |> unwrap
+    let account = get_resource(Account) |> unwrap
+    let finished = a.pc == 2 and b.pc == 2
+    set_resource(Audit, Audit { broken: finished and account.balance != 100 + a.amount + b.amount })
+}
+
+// Two steps: remember the balance, then write balance-as-remembered + amount.
+readonly ecs fn racy_step(who: str) -> nil {
+    let worker = require_entity(who)
+    let job = get(worker, Job) |> unwrap
+    if job.pc == 0 {
+        let account = get_resource(Account) |> unwrap
+        set(worker, Job { pc: 1, read: account.balance, ..job })
+    }
+    if job.pc == 1 {
+        set_resource(Account, Account { balance: job.read + job.amount })
+        set(worker, Job { pc: 2, ..job })
+    }
+    audit()
+}
+
+// One step: read and write with nothing in between.
+readonly ecs fn atomic_step(who: str) -> nil {
+    let worker = require_entity(who)
+    let job = get(worker, Job) |> unwrap
+    if job.pc == 0 {
+        let account = get_resource(Account) |> unwrap
+        set_resource(Account, Account { balance: account.balance + job.amount })
+        set(worker, Job { pc: 2, ..job })
+    }
+    audit()
+}
+
+system Alice(reads *, writes Job, writes Account, writes Audit) { racy_step("alice") }
+system Bob(reads *, writes Job, writes Account, writes Audit) { racy_step("bob") }
+system AliceAtomic(reads *, writes Job, writes Account, writes Audit) { atomic_step("alice") }
+system BobAtomic(reads *, writes Job, writes Account, writes Audit) { atomic_step("bob") }
+
+fn main() -> nil {
+    let _ = spawn("alice", Job { amount: 10 })
+    let _ = spawn("bob", Job { amount: 20 })
+    let start = fork()
+
+    let racy = explore(start, [system::Alice, system::Bob], {"goal": "Audit.broken"})
+    let order = join(racy["path"], " ")
+    print(f"racy    {racy["status"]} seen={racy["seen"]} schedule={order}")
+    let after = peek_resource(racy["world"], Account) |> unwrap
+    print(f"        balance={after.balance}, should be 130")
+
+    let atomic = explore(start, [system::AliceAtomic, system::BobAtomic], {"goal": "Audit.broken"})
+    print(f"atomic  {atomic["status"]} seen={atomic["seen"]}")
+}

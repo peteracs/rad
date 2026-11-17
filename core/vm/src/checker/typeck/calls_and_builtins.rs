@@ -449,8 +449,12 @@ impl Checker {
                                 sys_type.simulation_breach.clone()
                             }
                         });
+                        let is_exploration = name == crate::value::Builtin::Explore.name()
+                            || name == crate::value::Builtin::Follow.name();
                         if let Some(breach) = breach {
-                            let hint = if is_par {
+                            let hint = if is_exploration {
+                                "A move system must give the same worlds every time it runs from the same world: no IO and no rand_*, directly or in any handler reachable through its emits"
+                            } else if is_par {
                                 "Systems used in simulate_par() must not perform IO — directly or in any handler reachable through their emits (seeded rand_* is allowed)"
                             } else {
                                 "Systems used in simulate() must not perform IO — directly or in any handler reachable through their emits; if the system needs randomness, use simulate_par() with an explicit seed"

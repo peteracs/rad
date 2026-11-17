@@ -1,0 +1,143 @@
+// A crate-pushing level, played and proved by the same function.
+//
+//   rad vault.rad
+//
+// `try_step` is the game: it moves the player one cell and pushes a crate if
+// one is in the way. The live game calls it. `Walk` calls it too and offers
+// each legal step to `explore`, so the rules that are played are the rules
+// that are searched. Three questions are asked of the level:
+//
+//   1. What is a shortest solution?        explore, breadth-first, with a goal
+//   2. Does that solution really work?     follow replays it; then it is played live
+//   3. Is this position still winnable?    explore from it runs out of worlds
+//
+// oracle.py answers the same questions with its own search and must agree on
+// every number printed here.
+
+component At { indexed cell: int = 0 }
+component Crate { id: int = 0 }
+resource Level { won: bool = false, key: str = "" }
+
+let ROWS = [
+    "#########",
+    "#   #   #",
+    "# $   $ #",
+    "#  .#.  #",
+    "#   @   #",
+    "#########"
+]
+let WIDTH = 9
+
+fn cells_marked(mark: str) -> list<bool> {
+    let mut out = []
+    for row in ROWS {
+        for ch in chars(row) {
+            out = push(out, ch == mark)
+        }
+    }
+    return out
+}
+
+let WALLS = cells_marked("#")
+let GOALS = cells_marked(".")
+
+// `won` is the goal. `key` names a position: the player's cell and the set of
+// crate cells. Two crates swapping places is the same position.
+readonly ecs fn judge() -> nil {
+    let mut won = true
+    let mut spots = []
+    for crate in entities(Crate) {
+        let at = get(crate, At) |> unwrap
+        spots = push(spots, at.cell)
+        if not GOALS[at.cell] { won = false }
+    }
+    let me = get(require_entity("player"), At) |> unwrap
+    set_resource(Level, Level { won: won, key: f"{me.cell}:{sort(spots)}" })
+}
+
+readonly ecs fn build() -> nil {
+    let mut cell = 0
+    let mut crates = 0
+    for row in ROWS {
+        for ch in chars(row) {
+            if ch == "@" {
+                let _ = spawn("player", At { cell: cell })
+            }
+            if ch == "$" {
+                let _ = spawn(f"crate{crates}", At { cell: cell }, Crate { id: crates })
+                crates = crates + 1
+            }
+            cell = cell + 1
+        }
+    }
+    judge()
+}
+
+// One step of the game. Returns false, having changed nothing, when the step
+// is not legal.
+readonly ecs fn try_step(delta: int) -> bool {
+    let me = require_entity("player")
+    let here = get(me, At) |> unwrap
+    let to = here.cell + delta
+    if WALLS[to] { return false }
+    let hit = lookup(At, "cell", to)
+    if is_some(hit) {
+        let beyond = to + delta
+        if WALLS[beyond] or is_some(lookup(At, "cell", beyond)) { return false }
+        set(unwrap(hit), At { cell: beyond })
+    }
+    set(me, At { cell: to })
+    judge()
+    return true
+}
+
+fn delta_of(label: str) -> int {
+    if label == "U" { return 0 - WIDTH }
+    if label == "D" { return WIDTH }
+    if label == "L" { return -1 }
+    return 1
+}
+
+system Walk(reads *, writes At, writes Level) {
+    if try_step(delta_of("U")) { offer("U") }
+    if try_step(delta_of("D")) { offer("D") }
+    if try_step(delta_of("L")) { offer("L") }
+    if try_step(delta_of("R")) { offer("R") }
+}
+
+fn main() -> nil {
+    build()
+    let start = fork()
+    let by_position = {"goal": "Level.won", "key": "Level.key"}
+
+    // 1. A shortest solution.
+    let solved = explore(start, [system::Walk], by_position)
+    let route = join(solved["path"], "")
+    print(f"solve     {solved["status"]} moves={len(solved["path"])} seen={solved["seen"]} path={route}")
+
+    // 2. The path is a certificate: follow runs the moves again from the
+    //    start and must arrive at the world explore reported.
+    let arrived = follow(start, [system::Walk], solved["path"])
+    let same = world_digest(arrived) == world_digest(solved["world"])
+    print(f"follow    same_world={same}")
+
+    //    And it is a real solution: play it on the live world.
+    for label in solved["path"] {
+        let _ = try_step(delta_of(label))
+    }
+    let live = get_resource(Level) |> unwrap
+    print(f"play      won={live.won}")
+
+    // 3. Push the left crate into the top-left corner and ask again. The
+    //    search runs out of positions: that game cannot be won any more.
+    let cornered = follow(start, [system::Walk], ["L", "L", "U", "U", "R", "U", "L"])
+    let lost = explore(cornered, [system::Walk], by_position)
+    print(f"cornered  {lost["status"]} seen={lost["seen"]} depth={lost["depth"]}")
+
+    // The whole level, with and without a key. Without one a world is named
+    // by everything in it, so two crates swapping places are two worlds.
+    let every = explore(start, [system::Walk], {"key": "Level.key"})
+    print(f"positions {every["status"]} seen={every["seen"]} depth={every["depth"]}")
+    let labelled = explore(start, [system::Walk])
+    print(f"worlds    {labelled["status"]} seen={labelled["seen"]} depth={labelled["depth"]}")
+}

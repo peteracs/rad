@@ -312,4 +312,7 @@ define_builtins! {
     InsertFact => "insert_fact",
     RemoveFact => "remove_fact",
     ReplaceFactBy => "replace_fact_by",
+    Explore => "explore",
+    Offer => "offer",
+    Follow => "follow",
 }

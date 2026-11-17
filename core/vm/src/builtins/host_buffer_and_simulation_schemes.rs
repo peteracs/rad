@@ -735,6 +735,36 @@ fn builtin_type_scheme_simulation(name: &str) -> Option<BuiltinSig> {
             ret: Ty::WorldFork,
             is_pure: false,
         },
+        // Every future instead of one: each listed system is a move, and the
+        // optional third argument names the goal, score, key and bounds.
+        "explore" => BuiltinSig {
+            type_params: vec![],
+            params: vec![
+                Ty::WorldFork,
+                Ty::List(Box::new(Ty::SystemRef)),
+                Ty::Map(Box::new(Ty::Str), Box::new(Ty::Any)),
+            ],
+            ret: Ty::Map(Box::new(Ty::Str), Box::new(Ty::Any)),
+            is_pure: false,
+        },
+        // Inside a move system: the world as it is now is one successor.
+        "offer" => BuiltinSig {
+            type_params: vec![],
+            params: vec![Ty::Any],
+            ret: Ty::Nil,
+            is_pure: false,
+        },
+        // Replay a path of move labels; shares nothing with the search.
+        "follow" => BuiltinSig {
+            type_params: vec![],
+            params: vec![
+                Ty::WorldFork,
+                Ty::List(Box::new(Ty::SystemRef)),
+                Ty::List(Box::new(Ty::Any)),
+            ],
+            ret: Ty::WorldFork,
+            is_pure: false,
+        },
         // Seed a speculative fork without touching the live world: returns a
         // copy of `fork` with one resource overridden.
         "fork_with" => BuiltinSig {

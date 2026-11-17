@@ -1,5 +1,22 @@
 # Changelog
 
+- **`explore`: every future of a forked world, not a sample.** `simulate` runs
+  one future and `simulate_par` a sample of them. `explore(fork, moves,
+  options?)` searches every world reachable from a fork and returns a path to
+  a goal or the statement that there is none (`"exhausted"`). A move is a
+  system; inside it `offer(label)` records the world as it is now as one
+  successor and rewinds, and a system that never offers is one move named
+  after itself, so a plain list of systems means every interleaving of them.
+  `follow(fork, moves, path)` replays a path with none of the search's state,
+  which makes a path a certificate. `"collect"` returns one field of every
+  world reached, so two searches can be compared and joined where they meet.
+  The search runs on the worker pool and returns the same status, path,
+  counts and collected list at any thread count. Checked
+  against an independent Python search in `projects/dogfood/explore`: the
+  8-puzzle's 181,440 positions and 31-move diameter, a crate-pushing level
+  solved, played and then proved lost from a cornered position, and a
+  lost-update race found as a four-step schedule. See
+  [World Forking](../reference/builtins.md).
 - **A user function named like a builtin no longer escapes system
   authority.** The authority scanner took `sum(3)` for the builtin even when
   the program defined its own `sum`, which is the one that runs. A system that

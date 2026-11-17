@@ -90,7 +90,8 @@ impl Scanner<'_> {
             "fork_from_bytes" | "fork_apply" | "merge_forks" | "merge_forks_with" => {
                 self.direct.writes.insert(WHOLE_WORLD.to_string());
             }
-            "simulate" | "simulate_par" | "simulate_many" | "simulate_seeded" => {
+            "simulate" | "simulate_par" | "simulate_many" | "simulate_seeded" | "explore"
+            | "follow" => {
                 self.record_simulation_schedule(
                     args.get(crate::simulate_syntax::SYSTEMS_ARG_INDEX),
                 );
@@ -98,6 +99,10 @@ impl Scanner<'_> {
                     self.record_resource_overrides(args.get(5));
                 }
             }
+            // `offer` records and rewinds the private world of the exploration
+            // it runs in. The writes it captures were made, and are accounted
+            // for, by `set`/`set_resource`/`spawn`; it adds none of its own.
+            "offer" => {}
             "sandbox_run" => {
                 self.direct.reads.insert(WHOLE_WORLD.to_string());
                 self.direct.writes.insert(WHOLE_WORLD.to_string());
@@ -549,6 +554,9 @@ fn builtin_has_exact_state_authority(name: &str) -> bool {
             | "simulate_par"
             | "simulate_many"
             | "simulate_seeded"
+            | "explore"
+            | "offer"
+            | "follow"
             | "sandbox_run"
             | "recent_events"
             | "emit"

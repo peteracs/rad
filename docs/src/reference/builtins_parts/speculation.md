@@ -7,6 +7,9 @@
 | `simulate_par(fork, systems, ticks, n, seed, overrides?)` | Run `n` independent simulations of the same fork in parallel, returning a list of result forks. Deterministic: each fork's RNG seed is derived from `seed` and its index, so results are identical regardless of thread count. The optional 6th argument is a **list of resource values** applied to the fork before the rollouts (`[Policy { tax: 8 }]`) — seed a candidate at the call site without `commit()` |
 | `simulate_many(forks, systems, ticks, seed)` | The heterogeneous sibling of `simulate_par`: run each of the **distinct** forks in the list in parallel under the same schedule, returning a list of result forks (one per input, same order). Per-fork seeds derive from `(seed, index)`, so results are deterministic regardless of thread count. This is the axis a search wants — evaluate B×K candidate worlds at once |
 | `simulate_seeded(fork, systems, ticks, raw_seed)` | ONE rollout under an **exact** RNG seed — no per-index derivation. Feed it `fork_seed(f)` of a `simulate_par`/`simulate_many` result and it reproduces that single rollout bit-identically, without paying for the others |
+| `explore(fork, moves, options?)` | Search **every** world reachable from `fork`, where each system in `moves` is a move. Returns a `map<str, any>`: `status` is `"goal"`, `"exhausted"`, `"limit"` or `"depth"`, with `path`, `world`, `seen`, `expanded`, `frontier`, `pruned`, `depth`, `levels` and, on request, `collected`. Parallel, and the same answer at any thread count. See [Every future](#every-future-explore-offer-follow) |
+| `offer(label)` | (Inside a move system run by `explore` or `follow`) record the world as it is now as one successor, named `label` (`str` or `int`), and rewind to the world the move started from |
+| `follow(fork, moves, path)` | Run the moves a list of labels names, one after another, and return the fork they lead to. It reuses nothing from the search that produced the path, so a path that follows is a checked certificate |
 | `fork_with(fork, resource_value)` | Return a copy of `fork` with one resource overridden (e.g. `fork_with(f, Policy { rate: 8 })`) — seed a speculative candidate **without** `commit()`ing to the live world. Events, timers, and entities ride through untouched, so it composes straight into `simulate`/`simulate_par`/`simulate_many` |
 | `fork_seed(fork)` | The effective RNG seed the rollout that produced this fork ran under, or `0` for any fork that is not a simulate-family result (derived seeds are never 0). Local debug metadata: not serialized to the wire, and cleared by `fork_with` (an overridden copy is a new candidate, not a rollout's output) |
 | `commit(fork)` | Replace the live program state with the fork's — world **and** pending events, exactly as captured |
@@ -111,6 +114,134 @@ let again = simulate_seeded(root, SYSTEMS, 10, outlier_seed)
 The seed answers "which future is this" (`fork_seed(fork())` is `0` — only simulate-family
 results carry one), and `simulate_seeded` is the consumer that makes it actionable: the pair
 turns "the SET of rollouts is reproducible" into "each individual rollout is reproducible".
+
+### Every future: `explore`, `offer`, `follow`
+
+`simulate` runs one future and `simulate_par` runs a sample. `explore` runs all of them. It
+answers the questions a sample cannot: is this level solvable, what is a shortest solution,
+can this invariant ever break, is this position already lost.
+
+```text
+resource Jugs { a: int = 0, b: int = 0, done: bool = false }
+
+ecs fn pour(a: int, b: int, label: str) -> nil {
+    set_resource(Jugs, Jugs { a: a, b: b, done: a == 4 or b == 4 })
+    offer(label)
+}
+
+system Pour(j: Jugs, writes Jugs) {
+    pour(3, j.b, "fill a")
+    pour(j.a, 5, "fill b")
+    pour(0, j.b, "empty a")
+    pour(j.a, 0, "empty b")
+    let ab = min(j.a, 5 - j.b)
+    pour(j.a - ab, j.b + ab, "a into b")
+    let ba = min(j.b, 3 - j.a)
+    pour(j.a + ba, j.b - ba, "b into a")
+}
+
+let found = explore(fork(), [system::Pour], {"goal": "Jugs.done"})
+// found["status"] == "goal"
+// found["path"]   == ["fill b", "b into a", "empty a", "b into a", "fill b", "b into a"]
+```
+
+**Moves.** Each system in the list is run once from every world the search reaches.
+
+- A system that calls `offer(label)` yields one successor per call. `offer` records the world
+  as it is at that moment and rewinds to the world the move started from, so the next lines of
+  the system write the next alternative from a clean slate. Whatever the system leaves
+  unoffered at the end is dropped.
+- A system that never calls `offer` is one move: the world it leaves behind, labelled with the
+  system's own name. A list of such systems therefore means "run these in every order" — the
+  interleavings a scheduler may choose. `explore(f, [system::Alice, system::Bob],
+  {"goal": "Audit.broken"})` returns the shortest schedule that breaks an invariant, or proves
+  there is none.
+
+Events a move emits are delivered (one flush, as one simulated tick does) before the world is
+considered, so a goal may depend on what a handler wrote.
+
+**Options.** The third argument is a map; every key is optional.
+
+| Key | Value | Meaning |
+|---|---|---|
+| `"goal"` | `"Resource.field"`, a `bool` | Stop at the first world where it is true |
+| `"prune"` | `"Resource.field"`, a `bool` | Drop a world where it is true; `pruned` counts them |
+| `"score"` | `"Resource.field"`, an `int` | Expand the lowest score first. Without it the score is the depth: breadth-first |
+| `"key"` | `"Resource.field"`, a `str` or `int` | What makes two worlds the same world. Without it, everything in the world does |
+| `"collect"` | `"Resource.field"`, a `str` or `int` | Return this field of every world reached, as the list `collected` |
+| `"limit"` | positive `int` | Distinct worlds to hold. Default 1,000,000 |
+| `"depth"` | `int` ≥ 0 | Longest path to try |
+| `"batch"` | `int` 1..65536 | How many worlds at the head of the frontier one parallel round looks at. Default 256. Changes speed and memory, never the result |
+| `"ahead"` | `int` 0..4096 | In a scored search, how many queue-jumping successors a worker may expand past the world it was given. Default 32. Changes speed and memory, never the result |
+
+A misspelt key, resource or field, or a field of the wrong type, is a runtime error raised
+before the search starts.
+
+**Result.**
+
+| Key | Meaning |
+|---|---|
+| `status` | `"goal"`: a goal world was reached. `"exhausted"`: every reachable world was visited and none is a goal. `"limit"`: stopped at the world limit. `"depth"`: ran out of worlds, but some at the depth bound were not expanded |
+| `path` | The labels from the start to the goal (empty unless `status` is `"goal"`) |
+| `world` | The goal `world_fork` (present only for `"goal"`) |
+| `seen`, `expanded`, `frontier`, `pruned` | Distinct worlds reached; worlds whose moves were all examined; worlds reached and not finished; worlds dropped by `"prune"` |
+| `depth` | Length of `path` for a goal, otherwise the deepest world reached |
+| `levels` | `levels[d]` is the number of distinct worlds first reached at depth `d` |
+| `collected` | With `"collect"`: one value per distinct world, in the order the worlds were reached, the start first. `len(collected) == seen` |
+
+**What the answer means.**
+
+- `"exhausted"` is a proof, not a timeout: under these moves, and up to anything `"prune"`
+  dropped, no reachable world is a goal.
+- Without a `"score"` the search is breadth-first and stops at the first goal it generates, so
+  `path` is a shortest one. With a `"score"` it is best-first; `path` is a path, not
+  necessarily a shortest one.
+- The order is fixed: lowest score first, ties in arrival order, successors in the order they
+  were offered. Expanding a world depends on nothing but that world, so workers do it early
+  and in parallel, and the results are merged strictly in that order; a world that a merge
+  puts at the head of the queue is expanded before anything behind it is merged. The result —
+  status, path, every count — is the same at any thread count, any `"batch"` and any
+  `"ahead"`.
+- A scored search whose new worlds usually go to the head of the queue (a successor cheaper
+  than everything waiting) would otherwise advance one world per round. Each worker therefore
+  also expands the successors that would jump the queue, lowest score first, and returns them
+  with the world it was given. If such a successor turns out to be a world already seen, that
+  work is dropped; an error it raised is dropped too, and is raised only if the search itself
+  gets there.
+- Two worlds are one world when their identity is equal. With a `"key"` that is the field's
+  value; choose it to forget what does not matter (which of two identical crates is where).
+  Without a key it is the world's content digest (what `world_digest` hashes) together with
+  the events and timers still in flight. Identities are compared as 128 bits of BLAKE3.
+- `collected` is how a search without a goal reports what it found: which amounts can be
+  measured, which positions exist. Two searches that started in different worlds have met
+  when their lists share a value, and a `"goal"` on that value then gives each a path to it.
+- `path` is a certificate. `follow(fork, moves, path)` runs the named moves again and shares
+  nothing with the search; if it arrives at a goal world, the path is real. Two moves from one
+  world may not carry the same label, so a path always names one route.
+
+**Rules.**
+
+- Move systems obey `simulate()`'s strict purity: no IO, no `commit`, and no `rand_*` (a move
+  must give the same worlds every time it runs from the same world). The checker enforces it,
+  through helper functions and reachable handlers.
+- A system that calls `offer` may not declare `mut` parameters. A `mut` parameter is a private
+  copy written back when the system returns — after the rewind — so the offered world would
+  miss the write. Use `set`, `set_resource`, `spawn` and `despawn`, which write at once.
+- `offer` outside a move system, `explore` or `follow` inside a simulation, and all three
+  inside the sandbox are errors.
+- Searching and following never touch the live world. `commit(found["world"])` adopts a
+  result; replaying `path` with the game's own functions keeps the causality ledger complete,
+  because those writes then happen on the main timeline.
+
+**Cost.** A world waiting in the frontier holds a copy-on-write snapshot; a world that has
+been expanded holds only its parent and label. Memory therefore follows the frontier, and
+`"limit"` bounds it. The default identity serializes the world once per successor: programs
+with a large world should name a `"key"`.
+
+`projects/dogfood/explore` has four programs and an independent Python search
+(`oracle.py`) that must agree with each line they print: two jugs, the 8-puzzle exhausted to
+its known 181,440 positions and 31-move diameter, a crate-pushing level that is solved, played
+and then proved lost from a cornered position, and a lost-update race found as a schedule.
 
 ### Blast-radius assertions: `diff` and `assert_only_changed`
 

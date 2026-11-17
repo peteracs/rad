@@ -236,6 +236,10 @@ pub struct VM {
     /// Native/FFI and irreversible host effects are disabled there even
     /// before the replayed request reaches its settlement.
     pub(crate) observational_attempt_replay: bool,
+    /// Present on a worker VM only while one move system runs under
+    /// `explore` or `follow`: where `offer` records a successor world and
+    /// which world it rewinds to.
+    pub(crate) explore_session: Option<Box<builtins_impl::ExploreSession>>,
     /// Causality (#4): provenance ledger of main-timeline writes and emits.
     pub(crate) ledger: crate::causality::CausalityLedger,
     /// Who is currently executing — top-level code, a system, or a handler.

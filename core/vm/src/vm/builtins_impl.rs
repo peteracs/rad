@@ -26,6 +26,8 @@ include!("builtins_impl/binary_publications.rs");
 include!("builtins_impl/native_layout.rs");
 include!("builtins_impl/forks_and_simulation.rs");
 include!("builtins_impl/sandbox_and_rollouts.rs");
+include!("builtins_impl/exploration_options.rs");
+include!("builtins_impl/exploration.rs");
 include!("builtins_impl/fork_wire_and_delta.rs");
 include!("builtins_impl/fork_delta_application.rs");
 include!("builtins_impl/relation_transport.rs");

@@ -1,0 +1,50 @@
+// Two jugs and a tap: the smallest program that needs every future.
+//
+//   rad jugs.rad
+//
+// `Pour` writes each thing that can be done next and offers it. `explore`
+// tries all of them from every world it reaches, drops the worlds it has seen
+// before, and stops at the first world where `Jugs.done` is true. It searches
+// breadth-first, so the path is a shortest one. When no world is a goal it
+// says so: "exhausted" is a proof, not a timeout.
+
+resource Rules { cap_a: int = 3, cap_b: int = 5, target: int = 4 }
+resource Jugs { a: int = 0, b: int = 0, done: bool = false }
+
+ecs fn pour(rules: Rules, a: int, b: int, label: str) -> nil {
+    set_resource(Jugs, Jugs { a: a, b: b, done: a == rules.target or b == rules.target })
+    offer(label)
+}
+
+system Pour(rules: Rules, j: Jugs, writes Jugs) {
+    pour(rules, rules.cap_a, j.b, "fill a")
+    pour(rules, j.a, rules.cap_b, "fill b")
+    pour(rules, 0, j.b, "empty a")
+    pour(rules, j.a, 0, "empty b")
+    let ab = min(j.a, rules.cap_b - j.b)
+    pour(rules, j.a - ab, j.b + ab, "a into b")
+    let ba = min(j.b, rules.cap_a - j.a)
+    pour(rules, j.a + ba, j.b - ba, "b into a")
+}
+
+fn main() -> nil {
+    let start = fork()
+
+    let found = explore(start, [system::Pour], {"goal": "Jugs.done"})
+    let route = join(found["path"], " > ")
+    print(f"measure 4 with 3 and 5   {found["status"]} moves={len(found["path"])} seen={found["seen"]} path={route}")
+
+    let every = explore(start, [system::Pour])
+    print(f"every state of 3 and 5   {every["status"]} seen={every["seen"]} depth={every["depth"]} levels={every["levels"]}")
+
+    // 2 and 4 only ever hold even amounts: 3 cannot be measured, and the
+    // search proves it by running out of worlds.
+    let even = fork_with(start, Rules { cap_a: 2, cap_b: 4, target: 3 })
+    let never = explore(even, [system::Pour], {"goal": "Jugs.done"})
+    print(f"measure 3 with 2 and 4   {never["status"]} seen={never["seen"]} depth={never["depth"]} levels={never["levels"]}")
+
+    // Without a goal, "collect" is how a search says what it found: here,
+    // what the big jug holds in each world, in the order they were reached.
+    let held = explore(even, [system::Pour], {"collect": "Jugs.b"})
+    print(f"the big jug of 2 and 4   {held["collected"]}")
+}
