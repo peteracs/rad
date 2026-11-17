@@ -714,7 +714,11 @@ impl<'a> Scanner<'a> {
         }
         let logical_args = implicit.into_iter().chain(args.iter()).collect::<Vec<_>>();
         if let Expr::Ident(name, _) = callee {
-            if builtins::is_builtin(name) {
+            // A user function or binding with a builtin's name shadows the
+            // builtin, here as at runtime. Only a name that resolves to
+            // nothing of the program's own is the builtin; otherwise the call
+            // edge to the user function, and every write behind it, is lost.
+            if builtins::is_builtin(name) && targets.is_empty() {
                 self.scan_builtin(name, &logical_args);
                 return;
             }

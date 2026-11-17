@@ -1,5 +1,12 @@
 # Changelog
 
+- **A user function named like a builtin no longer escapes system
+  authority.** The authority scanner took `sum(3)` for the builtin even when
+  the program defined its own `sum`, which is the one that runs. A system that
+  declared no writes could then write any component or resource through such
+  a helper. The call now follows the program's function, as the type checker
+  and the runtime already did. A system that relied on the hole must declare
+  what it writes.
 - **`m[k] = v` in a loop is no longer linear in the size of the map.** The
   insert was already O(log n); pricing the new map for the collector walked
   every key and charged the whole map each time, so the collector also ran

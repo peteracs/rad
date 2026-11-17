@@ -46,6 +46,43 @@
     }
 
     #[test]
+    fn a_helper_named_like_a_builtin_does_not_escape_system_authority() {
+        // GH 0013: `sum` is a builtin. The user's `sum` shadows it at runtime,
+        // so the authority graph must follow the user's function too.
+        let program = |helper: &str| {
+            format!(
+                r#"
+                resource Tally {{ n: int = 0 }}
+                ecs fn {helper}(by: int) -> nil {{
+                    set_resource(Tally, Tally {{ n: by }})
+                }}
+                system Sneaky() {{
+                    {helper}(3)
+                }}
+                "#
+            )
+        };
+        for helper in ["bump", "sum", "reduce"] {
+            let (errors, report) = authority_src(&program(helper));
+            let violation = errors
+                .iter()
+                .find(|error| error.message.contains("exceeds its declared authority"))
+                .unwrap_or_else(|| {
+                    panic!("a write through `{helper}` must be rejected; errors={errors:?}")
+                });
+            assert!(
+                violation.message.contains("writes [Tally]"),
+                "{helper}: {violation:?}"
+            );
+            assert_eq!(
+                report.resolve("Sneaky").unwrap().transitive.writes,
+                vec!["Tally"],
+                "the graph must reach `{helper}`"
+            );
+        }
+    }
+
+    #[test]
     fn matching_mut_system_authority_accepts_transitive_helper_write() {
         let (errors, _) = authority_src(
             r#"
