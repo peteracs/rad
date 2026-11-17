@@ -1,0 +1,14 @@
+JOINED meet XXYxYxxY,XYYxyyy meets class ms534 route=539>534 worlds=20000 strategy=descent
+XXYxYxxY,XYYxyyy
+XXYxYxYYxyy,XYYxyyy
+aut2 XXyxyxYYXy,XYYxyyy
+XXyxYxyXy,XYYxyyy
+aut2 XXYXyxxy,XYYxyyy
+XXYxYxyyyxY,XYYxyyy
+XXYxYxyxyy,XYYxyyy
+XYXyXyxYYxy,XYYxyyy
+aut2 XXyxYxyXYY,XYYxyyy
+XXXyxYxYY,XYYxyyy
+XXXyxYYYxy,XYYxyyy
+flipy XXXYxyyyxY,XYYxyyy
+XXXyxxY,XYYxyyy

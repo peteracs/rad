@@ -1,0 +1,3 @@
+JOINED meet XXXYxYxY,XYYYYYYxyyyyyyy meets class ms958 route=1011>958 worlds=20000 strategy=descent
+XXXYxYxY,XYYYYYYxyyyyyyy
+flipy XXXyxyxy,XYYYYYYxyyyyyyy

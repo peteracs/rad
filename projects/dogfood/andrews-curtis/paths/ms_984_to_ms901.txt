@@ -1,0 +1,4 @@
+JOINED meet XYYXyyxY,XYYYYYYxyyyyyyy meets class ms901 route=984>926>901 worlds=20000 strategy=descent
+XYYXyyxY,XYYYYYYxyyyyyyy
+aut3 XYXyyxY,XYYYYYYxyyyyyyy
+aut3 XXyyxY,XYYYYYYxyyyyyyy

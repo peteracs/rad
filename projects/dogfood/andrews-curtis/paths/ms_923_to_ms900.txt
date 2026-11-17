@@ -1,0 +1,3 @@
+JOINED meet XYYYYYYxyyyyyyy,XYYxYxY meets class ms900 route=923>900 worlds=20000 strategy=descent
+XYYYYYYxyyyyyyy,XYYxYxY
+aut2 XXyyxy,XYYYYYYxyyyyyyy

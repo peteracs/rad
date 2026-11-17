@@ -1,0 +1,4 @@
+JOINED meet XYXYYxY,XYYYYYYYxyyyyyyyy meets class ms1046 route=1093>1069>1046 worlds=20000 strategy=descent
+XYXYYxY,XYYYYYYYxyyyyyyyy
+flipy XYYYYYYYxyyyyyyyy,XYYxYxY
+aut2 XXyyxy,XYYYYYYYxyyyyyyyy

@@ -1,5 +1,20 @@
 # Changelog
 
+- **Andrews-Curtis dogfood: fewer results are new than it said, and the open
+  presentations are now 120 classes.** `novelty.py` compared presentations
+  with the published ones letter by letter. An automorphic image of a
+  published presentation is settled by the same theorem, and five
+  automorphisms map one Miller-Schupp table row to another, so images were
+  counted as discoveries: of 80 trivializations 59 are new, not 78, and
+  `MS(7, y x y^-1 x^-1)`, called open, is AC-trivial by Theorem B of
+  arXiv:2408.15332v2. The READMEs, the release note and `results.tsv` now
+  say so. `explore_meet.py` then compared what a 20,000-world `explore` from
+  each of the 458 open presentations reaches: 13 met a trivialized row (all
+  images of Theorem B's family; only their certificates are new) and the
+  other 445 are tied to one another. With the five tied before, that is 450
+  presentations in 120 classes, where the five automorphisms alone give 147
+  orbits. All 584 certificates pass `check_certificate.py`, which now takes
+  a directory.
 - **`explore`: every future of a forked world, not a sample.** `simulate` runs
   one future and `simulate_par` a sample of them. `explore(fork, moves,
   options?)` searches every world reachable from a fork and returns a path to

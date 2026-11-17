@@ -1,0 +1,4 @@
+JOINED meet XYXYxyyy,XYYYYYYxyyyyyyy meets class ms921 route=1025>921 worlds=20000 strategy=descent
+XYXYxyyy,XYYYYYYxyyyyyyy
+aut3 XXYxyyy,XYYYYYYxyyyyyyy
+flipy XXyxYYY,XYYYYYYxyyyyyyy

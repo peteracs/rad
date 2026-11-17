@@ -1,198 +1,537 @@
 # index	n	r1	r2	result	class	ac_moves	certificate	published_before	note
+535	2	XyyxYYY	XXXYxxy	JOINED	ms534	0	ms_535_to_ms534.json	no	an automorphic image of the presentation its class starts at
+536	2	XyyxYYY	XXXYxxY	JOINED	ms533	0	ms_536_to_ms533.json	no	an automorphic image of the presentation its class starts at
+539	2	XyyxYYY	XyxxyXXy	JOINED	ms534	154	ms_539_to_ms534.json	no	
+540	2	XyyxYYY	XyxxyXXY	JOINED	ms534	80	ms_540_to_ms534.json	no	
+543	2	XyyxYYY	XyxxYXXy	JOINED	ms533	68	ms_543_to_ms533.json	no	
+544	2	XyyxYYY	XyxxYXXY	JOINED	ms533	24	ms_544_to_ms533.json	no	
+545	2	XyyxYYY	XyxxYXYX	JOINED	ms537	51	ms_545_to_ms537.json	no	
+546	2	XyyxYYY	XyxxYYXX	JOINED	ms538	70	ms_546_to_ms538.json	no	
+547	2	XyyxYYY	XyxyxyXX	JOINED	ms537	137	ms_547_to_ms537.json	no	
+548	2	XyyxYYY	XyxyxYXX	JOINED	ms541	74	ms_548_to_ms541.json	no	
+549	2	XyyxYYY	XyxYxyXX	JOINED	ms542	50	ms_549_to_ms542.json	no	
+550	2	XyyxYYY	XyxYxYXX	JOINED	ms538	67	ms_550_to_ms538.json	no	
+551	2	XyyxYYY	XyXXYxxy	JOINED	ms537	49	ms_551_to_ms537.json	no	
+552	2	XyyxYYY	XyXXYxxY	JOINED	ms541	0	ms_552_to_ms541.json	no	an automorphic image of the presentation its class starts at
+553	2	XyyxYYY	XyXYxxyX	JOINED	ms533	31	ms_553_to_ms533.json	no	
+554	2	XyyxYYY	XyXYxxYX	JOINED	ms534	79	ms_554_to_ms534.json	no	
+555	2	XyyxYYY	XXXYxxyy	JOINED	ms538	52	ms_555_to_ms538.json	no	
+556	2	XyyxYYY	XXXYxxYY	JOINED	ms537	0	ms_556_to_ms537.json	no	an automorphic image of the presentation its class starts at
+557	2	XyyxYYY	XXXYxyxy	JOINED	ms538	81	ms_557_to_ms538.json	no	
+558	2	XyyxYYY	XXXYxyxY	JOINED	ms542	64	ms_558_to_ms542.json	no	
+559	2	XyyxYYY	XXXYxYxy	JOINED	ms541	57	ms_559_to_ms541.json	no	
+560	2	XyyxYYY	XXXYxYxY	JOINED	ms537	167	ms_560_to_ms537.json	no	
+561	2	XyyxYYY	XXYxxyXY	JOINED	ms542	0	ms_561_to_ms542.json	no	an automorphic image of the presentation its class starts at
+562	2	XyyxYYY	XXYxxYXY	JOINED	ms538	0	ms_562_to_ms538.json	no	an automorphic image of the presentation its class starts at
+563	2	XyyxYYY	XXYXYxxy	JOINED	ms533	59	ms_563_to_ms533.json	no	
+564	2	XyyxYYY	XXYXYxxY	JOINED	ms534	158	ms_564_to_ms534.json	no	
 565	3	XyyyxYYYY	XyxyX	JOINED	AK3	37	ms_565_to_AK3.json	yes	
-566	3	XyyyxYYYY	XXYxY	JOINED	AK3	175	ms_566_to_AK3.json	no	length 14: may be one of the four the paper relates to AK(3) without listing them
+566	3	XyyyxYYYY	XXYxY	JOINED	AK3	175	ms_566_to_AK3.json	image	an automorphic image of a published presentation
 567	3	XyyyxYYYY	XyxyXy	JOINED	AK3	120	ms_567_to_AK3.json	yes	
 568	3	XyyyxYYYY	XyxyXY	JOINED	AK3	26	ms_568_to_AK3.json	yes	
 569	3	XyyyxYYYY	XyyxYX	JOINED	AK3	126	ms_569_to_AK3.json	no	
-570	3	XyyyxYYYY	XyXYxY	JOINED	AK3	127	ms_570_to_AK3.json	no	
+570	3	XyyyxYYYY	XyXYxY	JOINED	AK3	127	ms_570_to_AK3.json	image	an automorphic image of a published presentation
 571	3	XyyyxYYYY	XXYYxy	JOINED	AK3	82	ms_571_to_AK3.json	no	
-572	3	XyyyxYYYY	XYxYXY	JOINED	AK3	284	ms_572_to_AK3.json	no	
+572	3	XyyyxYYYY	XYxYXY	JOINED	AK3	284	ms_572_to_AK3.json	image	an automorphic image of a published presentation
 575	3	XyyyxYYYY	XyxyXyy	JOINED	AK3	140	ms_575_to_AK3.json	yes	
 576	3	XyyyxYYYY	XyxyXYY	JOINED	AK3	55	ms_576_to_AK3.json	yes	
 577	3	XyyyxYYYY	XyxYYYX	JOINED	AK3	78	ms_577_to_AK3.json	no	
 578	3	XyyyxYYYY	XyyxYXy	JOINED	AK3	221	ms_578_to_AK3.json	no	
 579	3	XyyyxYYYY	XyyxYXY	JOINED	AK3	111	ms_579_to_AK3.json	no	
-580	3	XyyyxYYYY	XyyXYxY	JOINED	AK3	71	ms_580_to_AK3.json	no	
+580	3	XyyyxYYYY	XyyXYxY	JOINED	AK3	71	ms_580_to_AK3.json	image	an automorphic image of a published presentation
 581	3	XyyyxYYYY	XyXYYxy	JOINED	AK3	76	ms_581_to_AK3.json	no	
+582	3	XyyyxYYYY	XXXYxxy	JOINED	ms574	0	ms_582_to_ms574.json	no	an automorphic image of the presentation its class starts at
+583	3	XyyyxYYYY	XXXYxxY	JOINED	ms573	0	ms_583_to_ms573.json	no	an automorphic image of the presentation its class starts at
 584	3	XyyyxYYYY	XXYxyyy	JOINED	AK3	120	ms_584_to_AK3.json	no	
-585	3	XyyyxYYYY	XYxYXYY	JOINED	AK3	342	ms_585_to_AK3.json	no	
+585	3	XyyyxYYYY	XYxYXYY	JOINED	AK3	342	ms_585_to_AK3.json	image	an automorphic image of a published presentation
 586	3	XyyyxYYYY	XYXYYxy	JOINED	AK3	174	ms_586_to_AK3.json	no	
-599	3	XyyyxYYYY	XyxyyyXy	TRIVIAL	T	455	ms_599.json	no	
+599	3	XyyyxYYYY	XyxyyyXy	TRIVIAL	T	455	ms_599.json	image	an automorphic image of a published presentation
 600	3	XyyyxYYYY	XyxyXyyy	JOINED	AK3	150	ms_600_to_AK3.json	yes	
 601	3	XyyyxYYYY	XyxyXYYY	JOINED	AK3	67	ms_601_to_AK3.json	yes	
 604	3	XyyyxYYYY	XyxYYYXy	JOINED	AK3	47	ms_604_to_AK3.json	no	
 605	3	XyyyxYYYY	XyxYYYXY	JOINED	AK3	141	ms_605_to_AK3.json	no	
+606	3	XyyyxYYYY	XyyxxyXX	JOINED	ms594	60	ms_606_to_ms594.json	no	
+607	3	XyyyxYYYY	XyyxxYXX	JOINED	ms590	69	ms_607_to_ms590.json	no	
 608	3	XyyyxYYYY	XyyxyyyX	JOINED	AK3	270	ms_608_to_AK3.json	no	
 609	3	XyyyxYYYY	XyyxYXyy	JOINED	AK3	251	ms_609_to_AK3.json	no	
 610	3	XyyyxYYYY	XyyxYXYY	JOINED	AK3	67	ms_610_to_AK3.json	no	
 611	3	XyyyxYYYY	XyyyyxyX	JOINED	AK3	149	ms_611_to_AK3.json	no	
-612	3	XyyyxYYYY	XyyyXYxY	JOINED	AK3	103	ms_612_to_AK3.json	no	
+612	3	XyyyxYYYY	XyyyXYxY	JOINED	AK3	103	ms_612_to_AK3.json	image	an automorphic image of a published presentation
 613	3	XyyyxYYYY	XyyXYYxy	JOINED	AK3	51	ms_613_to_AK3.json	no	
+614	3	XyyyxYYYY	XyXXYxxy	JOINED	ms595	0	ms_614_to_ms595.json	no	an automorphic image of the presentation its class starts at
+615	3	XyyyxYYYY	XyXXYxxY	JOINED	ms591	0	ms_615_to_ms591.json	no	an automorphic image of the presentation its class starts at
+616	3	XyyyxYYYY	XyXYxxyX	JOINED	ms594	0	ms_616_to_ms594.json	no	an automorphic image of the presentation its class starts at
+617	3	XyyyxYYYY	XyXYxxYX	JOINED	ms590	0	ms_617_to_ms590.json	no	an automorphic image of the presentation its class starts at
 618	3	XyyyxYYYY	XyXYxyyy	JOINED	AK3	194	ms_618_to_AK3.json	no	
+619	3	XyyyxYYYY	XXXYxxyy	JOINED	ms596	0	ms_619_to_ms596.json	no	an automorphic image of the presentation its class starts at
+620	3	XyyyxYYYY	XXXYxxYY	JOINED	ms587	0	ms_620_to_ms587.json	no	an automorphic image of the presentation its class starts at
+621	3	XyyyxYYYY	XXXYxyxy	JOINED	ms603	0	ms_621_to_ms603.json	no	an automorphic image of the presentation its class starts at
+622	3	XyyyxYYYY	XXXYxyxY	JOINED	ms602	0	ms_622_to_ms602.json	no	an automorphic image of the presentation its class starts at
+623	3	XyyyxYYYY	XXXYxYxy	JOINED	ms598	0	ms_623_to_ms598.json	no	an automorphic image of the presentation its class starts at
+624	3	XyyyxYYYY	XXXYxYxY	JOINED	ms597	0	ms_624_to_ms597.json	no	an automorphic image of the presentation its class starts at
+625	3	XyyyxYYYY	XXXYYxxy	JOINED	ms590	67	ms_625_to_ms590.json	no	
+626	3	XyyyxYYYY	XXXYYxxY	JOINED	ms594	67	ms_626_to_ms594.json	no	
+627	3	XyyyxYYYY	XXYxxyXY	JOINED	ms592	0	ms_627_to_ms592.json	no	an automorphic image of the presentation its class starts at
+628	3	XyyyxYYYY	XXYxxYXY	JOINED	ms588	0	ms_628_to_ms588.json	no	an automorphic image of the presentation its class starts at
+629	3	XyyyxYYYY	XXYXYxxy	JOINED	ms593	0	ms_629_to_ms593.json	no	an automorphic image of the presentation its class starts at
+630	3	XyyyxYYYY	XXYXYxxY	JOINED	ms589	0	ms_630_to_ms589.json	no	an automorphic image of the presentation its class starts at
 631	3	XyyyxYYYY	XXYYxYYY	JOINED	AK3	216	ms_631_to_AK3.json	no	
 632	3	XyyyxYYYY	XXYYYYxY	JOINED	AK3	396	ms_632_to_AK3.json	no	
 633	3	XyyyxYYYY	XYxyyyXY	JOINED	AK3	95	ms_633_to_AK3.json	no	
-634	3	XyyyxYYYY	XYxYXYYY	JOINED	AK3	390	ms_634_to_AK3.json	no	
+634	3	XyyyxYYYY	XYxYXYYY	JOINED	AK3	390	ms_634_to_AK3.json	image	an automorphic image of a published presentation
 635	3	XyyyxYYYY	XYxYYYXY	TRIVIAL	T	353	ms_635.json	yes	
 636	3	XyyyxYYYY	XYYxyXYY	JOINED	AK3	192	ms_636_to_AK3.json	no	
 637	4	XyyyyxYYYYY	XyxyX	JOINED	AK4	59	ms_637_to_AK4.json	yes	
-638	4	XyyyyxYYYYY	XXYxY	JOINED	AK4	276	ms_638_to_AK4.json	no	
+638	4	XyyyyxYYYYY	XXYxY	JOINED	AK4	276	ms_638_to_AK4.json	image	an automorphic image of a published presentation
 640	4	XyyyyxYYYYY	XyxyXy	JOINED	AK4	767	ms_640_to_AK4.json	yes	
 641	4	XyyyyxYYYYY	XyxyXY	JOINED	AK4	43	ms_641_to_AK4.json	yes	
 643	4	XyyyyxYYYYY	XyyxyX	TRIVIAL	T	141	ms_643.json	no	
-644	4	XyyyyxYYYYY	XyXYxY	JOINED	AK4	197	ms_644_to_AK4.json	no	
+644	4	XyyyyxYYYYY	XyXYxY	JOINED	AK4	197	ms_644_to_AK4.json	image	an automorphic image of a published presentation
+645	4	XyyyyxYYYYY	XXYxyy	JOINED	ms642	0	ms_645_to_ms642.json	no	an automorphic image of the presentation its class starts at
+646	4	XyyyyxYYYYY	XXYxYY	JOINED	ms639	0	ms_646_to_ms639.json	no	an automorphic image of the presentation its class starts at
 647	4	XyyyyxYYYYY	XXYYxY	TRIVIAL	T	122	ms_647.json	no	
-648	4	XyyyyxYYYYY	XYxYXY	JOINED	AK4	363	ms_648_to_AK4.json	no	
+648	4	XyyyyxYYYYY	XYxYXY	JOINED	AK4	363	ms_648_to_AK4.json	image	an automorphic image of a published presentation
+651	4	XyyyyxYYYYY	XyxyyyX	JOINED	ms642	80	ms_651_to_ms642.json	no	
+652	4	XyyyyxYYYYY	XyxyyXy	JOINED	ms639	1	ms_652_to_ms639.json	no	an automorphic image of the presentation its class starts at
+653	4	XyyyyxYYYYY	XyxyyXY	JOINED	ms639	2	ms_653_to_ms639.json	no	an automorphic image of the presentation its class starts at
 654	4	XyyyyxYYYYY	XyxyXyy	JOINED	AK4	705	ms_654_to_AK4.json	yes	
 655	4	XyyyyxYYYYY	XyxyXYY	JOINED	AK4	90	ms_655_to_AK4.json	yes	
-656	4	XyyyyxYYYYY	XyxYXyy	TRIVIAL	T	823	ms_656.json	no	
+656	4	XyyyyxYYYYY	XyxYXyy	TRIVIAL	T	823	ms_656.json	image	an automorphic image of a published presentation
+657	4	XyyyyxYYYYY	XyxYYXy	JOINED	ms642	1	ms_657_to_ms642.json	no	an automorphic image of the presentation its class starts at
+658	4	XyyyyxYYYYY	XyxYYXY	JOINED	ms642	2	ms_658_to_ms642.json	no	an automorphic image of the presentation its class starts at
+659	4	XyyyyxYYYYY	XyxYYYX	JOINED	ms639	151	ms_659_to_ms639.json	no	
 660	4	XyyyyxYYYYY	XyyxyXy	TRIVIAL	T	169	ms_660.json	no	
 661	4	XyyyyxYYYYY	XyyyxyX	TRIVIAL	T	1017	ms_661.json	no	
 662	4	XyyyyxYYYYY	XyyyxYX	JOINED	AK4	465	ms_662_to_AK4.json	no	
-663	4	XyyyyxYYYYY	XyyXYxY	JOINED	AK4	278	ms_663_to_AK4.json	no	
+663	4	XyyyyxYYYYY	XyyXYxY	JOINED	AK4	278	ms_663_to_AK4.json	image	an automorphic image of a published presentation
+664	4	XyyyyxYYYYY	XyXYxyy	JOINED	ms642	1	ms_664_to_ms642.json	no	an automorphic image of the presentation its class starts at
+665	4	XyyyyxYYYYY	XyXYxYY	JOINED	ms639	0	ms_665_to_ms639.json	no	an automorphic image of the presentation its class starts at
+666	4	XyyyyxYYYYY	XXXYxxy	JOINED	ms650	0	ms_666_to_ms650.json	no	an automorphic image of the presentation its class starts at
+667	4	XyyyyxYYYYY	XXXYxxY	JOINED	ms649	0	ms_667_to_ms649.json	no	an automorphic image of the presentation its class starts at
+668	4	XyyyyxYYYYY	XXYxyyy	JOINED	ms639	151	ms_668_to_ms639.json	no	
+669	4	XyyyyxYYYYY	XXYxYYY	JOINED	ms642	77	ms_669_to_ms642.json	no	
 670	4	XyyyyxYYYYY	XXYYYxy	JOINED	AK4	119	ms_670_to_AK4.json	no	
 671	4	XyyyyxYYYYY	XXYYYxY	TRIVIAL	T	990	ms_671.json	no	
-673	4	XyyyyxYYYYY	XYxyXYY	TRIVIAL	T	623	ms_673.json	no	
-674	4	XyyyyxYYYYY	XYxYXYY	JOINED	AK4	444	ms_674_to_AK4.json	no	
+672	4	XyyyyxYYYYY	XYxyyXY	JOINED	ms642	2	ms_672_to_ms642.json	no	an automorphic image of the presentation its class starts at
+673	4	XyyyyxYYYYY	XYxyXYY	TRIVIAL	T	623	ms_673.json	image	an automorphic image of a published presentation
+674	4	XyyyyxYYYYY	XYxYXYY	JOINED	AK4	444	ms_674_to_AK4.json	image	an automorphic image of a published presentation
+675	4	XyyyyxYYYYY	XYxYYXY	JOINED	ms639	2	ms_675_to_ms639.json	no	an automorphic image of the presentation its class starts at
 676	4	XyyyyxYYYYY	XYXYYxY	TRIVIAL	T	146	ms_676.json	no	
 689	4	XyyyyxYYYYY	XyxyyyyX	TRIVIAL	T	1288	ms_689.json	no	
+690	4	XyyyyxYYYYY	XyxyyyXy	JOINED	ms642	98	ms_690_to_ms642.json	no	
+691	4	XyyyyxYYYYY	XyxyyyXY	JOINED	ms642	74	ms_691_to_ms642.json	no	
+692	4	XyyyyxYYYYY	XyxyyXyy	JOINED	ms639	2	ms_692_to_ms639.json	no	an automorphic image of the presentation its class starts at
+693	4	XyyyyxYYYYY	XyxyyXYY	JOINED	ms639	4	ms_693_to_ms639.json	no	an automorphic image of the presentation its class starts at
 694	4	XyyyyxYYYYY	XyxyXyyy	JOINED	AK4	643	ms_694_to_AK4.json	yes	
 695	4	XyyyyxYYYYY	XyxyXYYY	JOINED	AK4	98	ms_695_to_AK4.json	yes	
-698	4	XyyyyxYYYYY	XyxYXyyy	TRIVIAL	T	1055	ms_698.json	no	
+698	4	XyyyyxYYYYY	XyxYXyyy	TRIVIAL	T	1055	ms_698.json	image	an automorphic image of a published presentation
 699	4	XyyyyxYYYYY	XyxYXYYY	TRIVIAL	T	989	ms_699.json	yes	
+700	4	XyyyyxYYYYY	XyxYYXyy	JOINED	ms642	2	ms_700_to_ms642.json	no	an automorphic image of the presentation its class starts at
+701	4	XyyyyxYYYYY	XyxYYXYY	JOINED	ms642	4	ms_701_to_ms642.json	no	an automorphic image of the presentation its class starts at
+702	4	XyyyyxYYYYY	XyxYYYXy	JOINED	ms639	143	ms_702_to_ms639.json	no	
+703	4	XyyyyxYYYYY	XyxYYYXY	JOINED	ms639	183	ms_703_to_ms639.json	no	
 704	4	XyyyyxYYYYY	XyxYYYYX	JOINED	AK4	126	ms_704_to_AK4.json	no	
 707	4	XyyyyxYYYYY	XyyxyyXy	TRIVIAL	T	252	ms_707.json	no	
 708	4	XyyyyxYYYYY	XyyxyXyy	TRIVIAL	T	197	ms_708.json	no	
 709	4	XyyyyxYYYYY	XyyxYXyy	TRIVIAL	T	149	ms_709.json	no	
+710	4	XyyyyxYYYYY	XyyyxyyX	JOINED	ms642	95	ms_710_to_ms642.json	no	
 711	4	XyyyyxYYYYY	XyyyxyXy	TRIVIAL	T	1171	ms_711.json	no	
 712	4	XyyyyxYYYYY	XyyyxyXY	TRIVIAL	T	875	ms_712.json	no	
 713	4	XyyyyxYYYYY	XyyyxYXy	JOINED	AK4	561	ms_713_to_AK4.json	no	
 714	4	XyyyyxYYYYY	XyyyxYXY	JOINED	AK4	442	ms_714_to_AK4.json	no	
-716	4	XyyyyxYYYYY	XyyyXYxy	TRIVIAL	T	793	ms_716.json	no	
-717	4	XyyyyxYYYYY	XyyyXYxY	JOINED	AK4	354	ms_717_to_AK4.json	no	
+715	4	XyyyyxYYYYY	XyyyxYYX	JOINED	ms639	148	ms_715_to_ms639.json	no	
+716	4	XyyyyxYYYYY	XyyyXYxy	TRIVIAL	T	793	ms_716.json	image	an automorphic image of a published presentation
+717	4	XyyyyxYYYYY	XyyyXYxY	JOINED	AK4	354	ms_717_to_AK4.json	image	an automorphic image of a published presentation
+718	4	XyyyyxYYYYY	XyyXYxyy	JOINED	ms642	2	ms_718_to_ms642.json	no	an automorphic image of the presentation its class starts at
+719	4	XyyyyxYYYYY	XyyXYxYY	JOINED	ms639	0	ms_719_to_ms639.json	no	an automorphic image of the presentation its class starts at
+720	4	XyyyyxYYYYY	XyXXYxxy	JOINED	ms685	0	ms_720_to_ms685.json	no	an automorphic image of the presentation its class starts at
+721	4	XyyyyxYYYYY	XyXXYxxY	JOINED	ms681	0	ms_721_to_ms681.json	no	an automorphic image of the presentation its class starts at
+722	4	XyyyyxYYYYY	XyXYxxyX	JOINED	ms684	0	ms_722_to_ms684.json	no	an automorphic image of the presentation its class starts at
+723	4	XyyyyxYYYYY	XyXYxxYX	JOINED	ms680	0	ms_723_to_ms680.json	no	an automorphic image of the presentation its class starts at
+724	4	XyyyyxYYYYY	XyXYxyyy	JOINED	ms639	185	ms_724_to_ms639.json	no	
+725	4	XyyyyxYYYYY	XyXYxYYY	JOINED	ms642	70	ms_725_to_ms642.json	no	
 726	4	XyyyyxYYYYY	XyXYYYxy	JOINED	AK4	123	ms_726_to_AK4.json	no	
 727	4	XyyyyxYYYYY	XyXYYYxY	TRIVIAL	T	847	ms_727.json	no	
+728	4	XyyyyxYYYYY	XXXYxxyy	JOINED	ms686	0	ms_728_to_ms686.json	no	an automorphic image of the presentation its class starts at
+729	4	XyyyyxYYYYY	XXXYxxYY	JOINED	ms677	0	ms_729_to_ms677.json	no	an automorphic image of the presentation its class starts at
+730	4	XyyyyxYYYYY	XXXYxyxy	JOINED	ms697	0	ms_730_to_ms697.json	no	an automorphic image of the presentation its class starts at
+731	4	XyyyyxYYYYY	XXXYxyxY	JOINED	ms696	0	ms_731_to_ms696.json	no	an automorphic image of the presentation its class starts at
+732	4	XyyyyxYYYYY	XXXYxYxy	JOINED	ms688	0	ms_732_to_ms688.json	no	an automorphic image of the presentation its class starts at
+733	4	XyyyyxYYYYY	XXXYxYxY	JOINED	ms687	0	ms_733_to_ms687.json	no	an automorphic image of the presentation its class starts at
+734	4	XyyyyxYYYYY	XXXYYxxy	JOINED	ms706	0	ms_734_to_ms706.json	no	an automorphic image of the presentation its class starts at
+735	4	XyyyyxYYYYY	XXXYYxxY	JOINED	ms705	0	ms_735_to_ms705.json	no	an automorphic image of the presentation its class starts at
+736	4	XyyyyxYYYYY	XXYxxyXY	JOINED	ms682	0	ms_736_to_ms682.json	no	an automorphic image of the presentation its class starts at
+737	4	XyyyyxYYYYY	XXYxxYXY	JOINED	ms678	0	ms_737_to_ms678.json	no	an automorphic image of the presentation its class starts at
 738	4	XyyyyxYYYYY	XXYxyyyy	JOINED	AK4	448	ms_738_to_AK4.json	no	
 739	4	XyyyyxYYYYY	XXYxYYYY	TRIVIAL	T	957	ms_739.json	no	
-746	4	XyyyyxYYYYY	XYxyXYYY	TRIVIAL	T	789	ms_746.json	no	
-747	4	XyyyyxYYYYY	XYxYXYYY	JOINED	AK4	525	ms_747_to_AK4.json	no	
+740	4	XyyyyxYYYYY	XXYXYxxy	JOINED	ms683	0	ms_740_to_ms683.json	no	an automorphic image of the presentation its class starts at
+741	4	XyyyyxYYYYY	XXYXYxxY	JOINED	ms679	0	ms_741_to_ms679.json	no	an automorphic image of the presentation its class starts at
+742	4	XyyyyxYYYYY	XXYYYxyy	JOINED	ms639	153	ms_742_to_ms639.json	no	
+743	4	XyyyyxYYYYY	XXYYYxYY	JOINED	ms642	77	ms_743_to_ms642.json	no	
+744	4	XyyyyxYYYYY	XYxyyyXY	JOINED	ms639	141	ms_744_to_ms639.json	no	
+745	4	XyyyyxYYYYY	XYxyyXYY	JOINED	ms642	4	ms_745_to_ms642.json	no	an automorphic image of the presentation its class starts at
+746	4	XyyyyxYYYYY	XYxyXYYY	TRIVIAL	T	789	ms_746.json	image	an automorphic image of a published presentation
+747	4	XyyyyxYYYYY	XYxYXYYY	JOINED	AK4	525	ms_747_to_AK4.json	image	an automorphic image of a published presentation
+748	4	XyyyyxYYYYY	XYxYYXYY	JOINED	ms639	4	ms_748_to_ms639.json	no	an automorphic image of the presentation its class starts at
+749	4	XyyyyxYYYYY	XYxYYYXY	JOINED	ms642	102	ms_749_to_ms642.json	no	
 750	4	XyyyyxYYYYY	XYXYYxYY	TRIVIAL	T	227	ms_750.json	no	
 751	4	XyyyyxYYYYY	XYXYYYxy	JOINED	AK4	139	ms_751_to_AK4.json	no	
 752	4	XyyyyxYYYYY	XYXYYYxY	TRIVIAL	T	1149	ms_752.json	no	
 753	4	XyyyyxYYYYY	XYYxyXYY	TRIVIAL	T	150	ms_753.json	no	
 754	4	XyyyyxYYYYY	XYYxYXYY	TRIVIAL	T	167	ms_754.json	no	
 755	5	XyyyyyxYYYYYY	XyxyX	JOINED	AK5	86	ms_755_to_AK5.json	yes	
-756	5	XyyyyyxYYYYYY	XXYxY	JOINED	AK5	706	ms_756_to_AK5.json	no	
+756	5	XyyyyyxYYYYYY	XXYxY	JOINED	AK5	706	ms_756_to_AK5.json	image	an automorphic image of a published presentation
+757	5	XyyyyyxYYYYYY	XyxyyX	JOINED	ms642	131	ms_757_to_ms642.json	no	
 758	5	XyyyyyxYYYYYY	XyxyXy	JOINED	AK5	108	ms_758_to_AK5.json	yes	
 759	5	XyyyyyxYYYYYY	XyxyXY	JOINED	AK5	64	ms_759_to_AK5.json	yes	
-760	5	XyyyyyxYYYYYY	XyxYXy	TRIVIAL	T	2302	ms_760.json	no	
-761	5	XyyyyyxYYYYYY	XyxYXY	TRIVIAL	T	1898	ms_761.json	no	
+760	5	XyyyyyxYYYYYY	XyxYXy	TRIVIAL	T	2302	ms_760.json	image	an automorphic image of a published presentation
+761	5	XyyyyyxYYYYYY	XyxYXY	TRIVIAL	T	1898	ms_761.json	image	an automorphic image of a published presentation
 762	5	XyyyyyxYYYYYY	XyxYYX	TRIVIAL	T	463	ms_762.json	no	
-765	5	XyyyyyxYYYYYY	XyXYxy	TRIVIAL	T	2292	ms_765.json	no	
-766	5	XyyyyyxYYYYYY	XyXYxY	JOINED	AK5	433	ms_766_to_AK5.json	no	
+765	5	XyyyyyxYYYYYY	XyXYxy	TRIVIAL	T	2292	ms_765.json	image	an automorphic image of a published presentation
+766	5	XyyyyyxYYYYYY	XyXYxY	JOINED	AK5	433	ms_766_to_AK5.json	image	an automorphic image of a published presentation
 767	5	XyyyyyxYYYYYY	XXYxyy	TRIVIAL	T	403	ms_767.json	no	
-771	5	XyyyyyxYYYYYY	XYxyXY	TRIVIAL	T	2290	ms_771.json	no	
-772	5	XyyyyyxYYYYYY	XYxYXY	JOINED	AK5	975	ms_772_to_AK5.json	no	
+768	5	XyyyyyxYYYYYY	XXYxYY	JOINED	ms642	160	ms_768_to_ms642.json	no	
+769	5	XyyyyyxYYYYYY	XXYYxy	JOINED	ms764	0	ms_769_to_ms764.json	no	an automorphic image of the presentation its class starts at
+770	5	XyyyyyxYYYYYY	XXYYxY	JOINED	ms763	0	ms_770_to_ms763.json	no	an automorphic image of the presentation its class starts at
+771	5	XyyyyyxYYYYYY	XYxyXY	TRIVIAL	T	2290	ms_771.json	image	an automorphic image of a published presentation
+772	5	XyyyyyxYYYYYY	XYxYXY	JOINED	AK5	975	ms_772_to_AK5.json	image	an automorphic image of a published presentation
+775	5	XyyyyyxYYYYYY	XyxyyXy	JOINED	ms642	178	ms_775_to_ms642.json	no	
+776	5	XyyyyyxYYYYYY	XyxyyXY	JOINED	ms642	104	ms_776_to_ms642.json	no	
 777	5	XyyyyyxYYYYYY	XyxyXyy	JOINED	AK5	130	ms_777_to_AK5.json	yes	
 778	5	XyyyyyxYYYYYY	XyxyXYY	JOINED	AK5	130	ms_778_to_AK5.json	yes	
-779	5	XyyyyyxYYYYYY	XyxYXyy	TRIVIAL	T	3255	ms_779.json	no	
-780	5	XyyyyyxYYYYYY	XyxYXYY	TRIVIAL	T	2849	ms_780.json	no	
+779	5	XyyyyyxYYYYYY	XyxYXyy	TRIVIAL	T	3255	ms_779.json	image	an automorphic image of a published presentation
+780	5	XyyyyyxYYYYYY	XyxYXYY	TRIVIAL	T	2849	ms_780.json	image	an automorphic image of a published presentation
 781	5	XyyyyyxYYYYYY	XyxYYXy	TRIVIAL	T	443	ms_781.json	no	
 782	5	XyyyyyxYYYYYY	XyxYYXY	TRIVIAL	T	703	ms_782.json	no	
-790	5	XyyyyyxYYYYYY	XyyXYxy	TRIVIAL	T	3228	ms_790.json	no	
-791	5	XyyyyyxYYYYYY	XyyXYxY	JOINED	AK5	318	ms_791_to_AK5.json	no	
+784	5	XyyyyyxYYYYYY	XyyxyXy	JOINED	ms763	1	ms_784_to_ms763.json	no	an automorphic image of the presentation its class starts at
+785	5	XyyyyyxYYYYYY	XyyxyXY	JOINED	ms763	2	ms_785_to_ms763.json	no	an automorphic image of the presentation its class starts at
+786	5	XyyyyyxYYYYYY	XyyxYXy	JOINED	ms764	1	ms_786_to_ms764.json	no	an automorphic image of the presentation its class starts at
+787	5	XyyyyyxYYYYYY	XyyxYXY	JOINED	ms764	2	ms_787_to_ms764.json	no	an automorphic image of the presentation its class starts at
+788	5	XyyyyyxYYYYYY	XyyyxyX	JOINED	ms764	179	ms_788_to_ms764.json	no	
+789	5	XyyyyyxYYYYYY	XyyyxYX	JOINED	ms763	142	ms_789_to_ms763.json	no	
+790	5	XyyyyyxYYYYYY	XyyXYxy	TRIVIAL	T	3228	ms_790.json	image	an automorphic image of a published presentation
+791	5	XyyyyyxYYYYYY	XyyXYxY	JOINED	AK5	318	ms_791_to_AK5.json	image	an automorphic image of a published presentation
 792	5	XyyyyyxYYYYYY	XyXYxyy	TRIVIAL	T	609	ms_792.json	no	
+793	5	XyyyyyxYYYYYY	XyXYxYY	JOINED	ms642	124	ms_793_to_ms642.json	no	
+794	5	XyyyyyxYYYYYY	XyXYYxy	JOINED	ms764	1	ms_794_to_ms764.json	no	an automorphic image of the presentation its class starts at
+795	5	XyyyyyxYYYYYY	XyXYYxY	JOINED	ms763	0	ms_795_to_ms763.json	no	an automorphic image of the presentation its class starts at
+796	5	XyyyyyxYYYYYY	XXXYxxy	JOINED	ms774	0	ms_796_to_ms774.json	no	an automorphic image of the presentation its class starts at
+797	5	XyyyyyxYYYYYY	XXXYxxY	JOINED	ms773	0	ms_797_to_ms773.json	no	an automorphic image of the presentation its class starts at
+798	5	XyyyyyxYYYYYY	XXYYxYY	JOINED	ms783	0	ms_798_to_ms783.json	no	an automorphic image of the presentation its class starts at
+799	5	XyyyyyxYYYYYY	XXYYYxy	JOINED	ms763	174	ms_799_to_ms763.json	no	
+800	5	XyyyyyxYYYYYY	XXYYYxY	JOINED	ms764	186	ms_800_to_ms764.json	no	
 801	5	XyyyyyxYYYYYY	XYxyyXY	TRIVIAL	T	329	ms_801.json	no	
-802	5	XyyyyyxYYYYYY	XYxyXYY	TRIVIAL	T	3225	ms_802.json	no	
-803	5	XyyyyyxYYYYYY	XYxYXYY	JOINED	AK5	1247	ms_803_to_AK5.json	no	
+802	5	XyyyyyxYYYYYY	XYxyXYY	TRIVIAL	T	3225	ms_802.json	image	an automorphic image of a published presentation
+803	5	XyyyyyxYYYYYY	XYxYXYY	JOINED	AK5	1247	ms_803_to_AK5.json	image	an automorphic image of a published presentation
+804	5	XyyyyyxYYYYYY	XYxYYXY	JOINED	ms642	214	ms_804_to_ms642.json	no	
+805	5	XyyyyyxYYYYYY	XYXYYxy	JOINED	ms764	1	ms_805_to_ms764.json	no	an automorphic image of the presentation its class starts at
+806	5	XyyyyyxYYYYYY	XYXYYxY	JOINED	ms763	2	ms_806_to_ms763.json	no	an automorphic image of the presentation its class starts at
 819	5	XyyyyyxYYYYYY	XyxyyyyX	TRIVIAL	T	1417	ms_819.json	no	
 820	5	XyyyyyxYYYYYY	XyxyyyXy	TRIVIAL	T	124	ms_820.json	no	
+821	5	XyyyyyxYYYYYY	XyxyyXyy	JOINED	ms642	225	ms_821_to_ms642.json	no	
+822	5	XyyyyyxYYYYYY	XyxyyXYY	JOINED	ms642	133	ms_822_to_ms642.json	no	
 823	5	XyyyyyxYYYYYY	XyxyXyyy	JOINED	AK5	152	ms_823_to_AK5.json	yes	
 824	5	XyyyyyxYYYYYY	XyxyXYYY	JOINED	AK5	145	ms_824_to_AK5.json	yes	
-827	5	XyyyyyxYYYYYY	XyxYXyyy	TRIVIAL	T	4208	ms_827.json	no	
-828	5	XyyyyyxYYYYYY	XyxYXYYY	TRIVIAL	T	3812	ms_828.json	no	
+827	5	XyyyyyxYYYYYY	XyxYXyyy	TRIVIAL	T	4208	ms_827.json	image	an automorphic image of a published presentation
+828	5	XyyyyyxYYYYYY	XyxYXYYY	TRIVIAL	T	3812	ms_828.json	image	an automorphic image of a published presentation
 829	5	XyyyyyxYYYYYY	XyxYYXyy	TRIVIAL	T	683	ms_829.json	no	
 830	5	XyyyyyxYYYYYY	XyxYYXYY	TRIVIAL	T	943	ms_830.json	no	
+831	5	XyyyyyxYYYYYY	XyxYYYYX	JOINED	ms642	107	ms_831_to_ms642.json	no	
 834	5	XyyyyyxYYYYYY	XyyxyyyX	TRIVIAL	T	165	ms_834.json	no	
+835	5	XyyyyyxYYYYYY	XyyxyyXy	JOINED	ms783	1	ms_835_to_ms783.json	no	an automorphic image of the presentation its class starts at
+836	5	XyyyyyxYYYYYY	XyyxyyXY	JOINED	ms783	2	ms_836_to_ms783.json	no	an automorphic image of the presentation its class starts at
+837	5	XyyyyyxYYYYYY	XyyxyXyy	JOINED	ms763	2	ms_837_to_ms763.json	no	an automorphic image of the presentation its class starts at
+838	5	XyyyyyxYYYYYY	XyyxyXYY	JOINED	ms763	4	ms_838_to_ms763.json	no	an automorphic image of the presentation its class starts at
+839	5	XyyyyyxYYYYYY	XyyxYXyy	JOINED	ms764	2	ms_839_to_ms764.json	no	an automorphic image of the presentation its class starts at
+840	5	XyyyyyxYYYYYY	XyyxYXYY	JOINED	ms764	4	ms_840_to_ms764.json	no	an automorphic image of the presentation its class starts at
 841	5	XyyyyyxYYYYYY	XyyyxyyX	TRIVIAL	T	636	ms_841.json	no	
+842	5	XyyyyyxYYYYYY	XyyyxyXy	JOINED	ms764	209	ms_842_to_ms764.json	no	
+843	5	XyyyyyxYYYYYY	XyyyxyXY	JOINED	ms764	161	ms_843_to_ms764.json	no	
+844	5	XyyyyyxYYYYYY	XyyyxYXy	JOINED	ms763	169	ms_844_to_ms763.json	no	
+845	5	XyyyyyxYYYYYY	XyyyxYXY	JOINED	ms763	147	ms_845_to_ms763.json	no	
+846	5	XyyyyyxYYYYYY	XyyyxYYX	JOINED	ms783	283	ms_846_to_ms783.json	no	
 847	5	XyyyyyxYYYYYY	XyyyyxyX	TRIVIAL	T	6457	ms_847.json	no	
 848	5	XyyyyyxYYYYYY	XyyyyxYX	JOINED	AK5	385	ms_848_to_AK5.json	no	
-849	5	XyyyyyxYYYYYY	XyyyXYxy	TRIVIAL	T	4164	ms_849.json	no	
-850	5	XyyyyyxYYYYYY	XyyyXYxY	JOINED	AK5	304	ms_850_to_AK5.json	no	
+849	5	XyyyyyxYYYYYY	XyyyXYxy	TRIVIAL	T	4164	ms_849.json	image	an automorphic image of a published presentation
+850	5	XyyyyyxYYYYYY	XyyyXYxY	JOINED	AK5	304	ms_850_to_AK5.json	image	an automorphic image of a published presentation
 851	5	XyyyyyxYYYYYY	XyyXYxyy	TRIVIAL	T	815	ms_851.json	no	
+852	5	XyyyyyxYYYYYY	XyyXYxYY	JOINED	ms642	153	ms_852_to_ms642.json	no	
+853	5	XyyyyyxYYYYYY	XyyXYYxy	JOINED	ms764	2	ms_853_to_ms764.json	no	an automorphic image of the presentation its class starts at
+854	5	XyyyyyxYYYYYY	XyyXYYxY	JOINED	ms763	1	ms_854_to_ms763.json	no	an automorphic image of the presentation its class starts at
+855	5	XyyyyyxYYYYYY	XyXXYxxy	JOINED	ms815	0	ms_855_to_ms815.json	no	an automorphic image of the presentation its class starts at
+856	5	XyyyyyxYYYYYY	XyXXYxxY	JOINED	ms811	0	ms_856_to_ms811.json	no	an automorphic image of the presentation its class starts at
+857	5	XyyyyyxYYYYYY	XyXYxxyX	JOINED	ms814	0	ms_857_to_ms814.json	no	an automorphic image of the presentation its class starts at
+858	5	XyyyyyxYYYYYY	XyXYxxYX	JOINED	ms810	0	ms_858_to_ms810.json	no	an automorphic image of the presentation its class starts at
+859	5	XyyyyyxYYYYYY	XyXYYxYY	JOINED	ms783	0	ms_859_to_ms783.json	no	an automorphic image of the presentation its class starts at
+860	5	XyyyyyxYYYYYY	XyXYYYxy	JOINED	ms763	175	ms_860_to_ms763.json	no	
+861	5	XyyyyyxYYYYYY	XyXYYYxY	JOINED	ms764	168	ms_861_to_ms764.json	no	
+862	5	XyyyyyxYYYYYY	XXXYxxyy	JOINED	ms816	0	ms_862_to_ms816.json	no	an automorphic image of the presentation its class starts at
+863	5	XyyyyyxYYYYYY	XXXYxxYY	JOINED	ms807	0	ms_863_to_ms807.json	no	an automorphic image of the presentation its class starts at
+864	5	XyyyyyxYYYYYY	XXXYxyxy	JOINED	ms826	0	ms_864_to_ms826.json	no	an automorphic image of the presentation its class starts at
+865	5	XyyyyyxYYYYYY	XXXYxyxY	JOINED	ms825	0	ms_865_to_ms825.json	no	an automorphic image of the presentation its class starts at
+866	5	XyyyyyxYYYYYY	XXXYxYxy	JOINED	ms818	0	ms_866_to_ms818.json	no	an automorphic image of the presentation its class starts at
+867	5	XyyyyyxYYYYYY	XXXYxYxY	JOINED	ms817	0	ms_867_to_ms817.json	no	an automorphic image of the presentation its class starts at
+868	5	XyyyyyxYYYYYY	XXXYYxxy	JOINED	ms833	0	ms_868_to_ms833.json	no	an automorphic image of the presentation its class starts at
+869	5	XyyyyyxYYYYYY	XXXYYxxY	JOINED	ms832	0	ms_869_to_ms832.json	no	an automorphic image of the presentation its class starts at
+870	5	XyyyyyxYYYYYY	XXYxxyXY	JOINED	ms812	0	ms_870_to_ms812.json	no	an automorphic image of the presentation its class starts at
+871	5	XyyyyyxYYYYYY	XXYxxYXY	JOINED	ms808	0	ms_871_to_ms808.json	no	an automorphic image of the presentation its class starts at
+872	5	XyyyyyxYYYYYY	XXYxyyyy	JOINED	ms642	75	ms_872_to_ms642.json	no	
 873	5	XyyyyyxYYYYYY	XXYxYYYY	TRIVIAL	T	949	ms_873.json	no	
+874	5	XyyyyyxYYYYYY	XXYXYxxy	JOINED	ms813	0	ms_874_to_ms813.json	no	an automorphic image of the presentation its class starts at
+875	5	XyyyyyxYYYYYY	XXYXYxxY	JOINED	ms809	0	ms_875_to_ms809.json	no	an automorphic image of the presentation its class starts at
+876	5	XyyyyyxYYYYYY	XXYYYxyy	JOINED	ms783	256	ms_876_to_ms783.json	no	
 877	5	XyyyyyxYYYYYY	XXYYYxYY	TRIVIAL	T	484	ms_877.json	no	
 878	5	XyyyyyxYYYYYY	XXYYYYxy	JOINED	AK5	248	ms_878_to_AK5.json	no	
 879	5	XyyyyyxYYYYYY	XXYYYYxY	TRIVIAL	T	6017	ms_879.json	no	
 880	5	XyyyyyxYYYYYY	XYxyyXYY	TRIVIAL	T	532	ms_880.json	no	
-881	5	XyyyyyxYYYYYY	XYxyXYYY	TRIVIAL	T	4160	ms_881.json	no	
-882	5	XyyyyyxYYYYYY	XYxYXYYY	JOINED	AK5	1519	ms_882_to_AK5.json	no	
+881	5	XyyyyyxYYYYYY	XYxyXYYY	TRIVIAL	T	4160	ms_881.json	image	an automorphic image of a published presentation
+882	5	XyyyyyxYYYYYY	XYxYXYYY	JOINED	AK5	1519	ms_882_to_AK5.json	image	an automorphic image of a published presentation
+883	5	XyyyyyxYYYYYY	XYxYYXYY	JOINED	ms642	270	ms_883_to_ms642.json	no	
 884	5	XyyyyyxYYYYYY	XYxYYYXY	TRIVIAL	T	149	ms_884.json	no	
+885	5	XyyyyyxYYYYYY	XYXYYxYY	JOINED	ms783	2	ms_885_to_ms783.json	no	an automorphic image of the presentation its class starts at
+886	5	XyyyyyxYYYYYY	XYXYYYxy	JOINED	ms763	205	ms_886_to_ms763.json	no	
+887	5	XyyyyyxYYYYYY	XYXYYYxY	JOINED	ms764	226	ms_887_to_ms764.json	no	
+888	5	XyyyyyxYYYYYY	XYYxyXYY	JOINED	ms764	4	ms_888_to_ms764.json	no	an automorphic image of the presentation its class starts at
+889	5	XyyyyyxYYYYYY	XYYxYXYY	JOINED	ms763	4	ms_889_to_ms763.json	no	an automorphic image of the presentation its class starts at
 890	6	XyyyyyyxYYYYYYY	XyxyX	JOINED	AK6	118	ms_890_to_AK6.json	yes	
-891	6	XyyyyyyxYYYYYYY	XyxYX	TRIVIAL	T	10868	ms_891.json	no	
-893	6	XyyyyyyxYYYYYYY	XXYxY	JOINED	AK6	922	ms_893_to_AK6.json	no	
+891	6	XyyyyyyxYYYYYYY	XyxYX	TRIVIAL	T	10868	ms_891.json	image	an automorphic image of a published presentation
+892	6	XyyyyyyxYYYYYYY	XXYxy	TRIVIAL	T	14051	ms_892.json	yes	
+893	6	XyyyyyyxYYYYYYY	XXYxY	JOINED	AK6	922	ms_893_to_AK6.json	image	an automorphic image of a published presentation
 895	6	XyyyyyyxYYYYYYY	XyxyXy	JOINED	AK6	147	ms_895_to_AK6.json	yes	
 896	6	XyyyyyyxYYYYYYY	XyxyXY	JOINED	AK6	89	ms_896_to_AK6.json	yes	
-903	6	XyyyyyyxYYYYYYY	XyXYxY	JOINED	AK6	631	ms_903_to_AK6.json	no	
-909	6	XyyyyyyxYYYYYYY	XYxYXY	JOINED	AK6	1315	ms_909_to_AK6.json	no	
+897	6	XyyyyyyxYYYYYYY	XyxYXy	TRIVIAL	T	14812	ms_897.json	image	an automorphic image of a published presentation
+898	6	XyyyyyyxYYYYYYY	XyxYXY	TRIVIAL	T	10832	ms_898.json	image	an automorphic image of a published presentation
+902	6	XyyyyyyxYYYYYYY	XyXYxy	TRIVIAL	T	14366	ms_902.json	image	an automorphic image of a published presentation
+903	6	XyyyyyyxYYYYYYY	XyXYxY	JOINED	AK6	631	ms_903_to_AK6.json	image	an automorphic image of a published presentation
+904	6	XyyyyyyxYYYYYYY	XXYxyy	JOINED	ms899	0	ms_904_to_ms899.json	no	an automorphic image of the presentation its class starts at
+905	6	XyyyyyyxYYYYYYY	XXYxYY	JOINED	ms894	0	ms_905_to_ms894.json	no	an automorphic image of the presentation its class starts at
+906	6	XyyyyyyxYYYYYYY	XXYYxy	JOINED	ms901	0	ms_906_to_ms901.json	no	an automorphic image of the presentation its class starts at
+907	6	XyyyyyyxYYYYYYY	XXYYxY	JOINED	ms900	0	ms_907_to_ms900.json	no	an automorphic image of the presentation its class starts at
+908	6	XyyyyyyxYYYYYYY	XYxyXY	TRIVIAL	T	19054	ms_908.json	image	an automorphic image of a published presentation
+909	6	XyyyyyyxYYYYYYY	XYxYXY	JOINED	AK6	1315	ms_909_to_AK6.json	image	an automorphic image of a published presentation
+913	6	XyyyyyyxYYYYYYY	XyxyyXy	JOINED	ms894	1	ms_913_to_ms894.json	no	an automorphic image of the presentation its class starts at
+914	6	XyyyyyyxYYYYYYY	XyxyyXY	JOINED	ms894	2	ms_914_to_ms894.json	no	an automorphic image of the presentation its class starts at
 915	6	XyyyyyyxYYYYYYY	XyxyXyy	JOINED	AK6	176	ms_915_to_AK6.json	yes	
 916	6	XyyyyyyxYYYYYYY	XyxyXYY	JOINED	AK6	221	ms_916_to_AK6.json	yes	
+917	6	XyyyyyyxYYYYYYY	XyxYXyy	TRIVIAL	T	18748	ms_917.json	image	an automorphic image of a published presentation
+918	6	XyyyyyyxYYYYYYY	XyxYXYY	TRIVIAL	T	14772	ms_918.json	image	an automorphic image of a published presentation
+919	6	XyyyyyyxYYYYYYY	XyxYYXy	JOINED	ms899	1	ms_919_to_ms899.json	no	an automorphic image of the presentation its class starts at
+920	6	XyyyyyyxYYYYYYY	XyxYYXY	JOINED	ms899	2	ms_920_to_ms899.json	no	an automorphic image of the presentation its class starts at
+923	6	XyyyyyyxYYYYYYY	XyyxyXy	JOINED	ms900	1	ms_923_to_ms900.json	no	an automorphic image of the presentation its class starts at
+924	6	XyyyyyyxYYYYYYY	XyyxyXY	JOINED	ms900	2	ms_924_to_ms900.json	no	an automorphic image of the presentation its class starts at
+925	6	XyyyyyyxYYYYYYY	XyyxYXy	JOINED	ms901	1	ms_925_to_ms901.json	no	an automorphic image of the presentation its class starts at
+926	6	XyyyyyyxYYYYYYY	XyyxYXY	JOINED	ms901	2	ms_926_to_ms901.json	no	an automorphic image of the presentation its class starts at
 927	6	XyyyyyyxYYYYYYY	XyyyxyX	TRIVIAL	T	471	ms_927.json	no	
 928	6	XyyyyyyxYYYYYYY	XyyyxYX	TRIVIAL	T	471	ms_928.json	no	
-930	6	XyyyyyyxYYYYYYY	XyyXYxY	JOINED	AK6	1088	ms_930_to_AK6.json	no	
+929	6	XyyyyyyxYYYYYYY	XyyXYxy	TRIVIAL	T	19363	ms_929.json	image	an automorphic image of a published presentation
+930	6	XyyyyyyxYYYYYYY	XyyXYxY	JOINED	AK6	1088	ms_930_to_AK6.json	image	an automorphic image of a published presentation
+931	6	XyyyyyyxYYYYYYY	XyXYxyy	JOINED	ms899	1	ms_931_to_ms899.json	no	an automorphic image of the presentation its class starts at
+932	6	XyyyyyyxYYYYYYY	XyXYxYY	JOINED	ms894	0	ms_932_to_ms894.json	no	an automorphic image of the presentation its class starts at
+933	6	XyyyyyyxYYYYYYY	XyXYYxy	JOINED	ms901	1	ms_933_to_ms901.json	no	an automorphic image of the presentation its class starts at
+934	6	XyyyyyyxYYYYYYY	XyXYYxY	JOINED	ms900	0	ms_934_to_ms900.json	no	an automorphic image of the presentation its class starts at
+935	6	XyyyyyyxYYYYYYY	XXXYxxy	JOINED	ms911	0	ms_935_to_ms911.json	no	an automorphic image of the presentation its class starts at
+936	6	XyyyyyyxYYYYYYY	XXXYxxY	JOINED	ms910	0	ms_936_to_ms910.json	no	an automorphic image of the presentation its class starts at
+937	6	XyyyyyyxYYYYYYY	XXYxyyy	JOINED	ms921	0	ms_937_to_ms921.json	no	an automorphic image of the presentation its class starts at
+938	6	XyyyyyyxYYYYYYY	XXYxYYY	JOINED	ms912	0	ms_938_to_ms912.json	no	an automorphic image of the presentation its class starts at
+939	6	XyyyyyyxYYYYYYY	XXYYxYY	JOINED	ms922	0	ms_939_to_ms922.json	no	an automorphic image of the presentation its class starts at
 940	6	XyyyyyyxYYYYYYY	XXYYYxy	TRIVIAL	T	256	ms_940.json	no	
 941	6	XyyyyyyxYYYYYYY	XXYYYxY	TRIVIAL	T	448	ms_941.json	no	
-944	6	XyyyyyyxYYYYYYY	XYxYXYY	JOINED	AK6	1702	ms_944_to_AK6.json	no	
+942	6	XyyyyyyxYYYYYYY	XYxyyXY	JOINED	ms899	2	ms_942_to_ms899.json	no	an automorphic image of the presentation its class starts at
+943	6	XyyyyyyxYYYYYYY	XYxyXYY	TRIVIAL	T	24046	ms_943.json	image	an automorphic image of a published presentation
+944	6	XyyyyyyxYYYYYYY	XYxYXYY	JOINED	AK6	1702	ms_944_to_AK6.json	image	an automorphic image of a published presentation
+945	6	XyyyyyyxYYYYYYY	XYxYYXY	JOINED	ms894	2	ms_945_to_ms894.json	no	an automorphic image of the presentation its class starts at
+946	6	XyyyyyyxYYYYYYY	XYXYYxy	JOINED	ms901	1	ms_946_to_ms901.json	no	an automorphic image of the presentation its class starts at
+947	6	XyyyyyyxYYYYYYY	XYXYYxY	JOINED	ms900	2	ms_947_to_ms900.json	no	an automorphic image of the presentation its class starts at
+960	6	XyyyyyyxYYYYYYY	XyxyyyyX	JOINED	ms921	104	ms_960_to_ms921.json	no	
+961	6	XyyyyyyxYYYYYYY	XyxyyyXy	JOINED	ms912	1	ms_961_to_ms912.json	no	an automorphic image of the presentation its class starts at
+962	6	XyyyyyyxYYYYYYY	XyxyyyXY	JOINED	ms912	2	ms_962_to_ms912.json	no	an automorphic image of the presentation its class starts at
+963	6	XyyyyyyxYYYYYYY	XyxyyXyy	JOINED	ms894	2	ms_963_to_ms894.json	no	an automorphic image of the presentation its class starts at
+964	6	XyyyyyyxYYYYYYY	XyxyyXYY	JOINED	ms894	4	ms_964_to_ms894.json	no	an automorphic image of the presentation its class starts at
 965	6	XyyyyyyxYYYYYYY	XyxyXyyy	JOINED	AK6	205	ms_965_to_AK6.json	yes	
 966	6	XyyyyyyxYYYYYYY	XyxyXYYY	JOINED	AK6	235	ms_966_to_AK6.json	yes	
+969	6	XyyyyyyxYYYYYYY	XyxYXyyy	TRIVIAL	T	22686	ms_969.json	image	an automorphic image of a published presentation
+970	6	XyyyyyyxYYYYYYY	XyxYXYYY	TRIVIAL	T	18710	ms_970.json	image	an automorphic image of a published presentation
+971	6	XyyyyyyxYYYYYYY	XyxYYXyy	JOINED	ms899	2	ms_971_to_ms899.json	no	an automorphic image of the presentation its class starts at
+972	6	XyyyyyyxYYYYYYY	XyxYYXYY	JOINED	ms899	4	ms_972_to_ms899.json	no	an automorphic image of the presentation its class starts at
+973	6	XyyyyyyxYYYYYYY	XyxYYYXy	JOINED	ms921	1	ms_973_to_ms921.json	no	an automorphic image of the presentation its class starts at
+974	6	XyyyyyyxYYYYYYY	XyxYYYXY	JOINED	ms921	2	ms_974_to_ms921.json	no	an automorphic image of the presentation its class starts at
+975	6	XyyyyyyxYYYYYYY	XyxYYYYX	JOINED	ms912	221	ms_975_to_ms912.json	no	
+979	6	XyyyyyyxYYYYYYY	XyyxyyXy	JOINED	ms922	1	ms_979_to_ms922.json	no	an automorphic image of the presentation its class starts at
+980	6	XyyyyyyxYYYYYYY	XyyxyyXY	JOINED	ms922	2	ms_980_to_ms922.json	no	an automorphic image of the presentation its class starts at
+981	6	XyyyyyyxYYYYYYY	XyyxyXyy	JOINED	ms900	2	ms_981_to_ms900.json	no	an automorphic image of the presentation its class starts at
+982	6	XyyyyyyxYYYYYYY	XyyxyXYY	JOINED	ms900	4	ms_982_to_ms900.json	no	an automorphic image of the presentation its class starts at
+983	6	XyyyyyyxYYYYYYY	XyyxYXyy	JOINED	ms901	2	ms_983_to_ms901.json	no	an automorphic image of the presentation its class starts at
+984	6	XyyyyyyxYYYYYYY	XyyxYXYY	JOINED	ms901	4	ms_984_to_ms901.json	no	an automorphic image of the presentation its class starts at
 985	6	XyyyyyyxYYYYYYY	XyyxYYYX	TRIVIAL	T	716	ms_985.json	no	
 986	6	XyyyyyyxYYYYYYY	XyyyxyyX	TRIVIAL	T	202	ms_986.json	no	
 987	6	XyyyyyyxYYYYYYY	XyyyxyXy	TRIVIAL	T	547	ms_987.json	no	
 988	6	XyyyyyyxYYYYYYY	XyyyxyXY	TRIVIAL	T	413	ms_988.json	no	
 989	6	XyyyyyyxYYYYYYY	XyyyxYXy	TRIVIAL	T	576	ms_989.json	no	
-993	6	XyyyyyyxYYYYYYY	XyyyXYxY	JOINED	AK6	1450	ms_993_to_AK6.json	no	
+990	6	XyyyyyyxYYYYYYY	XyyyyxyX	JOINED	ms901	162	ms_990_to_ms901.json	no	
+991	6	XyyyyyyxYYYYYYY	XyyyyxYX	JOINED	ms900	367	ms_991_to_ms900.json	no	
+992	6	XyyyyyyxYYYYYYY	XyyyXYxy	TRIVIAL	T	24356	ms_992.json	image	an automorphic image of a published presentation
+993	6	XyyyyyyxYYYYYYY	XyyyXYxY	JOINED	AK6	1450	ms_993_to_AK6.json	image	an automorphic image of a published presentation
+994	6	XyyyyyyxYYYYYYY	XyyXYxyy	JOINED	ms899	2	ms_994_to_ms899.json	no	an automorphic image of the presentation its class starts at
+995	6	XyyyyyyxYYYYYYY	XyyXYxYY	JOINED	ms894	0	ms_995_to_ms894.json	no	an automorphic image of the presentation its class starts at
+996	6	XyyyyyyxYYYYYYY	XyyXYYxy	JOINED	ms901	2	ms_996_to_ms901.json	no	an automorphic image of the presentation its class starts at
+997	6	XyyyyyyxYYYYYYY	XyyXYYxY	JOINED	ms900	1	ms_997_to_ms900.json	no	an automorphic image of the presentation its class starts at
+998	6	XyyyyyyxYYYYYYY	XyXXYxxy	JOINED	ms956	0	ms_998_to_ms956.json	no	an automorphic image of the presentation its class starts at
+999	6	XyyyyyyxYYYYYYY	XyXXYxxY	JOINED	ms952	0	ms_999_to_ms952.json	no	an automorphic image of the presentation its class starts at
+1000	6	XyyyyyyxYYYYYYY	XyXYxxyX	JOINED	ms955	0	ms_1000_to_ms955.json	no	an automorphic image of the presentation its class starts at
+1001	6	XyyyyyyxYYYYYYY	XyXYxxYX	JOINED	ms951	0	ms_1001_to_ms951.json	no	an automorphic image of the presentation its class starts at
+1002	6	XyyyyyyxYYYYYYY	XyXYxyyy	JOINED	ms921	1	ms_1002_to_ms921.json	no	an automorphic image of the presentation its class starts at
+1003	6	XyyyyyyxYYYYYYY	XyXYxYYY	JOINED	ms912	0	ms_1003_to_ms912.json	no	an automorphic image of the presentation its class starts at
+1004	6	XyyyyyyxYYYYYYY	XyXYYxYY	JOINED	ms922	0	ms_1004_to_ms922.json	no	an automorphic image of the presentation its class starts at
 1005	6	XyyyyyyxYYYYYYY	XyXYYYxY	TRIVIAL	T	391	ms_1005.json	no	
+1006	6	XyyyyyyxYYYYYYY	XXXYxxyy	JOINED	ms957	0	ms_1006_to_ms957.json	no	an automorphic image of the presentation its class starts at
+1007	6	XyyyyyyxYYYYYYY	XXXYxxYY	JOINED	ms948	0	ms_1007_to_ms948.json	no	an automorphic image of the presentation its class starts at
+1008	6	XyyyyyyxYYYYYYY	XXXYxyxy	JOINED	ms968	0	ms_1008_to_ms968.json	no	an automorphic image of the presentation its class starts at
+1009	6	XyyyyyyxYYYYYYY	XXXYxyxY	JOINED	ms967	0	ms_1009_to_ms967.json	no	an automorphic image of the presentation its class starts at
+1010	6	XyyyyyyxYYYYYYY	XXXYxYxy	JOINED	ms959	0	ms_1010_to_ms959.json	no	an automorphic image of the presentation its class starts at
+1011	6	XyyyyyyxYYYYYYY	XXXYxYxY	JOINED	ms958	0	ms_1011_to_ms958.json	no	an automorphic image of the presentation its class starts at
+1012	6	XyyyyyyxYYYYYYY	XXXYYxxy	JOINED	ms977	0	ms_1012_to_ms977.json	no	an automorphic image of the presentation its class starts at
+1013	6	XyyyyyyxYYYYYYY	XXXYYxxY	JOINED	ms976	0	ms_1013_to_ms976.json	no	an automorphic image of the presentation its class starts at
+1014	6	XyyyyyyxYYYYYYY	XXYxxyXY	JOINED	ms953	0	ms_1014_to_ms953.json	no	an automorphic image of the presentation its class starts at
+1015	6	XyyyyyyxYYYYYYY	XXYxxYXY	JOINED	ms949	0	ms_1015_to_ms949.json	no	an automorphic image of the presentation its class starts at
+1016	6	XyyyyyyxYYYYYYY	XXYxyyyy	JOINED	ms912	205	ms_1016_to_ms912.json	no	
+1017	6	XyyyyyyxYYYYYYY	XXYxYYYY	JOINED	ms921	101	ms_1017_to_ms921.json	no	
+1018	6	XyyyyyyxYYYYYYY	XXYXYxxy	JOINED	ms954	0	ms_1018_to_ms954.json	no	an automorphic image of the presentation its class starts at
+1019	6	XyyyyyyxYYYYYYY	XXYXYxxY	JOINED	ms950	0	ms_1019_to_ms950.json	no	an automorphic image of the presentation its class starts at
 1020	6	XyyyyyyxYYYYYYY	XXYYxyyy	TRIVIAL	T	713	ms_1020.json	no	
+1021	6	XyyyyyyxYYYYYYY	XXYYxYYY	JOINED	ms978	0	ms_1021_to_ms978.json	no	an automorphic image of the presentation its class starts at
 1022	6	XyyyyyyxYYYYYYY	XXYYYxYY	TRIVIAL	T	291	ms_1022.json	no	
-1028	6	XyyyyyyxYYYYYYY	XYxYXYYY	JOINED	AK6	2089	ms_1028_to_AK6.json	no	
+1023	6	XyyyyyyxYYYYYYY	XXYYYYxy	JOINED	ms900	380	ms_1023_to_ms900.json	no	
+1024	6	XyyyyyyxYYYYYYY	XXYYYYxY	JOINED	ms901	175	ms_1024_to_ms901.json	no	
+1025	6	XyyyyyyxYYYYYYY	XYxyyyXY	JOINED	ms921	2	ms_1025_to_ms921.json	no	an automorphic image of the presentation its class starts at
+1026	6	XyyyyyyxYYYYYYY	XYxyyXYY	JOINED	ms899	4	ms_1026_to_ms899.json	no	an automorphic image of the presentation its class starts at
+1027	6	XyyyyyyxYYYYYYY	XYxyXYYY	TRIVIAL	T	29042	ms_1027.json	image	an automorphic image of a published presentation
+1028	6	XyyyyyyxYYYYYYY	XYxYXYYY	JOINED	AK6	2089	ms_1028_to_AK6.json	image	an automorphic image of a published presentation
+1029	6	XyyyyyyxYYYYYYY	XYxYYXYY	JOINED	ms894	4	ms_1029_to_ms894.json	no	an automorphic image of the presentation its class starts at
+1030	6	XyyyyyyxYYYYYYY	XYxYYYXY	JOINED	ms912	2	ms_1030_to_ms912.json	no	an automorphic image of the presentation its class starts at
+1031	6	XyyyyyyxYYYYYYY	XYXYYxYY	JOINED	ms922	2	ms_1031_to_ms922.json	no	an automorphic image of the presentation its class starts at
 1032	6	XyyyyyyxYYYYYYY	XYXYYYxy	TRIVIAL	T	303	ms_1032.json	no	
 1033	6	XyyyyyyxYYYYYYY	XYXYYYxY	TRIVIAL	T	523	ms_1033.json	no	
+1034	6	XyyyyyyxYYYYYYY	XYYxyXYY	JOINED	ms901	4	ms_1034_to_ms901.json	no	an automorphic image of the presentation its class starts at
+1035	6	XyyyyyyxYYYYYYY	XYYxYXYY	JOINED	ms900	4	ms_1035_to_ms900.json	no	an automorphic image of the presentation its class starts at
 1036	7	XyyyyyyyxYYYYYYYY	XyxyX	JOINED	AK7	155	ms_1036_to_AK7.json	yes	
-1038	7	XyyyyyyyxYYYYYYYY	XXYxy	JOINED	ms1037	5147	ms_1038_to_ms1037.json	no	
-1039	7	XyyyyyyyxYYYYYYYY	XXYxY	JOINED	AK7	1464	ms_1039_to_AK7.json	no	
+1038	7	XyyyyyyyxYYYYYYYY	XXYxy	JOINED	ms1037	5147	ms_1038_to_ms1037.json	yes	its class contains a presentation that Theorem B trivializes, so it is AC-trivial; an automorphic image of the presentation its class starts at
+1039	7	XyyyyyyyxYYYYYYYY	XXYxY	JOINED	AK7	1464	ms_1039_to_AK7.json	image	an automorphic image of a published presentation
 1041	7	XyyyyyyyxYYYYYYYY	XyxyXy	JOINED	AK7	192	ms_1041_to_AK7.json	yes	
 1042	7	XyyyyyyyxYYYYYYYY	XyxyXY	JOINED	AK7	118	ms_1042_to_AK7.json	yes	
-1043	7	XyyyyyyyxYYYYYYYY	XyxYXy	JOINED	ms1037	91	ms_1043_to_ms1037.json	no	
-1044	7	XyyyyyyyxYYYYYYYY	XyxYXY	JOINED	ms1037	97	ms_1044_to_ms1037.json	no	
-1048	7	XyyyyyyyxYYYYYYYY	XyXYxy	JOINED	ms1037	3186	ms_1048_to_ms1037.json	no	
-1049	7	XyyyyyyyxYYYYYYYY	XyXYxY	JOINED	AK7	883	ms_1049_to_AK7.json	no	
-1054	7	XyyyyyyyxYYYYYYYY	XYxyXY	JOINED	ms1037	4739	ms_1054_to_ms1037.json	no	
-1055	7	XyyyyyyyxYYYYYYYY	XYxYXY	JOINED	AK7	2053	ms_1055_to_AK7.json	no	
-1059	7	XyyyyyyyxYYYYYYYY	XyxyyXy	JOINED	ms1040	1	ms_1059_to_ms1040.json	no	
-1060	7	XyyyyyyyxYYYYYYYY	XyxyyXY	JOINED	ms1040	2	ms_1060_to_ms1040.json	no	
+1043	7	XyyyyyyyxYYYYYYYY	XyxYXy	JOINED	ms1037	91	ms_1043_to_ms1037.json	image	its class contains a presentation that Theorem B trivializes, so it is AC-trivial; an automorphic image of a published presentation; an automorphic image of the presentation its class starts at
+1044	7	XyyyyyyyxYYYYYYYY	XyxYXY	JOINED	ms1037	97	ms_1044_to_ms1037.json	image	its class contains a presentation that Theorem B trivializes, so it is AC-trivial; an automorphic image of a published presentation; an automorphic image of the presentation its class starts at
+1048	7	XyyyyyyyxYYYYYYYY	XyXYxy	JOINED	ms1037	3186	ms_1048_to_ms1037.json	image	its class contains a presentation that Theorem B trivializes, so it is AC-trivial; an automorphic image of a published presentation; an automorphic image of the presentation its class starts at
+1049	7	XyyyyyyyxYYYYYYYY	XyXYxY	JOINED	AK7	883	ms_1049_to_AK7.json	image	an automorphic image of a published presentation
+1050	7	XyyyyyyyxYYYYYYYY	XXYxyy	JOINED	ms1045	0	ms_1050_to_ms1045.json	no	an automorphic image of the presentation its class starts at
+1051	7	XyyyyyyyxYYYYYYYY	XXYxYY	JOINED	ms1040	0	ms_1051_to_ms1040.json	no	an automorphic image of the presentation its class starts at
+1052	7	XyyyyyyyxYYYYYYYY	XXYYxy	JOINED	ms1047	0	ms_1052_to_ms1047.json	no	an automorphic image of the presentation its class starts at
+1053	7	XyyyyyyyxYYYYYYYY	XXYYxY	JOINED	ms1046	0	ms_1053_to_ms1046.json	no	an automorphic image of the presentation its class starts at
+1054	7	XyyyyyyyxYYYYYYYY	XYxyXY	JOINED	ms1037	4739	ms_1054_to_ms1037.json	image	its class contains a presentation that Theorem B trivializes, so it is AC-trivial; an automorphic image of a published presentation; an automorphic image of the presentation its class starts at
+1055	7	XyyyyyyyxYYYYYYYY	XYxYXY	JOINED	AK7	2053	ms_1055_to_AK7.json	image	an automorphic image of a published presentation
+1059	7	XyyyyyyyxYYYYYYYY	XyxyyXy	JOINED	ms1040	1	ms_1059_to_ms1040.json	no	an automorphic image of the presentation its class starts at
+1060	7	XyyyyyyyxYYYYYYYY	XyxyyXY	JOINED	ms1040	2	ms_1060_to_ms1040.json	no	an automorphic image of the presentation its class starts at
 1061	7	XyyyyyyyxYYYYYYYY	XyxyXyy	JOINED	AK7	229	ms_1061_to_AK7.json	yes	
 1062	7	XyyyyyyyxYYYYYYYY	XyxyXYY	JOINED	AK7	381	ms_1062_to_AK7.json	yes	
-1063	7	XyyyyyyyxYYYYYYYY	XyxYXyy	JOINED	ms1037	117	ms_1063_to_ms1037.json	no	
-1064	7	XyyyyyyyxYYYYYYYY	XyxYXYY	JOINED	ms1037	126	ms_1064_to_ms1037.json	no	
-1075	7	XyyyyyyyxYYYYYYYY	XyyXYxy	JOINED	ms1037	3051	ms_1075_to_ms1037.json	no	
-1076	7	XyyyyyyyxYYYYYYYY	XyyXYxY	JOINED	AK7	1418	ms_1076_to_AK7.json	no	
-1089	7	XyyyyyyyxYYYYYYYY	XYxyXYY	JOINED	ms1037	4469	ms_1089_to_ms1037.json	no	
-1090	7	XyyyyyyyxYYYYYYYY	XYxYXYY	JOINED	AK7	2636	ms_1090_to_AK7.json	no	
+1063	7	XyyyyyyyxYYYYYYYY	XyxYXyy	JOINED	ms1037	117	ms_1063_to_ms1037.json	image	its class contains a presentation that Theorem B trivializes, so it is AC-trivial; an automorphic image of a published presentation; an automorphic image of the presentation its class starts at
+1064	7	XyyyyyyyxYYYYYYYY	XyxYXYY	JOINED	ms1037	126	ms_1064_to_ms1037.json	image	its class contains a presentation that Theorem B trivializes, so it is AC-trivial; an automorphic image of a published presentation; an automorphic image of the presentation its class starts at
+1065	7	XyyyyyyyxYYYYYYYY	XyxYYXy	JOINED	ms1045	1	ms_1065_to_ms1045.json	no	an automorphic image of the presentation its class starts at
+1066	7	XyyyyyyyxYYYYYYYY	XyxYYXY	JOINED	ms1045	2	ms_1066_to_ms1045.json	no	an automorphic image of the presentation its class starts at
+1069	7	XyyyyyyyxYYYYYYYY	XyyxyXy	JOINED	ms1046	1	ms_1069_to_ms1046.json	no	an automorphic image of the presentation its class starts at
+1070	7	XyyyyyyyxYYYYYYYY	XyyxyXY	JOINED	ms1046	2	ms_1070_to_ms1046.json	no	an automorphic image of the presentation its class starts at
+1071	7	XyyyyyyyxYYYYYYYY	XyyxYXy	JOINED	ms1047	1	ms_1071_to_ms1047.json	no	an automorphic image of the presentation its class starts at
+1072	7	XyyyyyyyxYYYYYYYY	XyyxYXY	JOINED	ms1047	2	ms_1072_to_ms1047.json	no	an automorphic image of the presentation its class starts at
+1075	7	XyyyyyyyxYYYYYYYY	XyyXYxy	JOINED	ms1037	3051	ms_1075_to_ms1037.json	image	its class contains a presentation that Theorem B trivializes, so it is AC-trivial; an automorphic image of a published presentation; an automorphic image of the presentation its class starts at
+1076	7	XyyyyyyyxYYYYYYYY	XyyXYxY	JOINED	AK7	1418	ms_1076_to_AK7.json	image	an automorphic image of a published presentation
+1077	7	XyyyyyyyxYYYYYYYY	XyXYxyy	JOINED	ms1045	1	ms_1077_to_ms1045.json	no	an automorphic image of the presentation its class starts at
+1078	7	XyyyyyyyxYYYYYYYY	XyXYxYY	JOINED	ms1040	0	ms_1078_to_ms1040.json	no	an automorphic image of the presentation its class starts at
+1079	7	XyyyyyyyxYYYYYYYY	XyXYYxy	JOINED	ms1047	1	ms_1079_to_ms1047.json	no	an automorphic image of the presentation its class starts at
+1080	7	XyyyyyyyxYYYYYYYY	XyXYYxY	JOINED	ms1046	0	ms_1080_to_ms1046.json	no	an automorphic image of the presentation its class starts at
+1081	7	XyyyyyyyxYYYYYYYY	XXXYxxy	JOINED	ms1057	0	ms_1081_to_ms1057.json	no	an automorphic image of the presentation its class starts at
+1082	7	XyyyyyyyxYYYYYYYY	XXXYxxY	JOINED	ms1056	0	ms_1082_to_ms1056.json	no	an automorphic image of the presentation its class starts at
+1083	7	XyyyyyyyxYYYYYYYY	XXYxyyy	JOINED	ms1067	0	ms_1083_to_ms1067.json	no	an automorphic image of the presentation its class starts at
+1084	7	XyyyyyyyxYYYYYYYY	XXYxYYY	JOINED	ms1058	0	ms_1084_to_ms1058.json	no	an automorphic image of the presentation its class starts at
+1085	7	XyyyyyyyxYYYYYYYY	XXYYxYY	JOINED	ms1068	0	ms_1085_to_ms1068.json	no	an automorphic image of the presentation its class starts at
+1086	7	XyyyyyyyxYYYYYYYY	XXYYYxy	JOINED	ms1074	0	ms_1086_to_ms1074.json	no	an automorphic image of the presentation its class starts at
+1087	7	XyyyyyyyxYYYYYYYY	XXYYYxY	JOINED	ms1073	0	ms_1087_to_ms1073.json	no	an automorphic image of the presentation its class starts at
+1088	7	XyyyyyyyxYYYYYYYY	XYxyyXY	JOINED	ms1045	2	ms_1088_to_ms1045.json	no	an automorphic image of the presentation its class starts at
+1089	7	XyyyyyyyxYYYYYYYY	XYxyXYY	JOINED	ms1037	4469	ms_1089_to_ms1037.json	image	its class contains a presentation that Theorem B trivializes, so it is AC-trivial; an automorphic image of a published presentation; an automorphic image of the presentation its class starts at
+1090	7	XyyyyyyyxYYYYYYYY	XYxYXYY	JOINED	AK7	2636	ms_1090_to_AK7.json	image	an automorphic image of a published presentation
+1091	7	XyyyyyyyxYYYYYYYY	XYxYYXY	JOINED	ms1040	2	ms_1091_to_ms1040.json	no	an automorphic image of the presentation its class starts at
+1092	7	XyyyyyyyxYYYYYYYY	XYXYYxy	JOINED	ms1047	1	ms_1092_to_ms1047.json	no	an automorphic image of the presentation its class starts at
+1093	7	XyyyyyyyxYYYYYYYY	XYXYYxY	JOINED	ms1046	2	ms_1093_to_ms1046.json	no	an automorphic image of the presentation its class starts at
 1106	7	XyyyyyyyxYYYYYYYY	XyxyyyyX	TRIVIAL	T	345	ms_1106.json	no	
-1109	7	XyyyyyyyxYYYYYYYY	XyxyyXyy	JOINED	ms1040	2	ms_1109_to_ms1040.json	no	
-1110	7	XyyyyyyyxYYYYYYYY	XyxyyXYY	JOINED	ms1040	4	ms_1110_to_ms1040.json	no	
+1107	7	XyyyyyyyxYYYYYYYY	XyxyyyXy	JOINED	ms1058	1	ms_1107_to_ms1058.json	no	an automorphic image of the presentation its class starts at
+1108	7	XyyyyyyyxYYYYYYYY	XyxyyyXY	JOINED	ms1058	2	ms_1108_to_ms1058.json	no	an automorphic image of the presentation its class starts at
+1109	7	XyyyyyyyxYYYYYYYY	XyxyyXyy	JOINED	ms1040	2	ms_1109_to_ms1040.json	no	an automorphic image of the presentation its class starts at
+1110	7	XyyyyyyyxYYYYYYYY	XyxyyXYY	JOINED	ms1040	4	ms_1110_to_ms1040.json	no	an automorphic image of the presentation its class starts at
 1111	7	XyyyyyyyxYYYYYYYY	XyxyXyyy	JOINED	AK7	266	ms_1111_to_AK7.json	yes	
 1112	7	XyyyyyyyxYYYYYYYY	XyxyXYYY	JOINED	AK7	382	ms_1112_to_AK7.json	yes	
-1115	7	XyyyyyyyxYYYYYYYY	XyxYXyyy	JOINED	ms1037	143	ms_1115_to_ms1037.json	no	
-1116	7	XyyyyyyyxYYYYYYYY	XyxYXYYY	JOINED	ms1037	155	ms_1116_to_ms1037.json	no	
+1115	7	XyyyyyyyxYYYYYYYY	XyxYXyyy	JOINED	ms1037	143	ms_1115_to_ms1037.json	image	its class contains a presentation that Theorem B trivializes, so it is AC-trivial; an automorphic image of a published presentation; an automorphic image of the presentation its class starts at
+1116	7	XyyyyyyyxYYYYYYYY	XyxYXYYY	JOINED	ms1037	155	ms_1116_to_ms1037.json	image	its class contains a presentation that Theorem B trivializes, so it is AC-trivial; an automorphic image of a published presentation; an automorphic image of the presentation its class starts at
+1117	7	XyyyyyyyxYYYYYYYY	XyxYYXyy	JOINED	ms1045	2	ms_1117_to_ms1045.json	no	an automorphic image of the presentation its class starts at
+1118	7	XyyyyyyyxYYYYYYYY	XyxYYXYY	JOINED	ms1045	4	ms_1118_to_ms1045.json	no	an automorphic image of the presentation its class starts at
+1119	7	XyyyyyyyxYYYYYYYY	XyxYYYXy	JOINED	ms1067	1	ms_1119_to_ms1067.json	no	an automorphic image of the presentation its class starts at
+1120	7	XyyyyyyyxYYYYYYYY	XyxYYYXY	JOINED	ms1067	2	ms_1120_to_ms1067.json	no	an automorphic image of the presentation its class starts at
 1121	7	XyyyyyyyxYYYYYYYY	XyxYYYYX	TRIVIAL	T	368	ms_1121.json	no	
+1125	7	XyyyyyyyxYYYYYYYY	XyyxyyXy	JOINED	ms1068	1	ms_1125_to_ms1068.json	no	an automorphic image of the presentation its class starts at
+1126	7	XyyyyyyyxYYYYYYYY	XyyxyyXY	JOINED	ms1068	2	ms_1126_to_ms1068.json	no	an automorphic image of the presentation its class starts at
+1127	7	XyyyyyyyxYYYYYYYY	XyyxyXyy	JOINED	ms1046	2	ms_1127_to_ms1046.json	no	an automorphic image of the presentation its class starts at
+1128	7	XyyyyyyyxYYYYYYYY	XyyxyXYY	JOINED	ms1046	4	ms_1128_to_ms1046.json	no	an automorphic image of the presentation its class starts at
+1129	7	XyyyyyyyxYYYYYYYY	XyyxYXyy	JOINED	ms1047	2	ms_1129_to_ms1047.json	no	an automorphic image of the presentation its class starts at
+1130	7	XyyyyyyyxYYYYYYYY	XyyxYXYY	JOINED	ms1047	4	ms_1130_to_ms1047.json	no	an automorphic image of the presentation its class starts at
 1131	7	XyyyyyyyxYYYYYYYY	XyyxYYXy	TRIVIAL	T	374	ms_1131.json	no	
 1132	7	XyyyyyyyxYYYYYYYY	XyyxYYXY	TRIVIAL	T	366	ms_1132.json	no	
-1142	7	XyyyyyyyxYYYYYYYY	XyyyXYxy	JOINED	ms1037	4312	ms_1142_to_ms1037.json	no	
-1143	7	XyyyyyyyxYYYYYYYY	XyyyXYxY	JOINED	AK7	1999	ms_1143_to_AK7.json	no	
+1135	7	XyyyyyyyxYYYYYYYY	XyyyxyXy	JOINED	ms1073	1	ms_1135_to_ms1073.json	no	an automorphic image of the presentation its class starts at
+1136	7	XyyyyyyyxYYYYYYYY	XyyyxyXY	JOINED	ms1073	2	ms_1136_to_ms1073.json	no	an automorphic image of the presentation its class starts at
+1137	7	XyyyyyyyxYYYYYYYY	XyyyxYXy	JOINED	ms1074	1	ms_1137_to_ms1074.json	no	an automorphic image of the presentation its class starts at
+1138	7	XyyyyyyyxYYYYYYYY	XyyyxYXY	JOINED	ms1074	2	ms_1138_to_ms1074.json	no	an automorphic image of the presentation its class starts at
+1140	7	XyyyyyyyxYYYYYYYY	XyyyyxyX	JOINED	ms1074	374	ms_1140_to_ms1074.json	no	
+1141	7	XyyyyyyyxYYYYYYYY	XyyyyxYX	JOINED	ms1073	292	ms_1141_to_ms1073.json	no	
+1142	7	XyyyyyyyxYYYYYYYY	XyyyXYxy	JOINED	ms1037	4312	ms_1142_to_ms1037.json	image	its class contains a presentation that Theorem B trivializes, so it is AC-trivial; an automorphic image of a published presentation; an automorphic image of the presentation its class starts at
+1143	7	XyyyyyyyxYYYYYYYY	XyyyXYxY	JOINED	AK7	1999	ms_1143_to_AK7.json	image	an automorphic image of a published presentation
+1144	7	XyyyyyyyxYYYYYYYY	XyyXYxyy	JOINED	ms1045	2	ms_1144_to_ms1045.json	no	an automorphic image of the presentation its class starts at
+1145	7	XyyyyyyyxYYYYYYYY	XyyXYxYY	JOINED	ms1040	0	ms_1145_to_ms1040.json	no	an automorphic image of the presentation its class starts at
+1146	7	XyyyyyyyxYYYYYYYY	XyyXYYxy	JOINED	ms1047	2	ms_1146_to_ms1047.json	no	an automorphic image of the presentation its class starts at
+1147	7	XyyyyyyyxYYYYYYYY	XyyXYYxY	JOINED	ms1046	1	ms_1147_to_ms1046.json	no	an automorphic image of the presentation its class starts at
+1148	7	XyyyyyyyxYYYYYYYY	XyXXYxxy	JOINED	ms1102	0	ms_1148_to_ms1102.json	no	an automorphic image of the presentation its class starts at
+1149	7	XyyyyyyyxYYYYYYYY	XyXXYxxY	JOINED	ms1098	0	ms_1149_to_ms1098.json	no	an automorphic image of the presentation its class starts at
+1150	7	XyyyyyyyxYYYYYYYY	XyXYxxyX	JOINED	ms1101	0	ms_1150_to_ms1101.json	no	an automorphic image of the presentation its class starts at
+1151	7	XyyyyyyyxYYYYYYYY	XyXYxxYX	JOINED	ms1097	0	ms_1151_to_ms1097.json	no	an automorphic image of the presentation its class starts at
+1152	7	XyyyyyyyxYYYYYYYY	XyXYxyyy	JOINED	ms1067	1	ms_1152_to_ms1067.json	no	an automorphic image of the presentation its class starts at
+1153	7	XyyyyyyyxYYYYYYYY	XyXYxYYY	JOINED	ms1058	0	ms_1153_to_ms1058.json	no	an automorphic image of the presentation its class starts at
 1154	7	XyyyyyyyxYYYYYYYY	XyXYYxyy	TRIVIAL	T	330	ms_1154.json	no	
+1155	7	XyyyyyyyxYYYYYYYY	XyXYYxYY	JOINED	ms1068	0	ms_1155_to_ms1068.json	no	an automorphic image of the presentation its class starts at
+1156	7	XyyyyyyyxYYYYYYYY	XyXYYYxy	JOINED	ms1074	1	ms_1156_to_ms1074.json	no	an automorphic image of the presentation its class starts at
+1157	7	XyyyyyyyxYYYYYYYY	XyXYYYxY	JOINED	ms1073	0	ms_1157_to_ms1073.json	no	an automorphic image of the presentation its class starts at
+1158	7	XyyyyyyyxYYYYYYYY	XXXYxxyy	JOINED	ms1103	0	ms_1158_to_ms1103.json	no	an automorphic image of the presentation its class starts at
+1159	7	XyyyyyyyxYYYYYYYY	XXXYxxYY	JOINED	ms1094	0	ms_1159_to_ms1094.json	no	an automorphic image of the presentation its class starts at
+1160	7	XyyyyyyyxYYYYYYYY	XXXYxyxy	JOINED	ms1114	0	ms_1160_to_ms1114.json	no	an automorphic image of the presentation its class starts at
+1161	7	XyyyyyyyxYYYYYYYY	XXXYxyxY	JOINED	ms1113	0	ms_1161_to_ms1113.json	no	an automorphic image of the presentation its class starts at
+1162	7	XyyyyyyyxYYYYYYYY	XXXYxYxy	JOINED	ms1105	0	ms_1162_to_ms1105.json	no	an automorphic image of the presentation its class starts at
+1163	7	XyyyyyyyxYYYYYYYY	XXXYxYxY	JOINED	ms1104	0	ms_1163_to_ms1104.json	no	an automorphic image of the presentation its class starts at
+1164	7	XyyyyyyyxYYYYYYYY	XXXYYxxy	JOINED	ms1123	0	ms_1164_to_ms1123.json	no	an automorphic image of the presentation its class starts at
+1165	7	XyyyyyyyxYYYYYYYY	XXXYYxxY	JOINED	ms1122	0	ms_1165_to_ms1122.json	no	an automorphic image of the presentation its class starts at
+1166	7	XyyyyyyyxYYYYYYYY	XXYxxyXY	JOINED	ms1099	0	ms_1166_to_ms1099.json	no	an automorphic image of the presentation its class starts at
+1167	7	XyyyyyyyxYYYYYYYY	XXYxxYXY	JOINED	ms1095	0	ms_1167_to_ms1095.json	no	an automorphic image of the presentation its class starts at
 1168	7	XyyyyyyyxYYYYYYYY	XXYxyyyy	TRIVIAL	T	201	ms_1168.json	no	
 1169	7	XyyyyyyyxYYYYYYYY	XXYxYYYY	TRIVIAL	T	422	ms_1169.json	no	
-1180	7	XyyyyyyyxYYYYYYYY	XYxyXYYY	JOINED	ms1037	4887	ms_1180_to_ms1037.json	no	
-1181	7	XyyyyyyyxYYYYYYYY	XYxYXYYY	JOINED	AK7	3219	ms_1181_to_AK7.json	no	
+1170	7	XyyyyyyyxYYYYYYYY	XXYXYxxy	JOINED	ms1100	0	ms_1170_to_ms1100.json	no	an automorphic image of the presentation its class starts at
+1171	7	XyyyyyyyxYYYYYYYY	XXYXYxxY	JOINED	ms1096	0	ms_1171_to_ms1096.json	no	an automorphic image of the presentation its class starts at
+1172	7	XyyyyyyyxYYYYYYYY	XXYYxyyy	JOINED	ms1133	0	ms_1172_to_ms1133.json	no	an automorphic image of the presentation its class starts at
+1173	7	XyyyyyyyxYYYYYYYY	XXYYxYYY	JOINED	ms1124	0	ms_1173_to_ms1124.json	no	an automorphic image of the presentation its class starts at
+1174	7	XyyyyyyyxYYYYYYYY	XXYYYxyy	JOINED	ms1139	0	ms_1174_to_ms1139.json	no	an automorphic image of the presentation its class starts at
+1175	7	XyyyyyyyxYYYYYYYY	XXYYYxYY	JOINED	ms1134	0	ms_1175_to_ms1134.json	no	an automorphic image of the presentation its class starts at
+1176	7	XyyyyyyyxYYYYYYYY	XXYYYYxy	JOINED	ms1073	258	ms_1176_to_ms1073.json	no	
+1177	7	XyyyyyyyxYYYYYYYY	XXYYYYxY	JOINED	ms1074	303	ms_1177_to_ms1074.json	no	
+1178	7	XyyyyyyyxYYYYYYYY	XYxyyyXY	JOINED	ms1067	2	ms_1178_to_ms1067.json	no	an automorphic image of the presentation its class starts at
+1179	7	XyyyyyyyxYYYYYYYY	XYxyyXYY	JOINED	ms1045	4	ms_1179_to_ms1045.json	no	an automorphic image of the presentation its class starts at
+1180	7	XyyyyyyyxYYYYYYYY	XYxyXYYY	JOINED	ms1037	4887	ms_1180_to_ms1037.json	image	its class contains a presentation that Theorem B trivializes, so it is AC-trivial; an automorphic image of a published presentation; an automorphic image of the presentation its class starts at
+1181	7	XyyyyyyyxYYYYYYYY	XYxYXYYY	JOINED	AK7	3219	ms_1181_to_AK7.json	image	an automorphic image of a published presentation
+1182	7	XyyyyyyyxYYYYYYYY	XYxYYXYY	JOINED	ms1040	4	ms_1182_to_ms1040.json	no	an automorphic image of the presentation its class starts at
+1183	7	XyyyyyyyxYYYYYYYY	XYxYYYXY	JOINED	ms1058	2	ms_1183_to_ms1058.json	no	an automorphic image of the presentation its class starts at
 1184	7	XyyyyyyyxYYYYYYYY	XYXYYxyy	TRIVIAL	T	330	ms_1184.json	no	
+1185	7	XyyyyyyyxYYYYYYYY	XYXYYxYY	JOINED	ms1068	2	ms_1185_to_ms1068.json	no	an automorphic image of the presentation its class starts at
+1186	7	XyyyyyyyxYYYYYYYY	XYXYYYxy	JOINED	ms1074	1	ms_1186_to_ms1074.json	no	an automorphic image of the presentation its class starts at
+1187	7	XyyyyyyyxYYYYYYYY	XYXYYYxY	JOINED	ms1073	2	ms_1187_to_ms1073.json	no	an automorphic image of the presentation its class starts at
+1188	7	XyyyyyyyxYYYYYYYY	XYYxyXYY	JOINED	ms1047	4	ms_1188_to_ms1047.json	no	an automorphic image of the presentation its class starts at
+1189	7	XyyyyyyyxYYYYYYYY	XYYxYXYY	JOINED	ms1046	4	ms_1189_to_ms1046.json	no	an automorphic image of the presentation its class starts at

@@ -1,0 +1,5 @@
+JOINED meet XYYYYYYxyyyyyyy,XYxyyXyy meets class ms899 route=994>972>920>899 worlds=20000 strategy=descent
+XYYYYYYxyyyyyyy,XYxyyXyy
+flipy XYYXyxYY,XYYYYYYxyyyyyyy
+aut3 XYXyxYY,XYYYYYYxyyyyyyy
+aut3 XXyxYY,XYYYYYYxyyyyyyy

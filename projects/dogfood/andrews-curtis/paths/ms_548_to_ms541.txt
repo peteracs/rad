@@ -1,0 +1,11 @@
+JOINED meet XXXyxyxY,XYYxyyy meets class ms541 route=548>541 worlds=20000 strategy=descent
+XXXyxyxY,XYYxyyy
+XXXyxYxyy,XYYxyyy
+XXyxYxYXyy,XYYxyyy
+aut2 XXYxyxYxy,XYYxyyy
+flipy XXyxYxyxY,XYYxyyy
+aut3 XXyyXYxYxy,XYYxyyy
+XXYXyxYxy,XYYxyyy
+aut3 XXyxYYxyXy,XYYxyyy
+XXYxxYxyy,XYYxyyy
+XXYxxyxY,XYYxyyy
