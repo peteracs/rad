@@ -1,0 +1,261 @@
+// pequalnp gap L-gct-210 inside the orbit-Fourier families.
+//
+//   rad orbit_fourier.rad -- <row orbits> <column orbits>      e.g. -- 3,2 4,1
+//
+// The gap: every linear space L of 5 x 5 complex matrices with per(J + t) = 120
+// for all t in L has dim L <= 8. A space of dimension 9 refutes it.
+//
+// Rank-one lemma (README.md): for L = span{u_v w_v^T}, the coefficient of a
+// monomial m in per(J + sum_v x_v u_v w_v^T) is a positive integer times
+// [y^m] prod_a (1 + sum_v u_v(a) y_v)  times  [y^m] prod_b (1 + sum_v w_v(b) y_v),
+// so L is valid exactly when, for every multiset m of size 1..5, a factor is 0.
+//
+// The family: the rows are cut into consecutive orbits of the given sizes, and
+// so are the columns. A generator is (row orbit O, character a of Z_|O| on O,
+// zero elsewhere) x (column orbit P, character b of Z_|P| on P). There are 25,
+// linearly independent. Each variable's u lives on one row orbit, so the row
+// product splits orbit by orbit and its coefficient is the product of the
+// orbits' coefficients: it is zero when one orbit's part is. An orbit's part is
+// a sum over injective placements of its a-values into the orbit's rows of
+// z^(sum a*row), decided exactly by counting exponents. Blocks (r x s with the
+// rest unused) are the sub-case that uses one orbit per side.
+//
+// Validity passes to subsets and is invariant under scaling each orbit's
+// characters by a unit, so `explore` grows canonical sets one generator at a
+// time; "exhausted" means every valid set in the family was reached.
+
+resource Grow { ids: list<int> = [], size: int = 0, key: int = 0, target: int = 99, done: bool = false }
+
+fn parse_orbits(text: str) -> list<int> {
+    let mut out = []
+    for part in split(text, ",") { out = push(out, int(part)) }
+    return out
+}
+
+let ARGS = sys_args()
+let ROW_ORBITS = parse_orbits(if len(ARGS) > 0 { ARGS[0] } else { "5" })
+let COL_ORBITS = parse_orbits(if len(ARGS) > 1 { ARGS[1] } else { "4,1" })
+
+// slot -> orbit index and character, orbit by orbit.
+fn slot_orbit(orbits: list<int>) -> list<int> {
+    let mut out = []
+    for i in range(len(orbits)) {
+        for _ in range(orbits[i]) { out = push(out, i) }
+    }
+    return out
+}
+
+fn slot_char(orbits: list<int>) -> list<int> {
+    let mut out = []
+    for k in orbits {
+        for a in range(k) { out = push(out, a) }
+    }
+    return out
+}
+
+let ROW_ORBIT = slot_orbit(ROW_ORBITS)
+let ROW_CHAR = slot_char(ROW_ORBITS)
+let COL_ORBIT = slot_orbit(COL_ORBITS)
+let COL_CHAR = slot_char(COL_ORBITS)
+
+// sum N_k z^k = 0 for z a primitive n-th root, n <= 5. The only relations are
+// 1 + z + ... + z^(p-1) = 0 for prime n = p, and z^2 = -1 for n = 4.
+fn root_sum_is_zero(counts: list<int>, n: int) -> bool {
+    if n == 4 {
+        return counts[0] == counts[2] and counts[1] == counts[3]
+    }
+    for k in range(1, n) {
+        if counts[k] != counts[0] { return false }
+    }
+    return n > 1 or counts[0] == 0
+}
+
+// Exponent counts over injective placements of `vals[i..]` into the free rows.
+fn place(vals: list<int>, i: int, used: list<bool>, n: int, total: int, counts: list<int>) -> list<int> {
+    if i == len(vals) {
+        let r = total % n
+        return set_at(counts, r, counts[r] + 1)
+    }
+    let mut out = counts
+    for row in range(n) {
+        if not used[row] {
+            out = place(vals, i + 1, set_at(used, row, true), n, total + vals[i] * row, out)
+        }
+    }
+    return out
+}
+
+fn orbit_part_vanishes(vals: list<int>, n: int) -> bool {
+    if len(vals) > n { return true }
+    return root_sum_is_zero(place(vals, 0, filled(n, false), n, 0, filled(n, 0)), n)
+}
+
+fn code(vals: list<int>) -> int {
+    let mut c = 0
+    for v in sort(vals) { c = c * 6 + v + 1 }
+    return c
+}
+
+// table[code(sorted multiset)] for every multiset of Z_n of size 1..5.
+fn add_multisets(table: list<bool>, prefix: list<int>, low: int, n: int) -> list<bool> {
+    let mut out = table
+    if len(prefix) > 0 {
+        out = set_at(out, code(prefix), orbit_part_vanishes(prefix, n))
+    }
+    if len(prefix) == 5 { return out }
+    for v in range(low, n) {
+        out = add_multisets(out, push(prefix, v), v, n)
+    }
+    return out
+}
+
+fn vanish_tables() -> list<list<bool>> {
+    let mut out = []
+    for n in range(1, 6) { out = push(out, add_multisets(filled(7776, false), [], 0, n)) }
+    return out
+}
+
+// VANISH[n - 1][code(m)]: the part of a monomial on one orbit of size n is 0.
+let VANISH = vanish_tables()
+
+// One side of a monomial vanishes when some orbit's part does.
+fn side_vanishes(slots: list<int>, orbit_of: list<int>, char_of: list<int>, orbits: list<int>) -> bool {
+    for i in range(len(orbits)) {
+        let mut part = []
+        for s in slots {
+            if orbit_of[s] == i { part = push(part, char_of[s]) }
+        }
+        if len(part) > 0 and VANISH[orbits[i] - 1][code(part)] { return true }
+    }
+    return false
+}
+
+fn monomial_vanishes(m: list<int>) -> bool {
+    let mut rows = []
+    let mut cols = []
+    for v in m {
+        rows = push(rows, int_div(v, 5))
+        cols = push(cols, v % 5)
+    }
+    return side_vanishes(rows, ROW_ORBIT, ROW_CHAR, ROW_ORBITS) or side_vanishes(cols, COL_ORBIT, COL_CHAR, COL_ORBITS)
+}
+
+// Every multiset of `pool` (from index `start`, at most `room` more items)
+// added to `base` gives a vanishing monomial.
+fn all_vanish(pool: list<int>, start: int, room: int, base: list<int>) -> bool {
+    if not monomial_vanishes(base) { return false }
+    if room == 0 { return true }
+    for i in range(start, len(pool)) {
+        if not all_vanish(pool, i, room - 1, push(base, pool[i])) { return false }
+    }
+    return true
+}
+
+// `ids` is valid; is ids + [w]? Only monomials containing w are new.
+fn extends(ids: list<int>, w: int) -> bool {
+    return all_vanish(push(ids, w), 0, 4, [w])
+}
+
+fn units(n: int) -> list<int> {
+    let mut out = []
+    for u in range(1, n + 1) {
+        let mut g = u
+        let mut h = n
+        while h != 0 {
+            let t = g % h
+            g = h
+            h = t
+        }
+        if g == 1 { out = push(out, u % n) }
+    }
+    return out
+}
+
+// Every way to pick one unit per orbit: the slot permutations they induce.
+fn scalings(orbits: list<int>) -> list<list<int>> {
+    let mut maps = [[]]
+    let mut base = 0
+    for k in orbits {
+        let mut next = []
+        for prefix in maps {
+            for u in units(k) {
+                let mut m = prefix
+                for a in range(k) { m = push(m, base + (a * u) % k) }
+                next = push(next, m)
+            }
+        }
+        maps = next
+        base = base + k
+    }
+    return maps
+}
+
+let ROW_SCALINGS = scalings(ROW_ORBITS)
+let COL_SCALINGS = scalings(COL_ORBITS)
+
+fn encode(ids: list<int>) -> int {
+    let mut c = 0
+    for v in ids { c = c * 26 + v + 1 }
+    return c
+}
+
+fn canonical(ids: list<int>) -> list<int> {
+    let mut best = sort(ids)
+    let mut best_code = encode(best)
+    for p in ROW_SCALINGS {
+        for q in COL_SCALINGS {
+            let mut img = []
+            for v in ids { img = push(img, p[int_div(v, 5)] * 5 + q[v % 5]) }
+            let s = sort(img)
+            let c = encode(s)
+            if c < best_code {
+                best = s
+                best_code = c
+            }
+        }
+    }
+    return best
+}
+
+ecs fn grow_to(ids: list<int>, target: int, label: str) -> nil {
+    let rep = canonical(ids)
+    let n = len(rep)
+    set_resource(Grow, Grow { ids: rep, size: n, key: encode(rep), target: target, done: n >= target })
+    offer(label)
+}
+
+system Extend(g: Grow, writes Grow) {
+    for w in range(25) {
+        if not contains(g.ids, w) and extends(g.ids, w) {
+            grow_to(push(g.ids, w), g.target, str(w))
+        }
+    }
+}
+
+// A generator as (row orbit.character, column orbit.character).
+fn show(ids: list<int>) -> str {
+    let mut parts = []
+    for v in ids {
+        let r = int_div(v, 5)
+        let c = v % 5
+        parts = push(parts, f"({ROW_ORBIT[r]}.{ROW_CHAR[r]},{COL_ORBIT[c]}.{COL_CHAR[c]})")
+    }
+    return join(parts, " ")
+}
+
+fn main() -> nil {
+    let every = explore(fork(), [system::Extend], {"key": "Grow.key", "collect": "Grow.size"})
+    let mut largest = 0
+    let mut per_size = filled(26, 0)
+    for n in every["collected"] {
+        if n > largest { largest = n }
+        per_size = set_at(per_size, n, per_size[n] + 1)
+    }
+    print(f"rows {ROW_ORBITS} cols {COL_ORBITS}: {every["status"]} classes={every["seen"]} largest={largest} by_size={slice(per_size, 0, largest + 1)}")
+    if largest > 0 {
+        let start = fork_with(fork(), Grow { ids: [], size: 0, key: 0, target: largest, done: false })
+        let found = explore(start, [system::Extend], {"goal": "Grow.done", "key": "Grow.key"})
+        let g = peek_resource(found["world"], Grow) |> unwrap
+        print(f"  witness: {show(g.ids)}")
+    }
+}
