@@ -6,14 +6,17 @@ the search: words are free-reduced here from scratch, and every step is
 checked by trying all conjugates.
 
 After the SOLVED line every line is a state `a,b`, optionally prefixed by
-`autK ` when the state was reached by a Whitehead automorphism.
+the name of the automorphism that led to it.
 
   product step   <a, b> -> <a', b'>: one relator is unchanged as a cyclic word
                  up to inversion, the other is the cyclic reduction of
                  g a g^-1 * h b^e h^-1 for some words g, h and e = +1 or -1.
                  These are products of AC moves.
   aut step       both relators are the images of the previous ones under
-                 automorphism K (0: y->yx, 1: y->yX, 2: x->xy, 3: x->xY).
+                 the named automorphism: aut0..aut3 (y->yx, y->yX, x->xy,
+                 x->xY), which the searches use, or one that only renames
+                 generators: flipx (x->X), flipy (y->Y), swap (x<->y),
+                 which explore_meet.py uses.
 
 Why aut steps prove AC-triviality. AC moves commute with automorphisms: if
 <phi(r1), phi(r2)> goes to <u, v> by AC moves then <r1, r2> goes to
@@ -37,10 +40,13 @@ import sys
 # Only the image of the generator is written down. The image of its inverse
 # is computed, so a table entry cannot fail to be a homomorphism.
 GENERATOR_IMAGES = {
-    "aut0": ("y", "yx"),
-    "aut1": ("y", "yX"),
-    "aut2": ("x", "xy"),
-    "aut3": ("x", "xY"),
+    "aut0": {"y": "yx"},
+    "aut1": {"y": "yX"},
+    "aut2": {"x": "xy"},
+    "aut3": {"x": "xY"},
+    "flipx": {"x": "X"},
+    "flipy": {"y": "Y"},
+    "swap": {"x": "y", "y": "x"},
 }
 
 
@@ -103,8 +109,10 @@ def abelian_determinant(pair):
 
 
 def aut_step_ok(old, new, name):
-    letter, image = GENERATOR_IMAGES[name]
-    table = {letter: image, letter.swapcase(): inv(image)}
+    table = {}
+    for letter, image in GENERATOR_IMAGES[name].items():
+        table[letter] = image
+        table[letter.swapcase()] = inv(image)
     image = tuple("".join(table.get(c, c) for c in word) for word in old)
     return same_pair(image, new)
 

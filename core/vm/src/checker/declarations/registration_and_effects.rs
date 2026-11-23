@@ -467,8 +467,11 @@ impl Checker {
             ret
         };
         self.pop_type_param_scope();
-        let body_pure = self.block_is_conservatively_pure(&decl.body);
-        let inferred_pure = !decl.is_pure && decl.effects.is_empty() && body_pure;
+        // Provisional: callees declared later still read as unrestricted here;
+        // `refine_fn_effects` settles the table once every fn is registered.
+        let inferred = self.infer_body_effect(&decl.body);
+        let inferred_pure =
+            !decl.is_pure && decl.effects.is_empty() && inferred == InferredEffect::Pure;
         if !decl.is_pure && !inferred_pure {
             if let Some(reason) = self.find_block_purity_breach(&decl.body) {
                 self.purity_breach_reasons.insert(decl.name.clone(), reason);
@@ -486,13 +489,13 @@ impl Checker {
         } else if decl.effects.is_empty() {
             if decl.is_async {
                 EffectSet::single(Effect::Async)
-            } else if self.block_is_conservatively_readonly(&decl.body) {
+            } else if inferred == InferredEffect::Readonly {
                 // Bodies that only READ the world (get/has/require/queries)
                 // infer the readonly effect — the same allowance literal
                 // closures get — so they compose into pipelines without an
                 // annotation. Anything the walker can't vouch for stays
                 // unrestricted.
-                EffectSet::single(Effect::ReadECS)
+                InferredEffect::Readonly.effect_set()
             } else {
                 EffectSet::unrestricted()
             }
@@ -569,68 +572,6 @@ impl Checker {
                 other => other,
             })
             .collect()
-    }
-
-    /// Effect inference is order-dependent at registration: a call to a
-    /// function declared LATER cannot be classified, so the caller
-    /// degrades to unrestricted ("has IO effects") even when the callee
-    /// is pure. Re-infer with the complete function table until stable —
-    /// effects only narrow (pure ⊂ readonly ⊂ unrestricted), so this is
-    /// a monotone fixpoint.
-    pub(super) fn refine_fn_effects(&mut self, program: &Program) {
-        fn rank(sig_pure: bool, effects: &EffectSet) -> u8 {
-            if sig_pure || effects.is_pure() {
-                0
-            } else if *effects == EffectSet::single(Effect::ReadECS) {
-                1
-            } else {
-                2
-            }
-        }
-        for _ in 0..8 {
-            let mut changed = false;
-            for decl in &program.declarations {
-                let Decl::Fn(f) = decl else { continue };
-                // explicit annotations are contracts, not inferences
-                if f.is_pure || !f.effects.is_empty() || f.is_async {
-                    continue;
-                }
-                let Some(sig) = self.functions.get(&f.name) else {
-                    continue;
-                };
-                let cur = rank(sig.is_pure, &sig.effects);
-                if cur == 0 {
-                    continue;
-                }
-                let new = if self.block_is_conservatively_pure(&f.body) {
-                    0
-                } else if self.block_is_conservatively_readonly(&f.body) {
-                    1
-                } else {
-                    2
-                };
-                if new < cur {
-                    if let Some(sig) = self.functions.get_mut(&f.name) {
-                        match new {
-                            0 => {
-                                sig.is_pure = true;
-                                sig.effects = EffectSet::pure();
-                            }
-                            _ => {
-                                sig.effects = EffectSet::single(Effect::ReadECS);
-                            }
-                        }
-                    }
-                    if new == 0 {
-                        self.purity_breach_reasons.remove(&f.name);
-                    }
-                    changed = true;
-                }
-            }
-            if !changed {
-                break;
-            }
-        }
     }
 
     pub(super) fn register_type_alias(&mut self, decl: &TypeAliasDecl) {

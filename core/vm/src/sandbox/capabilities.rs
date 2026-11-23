@@ -37,6 +37,9 @@ pub fn builtin_allowed_in_sandbox(builtin: Builtin) -> bool {
         | Builtin::SimulatePar
         | Builtin::SimulateMany
         | Builtin::SimulateSeeded
+        | Builtin::Explore
+        | Builtin::Offer
+        | Builtin::Follow
         | Builtin::ForkWith
         | Builtin::ForkFromBytes
         | Builtin::ForkApply

@@ -1,0 +1,3 @@
+JOINED meet XXXYxYxy,XYYYYYxyyyyyy meets class ms818 route=866>818 worlds=20000 strategy=descent
+XXXYxYxy,XYYYYYxyyyyyy
+flipy XXXyxyxY,XYYYYYxyyyyyy

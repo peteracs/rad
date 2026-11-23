@@ -1,0 +1,11 @@
+JOINED meet XXXyyxxY,XYYYxyyyy meets class ms590 route=607>590 worlds=20000 strategy=descent
+XXXyyxxY,XYYYxyyyy
+XXXYxyyyyxY,XYYYxyyyy
+XXXYxyxyyy,XYYYxyyyy
+XXYxyxYXyyy,XYYYxyyyy
+XXyyxYYYxYXyyy,XYYYxyyyy
+aut2 XYXyyxYYxYXyy,XYYYxyyyy
+aut2 XYYXyyxYxYXy,XYYYxyyyy
+aut2 XXYYYXyyxxY,XYYYxyyyy
+XXyXYxxY,XYYYxyyyy
+flipy XXYXyxxy,XYYYxyyyy

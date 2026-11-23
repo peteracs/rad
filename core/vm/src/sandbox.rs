@@ -29,3 +29,4 @@ pub const DEFAULT_SEED: u64 = 1;
 include!("sandbox/capabilities.rs");
 include!("sandbox/isolation_tests.rs");
 include!("sandbox/simulation_tests.rs");
+include!("sandbox/exploration_tests.rs");

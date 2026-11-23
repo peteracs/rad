@@ -1,0 +1,3 @@
+JOINED meet XXyXYxxY,XYYYYYYxyyyyyyy meets class ms951 route=1001>951 worlds=20000 strategy=descent
+XXyXYxxY,XYYYYYYxyyyyyyy
+flipy XXYXyxxy,XYYYYYYxyyyyyyy

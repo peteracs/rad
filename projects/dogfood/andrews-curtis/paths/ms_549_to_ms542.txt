@@ -1,0 +1,11 @@
+JOINED meet XXXyxYxy,XYYxyyy meets class ms542 route=549>542 worlds=20000 strategy=descent
+XXXyxYxy,XYYxyyy
+XXXYxyyxy,XYYxyyy
+XXXYxxyyyy,XYYxyyy
+XXYxxyXyy,XYYxyyy
+XXyxYYxyxY,XYYxyyy
+XXyxYYxYxyy,XYYxyyy
+aut2 XXyXYxyxYY,XYYxyyy
+XXyXYxYxy,XYYxyyy
+aut2 XXYxxyXY,XYYxyyy
+flipy XXYxxYxy,XYYxyyy

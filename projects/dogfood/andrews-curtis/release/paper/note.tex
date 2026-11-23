@@ -13,11 +13,14 @@
 Of the $1190$ Miller--Schupp presentations $\MS(n,w)$ with $n\le 7$ and
 $|w|\le 7$, a published greedy search left $657$ unsolved. We give explicit,
 machine-checkable sequences of elementary Andrews--Curtis moves that
-trivialize $78$ of them, and that show $65$ more to be AC-trivial if and only
-if the Akbulut--Kirby presentation $\AK(n)$ is; for $n=3$ this adds $27$
-presentations to those known to stand or fall with $\AK(3)$. A further $17$
-are tied to two other presentations with $n=7$. Every certificate is checked
-by a program of about 150 lines that uses only free reduction.
+trivialize $93$ of them and that show $100$ more to be AC-trivial if and only
+if the Akbulut--Kirby presentation $\AK(n)$ is. Counting only presentations
+that are neither published nor automorphic images of published ones, $59$ of
+the trivializations and $30$ of the ties are new; for $n=3$ this adds $20$
+presentations to those known to stand or fall with $\AK(3)$. The remaining
+$450$ presentations are tied to one another in $120$ classes. Every
+certificate is checked by a program of about 160 lines that uses only free
+reduction.
 \end{abstract}
 
 \maketitle
@@ -68,40 +71,66 @@ $\langle x,y\mid\psi(x),\psi(y)\rangle$ for an automorphism $\psi$; since
 $\{\psi(x),\psi(y)\}$ is a basis, Nielsen moves (themselves AC moves) take it
 to $\langle x,y\mid x,y\rangle$. A path from $P$ to a presentation $K$ becomes
 AC moves from $P$ to $\psi(K)$, and $\psi(K)$ is AC-trivial if and only if $K$
-is, by the lemma again. Ties to a class are found with a saved search graph:
-the graph is grown from $K$, and a search from $P$ stops when it reaches a
-state of the graph.
+is, by the lemma again. Ties are found where two searches reach the same pair
+of cyclic words, up to renaming the generators ($x\mapsto x^{-1}$,
+$y\mapsto y^{-1}$, $x\leftrightarrow y$, which are automorphisms and are
+removed in the same way): either a search from $P$ reaches a state of a graph
+grown from $K$ and saved, or the states reached by searches of $20000$ states
+from two presentations are compared.
+
+\section{Images of published results}
+
+The lemma also says what is already known. If $\varphi$ is an automorphism,
+$\varphi(P)$ is AC-trivial exactly when $P$ is, so a published statement
+about $P$ is a statement about $\varphi(P)$. The automorphisms
+\[
+y\mapsto y^{-1},\qquad x\mapsto xy^{\pm1},\qquad x\mapsto y^{\pm1}x
+\]
+map $x^{-1}y^nxy^{-(n+1)}$ to a conjugate of itself or of its inverse, and so
+map $\MS(n,w)$ to $\MS(n,w')$; for example $\MS(n,yxy^{-1}x^{-1})$ is the
+image of $\MS(n,y^{-1}xyx^{-1})$ under $y\mapsto y^{-1}$ and is AC-trivial by
+Theorem~B. Under these automorphisms the $657$ presentations fall into $182$
+orbits. Below, a result is called \emph{new} only if the presentation is
+neither covered by the results recalled above nor the image of such a
+presentation under a product of these automorphisms.
 
 \section{Results}
 
 \begin{center}
 \begin{tabular}{rrrrrr}
 \toprule
-$n$ & AC-trivial & tied to $\AK(n)$ & tied to other & already known & open\\
+$n$ & AC-trivial & of them new & tied to $\AK(n)$ & of them new & in an open class\\
 \midrule
 2 & 0 & 0 & 0 & 0 & 32\\
-3 & 1 & 27 & 0 & 8 & 36\\
-4 & 23 & 15 & 0 & 8 & 72\\
-5 & 31 & 9 & 0 & 7 & 88\\
-6 & 15 & 7 & 0 & 7 & 117\\
-7 & 8 & 7 & 17 & 7 & 115\\
+3 & 2 & 0 & 34 & 20 & 36\\
+4 & 24 & 18 & 22 & 8 & 72\\
+5 & 31 & 19 & 16 & 2 & 88\\
+6 & 28 & 14 & 14 & 0 & 104\\
+7 & 8 & 8 & 14 & 0 & 118\\
 \midrule
-all & 78 & 65 & 17 & 37 & 460\\
+all & 93 & 59 & 100 & 30 & 450\\
 \bottomrule
 \end{tabular}
 \end{center}
 
-\noindent The columns count the $657$ presentations the greedy search left.
-``Already known'' are those covered by the results recalled above. The other
-two cores are $\MS(7,yxy^{-1}x^{-1})$ (13 tied) and $\MS(7,yxy^2x^{-1})$
-(4 tied); both are open. The trivializations use 122 to 10868 moves (median
-576). No presentation with $n=2$ was resolved, and $\AK(3)$ was not
-trivialized.
+\noindent The columns count the $657$ presentations the greedy search left;
+the $14$ not shown are $\MS(7,yxy^{-1}x^{-1})$ and $13$ presentations tied to
+it, all AC-trivial by Theorem~B. The $59$ new trivializations use 122 to 6457
+moves (median 443). No presentation with $n=2$ was resolved, and $\AK(3)$ was
+not trivialized.
+
+The $450$ presentations in the last column form $120$ classes of $2$ to $30$
+presentations, each tied to the first table row of its class. They are $147$
+orbits of the automorphisms above: $252$ of the ties repeat an orbit, and
+$78$ tie presentations of different orbits. None of the results recalled
+above settles any of the $120$ classes, and nothing here shows that two of
+them differ.
 
 The comparison with~\cite{shehper} is exact for the families and theorems
-above. That paper also relates four presentations of length 14 to $\AK(3)$
-without listing them in machine-readable form; one tie here has length 14
-and may coincide with one of them.
+above and their images. That paper also relates four presentations of length
+14 to $\AK(3)$ without listing them in machine-readable form; one tie here
+has length 14 and may coincide with one of them. Results published elsewhere
+about individual presentations were not compared.
 
 \section{Data}
 

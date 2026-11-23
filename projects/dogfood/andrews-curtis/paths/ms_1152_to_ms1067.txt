@@ -1,0 +1,4 @@
+JOINED meet XYYYYYYYxyyyyyyyy,XYxyyyXy meets class ms1067 route=1152>1120>1067 worlds=20000 strategy=descent
+XYYYYYYYxyyyyyyyy,XYxyyyXy
+flipy XYXyxYYY,XYYYYYYYxyyyyyyyy
+aut3 XXyxYYY,XYYYYYYYxyyyyyyyy

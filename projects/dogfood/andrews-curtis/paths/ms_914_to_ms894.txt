@@ -1,0 +1,3 @@
+JOINED meet XYXyxyy,XYYYYYYxyyyyyyy meets class ms894 route=914>894 worlds=20000 strategy=descent
+XYXyxyy,XYYYYYYxyyyyyyy
+aut3 XXyxyy,XYYYYYYxyyyyyyy

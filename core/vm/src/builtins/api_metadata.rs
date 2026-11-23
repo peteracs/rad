@@ -217,7 +217,7 @@ fn builtin_api_category(builtin: Builtin) -> &'static str {
         Fork | Simulate | Commit | Clock | Peek | PeekResource | SimulatePar | SandboxRun
         | SandboxInput | SandboxOutput | SandboxLastOutput | SandboxLastFuel | SimulateMany
         | SimulateSeeded | ForkWith | ForkSeed | Diff | AssertOnlyChanged | MergeForks
-        | MergeForksWith => "transactions-speculation",
+        | MergeForksWith | Explore | Offer | Follow => "transactions-speculation",
 
         SaveWorld | LoadWorld | TryLoadWorld | WorldDigest | SchemaDigest | ForkToBytes
         | ForkFromBytes | ForkDelta | ForkApply => "persistence-wire-replay",

@@ -37,18 +37,26 @@ from verify import cyc_reduce, cyclic_class, free_reduce, inv, rotations
 HERE = pathlib.Path(__file__).resolve().parent
 OUT = HERE / "certificates"
 
-# Inverses of the four automorphisms of the searches, as images of x and y.
+# Inverses of the automorphisms a path may name, as images of x and y: the
+# four the searches use, and the three that only rename generators, each of
+# which is its own inverse.
 INVERSE = {
     "aut0": {"x": "x", "y": "yX"},
     "aut1": {"x": "x", "y": "yx"},
     "aut2": {"x": "xY", "y": "y"},
     "aut3": {"x": "xy", "y": "y"},
+    "flipx": {"x": "X", "y": "y"},
+    "flipy": {"x": "x", "y": "Y"},
+    "swap": {"x": "y", "y": "x"},
 }
 FORWARD = {
     "aut0": {"x": "x", "y": "yx"},
     "aut1": {"x": "x", "y": "yX"},
     "aut2": {"x": "xy", "y": "y"},
     "aut3": {"x": "xY", "y": "y"},
+    "flipx": {"x": "X", "y": "y"},
+    "flipy": {"x": "x", "y": "Y"},
+    "swap": {"x": "y", "y": "x"},
 }
 
 

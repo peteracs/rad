@@ -1,0 +1,18 @@
+JOINED meet XXyyyxY,XYYYYYxyyyyyy meets class ms763 route=789>763 worlds=20000 strategy=descent
+XXyyyxY,XYYYYYxyyyyyy
+XXYYxyyyyy,XXyyyxY
+XXyxYXyyyyy,XXyyyxY
+XXyxYxyXyy,XXyyyxY
+XXyyyxY,XYYxYxyXyyy
+aut2 XXyyxYYxY,XYXyyyxY
+flipy XXYYxyyxy,XYYYxyXy
+aut3 XYXyyxYxY,XYYYxyXyy
+aut3 XXyyxYYxY,XYYYxyXyyy
+XXyyxYYxY,XYYYXyyxy
+aut3 XYYXyyxy,XYYxYxyXyyy
+aut3 XYXyyxy,XYYxYYxyXyyyy
+XXyyxYYYYxxY,XYXyyxy
+XXyyyyyXYxy,XYXyyxy
+aut3 XXyyxy,XYxyXyXyyyyyy
+XXyyxy,XYYYxyXyyyyyy
+XXyyxy,XYYYYYxyyyyyy

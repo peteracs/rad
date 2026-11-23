@@ -147,6 +147,7 @@ rad/
         - `projects/dogfood/dispatch60/scenarios/` - Production-shaped dispatch workloads.
         - `projects/dogfood/dispatch60/systems/` - Fixed-rate dispatch systems.
         - `projects/dogfood/dispatch60/tests/` - Dispatch workflow acceptance programs.
+      - `projects/dogfood/explore/` - Exhaustive searches with `explore`, each checked against an independent Python search.
       - `projects/dogfood/forgelink/` - Native-fidelity industrial protocol and telemetry gateway.
         - `projects/dogfood/forgelink/negative/` - Rejected nominal, layout, endian, and scalar implementations.
         - `projects/dogfood/forgelink/owners/` - Authoritative telemetry publication boundary.
@@ -265,6 +266,8 @@ rad/
         - `projects/dogfood/oracle/probes/` - Narrow performance and semantic probes.
           - `projects/dogfood/oracle/probes/purity/` - Purity and effect-boundary probes.
       - `projects/dogfood/orianna_gui/` - Orianna ability and browser-arena RAD sources.
+      - `projects/dogfood/pequalnp-circuits/` - pequalnp circuit witnesses emitted as Lean proofs, and desk-step triage.
+      - `projects/dogfood/pequalnp-gct210/` - Level spaces of subpermanent sums: orbit Fourier search and obstruction cores.
       - `projects/dogfood/radgui/` - Generic declarative GUI and RADSCOPE dogfood.
         - `projects/dogfood/radgui/targets/` - Runnable applications rendered through RADGUI.
       - `projects/dogfood/radrad/` - RAD programs that inspect or exercise RAD itself.

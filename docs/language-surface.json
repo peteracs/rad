@@ -1,11 +1,11 @@
 {
   "formatVersion": 1,
-  "ownerDigest": "8401431720d718b5d6d4e88a11d1ad761251864980636ef7835b08ff53f38e32",
+  "ownerDigest": "25ea70773fa4c5fed3c4c324142decf7da490feb51d2cde9002038800e47ea9a",
   "sources": [
     {
       "role": "builtins",
       "path": "core/vm/src/value/builtin_catalog.rs",
-      "sha256": "62a0b74833b670b591bd02288012ab3b64542c23de8f5abfe64f88732f29417e"
+      "sha256": "a27023c645bfa98629d032fb243b16ee488beece17a3053c46fd386db7f2bcce"
     },
     {
       "role": "contracts",
@@ -1537,6 +1537,18 @@
     {
       "variant": "ReplaceFactBy",
       "name": "replace_fact_by"
+    },
+    {
+      "variant": "Explore",
+      "name": "explore"
+    },
+    {
+      "variant": "Offer",
+      "name": "offer"
+    },
+    {
+      "variant": "Follow",
+      "name": "follow"
     }
   ]
 }

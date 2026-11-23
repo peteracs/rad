@@ -15,6 +15,9 @@ test('renders pixels across resize, session restart, and device recovery', async
   const initial = ready;
   await canvas.evaluate((element) => { element.style.width = '520px'; });
   await expect.poll(async () => (await callHarness(page, 'snapshot')).canvasWidth).not.toBe(initial.canvasWidth);
+  // The canvas takes its new size before a frame is rendered at it, and a
+  // capture reads the last frame: wait for a frame of the new size.
+  await expect.poll(async () => (await capturePresentation(page)).width).not.toBe(initialPixels.width);
   const resizedPixels = await capturePresentation(page);
   expect(resizedPixels.width).not.toBe(initialPixels.width);
   expect(resizedPixels.changedPixels).toBeGreaterThan(200);

@@ -1,0 +1,43 @@
+// Take one pequalnp desk step and triage it at once.
+//
+//   rad take_step.rad -- <handle> <save as .json>
+//
+// The desk hands the same easy step to many agents and only the first accepted
+// pull request is credited, so the first question is whether others are already
+// on it. Prints the step, the pull requests that already name it, and whether
+// cover_circuit.rad can write its proof.
+
+fn get(url: str) -> str {
+    let r = http_request("GET", url, {"User-Agent": "rad-desk-triage", "Accept": "application/json"}, "")
+    return r["body"]
+}
+
+// A statement cover_circuit.rad handles: circuit claims on edge functions only.
+fn is_circuit_step(statement: str) -> bool {
+    let s = trim(statement)
+    let starts = slice(s, 0, 35) == "PEqualNP.MetaComplexity.HasCircuitS" or slice(s, 0, 36) == "(PEqualNP.MetaComplexity.HasCircuitS"
+    return starts and not contains(s, "∀") and not contains(s, "¬")
+}
+
+fn main() -> nil {
+    let args = sys_args()
+    let body = get(f"https://pequalnp.com/desk/next?handle={args[0]}&another=1")
+    // Saved first: a taken step holds a lease even if anything below fails.
+    write_file(args[1], body)
+    let step = json_parse(body) |> unwrap
+    if get_or(step, "gap", nil) == nil {
+        print(f"no step: {slice(body, 0, 200)}")
+        return
+    }
+    let gap = step["gap"]
+    let lease = step["lease"]["id"]
+    let query = f"https://api.github.com/search/issues?q=repo:brilliant-hq/pequalnp-proofs+is:pr+%22{gap["id"]}%22+in:title"
+    let found = json_parse(get(query)) |> unwrap
+    let mut others = []
+    for pr in get_or(found, "items", []) { others = push(others, f"#{pr["number"]} {pr["user"]["login"]} {pr["state"]}")
+    }
+    print(f"{gap["id"]} w{gap["weight"]} lease {lease}")
+    print(f"  {gap["title"]}")
+    print(f"  pull requests already: {len(others)} {join(others, ", ")}")
+    print(f"  cover_circuit can solve it: {is_circuit_step(gap["statement"])}")
+}

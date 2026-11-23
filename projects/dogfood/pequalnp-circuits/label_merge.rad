@@ -1,0 +1,292 @@
+// Lower bounds for pequalnp "line" steps: fan-in-two gate lists that must be right, on a band
+// of input weights, for several outputs, each the AND (or the OR) of a line of points.
+//
+//   rad label_merge.rad -- <desk step .json> <output .lean>
+//
+// The argument (label_merge.lean.tmpl holds its general half): label the N input points and
+// merge labels like union-find, one gate at a time. Every wire depends only on the points of
+// one label, and a gate of fan-in two merges at most two labels, so m gates leave at least
+// N - m labels. Each output depends on every point of its line, so a line's points share a
+// label, and lines that meet share one. With C the number of classes of points under "on a
+// common line", m >= N - C.
+//
+// This program reads the lines and the band from the statement, computes C with union-find,
+// refuses when the claimed bound is above N - C, finds with `explore` a band input that makes
+// each output flip when one point of its line is turned off, checks every witness, and writes
+// the instance half of the Lean proof: the flips and the label chains between lines.
+
+struct Line { output: int, points: list<int>, all: bool }
+
+struct Step { n: int, outputs: int, band: list<int>, lines: list<Line>, bound: int }
+
+struct Flip { line: int, point: int, lit: list<int> }
+
+// The witness search: points join `on` in increasing order, never from `blocked`.
+resource Pad { n: int = 0, blocked: list<bool> = [], lit: list<bool> = [], size: int = 0, target: int = 0, last: int = -1, key: int = 0, done: bool = false }
+
+fn int_after(text: str, marker: str) -> int {
+    let rest = split(text, marker)[1]
+    let mut digits = ""
+    for ch in chars(rest) {
+        if ch < "0" or ch > "9" { break }
+        digits = digits + ch
+    }
+    return int(digits)
+}
+
+fn ints_in(text: str) -> list<int> {
+    let mut out = []
+    for piece in split(text, ",") { out = push(out, int(trim(piece))) }
+    return out
+}
+
+fn parse_line(n: int, piece: str) -> Line {
+    let base = ints_in(split(split(piece, "(({")[1], "}")[0])
+    let shift = int_after(piece, "fun u => u + ")
+    let mut points = []
+    for b in base { points = push(points, (b + shift) % n) }
+    return Line { output: int_after("@" + piece, "@"), points: sort(points), all: contains(piece, "decide (∀ v ∈") }
+}
+
+fn parse_step(statement: str) -> Step {
+    let n = int_after(statement, "∀ x : Fin ")
+    let head = split(statement, ") → PEqualNP.CircuitLowerBounds.Circuit.eval")[0]
+    let cards = split(head, ").card = ")
+    let mut band = []
+    for k in range(1, len(cards)) { band = push(band, int_after("@" + cards[k], "@")) }
+    let pieces = split(statement, "Circuit.eval ⟨gates, out ")
+    let mut lines = []
+    for k in range(1, len(pieces)) { lines = push(lines, parse_line(n, pieces[k])) }
+    let words = split(trim(split(statement, " ≤ gates.length")[0]), " ")
+    return Step { n: n, outputs: int_after(statement, "(out : Fin "), band: band, lines: lines, bound: int(words[len(words) - 1]) }
+}
+
+fn root(parent: list<int>, v: int) -> int {
+    let mut r = v
+    while parent[r] != r { r = parent[r] }
+    return r
+}
+
+// The class representative of every point: points on a common line are merged.
+fn classes(s: Step) -> list<int> {
+    let mut parent = range(s.n)
+    for line in s.lines {
+        for p in line.points {
+            let a = root(parent, p)
+            let b = root(parent, line.points[0])
+            if a != b { parent = set_at(parent, max(a, b), min(a, b)) }
+        }
+    }
+    let mut rep = []
+    for p in range(s.n) { rep = push(rep, root(parent, p)) }
+    return rep
+}
+
+fn line_value(line: Line, lit: list<bool>) -> bool {
+    for p in line.points {
+        if line.all and not lit[p] { return false }
+        if not line.all and lit[p] { return true }
+    }
+    return line.all
+}
+
+fn in_band(s: Step, size: int) -> bool { return contains(s.band, size) }
+
+system AddPad(c: Pad, writes Pad) {
+    if c.size < c.target {
+        for v in range(c.last + 1, c.n) {
+            if not c.blocked[v] and not c.lit[v] {
+                set_resource(Pad, Pad { n: c.n, blocked: c.blocked, lit: set_at(c.lit, v, true), size: c.size + 1, target: c.target, last: v, key: c.key + shl(1, v), done: c.size + 1 == c.target })
+                offer(str(v))
+            }
+        }
+    }
+}
+
+// A band input on which `line` is true and turns false once `point` is turned off.
+fn find_flip(s: Step, k: int, point: int) -> Flip {
+    let line = s.lines[k]
+    let mut blocked = filled(s.n, false)
+    let mut lit = filled(s.n, false)
+    for p in line.points { blocked = set_at(blocked, p, true) }
+    if line.all {
+        for p in line.points { lit = set_at(lit, p, true) }
+    } else {
+        lit = set_at(lit, point, true)
+    }
+    let start_size = if line.all { len(line.points) } else { 1 }
+    let mut target = -1
+    for t in s.band {
+        if target < 0 and t >= start_size and in_band(s, t - 1) { target = t }
+    }
+    let start = fork_with(fork(), Pad { n: s.n, blocked: blocked, lit: lit, size: start_size, target: target, last: -1, key: 0, done: start_size == target })
+    let found = explore(start, [system::AddPad], {"goal": "Pad.done", "key": "Pad.key"})
+    let pad = peek_resource(found["world"], Pad) |> unwrap
+    let mut members = []
+    for p in range(s.n) {
+        if pad.lit[p] { members = push(members, p) }
+    }
+    return Flip { line: k, point: point, lit: members }
+}
+
+fn flip_ok(s: Step, f: Flip) -> bool {
+    let mut lit = filled(s.n, false)
+    for p in f.lit { lit = set_at(lit, p, true) }
+    let off = set_at(lit, f.point, false)
+    let line = s.lines[f.line]
+    return in_band(s, len(f.lit)) and in_band(s, len(f.lit) - 1) and line_value(line, lit) and not line_value(line, off)
+}
+
+fn finset(s: Step, points: list<int>) -> str {
+    let mut parts = []
+    for p in points { parts = push(parts, str(p)) }
+    return "({" + join(parts, ", ") + "} : Finset (Fin " + str(s.n) + "))"
+}
+
+// The projection of the k-th of `outputs` conjuncts.
+fn projection(outputs: int, k: int) -> str {
+    let mut p = ""
+    for _ in range(k) { p = p + ".2" }
+    if k < outputs - 1 { p = p + ".1" }
+    return p
+}
+
+fn flip_proof(s: Step, prefix: str, f: Flip) -> str {
+    let line = s.lines[f.line]
+    let members = finset(s, f.lit)
+    let proj = projection(s.outputs, f.line)
+    let lit = f"(hspec (fun i => decide (i ∈ {members})) (by decide +kernel)){proj}.trans (by decide +kernel)"
+    let off = f"(hspec (fun i => decide (i ∈ {members}.erase {f.point})) (by decide +kernel)){proj}.trans (by decide +kernel)"
+    return f"    · exact {prefix}_dep gates L _ _ (hlab (out {line.output})) {f.point} {members}\n        ({lit})\n        ({off})"
+}
+
+fn line_block(s: Step, prefix: str, k: int, flips: list<Flip>) -> str {
+    let line = s.lines[k]
+    let mut alts = []
+    for _ in line.points { alts = push(alts, "rfl") }
+    let mut out = [
+        f"  have h{k} : ∀ v ∈ {finset(s, line.points)}, L v = lab (out {line.output}) := by",
+        "    intro v hv",
+        "    simp only [Finset.mem_insert, Finset.mem_singleton] at hv",
+        f"    rcases hv with {join(alts, " | ")}",
+    ]
+    for f in flips {
+        if f.line == k { out = push(out, flip_proof(s, prefix, f)) }
+    }
+    return join(out, "\n")
+}
+
+fn first_line_with(s: Step, p: int) -> int {
+    for k in range(len(s.lines)) {
+        if contains(s.lines[k].points, p) { return k }
+    }
+    return -1
+}
+
+// L p = L r for p and its representative r, through a chain of lines that meet.
+fn chain(s: Step, p: int, r: int) -> str {
+    let start = first_line_with(s, p)
+    // Breadth-first over lines; `via[k]` is the line and shared point line k was reached by.
+    let mut from = filled(len(s.lines), -1)
+    let mut shared = filled(len(s.lines), -1)
+    let mut seen = set_at(filled(len(s.lines), false), start, true)
+    let mut queue = [start]
+    let mut head = 0
+    let mut goal = -1
+    while head < len(queue) and goal < 0 {
+        let k = queue[head]
+        head = head + 1
+        if contains(s.lines[k].points, r) { goal = k }
+        for j in range(len(s.lines)) {
+            if not seen[j] {
+                for q in s.lines[k].points {
+                    if not seen[j] and contains(s.lines[j].points, q) {
+                        seen = set_at(seen, j, true)
+                        from = set_at(from, j, k)
+                        shared = set_at(shared, j, q)
+                        queue = push(queue, j)
+                    }
+                }
+            }
+        }
+    }
+    let mut path = [goal]
+    while from[path[0]] >= 0 { path = extend([from[path[0]]], path) }
+    let mut steps = [f"(h{path[0]} {p} (by decide))"]
+    for i in range(1, len(path)) {
+        let q = shared[path[i]]
+        steps = push(steps, f"(h{path[i - 1]} {q} (by decide)).symm")
+        steps = push(steps, f"(h{path[i]} {q} (by decide))")
+    }
+    steps = push(steps, f"(h{goal} {r} (by decide)).symm")
+    let mut term = steps[len(steps) - 1]
+    let mut i = len(steps) - 2
+    while i >= 0 {
+        term = f"{steps[i]}.trans {term}"
+        if i > 0 { term = f"({term})" }
+        i = i - 1
+    }
+    return term
+}
+
+fn lean_file(template: str, gap: str, module: str, statement: str, s: Step, rep: list<int>, flips: list<Flip>) -> str {
+    let prefix = "lm" + replace(replace(gap, "L-", ""), "-", "")
+    let mut lines = [replace(replace(template, "@N@", str(s.n)), "@P@", prefix), f"theorem {module} : {statement} := by", "  intro gates out hops hspec", f"  obtain ⟨L, hcard, hw⟩ := {prefix}_key gates (fun g hg => (hops g hg).2)", "  choose lab hlab using hw"]
+    for k in range(len(s.lines)) { lines = push(lines, line_block(s, prefix, k, flips)) }
+    let mut reps = []
+    let mut alts = []
+    let mut eqs = []
+    for p in range(s.n) {
+        if rep[p] == p { reps = push(reps, f"L {p}") }
+        alts = push(alts, "rfl")
+        eqs = push(eqs, f"p = {p}")
+    }
+    lines = push(lines, f"  have hU : ∀ p : Fin {s.n}, {join(eqs, " ∨ ")} := by decide")
+    lines = push(lines, f"  have hsub : Finset.univ.image L ⊆ [{join(reps, ", ")}].toFinset := by")
+    lines = push(lines, "    intro t ht")
+    lines = push(lines, "    simp only [Finset.mem_image, Finset.mem_univ, true_and] at ht")
+    lines = push(lines, "    obtain ⟨p, rfl⟩ := ht")
+    lines = push(lines, f"    rcases hU p with {join(alts, " | ")}")
+    for p in range(s.n) {
+        if rep[p] == p { lines = push(lines, "    · simp") } else { lines = push(lines, f"    · rw [{chain(s, p, rep[p])}]; simp") }
+    }
+    lines = push(lines, "  have hc := (Finset.card_le_card hsub).trans (List.toFinset_card_le _)")
+    lines = push(lines, "  simp only [List.length_cons, List.length_nil] at hc")
+    lines = push(lines, "  omega")
+    return join(push(lines, ""), "\n")
+}
+
+fn main() -> nil {
+    let args = sys_args()
+    let gap = (json_parse(read_file(args[0])) |> unwrap)["gap"]
+    let statement = gap["statement"]
+    if not contains(statement, "g.inputs.length ≤ 2)") or not contains(statement, " ≤ gates.length") {
+        print("not a fan-in-two line step")
+        return
+    }
+    let s = parse_step(statement)
+    let rep = classes(s)
+    let mut count = 0
+    for p in range(s.n) {
+        if rep[p] == p { count = count + 1 }
+    }
+    print(f"{gap["id"]}: N={s.n}, {len(s.lines)} lines, band {s.band}, {count} classes: proves {s.n - count}, claim {s.bound}")
+    if s.bound > s.n - count or len(s.lines) != s.outputs {
+        print("label merging does not reach the claim; no proof written")
+        return
+    }
+    let mut flips = []
+    for k in range(len(s.lines)) {
+        for p in s.lines[k].points {
+            let f = find_flip(s, k, p)
+            if not flip_ok(s, f) {
+                print(f"  no band flip for line {k} point {p}; no proof written")
+                return
+            }
+            flips = push(flips, f)
+        }
+    }
+    let template = read_file(args[2])
+    write_file(args[1], lean_file(template, gap["id"], gap["module"], statement, s, rep, flips))
+    print(f"wrote {args[1]}: {len(flips)} flips checked")
+}

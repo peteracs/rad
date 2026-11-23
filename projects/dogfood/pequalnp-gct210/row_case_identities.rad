@@ -1,0 +1,125 @@
+// Exact check of the identities behind Theorem B (README.md): a 4 x 5 level space
+// that contains a full zero-sum row reduces to x, y in C^5 with
+//   rows 0..2 = w^i x + w^(2i) y,  w a primitive cube root of unity.
+//
+//   rad row_case_identities.rad
+//
+// Arithmetic is in Z[w], written [a, b] = a + b w with w^2 = -1 - w, so every
+// comparison is exact. The vectors are fixed pseudo-random integers; each line
+// prints the two sides and whether they agree.
+
+fn zw(a: int) -> list<int> { return [a, 0] }
+
+fn add(p: list<int>, q: list<int>) -> list<int> { return [p[0] + q[0], p[1] + q[1]] }
+
+fn mul(p: list<int>, q: list<int>) -> list<int> {
+    let bd = p[1] * q[1]
+    return [p[0] * q[0] - bd, p[0] * q[1] + p[1] * q[0] - bd]
+}
+
+fn scale(k: int, p: list<int>) -> list<int> { return [k * p[0], k * p[1]] }
+
+// w^0, w^1, w^2
+let POW = [[1, 0], [0, 1], [-1, -1]]
+
+// Sum over injective placements of the vectors into the allowed columns of the
+// product of the chosen entries: the rectangular permanent.
+fn per_rect(vecs: list<list<list<int>>>, i: int, used: list<bool>) -> list<int> {
+    if i == len(vecs) { return [1, 0] }
+    let mut total = [0, 0]
+    for c in range(len(used)) {
+        if not used[c] {
+            let rest = per_rect(vecs, i + 1, set_at(used, c, true))
+            total = add(total, mul(vecs[i][c], rest))
+        }
+    }
+    return total
+}
+
+// Columns outside `cols` are closed by marking them used.
+fn per_on(vecs: list<list<list<int>>>, skip: int) -> list<int> {
+    let mut used = filled(5, false)
+    if skip >= 0 { used = set_at(used, skip, true) }
+    return per_rect(vecs, 0, used)
+}
+
+// P_k of the rows: sum over k-subsets of rows of their rectangular permanent.
+fn subsets(n: int, k: int, start: int) -> list<list<int>> {
+    if k == 0 { return [[]] }
+    let mut out = []
+    for i in range(start, n) {
+        for rest in subsets(n, k - 1, i + 1) { out = push(out, extend([i], rest)) }
+    }
+    return out
+}
+
+fn p_k(rows: list<list<list<int>>>, k: int, skip: int) -> list<int> {
+    let mut total = [0, 0]
+    for s in subsets(len(rows), k, 0) {
+        let mut vecs = []
+        for i in s { vecs = push(vecs, rows[i]) }
+        total = add(total, per_on(vecs, skip))
+    }
+    return total
+}
+
+fn lift(v: list<int>) -> list<list<int>> { return map(v, zw) }
+
+fn e3(v: list<int>) -> int {
+    let mut t = 0
+    for s in subsets(len(v), 3, 0) { t = t + v[s[0]] * v[s[1]] * v[s[2]] }
+    return t
+}
+
+fn without(v: list<int>, j: int) -> list<int> {
+    let mut out = []
+    for c in range(len(v)) {
+        if c != j { out = push(out, v[c]) }
+    }
+    return out
+}
+
+fn dot(u: list<int>, v: list<int>) -> int {
+    let mut t = 0
+    for c in range(len(u)) { t = t + u[c] * v[c] }
+    return t
+}
+
+fn report(name: str, got: list<int>, want: list<int>) -> bool {
+    let ok = got[0] == want[0] and got[1] == want[1]
+    print(f"{if ok { "ok  " } else { "FAIL" }} {name}: {got} vs {want}")
+    return ok
+}
+
+fn check(x: list<int>, y: list<int>, z: list<int>) -> bool {
+    let mut rows = []
+    for i in range(3) {
+        let mut row = []
+        for c in range(5) { row = push(row, add(scale(x[c], POW[i]), scale(y[c], POW[(2 * i) % 3]))) }
+        rows = push(rows, row)
+    }
+    let sx = sum(x)
+    let sy = sum(y)
+    let per_xy = sx * sy - dot(x, y)
+    let mut ok = true
+    ok = report("P2(top) = -3 perR(x, y)", p_k(rows, 2, -1), zw(-3 * per_xy)) and ok
+    ok = report("P3(top) = 6 (e3 x + e3 y)", p_k(rows, 3, -1), zw(6 * (e3(x) + e3(y)))) and ok
+    for j in range(5) {
+        let g3 = -3 * (per_xy - (sx * y[j] + sy * x[j] - 2 * x[j] * y[j]))
+        ok = report(f"G3[{j}] = -3 (perR - (X y_j + Y x_j - 2 x_j y_j))", p_k(rows, 2, j), zw(g3)) and ok
+        ok = report(f"G4[{j}] = 6 (e3 x^-j + e3 y^-j)", p_k(rows, 3, j), zw(6 * (e3(without(x, j)) + e3(without(y, j))))) and ok
+    }
+    // The full 4 x 5 split: row 3 = z (zero sum) adds sum_j z_j G_k[j] to P_k.
+    let full = push(rows, lift(z))
+    for k in range(2, 5) {
+        let mut want = p_k(rows, k, -1)
+        for j in range(5) { want = add(want, scale(z[j], p_k(rows, k - 1, j))) }
+        ok = report(f"P{k}(full) = P{k}(top) + sum z_j G{k}[j]", p_k(full, k, -1), want) and ok
+    }
+    return ok
+}
+
+fn main() -> nil {
+    let ok = check([3, -1, 4, 1, -5], [2, 7, -1, 8, 2], [1, -2, 3, 0, -2])
+    print(if ok { "all identities hold" } else { "an identity FAILED" })
+}
