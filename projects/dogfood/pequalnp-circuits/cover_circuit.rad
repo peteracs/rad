@@ -163,7 +163,7 @@ fn lean_file(module: str, statement: str, ws: list<Witness>) -> str {
     let mut lines = [
         "import PEqualNP.Defs",
         "",
-        "-- witness found by RAD explore: github.com/peteracs/rad",
+        "-- witness found by RAD explore: github.com/peteracs/rad-lang",
         "-- For each graph, a least vertex cover (found by breadth-first explore), one OR per cover",
         "-- vertex over its remaining edges, one AND with the vertex, ORs joining the terms:",
         "-- edges + cover - 1 gates, each circuit checked on every input before this file was written.",

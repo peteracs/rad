@@ -2,7 +2,7 @@
 
 RAD Causal Laws is an opt-in causal layer above the existing ECS. It is the
 first implementation slice of
-[RFC-0001](https://github.com/peteracs/rad/blob/main/docs/rfcs/0001-causal-settlements.md).
+[RFC-0001](https://github.com/peteracs/rad-lang/blob/main/docs/rfcs/0001-causal-settlements.md).
 Enable it with `--experimental-laws`:
 
 ```powershell
@@ -137,5 +137,5 @@ evaluation, structural
 world changes through `next`, cross-entity writes, and parallel settlement
 execution are deliberately outside RFC-0001. Validation-only constraints over
 the immutable complete candidate are implemented by
-[RFC-0002](https://github.com/peteracs/rad/blob/main/docs/rfcs/0002-candidate-constraints.md);
+[RFC-0002](https://github.com/peteracs/rad-lang/blob/main/docs/rfcs/0002-candidate-constraints.md);
 see the [Candidate Constraints](candidate-constraints.md) guide.

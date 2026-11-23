@@ -28,7 +28,7 @@ you get stuck, or run the checkpoints directly if you only want the receipts.
 You need a [Rust toolchain](https://rustup.rs/). Then:
 
 ```bash
-git clone https://github.com/peteracs/rad.git
+git clone https://github.com/peteracs/rad-lang.git
 cd rad
 cargo build -p rad-cli --release
 ```

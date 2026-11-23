@@ -2,7 +2,7 @@
 
 The browser playground runs the full Rust VM compiled to WebAssembly. No install needed — just open the link and type.
 
-**[Open the Playground](https://peteracs.github.io/rad/)**
+**[Open the Playground](https://peteracs.github.io/rad-lang/)**
 
 ## What you can try
 

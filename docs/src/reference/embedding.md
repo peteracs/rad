@@ -1,7 +1,7 @@
 # Rust embedding API
 
 The generated item-level reference is published at
-[rad_vm](https://peteracs.github.io/rad/rustdoc/rad_vm/). The mdBook page below
+[rad_vm](https://peteracs.github.io/rad-lang/rustdoc/rad_vm/). The mdBook page below
 defines lifecycle and ownership contracts that rustdoc item signatures alone
 cannot express.
 

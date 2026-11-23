@@ -221,4 +221,4 @@ minimal cause and the lineage, the minimal script, and the search statistics
 (strategy, replays, cache hits, workers, elapsed time, steps).
 
 The dogfood incident for this command is
-[`projects/dogfood/stockroom`](https://github.com/peteracs/rad/tree/main/projects/dogfood/stockroom).
+[`projects/dogfood/stockroom`](https://github.com/peteracs/rad-lang/tree/main/projects/dogfood/stockroom).

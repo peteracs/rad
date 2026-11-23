@@ -9,11 +9,11 @@ src = "src"
 build-dir = "book"
 
 [output.html]
-site-url = "/rad/docs/"
+site-url = "/rad-lang/docs/"
 default-theme = "rust"
 preferred-dark-theme = "rust"
-git-repository-url = "https://github.com/peteracs/rad"
-edit-url-template = "https://github.com/peteracs/rad/edit/main/docs/{path}"
+git-repository-url = "https://github.com/peteracs/rad-lang"
+edit-url-template = "https://github.com/peteracs/rad-lang/edit/main/docs/{path}"
 additional-css = ["theme/custom.css", "theme/highlight.css"]
 additional-js = ["theme/force-theme.js"]
 no-section-label = false

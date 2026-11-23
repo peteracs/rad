@@ -26,7 +26,7 @@ print(values: variadic<any>) -> nil
 - Transaction body: `denied: io`
 - Post-commit: `allowed`
 - Settlement: `denied: io effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="len"></a>
@@ -50,7 +50,7 @@ len(any) -> int
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="typeof"></a>
@@ -74,7 +74,7 @@ typeof(any) -> str
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="variant_of"></a>
@@ -98,7 +98,7 @@ variant_of(any) -> any
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="sys_args"></a>
@@ -122,7 +122,7 @@ sys_args() -> list<str>
 - Transaction body: `denied: io`
 - Post-commit: `allowed`
 - Settlement: `denied: host/output state`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad --strict-types --deny-warnings`
 
 <a id="str"></a>
@@ -146,7 +146,7 @@ str(any) -> str
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="int"></a>
@@ -170,7 +170,7 @@ int(any) -> int
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="float"></a>
@@ -194,7 +194,7 @@ float(any) -> float
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="abs"></a>
@@ -218,7 +218,7 @@ abs(any) -> any
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="sign"></a>
@@ -242,7 +242,7 @@ sign(any) -> any
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="min"></a>
@@ -266,7 +266,7 @@ min(any, any) -> any
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="max"></a>
@@ -290,7 +290,7 @@ max(any, any) -> any
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="unwrap"></a>
@@ -315,7 +315,7 @@ unwrap(Option<A>) -> A
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="expect"></a>
@@ -340,7 +340,7 @@ expect(option_or_result, message) -> value
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="push"></a>
@@ -365,7 +365,7 @@ push(list<T>, T) -> list<T> | push(str, str) -> str
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="pop"></a>
@@ -390,7 +390,7 @@ pop(list<A>) -> A
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="pop_last"></a>
@@ -415,7 +415,7 @@ pop_last(list<A>) -> A
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="drop_last"></a>
@@ -440,7 +440,7 @@ drop_last(list<A>) -> list<A>
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="sort"></a>
@@ -465,7 +465,7 @@ sort(list<A>) -> list<A>
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="reverse"></a>
@@ -490,7 +490,7 @@ reverse(list<A>) -> list<A>
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="slice"></a>
@@ -515,7 +515,7 @@ slice(list_or_str, start, end?: int) -> list_or_str
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="map"></a>
@@ -540,7 +540,7 @@ map(list, fn(item)) -> list
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="filter"></a>
@@ -565,7 +565,7 @@ filter(list, fn(item) -> bool) -> list
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="reduce"></a>
@@ -590,7 +590,7 @@ reduce(list, init, fn(acc, item)) -> value
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="range"></a>
@@ -614,7 +614,7 @@ range(stop) | range(start, stop) | range(start, stop, step) -> list<int> | range
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="get"></a>
@@ -638,7 +638,7 @@ get(entity, Component) -> Option<Component>
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad --strict-types --deny-warnings`
 
 <a id="read_field"></a>
@@ -662,7 +662,7 @@ read_field(entity, any, str) -> any
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad --strict-types --deny-warnings`
 
 <a id="lookup"></a>
@@ -686,7 +686,7 @@ lookup(any, str, any) -> Option<entity>
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/main.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/main.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/main.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/main.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/main.rad --strict-types --deny-warnings`
 
 <a id="lookup_all"></a>
@@ -710,7 +710,7 @@ lookup_all(any, str, any) -> list<entity>
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad --strict-types --deny-warnings`
 
 <a id="set"></a>
@@ -734,7 +734,7 @@ set(entity, any) -> nil
 - Transaction body: `allowed`
 - Post-commit: `denied: ecs`
 - Settlement: `denied: ecs effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/tests/grid_model.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/tests/grid_model.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/tests/grid_model.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/tests/grid_model.rad)
 - Verification command: `rad test projects/dogfood/sovereign-grid/tests`
 
 <a id="write_field"></a>
@@ -758,7 +758,7 @@ write_field(entity, any, str, any) -> nil
 - Transaction body: `denied: ecs`
 - Post-commit: `denied: ecs`
 - Settlement: `denied: ecs effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad --strict-types --deny-warnings`
 
 <a id="has"></a>
@@ -782,7 +782,7 @@ has(entity, any) -> bool
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad --strict-types --deny-warnings`
 
 <a id="spawn"></a>
@@ -806,7 +806,7 @@ spawn(arguments: variadic<str | Component>) -> entity
 - Transaction body: `allowed`
 - Post-commit: `denied: ecs`
 - Settlement: `denied: ecs effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad --strict-types --deny-warnings`
 
 <a id="get_entity"></a>
@@ -830,7 +830,7 @@ get_entity(str) -> entity | nil
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad --strict-types --deny-warnings`
 
 <a id="require_entity"></a>
@@ -854,7 +854,7 @@ require_entity(str) -> entity
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad --strict-types --deny-warnings`
 
 <a id="remove"></a>
@@ -878,7 +878,7 @@ remove(entity, any) -> bool
 - Transaction body: `allowed`
 - Post-commit: `denied: ecs`
 - Settlement: `denied: ecs effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/tests/grid_model.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/tests/grid_model.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/tests/grid_model.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/tests/grid_model.rad)
 - Verification command: `rad test projects/dogfood/sovereign-grid/tests`
 
 <a id="remove_many"></a>
@@ -902,7 +902,7 @@ remove_many(entity, list<any>) -> int
 - Transaction body: `allowed`
 - Post-commit: `denied: ecs`
 - Settlement: `denied: ecs effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad --strict-types --deny-warnings`
 
 <a id="despawn"></a>
@@ -926,7 +926,7 @@ despawn(entity) -> bool
 - Transaction body: `allowed`
 - Post-commit: `denied: ecs`
 - Settlement: `denied: ecs effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad --strict-types --deny-warnings`
 
 <a id="entities"></a>
@@ -950,7 +950,7 @@ entities(components: variadic<ComponentType>) -> list<entity>
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad --strict-types --deny-warnings`
 
 <a id="visit_view"></a>
@@ -974,7 +974,7 @@ visit_view(str, fn(entity) -> nil) -> nil
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/main.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/main.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/main.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/main.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/main.rad --strict-types --deny-warnings`
 
 <a id="get_resource"></a>
@@ -998,7 +998,7 @@ get_resource(any) -> Option<any>
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad --strict-types --deny-warnings`
 
 <a id="set_resource"></a>
@@ -1022,7 +1022,7 @@ set_resource(any, any) -> nil
 - Transaction body: `allowed`
 - Post-commit: `denied: ecs`
 - Settlement: `denied: ecs effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad --strict-types --deny-warnings`
 
 <a id="transition"></a>
@@ -1046,7 +1046,7 @@ transition(any, str) -> Result<any, str>
 - Transaction body: `allowed`
 - Post-commit: `denied: ecs+event`
 - Settlement: `denied: ecs+event effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/main.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/main.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/main.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/main.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/main.rad --strict-types --deny-warnings`
 
 <a id="keys"></a>
@@ -1071,7 +1071,7 @@ keys(map<A, B>) -> list<A>
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="contains"></a>
@@ -1096,7 +1096,7 @@ contains(list<A>, A) -> bool
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="format"></a>
@@ -1120,7 +1120,7 @@ format(template: str, values: variadic<any>) -> str
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="entries"></a>
@@ -1145,7 +1145,7 @@ entries(map<A, B>) -> list<list<any>>
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="merge"></a>
@@ -1170,7 +1170,7 @@ merge(map<A, B>, map<A, B>) -> map<A, B>
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="remove_key"></a>
@@ -1195,7 +1195,7 @@ remove_key(map<A, B>, A) -> map<A, B>
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="group_by"></a>
@@ -1220,7 +1220,7 @@ group_by(list<A>, fn(A) -> B) -> map<B, list<A>>
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="split"></a>
@@ -1244,7 +1244,7 @@ split(s, separator) -> list<str>
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="join"></a>
@@ -1269,7 +1269,7 @@ join(list, separator) -> str
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="trim"></a>
@@ -1293,7 +1293,7 @@ trim(str) -> str
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="replace"></a>
@@ -1317,7 +1317,7 @@ replace(s, from, to) -> str
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="starts_with"></a>
@@ -1341,7 +1341,7 @@ starts_with(str, str) -> bool
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="ends_with"></a>
@@ -1365,7 +1365,7 @@ ends_with(str, str) -> bool
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="append"></a>
@@ -1390,7 +1390,7 @@ append(list<A>, list<A>) -> list<A>
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="extend"></a>
@@ -1415,7 +1415,7 @@ extend(list<A>, list<A>) -> list<A>
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="zip"></a>
@@ -1440,7 +1440,7 @@ zip(list<A>, list<B>) -> list<(A, B)>
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="flat_map"></a>
@@ -1465,7 +1465,7 @@ flat_map(list<A>, pure fn(A) -> list<B>) -> list<B>
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="try_int"></a>
@@ -1489,7 +1489,7 @@ try_int(any) -> Option<int>
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="try_float"></a>
@@ -1513,7 +1513,7 @@ try_float(any) -> Option<float>
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="chr"></a>
@@ -1537,7 +1537,7 @@ chr(int) -> str
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="ord"></a>
@@ -1561,7 +1561,7 @@ ord(str) -> int
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="chars"></a>
@@ -1585,7 +1585,7 @@ chars(str) -> list<str>
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="to_upper"></a>
@@ -1609,7 +1609,7 @@ to_upper(str) -> str
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="to_lower"></a>
@@ -1633,7 +1633,7 @@ to_lower(str) -> str
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="values"></a>
@@ -1658,7 +1658,7 @@ values(map<A, B>) -> list<B>
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="read_file"></a>
@@ -1682,7 +1682,7 @@ read_file(str) -> str
 - Transaction body: `denied: async+io`
 - Post-commit: `allowed`
 - Settlement: `denied: async+io effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad --strict-types --deny-warnings`
 
 <a id="write_file"></a>
@@ -1706,7 +1706,7 @@ write_file(str, str) -> nil
 - Transaction body: `denied: async+io`
 - Post-commit: `allowed`
 - Settlement: `denied: async+io effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_io.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/host_io.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_io.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/host_io.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/host_io.rad --strict-types --deny-warnings`
 
 <a id="http_get"></a>
@@ -1730,7 +1730,7 @@ http_get(str) -> str
 - Transaction body: `denied: async+io`
 - Post-commit: `allowed`
 - Settlement: `denied: async+io effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_network.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/host_network.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_network.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/host_network.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/host_network.rad --strict-types --deny-warnings`
 
 <a id="regex_is_match"></a>
@@ -1754,7 +1754,7 @@ regex_is_match(str, str) -> bool
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="regex_find"></a>
@@ -1778,7 +1778,7 @@ regex_find(str, str) -> Option<str>
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="now_unix_s"></a>
@@ -1802,7 +1802,7 @@ now_unix_s() -> int
 - Transaction body: `denied: io`
 - Post-commit: `allowed`
 - Settlement: `denied: io effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_io.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/host_io.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_io.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/host_io.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/host_io.rad --strict-types --deny-warnings`
 
 <a id="now_unix_ms"></a>
@@ -1826,7 +1826,7 @@ now_unix_ms() -> int
 - Transaction body: `denied: io`
 - Post-commit: `allowed`
 - Settlement: `denied: io effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_io.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/host_io.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_io.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/host_io.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/host_io.rad --strict-types --deny-warnings`
 
 <a id="rand_int"></a>
@@ -1850,7 +1850,7 @@ rand_int(min, max) -> int
 - Transaction body: `denied: io`
 - Post-commit: `allowed`
 - Settlement: `denied: io effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="rand_float"></a>
@@ -1874,7 +1874,7 @@ rand_float() -> float
 - Transaction body: `denied: io`
 - Post-commit: `allowed`
 - Settlement: `denied: io effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="rand_bool"></a>
@@ -1898,7 +1898,7 @@ rand_bool() -> bool
 - Transaction body: `denied: io`
 - Post-commit: `allowed`
 - Settlement: `denied: io effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="rand_seed"></a>
@@ -1922,7 +1922,7 @@ rand_seed(int) -> nil
 - Transaction body: `denied: io`
 - Post-commit: `allowed`
 - Settlement: `denied: io effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="gen_int"></a>
@@ -1946,7 +1946,7 @@ gen_int() -> list<int>
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="gen_float"></a>
@@ -1970,7 +1970,7 @@ gen_float() -> list<float>
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="gen_str"></a>
@@ -1994,7 +1994,7 @@ gen_str() -> list<str>
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="gen_bool"></a>
@@ -2018,7 +2018,7 @@ gen_bool() -> list<bool>
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="gen_list"></a>
@@ -2043,7 +2043,7 @@ gen_list(list<A>) -> list<list<A>>
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="input"></a>
@@ -2067,7 +2067,7 @@ input(prompt?: any) -> str
 - Transaction body: `denied: async+io`
 - Post-commit: `allowed`
 - Settlement: `denied: async+io effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_io.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/host_io.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_io.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/host_io.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/host_io.rad --strict-types --deny-warnings`
 
 <a id="readline"></a>
@@ -2091,7 +2091,7 @@ readline() -> str
 - Transaction body: `denied: async+io`
 - Post-commit: `allowed`
 - Settlement: `denied: async+io effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_io.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/host_io.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_io.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/host_io.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/host_io.rad --strict-types --deny-warnings`
 
 <a id="assert"></a>
@@ -2115,7 +2115,7 @@ assert(bool, str) -> nil
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="assert_eq"></a>
@@ -2139,7 +2139,7 @@ assert_eq(any, any) -> nil
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="int_div"></a>
@@ -2163,7 +2163,7 @@ int_div(int, int) -> int
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="sort_by"></a>
@@ -2188,7 +2188,7 @@ sort_by(list<A>, fn(A) -> any) -> list<A>
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="unwrap_or"></a>
@@ -2213,7 +2213,7 @@ unwrap_or(option_or_result, default) -> value
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="is_some"></a>
@@ -2237,7 +2237,7 @@ is_some(any) -> bool
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="is_none"></a>
@@ -2261,7 +2261,7 @@ is_none(any) -> bool
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="require"></a>
@@ -2285,7 +2285,7 @@ require(entity, Component) -> Component (runtime error if missing)
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad --strict-types --deny-warnings`
 
 <a id="require_all"></a>
@@ -2309,7 +2309,7 @@ require_all(entity, components: variadic<ComponentType>) -> list<any>
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad --strict-types --deny-warnings`
 
 <a id="map_or"></a>
@@ -2334,7 +2334,7 @@ map_or(any, B, fn(A) -> B) -> B
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="load_extension"></a>
@@ -2358,7 +2358,7 @@ load_extension(str, int) -> any
 - Transaction body: `denied: io`
 - Post-commit: `allowed`
 - Settlement: `denied: io effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ffi_native.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/ffi_native.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ffi_native.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/ffi_native.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/ffi_native.rad --strict-types --deny-warnings`
 
 <a id="host_try"></a>
@@ -2383,7 +2383,7 @@ host_try(fn(A) -> B, A) -> Result<B, str>
 - Transaction body: `denied: io`
 - Post-commit: `allowed`
 - Settlement: `denied: io effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ffi_native.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/ffi_native.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ffi_native.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/ffi_native.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/ffi_native.rad --strict-types --deny-warnings`
 
 <a id="host_try0"></a>
@@ -2408,7 +2408,7 @@ host_try0(fn() -> A) -> Result<A, str>
 - Transaction body: `denied: io`
 - Post-commit: `allowed`
 - Settlement: `denied: io effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ffi_native.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/ffi_native.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ffi_native.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/ffi_native.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/ffi_native.rad --strict-types --deny-warnings`
 
 <a id="gc_collect"></a>
@@ -2432,7 +2432,7 @@ gc_collect() -> int
 - Transaction body: `denied: io`
 - Post-commit: `allowed`
 - Settlement: `denied: io effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="eprint"></a>
@@ -2456,7 +2456,7 @@ eprint(values: variadic<any>) -> nil
 - Transaction body: `denied: io`
 - Post-commit: `allowed`
 - Settlement: `denied: io effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_io.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/host_io.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_io.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/host_io.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/host_io.rad --strict-types --deny-warnings`
 
 <a id="write_stdout"></a>
@@ -2480,7 +2480,7 @@ write_stdout(str) -> nil
 - Transaction body: `denied: io`
 - Post-commit: `allowed`
 - Settlement: `denied: io effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_io.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/host_io.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_io.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/host_io.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/host_io.rad --strict-types --deny-warnings`
 
 <a id="write_stderr"></a>
@@ -2504,7 +2504,7 @@ write_stderr(str) -> nil
 - Transaction body: `denied: io`
 - Post-commit: `allowed`
 - Settlement: `denied: io effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_io.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/host_io.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_io.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/host_io.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/host_io.rad --strict-types --deny-warnings`
 
 <a id="read_stdin_all"></a>
@@ -2528,7 +2528,7 @@ read_stdin_all() -> str
 - Transaction body: `denied: async+io`
 - Post-commit: `allowed`
 - Settlement: `denied: async+io effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_io.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/host_io.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_io.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/host_io.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/host_io.rad --strict-types --deny-warnings`
 
 <a id="flush_stdout"></a>
@@ -2552,7 +2552,7 @@ flush_stdout() -> nil
 - Transaction body: `denied: io`
 - Post-commit: `allowed`
 - Settlement: `denied: io effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_io.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/host_io.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_io.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/host_io.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/host_io.rad --strict-types --deny-warnings`
 
 <a id="sleep_ms"></a>
@@ -2576,7 +2576,7 @@ sleep_ms(int) -> nil
 - Transaction body: `denied: io`
 - Post-commit: `allowed`
 - Settlement: `denied: io effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_io.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/host_io.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_io.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/host_io.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/host_io.rad --strict-types --deny-warnings`
 
 <a id="name_of"></a>
@@ -2600,7 +2600,7 @@ name_of(entity) -> str
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad --strict-types --deny-warnings`
 
 <a id="id_of"></a>
@@ -2624,7 +2624,7 @@ id_of(entity) -> int
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad --strict-types --deny-warnings`
 
 <a id="append_file"></a>
@@ -2648,7 +2648,7 @@ append_file(str, str) -> nil
 - Transaction body: `denied: async+io`
 - Post-commit: `allowed`
 - Settlement: `denied: async+io effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_io.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/host_io.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_io.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/host_io.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/host_io.rad --strict-types --deny-warnings`
 
 <a id="file_exists"></a>
@@ -2672,7 +2672,7 @@ file_exists(str) -> bool
 - Transaction body: `denied: async+io`
 - Post-commit: `allowed`
 - Settlement: `denied: async+io effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_io.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/host_io.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_io.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/host_io.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/host_io.rad --strict-types --deny-warnings`
 
 <a id="remove_file"></a>
@@ -2696,7 +2696,7 @@ remove_file(str) -> nil
 - Transaction body: `denied: async+io`
 - Post-commit: `allowed`
 - Settlement: `denied: async+io effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_io.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/host_io.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_io.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/host_io.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/host_io.rad --strict-types --deny-warnings`
 
 <a id="list_dir"></a>
@@ -2720,7 +2720,7 @@ list_dir(str) -> list<str>
 - Transaction body: `denied: async+io`
 - Post-commit: `allowed`
 - Settlement: `denied: async+io effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_io.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/host_io.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_io.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/host_io.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/host_io.rad --strict-types --deny-warnings`
 
 <a id="create_dir"></a>
@@ -2744,7 +2744,7 @@ create_dir(str) -> nil
 - Transaction body: `denied: async+io`
 - Post-commit: `allowed`
 - Settlement: `denied: async+io effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_io.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/host_io.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_io.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/host_io.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/host_io.rad --strict-types --deny-warnings`
 
 <a id="remove_dir"></a>
@@ -2768,7 +2768,7 @@ remove_dir(str) -> nil
 - Transaction body: `denied: async+io`
 - Post-commit: `allowed`
 - Settlement: `denied: async+io effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_io.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/host_io.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_io.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/host_io.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/host_io.rad --strict-types --deny-warnings`
 
 <a id="read_file_bytes"></a>
@@ -2792,7 +2792,7 @@ read_file_bytes(str) -> list<int>
 - Transaction body: `denied: async+io`
 - Post-commit: `allowed`
 - Settlement: `denied: async+io effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_io.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/host_io.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_io.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/host_io.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/host_io.rad --strict-types --deny-warnings`
 
 <a id="write_file_bytes"></a>
@@ -2816,7 +2816,7 @@ write_file_bytes(str, list<int>) -> nil
 - Transaction body: `denied: async+io`
 - Post-commit: `allowed`
 - Settlement: `denied: async+io effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_io.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/host_io.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_io.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/host_io.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/host_io.rad --strict-types --deny-warnings`
 
 <a id="http_post"></a>
@@ -2840,7 +2840,7 @@ http_post(str, str) -> str
 - Transaction body: `denied: async+io`
 - Post-commit: `allowed`
 - Settlement: `denied: async+io effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_network.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/host_network.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_network.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/host_network.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/host_network.rad --strict-types --deny-warnings`
 
 <a id="http_post_json"></a>
@@ -2864,7 +2864,7 @@ http_post_json(str, str) -> str
 - Transaction body: `denied: async+io`
 - Post-commit: `allowed`
 - Settlement: `denied: async+io effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_network.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/host_network.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_network.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/host_network.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/host_network.rad --strict-types --deny-warnings`
 
 <a id="http_request"></a>
@@ -2888,7 +2888,7 @@ http_request(str, str, map<str, str>, str) -> map<str, any>
 - Transaction body: `denied: async+io`
 - Post-commit: `allowed`
 - Settlement: `denied: async+io effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_network.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/host_network.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_network.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/host_network.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/host_network.rad --strict-types --deny-warnings`
 
 <a id="tcp_connect"></a>
@@ -2912,7 +2912,7 @@ tcp_connect(str, int) -> int
 - Transaction body: `denied: async+io`
 - Post-commit: `allowed`
 - Settlement: `denied: async+io effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_network.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/host_network.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_network.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/host_network.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/host_network.rad --strict-types --deny-warnings`
 
 <a id="tcp_listen"></a>
@@ -2936,7 +2936,7 @@ tcp_listen(str, int) -> int
 - Transaction body: `denied: async+io`
 - Post-commit: `allowed`
 - Settlement: `denied: async+io effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_network.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/host_network.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_network.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/host_network.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/host_network.rad --strict-types --deny-warnings`
 
 <a id="tcp_accept"></a>
@@ -2960,7 +2960,7 @@ tcp_accept(int) -> int
 - Transaction body: `denied: async+io`
 - Post-commit: `allowed`
 - Settlement: `denied: async+io effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_network.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/host_network.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_network.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/host_network.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/host_network.rad --strict-types --deny-warnings`
 
 <a id="tcp_accept_timeout"></a>
@@ -2984,7 +2984,7 @@ tcp_accept_timeout(int, int) -> Option<int>
 - Transaction body: `denied: async+io`
 - Post-commit: `allowed`
 - Settlement: `denied: async+io effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_network.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/host_network.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_network.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/host_network.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/host_network.rad --strict-types --deny-warnings`
 
 <a id="tcp_read"></a>
@@ -3008,7 +3008,7 @@ tcp_read(int, int) -> str
 - Transaction body: `denied: async+io`
 - Post-commit: `allowed`
 - Settlement: `denied: async+io effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_network.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/host_network.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_network.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/host_network.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/host_network.rad --strict-types --deny-warnings`
 
 <a id="tcp_write"></a>
@@ -3032,7 +3032,7 @@ tcp_write(int, str) -> nil
 - Transaction body: `denied: async+io`
 - Post-commit: `allowed`
 - Settlement: `denied: async+io effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_network.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/host_network.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_network.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/host_network.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/host_network.rad --strict-types --deny-warnings`
 
 <a id="tcp_close"></a>
@@ -3056,7 +3056,7 @@ tcp_close(int) -> nil
 - Transaction body: `denied: async+io`
 - Post-commit: `allowed`
 - Settlement: `denied: async+io effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_network.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/host_network.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_network.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/host_network.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/host_network.rad --strict-types --deny-warnings`
 
 <a id="udp_bind"></a>
@@ -3080,7 +3080,7 @@ udp_bind(str, int) -> int
 - Transaction body: `denied: async+io`
 - Post-commit: `allowed`
 - Settlement: `denied: async+io effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_network.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/host_network.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_network.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/host_network.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/host_network.rad --strict-types --deny-warnings`
 
 <a id="udp_recv_from"></a>
@@ -3104,7 +3104,7 @@ udp_recv_from(int, int) -> (str, str, int)
 - Transaction body: `denied: async+io`
 - Post-commit: `allowed`
 - Settlement: `denied: async+io effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_network.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/host_network.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_network.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/host_network.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/host_network.rad --strict-types --deny-warnings`
 
 <a id="udp_recv_from_timeout"></a>
@@ -3128,7 +3128,7 @@ udp_recv_from_timeout(int, int, int) -> Option<(str, str, int)>
 - Transaction body: `denied: async+io`
 - Post-commit: `allowed`
 - Settlement: `denied: async+io effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_network.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/host_network.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_network.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/host_network.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/host_network.rad --strict-types --deny-warnings`
 
 <a id="udp_recv_from_bytes"></a>
@@ -3152,7 +3152,7 @@ udp_recv_from_bytes(int, int) -> (list<int>, str, int)
 - Transaction body: `denied: async+io`
 - Post-commit: `allowed`
 - Settlement: `denied: async+io effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_network.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/host_network.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_network.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/host_network.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/host_network.rad --strict-types --deny-warnings`
 
 <a id="udp_recv_from_bytes_timeout"></a>
@@ -3176,7 +3176,7 @@ udp_recv_from_bytes_timeout(int, int, int) -> Option<(list<int>, str, int)>
 - Transaction body: `denied: async+io`
 - Post-commit: `allowed`
 - Settlement: `denied: async+io effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_network.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/host_network.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_network.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/host_network.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/host_network.rad --strict-types --deny-warnings`
 
 <a id="udp_recv_bytebuf"></a>
@@ -3200,7 +3200,7 @@ udp_recv_bytebuf(int, int) -> (bytebuf, str, int)
 - Transaction body: `denied: async+io`
 - Post-commit: `allowed`
 - Settlement: `denied: async+io effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_network.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/host_network.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_network.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/host_network.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/host_network.rad --strict-types --deny-warnings`
 
 <a id="udp_recv_bytebuf_timeout"></a>
@@ -3224,7 +3224,7 @@ udp_recv_bytebuf_timeout(int, int, int) -> Option<(bytebuf, str, int)>
 - Transaction body: `denied: async+io`
 - Post-commit: `allowed`
 - Settlement: `denied: async+io effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_network.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/host_network.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_network.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/host_network.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/host_network.rad --strict-types --deny-warnings`
 
 <a id="udp_send_to"></a>
@@ -3248,7 +3248,7 @@ udp_send_to(int, str, int, str) -> int
 - Transaction body: `denied: async+io`
 - Post-commit: `allowed`
 - Settlement: `denied: async+io effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_network.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/host_network.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_network.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/host_network.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/host_network.rad --strict-types --deny-warnings`
 
 <a id="udp_send_to_bytes"></a>
@@ -3272,7 +3272,7 @@ udp_send_to_bytes(int, str, int, list<int>) -> int
 - Transaction body: `denied: async+io`
 - Post-commit: `allowed`
 - Settlement: `denied: async+io effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_network.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/host_network.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_network.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/host_network.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/host_network.rad --strict-types --deny-warnings`
 
 <a id="udp_send_bytebuf"></a>
@@ -3296,7 +3296,7 @@ udp_send_bytebuf(int, str, int, bytebuf) -> int
 - Transaction body: `denied: async+io`
 - Post-commit: `allowed`
 - Settlement: `denied: async+io effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_network.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/host_network.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_network.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/host_network.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/host_network.rad --strict-types --deny-warnings`
 
 <a id="udp_close"></a>
@@ -3320,7 +3320,7 @@ udp_close(int) -> nil
 - Transaction body: `denied: async+io`
 - Post-commit: `allowed`
 - Settlement: `denied: async+io effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_network.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/host_network.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/host_network.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/host_network.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/host_network.rad --strict-types --deny-warnings`
 
 <a id="query_where"></a>
@@ -3344,7 +3344,7 @@ query_where(components: variadic<ComponentType>, predicate: readonly fn(entity) 
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad --strict-types --deny-warnings`
 
 <a id="query_map"></a>
@@ -3368,7 +3368,7 @@ query_map(components: variadic<ComponentType>, mapper: readonly fn(entity) -> T)
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad --strict-types --deny-warnings`
 
 <a id="query_count"></a>
@@ -3392,7 +3392,7 @@ query_count(components: variadic<ComponentType>) -> int
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad --strict-types --deny-warnings`
 
 <a id="with_field"></a>
@@ -3416,7 +3416,7 @@ with_field(list<entity>, str, str, pure fn(any) -> bool) -> list<entity>
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad --strict-types --deny-warnings`
 
 <a id="log"></a>
@@ -3440,7 +3440,7 @@ log(str, map<str, any>) -> nil
 - Transaction body: `denied: io`
 - Post-commit: `allowed`
 - Settlement: `denied: io effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad --strict-types --deny-warnings`
 
 <a id="metric"></a>
@@ -3464,7 +3464,7 @@ metric(str, str, float, map<str, any>) -> nil
 - Transaction body: `denied: io`
 - Post-commit: `allowed`
 - Settlement: `denied: io effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad --strict-types --deny-warnings`
 
 <a id="trace_id"></a>
@@ -3488,7 +3488,7 @@ trace_id() -> int | nil
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `denied: host/output state`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad --strict-types --deny-warnings`
 
 <a id="flush_events"></a>
@@ -3512,7 +3512,7 @@ flush_events() -> nil
 - Transaction body: `denied: event`
 - Post-commit: `allowed`
 - Settlement: `denied: event effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad --strict-types --deny-warnings`
 
 <a id="byte_at"></a>
@@ -3536,7 +3536,7 @@ byte_at(str, int) -> int
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="substring_bytes"></a>
@@ -3560,7 +3560,7 @@ substring_bytes(str, int, int) -> str
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="byte_len"></a>
@@ -3584,7 +3584,7 @@ byte_len(str) -> int
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="bitset_new"></a>
@@ -3608,7 +3608,7 @@ bitset_new() -> bitset
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="bitset_set"></a>
@@ -3632,7 +3632,7 @@ bitset_set(bitset, int) -> bitset
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="bitset_has"></a>
@@ -3656,7 +3656,7 @@ bitset_has(bitset, int) -> bool
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="bitset_clear"></a>
@@ -3680,7 +3680,7 @@ bitset_clear(bitset, int) -> bitset
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="buffer_new"></a>
@@ -3704,7 +3704,7 @@ buffer_new() -> any
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="buffer_append"></a>
@@ -3728,7 +3728,7 @@ buffer_append(any, str) -> any
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="buffer_to_str"></a>
@@ -3752,7 +3752,7 @@ buffer_to_str(any) -> str
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="bytebuf_new"></a>
@@ -3776,7 +3776,7 @@ bytebuf_new(int) -> bytebuf
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="bytebuf_len"></a>
@@ -3800,7 +3800,7 @@ bytebuf_len(bytebuf) -> int
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="bytebuf_get"></a>
@@ -3824,7 +3824,7 @@ bytebuf_get(bytebuf, int) -> int
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="bytebuf_set_u8"></a>
@@ -3848,7 +3848,7 @@ bytebuf_set_u8(bytebuf, int, int) -> bytebuf
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="bytebuf_set_u16_le"></a>
@@ -3872,7 +3872,7 @@ bytebuf_set_u16_le(bytebuf, int, int) -> bytebuf
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="bytebuf_set_u32_le"></a>
@@ -3896,7 +3896,7 @@ bytebuf_set_u32_le(bytebuf, int, int) -> bytebuf
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="bytebuf_set_i32_le"></a>
@@ -3920,7 +3920,7 @@ bytebuf_set_i32_le(bytebuf, int, int) -> bytebuf
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="bytebuf_get_u16_le"></a>
@@ -3944,7 +3944,7 @@ bytebuf_get_u16_le(bytebuf, int) -> int
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="bytebuf_get_u32_le"></a>
@@ -3968,7 +3968,7 @@ bytebuf_get_u32_le(bytebuf, int) -> int
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="bytebuf_get_i32_le"></a>
@@ -3992,7 +3992,7 @@ bytebuf_get_i32_le(bytebuf, int) -> int
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="bytebuf_slice"></a>
@@ -4016,7 +4016,7 @@ bytebuf_slice(bytebuf, int, int) -> bytebuf
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="bytebuf_copy"></a>
@@ -4040,7 +4040,7 @@ bytebuf_copy(bytebuf, int, bytebuf) -> bytebuf
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="bytebuf_to_list"></a>
@@ -4064,7 +4064,7 @@ bytebuf_to_list(bytebuf) -> list<int>
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="bytebuf_from_list"></a>
@@ -4088,7 +4088,7 @@ bytebuf_from_list(list<int>) -> bytebuf
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="words_new"></a>
@@ -4112,7 +4112,7 @@ words_new(int, int) -> bytebuf
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="words_len"></a>
@@ -4136,7 +4136,7 @@ words_len(bytebuf) -> int
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="words_get"></a>
@@ -4160,7 +4160,7 @@ words_get(bytebuf, int) -> int
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="words_set"></a>
@@ -4184,7 +4184,7 @@ words_set(bytebuf, int, int) -> bytebuf
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="words_gather"></a>
@@ -4208,7 +4208,7 @@ words_gather(bytebuf, int, int, int, int) -> bytebuf
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="words_add"></a>
@@ -4232,7 +4232,7 @@ words_add(bytebuf, bytebuf) -> bytebuf
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="words_min"></a>
@@ -4256,7 +4256,7 @@ words_min(bytebuf, bytebuf) -> bytebuf
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="words_scale"></a>
@@ -4280,7 +4280,7 @@ words_scale(bytebuf, int, int) -> bytebuf
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="words_add_strided"></a>
@@ -4304,7 +4304,7 @@ words_add_strided(bytebuf, bytebuf, int, int) -> bytebuf
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="words_min_value"></a>
@@ -4328,7 +4328,7 @@ words_min_value(bytebuf) -> int
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="words_max_value"></a>
@@ -4352,7 +4352,7 @@ words_max_value(bytebuf) -> int
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="words_count_gt"></a>
@@ -4376,7 +4376,7 @@ words_count_gt(bytebuf, bytebuf) -> int
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="words_digest"></a>
@@ -4400,7 +4400,7 @@ words_digest(bytebuf) -> int
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="words_min_ratio"></a>
@@ -4424,7 +4424,7 @@ words_min_ratio(bytebuf, bytebuf, int) -> int
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="words_max_ratio"></a>
@@ -4448,7 +4448,7 @@ words_max_ratio(bytebuf, bytebuf, int) -> int
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="publish_bytes"></a>
@@ -4472,7 +4472,7 @@ publish_bytes(str, bytebuf) -> nil
 - Transaction body: `denied: io`
 - Post-commit: `allowed`
 - Settlement: `denied: io effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="size_of"></a>
@@ -4496,7 +4496,7 @@ size_of(any) -> int
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="offset_of"></a>
@@ -4520,7 +4520,7 @@ offset_of(any, str) -> int
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="decode_le"></a>
@@ -4544,7 +4544,7 @@ decode_le(any, int, any) -> any
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="decode_be"></a>
@@ -4568,7 +4568,7 @@ decode_be(any, int, any) -> any
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="encode_le"></a>
@@ -4592,7 +4592,7 @@ encode_le(any) -> any
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="encode_be"></a>
@@ -4616,7 +4616,7 @@ encode_be(any) -> any
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="revision"></a>
@@ -4640,7 +4640,7 @@ revision(any) -> int
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad --strict-types --deny-warnings`
 
 <a id="changes_since"></a>
@@ -4664,7 +4664,7 @@ changes_since(any, int) -> list<any>
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad --strict-types --deny-warnings`
 
 <a id="why_in_view"></a>
@@ -4688,7 +4688,7 @@ why_in_view(any, entity) -> str
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad --strict-types --deny-warnings`
 
 <a id="why_not_in_view"></a>
@@ -4712,7 +4712,7 @@ why_not_in_view(any, entity) -> str
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/main.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/main.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/main.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/main.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/main.rad --strict-types --deny-warnings`
 
 <a id="why_field"></a>
@@ -4736,7 +4736,7 @@ why_field(entity, any, str) -> str
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/main.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/main.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/main.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/main.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/main.rad --strict-types --deny-warnings`
 
 <a id="why_removed"></a>
@@ -4760,7 +4760,7 @@ why_removed(any, any) -> str
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/main.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/main.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/main.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/main.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/main.rad --strict-types --deny-warnings`
 
 <a id="why_missing"></a>
@@ -4784,7 +4784,7 @@ why_missing(any, any) -> str
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad --strict-types --deny-warnings`
 
 <a id="why_revision_changed"></a>
@@ -4808,7 +4808,7 @@ why_revision_changed(any) -> str
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad --strict-types --deny-warnings`
 
 <a id="why_revision_did_not_change"></a>
@@ -4832,7 +4832,7 @@ why_revision_did_not_change(any, int) -> str
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad --strict-types --deny-warnings`
 
 <a id="lower_bound"></a>
@@ -4856,7 +4856,7 @@ lower_bound(any, str, any) -> Option<entity>
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/main.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/main.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/main.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/main.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/main.rad --strict-types --deny-warnings`
 
 <a id="upper_bound"></a>
@@ -4880,7 +4880,7 @@ upper_bound(any, str, any) -> Option<entity>
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/main.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/main.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/main.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/main.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/main.rad --strict-types --deny-warnings`
 
 <a id="first"></a>
@@ -4904,7 +4904,7 @@ first(any, str) -> Option<entity>
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad --strict-types --deny-warnings`
 
 <a id="last"></a>
@@ -4928,7 +4928,7 @@ last(any, str) -> Option<entity>
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad --strict-types --deny-warnings`
 
 <a id="next"></a>
@@ -4952,7 +4952,7 @@ next(any, str, any) -> Option<entity>
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad --strict-types --deny-warnings`
 
 <a id="previous"></a>
@@ -4976,7 +4976,7 @@ previous(any, str, any) -> Option<entity>
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad --strict-types --deny-warnings`
 
 <a id="enter_phase"></a>
@@ -5000,7 +5000,7 @@ enter_phase(str) -> nil
 - Transaction body: `denied: ecs`
 - Post-commit: `denied: ecs`
 - Settlement: `denied: ecs effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/main.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/main.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/main.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/main.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/main.rad --strict-types --deny-warnings`
 
 <a id="mark_phase"></a>
@@ -5024,7 +5024,7 @@ mark_phase(entity, str) -> nil
 - Transaction body: `denied: ecs`
 - Post-commit: `denied: ecs`
 - Settlement: `denied: ecs effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/main.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/main.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/main.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/main.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/main.rad --strict-types --deny-warnings`
 
 <a id="assert_trace"></a>
@@ -5048,7 +5048,7 @@ assert_trace(entity, list<str>) -> nil
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/main.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/main.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/main.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/main.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/main.rad --strict-types --deny-warnings`
 
 <a id="model_check"></a>
@@ -5072,7 +5072,7 @@ model_check(str, list<any>, list<str>, list<any>, list<str>, int, int, int) -> n
 - Transaction body: `denied: ecs`
 - Post-commit: `denied: ecs`
 - Settlement: `denied: ecs effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/tests/grid_model.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/tests/grid_model.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/tests/grid_model.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/tests/grid_model.rad)
 - Verification command: `rad test projects/dogfood/sovereign-grid/tests`
 
 <a id="fork"></a>
@@ -5096,7 +5096,7 @@ fork() -> world_fork
 - Transaction body: `denied: ecs`
 - Post-commit: `denied: ecs`
 - Settlement: `denied: ecs effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad --strict-types --deny-warnings`
 
 <a id="simulate"></a>
@@ -5120,7 +5120,7 @@ simulate(fork, systems, ticks) -> world_fork
 - Transaction body: `denied: ecs`
 - Post-commit: `denied: ecs`
 - Settlement: `denied: ecs effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad --strict-types --deny-warnings`
 
 <a id="commit"></a>
@@ -5144,7 +5144,7 @@ commit(world_fork) -> nil
 - Transaction body: `denied: ecs`
 - Post-commit: `denied: ecs`
 - Settlement: `denied: ecs effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad --strict-types --deny-warnings`
 
 <a id="clock"></a>
@@ -5168,7 +5168,7 @@ clock() -> float
 - Transaction body: `denied: io`
 - Post-commit: `allowed`
 - Settlement: `denied: io effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad --strict-types --deny-warnings`
 
 <a id="peek"></a>
@@ -5192,7 +5192,7 @@ peek(fork, entity, Component) -> Option<Component>
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad --strict-types --deny-warnings`
 
 <a id="peek_resource"></a>
@@ -5216,7 +5216,7 @@ peek_resource(world_fork, any) -> Option<any>
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad --strict-types --deny-warnings`
 
 <a id="debug_trace"></a>
@@ -5241,7 +5241,7 @@ debug_trace(A) -> A
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `denied: host/output state`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="format_value"></a>
@@ -5265,7 +5265,7 @@ format_value(any, str) -> str
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="enumerate"></a>
@@ -5290,7 +5290,7 @@ enumerate(list<A>) -> list<(int, A)>
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="find"></a>
@@ -5315,7 +5315,7 @@ find(list<A>, fn(A) -> bool) -> Option<A>
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="max_by"></a>
@@ -5340,7 +5340,7 @@ max_by(list<A>, fn(A) -> any) -> Option<A>
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="min_by"></a>
@@ -5365,7 +5365,7 @@ min_by(list<A>, fn(A) -> any) -> Option<A>
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="round"></a>
@@ -5389,7 +5389,7 @@ round(any) -> int
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="floor"></a>
@@ -5413,7 +5413,7 @@ floor(any) -> int
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="ceil"></a>
@@ -5437,7 +5437,7 @@ ceil(any) -> int
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="sqrt"></a>
@@ -5461,7 +5461,7 @@ sqrt(any) -> float
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="pow"></a>
@@ -5485,7 +5485,7 @@ pow(any, any) -> any
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="to_fixed"></a>
@@ -5509,7 +5509,7 @@ to_fixed(any, int) -> str
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="json_stringify"></a>
@@ -5533,7 +5533,7 @@ json_stringify(any) -> str
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="json_parse"></a>
@@ -5557,7 +5557,7 @@ json_parse(str) -> Option<any>
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="simulate_par"></a>
@@ -5581,7 +5581,7 @@ simulate_par(fork, systems, ticks, n_futures, seed, with?: list<resource>) -> li
 - Transaction body: `denied: ecs`
 - Post-commit: `denied: ecs`
 - Settlement: `denied: ecs effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad --strict-types --deny-warnings`
 
 <a id="sandbox_run"></a>
@@ -5605,7 +5605,7 @@ sandbox_run(source, fork, caps_json, input?) -> Result<world_fork, str>
 - Transaction body: `denied: ecs`
 - Post-commit: `denied: ecs`
 - Settlement: `denied: ecs effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad --strict-types --deny-warnings`
 
 <a id="sandbox_input"></a>
@@ -5629,7 +5629,7 @@ sandbox_input() -> any
 - Transaction body: `denied: io`
 - Post-commit: `allowed`
 - Settlement: `denied: host/output state`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/sandbox_guest.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/sandbox_guest.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/sandbox_guest.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/sandbox_guest.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad --strict-types --deny-warnings`
 
 <a id="sandbox_output"></a>
@@ -5653,7 +5653,7 @@ sandbox_output(any) -> nil
 - Transaction body: `denied: io`
 - Post-commit: `allowed`
 - Settlement: `denied: host/output state`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/sandbox_guest.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/sandbox_guest.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/sandbox_guest.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/sandbox_guest.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad --strict-types --deny-warnings`
 
 <a id="sandbox_last_output"></a>
@@ -5677,7 +5677,7 @@ sandbox_last_output() -> any
 - Transaction body: `denied: io`
 - Post-commit: `allowed`
 - Settlement: `denied: host/output state`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad --strict-types --deny-warnings`
 
 <a id="sandbox_last_fuel"></a>
@@ -5701,7 +5701,7 @@ sandbox_last_fuel() -> int
 - Transaction body: `denied: io`
 - Post-commit: `allowed`
 - Settlement: `denied: host/output state`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad --strict-types --deny-warnings`
 
 <a id="simulate_many"></a>
@@ -5725,7 +5725,7 @@ simulate_many(forks, systems, ticks, seed) -> list<world_fork>
 - Transaction body: `denied: ecs`
 - Post-commit: `denied: ecs`
 - Settlement: `denied: ecs effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad --strict-types --deny-warnings`
 
 <a id="simulate_seeded"></a>
@@ -5749,7 +5749,7 @@ simulate_seeded(fork, systems, ticks, raw_seed) -> world_fork
 - Transaction body: `denied: ecs`
 - Post-commit: `denied: ecs`
 - Settlement: `denied: ecs effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad --strict-types --deny-warnings`
 
 <a id="fork_with"></a>
@@ -5773,7 +5773,7 @@ fork_with(fork, resource_value) -> world_fork
 - Transaction body: `denied: ecs`
 - Post-commit: `denied: ecs`
 - Settlement: `denied: ecs effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad --strict-types --deny-warnings`
 
 <a id="fork_seed"></a>
@@ -5797,7 +5797,7 @@ fork_seed(fork) -> int
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad --strict-types --deny-warnings`
 
 <a id="diff"></a>
@@ -5821,7 +5821,7 @@ diff(world_fork, world_fork) -> map<str, int>
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad --strict-types --deny-warnings`
 
 <a id="assert_only_changed"></a>
@@ -5845,7 +5845,7 @@ assert_only_changed(before, after, allowed: list<Component>) -> nil
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad --strict-types --deny-warnings`
 
 <a id="why"></a>
@@ -5869,7 +5869,7 @@ why(entity, any) -> str
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/main.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/main.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/main.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/main.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/main.rad --strict-types --deny-warnings`
 
 <a id="why_resource"></a>
@@ -5893,7 +5893,7 @@ why_resource(any) -> str
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad --strict-types --deny-warnings`
 
 <a id="why_fact"></a>
@@ -5917,7 +5917,7 @@ why_fact(str, list<any>) -> str
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/experimental/relation_builtins.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/experimental/relation_builtins.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/experimental/relation_builtins.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/experimental/relation_builtins.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/experimental/relation_builtins.rad --experimental-laws --relation-schema projects/dogfood/sovereign-grid/experimental/relation_runtime.rad --relation-module sovereign::surface --experimental-relations --strict-types --deny-warnings`
 
 <a id="save_world"></a>
@@ -5941,7 +5941,7 @@ save_world() -> str
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/main.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/main.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/main.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/main.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/main.rad --strict-types --deny-warnings`
 
 <a id="load_world"></a>
@@ -5965,7 +5965,7 @@ load_world(str) -> int
 - Transaction body: `denied: ecs`
 - Post-commit: `denied: ecs`
 - Settlement: `denied: ecs effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/main.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/main.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/main.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/main.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/main.rad --strict-types --deny-warnings`
 
 <a id="try_load_world"></a>
@@ -5989,7 +5989,7 @@ try_load_world(str) -> Result<int, str>
 - Transaction body: `denied: ecs`
 - Post-commit: `denied: ecs`
 - Settlement: `denied: ecs effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/main.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/main.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/main.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/main.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/main.rad --strict-types --deny-warnings`
 
 <a id="world_digest"></a>
@@ -6013,7 +6013,7 @@ world_digest(fork?: world_fork) -> str
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad --strict-types --deny-warnings`
 
 <a id="schema_digest"></a>
@@ -6037,7 +6037,7 @@ schema_digest() -> str
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/main.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/main.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/main.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/main.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/main.rad --strict-types --deny-warnings`
 
 <a id="merge_forks"></a>
@@ -6061,7 +6061,7 @@ merge_forks(base, ours, theirs) -> Result<world_fork, list<Conflict>>
 - Transaction body: `denied: ecs`
 - Post-commit: `denied: ecs`
 - Settlement: `denied: ecs effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad --strict-types --deny-warnings`
 
 <a id="merge_forks_with"></a>
@@ -6085,7 +6085,7 @@ merge_forks_with(base, ours, theirs, resolutions: list<(Conflict, value)>) -> Re
 - Transaction body: `denied: ecs`
 - Post-commit: `denied: ecs`
 - Settlement: `denied: ecs effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad --strict-types --deny-warnings`
 
 <a id="fork_to_bytes"></a>
@@ -6109,7 +6109,7 @@ fork_to_bytes(world_fork) -> str
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad --strict-types --deny-warnings`
 
 <a id="fork_from_bytes"></a>
@@ -6133,7 +6133,7 @@ fork_from_bytes(str) -> Result<world_fork, str>
 - Transaction body: `denied: ecs`
 - Post-commit: `denied: ecs`
 - Settlement: `denied: ecs effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad --strict-types --deny-warnings`
 
 <a id="fork_delta"></a>
@@ -6157,7 +6157,7 @@ fork_delta(base, fork) -> str
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad --strict-types --deny-warnings`
 
 <a id="fork_apply"></a>
@@ -6181,7 +6181,7 @@ fork_apply(base, delta) -> Result<world_fork, str>
 - Transaction body: `denied: ecs`
 - Post-commit: `denied: ecs`
 - Settlement: `denied: ecs effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad --strict-types --deny-warnings`
 
 <a id="popcount"></a>
@@ -6205,7 +6205,7 @@ popcount(int) -> int
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="ctz"></a>
@@ -6229,7 +6229,7 @@ ctz(int) -> int
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="shl"></a>
@@ -6253,7 +6253,7 @@ shl(int, int) -> int
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="shr"></a>
@@ -6277,7 +6277,7 @@ shr(int, int) -> int
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="filled"></a>
@@ -6301,7 +6301,7 @@ filled(int, any) -> list<any>
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="set_at"></a>
@@ -6325,7 +6325,7 @@ set_at(list<any>, int, any) -> list<any>
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="res"></a>
@@ -6349,7 +6349,7 @@ res(any) -> any
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad --strict-types --deny-warnings`
 
 <a id="sum"></a>
@@ -6373,7 +6373,7 @@ sum(list<any>) -> any
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="product"></a>
@@ -6397,7 +6397,7 @@ product(list<any>) -> any
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="get_or"></a>
@@ -6421,7 +6421,7 @@ get_or(any, any, any) -> any
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="clamp"></a>
@@ -6445,7 +6445,7 @@ clamp(any, any, any) -> any
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="index_of"></a>
@@ -6469,7 +6469,7 @@ index_of(list<any>, any) -> int
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="any"></a>
@@ -6493,7 +6493,7 @@ any(list<any>, fn(any) -> bool) -> bool
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="all"></a>
@@ -6517,7 +6517,7 @@ all(list<any>, fn(any) -> bool) -> bool
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="drop_first"></a>
@@ -6542,7 +6542,7 @@ drop_first(list<A>) -> list<A>
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/values_collections_text.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/values_collections_text.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/values_collections_text.rad --strict-types --deny-warnings`
 
 <a id="recent_events"></a>
@@ -6566,7 +6566,7 @@ recent_events(str, int) -> list<any>
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/ecs_queries_provenance.rad --strict-types --deny-warnings`
 
 <a id="base_fact"></a>
@@ -6590,7 +6590,7 @@ base_fact(str, list<any>) -> bool
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/experimental/relation_builtins.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/experimental/relation_builtins.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/experimental/relation_builtins.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/experimental/relation_builtins.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/experimental/relation_builtins.rad --experimental-laws --relation-schema projects/dogfood/sovereign-grid/experimental/relation_runtime.rad --relation-module sovereign::surface --experimental-relations --strict-types --deny-warnings`
 
 <a id="candidate_fact"></a>
@@ -6614,7 +6614,7 @@ candidate_fact(str, list<any>) -> bool
 - Transaction body: `allowed`
 - Post-commit: `allowed`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/experimental/relation_builtins.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/experimental/relation_builtins.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/experimental/relation_builtins.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/experimental/relation_builtins.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/experimental/relation_builtins.rad --experimental-laws --relation-schema projects/dogfood/sovereign-grid/experimental/relation_runtime.rad --relation-module sovereign::surface --experimental-relations --strict-types --deny-warnings`
 
 <a id="insert_fact"></a>
@@ -6638,7 +6638,7 @@ insert_fact(str, list<any>) -> nil
 - Transaction body: `denied: ecs`
 - Post-commit: `denied: ecs`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/experimental/relation_builtins.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/experimental/relation_builtins.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/experimental/relation_builtins.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/experimental/relation_builtins.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/experimental/relation_builtins.rad --experimental-laws --relation-schema projects/dogfood/sovereign-grid/experimental/relation_runtime.rad --relation-module sovereign::surface --experimental-relations --strict-types --deny-warnings`
 
 <a id="remove_fact"></a>
@@ -6662,7 +6662,7 @@ remove_fact(str, list<any>) -> nil
 - Transaction body: `denied: ecs`
 - Post-commit: `denied: ecs`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/experimental/relation_builtins.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/experimental/relation_builtins.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/experimental/relation_builtins.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/experimental/relation_builtins.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/experimental/relation_builtins.rad --experimental-laws --relation-schema projects/dogfood/sovereign-grid/experimental/relation_runtime.rad --relation-module sovereign::surface --experimental-relations --strict-types --deny-warnings`
 
 <a id="replace_fact_by"></a>
@@ -6686,7 +6686,7 @@ replace_fact_by(str, str, list<any>, list<any>) -> nil
 - Transaction body: `denied: ecs`
 - Post-commit: `denied: ecs`
 - Settlement: `allowed`
-- Executable evidence: [projects/dogfood/sovereign-grid/experimental/relation_builtins.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/experimental/relation_builtins.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/experimental/relation_builtins.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/experimental/relation_builtins.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/experimental/relation_builtins.rad --experimental-laws --relation-schema projects/dogfood/sovereign-grid/experimental/relation_runtime.rad --relation-module sovereign::surface --experimental-relations --strict-types --deny-warnings`
 
 <a id="explore"></a>
@@ -6710,7 +6710,7 @@ explore(fork, moves, options?: map<str, any>) -> map<str, any>
 - Transaction body: `denied: ecs`
 - Post-commit: `denied: ecs`
 - Settlement: `denied: ecs effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad --strict-types --deny-warnings`
 
 <a id="offer"></a>
@@ -6734,7 +6734,7 @@ offer(label: str | int) -> nil
 - Transaction body: `denied: ecs`
 - Post-commit: `denied: ecs`
 - Settlement: `denied: ecs effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad --strict-types --deny-warnings`
 
 <a id="follow"></a>
@@ -6758,5 +6758,5 @@ follow(fork, moves, path: list<str | int>) -> world_fork
 - Transaction body: `denied: ecs`
 - Post-commit: `denied: ecs`
 - Settlement: `denied: ecs effect`
-- Executable evidence: [projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad](https://github.com/peteracs/rad/blob/main/projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad)
+- Executable evidence: [projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad)
 - Verification command: `rad projects/dogfood/sovereign-grid/builtins/speculation_persistence.rad --strict-types --deny-warnings`

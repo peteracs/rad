@@ -232,13 +232,13 @@ you want manual control of memory layout.
 
 ## Quick links
 
-- [Try it in your browser](https://peteracs.github.io/rad/)
+- [Try it in your browser](https://peteracs.github.io/rad-lang/)
 - [Built-in functions](./reference/builtins.md) — `why`, `fork`, `diff`, `sandbox_run`, and the rest, with contracts
 - [Language guarantees](./reference/guarantees.md) — the behavioral contracts, with maturity labels
 - [Language specification](./reference/spec.md)
 - [Installation](./getting-started/installation.md) and [Hello World](./getting-started/hello-world.md)
-- [Browse examples](https://github.com/peteracs/rad/tree/main/examples)
-- [GitHub repository](https://github.com/peteracs/rad)
+- [Browse examples](https://github.com/peteracs/rad-lang/tree/main/examples)
+- [GitHub repository](https://github.com/peteracs/rad-lang)
 
 ## Status
 

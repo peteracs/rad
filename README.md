@@ -8,15 +8,15 @@ Rad is a programming language for simulations, game servers, agents, and policy
 engines where state must be inspectable, forkable, replayable, and hard to
 mutate by accident.
 
-[Playground](https://peteracs.github.io/rad/) ·
-[Documentation](https://peteracs.github.io/rad/docs/) ·
-[Rust API](https://peteracs.github.io/rad/rustdoc/rad_vm/) ·
-[Examples](https://peteracs.github.io/rad/docs/examples/catalog.html) ·
-[Language spec](https://peteracs.github.io/rad/docs/reference/spec.html)
+[Playground](https://peteracs.github.io/rad-lang/) ·
+[Documentation](https://peteracs.github.io/rad-lang/docs/) ·
+[Rust API](https://peteracs.github.io/rad-lang/rustdoc/rad_vm/) ·
+[Examples](https://peteracs.github.io/rad-lang/docs/examples/catalog.html) ·
+[Language spec](https://peteracs.github.io/rad-lang/docs/reference/spec.html)
 
-[![CI](https://github.com/peteracs/rad/actions/workflows/ci.yml/badge.svg)](https://github.com/peteracs/rad/actions/workflows/ci.yml)
-[![Docs](https://img.shields.io/badge/docs-mdBook-8b5cf6)](https://peteracs.github.io/rad/docs/)
-[![Playground](https://img.shields.io/badge/playground-WASM-0ea5e9)](https://peteracs.github.io/rad/)
+[![CI](https://github.com/peteracs/rad-lang/actions/workflows/ci.yml/badge.svg)](https://github.com/peteracs/rad-lang/actions/workflows/ci.yml)
+[![Docs](https://img.shields.io/badge/docs-mdBook-8b5cf6)](https://peteracs.github.io/rad-lang/docs/)
+[![Playground](https://img.shields.io/badge/playground-WASM-0ea5e9)](https://peteracs.github.io/rad-lang/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-22c55e)](LICENSE)
 
 </div>
@@ -126,12 +126,12 @@ for diagnostics, scheduling, and tools.
 
 ## Try it in 60 seconds
 
-The fastest route is the [WASM playground](https://peteracs.github.io/rad/).
+The fastest route is the [WASM playground](https://peteracs.github.io/rad-lang/).
 
 To run the native VM:
 
 ```bash
-git clone https://github.com/peteracs/rad.git
+git clone https://github.com/peteracs/rad-lang.git
 cd rad
 cargo build --release -p rad-cli -p rad-ffi-worker -j 1
 target/release/rad examples/demo.rad
@@ -167,7 +167,7 @@ The repository does not stop at syntax samples. [`projects/dogfood`](projects/do
 contains game runtimes, speculative planners, sandboxes, replay workflows,
 causal constraints, browser presentation, and independently checked exact-search
 projects built on the same shipping VM. The
-[production dogfood portfolio](https://peteracs.github.io/rad/docs/project/production-dogfood-portfolio.html)
+[production dogfood portfolio](https://peteracs.github.io/rad-lang/docs/project/production-dogfood-portfolio.html)
 binds eleven cumulative services to their negative fixtures, scale workloads,
 replays, operational inspections, and one exact-generation release report.
 
@@ -190,12 +190,12 @@ Rad is pre-release software at version **0.5.0**. The Rust VM is the single
 shipping implementation. The features above are implemented and exercised in
 the repository, but 0.x releases do not carry a compatibility promise yet.
 
-Start with the [documentation](https://peteracs.github.io/rad/docs/), then see
-the [language guarantees](https://peteracs.github.io/rad/docs/reference/guarantees.html),
-[builtins](https://peteracs.github.io/rad/docs/reference/builtins.html),
-[enterprise DX semantics](https://peteracs.github.io/rad/docs/reference/enterprise-dx-v05.html),
-[examples](https://peteracs.github.io/rad/docs/examples/catalog.html), and
-[roadmap](https://peteracs.github.io/rad/docs/project/roadmap.html).
+Start with the [documentation](https://peteracs.github.io/rad-lang/docs/), then see
+the [language guarantees](https://peteracs.github.io/rad-lang/docs/reference/guarantees.html),
+[builtins](https://peteracs.github.io/rad-lang/docs/reference/builtins.html),
+[enterprise DX semantics](https://peteracs.github.io/rad-lang/docs/reference/enterprise-dx-v05.html),
+[examples](https://peteracs.github.io/rad-lang/docs/examples/catalog.html), and
+[roadmap](https://peteracs.github.io/rad-lang/docs/project/roadmap.html).
 
 ## Contributing
 

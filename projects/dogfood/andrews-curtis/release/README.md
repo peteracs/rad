@@ -100,7 +100,7 @@ renaming the generators (`x -> x^-1`, `y -> y^-1`, `x <-> y`): the first kind
 from a saved search graph per class, the open classes from comparing the
 pairs that a search of 20,000 states from each presentation reaches.
 
-The search was written in [Rad](https://github.com/peteracs/rad) as a language
+The search was written in [Rad](https://github.com/peteracs/rad-lang) as a language
 test (`projects/dogfood/andrews-curtis`); nothing here needs Rad.
 
 ## Novelty

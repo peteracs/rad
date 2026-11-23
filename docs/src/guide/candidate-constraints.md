@@ -239,5 +239,5 @@ Run it with:
 rad projects/dogfood/causal-constraints/main.rad --experimental-laws
 ```
 
-See [RFC-0002](https://github.com/peteracs/rad/blob/main/docs/rfcs/0002-candidate-constraints.md)
+See [RFC-0002](https://github.com/peteracs/rad-lang/blob/main/docs/rfcs/0002-candidate-constraints.md)
 for the normative semantics and explicit non-goals.

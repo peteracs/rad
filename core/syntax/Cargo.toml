@@ -4,7 +4,7 @@ version = "0.5.0"
 edition = "2021"
 description = "Canonical RAD source syntax, lexer, AST, and parser"
 license = "MIT"
-repository = "https://github.com/peteracs/rad"
+repository = "https://github.com/peteracs/rad-lang"
 
 [dependencies]
 blake3 = "1.8.4"
