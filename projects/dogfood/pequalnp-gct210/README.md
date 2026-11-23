@@ -11,6 +11,8 @@ a proof of either. It finds or rules out spaces in exact families, with `explore
 | Program | What it does | Run time |
 |---|---|---|
 | `orbit_fourier.rad -- <row orbits> <col orbits>` | Every valid space in one orbit-Fourier family of p x q matrices (p, q = the orbit sums), e.g. `-- 4,1 4,1` | < 0.5 s each |
+| `orbit_fourier.rad -- <rows> <cols> stdin <d> < classes.txt` | Is there a valid space of dimension d, imposing only the condition classes read from stdin | < 0.5 s each |
+| `rad blame <trace> --output "dimension <d>: none"` | Which condition classes the cap depends on (see below) | < 5 s |
 
 Every run is bounded by `timeout 5`.
 
@@ -110,6 +112,55 @@ So each character's span lies in a coordinate plane. A mixed pair forces
 xᵀ(J − I)y = 0 and x_c Σy + y_c Σx = 2 x_c y_c for every column c, which leaves the
 two spans at total dimension ≤ 2. **This route caps at 6, the record**; a 7 must use
 other row vectors (the trivial character, or rows shared with row 0).
+
+**Row-split spaces (Theorem A).** Let L = ⊕_i e_i ⊗ W_i (each member's row i lies in
+W_i ⊂ C^q). P_k is multilinear across rows, so L is level exactly when for every set of
+k distinct rows and w_i ∈ W_i the rectangular permanent of the q x k matrix [w_i] is 0.
+With zero sums that is: W_i ⊂ Z = 1^⊥; W_i ⊥ W_j (dot product) for i ≠ j; then
+Σ_a w_a w'_a w''_a = 0 over three distinct rows (inclusion-exclusion leaves only the
+3-block, coefficient 2) and Σ_a w_a w'_a w''_a w'''_a = 0 over four (coefficient −6).
+
+*4 x 5 row-split level spaces have dimension ≤ 6.* Z ⊂ C^5 has dimension 4 and the dot
+product on it is nondegenerate, so W_j ⊂ W_i^⊥ gives dim W_i + dim W_j ≤ 4. A sum of 7
+over four rows must be (2, 2, 2, 1), and then W_1 = W_0^⊥ and W_2 ⊂ W_0 ∩ W_1 force
+W_0 = W_1 = W_2 = I with I = I^⊥. The triple condition on rows 0, 1, 2 makes I a plane
+inside {p_1 = p_2 = p_3 = 0}, i.e. a line on the curve X = V(p_1, p_2, p_3) ⊂ P^4. X is
+smooth: its Jacobian rows 1, w, w² are dependent only if w takes at most two values,
+and two values with p_1 = p_2 = 0 force w = 0. A smooth complete intersection of
+positive dimension is connected, so X is an irreducible curve of degree 6 (genus 4)
+and contains no line. ∎ The same count caps row-split spaces at 7 on 5 x 5 (a sum of 8
+again needs three rows sharing such an I, and (3,1,1,1,1) dies because the line ℓ =
+W_0^⊥ would need ℓ² ∈ span(ℓ, 1) with p_1(ℓ) = p_2(ℓ) = 0, forcing ℓ = 0) and at 4 on 4 x 4.
+Row-split spaces never beat the records p + q − 3.
+
+## Counterfactual obstruction cores (`rad blame`)
+
+A search that ends `exhausted` says *that* a dimension is out of reach, not *why*.
+RAD's `rad blame` answers why for any recorded program: it replays the session with
+recorded inputs withheld and reports the inputs the output depends on. Here the
+inputs are the conditions themselves. With the argument `stdin` the program reads
+the condition classes to impose, one per line (`k d`: the monomials of size k whose
+generators touch d distinct row orbits, `classes.txt` lists all ten for degree ≤ 4), so
+
+    rad orbit_fourier.rad --record t.radr -- 1,1,1,1 5 stdin 5 < classes.txt
+    rad blame t.radr --output "dimension 5: none"
+
+replays the search under relaxed hypotheses and returns a **minimal set of condition
+classes that still rules the dimension out**, with each class marked necessary or
+incidental. Withholding a class is a relaxation, so a necessary class is one whose
+removal lets a bigger space through, and the minimal cause is an obstruction core.
+
+| Family | Cap | Necessary classes | Incidental | Replays |
+|---|---|---|---|---|
+| rows 1,1,1,1 x cols 5 (row-split) | 4 | (1,1) (2,2) (3,3) (4,4) | the 7 classes with a repeated row | 24 in 4.6 s |
+| rows 3,1 x cols 4,1 (best 4 x 5) | 5 | (1,1) (2,1) (3,1) (4,2), plus (2,2) or a stand-in | the other 6 | 24 in 2.6 s |
+
+The row-split core is exactly the reduction in Theorem A, found by replay rather than
+by hand: only conditions across distinct rows matter. In the best 4 x 5 family the
+obstruction sits inside the 3-row orbit (the ℤ_3 characters, as in the hand analysis
+above) plus the cross-orbit quadruples. Dropping any single nonlinear class from that
+family lifts the cap to 6 but never to 7 (each relaxed search for 7 ends `exhausted`);
+only dropping P_1 itself does. A 7 there is at least two condition classes away.
 
 ## RAD findings
 

@@ -1,6 +1,7 @@
 // pequalnp gap L-gct-210 inside the orbit-Fourier families.
 //
 //   rad orbit_fourier.rad -- <row orbits> <column orbits>      e.g. -- 3,2 4,1
+//   rad orbit_fourier.rad -- <row orbits> <column orbits> stdin <target>  < classes
 //
 // The gap (L-gct-210): every linear space L of 5 x 5 complex matrices with per(J + t) = 120
 // for all t in L has dim L <= 8. A space of dimension 9 refutes it.
@@ -40,6 +41,42 @@ let ROWS = sum(ROW_ORBITS)
 let COLS = sum(COL_ORBITS)
 // A monomial picks at most one generator per row and per column.
 let MAX_DEGREE = min(ROWS, COLS)
+
+// Which conditions are imposed. A class (k, d) is every monomial of size k whose
+// generators touch d distinct row orbits. With the program argument `stdin` the
+// enforced classes arrive one per line as `k d`, so `rad blame` can withhold each
+// one and find the classes the answer depends on; otherwise all are enforced.
+fn class_index(k: int, d: int) -> int { return k * (MAX_DEGREE + 1) + d }
+
+fn read_classes() -> list<bool> {
+    let n = (MAX_DEGREE + 1) * (MAX_DEGREE + 1)
+    if len(ARGS) < 3 or ARGS[2] != "stdin" { return filled(n, true) }
+    let mut enforced = filled(n, false)
+    let mut line = readline()
+    while line != "" {
+        let kd = split(trim(line), " ")
+        enforced = set_at(enforced, class_index(int(kd[0]), int(kd[1])), true)
+        line = readline()
+    }
+    return enforced
+}
+
+let ENFORCED = read_classes()
+
+// BIGGER[k]: some enforced class has monomials of size more than k.
+fn bigger_classes() -> list<bool> {
+    let mut out = filled(MAX_DEGREE + 1, false)
+    for k in range(MAX_DEGREE + 1) {
+        for size in range(k + 1, MAX_DEGREE + 1) {
+            for d in range(size + 1) {
+                if ENFORCED[class_index(size, d)] { out = set_at(out, k, true) }
+            }
+        }
+    }
+    return out
+}
+
+let BIGGER = bigger_classes()
 
 // slot -> orbit index and character, orbit by orbit.
 fn slot_orbit(orbits: list<int>) -> list<int> {
@@ -101,22 +138,28 @@ fn code(vals: list<int>) -> int {
     return c
 }
 
-// table[code(sorted multiset)] for every multiset of Z_n of size 1..5.
+// table[code(sorted multiset)] for every multiset of Z_n of size 1..MAX_DEGREE.
 fn add_multisets(table: list<bool>, prefix: list<int>, low: int, n: int) -> list<bool> {
     let mut out = table
     if len(prefix) > 0 {
         out = set_at(out, code(prefix), orbit_part_vanishes(prefix, n))
     }
-    if len(prefix) == 5 { return out }
+    if len(prefix) == MAX_DEGREE { return out }
     for v in range(low, n) {
         out = add_multisets(out, push(prefix, v), v, n)
     }
     return out
 }
 
+// Only the orbit sizes that occur get a table; the others stay empty.
 fn vanish_tables() -> list<list<bool>> {
+    let mut codes = 1
+    for _ in range(MAX_DEGREE) { codes = codes * 6 }
     let mut out = []
-    for n in range(1, 6) { out = push(out, add_multisets(filled(7776, false), [], 0, n)) }
+    for n in range(1, 6) {
+        let used = contains(ROW_ORBITS, n) or contains(COL_ORBITS, n)
+        out = push(out, if used { add_multisets(filled(codes, false), [], 0, n) } else { [] })
+    }
     return out
 }
 
@@ -138,10 +181,14 @@ fn side_vanishes(slots: list<int>, orbit_of: list<int>, char_of: list<int>, orbi
 fn monomial_vanishes(m: list<int>) -> bool {
     let mut rows = []
     let mut cols = []
+    let mut orbits = []
     for v in m {
         rows = push(rows, int_div(v, COLS))
         cols = push(cols, v % COLS)
+        let o = ROW_ORBIT[int_div(v, COLS)]
+        if not contains(orbits, o) { orbits = push(orbits, o) }
     }
+    if not ENFORCED[class_index(len(m), len(orbits))] { return true }
     return side_vanishes(rows, ROW_ORBIT, ROW_CHAR, ROW_ORBITS) or side_vanishes(cols, COL_ORBIT, COL_CHAR, COL_ORBITS)
 }
 
@@ -149,7 +196,7 @@ fn monomial_vanishes(m: list<int>) -> bool {
 // added to `base` gives a vanishing monomial.
 fn all_vanish(pool: list<int>, start: int, room: int, base: list<int>) -> bool {
     if not monomial_vanishes(base) { return false }
-    if room == 0 { return true }
+    if room == 0 or not BIGGER[len(base)] { return true }
     for i in range(start, len(pool)) {
         if not all_vanish(pool, i, room - 1, push(base, pool[i])) { return false }
     }
@@ -181,15 +228,15 @@ fn scalings(orbits: list<int>) -> list<list<int>> {
     let mut maps = [[]]
     let mut base = 0
     for k in orbits {
-        let mut next = []
+        let mut grown = []
         for prefix in maps {
             for u in units(k) {
                 let mut m = prefix
                 for a in range(k) { m = push(m, base + (a * u) % k) }
-                next = push(next, m)
+                grown = push(grown, m)
             }
         }
-        maps = next
+        maps = grown
         base = base + k
     }
     return maps
@@ -248,7 +295,24 @@ fn show(ids: list<int>) -> str {
     return join(parts, " ")
 }
 
+// Is there a valid space of dimension `target`? A goal search: it stops at the
+// first one, and "exhausted" proves there is none in the family.
+fn reach(target: int) -> nil {
+    let start = fork_with(fork(), Grow { ids: [], size: 0, key: 0, target: target, done: false })
+    let found = explore(start, [system::Extend], {"goal": "Grow.done", "key": "Grow.key"})
+    if found["status"] == "goal" {
+        let g = peek_resource(found["world"], Grow) |> unwrap
+        print(f"dimension {target}: found {show(g.ids)}")
+    } else {
+        print(f"dimension {target}: none ({found["status"]}, seen={found["seen"]})")
+    }
+}
+
 fn main() -> nil {
+    if len(ARGS) > 3 {
+        reach(int(ARGS[3]))
+        return
+    }
     let every = explore(fork(), [system::Extend], {"key": "Grow.key", "collect": "Grow.size"})
     let mut largest = 0
     let mut per_size = filled(ROWS * COLS + 1, 0)
