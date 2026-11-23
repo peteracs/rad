@@ -13,6 +13,7 @@ a proof of either. It finds or rules out spaces in exact families, with `explore
 | `orbit_fourier.rad -- <row orbits> <col orbits>` | Every valid space in one orbit-Fourier family of p x q matrices (p, q = the orbit sums), e.g. `-- 4,1 4,1` | < 0.5 s each |
 | `orbit_fourier.rad -- <rows> <cols> stdin <d> < classes.txt` | Is there a valid space of dimension d, imposing only the condition classes read from stdin | < 0.5 s each |
 | `rad blame <trace> --output "dimension <d>: none"` | Which condition classes the cap depends on (see below) | < 5 s |
+| `row_case_identities.rad` | Exact Z[ω] check of the identities behind Theorem B | 0.1 s |
 
 Every run is bounded by `timeout 5`.
 
@@ -132,6 +133,45 @@ and contains no line. ∎ The same count caps row-split spaces at 7 on 5 x 5 (a 
 again needs three rows sharing such an I, and (3,1,1,1,1) dies because the line ℓ =
 W_0^⊥ would need ℓ² ∈ span(ℓ, 1) with p_1(ℓ) = p_2(ℓ) = 0, forcing ℓ = 0) and at 4 on 4 x 4.
 Row-split spaces never beat the records p + q − 3.
+
+**A full row (Theorem B).** *No 4 x 5 level space of dimension 7 contains e_i ⊗ Z,
+a full zero-sum row.* Say i = 3 and write other members as (A, r), A on rows 0..2.
+
+1. *Reduction.* Modulo K = e_3 ⊗ Z take r = s·1. For z ∈ Z,
+   P_k(A, s1 + z) = P_k^top(A) + s (6 − k) P_(k−1)^top(A) + Σ_j z_j G_k(A)_j, with
+   G_k(A)_j = P_(k−1)^top(A without column j). The z-terms vanish for all z ∈ Z only if
+   G_k(A) ∈ span(1). For k = 2 that makes the column sums of A a constant c, and then
+   P_1 gives s = −c, P_2: P_2^top = 20c², P_3: P_3^top = 60c³, and P_4 (P_4^top = 0 on three
+   rows) gives −2c · 60c³ = 0, so c ≡ 0. Hence L = K ⊕ L′ with L′ three-dimensional,
+   supported on rows 0..2, zero column sums.
+2. *Fourier coordinates.* Zero-sum columns of C^3 are spanned by (1, ω, ω²) and
+   (1, ω², ω), so A = (1, ω, ω²) ⊗ x + (1, ω², ω) ⊗ y and L′ is a 3-dimensional V ⊂ C^5 ⊕ C^5.
+   With X = Σx, Y = Σy (`row_case_identities.rad` checks each line exactly in Z[ω],
+   including the split of P_2..P_4 for the full 4 x 5 matrix):
+   P_2^top = −3 perR(x, y), P_3^top = 6 (e_3 x + e_3 y), G_3[j] = −3 (perR(x, y) − (X y_j + Y x_j − 2 x_j y_j)),
+   G_4[j] = 6 (e_3 x^(−j) + e_3 y^(−j)). The conditions on V are: (E2) perR(x, y) = 0,
+   (E3) e_3 x + e_3 y = 0, (G3) 2 x_j y_j = X y_j + Y x_j for all j (the constant is 0 because
+   the five terms sum to 2 perR), and (G4) h_x(x_j) + h_y(y_j) independent of j, where
+   h_v(z) = −e_2(v) z + e_1(v) z² − z³.
+3. *Unique factorisation.* Put ξ = x − X/2, η = y − Y/2, S = Σξ = −3X/2, T = Ση. (G3) is
+   ξ_j η_j = S T / 9 as quadratic forms on V (and it implies E2). If S and T are both
+   nonzero forms, factoring in the polynomial ring of V gives {ξ_j, η_j} ⊂ C·S ∪ C·T for
+   every j, so the coordinates of V span at most two dimensions: impossible for dim 3.
+   By the x ↔ y symmetry let S ≡ 0, so X ≡ 0, and for each j either x_j ≡ 0 or y_j ≡ Y/2.
+4. *At most three values.* Let J be the columns where x ≢ 0, m = |J|. V is a hyperplane
+   of a 4-dimensional W_m, and (G4) says the x_j (j ∈ J), and the y_j (j ∉ J), are roots
+   of one cubic: at most three values. V is irreducible, so it lies in one subspace of
+   equal coordinates, and each case fails:
+   m ≤ 1 (x = 0): V would be {y constant on a 3-block partition}, where e_3 ≢ 0 (E3);
+   m = 2: x leaves the conditions, V = C·x ⊕ (a plane) and the three free y's must be roots
+   of z² − (Y/2) z + e_2′, forcing y_3 = y_4 = s, y_2 = −2s, where that quadratic is −2s² − Ys/2 ≢ 0;
+   m = 3: V meets the x-plane in a line where x_0 x_1 x_2 = 0 and the y-part forces
+   x_0 x_1 x_2 = c u³ on that plane, but a product of three distinct lines is no cube;
+   m = 4: V = {(p, q, r, r)} ⊕ C·Y and the cubic through p, q, r needs p + q + r ≡ 0, false;
+   m = 5: y = 0 and V would sit in a 2-dimensional equal-coordinates subspace of Z. ∎
+
+So a dimension-7 witness for L-gct-179 meets every row (and, by the same count on
+rows of Z, cannot be split by rows) in at most three dimensions.
 
 ## Counterfactual obstruction cores (`rad blame`)
 
