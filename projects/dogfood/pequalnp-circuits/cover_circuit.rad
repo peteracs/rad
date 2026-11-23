@@ -1,18 +1,28 @@
-// Witnesses for pequalnp circuit steps "HasCircuitSize n (edge function) s".
+// Witnesses for pequalnp circuit steps: a statement that is one claim
+// "HasCircuitSize n (edge function) s", or a conjunction (A) ∧ (B) ∧ ... of them.
 //
 //   rad cover_circuit.rad -- <desk step .json> <output .lean>
 //
-// Reads the step the desk handed out, takes the graph from its statement
-// ((x a && x b) || ...), finds a least vertex cover with `explore` (the search is
-// breadth-first, so the first world that covers every edge has the fewest
-// vertices), and builds the cover circuit: for each cover vertex v, an OR of
-// the inputs on its remaining edges, an AND with x v, and ORs joining these
-// terms. That is |E| + tau - 1 gates. The circuit is checked on every input
-// here before the Lean file is written; Lean checks it again with `decide`.
+// Reads the step the desk handed out and, for each claim, takes the graph from
+// its edge function ((x a && x b) || ...), finds a least vertex cover with
+// `explore` (the search is breadth-first, so the first world that covers every
+// edge has the fewest vertices), and builds the cover circuit: for each cover
+// vertex v, an OR of the inputs on its remaining edges, an AND with x v, and
+// ORs joining these terms. That is |E| + tau - 1 gates. Every circuit is checked
+// on every input here before the Lean file is written; Lean checks it again
+// with `decide +kernel`.
 
-resource Cover { chosen: list<bool> = [], last: int = -1, key: int = 0, done: bool = false }
+struct Graph { n: int, edges: list<list<int>>, bound: int }
 
-// The number right after `marker` in `text`.
+// Gates are [op, left, right]; wire n + j is gate j.
+struct Chain { gates: list<list<str>>, out: int }
+
+struct Witness { graph: Graph, cover: list<int>, circuit: Chain }
+
+// The graph travels in the world, so the move system reads nothing global.
+resource Cover { n: int = 0, edges: list<list<int>> = [], chosen: list<bool> = [], last: int = -1, key: int = 0, done: bool = false }
+
+// The number right after the first `marker` in `text`.
 fn int_after(text: str, marker: str) -> int {
     let rest = split(text, marker)[1]
     let mut digits = ""
@@ -23,31 +33,37 @@ fn int_after(text: str, marker: str) -> int {
     return int(digits)
 }
 
-// Every "(x a && x b)" in the statement, as [a, b].
-fn parse_edges(statement: str) -> list<list<int>> {
-    let mut out = []
-    let parts = split(statement, "(x ")
+// One claim "HasCircuitSize n (fun x ... => (x a && x b) || ...) s".
+fn parse_claim(claim: str) -> Graph {
+    let mut edges = []
+    let parts = split(claim, "(x ")
     for k in range(1, len(parts)) {
         let p = parts[k]
         if contains(p, " && x ") {
-            let a = int_after("@" + p, "@")
-            let b = int_after(p, " && x ")
-            out = push(out, [a, b])
+            edges = push(edges, [int_after("@" + p, "@"), int_after(p, " && x ")])
         }
+    }
+    let words = split(trim(claim), " ")
+    return Graph { n: int_after(claim, "HasCircuitSize "), edges: edges, bound: int(words[len(words) - 1]) }
+}
+
+// "(A) ∧ (B) ∧ ..." into A, B, ...; a single claim stays whole.
+fn claims(statement: str) -> list<str> {
+    let s = trim(statement)
+    if not contains(s, ") ∧ (") { return [s] }
+    let pieces = split(s, ") ∧ (")
+    let mut out = []
+    for k in range(len(pieces)) {
+        let mut p = pieces[k]
+        if k == 0 { p = slice(p, 1, len(p)) }
+        if k == len(pieces) - 1 { p = slice(p, 0, len(p) - 1) }
+        out = push(out, p)
     }
     return out
 }
 
-let ARGS = sys_args()
-let STEP = json_parse(read_file(ARGS[0])) |> unwrap
-let GAP = STEP["gap"]
-let STATEMENT = GAP["statement"]
-let N = int_after(STATEMENT, "HasCircuitSize ")
-let EDGES = parse_edges(STATEMENT)
-let BOUND = int(split(trim(STATEMENT), " ")[len(split(trim(STATEMENT), " ")) - 1])
-
-fn covers_all(chosen: list<bool>) -> bool {
-    for e in EDGES {
+fn covers_all(edges: list<list<int>>, chosen: list<bool>) -> bool {
+    for e in edges {
         if not chosen[e[0]] and not chosen[e[1]] { return false }
     }
     return true
@@ -55,127 +71,138 @@ fn covers_all(chosen: list<bool>) -> bool {
 
 // Vertices are added in increasing order, so each set is reached once.
 system AddVertex(c: Cover, writes Cover) {
-    for v in range(c.last + 1, N) {
+    for v in range(c.last + 1, c.n) {
         let chosen = set_at(c.chosen, v, true)
-        set_resource(Cover, Cover { chosen: chosen, last: v, key: c.key + shl(1, v), done: covers_all(chosen) })
+        set_resource(Cover, Cover { n: c.n, edges: c.edges, chosen: chosen, last: v, key: c.key + shl(1, v), done: covers_all(c.edges, chosen) })
         offer(str(v))
     }
 }
 
-// Gates are [op, left, right]; wire n + j is gate j.
-struct Chain { gates: list<list<str>>, out: int }
+fn least_cover(g: Graph) -> list<int> {
+    let none = filled(g.n, false)
+    let start = fork_with(fork(), Cover { n: g.n, edges: g.edges, chosen: none, last: -1, key: 0, done: covers_all(g.edges, none) })
+    let found = explore(start, [system::AddVertex], {"goal": "Cover.done", "key": "Cover.key"})
+    let c = peek_resource(found["world"], Cover) |> unwrap
+    let mut cover = []
+    for v in range(g.n) {
+        if c.chosen[v] { cover = push(cover, v) }
+    }
+    return cover
+}
 
 // Appends ORs joining `wires`; the result's `out` is the joined wire.
-fn or_chain(gates: list<list<str>>, wires: list<int>) -> Chain {
+fn or_chain(n: int, gates: list<list<str>>, wires: list<int>) -> Chain {
     let mut gs = gates
     let mut acc = wires[0]
     for k in range(1, len(wires)) {
         gs = push(gs, ["or", str(acc), str(wires[k])])
-        acc = N + len(gs) - 1
+        acc = n + len(gs) - 1
     }
     return Chain { gates: gs, out: acc }
 }
 
-fn cover_circuit(cover: list<int>) -> Chain {
+fn cover_circuit(g: Graph, cover: list<int>) -> Chain {
     let mut gates = []
     let mut terms = []
-    let mut used = filled(len(EDGES), false)
+    let mut used = filled(len(g.edges), false)
     for v in cover {
         let mut nbrs = []
-        for k in range(len(EDGES)) {
-            let e = EDGES[k]
+        for k in range(len(g.edges)) {
+            let e = g.edges[k]
             if not used[k] and (e[0] == v or e[1] == v) {
                 nbrs = push(nbrs, if e[0] == v { e[1] } else { e[0] })
                 used = set_at(used, k, true)
             }
         }
         if len(nbrs) > 0 {
-            let chained = or_chain(gates, nbrs)
+            let chained = or_chain(g.n, gates, nbrs)
             gates = push(chained.gates, ["and", str(v), str(chained.out)])
-            terms = push(terms, N + len(gates) - 1)
+            terms = push(terms, g.n + len(gates) - 1)
         }
     }
-    return or_chain(gates, terms)
+    return or_chain(g.n, gates, terms)
 }
 
-fn eval_circuit(gates: list<list<str>>, out: int, x: list<bool>) -> bool {
+fn eval_circuit(c: Chain, x: list<bool>) -> bool {
     let mut w = x
-    for g in gates {
-        let a = w[int(g[1])]
-        let b = w[int(g[2])]
-        w = push(w, if g[0] == "and" { a and b } else { a or b })
+    for gate in c.gates {
+        let a = w[int(gate[1])]
+        let b = w[int(gate[2])]
+        w = push(w, if gate[0] == "and" { a and b } else { a or b })
     }
-    return w[out]
+    return w[c.out]
 }
 
-fn edge_function(x: list<bool>) -> bool {
-    for e in EDGES {
+fn edge_function(g: Graph, x: list<bool>) -> bool {
+    for e in g.edges {
         if x[e[0]] and x[e[1]] { return true }
     }
     return false
 }
 
-fn bits(m: int) -> list<bool> {
-    let mut x = []
-    for i in range(N) { x = push(x, shr(m, i) % 2 == 1) }
-    return x
-}
-
-fn agrees_everywhere(gates: list<list<str>>, out: int) -> bool {
-    for m in range(shl(1, N)) {
-        let x = bits(m)
-        if eval_circuit(gates, out, x) != edge_function(x) { return false }
+fn agrees_everywhere(g: Graph, c: Chain) -> bool {
+    for m in range(shl(1, g.n)) {
+        let mut x = []
+        for i in range(g.n) { x = push(x, shr(m, i) % 2 == 1) }
+        if eval_circuit(c, x) != edge_function(g, x) { return false }
     }
     return true
 }
 
-fn lean_circuit(gates: list<list<str>>, out: int) -> str {
+fn lean_circuit(c: Chain) -> str {
     let mut parts = []
-    for g in gates { parts = push(parts, f"⟨.{g[0]}, [{g[1]}, {g[2]}]⟩") }
-    return f"⟨[{join(parts, ", ")}], {out}⟩"
+    for gate in c.gates { parts = push(parts, f"⟨.{gate[0]}, [{gate[1]}, {gate[2]}]⟩") }
+    return f"⟨[{join(parts, ", ")}], {c.out}⟩"
 }
 
-fn lean_file(cover: list<int>, gates: list<list<str>>, out: int) -> str {
-    let lines = [
+fn lean_witness(c: Chain) -> str {
+    return f"⟨{lean_circuit(c)}, by simp [FanInTwo], by simp [PEqualNP.CircuitLowerBounds.Circuit.size], by decide +kernel⟩"
+}
+
+fn lean_file(module: str, statement: str, ws: list<Witness>) -> str {
+    let mut lines = [
         "import Mathlib",
         "import PEqualNP.Defs",
         "",
         "-- witness found by RAD explore: github.com/peteracs/rad",
-        f"-- A least vertex cover {cover} (found by breadth-first explore), one OR per cover",
+        "-- For each graph, a least vertex cover (found by breadth-first explore), one OR per cover",
         "-- vertex over its remaining edges, one AND with the vertex, ORs joining the terms:",
-        f"-- |E| + tau - 1 = {len(EDGES)} + {len(cover)} - 1 = {len(gates)} gates, checked on every input.",
+        "-- edges + cover - 1 gates, each circuit checked on every input before this file was written.",
         "",
         "open PEqualNP.CircuitLowerBounds PEqualNP.MetaComplexity",
         "",
-        f"theorem {GAP["module"]} : {STATEMENT} := by",
-        f"  refine ⟨{lean_circuit(gates, out)}, ?_, ?_, ?_⟩",
-        "  · simp [FanInTwo]",
-        "  · simp [PEqualNP.CircuitLowerBounds.Circuit.size]",
-        "  · decide +kernel",
-        "",
+        f"theorem {module} : {statement} := by",
     ]
-    return join(lines, "\n")
+    if len(ws) == 1 {
+        lines = push(lines, f"  exact {lean_witness(ws[0].circuit)}")
+    } else {
+        lines = push(lines, f"  refine ⟨{join(filled(len(ws), "?_"), ", ")}⟩")
+        for w in ws { lines = push(lines, f"  · exact {lean_witness(w.circuit)}") }
+    }
+    return join(push(lines, ""), "\n")
 }
 
 fn main() -> nil {
-    print(f"{GAP["id"]}: n={N}, {len(EDGES)} edges, bound {BOUND}")
-    let start = fork_with(fork(), Cover { chosen: filled(N, false), last: -1, key: 0, done: covers_all(filled(N, false)) })
-    let found = explore(start, [system::AddVertex], {"goal": "Cover.done", "key": "Cover.key"})
-    let c = peek_resource(found["world"], Cover) |> unwrap
-    let mut cover = []
-    for v in range(N) {
-        if c.chosen[v] { cover = push(cover, v) }
+    let args = sys_args()
+    let gap = (json_parse(read_file(args[0])) |> unwrap)["gap"]
+    let mut ws = []
+    let mut failed = 0
+    for claim in claims(gap["statement"]) {
+        let g = parse_claim(claim)
+        let cover = least_cover(g)
+        let c = cover_circuit(g, cover)
+        let ok = agrees_everywhere(g, c) and len(c.gates) <= g.bound
+        if not ok {
+            failed = failed + 1
+            print(f"  FAILED: n={g.n} edges={g.edges} cover={cover} gates={len(c.gates)} bound={g.bound}")
+        }
+        ws = push(ws, Witness { graph: g, cover: cover, circuit: c })
     }
-    print(f"least cover {cover} ({found["status"]}, seen={found["seen"]})")
-    let built = cover_circuit(cover)
-    let gates = built.gates
-    let out = built.out
-    let ok = agrees_everywhere(gates, out)
-    print(f"cover circuit: {len(gates)} gates, output wire {out}, agrees on all {shl(1, N)} inputs: {ok}")
-    if not ok or len(gates) > BOUND {
+    print(f"{gap["id"]}: {len(ws)} claims, {failed} failed")
+    if failed > 0 {
         print("no witness written")
         return
     }
-    write_file(ARGS[1], lean_file(cover, gates, out))
-    print(f"wrote {ARGS[1]}")
+    write_file(args[1], lean_file(gap["module"], gap["statement"], ws))
+    print(f"wrote {args[1]}")
 }

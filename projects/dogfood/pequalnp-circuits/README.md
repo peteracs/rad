@@ -1,7 +1,8 @@
 # pequalnp circuit witnesses
 
 `cover_circuit.rad` turns a pequalnp desk step of the form
-`HasCircuitSize n (fun x => (x a && x b) || ...) s` into a checked Lean proof:
+`HasCircuitSize n (fun x => (x a && x b) || ...) s`, or a conjunction `(A) ∧ (B) ∧ ...` of
+such claims, into a checked Lean proof:
 
     rad cover_circuit.rad -- <desk step .json> <output .lean>
 
@@ -17,5 +18,6 @@
 | Step | Graph | Cover | Gates / bound | Run time |
 |---|---|---|---|---|
 | L-meta-1001 | Petersen minus a vertex (9 vertices, 12 edges) | {0, 1, 3, 7, 8} | 16 / 16 | < 0.2 s |
+| L-meta-926 | 85 graphs without 4-cycles, up to 7 vertices | one per graph | all within bound | 0.8 s |
 
 Every Lean file it writes carries the line `-- witness found by RAD explore: github.com/peteracs/rad`.
