@@ -89,6 +89,28 @@ min(p, q). All 35 pairs (5 row partitions of 4, 7 column partitions of 5) end
 below the record 6 (one row plus one column), so a 7 needs generators whose row and
 column orbits differ from generator to generator, as in the accepted L-gct-198 witness.
 
+## Theory (no search)
+
+**Quadratic bound, any p x q.** On C^(p x q) write t by rows r_1..r_p. Then
+P_2(t) = Σ_{i<i'} r_iᵀ (J_q − I_q) r_{i'}, the quadratic form of ½ (J_p − I_p) ⊗ (J_q − I_q),
+whose eigenvalues are products of {p − 1, −1} and {q − 1, −1}: none is zero, so P_2 is
+nondegenerate. On the hyperplane H = {P_1 = 0} = 1^⊥ a radical vector would be a
+multiple of (A ⊗ M)^(−1) 1 ∝ 1, which is not in H, so P_2 stays nondegenerate on H
+(dimension pq − 1). L is totally isotropic for it, hence **dim L ≤ ⌊(pq − 1)/2⌋**. For
+p = 2 this is q − 1, attained by one zero-sum row: **two-row level spaces have dimension
+exactly q − 1 = p + q − 3.**
+
+**4 x 5, row plus Z_3 characters (L-gct-179).** Take row 0 free with zero sum (4
+dimensions) and add rank-one u_k ⊗ v_k with u_k ∈ {(1, ω, ω²), (1, ω², ω)} on rows 1..3.
+By the lemma the row side vanishes except on a mixed pair {χ_1, χ_2} or a uniform triple.
+A uniform triple forces e_3(v^(b)) = 0 for every coordinate b; since
+e_3(v^(b)) = g(v_b) with g(z) = e_3 − e_2 z + e_1 z² − z³, all five coordinates are roots
+of g, and matching the power sums p_1..p_3 leaves at most two nonzero coordinates.
+So each character's span lies in a coordinate plane. A mixed pair forces
+xᵀ(J − I)y = 0 and x_c Σy + y_c Σx = 2 x_c y_c for every column c, which leaves the
+two spans at total dimension ≤ 2. **This route caps at 6, the record**; a 7 must use
+other row vectors (the trivial character, or rows shared with row 0).
+
 ## RAD findings
 
 - GH 0018 (fixed): an unannotated recursive helper was inferred IO, so `explore`
