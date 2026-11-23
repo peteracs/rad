@@ -1,0 +1,181 @@
+// Witnesses for pequalnp circuit steps "HasCircuitSize n (edge function) s".
+//
+//   rad cover_circuit.rad -- <desk step .json> <output .lean>
+//
+// Reads the step the desk handed out, takes the graph from its statement
+// ((x a && x b) || ...), finds a least vertex cover with `explore` (the search is
+// breadth-first, so the first world that covers every edge has the fewest
+// vertices), and builds the cover circuit: for each cover vertex v, an OR of
+// the inputs on its remaining edges, an AND with x v, and ORs joining these
+// terms. That is |E| + tau - 1 gates. The circuit is checked on every input
+// here before the Lean file is written; Lean checks it again with `decide`.
+
+resource Cover { chosen: list<bool> = [], last: int = -1, key: int = 0, done: bool = false }
+
+// The number right after `marker` in `text`.
+fn int_after(text: str, marker: str) -> int {
+    let rest = split(text, marker)[1]
+    let mut digits = ""
+    for ch in chars(rest) {
+        if ch < "0" or ch > "9" { break }
+        digits = digits + ch
+    }
+    return int(digits)
+}
+
+// Every "(x a && x b)" in the statement, as [a, b].
+fn parse_edges(statement: str) -> list<list<int>> {
+    let mut out = []
+    let parts = split(statement, "(x ")
+    for k in range(1, len(parts)) {
+        let p = parts[k]
+        if contains(p, " && x ") {
+            let a = int_after("@" + p, "@")
+            let b = int_after(p, " && x ")
+            out = push(out, [a, b])
+        }
+    }
+    return out
+}
+
+let ARGS = sys_args()
+let STEP = json_parse(read_file(ARGS[0])) |> unwrap
+let GAP = STEP["gap"]
+let STATEMENT = GAP["statement"]
+let N = int_after(STATEMENT, "HasCircuitSize ")
+let EDGES = parse_edges(STATEMENT)
+let BOUND = int(split(trim(STATEMENT), " ")[len(split(trim(STATEMENT), " ")) - 1])
+
+fn covers_all(chosen: list<bool>) -> bool {
+    for e in EDGES {
+        if not chosen[e[0]] and not chosen[e[1]] { return false }
+    }
+    return true
+}
+
+// Vertices are added in increasing order, so each set is reached once.
+system AddVertex(c: Cover, writes Cover) {
+    for v in range(c.last + 1, N) {
+        let chosen = set_at(c.chosen, v, true)
+        set_resource(Cover, Cover { chosen: chosen, last: v, key: c.key + shl(1, v), done: covers_all(chosen) })
+        offer(str(v))
+    }
+}
+
+// Gates are [op, left, right]; wire n + j is gate j.
+struct Chain { gates: list<list<str>>, out: int }
+
+// Appends ORs joining `wires`; the result's `out` is the joined wire.
+fn or_chain(gates: list<list<str>>, wires: list<int>) -> Chain {
+    let mut gs = gates
+    let mut acc = wires[0]
+    for k in range(1, len(wires)) {
+        gs = push(gs, ["or", str(acc), str(wires[k])])
+        acc = N + len(gs) - 1
+    }
+    return Chain { gates: gs, out: acc }
+}
+
+fn cover_circuit(cover: list<int>) -> Chain {
+    let mut gates = []
+    let mut terms = []
+    let mut used = filled(len(EDGES), false)
+    for v in cover {
+        let mut nbrs = []
+        for k in range(len(EDGES)) {
+            let e = EDGES[k]
+            if not used[k] and (e[0] == v or e[1] == v) {
+                nbrs = push(nbrs, if e[0] == v { e[1] } else { e[0] })
+                used = set_at(used, k, true)
+            }
+        }
+        if len(nbrs) > 0 {
+            let chained = or_chain(gates, nbrs)
+            gates = push(chained.gates, ["and", str(v), str(chained.out)])
+            terms = push(terms, N + len(gates) - 1)
+        }
+    }
+    return or_chain(gates, terms)
+}
+
+fn eval_circuit(gates: list<list<str>>, out: int, x: list<bool>) -> bool {
+    let mut w = x
+    for g in gates {
+        let a = w[int(g[1])]
+        let b = w[int(g[2])]
+        w = push(w, if g[0] == "and" { a and b } else { a or b })
+    }
+    return w[out]
+}
+
+fn edge_function(x: list<bool>) -> bool {
+    for e in EDGES {
+        if x[e[0]] and x[e[1]] { return true }
+    }
+    return false
+}
+
+fn bits(m: int) -> list<bool> {
+    let mut x = []
+    for i in range(N) { x = push(x, shr(m, i) % 2 == 1) }
+    return x
+}
+
+fn agrees_everywhere(gates: list<list<str>>, out: int) -> bool {
+    for m in range(shl(1, N)) {
+        let x = bits(m)
+        if eval_circuit(gates, out, x) != edge_function(x) { return false }
+    }
+    return true
+}
+
+fn lean_circuit(gates: list<list<str>>, out: int) -> str {
+    let mut parts = []
+    for g in gates { parts = push(parts, f"⟨.{g[0]}, [{g[1]}, {g[2]}]⟩") }
+    return f"⟨[{join(parts, ", ")}], {out}⟩"
+}
+
+fn lean_file(cover: list<int>, gates: list<list<str>>, out: int) -> str {
+    let lines = [
+        "import Mathlib",
+        "import PEqualNP.Defs",
+        "",
+        "-- witness found by RAD explore: github.com/peteracs/rad",
+        f"-- A least vertex cover {cover} (found by breadth-first explore), one OR per cover",
+        "-- vertex over its remaining edges, one AND with the vertex, ORs joining the terms:",
+        f"-- |E| + tau - 1 = {len(EDGES)} + {len(cover)} - 1 = {len(gates)} gates, checked on every input.",
+        "",
+        "open PEqualNP.CircuitLowerBounds PEqualNP.MetaComplexity",
+        "",
+        f"theorem {GAP["module"]} : {STATEMENT} := by",
+        f"  refine ⟨{lean_circuit(gates, out)}, ?_, ?_, ?_⟩",
+        "  · simp [FanInTwo]",
+        "  · simp [PEqualNP.CircuitLowerBounds.Circuit.size]",
+        "  · decide +kernel",
+        "",
+    ]
+    return join(lines, "\n")
+}
+
+fn main() -> nil {
+    print(f"{GAP["id"]}: n={N}, {len(EDGES)} edges, bound {BOUND}")
+    let start = fork_with(fork(), Cover { chosen: filled(N, false), last: -1, key: 0, done: covers_all(filled(N, false)) })
+    let found = explore(start, [system::AddVertex], {"goal": "Cover.done", "key": "Cover.key"})
+    let c = peek_resource(found["world"], Cover) |> unwrap
+    let mut cover = []
+    for v in range(N) {
+        if c.chosen[v] { cover = push(cover, v) }
+    }
+    print(f"least cover {cover} ({found["status"]}, seen={found["seen"]})")
+    let built = cover_circuit(cover)
+    let gates = built.gates
+    let out = built.out
+    let ok = agrees_everywhere(gates, out)
+    print(f"cover circuit: {len(gates)} gates, output wire {out}, agrees on all {shl(1, N)} inputs: {ok}")
+    if not ok or len(gates) > BOUND {
+        print("no witness written")
+        return
+    }
+    write_file(ARGS[1], lean_file(cover, gates, out))
+    print(f"wrote {ARGS[1]}")
+}
