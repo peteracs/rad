@@ -1,0 +1,177 @@
+// Collapse an RH pillar's editable slice into one Solution.lean over the frozen interface.
+//
+//   rad slice.rad -- <statement .lean> <entry full name> <output .lean> <source .lean>...
+//
+// The statement file is the frozen challenge file (its theorem ends in `sorry`). The sources are
+// the editable files that hold the real proof (fetched from Alpöge's tree). Every declaration in
+// them is parsed with its namespace and the `variable` lines in force; a declaration is kept only
+// when it is reachable from the entry theorem through the names its text mentions. Names defined
+// nowhere in the sources are taken from the frozen interface or Mathlib. The kept declarations
+// move into `<Core>.Slice` (full names shortened, so nothing clashes with frozen names) and the
+// frozen theorem is closed by the entry.
+
+struct Decl { full: str, short: str, text: str, vars: list<str> }
+
+fn is_ident_char(ch: str) -> bool {
+    return (ch >= "a" and ch <= "z") or (ch >= "A" and ch <= "Z") or (ch >= "0" and ch <= "9") or ch == "_" or ch == "." or ch == "'"
+}
+
+fn tokens(text: str) -> list<str> {
+    let mut out = []
+    let mut cur = ""
+    for ch in chars(text) {
+        if is_ident_char(ch) {
+            cur = cur + ch
+        } else {
+            if len(cur) > 0 { out = push(out, cur) }
+            cur = ""
+        }
+    }
+    if len(cur) > 0 { out = push(out, cur) }
+    return out
+}
+
+// The declared name after the keyword, skipping modifiers such as `private` or `@[simp]`.
+fn decl_name(line: str) -> str {
+    let kinds = ["theorem", "lemma", "def", "abbrev", "instance", "structure", "class", "inductive"]
+    let words = split(trim(line), " ")
+    for k in range(len(words) - 1) {
+        if contains(kinds, words[k]) {
+            let name = words[k + 1]
+            return split(split(name, ":")[0], "(")[0]
+        }
+    }
+    return ""
+}
+
+fn qualify(stack: list<str>, name: str) -> str {
+    if len(stack) == 0 { return name }
+    return join(stack, ".") + "." + name
+}
+
+fn parse(text: str) -> list<Decl> {
+    let lines = split(replace(text, "\r", ""), "\n")
+    let mut stack = []
+    let mut vars = []
+    let mut decls = []
+    let mut k = 0
+    while k < len(lines) {
+        let line = lines[k]
+        let top = len(line) > 0 and slice(line, 0, 1) != " "
+        if top and starts_with(line, "namespace ") {
+            stack = push(stack, trim(slice(line, 10, len(line))))
+            k = k + 1
+        } else if top and starts_with(line, "end ") and len(stack) > 0 {
+            stack = slice(stack, 0, len(stack) - 1)
+            vars = []
+            k = k + 1
+        } else if top and (starts_with(line, "variable") or decl_name(line) != "") {
+            let mut block = [line]
+            let mut j = k + 1
+            while j < len(lines) and (len(lines[j]) == 0 or slice(lines[j], 0, 1) == " ") {
+                block = push(block, lines[j])
+                j = j + 1
+            }
+            let body = trim(join(block, "\n"))
+            if starts_with(line, "variable") {
+                vars = push(vars, body)
+            } else {
+                let short = decl_name(line)
+                decls = push(decls, Decl { full: qualify(stack, short), short: short, text: body, vars: vars })
+            }
+            k = j
+        } else {
+            k = k + 1
+        }
+    }
+    return decls
+}
+
+fn mentions(d: Decl, other: Decl) -> bool {
+    for t in tokens(d.text) {
+        if t == other.short or t == other.full or ends_with(t, "." + other.short) { return true }
+    }
+    return false
+}
+
+// Indices of the declarations reachable from `entry`, in source order.
+fn reachable(decls: list<Decl>, entry: int) -> list<int> {
+    let mut seen = filled(len(decls), false)
+    seen = set_at(seen, entry, true)
+    let mut queue = [entry]
+    let mut head = 0
+    while head < len(queue) {
+        let d = decls[queue[head]]
+        head = head + 1
+        for j in range(len(decls)) {
+            if not seen[j] and mentions(d, decls[j]) {
+                seen = set_at(seen, j, true)
+                queue = push(queue, j)
+            }
+        }
+    }
+    let mut out = []
+    for j in range(len(decls)) {
+        if seen[j] { out = push(out, j) }
+    }
+    return out
+}
+
+// Full names of kept declarations become short names inside `<Core>.Slice`.
+fn localize(text: str, decls: list<Decl>, kept: list<int>) -> str {
+    let mut out = text
+    for j in kept {
+        let d = decls[j]
+        out = replace(replace(out, "@_root_." + d.full, "@" + d.short), "@" + d.full, "@" + d.short)
+        out = replace(out, "_root_." + d.full, d.short)
+        if d.full != d.short { out = replace(out, d.full, d.short) }
+    }
+    return out
+}
+
+fn main() -> nil {
+    let args = sys_args()
+    let statement = read_file(args[0])
+    let entry_name = args[1]
+    let mut decls = []
+    for k in range(3, len(args)) { decls = extend(decls, parse(read_file(args[k]))) }
+    let mut entry = -1
+    for j in range(len(decls)) {
+        if decls[j].full == entry_name { entry = j }
+    }
+    if entry < 0 {
+        print(f"entry {entry_name} not found among {len(decls)} declarations")
+        return
+    }
+    let kept = reachable(decls, entry)
+    let core = split(split(statement, "namespace ")[1], "\n")[0]
+    let head = split(statement, f"namespace {core}")[0]
+    let theorem = split(split(statement, f"namespace {core}")[1], f"end {core}")[0]
+    let close = trim(split(theorem, ":= by")[0])
+    let mut out = [trim(head), "", "-- found by RAD: github.com/peteracs/rad", "-- RAD kept the declarations reachable from the entry theorem; the rest of the slice is unused.", "", f"namespace {core}.Slice", ""]
+    let mut last_vars = ""
+    for j in kept {
+        let d = decls[j]
+        let v = join(d.vars, "\n")
+        if v != last_vars and len(v) > 0 {
+            out = push(out, v)
+            out = push(out, "")
+        }
+        last_vars = v
+        out = push(out, localize(d.text, decls, kept))
+        out = push(out, "")
+    }
+    out = push(out, f"end {core}.Slice")
+    out = push(out, "")
+    out = push(out, f"namespace {core}")
+    out = push(out, "")
+    out = push(out, f"{close} :=")
+    out = push(out, f"  @Slice.{decls[entry].short}")
+    out = push(out, "")
+    out = push(out, f"end {core}")
+    write_file(args[2], join(push(out, ""), "\n"))
+    let mut names = []
+    for j in kept { names = push(names, decls[j].short) }
+    print(f"{len(decls)} declarations parsed, {len(kept)} kept: {join(names, ", ")}")
+    print(f"wrote {args[2]}")
+}

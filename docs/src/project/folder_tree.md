@@ -277,6 +277,7 @@ rad/
         - `projects/dogfood/radsheet/incident/` - Replayable spreadsheet incident reproduction.
       - `projects/dogfood/radtrack/` - Offline-first tracker and synchronization application.
         - `projects/dogfood/radtrack/demo/` - Tracker sync, conflict, replay, and migration demonstrations.
+      - `projects/dogfood/rh-slice/` - Riemann Hypothesis pillar slices: keep only the declarations a pillar theorem reaches.
       - `projects/dogfood/schema/` - Versioned schema and saved-world migration fixtures.
       - `projects/dogfood/speculation/` - Fork, simulate, sandbox, and blast-radius examples.
       - `projects/dogfood/stockroom/` - Order-desk incident traced with `rad blame`, and a lineage-versus-intervention experiment.
