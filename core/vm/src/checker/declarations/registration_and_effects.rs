@@ -467,8 +467,11 @@ impl Checker {
             ret
         };
         self.pop_type_param_scope();
-        let body_pure = self.block_is_conservatively_pure(&decl.body);
-        let inferred_pure = !decl.is_pure && decl.effects.is_empty() && body_pure;
+        // Provisional: callees declared later still read as unrestricted here;
+        // `refine_fn_effects` settles the table once every fn is registered.
+        let inferred = self.infer_body_effect(&decl.body);
+        let inferred_pure =
+            !decl.is_pure && decl.effects.is_empty() && inferred == InferredEffect::Pure;
         if !decl.is_pure && !inferred_pure {
             if let Some(reason) = self.find_block_purity_breach(&decl.body) {
                 self.purity_breach_reasons.insert(decl.name.clone(), reason);
@@ -486,13 +489,13 @@ impl Checker {
         } else if decl.effects.is_empty() {
             if decl.is_async {
                 EffectSet::single(Effect::Async)
-            } else if self.block_is_conservatively_readonly(&decl.body) {
+            } else if inferred == InferredEffect::Readonly {
                 // Bodies that only READ the world (get/has/require/queries)
                 // infer the readonly effect — the same allowance literal
                 // closures get — so they compose into pipelines without an
                 // annotation. Anything the walker can't vouch for stays
                 // unrestricted.
-                EffectSet::single(Effect::ReadECS)
+                InferredEffect::Readonly.effect_set()
             } else {
                 EffectSet::unrestricted()
             }
@@ -569,109 +572,6 @@ impl Checker {
                 other => other,
             })
             .collect()
-    }
-
-    /// Effect inference is order-dependent at registration: a call to a
-    /// function declared LATER cannot be classified, so the caller
-    /// degrades to unrestricted ("has IO effects") even when the callee
-    /// is pure. Re-infer with the complete function table.
-    ///
-    /// The fixpoint is optimistic (greatest): every unannotated candidate is
-    /// first assumed pure, and a candidate whose body is not conservatively
-    /// pure under the current assumptions is demoted, until nothing changes.
-    /// Then the same for readonly. Starting from "unrestricted" instead
-    /// could never prove a recursive function pure, because its own call
-    /// would still read as unrestricted (GH 0018). Demotion only follows
-    /// calls, so a function with an impure operation anywhere in its call
-    /// graph still ends up impure.
-    pub(super) fn refine_fn_effects(&mut self, program: &Program) {
-        fn rank(sig_pure: bool, effects: &EffectSet) -> u8 {
-            if sig_pure || effects.is_pure() {
-                0
-            } else if *effects == EffectSet::single(Effect::ReadECS) {
-                1
-            } else {
-                2
-            }
-        }
-        // (name, body, registered signature) of each unannotated fn the
-        // registration pass did not already prove pure.
-        let mut seen = std::collections::HashSet::new();
-        let mut candidates = Vec::new();
-        for decl in &program.declarations {
-            let Decl::Fn(f) = decl else { continue };
-            // explicit annotations are contracts, not inferences
-            if f.is_pure || !f.effects.is_empty() || f.is_async {
-                continue;
-            }
-            let Some(sig) = self.functions.get(&f.name) else {
-                continue;
-            };
-            if rank(sig.is_pure, &sig.effects) == 0 || !seen.insert(f.name.clone()) {
-                continue;
-            }
-            candidates.push((f.name.clone(), &f.body, sig.is_pure, sig.effects.clone()));
-        }
-
-        // Level 0: assume all candidates pure, demote until stable.
-        for (name, _, _, _) in &candidates {
-            if let Some(sig) = self.functions.get_mut(name) {
-                sig.is_pure = true;
-                sig.effects = EffectSet::pure();
-            }
-        }
-        let mut assumed: Vec<bool> = vec![true; candidates.len()];
-        loop {
-            let mut changed = false;
-            for (i, (name, body, was_pure, was_effects)) in candidates.iter().enumerate() {
-                if assumed[i] && !self.block_is_conservatively_pure(body) {
-                    assumed[i] = false;
-                    if let Some(sig) = self.functions.get_mut(name) {
-                        sig.is_pure = *was_pure;
-                        sig.effects = was_effects.clone();
-                    }
-                    changed = true;
-                }
-            }
-            if !changed {
-                break;
-            }
-        }
-        for (i, (name, _, _, _)) in candidates.iter().enumerate() {
-            if assumed[i] {
-                self.purity_breach_reasons.remove(name);
-            }
-        }
-
-        // Level 1: of the rest, assume the unrestricted ones readonly.
-        let mut assumed_ro: Vec<bool> = candidates
-            .iter()
-            .enumerate()
-            .map(|(i, (_, _, p, e))| !assumed[i] && rank(*p, e) == 2)
-            .collect();
-        for (i, (name, _, _, _)) in candidates.iter().enumerate() {
-            if assumed_ro[i] {
-                if let Some(sig) = self.functions.get_mut(name) {
-                    sig.effects = EffectSet::single(Effect::ReadECS);
-                }
-            }
-        }
-        loop {
-            let mut changed = false;
-            for (i, (name, body, was_pure, was_effects)) in candidates.iter().enumerate() {
-                if assumed_ro[i] && !self.block_is_conservatively_readonly(body) {
-                    assumed_ro[i] = false;
-                    if let Some(sig) = self.functions.get_mut(name) {
-                        sig.is_pure = *was_pure;
-                        sig.effects = was_effects.clone();
-                    }
-                    changed = true;
-                }
-            }
-            if !changed {
-                break;
-            }
-        }
     }
 
     pub(super) fn register_type_alias(&mut self, decl: &TypeAliasDecl) {

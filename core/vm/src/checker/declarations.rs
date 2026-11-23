@@ -6,3 +6,4 @@ use std::collections::HashMap;
 include!("declarations/registration_routing.rs");
 include!("declarations/registration_and_effects.rs");
 include!("declarations/effect_analysis.rs");
+include!("declarations/effect_inference.rs");
