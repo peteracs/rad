@@ -53,10 +53,10 @@ failing repository gate.
 
 ## Publication
 
-The [mdBook](https://peteracs.github.io/rad/docs/) is the canonical
+The [mdBook](https://peteracs.github.io/rad-lang/docs/) is the canonical
 human-facing language/API output. API inventories are generated into Markdown
 before `mdbook build`, so local HTML and GitHub Pages consume the same checked
 source generation. Rust host APIs additionally use `cargo doc` and are
 published from the same Pages workflow at the [Rust API
-documentation](https://peteracs.github.io/rad/rustdoc/rad_vm/). Generated
+documentation](https://peteracs.github.io/rad-lang/rustdoc/rad_vm/). Generated
 rustdoc remains under `target/` locally and is never committed.

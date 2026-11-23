@@ -8,7 +8,7 @@
 > reason?
 
 The repository's
-[`bounded-support proof program`](https://github.com/peteracs/rad/blob/main/projects/dogfood/collatz-lab/PROOF_PROGRAM.md)
+[`bounded-support proof program`](https://github.com/peteracs/rad-lang/blob/main/projects/dogfood/collatz-lab/PROOF_PROGRAM.md)
 separates proved reductions, the exact computed base, and the remaining
 uniform renewal lemma.
 

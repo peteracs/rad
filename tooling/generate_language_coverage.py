@@ -22,7 +22,7 @@ OUTPUT = ROOT / "projects/dogfood/sovereign-grid/coverage.toml"
 BUILTIN_API = ROOT / "docs/src/reference/generated/builtin-api.md"
 BUILTIN_INDEX = ROOT / "docs/src/reference/generated/builtin-index.md"
 SYNTAX_INDEX = ROOT / "docs/src/reference/generated/syntax-rules.md"
-REPOSITORY_BLOB = "https://github.com/peteracs/rad/blob/main/"
+REPOSITORY_BLOB = "https://github.com/peteracs/rad-lang/blob/main/"
 CATEGORY_ORDER = [
     "values-control",
     "collections",

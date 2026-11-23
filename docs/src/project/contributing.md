@@ -226,13 +226,13 @@ Look for issues labeled `good-first-issue`. Great starting points:
 - Adding examples that demonstrate language features
 - Documentation improvements
 
-Use the [Good First Issue template](https://github.com/peteracs/rad/issues/new?template=good_first_issue.yml) when filing new ones — it includes a "files to touch" section to help newcomers navigate the codebase.
+Use the [Good First Issue template](https://github.com/peteracs/rad-lang/issues/new?template=good_first_issue.yml) when filing new ones — it includes a "files to touch" section to help newcomers navigate the codebase.
 
 ## Proposing Language Changes
 
 For changes that affect syntax, semantics, or the type system:
 
-1. **Start a discussion** — open a [Language Design Discussion](https://github.com/peteracs/rad/issues/new?template=language_design.yml) to gauge interest
+1. **Start a discussion** — open a [Language Design Discussion](https://github.com/peteracs/rad-lang/issues/new?template=language_design.yml) to gauge interest
 2. **Write an RFC** — once the idea is fleshed out, copy the [RFC template](rfc-template.md) and open a PR
 3. **Implement** — after the RFC is accepted, follow the compiler-pipeline checklist above
 

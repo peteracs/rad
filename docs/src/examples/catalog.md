@@ -1,6 +1,6 @@
 # Example Catalog
 
-All examples live in the repository [`examples/`](https://github.com/peteracs/rad/tree/main/examples) directory. Run any of them with:
+All examples live in the repository [`examples/`](https://github.com/peteracs/rad-lang/tree/main/examples) directory. Run any of them with:
 
 ```bash
 rad examples/<name>.rad

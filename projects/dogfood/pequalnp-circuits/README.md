@@ -32,7 +32,7 @@ such claims, into a checked Lean proof:
 | L-meta-1001 | Petersen minus a vertex (9 vertices, 12 edges) | {0, 1, 3, 7, 8} | 16 / 16 | < 0.2 s |
 | L-meta-926 | 85 graphs without 4-cycles, up to 7 vertices | one per graph | all within bound | 0.8 s |
 
-Every Lean file it writes carries the line `-- witness found by RAD explore: github.com/peteracs/rad`.
+Every Lean file it writes carries the line `-- witness found by RAD explore: github.com/peteracs/rad-lang`.
 
 ## Lower bounds by label merging
 

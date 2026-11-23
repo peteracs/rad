@@ -4,7 +4,7 @@ version = "0.5.0"
 edition = "2021"
 description = "RAD relation syntax, validation, and sealed semantic products"
 license = "MIT"
-repository = "https://github.com/peteracs/rad"
+repository = "https://github.com/peteracs/rad-lang"
 
 [dependencies]
 hex = "0.4"

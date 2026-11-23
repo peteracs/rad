@@ -158,8 +158,8 @@ So the claim is not that every Rad program has the same architecture. It's that 
 
 ---
 
-**Try it now:** [Rad Playground](https://peteracs.github.io/rad/) — runs the Rust VM as WebAssembly in your browser.
+**Try it now:** [Rad Playground](https://peteracs.github.io/rad-lang/) — runs the Rust VM as WebAssembly in your browser.
 
-**Source / spec:** [github.com/peteracs/rad](https://github.com/peteracs/rad) · [Language specification](../reference/spec.md) · [Language guarantees](../reference/guarantees.md)
+**Source / spec:** [github.com/peteracs/rad-lang](https://github.com/peteracs/rad-lang) · [Language specification](../reference/spec.md) · [Language guarantees](../reference/guarantees.md)
 
 **Implementation:** Rust bytecode VM and `rad` CLI (`rad-vm` crate) are the primary implementation and runtime. The historical Rad-to-C compiler under `experiments/c-backend/` is frozen experimental code, not part of the shipping language contract. An early Python prototype informed the design but is not part of the shipping toolchain.
