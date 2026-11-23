@@ -10,7 +10,7 @@ a proof of either. It finds or rules out spaces in exact families, with `explore
 
 | Program | What it does | Run time |
 |---|---|---|
-| `orbit_fourier.rad -- <row orbits> <col orbits>` | Every valid space in one orbit-Fourier family, e.g. `-- 4,1 4,1` | < 0.5 s each |
+| `orbit_fourier.rad -- <row orbits> <col orbits>` | Every valid space in one orbit-Fourier family of p x q matrices (p, q = the orbit sums), e.g. `-- 4,1 4,1` | < 0.5 s each |
 
 Every run is bounded by `timeout 5`.
 
@@ -79,6 +79,15 @@ per(J + t) = 24 + 6 (4 + Σr)(4 + Σc) = 120, and dim L = 3 + 3 = 6.
 
 For one orbit per side (an r x s block, the rest unused), the maximum is 4: the single
 row (or column) of zero sum.
+
+## 4 x 5 (gap L-gct-179: find dimension 7)
+
+For p x q the per-type sum runs over injections Fin p ↪ Fin q; the lemma holds with the
+constant (q − s)!/(q − p)! in place of (5 − s)!, and a monomial has degree at most
+min(p, q). All 35 pairs (5 row partitions of 4, 7 column partitions of 5) end
+`exhausted`. The largest valid space is **5**, at rows (3,1) with columns (3,2) or (4,1):
+below the record 6 (one row plus one column), so a 7 needs generators whose row and
+column orbits differ from generator to generator, as in the accepted L-gct-198 witness.
 
 ## RAD findings
 

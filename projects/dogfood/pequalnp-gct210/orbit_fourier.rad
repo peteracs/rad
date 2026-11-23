@@ -2,7 +2,7 @@
 //
 //   rad orbit_fourier.rad -- <row orbits> <column orbits>      e.g. -- 3,2 4,1
 //
-// The gap: every linear space L of 5 x 5 complex matrices with per(J + t) = 120
+// The gap (L-gct-210): every linear space L of 5 x 5 complex matrices with per(J + t) = 120
 // for all t in L has dim L <= 8. A space of dimension 9 refutes it.
 //
 // Rank-one lemma (README.md): for L = span{u_v w_v^T}, the coefficient of a
@@ -12,7 +12,7 @@
 //
 // The family: the rows are cut into consecutive orbits of the given sizes, and
 // so are the columns. A generator is (row orbit O, character a of Z_|O| on O,
-// zero elsewhere) x (column orbit P, character b of Z_|P| on P). There are 25,
+// zero elsewhere) x (column orbit P, character b of Z_|P| on P). There are p * q,
 // linearly independent. Each variable's u lives on one row orbit, so the row
 // product splits orbit by orbit and its coefficient is the product of the
 // orbits' coefficients: it is zero when one orbit's part is. An orbit's part is
@@ -35,6 +35,11 @@ fn parse_orbits(text: str) -> list<int> {
 let ARGS = sys_args()
 let ROW_ORBITS = parse_orbits(if len(ARGS) > 0 { ARGS[0] } else { "5" })
 let COL_ORBITS = parse_orbits(if len(ARGS) > 1 { ARGS[1] } else { "4,1" })
+// p x q matrices: the orbit sizes add up to the row and column counts.
+let ROWS = sum(ROW_ORBITS)
+let COLS = sum(COL_ORBITS)
+// A monomial picks at most one generator per row and per column.
+let MAX_DEGREE = min(ROWS, COLS)
 
 // slot -> orbit index and character, orbit by orbit.
 fn slot_orbit(orbits: list<int>) -> list<int> {
@@ -134,8 +139,8 @@ fn monomial_vanishes(m: list<int>) -> bool {
     let mut rows = []
     let mut cols = []
     for v in m {
-        rows = push(rows, int_div(v, 5))
-        cols = push(cols, v % 5)
+        rows = push(rows, int_div(v, COLS))
+        cols = push(cols, v % COLS)
     }
     return side_vanishes(rows, ROW_ORBIT, ROW_CHAR, ROW_ORBITS) or side_vanishes(cols, COL_ORBIT, COL_CHAR, COL_ORBITS)
 }
@@ -153,7 +158,7 @@ fn all_vanish(pool: list<int>, start: int, room: int, base: list<int>) -> bool {
 
 // `ids` is valid; is ids + [w]? Only monomials containing w are new.
 fn extends(ids: list<int>, w: int) -> bool {
-    return all_vanish(push(ids, w), 0, 4, [w])
+    return all_vanish(push(ids, w), 0, MAX_DEGREE - 1, [w])
 }
 
 fn units(n: int) -> list<int> {
@@ -205,7 +210,7 @@ fn canonical(ids: list<int>) -> list<int> {
     for p in ROW_SCALINGS {
         for q in COL_SCALINGS {
             let mut img = []
-            for v in ids { img = push(img, p[int_div(v, 5)] * 5 + q[v % 5]) }
+            for v in ids { img = push(img, p[int_div(v, COLS)] * COLS + q[v % COLS]) }
             let s = sort(img)
             let c = encode(s)
             if c < best_code {
@@ -225,7 +230,7 @@ ecs fn grow_to(ids: list<int>, target: int, label: str) -> nil {
 }
 
 system Extend(g: Grow, writes Grow) {
-    for w in range(25) {
+    for w in range(ROWS * COLS) {
         if not contains(g.ids, w) and extends(g.ids, w) {
             grow_to(push(g.ids, w), g.target, str(w))
         }
@@ -236,8 +241,8 @@ system Extend(g: Grow, writes Grow) {
 fn show(ids: list<int>) -> str {
     let mut parts = []
     for v in ids {
-        let r = int_div(v, 5)
-        let c = v % 5
+        let r = int_div(v, COLS)
+        let c = v % COLS
         parts = push(parts, f"({ROW_ORBIT[r]}.{ROW_CHAR[r]},{COL_ORBIT[c]}.{COL_CHAR[c]})")
     }
     return join(parts, " ")
@@ -246,7 +251,7 @@ fn show(ids: list<int>) -> str {
 fn main() -> nil {
     let every = explore(fork(), [system::Extend], {"key": "Grow.key", "collect": "Grow.size"})
     let mut largest = 0
-    let mut per_size = filled(26, 0)
+    let mut per_size = filled(ROWS * COLS + 1, 0)
     for n in every["collected"] {
         if n > largest { largest = n }
         per_size = set_at(per_size, n, per_size[n] + 1)
