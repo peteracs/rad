@@ -266,6 +266,8 @@ rad/
         - `projects/dogfood/oracle/probes/` - Narrow performance and semantic probes.
           - `projects/dogfood/oracle/probes/purity/` - Purity and effect-boundary probes.
       - `projects/dogfood/orianna_gui/` - Orianna ability and browser-arena RAD sources.
+      - `projects/dogfood/pequalnp-circuits/` - pequalnp circuit witnesses emitted as Lean proofs, and desk-step triage.
+      - `projects/dogfood/pequalnp-gct210/` - Level spaces of subpermanent sums: orbit Fourier search and obstruction cores.
       - `projects/dogfood/radgui/` - Generic declarative GUI and RADSCOPE dogfood.
         - `projects/dogfood/radgui/targets/` - Runnable applications rendered through RADGUI.
       - `projects/dogfood/radrad/` - RAD programs that inspect or exercise RAD itself.
