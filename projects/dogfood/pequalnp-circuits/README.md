@@ -33,3 +33,26 @@ such claims, into a checked Lean proof:
 | L-meta-926 | 85 graphs without 4-cycles, up to 7 vertices | one per graph | all within bound | 0.8 s |
 
 Every Lean file it writes carries the line `-- witness found by RAD explore: github.com/peteracs/rad`.
+
+## Lower bounds by label merging
+
+`label_merge.rad` proves the other direction for steps that ask for at least s gates in every
+fan-in-two gate list right, on a band of input weights, for several outputs that are each the
+AND (or the OR) of a line of points:
+
+    rad label_merge.rad -- <desk step .json> <output .lean> label_merge.lean.tmpl
+
+The argument: label the N input points and merge labels like union-find, one gate at a time.
+Every wire depends only on the points of one label, and a gate of fan-in two merges at most two
+labels, so m gates leave at least N - m labels. Each output depends on every point of its line,
+so the lines' points fall into C classes and m >= N - C. The general half is
+`label_merge.lean.tmpl`; the program reads the lines and band from the statement, counts the
+classes with union-find, refuses when the claim is above N - C, finds with `explore` the band
+inputs on which each output flips, checks every one, and writes the label chains between lines.
+
+| Step | Lines | Classes | Bound | Lean check |
+| --- | --- | --- | --- | --- |
+| L-meta-1019 (three concurrent lines, plane of order 3, band 6-7) | 3 | 4 of 13 points | 9 | 2.7 s, warm REPL |
+
+L-meta-1019 itself was accepted from another pull request first; the program is ready for the
+next step of the family.

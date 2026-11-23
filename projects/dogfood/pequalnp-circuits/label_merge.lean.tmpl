@@ -1,0 +1,107 @@
+import Mathlib
+import PEqualNP.Defs
+
+open PEqualNP.CircuitLowerBounds
+
+-- witness found by RAD explore: github.com/peteracs/rad
+-- Labels on the @N@ input points, merged like union-find one gate at a time: every wire depends
+-- only on the points of one label, and a gate of fan-in two merges at most two labels, so m
+-- gates leave at least @N@ - m labels. Each output depends on every point of its line (band
+-- inputs found by RAD explore), lines that meet share a label, and the count follows.
+
+private def @P@W (gs : List Gate) (x : List Bool) : List Bool :=
+  gs.foldl (fun w g => w ++ [g.op.eval (g.inputs.map fun i => w.getD i false)]) x
+
+private theorem @P@W_append (gs : List Gate) (g : Gate) (x : List Bool) :
+    @P@W (gs ++ [g]) x =
+      @P@W gs x ++ [g.op.eval (g.inputs.map fun i => (@P@W gs x).getD i false)] := by
+  simp [@P@W, List.foldl_append]
+
+private theorem @P@W_length (gs : List Gate) (x : List Bool) :
+    (@P@W gs x).length = x.length + gs.length := by
+  induction gs using List.reverseRecOn with
+  | nil => simp [@P@W]
+  | append_singleton gs g ih => rw [@P@W_append]; simp [ih]; omega
+
+private theorem @P@_ofFn (x : Fin @N@ → Bool) (w : ℕ) :
+    (List.ofFn x).getD w false = if h : w < @N@ then x ⟨w, h⟩ else false := by
+  split_ifs with h
+  · rw [List.getD_eq_getElem _ _ (by simp [h]), List.getElem_ofFn]
+  · rw [List.getD_eq_default _ _ (by simp; omega)]
+
+private theorem @P@_two (l : List ℕ) (hl : l.length ≤ 2) (i : ℕ) (hi : i ∈ l) :
+    i = l.getD 0 0 ∨ (2 ≤ l.length ∧ i = l.getD 1 0) := by
+  rcases l with _ | ⟨u, _ | ⟨v, _ | ⟨w, t⟩⟩⟩ <;> simp_all
+
+private theorem @P@_key (gs : List Gate) (h : ∀ g ∈ gs, g.inputs.length ≤ 2) :
+    ∃ L : Fin @N@ → ℕ, @N@ ≤ (Finset.univ.image L).card + gs.length ∧
+      ∀ w : ℕ, ∃ l : ℕ, ∀ x y : Fin @N@ → Bool, (∀ p, L p = l → x p = y p) →
+        (@P@W gs (List.ofFn x)).getD w false = (@P@W gs (List.ofFn y)).getD w false := by
+  induction gs using List.reverseRecOn with
+  | nil =>
+    refine ⟨fun p => p.val, ?_, ?_⟩
+    · rw [Finset.card_image_of_injective _ (fun a b hab => Fin.ext hab)]; simp
+    · intro w
+      by_cases hw : w < @N@
+      · exact ⟨w, fun x y hxy => by simp only [@P@W, List.foldl_nil, @P@_ofFn, hw, ↓reduceDIte]; exact hxy ⟨w, hw⟩ rfl⟩
+      · exact ⟨0, fun x y _ => by simp only [@P@W, List.foldl_nil, @P@_ofFn, hw, ↓reduceDIte]⟩
+  | append_singleton gs g ih =>
+    obtain ⟨L, hcard, hw⟩ := ih (fun g' hg' => h g' (by simp [hg']))
+    have hg : g.inputs.length ≤ 2 := h g (by simp)
+    choose lab hlab using hw
+    set a := lab (g.inputs.getD 0 0) with ha
+    set b := if 2 ≤ g.inputs.length then lab (g.inputs.getD 1 0) else a with hb
+    let f : ℕ → ℕ := fun t => if t = b then a else t
+    have lift : ∀ (l : ℕ) (x y : Fin @N@ → Bool), (∀ p, f (L p) = f l → x p = y p) →
+        ∀ p, L p = l → x p = y p := fun l x y H p hp => H p (by rw [hp])
+    refine ⟨fun p => f (L p), ?_, ?_⟩
+    · have hsub : (Finset.univ.image L).erase b ⊆ Finset.univ.image (fun p => f (L p)) := by
+        intro t ht
+        simp only [Finset.mem_erase, Finset.mem_image, Finset.mem_univ, true_and] at ht ⊢
+        obtain ⟨hne, p, rfl⟩ := ht
+        exact ⟨p, by simp [f, hne]⟩
+      have h1 := Finset.card_le_card hsub
+      have h2 := Finset.pred_card_le_card_erase (s := Finset.univ.image L) (a := b)
+      simp only [List.length_append, List.length_singleton]; omega
+    · intro w
+      have hlen : ∀ x : Fin @N@ → Bool, (@P@W gs (List.ofFn x)).length = @N@ + gs.length := by
+        intro x; simp [@P@W_length]
+      by_cases hw1 : w < @N@ + gs.length
+      · refine ⟨f (lab w), fun x y hxy => ?_⟩
+        rw [@P@W_append, @P@W_append, List.getD_append _ _ _ _ (by rw [hlen]; exact hw1),
+          List.getD_append _ _ _ _ (by rw [hlen]; exact hw1)]
+        exact hlab w x y (lift _ x y hxy)
+      · by_cases hw2 : w = @N@ + gs.length
+        · refine ⟨a, fun x y hxy => ?_⟩
+          rw [@P@W_append, @P@W_append, List.getD_append_right _ _ _ _ (by rw [hlen]; omega),
+            List.getD_append_right _ _ _ _ (by rw [hlen]; omega), hlen, hlen]
+          simp only [hw2, Nat.sub_self, List.getD_cons_zero]
+          congr 1
+          apply List.map_congr_left
+          intro i hi
+          have hfi : f (lab i) = a := by
+            rcases @P@_two _ hg i hi with hi0 | ⟨h2, hi1⟩
+            · subst hi0; simp only [f, ← ha]; split_ifs <;> rfl
+            · subst hi1; simp [f, hb, h2]
+          exact hlab i x y (lift _ x y (by rw [hfi]; exact hxy))
+        · refine ⟨0, fun x y _ => ?_⟩
+          rw [List.getD_eq_default _ _ (by rw [@P@W_length]; simp; omega),
+            List.getD_eq_default _ _ (by rw [@P@W_length]; simp; omega)]
+
+private theorem @P@_dep (gates : List Gate) (L : Fin @N@ → ℕ) (l w : ℕ)
+    (hl : ∀ x y : Fin @N@ → Bool, (∀ p, L p = l → x p = y p) →
+      (@P@W gates (List.ofFn x)).getD w false = (@P@W gates (List.ofFn y)).getD w false)
+    (v : Fin @N@) (S : Finset (Fin @N@))
+    (ht : Circuit.eval ⟨gates, w⟩ (List.ofFn fun i => decide (i ∈ S)) = true)
+    (hf : Circuit.eval ⟨gates, w⟩ (List.ofFn fun i => decide (i ∈ S.erase v)) = false) :
+    L v = l := by
+  by_contra hne
+  have h := hl (fun i => decide (i ∈ S)) (fun i => decide (i ∈ S.erase v)) (by
+    intro p hp
+    have hpv : p ≠ v := fun e => hne (e ▸ hp)
+    simp [Finset.mem_erase, hpv])
+  have e1 : Circuit.eval ⟨gates, w⟩ (List.ofFn fun i => decide (i ∈ S)) =
+      (@P@W gates (List.ofFn fun i => decide (i ∈ S))).getD w false := rfl
+  have e2 : Circuit.eval ⟨gates, w⟩ (List.ofFn fun i => decide (i ∈ S.erase v)) =
+      (@P@W gates (List.ofFn fun i => decide (i ∈ S.erase v))).getD w false := rfl
+  rw [e1] at ht; rw [e2] at hf; rw [ht, hf] at h; exact Bool.noConfusion h
