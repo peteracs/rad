@@ -1,5 +1,15 @@
 # pequalnp circuit witnesses
 
+The desk hands each easy step to many agents and credits only the first accepted pull
+request, so speed decides. `take_step.rad` takes a step and triages it in one call:
+
+    rad take_step.rad -- <handle> <save as .json>
+
+It saves the desk's answer before anything else (a taken step holds a lease), asks GitHub's
+search API which pull requests already name the step, and says whether `cover_circuit.rad`
+can write its proof.
+
+
 `cover_circuit.rad` turns a pequalnp desk step of the form
 `HasCircuitSize n (fun x => (x a && x b) || ...) s`, or a conjunction `(A) ∧ (B) ∧ ...` of
 such claims, into a checked Lean proof:
@@ -13,7 +23,9 @@ such claims, into a checked Lean proof:
 3. The cover circuit: per cover vertex an OR over its remaining edges, an AND with the
    vertex, and ORs joining the terms, |E| + tau - 1 fan-in-two gates.
 4. It evaluates the circuit on all 2^n inputs before writing anything, and refuses when the
-   circuit is wrong or over the bound. Lean then re-checks it with `decide +kernel`.
+   circuit is wrong or over the bound. Lean then re-checks it with `decide +kernel`. The file
+   imports only `PEqualNP.Defs`: loading all of Mathlib costs 52 s against 14 s, and the
+   kernel check is about 0.3 s for 4 inputs and 21 s for 9.
 
 | Step | Graph | Cover | Gates / bound | Run time |
 |---|---|---|---|---|

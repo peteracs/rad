@@ -161,7 +161,6 @@ fn lean_witness(c: Chain) -> str {
 
 fn lean_file(module: str, statement: str, ws: list<Witness>) -> str {
     let mut lines = [
-        "import Mathlib",
         "import PEqualNP.Defs",
         "",
         "-- witness found by RAD explore: github.com/peteracs/rad",
