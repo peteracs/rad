@@ -533,6 +533,61 @@ mod explore_tests {
         assert!(error.contains("cannot be used in explore()"), "{error}");
     }
 
+    // GH 0018: an unannotated recursive helper is pure when its body is.
+    #[test]
+    fn a_move_system_may_call_a_recursive_pure_helper() {
+        let out = lines(
+            r#"
+            resource S { n: int = 0 }
+            fn depth(k: int) -> int {
+                if k == 0 { return 0 }
+                return 1 + depth(k - 1)
+            }
+            fn even(k: int) -> bool {
+                if k == 0 { return true }
+                return odd(k - 1)
+            }
+            fn odd(k: int) -> bool {
+                if k == 0 { return false }
+                return even(k - 1)
+            }
+            ecs fn step(n: int) -> nil {
+                set_resource(S, S { n: n })
+                offer("next")
+            }
+            system Count(s: S, writes S) {
+                if s.n < 3 and even(2) { step(s.n + depth(1)) }
+            }
+            let r = explore(fork(), [system::Count], {})
+            print(f"{r["status"]} seen={r["seen"]}")
+            "#,
+        );
+        assert_eq!(out, vec!["exhausted seen=4"]);
+    }
+
+    // GH 0018: optimism about recursion must not hide IO further down.
+    #[test]
+    fn a_recursive_helper_that_reaches_io_is_still_refused() {
+        let error = failure(
+            r#"
+            resource S { n: int = 0 }
+            fn loud(k: int) -> int {
+                if k == 0 { print("bottom") return 0 }
+                return 1 + loud(k - 1)
+            }
+            ecs fn step(n: int) -> nil {
+                set_resource(S, S { n: n })
+                offer("next")
+            }
+            system Count(s: S, writes S) {
+                if s.n < 3 { step(s.n + loud(1)) }
+            }
+            let r = explore(fork(), [system::Count], {})
+            "#,
+        );
+        assert!(error.contains("cannot be used in explore()"), "{error}");
+    }
+
     #[test]
     fn exploring_inside_a_simulation_is_refused() {
         let error = failure(&jugs(
