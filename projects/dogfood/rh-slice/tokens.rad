@@ -3,7 +3,8 @@
 // token however long, and everything else is a string, char, number, operator or single symbol.
 
 fn is_space(ch: str) -> bool {
-    return ch == " " or ch == "\n" or ch == "\t" or ch == "\r" or ord(ch) == 12 or ord(ch) == 11 or ord(ch) == 160
+    let c = ord(ch)
+    return c == 32 or c == 10 or c == 9 or c == 13 or c == 12 or c == 11 or c == 160
 }
 
 fn in_ident_ranges(c: int) -> bool {
@@ -12,12 +13,14 @@ fn in_ident_ranges(c: int) -> bool {
 
 fn ident_start(ch: str) -> bool {
     let c = ord(ch)
-    return (c >= 65 and c <= 90) or (c >= 97 and c <= 122) or c == 95 or in_ident_ranges(c)
+    if c < 128 { return (c >= 97 and c <= 122) or (c >= 65 and c <= 90) or c == 95 }
+    return in_ident_ranges(c)
 }
 
 fn ident_continue(ch: str) -> bool {
     let c = ord(ch)
-    return ident_start(ch) or (c >= 48 and c <= 57) or c == 39 or (c >= 8320 and c <= 8329) or (c >= 8304 and c <= 8313)
+    if c < 128 { return (c >= 97 and c <= 122) or (c >= 65 and c <= 90) or c == 95 or (c >= 48 and c <= 57) or c == 39 }
+    return in_ident_ranges(c) or (c >= 8320 and c <= 8329) or (c >= 8304 and c <= 8313)
 }
 
 fn is_digit(ch: str) -> bool {
