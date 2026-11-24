@@ -197,7 +197,11 @@ fn parse(path: str) -> Source {
             }
             let ns = current_ns(scopes)
             let mut full = written
-            if len(ns) > 0 { full = ns + "." + written }
+            // `theorem _root_.A.b` names `A.b` whatever namespace it is written in.
+            if starts_with(written, "_root_.") {
+                full = slice(written, 7, len(written))
+                written = full
+            } else if len(ns) > 0 { full = ns + "." + written }
             let short = last_part(written)
             let mut opens = prefix_opens
             let mut vars = []
