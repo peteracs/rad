@@ -41,12 +41,13 @@ fn separators() -> list<str> {
 }
 
 fn symbols() -> list<str> {
-    return ["→", "↔", "≤", "≥", "≠", "⊢", "⟨", "⟩", "∀", "∃", "λ", "↦", "∧", "∨", "¬", "∈", "∉", "⊆", "∪", "∩", "∑", "∏", "∫", "‖", "⁻", "¹", "•", "∘", "↑", "⇑", "≃", "×", "⊓", "⊔", "≫", "⋯", "·"]
+    return ["→", "↔", "≤", "≥", "≠", "⊢", "⟨", "⟩", "∀", "∃", "λ", "↦", "∧", "∨", "¬", "∈", "∉", "⊆", "∪", "∩", "∑", "∏", "∫", "‖", "⁻", "¹", "•", "∘", "↑", "⇑", "≃", "×", "⊓", "⊔", "≫", "⋯", "·",
+        "⌈", "⌉", "⌊", "⌋", "‹", "›", "«", "»", "⦃", "⦄", "⟦", "⟧", "⟪", "⟫", "∣", "≡", "⊤", "⊥", "√", "∞", "⊗", "⊕", "≅", "≪", "∖", "⁅", "⁆", "⊂", "⊃", "⊇", "∆", "≈", "⟶", "⥤", "⋆", "∗", "⊞", "⊠", "†", "ᵀ", "ᴴ", "⬝", "∠", "⨆", "⨅", "⋃", "⋂", "∮", "∂", "∇"]
 }
 
 // The declared name after the keyword, skipping modifiers such as `private` or `@[simp]`.
 fn decl_name(line: str) -> str {
-    let kinds = ["theorem", "lemma", "def", "abbrev", "instance", "structure", "class", "inductive"]
+    let kinds = ["theorem", "lemma", "def", "abbrev", "instance", "structure", "class", "inductive", "alias"]
     let words = split(trim(line), " ")
     for k in range(len(words) - 1) {
         if contains(kinds, words[k]) {
@@ -66,12 +67,13 @@ fn is_root(head: str) -> bool {
     return false
 }
 
+// A line starting at column 0 begins a command, except a proof's `by` written flush left.
 fn is_top(line: str) -> bool {
-    return len(line) > 0 and slice(line, 0, 1) != " "
+    return len(line) > 0 and slice(line, 0, 1) != " " and line != "by" and not starts_with(line, "by ")
 }
 
 fn is_dropped(line: str) -> bool {
-    return line == "module"
+    return line == "module" or line == "example" or starts_with(line, "example ") or starts_with(line, "example:")
 }
 
 // Module-system section markers as plain sections: `@[expose] public section` is `section` and
@@ -120,13 +122,26 @@ fn is_substantive(line: str) -> bool {
 }
 
 // Namespaces named by `open A B (x) hiding ...` or `open scoped A ... in`.
+// `line` may be a whole block: an `open` can continue on indented lines.
 fn open_names(line: str) -> list<str> {
     let mut out = []
-    for w in slice(split(trim(line), " "), 1, len(split(trim(line), " "))) {
+    let words = split(trim(replace(line, "\n", " ")), " ")
+    for w in slice(words, 1, len(words)) {
         if w == "in" or w == "hiding" or w == "renaming" or starts_with(w, "(") { return out }
         if w != "scoped" and len(w) > 0 { out = push(out, w) }
     }
     return out
+}
+
+// `A.B.f` gives `A.B`; a name with no dot gives "".
+fn parent_of(name: str) -> str {
+    let parts = split(name, ".")
+    return join(slice(parts, 0, len(parts) - 1), ".")
+}
+
+fn last_part(name: str) -> str {
+    let parts = split(name, ".")
+    return parts[len(parts) - 1]
 }
 
 fn module_of(path: str) -> str {
@@ -167,14 +182,23 @@ fn parse(path: str) -> Source {
         } else if starts_with(line, "import ") or starts_with(line, "public import ") {
             imports = push(imports, trim(split(line, "import ")[1]))
         } else if is_dropped(line) {
-        } else if is_prefix(line) {
+            prefix = ""
+            prefix_opens = []
+        } else if is_prefix(line) or is_modifier(text) {
+            // A modifier can span lines (`omit [..]\n  [..] in`): its ` in` ends the whole block.
             prefix = prefix + text + "\n"
-            if starts_with(line, "open ") { prefix_opens = extend(prefix_opens, open_names(line)) }
+            if starts_with(line, "open ") { prefix_opens = extend(prefix_opens, open_names(text)) }
         } else if decl_name(line) != "" {
-            let short = decl_name(line)
+            let mut written = decl_name(line)
+            // An anonymous `instance [..] : C X` or `instance (priority := n) : ...` has no name to
+            // index; a unique one keeps it apart from the others (nothing refers to it by name).
+            for b in ["[", "(", "{", "⦃"] {
+                if starts_with(written, b) { written = "anon_" + replace(module_of(path), ".", "_") + "_" + str(len(items)) }
+            }
             let ns = current_ns(scopes)
-            let mut full = short
-            if len(ns) > 0 { full = ns + "." + short }
+            let mut full = written
+            if len(ns) > 0 { full = ns + "." + written }
+            let short = last_part(written)
             let mut opens = prefix_opens
             let mut vars = []
             for s in scopes {
@@ -193,14 +217,14 @@ fn parse(path: str) -> Source {
                 scopes = slice(scopes, 0, top)
             } else if starts_with(line, "open ") {
                 let s = scopes[top]
-                scopes = set_at(scopes, top, Scope { ns: s.ns, opens: extend(s.opens, open_names(line)), vars: s.vars, closer: s.closer })
+                scopes = set_at(scopes, top, Scope { ns: s.ns, opens: extend(s.opens, open_names(text)), vars: s.vars, closer: s.closer })
             } else if starts_with(line, "variable") {
                 let s = scopes[top]
                 scopes = set_at(scopes, top, Scope { ns: s.ns, opens: s.opens, vars: push(s.vars, text), closer: s.closer })
             }
             let mut opens = []
             for s in scopes { opens = extend(opens, s.opens) }
-            items = push(items, Item { kind: "keep", full: "", short: "", text: prefix + text, ns: current_ns(scopes), opens: distinct(opens), vars: "", root: is_substantive(line) })
+            items = push(items, Item { kind: "keep", full: "", short: "", text: prefix + text, ns: current_ns(scopes), opens: distinct(opens), vars: "", root: is_substantive(line) or (starts_with(line, "open ") and contains_str(line, "(")) })
             prefix = ""
             prefix_opens = []
         }
@@ -230,27 +254,77 @@ fn contains_str(text: str, part: str) -> bool {
     return len(split(text, part)) > 1
 }
 
-// Sources in import order: a module comes after every source module it imports.
+// Sources in import order: a module comes after every source module it imports, and as late as
+// that allows (just before the first module that needs it). In one file everything earlier is
+// visible, so a module placed early could shadow names (an `export` into an enclosing
+// namespace) for a module that never imported it.
 fn ordered(sources: list<Source>) -> list<Source> {
     let mut modules = {}
     for src in sources { modules = merge(modules, { src.module: true }) }
-    let mut out = []
+    // How many unplaced sources still import each module.
+    let mut waiting = {}
+    for src in sources {
+        for m in distinct(src.imports) {
+            if get_or(modules, m, false) { waiting = merge(waiting, { m: get_or(waiting, m, 0) + 1 }) }
+        }
+    }
+    let late = shadowing(sources, modules)
+    // Fill from the end: a module goes in once everything importing it is placed. Modules in
+    // `late` go first (so they end up last), so a module that does not import them never sees
+    // their names.
+    let mut back = []
     let mut placed = {}
-    while len(out) < len(sources) {
-        for src in sources {
-            if not get_or(placed, src.module, false) {
-                let mut ready = true
-                for m in src.imports {
-                    if get_or(modules, m, false) and not get_or(placed, m, false) { ready = false }
+    let mut prefer = true
+    while len(back) < len(sources) {
+        let before = len(back)
+        let mut k = len(sources) - 1
+        while k >= 0 {
+            let src = sources[k]
+            if not get_or(placed, src.module, false) and get_or(waiting, src.module, 0) == 0 and get_or(late, src.module, false) == prefer {
+                back = push(back, src)
+                placed = merge(placed, { src.module: true })
+                for m in distinct(src.imports) {
+                    if get_or(modules, m, false) { waiting = merge(waiting, { m: waiting[m] - 1 }) }
                 }
-                if ready {
-                    out = push(out, src)
-                    placed = merge(placed, { src.module: true })
+            }
+            k = k - 1
+        }
+        // Back to the late modules as soon as one is ready again.
+        if len(back) == before { prefer = not prefer } else { prefer = true }
+    }
+    let mut out = []
+    let mut j = len(back) - 1
+    while j >= 0 {
+        out = push(out, back[j])
+        j = j - 1
+    }
+    return out
+}
+
+// Modules with an `export` line (it adds names to an enclosing namespace, which Lean
+// prefers to an opened one) and every module importing one of them.
+fn shadowing(sources: list<Source>, modules: map<str, bool>) -> map<str, bool> {
+    let mut late = {}
+    for src in sources {
+        for item in src.items {
+            if starts_with(item.text, "export ") { late = merge(late, { src.module: true }) }
+        }
+    }
+    let mut grew = true
+    while grew {
+        grew = false
+        for src in sources {
+            if not get_or(late, src.module, false) {
+                for m in src.imports {
+                    if get_or(late, m, false) and not get_or(late, src.module, false) {
+                        late = merge(late, { src.module: true })
+                        grew = true
+                    }
                 }
             }
         }
     }
-    return out
+    return late
 }
 
 // `A.B.C` gives `A.B.C`, `A.B`, `A`.
@@ -302,19 +376,37 @@ fn resolve(name: str, bases: list<str>, by_full: map<str, list<int>>, by_short: 
         let head = join(slice(parts, 0, k), ".")
         for c in candidates(head, bases) {
             let hit = get_or(by_full, c, [])
-            if len(hit) > 0 { return hit }
+            if len(hit) > 0 { return extend(hit, fields_after(parts, k, by_short)) }
         }
         k = k - 1
     }
-    // Not a declaration or namespace path: dot-notation on a local, so any later component may
-    // name a declaration through its type's namespace.
-    let mut known = false
-    for c in candidates(parts[0], bases) {
-        if len(get_or(spaces, c, [])) > 0 { known = true }
-    }
+    // Not a declaration: dot-notation on a local, so any later component may name a declaration
+    // through its type's namespace. A local can share its name with a namespace (`S.Zhat` with a
+    // namespace `S` in scope), so a namespace head does not rule this out.
+    return fields_after(parts, 1, by_short)
+}
+
+// Later components of `x.f.g` after the part that resolved may be dot-notation fields (`D` a
+// local sharing a declaration's name).
+fn fields_after(parts: list<str>, k: int, by_short: map<str, list<int>>) -> list<int> {
     let mut out = []
-    if not known and len(parts) > 1 {
-        for p in slice(parts, 1, len(parts)) { out = extend(out, get_or(by_short, p, [])) }
+    for p in slice(parts, k, len(parts)) { out = extend(out, get_or(by_short, p, [])) }
+    return out
+}
+
+// The names the explicit `open X (a b)` and `export X (a b)` lines of `text` bring in, as `X.a`
+// and `X.b`.
+fn explicit_opens(text: str) -> list<str> {
+    let mut out = []
+    for line in split(text, "\n") {
+        if (starts_with(line, "open ") or starts_with(line, "export ")) and contains_str(line, "(") {
+            let inside = split(split(line, "(")[1], ")")[0]
+            for o in open_names(line) {
+                for n in split(inside, " ") {
+                    if len(n) > 0 { out = push(out, o + "." + n) }
+                }
+            }
+        }
     }
     return out
 }
@@ -365,13 +457,12 @@ fn all_prefixes(names: list<str>, at: list<int>) -> list<str> {
     return out
 }
 
-// Declarations reachable from the entry, the roots, and the names in kept root lines.
-fn reach(decls: list<Item>, keeps: list<Item>, firsts: list<int>, entry: int, full_index: map<str, list<int>>, short_index: map<str, list<int>>, spaces: map<str, list<str>>, known_parts: map<str, list<str>>) -> list<bool> {
-    let mut seen = filled(len(decls), false)
-    let mut queue = [entry]
-    seen = set_at(seen, entry, true)
-    for j in firsts {
-        if decls[j].root and not seen[j] {
+// `seen` grown by the declarations reachable from `start` and from the names in `keeps` lines.
+fn reach(decls: list<Item>, keeps: list<Item>, start: list<int>, seen0: list<bool>, full_index: map<str, list<int>>, short_index: map<str, list<int>>, spaces: map<str, list<str>>, known_parts: map<str, list<str>>) -> list<bool> {
+    let mut seen = seen0
+    let mut queue = []
+    for j in start {
+        if not seen[j] {
             seen = set_at(seen, j, true)
             queue = push(queue, j)
         }
@@ -379,7 +470,7 @@ fn reach(decls: list<Item>, keeps: list<Item>, firsts: list<int>, entry: int, fu
     // Names in kept attribute, notation and instance lines are reached as well.
     for item in keeps {
         let bases = bases_of(item.ns, item.opens)
-        for name in names_in(item.text) {
+        for name in extend(names_in(item.text), explicit_opens(item.text)) {
             for j in resolve(name, bases, full_index, short_index, spaces, known_parts) {
                 if not seen[j] {
                     seen = set_at(seen, j, true)
@@ -392,8 +483,9 @@ fn reach(decls: list<Item>, keeps: list<Item>, firsts: list<int>, entry: int, fu
     while head < len(queue) {
         let d = decls[queue[head]]
         head = head + 1
-        let bases = bases_of(d.ns, d.opens)
-        for name in names_in(d.text + "\n" + d.vars) {
+        // Lean resolves names in `def A.B.f` under `A.B` as well as the current namespace.
+        let bases = bases_of(parent_of(d.full), d.opens)
+        for name in extend(names_in(d.text + "\n" + d.vars), explicit_opens(d.text)) {
             for j in resolve(name, bases, full_index, short_index, spaces, known_parts) {
                 if not seen[j] {
                     seen = set_at(seen, j, true)
@@ -405,12 +497,61 @@ fn reach(decls: list<Item>, keeps: list<Item>, firsts: list<int>, entry: int, fu
     return seen
 }
 
+// The modules of sources with at least one kept declaration (those are emitted).
+fn emitted_sources(sources: list<Source>, seen: list<bool>, full_index: map<str, list<int>>) -> map<str, bool> {
+    let mut out = {}
+    let mut index = 0
+    for src in sources {
+        for item in src.items {
+            if item.kind == "decl" {
+                if seen[index] and get_or(full_index, item.full, [-1])[0] == index { out = merge(out, { src.module: true }) }
+                index = index + 1
+            }
+        }
+    }
+    return out
+}
+
+// The `variable` lines of emitted sources not yet in `done`.
+fn new_variable_lines(sources: list<Source>, seen: list<bool>, full_index: map<str, list<int>>, done: map<str, bool>) -> list<Item> {
+    let emitted = emitted_sources(sources, seen, full_index)
+    let mut out = []
+    for src in sources {
+        if get_or(emitted, src.module, false) and not get_or(done, src.module, false) {
+            for item in src.items {
+                if item.kind == "keep" and starts_with(item.text, "variable") { out = push(out, item) }
+            }
+        }
+    }
+    return out
+}
+
 // `[[key, index], ...]` as a map from key to its indices, in order.
 fn index_pairs(pairs: list<list<any>>) -> map<str, list<int>> {
     let grouped = group_by(pairs, fn(e: list<any>) -> str { return e[0] })
     let mut out = {}
     for k in keys(grouped) {
         out = merge(out, { k: map(grouped[k], fn(e: list<any>) -> int { return e[1] }) })
+    }
+    return out
+}
+
+// `needed` plus the namespaces that `item`'s `open` lines (its own or an `open ... in` prefix)
+// name but no kept declaration keeps alive.
+fn needs_of(item: Item, spaces: map<str, list<str>>, alive: map<str, list<str>>, needed: list<str>) -> list<str> {
+    let mut out = needed
+    let lines = split(item.text, "\n")
+    for i in range(len(lines)) {
+        if starts_with(lines[i], "open ") {
+            // The open runs on over indented lines; open_names stops at its `in`.
+            for o in open_names(join(slice(lines, i, len(lines)), "\n")) {
+                for c in candidates(o, prefixes(item.ns)) {
+                    // Registered even when a kept declaration lives in it: that one may come
+                    // after this `open`, and a repeated `namespace X end X` is harmless.
+                    if len(get_or(spaces, c, [])) > 0 and not contains(out, c) { out = push(out, c) }
+                }
+            }
+        }
     }
     return out
 }
@@ -454,7 +595,18 @@ fn main() -> nil {
         print(f"entry {entry_name} not found among {len(decls)} declarations")
         return
     }
-    let seen = reach(decls, keeps, firsts, full_index[entry_name][0], full_index, short_index, spaces, known_parts)
+    let start = push(filter(firsts, fn(j: int) -> bool { return decls[j].root }), full_index[entry_name][0])
+    let mut seen = reach(decls, keeps, start, filled(len(decls), false), full_index, short_index, spaces, known_parts)
+    // An emitted source brings all its `variable` lines, and Lean elaborates each one: reach
+    // their names too, until no further source is emitted.
+    let mut done_sources = {}
+    let mut grew = true
+    while grew {
+        let lines = new_variable_lines(sources, seen, full_index, done_sources)
+        done_sources = merge(done_sources, emitted_sources(sources, seen, full_index))
+        grew = len(lines) > 0
+        if grew { seen = reach(decls, lines, [], seen, full_index, short_index, spaces, known_parts) }
+    }
     // Namespaces that still hold a kept declaration.
     let alive = as_set(all_prefixes(fulls, filter(firsts, fn(j: int) -> bool { return seen[j] })))
     let core = split(split(statement, "namespace ")[1], "\n")[0]
@@ -487,15 +639,10 @@ fn main() -> nil {
         for item in src.items {
             if item.kind == "keep" {
                 chunk = push(chunk, item.text)
-                if starts_with(item.text, "open ") {
-                    for o in open_names(item.text) {
-                        for c in candidates(o, prefixes(item.ns)) {
-                            if len(get_or(spaces, c, [])) > 0 and len(get_or(alive, c, [])) == 0 and not contains(needed, c) { needed = push(needed, c) }
-                        }
-                    }
-                }
+                needed = needs_of(item, spaces, alive, needed)
             } else {
                 if seen[index] and get_or(full_index, decls[index].full, [-1])[0] == index {
+                    needed = needs_of(item, spaces, alive, needed)
                     chunk = push(chunk, item.text)
                     used = used + 1
                 }

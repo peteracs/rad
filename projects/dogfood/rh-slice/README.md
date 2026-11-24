@@ -22,7 +22,11 @@ enclosing one, and under every open namespace; `Foo.mk` falls back to `Foo`, and
 local may mean any declaration of that last name. Module-system markers (`@[expose] public
 section`) become plain sections, whatever a file leaves open is closed at its end, and command
 modifiers such as `set_option maxHeartbeats 800000 in` stay with their declaration. Sources may be
-given as directories, and each emitted source is marked `-- from <Module>` (comments are free) so a
+given as directories. A name under the declaration's own namespace prefix resolves first, so
+`export` aliases and locals sharing a namespace's name land where Lean puts them; `open X (a b)`,
+multi-line `open` and `omit`, `alias`, anonymous instances and the `variable` lines an emitted
+source relies on are all followed. Sources holding `export` lines are emitted as late as their
+imports allow, so their aliases shadow nothing earlier. Each emitted source is marked `-- from <Module>` (comments are free) so a
 large slice can be split back into modules and compiled in parallel.
 
 Performance note for RAD: a function that holds a closure copies its lists on every update, and a
@@ -38,5 +42,9 @@ what it writes. `count.rad` prints the count and projected score of any Lean fil
 | Pillar | Slice | Kept | Declarations |
 | --- | --- | --- | --- |
 | Core 36, pure family decomposition | 394 files, 1,023,975 tokens | 1 file, 1,318 tokens; scored 79.55 (attempt 102708) | 2 of 4 in `PureTypeLatticesOrthogonal.lean` |
-| Core 41, non-generic orbital vanishing | 920 files, 3,282,020 tokens | 1 file, 314,410 tokens (attempt 102902 used an earlier version with a scope bug, rejected) | 1,620 of 11,519 |
+| Core 41, non-generic orbital vanishing | 920 files, 3,282,020 tokens | 1 file, 402,388 tokens; scored 65.65 (attempt 103718, previous best 53.34) | 2,350 of 11,519 |
 | Core 1, zero-free region (not submitted) | 21 files, 21,641 tokens | 1 file, 19,176 tokens | 73 of 94 |
+
+The grader runs Lean v4.33.1 with Mathlib `0df444a`, not the repo's current toolchain; Core 41
+was checked locally on that version, against the frozen modules' published build, in two
+halves of under five minutes each, before it was submitted.
