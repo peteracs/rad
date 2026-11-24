@@ -1,0 +1,145 @@
+// Normalized Lean 4 token count, as the RH Playground grader computes it (`TOKEN_RE` in the
+// board's pr_lightweight_checks.py): comments and import lines are free, every identifier is one
+// token however long, and everything else is a string, char, number, operator or single symbol.
+
+fn is_space(ch: str) -> bool {
+    return ch == " " or ch == "\n" or ch == "\t" or ch == "\r" or ord(ch) == 12 or ord(ch) == 11 or ord(ch) == 160
+}
+
+fn in_ident_ranges(c: int) -> bool {
+    return (c >= 192 and c <= 591) or (c >= 880 and c <= 1023) or (c >= 7424 and c <= 8191) or (c >= 8448 and c <= 8527) or (c >= 119808 and c <= 120831)
+}
+
+fn ident_start(ch: str) -> bool {
+    let c = ord(ch)
+    return (c >= 65 and c <= 90) or (c >= 97 and c <= 122) or c == 95 or in_ident_ranges(c)
+}
+
+fn ident_continue(ch: str) -> bool {
+    let c = ord(ch)
+    return ident_start(ch) or (c >= 48 and c <= 57) or c == 39 or (c >= 8320 and c <= 8329) or (c >= 8304 and c <= 8313)
+}
+
+fn is_digit(ch: str) -> bool {
+    return ch >= "0" and ch <= "9"
+}
+
+// `--` comments and nested `/- ... -/` blocks removed; string literals kept; newlines kept.
+// Text outside comments is kept as whole runs, so the work is one pass over the characters.
+fn strip_comments(cs: list<str>) -> str {
+    let n = len(cs)
+    let mut pieces = []
+    let mut start = 0
+    let mut depth = 0
+    let mut i = 0
+    while i < n {
+        let ch = cs[i]
+        let after = if_index(cs, i + 1)
+        if depth == 0 {
+            if ch == "\"" {
+                i = i + 1
+                while i < n and cs[i] != "\"" {
+                    if cs[i] == "\\" { i = i + 2 } else { i = i + 1 }
+                }
+                i = min(i + 1, n)
+            } else if ch == "/" and after == "-" {
+                pieces = push(pieces, join(slice(cs, start, i), ""))
+                depth = 1
+                i = i + 2
+            } else if ch == "-" and after == "-" {
+                pieces = push(pieces, join(slice(cs, start, i), ""))
+                while i < n and cs[i] != "\n" { i = i + 1 }
+                start = i
+            } else {
+                i = i + 1
+            }
+        } else if ch == "/" and after == "-" {
+            depth = depth + 1
+            i = i + 2
+        } else if ch == "-" and after == "/" {
+            depth = depth - 1
+            i = i + 2
+            start = i
+        } else {
+            if ch == "\n" { pieces = push(pieces, "\n") }
+            i = i + 1
+        }
+    }
+    if depth == 0 { pieces = push(pieces, join(slice(cs, start, n), "")) }
+    return join(pieces, "")
+}
+
+fn if_index(cs: list<str>, k: int) -> str {
+    if k < len(cs) { return cs[k] }
+    return ""
+}
+
+// A line such as `public import Foo` costs nothing.
+fn is_import_line(line: str) -> bool {
+    let words = split(trim(line), " ")
+    let mut k = 0
+    while k < len(words) and (words[k] == "public" or words[k] == "private" or words[k] == "meta") { k = k + 1 }
+    return k + 1 < len(words) and words[k] == "import"
+}
+
+fn count_line(cs: list<str>) -> int {
+    let ops3 = ["<;>", "..."]
+    let ops2 = [":=", "=>", "->", "..", "::", "<=", ">=", "!=", "&&", "||"]
+    let n = len(cs)
+    let mut count = 0
+    let mut i = 0
+    while i < n {
+        let ch = cs[i]
+        if is_space(ch) {
+            i = i + 1
+        } else {
+            count = count + 1
+            if ident_start(ch) and ch != "λ" {
+                i = i + 1
+                while i < n and ident_continue(cs[i]) { i = i + 1 }
+            } else if is_digit(ch) {
+                while i < n and is_digit(cs[i]) { i = i + 1 }
+                if if_index(cs, i) == "." and is_digit(if_index(cs, i + 1)) {
+                    i = i + 1
+                    while i < n and is_digit(cs[i]) { i = i + 1 }
+                }
+            } else if ch == "\"" {
+                let mut j = i + 1
+                while j < n and cs[j] != "\"" {
+                    if cs[j] == "\\" { j = j + 2 } else { j = j + 1 }
+                }
+                if j < n { i = j + 1 } else { i = i + 1 }
+            } else if ch == "'" and if_index(cs, i + 1) == "\\" and if_index(cs, i + 2) != "\n" and if_index(cs, i + 3) == "'" {
+                i = i + 4
+            } else if ch == "'" and if_index(cs, i + 1) != "'" and if_index(cs, i + 1) != "\\" and if_index(cs, i + 1) != "" and if_index(cs, i + 2) == "'" {
+                i = i + 3
+            } else {
+                let two = ch + if_index(cs, i + 1)
+                if contains(ops3, two + if_index(cs, i + 2)) {
+                    i = i + 3
+                } else if contains(ops2, two) {
+                    i = i + 2
+                } else {
+                    i = i + 1
+                }
+            }
+        }
+    }
+    return count
+}
+
+// Tokens of a whole Lean source file, as scored.
+pub fn count_tokens(text: str) -> int {
+    let stripped = strip_comments(chars(replace(text, "\r", "")))
+    let mut total = 0
+    for line in split(stripped, "\n") {
+        if not is_import_line(line) { total = total + count_line(chars(line)) }
+    }
+    return total
+}
+
+// Score(T) = 100 - 50 / (1 + log10(T0 / T) / 2) for T <= T0, and 50 / (1 + log10(T / T0) / 2) above.
+pub fn projected_score(t: int, t0: int) -> float {
+    if t <= t0 { return 100.0 - 50.0 / (1.0 + (ln(float(t0) / float(t)) / ln(10.0)) / 2.0) }
+    return 50.0 / (1.0 + (ln(float(t) / float(t0)) / ln(10.0)) / 2.0)
+}

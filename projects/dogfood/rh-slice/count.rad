@@ -1,0 +1,21 @@
+// Print the scored token count of Lean files and, given the pillar's baseline, the projected score.
+//
+//   rad count.rad -- <T0 or 0> <file .lean>...
+
+use "tokens.rad"
+
+fn main() -> nil {
+    let args = sys_args()
+    let t0 = int(args[0])
+    let mut total = 0
+    for k in range(1, len(args)) {
+        let n = count_tokens(read_file(args[k]))
+        total = total + n
+        if len(args) > 2 { print(f"{n} {args[k]}") }
+    }
+    if t0 > 0 {
+        print(f"total {total}  score {projected_score(total, t0)}")
+    } else {
+        print(f"total {total}")
+    }
+}
